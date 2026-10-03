@@ -216,25 +216,6 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
     }
 
-    // Also migrate pending restore queues — these have screenId per entry.
-    // Same guard as active assignments: skip entries that already have a valid
-    // virtual screen ID matching the current config. Re-migrating would run
-    // resolveVirtualScreen with zone coords relative to the virtual screen
-    // (not the physical screen), which can produce wrong results.
-    for (auto queueIt = m_pendingRestoreQueues.begin(); queueIt != m_pendingRestoreQueues.end(); ++queueIt) {
-        for (PendingRestore& entry : queueIt.value()) {
-            if (entry.screenId != physicalScreenId && !entry.screenId.startsWith(prefix)) {
-                continue;
-            }
-            if (PhosphorIdentity::VirtualScreenId::isVirtual(entry.screenId)
-                && virtualScreenIds.contains(entry.screenId)) {
-                continue;
-            }
-            entry.screenId = resolveVirtualScreen(entry.zoneIds, entry.screenId);
-            anyStateMigrated = true;
-        }
-    }
-
     // Migrate lastUsedScreenId per store: last-used is per-key, so rewrite the
     // stored screen on each store that points at the physical screen (or an old
     // virtual sub-screen on it) to the virtual screen its last-used zone falls in.
@@ -246,7 +227,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             continue;
         }
         // Already a valid VS in the CURRENT config — leave the SCREEN alone,
-        // like the three sibling loops above. Re-resolving would let a shared
+        // like the two sibling loops above. Re-resolving would let a shared
         // layout (zone present on every VS) silently rewrite a correct vs:1
         // last-used to the first candidate, and force a save for a no-op.
         //
@@ -303,7 +284,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
                 QString screen = it.key();
                 // Already a valid VS in the CURRENT config — leave it as its own
                 // identity source, exactly as the live-screen / pre-float /
-                // pending-restore / lastUsed loops do. Re-resolving on a VS
+                // lastUsed loops do. Re-resolving on a VS
                 // RECONFIGURATION would push a still-valid vs:1 key through
                 // resolveVirtualScreen, whose per-VS-layout candidate branch can
                 // return vs:0 for a zone that resolves uniquely there, silently
@@ -436,16 +417,6 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         if (preFloatMigrated) {
             state->setPreFloatScreenAssignments(preFloatScreens);
             anyStateMigrated = true;
-        }
-    }
-
-    // Also migrate pending restore queues
-    for (auto queueIt = m_pendingRestoreQueues.begin(); queueIt != m_pendingRestoreQueues.end(); ++queueIt) {
-        for (PendingRestore& entry : queueIt.value()) {
-            if (entry.screenId.startsWith(prefix)) {
-                entry.screenId = physicalScreenId;
-                anyStateMigrated = true;
-            }
         }
     }
 
@@ -620,11 +591,6 @@ WindowTrackingService::physicalScreensWithStaleVirtualAssignments(const QSet<QSt
             for (auto it = preFloat.constBegin(); it != preFloat.constEnd(); ++it) {
                 check(it.value());
             }
-        }
-    }
-    for (auto qit = m_pendingRestoreQueues.constBegin(); qit != m_pendingRestoreQueues.constEnd(); ++qit) {
-        for (const auto& entry : qit.value()) {
-            check(entry.screenId);
         }
     }
     for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {

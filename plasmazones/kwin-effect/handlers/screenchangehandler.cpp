@@ -8,7 +8,6 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
-#include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -234,25 +233,6 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
     }
     qCInfo(lcScreenChange) << "Applying geometries to" << geometries.size() << "windows";
 
-    // Single pass: map by full window ID and by appId for fallback
-    QHash<QString, KWin::EffectWindow*> windowByFullId;
-    QHash<QString, KWin::EffectWindow*> windowByAppId;
-    const auto windows = KWin::effects->stackingOrder();
-    for (KWin::EffectWindow* w : windows) {
-        // isDeleted: a dying sibling must not claim the insert-if-absent
-        // appId slot — the apply loop's own isDeleted guard would then
-        // silently drop the live window's reapply.
-        if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
-            continue;
-        }
-        QString fullId = m_effect->getWindowId(w);
-        QString appId = ::PhosphorIdentity::WindowId::extractAppId(fullId);
-        windowByFullId.insert(fullId, w);
-        if (!windowByAppId.contains(appId)) {
-            windowByAppId.insert(appId, w);
-        }
-    }
-
     struct ApplyEntry
     {
         QPointer<KWin::EffectWindow> window;
@@ -260,6 +240,8 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
     };
     QVector<ApplyEntry> toApply;
 
+    QVector<const PhosphorProtocol::WindowGeometryEntry*> valid;
+    QStringList validIds;
     for (const auto& entry : geometries) {
         if (entry.windowId.isEmpty()) {
             qCDebug(lcScreenChange) << "Skipping geometry entry with empty windowId";
@@ -269,12 +251,19 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             qCDebug(lcScreenChange) << "Skipping geometry entry with invalid size for" << entry.windowId;
             continue;
         }
+        valid.append(&entry);
+        validIds.append(entry.windowId);
+    }
 
-        KWin::EffectWindow* window = windowByFullId.value(entry.windowId);
-        if (!window) {
-            window = windowByAppId.value(::PhosphorIdentity::WindowId::extractAppId(entry.windowId));
-        }
-        if (window && m_effect->shouldHandleWindow(window)) {
+    // The effect's shared batch resolve: an entry naming a live window gets
+    // that window or nothing, and only an entry naming no live window falls
+    // back to the ONE unclaimed window of its app. The old first-seen app map
+    // handed a stale entry to whichever same-app window it met first.
+    const QVector<KWin::EffectWindow*> resolved = m_effect->resolveDaemonWindowIds(validIds);
+    for (int i = 0; i < valid.size(); ++i) {
+        const auto& entry = *valid.at(i);
+        KWin::EffectWindow* const window = resolved.at(i);
+        if (window) {
             const QString winScreenId = m_effect->getWindowScreenId(window);
             if (m_effect->m_tilingHandler->isManagedScreen(winScreenId)) {
                 qCDebug(lcScreenChange) << "Skipping autotile-managed window" << entry.windowId << "on screen"

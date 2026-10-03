@@ -578,7 +578,7 @@ struct ScrollVisualPlacement
     /// The resolver has to draw the window where it was actually committed, so
     /// this records what the commit did rather than what the column is. Two
     /// commit-side centrings exist and they cover different populations. An
-    /// X11 tile is pre-centred by constrainTileGeometry (drag_snap.cpp) on
+    /// X11 tile is pre-centred by constrainTileGeometry (window_geometry_apply.cpp) on
     /// every apply, with no declared-rect exemption, so it stays true there. A
     /// Wayland tile is centred only by the size-continuity pass and the
     /// reactive pass in window_connections.cpp, and both are keyed on

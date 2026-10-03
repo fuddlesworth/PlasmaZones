@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorRules/MatchTypes.h>
@@ -56,6 +57,66 @@ QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap() const
         }
     }
     return windowMap;
+}
+
+QVector<KWin::EffectWindow*> PlasmaZonesEffect::resolveDaemonWindowIds(const QStringList& windowIds) const
+{
+    QVector<KWin::EffectWindow*> resolved(windowIds.size(), nullptr);
+    // A window an id names is claimed even when it is refused, so the
+    // app-id fallback below can never hand a refused window's entry, or any
+    // other entry, to it. The fallback's own picks claim too.
+    QSet<KWin::EffectWindow*> claimed;
+    QVector<int> misses;
+    for (int i = 0; i < windowIds.size(); ++i) {
+        if (windowIds.at(i).isEmpty()) {
+            continue;
+        }
+        // The UNFILTERED live set first. buildWindowMap drops every window
+        // shouldHandleWindow refuses (fullscreen, own keep-above,
+        // skip-switcher, an Exclude rule), and resolving against it alone
+        // let an entry naming such a window miss and fall back to a same-app
+        // sibling, which then took its rect.
+        if (KWin::EffectWindow* const w = findWindowByInstanceId(windowIds.at(i))) {
+            claimed.insert(w);
+            if (shouldHandleWindow(w)) {
+                resolved[i] = w;
+            } else {
+                qCDebug(lcEffect) << "resolveDaemonWindowIds: skipping a window this effect does not handle"
+                                  << windowIds.at(i);
+            }
+            continue;
+        }
+        misses.append(i);
+    }
+    if (misses.isEmpty()) {
+        return resolved;
+    }
+    // App-id fallback for single-instance apps (uuid drift across a KWin
+    // restart), counting only UNCLAIMED handled windows, so a stale entry can
+    // neither double-apply onto a claimed window nor trip the ambiguity bail
+    // against it.
+    const QHash<QString, KWin::EffectWindow*> handled = buildWindowMap();
+    for (const int i : std::as_const(misses)) {
+        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowIds.at(i));
+        KWin::EffectWindow* candidate = nullptr;
+        int matchCount = 0;
+        for (auto it = handled.constBegin(); it != handled.constEnd(); ++it) {
+            if (claimed.contains(it.value())) {
+                continue;
+            }
+            if (::PhosphorIdentity::WindowId::extractAppId(it.key()) == appId) {
+                candidate = it.value();
+                if (++matchCount > 1) {
+                    break;
+                }
+            }
+        }
+        if (matchCount == 1) {
+            resolved[i] = candidate;
+            claimed.insert(candidate);
+        }
+    }
+    return resolved;
 }
 
 QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback) const

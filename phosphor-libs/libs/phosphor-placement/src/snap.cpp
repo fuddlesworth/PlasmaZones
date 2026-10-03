@@ -114,27 +114,6 @@ bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
     return cleared;
 }
 
-bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
-{
-    // Pop the oldest pending-restore entry for this window's live appId.
-    // Single authoritative implementation — see header for why earlier
-    // consumePendingAssignment / clearStalePendingAssignment twins were
-    // merged. Callers that don't care about the result ignore the bool.
-    const QString appId = currentAppIdFor(windowId);
-    auto it = m_pendingRestoreQueues.find(appId);
-    if (it == m_pendingRestoreQueues.end() || it->isEmpty()) {
-        return false;
-    }
-    it->removeFirst();
-    const int remaining = it->size();
-    if (it->isEmpty()) {
-        m_pendingRestoreQueues.erase(it);
-    }
-    qCDebug(lcPlacement) << "Consumed pending assignment for" << appId << "remaining:" << remaining;
-    markDirty(DirtyPendingRestores);
-    return true;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Snap-state resolver wiring and access helpers
 // ═══════════════════════════════════════════════════════════════════════════════

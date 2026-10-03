@@ -111,6 +111,23 @@ SnapState* SnapEngine::stateForWindowOnScreen(const QString& windowId, const QSt
         // is for. Resolving through the primary instead wrote a RouteToDesktop
         // commit, a cross-desktop move and a background-desktop restore into
         // the VIEWED desktop's store, where the next switch released it.
+        //
+        // A pinned write naming a screen OTHER than the one the window is
+        // tracked on is the window changing screens: a keyboard move across
+        // outputs, or a drop or zone-number snap on the other monitor.
+        // commitSnapImpl always pins (it falls back to the screen's current
+        // desktop), so every such commit lands here. A window is on exactly
+        // one screen, so it is re-homed first, the way handoffReceive does,
+        // carrying its per-window state and releasing what it held on the
+        // screen it left. Adding the pinned key beside the old one instead
+        // left the window a member of both screens with the primary still on
+        // the old one: every read answered with the zone it had left, and the
+        // membership pass took the pair for a multi-desktop window and
+        // re-applied the old zone, throwing the window back across monitors
+        // (discussion #1124).
+        if (const auto primary = m_states.windowKey(canonical); primary && primary->screenId != screenId) {
+            migrateWindowToScreen(windowId, screenId);
+        }
         const PhosphorEngine::PlacementStateKey pinned{screenId, desktop, currentActivity()};
         owner = ensureStateForKey(pinned);
         if (owner) {
@@ -566,28 +583,22 @@ PhosphorEngine::ISnapSettings* SnapEngine::snapSettings() const
 // header (forward-declared in SnapEngine.h).
 SnapEngine::~SnapEngine() = default;
 
-void SnapEngine::markWindowReported(const QString& windowId)
-{
-    if (!windowId.isEmpty()) {
-        m_effectReportedWindows.insert(windowId);
-    }
-}
-
 int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
-    // The return mixes two buckets: per-store state prunes from the base class
-    // and runtime effect-reported-flag erasures below, so a window present in
-    // both counts once per bucket. The caller sums it into a cleanup log line
-    // and gates its dirty-mark on > 0 — safe either way, since any positive
-    // value means something was erased — but no consumer may treat it as a
-    // distinct-window count.
-    int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
-    for (auto it = m_effectReportedWindows.begin(); it != m_effectReportedWindows.end();) {
-        if (!aliveWindowIds.contains(*it)) {
-            it = m_effectReportedWindows.erase(it);
-            ++pruned;
-        } else {
-            ++it;
+    // Called by WindowTrackingService::pruneStaleAssignments with the alive
+    // set already canonicalized, after it has pruned every SnapState's own
+    // per-window data. What is left for a window that died without a close
+    // signal is its membership in the state index, which would otherwise
+    // leak and keep every membership reconcile walking a dead id. Only the
+    // membership goes: the per-desktop zones are the persisted record's,
+    // nothing is announced, and the index is runtime-only, so the drops are
+    // not counted (the caller marks persisted state dirty on a positive
+    // return).
+    const int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
+    const QStringList tracked = m_states.trackedWindowIds();
+    for (const QString& windowId : tracked) {
+        if (!aliveWindowIds.contains(windowId)) {
+            m_states.removeWindow(windowId);
         }
     }
     return pruned;
@@ -754,7 +765,10 @@ bool SnapEngine::isActiveOnScreen(const QString& screenId) const
 
 void SnapEngine::windowClosed(const QString& windowId)
 {
-    m_effectReportedWindows.remove(windowId);
+    // Snap keeps no engine-side close state. A snap window's close runs
+    // through WindowTrackingService::windowClosed, which clears its SnapState
+    // and its snap resolver entry, so nothing in the daemon calls this.
+    Q_UNUSED(windowId)
 }
 
 std::optional<PhosphorEngine::PlacementStateKey> SnapEngine::heldKeyForWindow(const QString& windowId) const

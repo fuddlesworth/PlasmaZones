@@ -86,15 +86,6 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         layoutManager, screenManager, virtualDesktopManager, m_geometryResolver.get(),
         PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()}, this);
 
-    // Wire the disabled-context gate consulted before recording a snap-side
-    // PendingRestore on windowClosed. The placement library has no settings
-    // dependency, so the gate is injected from here — single funnel via
-    // isPersistedContextDisabled() so the predicate and the load/save filters
-    // share one decision implementation. See discussion #461.
-    m_service->setShouldTrackPredicate([this](const QString& screenId, int virtualDesktop) -> bool {
-        return !isPersistedContextDisabled(screenId, virtualDesktop);
-    });
-
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
     // first navigation call; setZoneDetectionAdaptor is forwarded to
@@ -205,14 +196,13 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
 
     // Exclude-pattern pruning is now driven from `Daemon::init` (and again
     // from `Daemon::finalizeStartup` once AutotileEngine::loadState has
-    // populated the autotile queue) — see WTA::pruneExcludedPendingRestores.
+    // populated the autotile queue) — see WTA::pruneExcludedPlacements.
 
     // If we have placement records but missed activeLayoutChanged (layout was set before we
     // connected), set the flag so tryEmitPendingRestoresAvailable will emit when panel
     // geometry is ready. Fixes daemon restart: windows that were snapped before stop
     // are not re-registered because pendingRestoresAvailable was never emitted. The
-    // unified WindowPlacementStore is the source of truth (the legacy pending-restore
-    // queue is in-session-only and empty right after loadState).
+    // unified WindowPlacementStore is the only restore source.
     if (m_service->placementStore().size() > 0 && m_layoutManager->activeLayout()) {
         m_hasPendingRestores = true;
         qCDebug(lcDbusWindow) << "Pending restores: loaded at init, will emit when panel geometry ready";
@@ -223,21 +213,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
 // that originally required this has moved to SnapEngine (Phase 5E), but
 // the destructor is kept out-of-line to avoid churning every translation
 // unit that includes this header.
-//
-// Symmetric clear of the should-track predicate to mirror the
-// `setShouldRestorePredicate({})` clear in enginewiring.cpp's `setEngines()`
-// (predicate handoff path).
-// `m_service` is parented to WTA and dies with it, so the captured
-// `this` never outlives the predicate today — the clear keeps the
-// "every late-bound predicate is cleared symmetrically before its
-// captured `this` becomes unsafe" contract defensible if a future
-// refactor moves service ownership or re-parents the m_service member.
-WindowTrackingAdaptor::~WindowTrackingAdaptor()
-{
-    if (m_service) {
-        m_service->setShouldTrackPredicate({});
-    }
-}
+WindowTrackingAdaptor::~WindowTrackingAdaptor() = default;
 
 PhosphorSnapEngine::SnapEngine* WindowTrackingAdaptor::snapEngine() const
 {

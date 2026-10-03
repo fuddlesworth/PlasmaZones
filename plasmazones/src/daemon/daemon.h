@@ -911,7 +911,7 @@ private:
     // built via `PhosphorRules::ExclusionRules::excludePlacementRulesFrom` and
     // kept in lockstep with the store via the rulesChanged subscription wired
     // in init(). SnapEngine borrows a pointer into this set for isAppIdExcluded;
-    // the WindowTrackingAdaptor's pruneExcludedPendingRestores receives the
+    // the WindowTrackingAdaptor's pruneExcludedPlacements receives the
     // AppId patterns extracted from this same slice at refilter time. Held as a
     // member (stable address) so the bound RuleEvaluator's per-revision cache
     // stays valid across back-to-back resolves.

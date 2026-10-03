@@ -64,7 +64,9 @@ enum class SnapIntent {
     AutoRestored,
 };
 
-/// Coarse structural classification for the snap-restore consume gate.
+/// Coarse structural classification of a window, carried on the open and close
+/// wire calls and on the placement record. Nothing branches on it any more:
+/// the pending-restore consume gate it fed was removed with that queue.
 /// Wire/JSON encoding is `int`; `Unknown` is the permissive default.
 enum class WindowKind : int {
     Unknown = 0,
@@ -74,12 +76,8 @@ enum class WindowKind : int {
 
 /// Clamp an integer wire value to a valid WindowKind. Unknown wire values
 /// (out-of-range, future enum values from an older daemon) collapse to
-/// `Unknown` rather than producing an undefined enum. The close-capture
-/// consume gate (CloseCaptureContext::windowKind) refuses only when both
-/// sides are concrete and disagree, so `Unknown` is permissive — the
-/// safe-by-default policy. On the restore side the value is carried in the
-/// record for that gate; `SnapEngine::resolveWindowRestore` itself no longer
-/// branches on it. Centralised here so the persistence-layer call sites
+/// `Unknown` rather than producing an undefined enum. Centralised here so the
+/// persistence-layer call sites
 /// (`WindowTrackingAdaptor::windowClosed`, `SnapAdaptor::resolveWindowRestore`,
 /// `WindowPlacement::fromJson`) stay in lockstep when a new kind is added.
 inline WindowKind clampWindowKindFromWire(int wire)
@@ -152,17 +150,6 @@ struct ResnapEntry
     int zonePosition = 0;
     QString screenId;
     int virtualDesktop = 0;
-};
-
-struct PendingRestore
-{
-    QStringList zoneIds;
-    QString screenId;
-    int virtualDesktop = 0;
-    QString layoutId;
-    QList<int> zoneNumbers;
-    /// Closing window's kind; the consume gate refuses when both sides are concrete and disagree.
-    WindowKind windowKind = WindowKind::Unknown;
 };
 
 struct SnapResult

@@ -322,6 +322,13 @@ public:
     /// Resolve a resnap filter into the concrete list of snap-mode screens.
     QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
 
+    /// moveWindowToZone on a named screen, for an in-process caller that
+    /// resolved the zone on a specific screen (Control.snapWindowToZone). An
+    /// empty @p screenHint detects the screen from the zone, which is all the
+    /// D-Bus slot can do: with one layout on two screens that detection
+    /// answers with the first of them.
+    void moveWindowToZoneOnScreen(const QString& windowId, const QString& zoneId, const QString& screenHint);
+
     /// Cross-screen tiling-engine reclaim hook, invoked as (windowId,
     /// openingScreenId) → claimed. This channel exists because the tiling
     /// dispatch only ever hears about ENGINE-MANAGED screens: a session
@@ -360,7 +367,7 @@ private:
      * refused: missing dependencies, the global `snappingEnabled()` kill-switch
      * is off, or the target context is disabled by the cascade. A false return
      * means no commit happened; callers must skip any post-snap work (e.g.
-     * consumePendingAssignment, success logging).
+     * success logging).
      */
     bool applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY, int& snapWidth,
                          int& snapHeight, bool& shouldSnap);

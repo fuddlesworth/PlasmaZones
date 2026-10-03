@@ -105,6 +105,33 @@ private Q_SLOTS:
         QCOMPARE(changed.size(), 0);
     }
 
+    // fillsOutputState: engaged true when maximize OR fullscreen is on, engaged
+    // false once either is known and neither is on, unknown otherwise. The snap
+    // engine skips recording such a window's frame as a float-back.
+    void fillsOutputState_combinesMaximizeAndFullscreen()
+    {
+        WindowRegistry reg;
+        QVERIFY(!reg.fillsOutputState(QStringLiteral("missing")).has_value());
+
+        PhosphorEngine::WindowMetadata meta = make(QStringLiteral("firefox"));
+        reg.upsert(QStringLiteral("u1"), meta);
+        QVERIFY(!reg.fillsOutputState(QStringLiteral("u1")).has_value());
+
+        meta.isMaximized = false;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u1")), std::optional<bool>(false));
+
+        meta.isFullscreen = true;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u1")), std::optional<bool>(true));
+
+        meta.isFullscreen = false;
+        meta.isMaximized = true;
+        reg.upsert(QStringLiteral("u1"), meta);
+        // A composite id resolves to the same instance record.
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("firefox|u1")), std::optional<bool>(true));
+    }
+
     void upsert_rejectsEmptyInstanceId()
     {
         WindowRegistry reg;

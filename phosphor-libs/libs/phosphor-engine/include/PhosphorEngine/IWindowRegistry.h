@@ -92,6 +92,22 @@ public:
         Q_UNUSED(windowId)
         return std::nullopt;
     }
+
+    // New virtuals go below this line: this interface is installed and
+    // exported, and its vtable order is part of the ABI a released build
+    // shipped.
+
+    /// Whether @p windowId is maximized or fullscreen as last reported: engaged
+    /// true when either state is on, engaged false when a state is known and
+    /// neither is on, nullopt when neither was delivered or the window is
+    /// unknown. Such a window's frame is the output, not a free position, and
+    /// only the compositor knows its restore rect. Default reports unknown,
+    /// like minimizedState.
+    virtual std::optional<bool> fillsOutputState(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return std::nullopt;
+    }
 };
 
 } // namespace PhosphorEngine

@@ -1484,11 +1484,11 @@ void Daemon::processPendingGeometryUpdates()
     *conn = connect(
         m_layoutComputeService.get(), &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration, this,
         [this, pending, conn](const QString& screenId, const QUuid&, PhosphorZones::Layout*, uint64_t generation) {
-            // Shutdown guard, the async-completion idiom lifecycle.cpp's
-            // D-Bus replies use: stop() has already hidden the overlays and
-            // stopped the reapply timer, and restarting it here would push a
-            // geometry reapply at the effect against torn-down engine state
-            // up to 3s after shutdown began.
+            // Shutdown guard, the idiom the daemon's D-Bus replies use
+            // (bridge_watchdog.cpp, plasma_workspace.cpp): stop() has already
+            // hidden the overlays and stopped the reapply timer, and restarting
+            // it here would push a geometry reapply at the effect against
+            // torn-down engine state up to 3s after shutdown began.
             if (m_shuttingDown) {
                 return;
             }

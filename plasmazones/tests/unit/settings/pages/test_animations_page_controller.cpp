@@ -975,7 +975,7 @@ private Q_SLOTS:
     /// `resolveShaderWithDefault`, driving both DesktopTransitionManager from
     /// `kwin-effect/plasmazoneseffect/lifecycle.cpp` (the screen-level desktop
     /// switch and peek legs) and the snap geometry legs through
-    /// `applyWindowGeometry` in `kwin-effect/plasmazoneseffect/drag_snap.cpp`.
+    /// `applyWindowGeometry` in `kwin-effect/plasmazoneseffect/window_geometry_apply.cpp`.
     void supportsShaderLeg_matchesConsumedLegCallSites()
     {
         TestHelpers::TimingControllerFixture fx;
@@ -1020,7 +1020,7 @@ private Q_SLOTS:
         // windowClosed, windowStartUserMovedResized for the held move,
         // windowMaximizedStateChanged and windowActivated; daemon_apply for
         // minimizedChanged), while the snap geometry legs resolve through
-        // applyWindowGeometry in drag_snap.cpp. Both run the resolved shader
+        // applyWindowGeometry in window_geometry_apply.cpp. Both run the resolved shader
         // on the OffscreenEffect's redirected texture quad.
         expect(QStringLiteral("window.appearance.open"), true);
         expect(QStringLiteral("window.appearance.close"), true);

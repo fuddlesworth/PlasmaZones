@@ -348,6 +348,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
                                   result.screenName);
         return;
     }
+    recordFreeFrameBeforeUserSnap(windowId, screenId);
     commitSnap(windowId, result.zoneId, result.screenName);
     m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId,
@@ -401,6 +402,7 @@ void SnapEngine::spanFocusedInDirection(const QString& direction, const Navigati
                                   result.screenName);
         return;
     }
+    recordFreeFrameBeforeUserSnap(windowId, screenId);
     commitMultiZoneSnap(windowId, result.zoneIds, result.screenName);
     m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, result.geometry.x(), result.geometry.y(), result.geometry.width(),
@@ -662,6 +664,7 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const NavigationContext& 
                                   effectiveScreen);
         return;
     }
+    recordFreeFrameBeforeUserSnap(windowId, effectiveScreen);
     commitSnap(windowId, result.zoneId, effectiveScreen);
     m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId, effectiveScreen,
@@ -707,6 +710,7 @@ void SnapEngine::pushFocusedToEmptyZone(const NavigationContext& ctx)
                                   effectiveScreen);
         return;
     }
+    recordFreeFrameBeforeUserSnap(windowId, effectiveScreen);
     commitSnap(windowId, result.zoneId, effectiveScreen);
     m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId, effectiveScreen,

@@ -173,6 +173,8 @@ set(plasmazones_core_SRCS
     # snapnavigationtargets moved to phosphor-libs/libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/lifecycle.cpp
+    dbus/windowtrackingadaptor/activation.cpp
+    dbus/windowtrackingadaptor/prune.cpp
     dbus/windowtrackingadaptor/queries.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
     dbus/windowtrackingadaptor/rules.cpp
@@ -554,6 +556,8 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/init_assignment_apply.cpp
     daemon/daemon/init_dbus_service.cpp
     daemon/daemon/lifecycle.cpp
+    daemon/daemon/bridge_watchdog.cpp
+    daemon/daemon/plasma_workspace.cpp
     daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp

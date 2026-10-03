@@ -201,10 +201,6 @@ public:
     {
         return m_store;
     }
-    const QHash<QString, QList<PhosphorEngine::PendingRestore>>& pendingRestoreQueues() const override
-    {
-        return m_pending;
-    }
     QObject* asQObject() override
     {
         return this;
@@ -297,10 +293,6 @@ public:
     {
     }
     bool clearAutoSnapped(const QString&) override
-    {
-        return false;
-    }
-    bool consumePendingAssignment(const QString&) override
     {
         return false;
     }
@@ -397,7 +389,6 @@ public:
     }
 
 private:
-    QHash<QString, QList<PhosphorEngine::PendingRestore>> m_pending;
     PhosphorEngine::WindowPlacementStore m_store;
 };
 

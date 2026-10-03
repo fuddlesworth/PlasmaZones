@@ -71,8 +71,6 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
     // restarts the same timer twice.
     markDirty(DirtyPreFloatZones | DirtyPreFloatScreens | DirtyZoneAssignments
               | (lastUsedCleared ? DirtyLastUsedZone : DirtyNone));
-
-    consumePendingAssignment(windowId);
 }
 
 void WindowTrackingService::setWindowSticky(const QString& rawWindowId, bool sticky)
@@ -120,29 +118,15 @@ void WindowTrackingService::renumberDesktopZones(int removedDesktop)
         markDirty(DirtyWindowPlacements);
     }
     // Every structure keyed by a bare desktop number moves with the store
-    // (IPlacementEngine::renumberDesktopsAfterRemoval's contract): a pending
-    // restore or a buffered resnap queued across a mid-list removal would
-    // otherwise land one desktop off.
-    const auto shift = [removedDesktop](int& desktop) {
-        if (desktop == removedDesktop) {
-            desktop = 0;
-        } else if (desktop > removedDesktop) {
-            --desktop;
-        }
-    };
-    bool pendingTouched = false;
-    for (auto& queue : m_pendingRestoreQueues) {
-        for (PhosphorEngine::PendingRestore& entry : queue) {
-            const int before = entry.virtualDesktop;
-            shift(entry.virtualDesktop);
-            pendingTouched |= (entry.virtualDesktop != before);
-        }
-    }
-    if (pendingTouched) {
-        markDirty(DirtyPendingRestores);
-    }
+    // (IPlacementEngine::renumberDesktopsAfterRemoval's contract): a buffered
+    // resnap queued across a mid-list removal would otherwise land one desktop
+    // off. A row on the removed desktop maps to 0, the all-desktops sentinel.
     for (PhosphorEngine::ResnapEntry& entry : m_resnapBuffer) {
-        shift(entry.virtualDesktop);
+        if (entry.virtualDesktop == removedDesktop) {
+            entry.virtualDesktop = 0;
+        } else if (entry.virtualDesktop > removedDesktop) {
+            --entry.virtualDesktop;
+        }
     }
 }
 

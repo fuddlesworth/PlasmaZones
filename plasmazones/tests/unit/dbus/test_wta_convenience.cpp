@@ -11,6 +11,7 @@
  */
 
 #include "wta_convenience_fixture.h"
+#include "dbus/controladaptor.h"
 
 #include <PhosphorProtocol/AutotileTypes.h>
 #include <QScopeGuard>
@@ -69,6 +70,79 @@ private Q_SLOTS:
         m_snapAdaptor->moveWindowToZone(QString(), m_zoneIds[0]);
 
         QCOMPARE(spy.count(), 0);
+    }
+
+    // The focused-window screen that window shortcuts act on follows the
+    // focused window when it moves output without a new activation. Before,
+    // only windowActivated set it, so a key pressed after a KWin move of the
+    // focused window acted on the output it had left. A report for any other
+    // window must not repoint it.
+    void testActiveWindowScreenChanged_followsTheFocusedWindow()
+    {
+        const QString focused = QStringLiteral("firefox|12345");
+        const QString other = QStringLiteral("konsole|67890");
+        m_wta->windowActivated(focused, QStringLiteral("DP-1"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-1"));
+
+        m_wta->activeWindowScreenChanged(other, QStringLiteral("DP-3"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-1"));
+
+        m_wta->activeWindowScreenChanged(focused, QStringLiteral("DP-2"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-2"));
+    }
+
+    // A daemon-driven snap of a floating window records its live frame as the
+    // float-back before the commit. The effect's own pre-snap capture arrives
+    // after the commit, when the window is in a zone, so recordFreeGeometry
+    // refuses it; a keyboard or D-Bus snap left the window with nothing to
+    // float back to. A window already in a zone records nothing, because its
+    // frame is the zone rect.
+    void testMoveWindowToZone_recordsTheFreeFrameOfAFloatingWindow()
+    {
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        m_snapEngine->setNavigationStateProvider(m_wta);
+        const QString windowId = QStringLiteral("firefox|free-1");
+        const QRect freeFrame(120, 140, 640, 480);
+        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
+        m_snapEngine->setWindowFloat(windowId, true);
+        QVERIFY(m_snapEngine->isFloating(windowId));
+        m_wta->service()->clearFreeGeometry(windowId);
+        m_wta->setFrameGeometry(windowId, freeFrame.x(), freeFrame.y(), freeFrame.width(), freeFrame.height());
+
+        m_snapAdaptor->moveWindowToZone(windowId, m_zoneIds[1]);
+
+        const auto freeOn = [this, &windowId]() {
+            const auto rec = m_wta->service()->placementStore().peekExact(windowId);
+            return rec ? rec->freeGeometryByScreen.value(m_screenId) : QRect();
+        };
+        QCOMPARE(freeOn(), freeFrame);
+
+        // Now in a zone: another snap of it must not record the zone rect.
+        m_wta->setFrameGeometry(windowId, 8, 8, 300, 300);
+        m_snapAdaptor->moveWindowToZone(windowId, m_zoneIds[2]);
+        QCOMPARE(freeOn(), freeFrame);
+    }
+
+    // Control.snapWindowToZone snaps on the screen it names. The screen used to
+    // be dropped after the layout lookup, so the snap re-detected it from the
+    // zone id alone, and with one layout on two screens that answered with the
+    // first of them: the window was snapped on a screen the caller did not name.
+    void testControlSnapWindowToZone_snapsOnTheNamedScreen()
+    {
+        const QString windowId = QStringLiteral("firefox|12345");
+        const QString otherScreen = QStringLiteral("DP-2");
+        const int desktop = m_layoutManager->currentVirtualDesktop();
+        m_layoutManager->assignLayout(m_screenId, desktop, QString(), m_testLayout);
+        m_layoutManager->assignLayout(otherScreen, desktop, QString(), m_testLayout);
+        auto* control = new ControlAdaptor(m_wta, m_snapAdaptor, nullptr, m_layoutManager, nullptr, nullptr, nullptr,
+                                           nullptr, nullptr, m_parent);
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        control->snapWindowToZone(windowId, 1, otherScreen);
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(6).toString(), otherScreen);
+        QCOMPARE(m_wta->service()->screenForWindow(windowId), otherScreen);
     }
 
     // =====================================================================

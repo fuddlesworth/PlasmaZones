@@ -3,16 +3,13 @@
 
 /**
  * @file test_wts_session.cpp
- * @brief Unit tests for WindowTrackingService session restore, clear-stale, and resnap
+ * @brief Unit tests for WindowTrackingService resnap, rotation and auto-snap marking
  *
  * Tests cover:
- * 1. Clear stale pending assignments
- * 2. Resnap buffer population (desktop filter, per-screen VDM desktops,
+ * 1. Resnap buffer population (desktop filter, per-screen VDM desktops,
  *    durable-record fallback) and resnap calculations from the previous layout
- * 3. Rotation calculations
- * 4. Pending-restore queue persistence round-trips
- * 5. Auto-snap marking
- * 6. Consume pending assignment
+ * 2. Rotation calculations
+ * 3. Auto-snap marking
  *
  * Session zone-restore-from-session (the old calculateRestoreFromSession /
  * PendingRestoreQueues path) is now covered by the unified WindowPlacementStore
@@ -29,7 +26,6 @@
 #include <QHash>
 #include <QRect>
 #include <QSet>
-#include <QUuid>
 #include <QRectF>
 #include <memory>
 
@@ -152,31 +148,6 @@ private Q_SLOTS:
     // (see test_window_placement_store + test_wta_convenience). The legacy
     // calculateRestoreFromSession / PendingRestoreQueues tests were removed with
     // that mechanism.
-
-    // =====================================================================
-    // P1: Clear Stale Pending
-    // =====================================================================
-
-    void testClearStalePendingAssignment()
-    {
-        QString windowId = QStringLiteral("app|12345");
-        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.screenId = QStringLiteral("DP-1");
-        entry.virtualDesktop = 1;
-        entry.layoutId = QUuid::createUuid().toString();
-        entry.zoneNumbers = {1};
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        bool popped = m_service->consumePendingAssignment(windowId);
-        QVERIFY(popped);
-        QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
-    }
 
     // =====================================================================
     // P1: Resnap
@@ -594,49 +565,6 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Daemon Restart / Pending Restore
-    // =====================================================================
-
-    // Pins the pending-restore queue setter/readback round-trip — pure state
-    // persistence, no restart simulation and no signal emission involved.
-    void testPendingRestoreQueue_roundTrip()
-    {
-        QString appId = QStringLiteral("firefox");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.layoutId = m_testLayout->id().toString();
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().zoneIds.first(), m_zoneIds[0]);
-    }
-
-    // =====================================================================
-    // P0: PendingRestore round-trip preserves screenId
-    // (wrong-display restore *resolution* is covered by test_window_placement_store
-    //  / test_wta_convenience; this only pins the persistence round-trip)
-    // =====================================================================
-
-    void testPendingRestore_preservesScreenId()
-    {
-        QString appId = QStringLiteral("app");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.screenId = QStringLiteral("HDMI-2");
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().screenId, QStringLiteral("HDMI-2"));
-    }
-
-    // =====================================================================
     // P1: Auto-snap / Mark as auto-snapped
     // =====================================================================
 
@@ -649,50 +577,6 @@ private Q_SLOTS:
         QVERIFY(m_service->isAutoSnapped(windowId));
         QVERIFY(m_service->clearAutoSnapped(windowId));
         QVERIFY(!m_service->isAutoSnapped(windowId));
-    }
-
-    // =====================================================================
-    // P1: Consume pending assignment
-    // =====================================================================
-
-    void testConsumePendingAssignment()
-    {
-        QString windowId = QStringLiteral("app|12345");
-        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.zoneNumbers = {1};
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        m_service->consumePendingAssignment(windowId);
-
-        QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
-    }
-
-    // =====================================================================
-    // P0: PendingRestore round-trip preserves zoneNumbers
-    // (UUID-collision regeneration on import is covered elsewhere; this only
-    //  pins that zoneNumbers survive the persistence round-trip)
-    // =====================================================================
-
-    void testPendingRestore_preservesZoneNumbers()
-    {
-        QString appId = QStringLiteral("app");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.zoneNumbers = {1};
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().zoneNumbers.first(), 1);
     }
 
 private:

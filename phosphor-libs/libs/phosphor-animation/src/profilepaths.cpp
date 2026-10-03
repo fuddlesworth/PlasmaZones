@@ -282,7 +282,7 @@ bool eventPathResolvesPerWindow(const QString& path)
     //                          (open/close/focus) and daemon_apply (minimize)
     //   window.movement.move — tryBeginShaderForEvent from window_connections
     //   window.movement.placeIn / .placeOut / .layoutSwitch
-    //                        — applyWindowGeometry's resolve in drag_snap, and
+    //                        — applyWindowGeometry's resolve in window_geometry_apply, and
     //                          every other applyWindowGeometry caller that takes
     //                          the default profilePath (it defaults to placeIn),
     //                          which includes the tiling and scrolling reflows;

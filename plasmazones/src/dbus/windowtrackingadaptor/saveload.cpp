@@ -45,8 +45,8 @@ bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, 
         return false;
     }
     // Routes through `handleForPersisted` which resolves the screen's
-    // mode via the bound IModeProvider — every consumer (snap-side
-    // ShouldTrackPredicate, the WindowPlacementStore serialize keep-predicate,
+    // mode via the bound IModeProvider — every consumer (the snap engine's
+    // restore gate, the WindowPlacementStore serialize keep-predicate,
     // and the save/load filters) ends up applying the cascade keyed on
     // the mode the screen is actually running.
     return m_contextResolver->isDisabled(m_contextResolver->handleForPersisted(screenId, virtualDesktop, activity));

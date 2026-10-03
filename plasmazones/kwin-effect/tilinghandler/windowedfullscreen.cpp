@@ -1246,7 +1246,7 @@ void TilingHandler::releaseWindowedFullscreenState(const QString& windowId)
     restoreWindowedFullscreenLayerDemotion(windowId, kw);
     // Requested-state term: during our OWN enter round-trip the committed
     // state lags behind while requested is already true (the same lag
-    // drag_snap's apply bail and the self-heal arm handle explicitly). A
+    // applyWindowGeometry's bail and the self-heal arm handle explicitly). A
     // release landing inside that gap must still un-set, or the client
     // commits fullscreen with membership already gone — the apply bail then
     // rejects every geometry and the ack arm can't fire, stranding the

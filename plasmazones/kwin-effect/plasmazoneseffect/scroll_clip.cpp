@@ -122,7 +122,7 @@ QPoint PlasmaZonesEffect::scrollVisualTranslationFor(const ScrollVisualPlacement
     // where both constrain paths put a smaller frame on screen (the X11
     // pre-pass does it explicitly; KWin does it for a Wayland client that
     // renegotiated). Clamped at zero to match constrainTileGeometry
-    // (drag_snap.cpp, `qMax(0, ...)`): when a minimum size exceeds the column
+    // (window_geometry_apply.cpp, `qMax(0, ...)`): when a minimum size exceeds the column
     // the window stays anchored at the column's origin rather than shifting
     // past its edge, and the drawn position has to follow the committed one.
     //

@@ -9,7 +9,9 @@
 // as AutotileEngine.h / daemon.h / windowtrackingadaptor.h. Grew with the
 // per-desktop membership change: the membership pass and its helpers, the
 // per-desktop seed / restore-desktop resolution, the window-scoped resnap,
-// the pinned-desktop store resolution and the float residence helper.
+// the pinned-desktop store resolution and the float residence helper. Grew
+// with the cross-output bounce fix (#1124): the free-frame capture before a
+// user snap.
 
 #pragma once
 
@@ -166,13 +168,12 @@ public:
      * Applied inside `resolveWindowRestore` so BOTH the engine's own
      * `windowOpened` path AND the D-Bus `SnapAdaptor::resolveWindowRestore`
      * path (used by the KWin effect for per-window restores) hit the same
-     * gate. A PendingRestore authored before the user disabled the context
+     * gate. A placement record saved before the user disabled the context
      * can no longer drag a freshly opened window into a zone the user told
-     * us to stay out of (discussion #461 item 7). Without this gate,
-     * restarting the daemon was the only way to evict stale in-memory
-     * entries — the `isPersistedContextDisabled` filter on disk load only
-     * fires on startup, so any restore queued during the running session
-     * leaked through.
+     * us to stay out of (discussion #461 item 7). The
+     * `isPersistedContextDisabled` filter on disk load only fires on
+     * startup, so without this gate a record saved during the running
+     * session would leak through.
      *
      * When unset (default), the engine behaves as if every context is
      * active — the historical default that unit tests rely on.
@@ -351,6 +352,10 @@ public:
         m_placementZonesResolver = std::move(resolver);
     }
 
+    /// A no-op: snap's close is WindowTrackingService-driven (WTS::windowClosed
+    /// clears the window's SnapState and its resolver entry), so snap keeps no
+    /// engine-side close state and the daemon's engine close loop, which walks
+    /// the tiling engines, does not include it.
     void windowClosed(const QString& windowId) override;
 
     /// The (screen, desktop, activity) key of the store that genuinely holds
@@ -827,6 +832,18 @@ public:
 
     void uncommitSnap(const QString& windowId);
 
+    /// Record a floating window's live frame as its float-back on @p screenId,
+    /// ahead of a user snap the DAEMON drives (the move, span, snap-to-zone and
+    /// push keys, the D-Bus moveWindowToZone). Those commit before the effect's
+    /// pre-snap capture arrives, and recordFreeGeometry refuses a capture for a
+    /// window that already occupies a zone, so the window was left with no
+    /// float-back. The capture toggleFocusedFloat already takes, for the same
+    /// reason. No-op for a window in a zone (its frame is the zone rect), a
+    /// maximized or fullscreen one (its frame is the output), and a frame that
+    /// does not lie on @p screenId. Not for handoffs: a window arriving from a
+    /// tiling engine is sitting on its tile rect.
+    void recordFreeFrameBeforeUserSnap(const QString& windowId, const QString& screenId);
+
     /// Unconfined (user-toggle) form. Also the ABI-stable signature the
     /// installed library exported before the confinement parameter existed.
     PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
@@ -892,16 +909,8 @@ public:
     QVector<PhosphorEngine::ZoneAssignmentEntry> calculateRotation(bool clockwise,
                                                                    const QString& screenFilter = QString()) const;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Effect-reported windows (runtime flag — not persisted)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void markWindowReported(const QString& windowId);
-    const QSet<QString>& effectReportedWindows() const
-    {
-        return m_effectReportedWindows;
-    }
-
+    /// Drops the state-index membership of every window not in the
+    /// (canonical) alive set. See the definition for why only the membership.
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1164,6 +1173,9 @@ private:
     PhosphorEngine::ScreenContextTracker m_context;
     SnapState* m_globals = nullptr;
     PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
+    // Stored and never read: zone lookups go through m_windowTracker and the
+    // adjacency resolver. Kept because the constructor parameter and this
+    // member are part of the installed class's ABI.
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     PhosphorEngine::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QPointer<QObject> m_autotileEngineObj;
@@ -1188,7 +1200,6 @@ private:
     // by the fact that SnapEngine has to exist before a resolver that
     // takes WTS + PhosphorZones::LayoutRegistry can be built).
     std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
-    QSet<QString> m_effectReportedWindows;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Float helpers (src/float.cpp)

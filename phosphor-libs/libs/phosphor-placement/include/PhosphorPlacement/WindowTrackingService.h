@@ -10,7 +10,9 @@
 // which of those owns what. Same rationale as
 // PhosphorTileEngine/AutotileEngine.h. Grew with the per-desktop membership
 // change: the forget / renumber wrappers over the persisted per-desktop
-// zones, the membership-aware zone walk and the per-desktop zone read.
+// zones, the membership-aware zone walk and the per-desktop zone read. Grew
+// with the cross-output bounce fix (#1124): the tiling held-screen resolver
+// the resnap buffer consults before it hands a snap zone back.
 
 #pragma once
 
@@ -138,46 +140,6 @@ public:
     const PhosphorEngine::WindowPlacementStore& placementStore() const;
 
     /**
-     * @brief Predicate type for "is this snap-mode context active?".
-     *
-     * Receives the (screenId, virtualDesktop) tuple recorded for the closing
-     * window. Returns true when the context is ACTIVE (i.e. tracking should
-     * proceed); false when the context is disabled via the snapping-disabled
-     * monitor / desktop lists.
-     *
-     * No activity parameter: SnapState does not track per-window activity, so
-     * the placement library has nothing to thread through. If activity-mode
-     * filtering grows here later, extend the signature then — until then the
-     * dead slot would be misleading.
-     *
-     * The placement library is intentionally settings-agnostic (LGPL boundary),
-     * so the daemon adaptor injects the predicate. When unset, the service
-     * behaves as if every context is active — the historical default that unit
-     * tests rely on.
-     */
-    using ShouldTrackPredicate = std::function<bool(const QString& screenId, int virtualDesktop)>;
-
-    /**
-     * @brief Inject a context-active predicate. See ShouldTrackPredicate.
-     *
-     * Used to suppress PendingRestore writes for windows that close on a
-     * monitor/desktop the user has disabled snapping for. Without this, a
-     * window closed on a disabled monitor still gets a snap restore
-     * recorded against that monitor — when the same app reopens (or KWin
-     * rehomes the window onto a surviving monitor after sleep), the snap
-     * machinery picks the stale entry up and yanks the window back into a
-     * zone the user told us to stay out of. See discussion #461 item 2.
-     *
-     * Ownership: the caller is responsible for keeping any captured state
-     * (e.g. `this` pointers to a settings adaptor) valid for the lifetime
-     * of this WindowTrackingService. If the captured object is destroyed
-     * before WTS, clear the predicate first (`setShouldTrackPredicate({})`)
-     * — otherwise a subsequent `windowClosed` call dereferences freed
-     * memory.
-     */
-    void setShouldTrackPredicate(ShouldTrackPredicate predicate);
-
-    /**
      * @brief Wire the snap-mode placement engine.
      *
      * Float-back / free geometry is SHARED across modes and lives in the single
@@ -235,6 +197,26 @@ public:
     /// True if a tiling-family engine (autotile / scrolling) reports the window actively tiled.
     /// Returns false when the predicate is unwired (snap-only tests).
     bool isWindowEngineTiled(const QString& windowId) const;
+
+    /**
+     * @brief Resolver: the screen a tiling-family engine (autotile / scrolling)
+     * genuinely holds @p windowId on, tiled or engine-floating, in that
+     * screen's current context (IPlacementEngine::heldScreenForWindow); empty
+     * when neither engine holds it.
+     *
+     * Injected by the daemon (same LGPL-boundary pattern as
+     * EngineTiledPredicate). The resnap buffer asks it: a snapped window whose
+     * screen goes to tiling keeps its zone there as memory for the return to
+     * snapping, and a tiled move to another output never reaches the snap
+     * engine, so without this the return replayed the zone of a screen the
+     * window had left and dragged it back across monitors.
+     */
+    using TilingHeldScreenResolver = std::function<QString(const QString& windowId)>;
+    void setTilingHeldScreenResolver(TilingHeldScreenResolver resolver);
+
+    /// The screen a tiling-family engine holds @p windowId on (see the resolver);
+    /// empty when neither holds it or the resolver is unwired (snap-only tests).
+    QString tilingHeldScreenForWindow(const QString& windowId) const;
 
     /**
      * @brief Resolver: which engine id owns @p windowId's mode on @p screenId?
@@ -450,7 +432,10 @@ public:
     void releaseEngineSlot(const QString& windowId, const QString& engineId) override;
     /// Dirty-marking wrapper for WindowPlacementStore::forgetDesktopZones.
     void forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop) override;
-    /// Dirty-marking wrapper for WindowPlacementStore::renumberDesktopZones.
+    /// Dirty-marking wrapper for WindowPlacementStore::renumberDesktopZones
+    /// that also shifts the buffered resnap rows the same way: a row on the
+    /// removed desktop maps to 0, the all-desktops sentinel, and a row past it
+    /// moves down one.
     void renumberDesktopZones(int removedDesktop) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -669,37 +654,6 @@ public:
      */
     bool clearAutoSnapped(const QString& windowId) override;
 
-    /**
-     * @brief Pop the oldest pending restore entry for this window's appId.
-     *
-     * The pending-restore queue is keyed by appId (FIFO), mirroring KWin's
-     * takeSessionInfo pattern. Every call to this method consumes at most
-     * one entry — the oldest one — and erases the queue entry entirely once
-     * it's emptied. Call sites:
-     *
-     *   1. After a successful session restore — so the same window isn't
-     *      restored again if reopened, and so other instances of the same
-     *      app class don't incorrectly restore onto this window's zone.
-     *   2. After a user-initiated snap or unsnap — so a stale entry from a
-     *      previous session doesn't drag the window back to a different zone
-     *      on its next close/reopen cycle.
-     *
-     * There is no "stale" vs "fresh" distinction inside the queue: every
-     * entry is a FIFO head, and this method pops the head regardless of
-     * provenance. Earlier versions split this into two methods
-     * (consumePendingAssignment / clearStalePendingAssignment) that were
-     * implementation-identical but named as if they did different things;
-     * the duplication has been removed.
-     *
-     * @param windowId Full window ID — the appId is resolved via
-     *                 currentAppIdFor() so the queue lookup sees the live
-     *                 class (Electron/CEF apps that mutate their class
-     *                 mid-session still hit the right queue).
-     * @return true if an entry was popped, false if the queue was empty.
-     *         Callers that don't care about the result may ignore it.
-     */
-    bool consumePendingAssignment(const QString& windowId) override;
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation Helpers
     // ═══════════════════════════════════════════════════════════════════════════
@@ -826,7 +780,7 @@ public:
      *        excluding screens the caller knows are still subdivided.
      *
      * Sweeps every state store that holds a screen id (active screen
-     * assignments, pre-float assignments, pending restore queues, pre-tile
+     * assignments, pre-float assignments, placement records, pre-tile
      * geometry on the snap engine) and returns the set of physical screen ids
      * for which any stored value is still a "physId/vs:N" form whose physId
      * is NOT in @p subdividedPhysicalIds.
@@ -873,7 +827,7 @@ public:
     };
 
     /**
-     * @brief Pre-compute zone geometries for all pending restore entries.
+     * @brief Pre-compute zone geometries for the restorable snapped records.
      * @return Map of appId -> {geometry, savedScreenId, windowId}
      *
      * Used by the KWin effect to cache expected snap positions so that
@@ -896,11 +850,9 @@ public:
     /**
      * @brief Clean up all tracking data for a closed window
      * @param windowId Full window ID
-     * @param kind Structural kind of the closing window. When a PendingRestore
-     *             entry is enqueued for this close, the kind is stamped onto
-     *             the entry so the consume path can refuse to assign it to a
-     *             window of a different kind on reopen. Defaults to
-     *             `WindowKind::Unknown` (the pre-fix behaviour: no kind gate).
+     * @param kind Structural kind of the closing window. Unused: it gated the
+     *             pending-restore queue this close used to write, which was
+     *             removed. Kept so the D-Bus close path keeps its signature.
      */
     void windowClosed(const QString& windowId, PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown);
 
@@ -923,13 +875,7 @@ public:
     /// else the flat zoneIds.
     QStringList snapZonesOnDesktopInView(const PhosphorEngine::EngineSlot& slot, const QString& screenId) const;
 
-    using PendingRestore = PhosphorEngine::PendingRestore;
     using ResnapEntry = PhosphorEngine::ResnapEntry;
-
-    /**
-     * @brief Get pending restore queues (consumption queue: appId -> list of pending restores)
-     */
-    const QHash<QString, QList<PendingRestore>>& pendingRestoreQueues() const override;
 
     QVector<ResnapEntry> takeResnapBuffer() override;
 
@@ -937,16 +883,6 @@ public:
      * @brief Get user-snapped classes
      */
     const QSet<QString>& userSnappedClasses() const;
-
-    /**
-     * @brief Set pending restore queues (test / bulk-seed entry point)
-     *
-     * No production loader remains: the adaptor's save path DELETES the
-     * legacy KConfig key (saveload.cpp), and the queues are documented
-     * in-session-only. Kept as public API for the unit suites that seed
-     * restore state directly.
-     */
-    void setPendingRestoreQueues(const QHash<QString, QList<PendingRestore>>& queues);
 
     /**
      * @brief Set user-snapped classes (loaded from the persisted state by the adaptor)
@@ -992,7 +928,7 @@ public:
     // immediately after populating in-memory state so the first real save
     // doesn't redundantly write back what we just loaded.
     // ═══════════════════════════════════════════════════════════════════════
-    // NOTE: several bits below (DirtyZoneAssignments, DirtyPendingRestores,
+    // NOTE: several bits below (DirtyZoneAssignments,
     // DirtyPreTileGeometries, DirtyPreFloatZones, DirtyPreFloatScreens,
     // DirtyAutotileOrders, DirtyAutotilePending) no longer have a dedicated save
     // block — their legacy keys were collapsed into DirtyWindowPlacements. The
@@ -1006,7 +942,7 @@ public:
         DirtyNone = 0,
         DirtyActiveLayoutId = 1u << 0,
         DirtyZoneAssignments = 1u << 1, // legacy save-trigger → DirtyWindowPlacements
-        DirtyPendingRestores = 1u << 2, // legacy save-trigger → DirtyWindowPlacements
+        // bit 2 reserved (was DirtyPendingRestores, removed with the pending-restore queue)
         DirtyPreTileGeometries = 1u << 3, // legacy save-trigger → DirtyWindowPlacements
         DirtyLastUsedZone = 1u << 4,
         DirtyPreFloatZones = 1u << 5, // legacy save-trigger → DirtyWindowPlacements
@@ -1017,7 +953,7 @@ public:
         // bit 10 reserved (was DirtyFloatRestores, removed with the FloatRestoreQueues key)
         DirtyWindowPlacements = 1u << 11, ///< unified WindowPlacementStore (sole per-window restore state)
         DirtyScrollStrips = 1u << 12, ///< scrolling strip-structure snapshots (WTA-provided blob)
-        DirtyAll = 0x1FFFu, // covers bits 0-12 incl. the reserved bit 10
+        DirtyAll = 0x1FFFu, // covers bits 0-12 incl. the reserved bits 2 and 10
     };
     using DirtyMask = uint32_t;
 
@@ -1273,14 +1209,6 @@ private:
     EngineFloatWriter m_engineFloatWriter{};
     EngineFloatLister m_engineFloatLister{};
 
-    // Session persistence: consumption queue (appId -> list of pending restores, consumed FIFO)
-    QHash<QString, QList<PendingRestore>> m_pendingRestoreQueues;
-
-    // Optional daemon-injected gate consulted before recording a PendingRestore
-    // on windowClosed. When unset (e.g. unit tests), every context is treated
-    // as active and the historical write-everything behavior is preserved.
-    ShouldTrackPredicate m_shouldTrackPredicate{};
-
     // Pre-float zone and screen state is owned by SnapState (authoritative store).
     // WTS preFloat getter methods add appId-fallback queries for session-restored
     // entries keyed by appId. SnapState itself uses windowId-only keys.
@@ -1294,6 +1222,10 @@ private:
     // save after daemon startup to serialize every field. Cleared by
     // loadState() once in-memory state mirrors the disk file.
     DirtyMask m_dirtyMask = DirtyAll;
+
+    // Appended last: this is an installed class, and a member added after a
+    // release goes after every member that release shipped.
+    TilingHeldScreenResolver m_tilingHeldScreenResolver{};
 
     // Note: No save timer - persistence is the WindowTrackingAdaptor's debounced
     // JSON save. Service emits stateChanged() signal when state needs saving

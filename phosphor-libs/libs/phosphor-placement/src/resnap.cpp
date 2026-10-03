@@ -59,6 +59,11 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // funnel through addCandidate).
     QHash<QString, int> screenDesktopMemo;
 
+    // Windows whose snap assignment names a screen they have since LEFT while a
+    // tiling engine held them. Collected by addCandidate and forgotten after
+    // both passes (see the loop below the durable pass).
+    QSet<QString> departed;
+
     // Per-window candidate processing, shared by the live and durable passes below.
     const auto addCandidate = [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                   int virtualDesktop) {
@@ -74,6 +79,18 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
             return;
         if (screenId.isEmpty())
             return;
+        // A window a tiling engine holds on ANOTHER screen is not this
+        // resnap's to place. Its snap assignment here is memory from before
+        // the screen went to tiling, and the window left while tiled (a
+        // keyboard move, a drag), which the snap engine never hears of.
+        // Replaying it pulled the window off the screen it is on and back
+        // into its old zone (discussion #1124). Held on THIS screen is the
+        // ordinary return to snapping, whatever order the release and this
+        // pass run in, so only a different screen skips.
+        if (const QString heldOn = tilingHeldScreenForWindow(windowId); !heldOn.isEmpty() && heldOn != screenId) {
+            departed.insert(canonicalizeForLookup(windowId));
+            return;
+        }
         // Skip windows on excluded screens (e.g. autotile screens)
         if (excludeScreens.contains(screenId))
             return;
@@ -172,6 +189,19 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
                 desktop = shown;
         }
         addCandidate(rec.windowId, snapZonesOnDesktopInView(snapSlot, rec.screenId), rec.screenId, desktop);
+    }
+
+    // Skipping is not enough for a departed window: its membership stays in
+    // the old screen's store, and zone occupancy reads every store, so once
+    // that screen snaps again the window would count as an occupant of a zone
+    // on a monitor it is not on. A window is on one screen, and the tiling
+    // engine holding it elsewhere is the truth, so the snap engine forgets it.
+    for (const QString& windowId : std::as_const(departed)) {
+        qCInfo(lcPlacement) << "Resnap buffer: skipping" << windowId << "held by a tiling engine on"
+                            << tilingHeldScreenForWindow(windowId) << "- forgetting its snap assignment";
+        if (m_snapResolver.forgetWindow) {
+            m_snapResolver.forgetWindow(windowId);
+        }
     }
 
     if (!newBuffer.isEmpty()) {

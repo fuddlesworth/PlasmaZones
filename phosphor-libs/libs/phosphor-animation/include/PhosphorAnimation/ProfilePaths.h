@@ -411,7 +411,7 @@ PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 /// other resolve legs do not consult it and are windowless or per-window by
 /// construction at their own call sites: the desktop legs in lifecycle_wiring,
 /// the strip in tiling, the daemon's overlay legs in animation_config, and
-/// `applyWindowGeometry`'s per-window resolve in drag_snap.
+/// `applyWindowGeometry`'s per-window resolve in window_geometry_apply.
 ///
 /// The hazard runs in the fail-open direction. Add a PER-WINDOW leg without
 /// listing it here and tryBeginShaderForEvent resolves it windowless, dropping

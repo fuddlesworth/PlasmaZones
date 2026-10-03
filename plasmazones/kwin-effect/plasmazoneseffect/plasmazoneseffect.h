@@ -6,7 +6,9 @@
 // back-pointer surface the split-out implementation files
 // (plasmazoneseffect/*.cpp, handlers, autotilehandler) call back through.
 // The implementation is already partitioned; the class declaration is the
-// one place KWin's plugin contract requires to be whole.
+// one place KWin's plugin contract requires to be whole. Grew with the
+// cross-output bounce fix (#1124) and its audit: the per-window wiring split
+// and the members those fixes add.
 
 #pragma once
 
@@ -408,6 +410,14 @@ private:
     /// seed that stamp. Called once per window from setupWindowConnections,
     /// inside its idempotency guard; defined in window_desktop_connections.cpp.
     void wireDesktopChangeHandler(KWin::EffectWindow* w);
+    /// The rest of setupWindowConnections' per-window wiring, split by concern
+    /// and called from it in this order: cross-output and virtual-screen moves
+    /// (window_output_connections.cpp), identity and metadata pushes
+    /// (window_metadata_connections.cpp), and the interactive move/resize pair
+    /// (window_moveresize_connections.cpp).
+    void wireOutputChangeHandlers(KWin::EffectWindow* w);
+    void wireMetadataHandlers(KWin::EffectWindow* w);
+    void wireUserMoveResizeHandlers(KWin::EffectWindow* w);
 
     /**
      * @brief Push current metadata for a window to the daemon's WindowRegistry.
@@ -506,7 +516,7 @@ private:
     bool isExcludedByDecorationRule(KWin::EffectWindow* w,
                                     std::optional<PhosphorRules::WindowQuery>* sharedQuery = nullptr) const;
 
-    /// Classify a window's structural kind for the snap-restore consume gate.
+    /// Classify a window's structural kind for the open and close wire calls.
     PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;
 
     /**
@@ -843,6 +853,8 @@ private:
     /// re-seed uses this to fall back to the stacking walk when the raw
     /// active window is internally rejected; ordinary callers may ignore it.
     bool notifyWindowActivated(KWin::EffectWindow* w);
+    /// The exact id, else the same instance under another app prefix, else
+    /// the one live window of the id's app when exactly one exists.
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
 
     /// The O(1) reverse-cache half of findWindowById, WITHOUT the fuzzy appId fallback.
@@ -865,10 +877,18 @@ private:
                               const QSize& size, bool freshOpen);
 
     /**
-     * @brief All windows matching windowId (exact or same appId).
+     * @brief The window with windowId's instance, else every window of its app.
      * Used by autotile to disambiguate when multiple windows share an appId (e.g. two Firefox).
      */
     QVector<KWin::EffectWindow*> findAllWindowsById(const QString& windowId) const;
+
+    /// Resolve a daemon batch's window ids to live windows, index-aligned with
+    /// @p windowIds. An id naming a live window (exactly, or by instance) gets
+    /// that window, or nullptr when shouldHandleWindow refuses it: it is never
+    /// handed to a sibling. Only an id naming no live window falls back to its
+    /// app, and only when exactly one unclaimed handled window of that app
+    /// exists.
+    QVector<KWin::EffectWindow*> resolveDaemonWindowIds(const QStringList& windowIds) const;
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
@@ -1153,7 +1173,7 @@ private:
     /// rect differ by the centring offset).
     ///
     /// "Predict" is the honest word, not "commit" — the implementation
-    /// (drag_snap.cpp) enumerates the two known divergences from what KWin
+    /// (window_geometry_apply.cpp) enumerates the two known divergences from what KWin
     /// finally commits, and why every consumer as written tolerates them. Do
     /// not add an equality comparand without reading that note.
     ///

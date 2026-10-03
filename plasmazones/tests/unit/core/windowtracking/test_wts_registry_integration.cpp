@@ -176,20 +176,6 @@ private Q_SLOTS:
         QCOMPARE(m_service->preFloatZone(instanceId), m_zoneIds[0]);
     }
 
-    void windowClosed_withBareInstanceId_persistsUnderCurrentClass()
-    {
-        const QString instanceId = QStringLiteral("firefox-uuid");
-        m_registry->upsert(instanceId, {QStringLiteral("firefox"), QString(), QString()});
-
-        m_service->assignWindowToZone(instanceId, m_zoneIds[1], m_screenId, 1);
-        m_service->windowClosed(instanceId);
-
-        // Pending restore entry keyed by CURRENT class name from the
-        // registry, not by the instance id. That's what lets a new
-        // instance (with a different uuid) pick it up on next launch.
-        QVERIFY(m_service->pendingRestoreQueues().contains(QStringLiteral("firefox")));
-    }
-
     // ────────────────────────────────────────────────────────────────────
     // pendingRestoreGeometries — the effect's instant-restore cache source
     // ────────────────────────────────────────────────────────────────────
