@@ -168,7 +168,12 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                     const auto counterGuard = qScopeGuard([this, prevInApply] {
                         m_effect->m_daemonGate.inGeometryApply = prevInApply;
                     });
+                    // Re-asserting the commanded rect is not a new command, so
+                    // the window keeps its stamp: a strip entry the next batch
+                    // has already scheduled for it must still land.
+                    const quint64 latestCommand = m_effect->m_daemonGate.commandStamps.current(w);
                     m_effect->applyWindowGeometry(w, commanded, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+                    m_effect->m_daemonGate.commandStamps.reinstate(w, latestCommand);
                     return;
                 }
             }

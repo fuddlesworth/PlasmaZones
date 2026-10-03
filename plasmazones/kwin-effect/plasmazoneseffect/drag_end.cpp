@@ -139,6 +139,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
         return kw->interactiveMoveResizeCount();
     }();
 
+    // The drop is this window's newest command, decided at dispatch even though
+    // its outcome arrives asynchronously: a deferred apply registered earlier in
+    // the gesture (a tile or snap batch that landed mid-drag) must not replay at
+    // windowFinishUserMovedResized over whatever the drop decides, and that
+    // signal can fire before the reply. Whatever the outcome applies is a fresh
+    // command of its own.
+    m_daemonGate.commandStamps.bump(window);
+
     // qRound the cursor coords (not truncation): the hot-path updateDragCursor
     // stream rounds, so on fractional-scale outputs the release coordinate the
     // daemon resolves the drop zone against must round too, or it can differ by

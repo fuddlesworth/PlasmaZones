@@ -491,6 +491,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         QPointer<KWin::EffectWindow> window;
         QRect geometry;
         QString screenId; ///< daemon-authoritative target screen (empty = no override)
+        quint64 commandStamp = 0; ///< this entry's WindowCommandStamps stamp
     };
     QVector<PendingApply> pending;
 
@@ -529,6 +530,9 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             p.window = QPointer<KWin::EffectWindow>(window);
             p.geometry = valid.at(i)->toRect();
             p.screenId = valid.at(i)->screenId;
+            // Scheduling is the command: an older entry still pending for this
+            // window, from any cascade, is superseded from here on.
+            p.commandStamp = m_daemonGate.commandStamps.bump(window);
             pending.append(p);
         }
     }
@@ -564,10 +568,9 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         ? PhosphorAnimation::ProfilePaths::WindowLayoutSwitch
         : PhosphorAnimation::ProfilePaths::WindowPlaceIn;
 
-    // Per-screen supersession epoch (see m_daemonGate.batchGenByScreen): bump and
-    // snapshot each target screen's counter so this cascade's still-queued
-    // ticks self-cancel if a newer batch lands on the same screen. Float/
-    // restore entries (empty screenId) are independent and never guarded.
+    // Per-screen epoch (see m_daemonGate.batchGenByScreen), bumped and
+    // snapshotted for each target screen. Only the z-order restore below reads
+    // it; whether an entry still applies is its own command stamp's call.
     QHash<QString, uint64_t> genByScreen;
     for (const auto& p : pending) {
         if (p.screenId.isEmpty() || genByScreen.contains(p.screenId)) {
@@ -586,16 +589,16 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     // than anything incorrect.
     applyStaggeredOrImmediate(
         pending.size(),
-        [this, pending, batchProfilePath, genByScreen](int i) {
+        [this, pending, batchProfilePath](int i) {
             const auto& p = pending[i];
-            // Drop this apply if a newer daemon batch has superseded this
-            // window's screen: a later-firing tick of this (older) cascade would
-            // otherwise clobber the newer batch's position and strand the window
-            // in a stale zone. Only observable with cascade stagger enabled,
-            // where the per-window moves spread across timer ticks. Empty
-            // screenId (float/restore) is independent and always applies.
-            if (!p.screenId.isEmpty()
-                && m_daemonGate.batchGenByScreen.value(p.screenId) != genByScreen.value(p.screenId)) {
+            // Drop this apply if any newer command for THIS window has landed
+            // since it was scheduled (a later batch carrying it, a keyboard
+            // move, a float, a drag end): a later-firing tick of this older
+            // cascade would otherwise put the stale rect back over it. Per
+            // window, so a newer batch that does not carry the window leaves
+            // its entry alone. Only observable with cascade stagger enabled.
+            if (p.window && !m_daemonGate.commandStamps.isCurrent(p.window.data(), p.commandStamp)) {
+                qCDebug(lcEffect) << "Batch apply superseded by a newer command for" << getWindowId(p.window.data());
                 return;
             }
             // isDeleted too, not just destruction: close-shader grabs (which

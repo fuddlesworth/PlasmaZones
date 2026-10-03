@@ -237,6 +237,7 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
     {
         QPointer<KWin::EffectWindow> window;
         QRect geometry;
+        quint64 commandStamp = 0; ///< see WindowCommandStamps
     };
     QVector<ApplyEntry> toApply;
 
@@ -273,14 +274,20 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             QRect newGeometry = entry.toRect();
             QRectF currentWindowGeometry = window->frameGeometry();
             if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
-                toApply.append({QPointer<KWin::EffectWindow>(window), newGeometry});
+                // Bumped only for an entry this pass will actually apply: a
+                // skipped window keeps whatever command it already has pending.
+                toApply.append({QPointer<KWin::EffectWindow>(window), newGeometry,
+                                m_effect->m_daemonGate.commandStamps.bump(window)});
             }
         }
     }
 
     m_effect->applyStaggeredOrImmediate(toApply.size(), [this, toApply](int i) {
         const ApplyEntry& e = toApply[i];
-        if (e.window && !e.window->isDeleted() && m_effect->shouldHandleWindow(e.window)) {
+        // A newer command for the window since this pass scheduled it (a daemon
+        // batch, a keyboard move, a float) wins over this resnap.
+        if (e.window && !e.window->isDeleted() && m_effect->shouldHandleWindow(e.window)
+            && m_effect->m_daemonGate.commandStamps.isCurrent(e.window.data(), e.commandStamp)) {
             // Re-check at apply time (mirrors the build-time guard above): the
             // window's screen can flip to autotile during the stagger interval,
             // and a snap-path applyWindowGeometry would then fight the autotile

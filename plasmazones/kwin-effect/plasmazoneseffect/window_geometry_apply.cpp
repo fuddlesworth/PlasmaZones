@@ -77,7 +77,10 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
     // KWin round-trips the request through device pixels, so the committed
     // frame is this rect rounded. The scroll consumers are all intersects()
     // tests or animation endpoints, so neither divergence bites there — do not
-    // add an equality comparand among THOSE without revisiting this.
+    // add an equality comparand among THOSE without revisiting this. The one
+    // consumer that COMMITS the result is the windowed-fullscreen ack
+    // re-commit in slotWindowFullScreenChanged, a raw moveResize that routes
+    // through here so it and applyWindowGeometry read the column rect alike.
     //
     // Three equalities against this rect are sanctioned, all in
     // applyWindowGeometry, and all comparing against `frameGeometry().toRect()`
@@ -177,6 +180,19 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // withheld from compositing until the hard deadline for nothing.
         endRestoreSuppression(window);
         return;
+    }
+
+    // This is now the window's latest geometry command, whatever becomes of it
+    // below: the fullscreen bail, the no-op skip and an immediate mid-drag
+    // commit are commands too. Every deferred apply scheduled for the window
+    // before it is stale (WindowCommandStamps), and a mid-drag replay still
+    // pending goes now, so the older rect can never land over this one at the
+    // gesture's end. A replay re-entering here has already dropped its own
+    // handle, and the defer below registers a fresh one under this stamp.
+    const quint64 commandStamp = m_daemonGate.commandStamps.bump(window);
+    if (auto prior = m_deferredGeometryReplay.find(window); prior != m_deferredGeometryReplay.end()) {
+        disconnect(*prior);
+        m_deferredGeometryReplay.erase(prior);
     }
 
     // Don't call moveResize() on fullscreen windows, it can crash KWin.
@@ -289,94 +305,86 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     if (deferredToMoveEnd) {
         qCDebug(lcEffect) << "Window in user move/resize, deferring geometry via windowFinishUserMovedResized";
         QPointer<KWin::EffectWindow> safeWindow = window;
-        // Snapshot the batch-supersession context at defer time: the fire can
-        // land arbitrarily later (the user keeps dragging), and replaying the
-        // old rect after a NEWER per-screen batch repositioned things would
-        // clobber it — or, after the drag crossed screens, teleport the
-        // window back to the old screen's rect.
+        // Snapshot the supersession context at defer time: the fire can land
+        // arbitrarily later (the user keeps dragging). Replaying this rect after
+        // any newer command for the window would clobber it, and so would
+        // replaying it after the gesture carried the window to another screen
+        // (a keyboard move, which has no drag-end dispatch to bump the stamp).
+        // The previous replay, if any, was retired at the top of this function.
         const QString deferScreen = getWindowScreenId(window);
-        const uint64_t deferGen = m_daemonGate.batchGenByScreen.value(deferScreen);
-        // Retire any replay this window already has pending. Two applies inside
-        // one batch generation on one screen both pass the supersession guard
-        // below, so without this both replays fire at drag end and the window
-        // pays two moveResizes, two animator retargets and two rule resolves for
-        // one reposition. The newer rect is the one the caller means.
-        if (auto prior = m_deferredGeometryReplay.find(window); prior != m_deferredGeometryReplay.end()) {
-            disconnect(*prior);
-            m_deferredGeometryReplay.erase(prior);
-        }
         auto conn = std::make_shared<QMetaObject::Connection>();
-        *conn =
-            connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
-                    [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen, originOverride,
-                     visualTargetOverride, demoteMaximizeOnDeferredReplay](KWin::EffectWindow*) {
-                        disconnect(*conn);
-                        // Drop the handle on every exit, not just the applying
-                        // one: a stale entry would make the next defer for this
-                        // window disconnect an already-dead connection and, once
-                        // the pointer is recycled, retire a live replay that
-                        // belongs to a different window.
-                        if (safeWindow) {
-                            m_deferredGeometryReplay.remove(safeWindow.data());
-                        }
-                        if (!safeWindow || safeWindow->isDeleted()) {
-                            return;
-                        }
-                        // Same predicate as the top-of-function fullscreen
-                        // bail, exemptions included: a deferred apply for a
-                        // windowed-fullscreen member must not be silently
-                        // dropped by a plain isFullScreen() test the entry
-                        // bail was deliberately opened for.
-                        if (safeWindow->isFullScreen()) {
-                            KWin::Window* kwFs = safeWindow->window();
-                            const bool requestedFullScreen = !kwFs || kwFs->isRequestedFullScreen();
-                            const bool windowedFsMember = !m_windowedFullscreenWindows.isEmpty()
-                                && m_windowedFullscreenWindows.contains(getWindowId(safeWindow.data()));
-                            if (requestedFullScreen && !windowedFsMember) {
-                                // Same release the synchronous fullscreen bail
-                                // does: this replay is the reposition, and it
-                                // is not happening.
+        *conn = connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
+                        [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, commandStamp,
+                         originOverride, visualTargetOverride, demoteMaximizeOnDeferredReplay](KWin::EffectWindow*) {
+                            disconnect(*conn);
+                            // Drop the handle on every exit, not just the applying
+                            // one: a stale entry would make the next defer for this
+                            // window disconnect an already-dead connection and, once
+                            // the pointer is recycled, retire a live replay that
+                            // belongs to a different window.
+                            if (safeWindow) {
+                                m_deferredGeometryReplay.remove(safeWindow.data());
+                            }
+                            if (!safeWindow || safeWindow->isDeleted()) {
+                                return;
+                            }
+                            // Same predicate as the top-of-function fullscreen
+                            // bail, exemptions included: a deferred apply for a
+                            // windowed-fullscreen member must not be silently
+                            // dropped by a plain isFullScreen() test the entry
+                            // bail was deliberately opened for.
+                            if (safeWindow->isFullScreen()) {
+                                KWin::Window* kwFs = safeWindow->window();
+                                const bool requestedFullScreen = !kwFs || kwFs->isRequestedFullScreen();
+                                const bool windowedFsMember = !m_windowedFullscreenWindows.isEmpty()
+                                    && m_windowedFullscreenWindows.contains(getWindowId(safeWindow.data()));
+                                if (requestedFullScreen && !windowedFsMember) {
+                                    // Same release the synchronous fullscreen bail
+                                    // does: this replay is the reposition, and it
+                                    // is not happening.
+                                    endRestoreSuppression(safeWindow.data());
+                                    return;
+                                }
+                            }
+                            const QString nowScreen = getWindowScreenId(safeWindow.data());
+                            if (nowScreen != deferScreen
+                                || !m_daemonGate.commandStamps.isCurrent(safeWindow.data(), commandStamp)) {
+                                qCDebug(lcEffect) << "Deferred geometry superseded (screen or newer command), dropping:"
+                                                  << getWindowId(safeWindow.data());
                                 endRestoreSuppression(safeWindow.data());
                                 return;
                             }
-                        }
-                        const QString nowScreen = getWindowScreenId(safeWindow.data());
-                        if (nowScreen != deferScreen || m_daemonGate.batchGenByScreen.value(deferScreen) != deferGen) {
-                            qCDebug(lcEffect) << "Deferred geometry superseded (screen or batch changed), dropping:"
-                                              << getWindowId(safeWindow.data());
-                            endRestoreSuppression(safeWindow.data());
-                            return;
-                        }
-                        // Pay the demote claim the caller's mid-gesture bail
-                        // skipped (see the header doc): the gesture is over
-                        // now, so the demote's isUserMove/isUserResize guard
-                        // passes, and it must run before the moveResize below
-                        // for the same reason it runs before the immediate
-                        // apply — a surviving KWin maximize fights the zone
-                        // rect and arms a cross-screen restore.
-                        if (demoteMaximizeOnDeferredReplay) {
-                            m_tilingHandler->demoteMaximizeForSnapPlacement(safeWindow.data(), geo);
-                        }
-                        // Re-assert the self-caused-frame-change guard the
-                        // original (batch) apply held — without it the
-                        // synchronous frame change from this moveResize
-                        // reads as an external move and can report a
-                        // phantom cross-VS unsnap.
-                        // Save/restore, not set/clear (nesting-safe).
-                        const bool prevInApply = m_daemonGate.inGeometryApply;
-                        m_daemonGate.inGeometryApply = true;
-                        const auto guard = qScopeGuard([this, prevInApply] {
-                            m_daemonGate.inGeometryApply = prevInApply;
+                            // Pay the demote claim the caller's mid-gesture bail
+                            // skipped (see the header doc): the gesture is over
+                            // now, so the demote's isUserMove/isUserResize guard
+                            // passes, and it must run before the moveResize below
+                            // for the same reason it runs before the immediate
+                            // apply — a surviving KWin maximize fights the zone
+                            // rect and arms a cross-screen restore.
+                            if (demoteMaximizeOnDeferredReplay) {
+                                m_tilingHandler->demoteMaximizeForSnapPlacement(safeWindow.data(), geo);
+                            }
+                            // Re-assert the self-caused-frame-change guard the
+                            // original (batch) apply held — without it the
+                            // synchronous frame change from this moveResize
+                            // reads as an external move and can report a
+                            // phantom cross-VS unsnap.
+                            // Save/restore, not set/clear (nesting-safe).
+                            const bool prevInApply = m_daemonGate.inGeometryApply;
+                            m_daemonGate.inGeometryApply = true;
+                            const auto guard = qScopeGuard([this, prevInApply] {
+                                m_daemonGate.inGeometryApply = prevInApply;
+                            });
+                            // Forward BOTH scroll overrides: dropping them replayed a
+                            // leaving column as a direct animate-to-park, sweeping it
+                            // backwards across the screen — the exact artifact the
+                            // override split exists to prevent. They are frame-relative
+                            // snapshots from defer time, valid because the stamp guard above
+                            // dropped the replay if any newer command for this window landed
+                            // since (another window moving does not invalidate them).
+                            applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath, originOverride,
+                                                visualTargetOverride, demoteMaximizeOnDeferredReplay);
                         });
-                        // Forward BOTH scroll overrides: dropping them replayed a
-                        // leaving column as a direct animate-to-park, sweeping it
-                        // backwards across the screen — the exact artifact the
-                        // override split exists to prevent. They are frame-relative
-                        // snapshots from defer time; the batch-generation guard above
-                        // already dropped the replay if anything moved since.
-                        applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath, originOverride,
-                                            visualTargetOverride, demoteMaximizeOnDeferredReplay);
-                    });
         m_deferredGeometryReplay.insert(window, *conn);
         return;
     }

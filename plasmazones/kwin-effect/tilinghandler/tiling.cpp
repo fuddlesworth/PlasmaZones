@@ -526,6 +526,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QPoint visualPos;
         bool hasVisualPos = false;
         QString tabFrom;
+        quint64 commandStamp = 0; ///< see WindowCommandStamps
     };
     QVector<TileSnap> toApply;
     QSet<KWin::EffectWindow*> applied;
@@ -573,7 +574,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // before it ever reaches `entries`, so it is always present here.
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
                         e.isWindowedFullscreen, e.isMaximizedToEdges, e.stacking, e.scrollEdge, e.viewDelta,
-                        e.viewImmediate, e.visualPos, e.hasVisualPos, e.tabFrom});
+                        e.viewImmediate, e.visualPos, e.hasVisualPos, e.tabFrom,
+                        m_effect->m_daemonGate.commandStamps.bump(e.window)});
     }
 
     // Start this batch's view legs, ONCE per output. The delta is a property
@@ -1364,28 +1366,26 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             TileSnap snap = toApply[i];
             // Drop this apply if superseded by a desktop/screen switch (global
             // epoch), by a newer retile of THIS window's screen (per-screen),
-            // or by the screen's STRIP being replaced under it. A batch for a
-            // DIFFERENT screen no longer cancels us — that was the
-            // cross-output "hole on the source monitor" bug.
+            // by the screen's STRIP being replaced under it, or by any newer
+            // command for this window (its command stamp: a float, a drag end,
+            // a snap batch, the untrack funnel). Checked before markWindowTiled,
+            // the pre-seeds and the centring-target record below. A batch for a
+            // DIFFERENT screen does not cancel us (the cross-output "hole on the
+            // source monitor" bug).
             if (m_tileStaggerGeneration != gen
                 || m_tileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)
-                || m_stripEpochByScreen.value(snap.screenId) != stripEpochByScreen.value(snap.screenId)) {
-                // A genuinely newer retile — of this window's screen, OR a
-                // global bump (desktop/screen switch) — has superseded this
-                // apply; normal during rapid ops. Both epochs are logged
-                // because either can be the one that tripped: printing only
-                // the per-screen pair read as "superseded, but the gens match"
-                // whenever the global epoch fired. Logged at debug to keep the
-                // supersession trail available without production noise (it
-                // was the smoking gun for the cross-output "source doesn't
-                // reflow" bug: a destination batch keyed to the moved window's
-                // STALE screen bumped the source screen's gen).
+                || m_stripEpochByScreen.value(snap.screenId) != stripEpochByScreen.value(snap.screenId)
+                || (snap.window && !m_effect->m_daemonGate.commandStamps.isCurrent(snap.window, snap.commandStamp))) {
+                // Every epoch is logged because any one can be the one that
+                // tripped (a destination batch keyed to a moved window's STALE
+                // screen once bumped the source screen's gen this way).
                 qCDebug(lcEffect) << "Autotile apply: skip superseded" << snap.windowId << "screen" << snap.screenId
                                   << "| globalGen now" << m_tileStaggerGeneration << "captured" << gen
                                   << "| screenGen now" << m_tileStaggerGenByScreen.value(snap.screenId) << "captured"
                                   << genByScreen.value(snap.screenId) << "| stripEpoch now"
                                   << m_stripEpochByScreen.value(snap.screenId) << "captured"
-                                  << stripEpochByScreen.value(snap.screenId);
+                                  << stripEpochByScreen.value(snap.screenId) << "| command stamp captured"
+                                  << snap.commandStamp;
                 return;
             }
             if (!snap.window || snap.window->isDeleted()) {

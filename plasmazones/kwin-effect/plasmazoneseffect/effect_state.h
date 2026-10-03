@@ -194,6 +194,54 @@ struct DragActivationState
     bool startedFloating = false;
 };
 
+/// Per-window geometry command stamp: the one supersession model every deferred
+/// apply shares. Every geometry command for a window (applyWindowGeometry, a
+/// drag-end dispatch, an effect-side float, the untrack funnel, and each entry a
+/// cascade schedules) bumps the window's stamp from one monotonic counter. A
+/// deferred apply (the snap and tile cascades, the screen-change cascade, the
+/// mid-drag replay) captures the stamp it was scheduled under and drops itself
+/// at fire time when a newer command has bumped it since.
+///
+/// Per WINDOW, not per screen: a per-screen epoch let a newer batch that does
+/// not carry a window void that window's pending entry (over-cancel), and let a
+/// single-window command leave an older pending entry standing (under-cancel).
+/// Keyed by raw pointer and erased when the window is deleted; the counter is
+/// session-monotonic, so a recycled address never matches a captured stamp.
+struct WindowCommandStamps
+{
+    quint64 bump(const KWin::EffectWindow* w)
+    {
+        return w ? (byWindow[w] = ++seq) : 0;
+    }
+    /// True when @p stamp is still @p w's latest command. A zero stamp (the
+    /// entry had no live window when it was scheduled) is never superseded.
+    bool isCurrent(const KWin::EffectWindow* w, quint64 stamp) const
+    {
+        return stamp == 0 || byWindow.value(w) == stamp;
+    }
+    quint64 current(const KWin::EffectWindow* w) const
+    {
+        return byWindow.value(w);
+    }
+    /// Put back a stamp read before an apply that only RE-ASSERTS a command
+    /// already issued (the scroll counter-assert): that apply is not a new
+    /// command, so it must not void an entry scheduled after the one it
+    /// re-asserts.
+    void reinstate(const KWin::EffectWindow* w, quint64 stamp)
+    {
+        if (w && stamp != 0) {
+            byWindow[w] = stamp;
+        }
+    }
+    void forget(const KWin::EffectWindow* w)
+    {
+        byWindow.remove(w);
+    }
+
+    QHash<const KWin::EffectWindow*, quint64> byWindow;
+    quint64 seq = 0;
+};
+
 /// Daemon readiness / virtual-screen fetch gate state. Grouped from
 /// PlasmaZonesEffect's trailing member block; see PlasmaZonesEffect::m_daemonGate.
 /// Cached daemon D-Bus service registration state, updated via QDBusServiceWatcher
@@ -235,19 +283,14 @@ struct DaemonGateState
     /// authoritative source of the window's intended VS during these applies, so the crossing check
     /// is unsafe and must be skipped.
     bool inGeometryApply = false;
-    /// Per-screen supersession epoch for slotApplyGeometriesBatch cascades.
-    /// When cascade stagger is enabled, a daemon geometry batch spreads its
-    /// per-window moves across QTimer::singleShot ticks. A rapid second batch
-    /// (e.g. holding the rotate shortcut) starts its own cascade while the
-    /// first one's ticks are still queued; the older batch's later-firing
-    /// timers would then clobber the newer batch's positions, leaving windows
-    /// in stale zones. Each batch bumps and captures the epoch for every screen
-    /// it targets. A staggered apply drops itself when its screen's epoch has
-    /// advanced, and the z-order restore drops only when every screen it
-    /// targeted has advanced. Per-screen, not global, so a batch on
-    /// one output never strands an in-flight cascade on another — mirrors the
-    /// autotile cascade guard (m_tileStaggerGenByScreen).
+    /// Per-screen epoch for slotApplyGeometriesBatch cascades, read ONLY by a
+    /// cascade's z-order restore: each batch bumps and captures it for every
+    /// screen it targets, and the restore skips when every screen it targeted
+    /// has advanced (the superseding cascade re-asserts the stacking itself).
+    /// Whether a staggered apply still fires is commandStamps' call, per window.
     QHash<QString, uint64_t> batchGenByScreen;
+    /// See WindowCommandStamps.
+    WindowCommandStamps commandStamps;
     int pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
     /// Countdown for the LIVE (generation 0) fetchVirtualScreenConfig replies, which the counter
     /// above deliberately does not cover — it is the startup batch's own tally. Both exist because

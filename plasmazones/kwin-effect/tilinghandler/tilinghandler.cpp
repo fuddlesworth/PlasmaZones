@@ -767,15 +767,10 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     m_unfloatInFlight.remove(windowId);
     dropFullscreenHoldRecords(windowId);
     // Same reasoning as the retry budget below: a dead id's entry must not
-    // outlive the window. Ids are unique per window, so the entry is a leak
-    // rather than a misattribution, and a window closing inside its own round
-    // trip would otherwise leave an armed entry behind for good.
-    //
-    // This funnel also serves the cross-output transfer of a LIVE window,
-    // where dropping the marker reopens the race for the remainder of a trip
-    // that is still genuinely in flight. Accepted rather than worked around:
-    // the window is changing screens, so the batch that would have been
-    // suppressed is describing the strip it is leaving, and the arriving
+    // outlive the window (a leak, not a misattribution: ids are unique). On
+    // the cross-output transfer of a LIVE window, dropping the marker reopens
+    // the race for the rest of a trip still in flight. Accepted: the batch it
+    // would have suppressed describes the strip being left, and the arriving
     // strip answers on its own first batch.
     m_maximizeToggleInFlight.remove(windowId);
     m_monocleRestoreOwed.remove(windowId);
@@ -837,10 +832,15 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // a cross-output transfer to a screen these engines do not manage, no later
     // tile batch exists to hand the state back.
     //
-    // The EffectWindow is resolved rather than dropped bare so the bit is
-    // handed back while the window is still alive, and so the release can
-    // re-seed the tracked-screen map after its suppressed move.
-    releaseAllClaims(windowId, m_effect->findWindowByIdExact(windowId), ScrollDecisions::ClaimScope::UntrackFunnel);
+    // The window is resolved so the bit goes back while it is alive and the
+    // release can re-seed the tracked-screen map after its suppressed move.
+    KWin::EffectWindow* const liveWindow = m_effect->findWindowByIdExact(windowId);
+    releaseAllClaims(windowId, liveWindow, ScrollDecisions::ClaimScope::UntrackFunnel);
+    // Every caller is a genuine release, and a release is a command: a tile
+    // cascade entry still pending for the window (it applies to an untracked
+    // window by design) must not move it back into the tile it just left
+    // before the daemon's own post-release retile supersedes it.
+    m_effect->m_daemonGate.commandStamps.bump(liveWindow);
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared

@@ -922,6 +922,8 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // make the next defer for a recycled address disconnect a replay that
         // belongs to the new window.
         m_deferredGeometryReplay.remove(w);
+        // Command stamp: bounded, and a recycled address starts with no stamp.
+        m_daemonGate.commandStamps.forget(w);
         // Spurious-minimize-pair stamp — raw-pointer-keyed like its
         // siblings below, so erase here both to stay bounded and so a
         // reused address can't inherit a stale stamp that would swallow

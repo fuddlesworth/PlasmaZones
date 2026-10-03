@@ -475,6 +475,10 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // membership can only refuse a future adopt (usually consumed by the
     // next flag-off entry, but a float means no batch entry ever arrives).
     m_windowedFsClearInFlight.remove(windowId);
+    // The float is the window's newest command: a tile or snap entry still
+    // pending in a cascade (or a mid-drag replay) must not land on the floater.
+    KWin::EffectWindow* const liveWindow = m_effect->findWindowByIdExact(windowId);
+    m_effect->m_daemonGate.commandStamps.bump(liveWindow);
     // A floating window is free to move itself — stop countering.
     m_effect->m_scrollCommandedRects.remove(windowId);
     m_effect->m_scrollOfferedColumn.remove(windowId);
@@ -532,7 +536,7 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // per-entry Release in the tile batch never runs. Left held, the window
     // stays KWin-maximized as a floater and a later re-tile resolves to None
     // instead of Apply, silently never re-asserting.
-    releaseAllClaims(windowId, m_effect->findWindowByIdExact(windowId), ScrollDecisions::ClaimScope::StripExit);
+    releaseAllClaims(windowId, liveWindow, ScrollDecisions::ClaimScope::StripExit);
     // Shared placement-flip funnel (update-or-remove in the same turn) —
     // the bare removal here left the float paths WITHOUT a bulk
     // updateAllDecorations follow-up (daemon auto-float past maxWindows)

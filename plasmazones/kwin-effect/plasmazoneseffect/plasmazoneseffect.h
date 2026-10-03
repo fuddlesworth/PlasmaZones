@@ -3760,12 +3760,12 @@ private:
     // The one in-flight deferred geometry replay per window (applyWindowGeometry
     // postponing a tile apply until the user's interactive move ends).
     //
-    // WHY A STORE AND NOT A BARE connect(): two applies for the same window
-    // inside one batch generation on one screen both survive the supersession
-    // guard, so without this each one connected its own replay and both fired at
-    // drag end, paying a full moveResize plus an animator retarget plus a rule
-    // resolve twice. Last-write-wins made the final rect right, which is exactly
-    // why it stayed invisible.
+    // WHY A STORE AND NOT A BARE connect(): the command stamp alone would drop a
+    // superseded replay only when it FIRES, so every apply in a gesture left its
+    // own connection standing until drag end. Every applyWindowGeometry retires
+    // the window's handle here first, so at most one replay is ever connected
+    // and an older rect is gone before a newer command can be overtaken by it.
+    // (WindowCommandStamps still guards the fire against non-apply commands.)
     //
     // A blanket disconnect on the signal is NOT a substitute: window_connections
     // holds a permanent connection from the same signal to the same receiver, and
