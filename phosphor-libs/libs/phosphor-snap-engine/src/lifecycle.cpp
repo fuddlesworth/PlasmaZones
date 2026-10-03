@@ -10,6 +10,7 @@
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutUtils.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
 #include "snapenginelogging.h"
 
@@ -424,6 +425,14 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
             // nothing meaningful to restore, so the move is skipped. (Snapped restore
             // places by zone geometry and never consults this.)
             const QRect freeGeo = rec->freeGeometryFor(restoreScreen);
+            // A RE-ENTRY: the window's own record, driven by anything but a
+            // genuine open (a restart sweep, a pending sweep, an unminimize, a
+            // desktop arrival). The window is already on screen where the user
+            // left it, so the user's choices stand: no floated-position move
+            // and no managed-restore veto. Read before the re-bind below
+            // makes every record the window's own.
+            const bool reEntry = reason != PhosphorEngine::RestoreReason::Open
+                && PhosphorIdentity::WindowId::sameWindowInstance(rec->windowId, windowId);
             rec->windowId = windowId;
             m_windowTracker->placementStore().record(*rec);
 
@@ -459,7 +468,9 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 : slot.zonesByDesktop.value(restoreDesktop);
             if (!restoreZones.isEmpty()) {
                 // A stored snap is subject to BOTH the disabled-context gate and
-                // the managed-restore gate (restoreWindowsToZonesOnLogin). Either
+                // the managed-restore gate (restoreWindowsToZonesOnLogin and the
+                // SetRestoreToZoneOnLogin rule, skipped for a re-entry, whose
+                // window is already in that zone). Either
                 // veto falls the window through to the normal auto-snap chain
                 // rather than re-applying the recorded zone. The context gate
                 // asks about the desktop being restored onto, and runs BEFORE
@@ -467,7 +478,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // leaves nothing behind.
                 const bool contextAllows =
                     !m_shouldRestorePredicate || m_shouldRestorePredicate(restoreScreen, restoreDesktop);
-                const bool managedAllows = !m_managedRestorePredicate || m_managedRestorePredicate(windowId);
+                const bool managedAllows = reEntry || !m_managedRestorePredicate || m_managedRestorePredicate(windowId);
                 if (contextAllows && !managedAllows) {
                     // Distinct log so the managed gate (restoreWindowsToZonesOnLogin
                     // off) is identifiable separately from a disabled-context veto.
@@ -602,8 +613,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // visible/state desync the comment at the read warns about.
                 // Resolved at most ONCE for the two arms below, which ask the
                 // same question of the same (screen, desktop). Lazy, so a
-                // re-drive that reaches neither arm — an already-floating
-                // desktop arrival whose move gate short-circuits — pays no
+                // re-drive that reaches neither arm — a re-entry, whose move
+                // gate short-circuits, of a window already floating — pays no
                 // walk at all.
                 std::optional<QList<QSize>> managedSizesMemo;
                 const auto managedSizes = [&]() -> const QList<QSize>& {
@@ -612,7 +623,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                     }
                     return *managedSizesMemo;
                 };
-                const bool moveRestored = restoreFloatedPosition && freeGeo.isValid()
+                const bool moveRestored = !reEntry && restoreFloatedPosition && freeGeo.isValid()
                     && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))
                     && !isManagedSize(managedSizes(), freeGeo.size());
                 if (moveRestored) {

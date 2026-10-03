@@ -206,13 +206,12 @@ public:
      * the `snappingRestoreFloatedWindowsOnLogin` setting. Returns true to
      * restore the position, the ONE thing it governs for a FLOATED record:
      * such a record always re-marks the window floating, but its position is
-     * re-applied only when the predicate opts in and the rect is not a managed
-     * size (a zone-sized "free" rect is a spawn frame); a declined or refused
-     * move still gets a first placement its free SIZE.
-     *
-     * When the predicate is UNSET (default), the engine preserves its historical
-     * behaviour: a floated record is consumed only on the screen it reopens on and
-     * is marked floating without a position move — the path unit tests rely on.
+     * re-applied only when the predicate opts in, the rect is not a managed
+     * size (a zone-sized "free" rect is a spawn frame) and this is no re-entry
+     * (the window's own record, any reason but Open). A declined move still
+     * gets a first placement its free SIZE. When UNSET (default), a floated
+     * record is consumed only on the screen it reopens on and is marked
+     * floating without a move, the path unit tests rely on.
      */
     using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
 
@@ -232,17 +231,17 @@ public:
      *        window that was SNAPPED at logout should be restored to its recorded
      *        zone on reopen/login (the "managed restore").
      *
-     * This is the snapped-to-zone analogue of @ref RestorePositionPredicate
-     * (which governs FLOATED records). Keyed by the live windowId so the daemon
-     * closure stays settings-agnostic (LGPL boundary) — the engine only asks.
-     * The daemon wires it to the `restoreWindowsToZonesOnLogin` setting.
+     * The snapped-to-zone analogue of @ref RestorePositionPredicate. Keyed by
+     * the live windowId so the daemon closure stays settings-agnostic (LGPL
+     * boundary). The daemon wires it to `restoreWindowsToZonesOnLogin` and the
+     * per-window SetRestoreToZoneOnLogin rule. It governs an Open and a FIFO
+     * match only: a re-entry of the window's own record skips it.
      *
-     * When the predicate returns false the stored snap is not re-applied; the
-     * window falls through to the normal auto-snap policy chain, exactly as a
-     * disabled-context rejection does. When UNSET (default) the engine restores
-     * snapped records unconditionally — the historical behaviour unit tests rely
-     * on. This gate is independent of @ref ShouldRestorePredicate (the
-     * disabled-context gate); both must opt in for a managed restore to proceed.
+     * When it returns false the stored snap is not re-applied and the window
+     * falls through to the auto-snap chain, as a disabled-context rejection
+     * does. When UNSET (default) snapped records restore unconditionally, the
+     * behaviour unit tests rely on. Independent of @ref ShouldRestorePredicate
+     * (the disabled-context gate); both must opt in.
      */
     using ManagedRestorePredicate = std::function<bool(const QString& windowId)>;
 
