@@ -9,7 +9,9 @@
 // as AutotileEngine.h / daemon.h / windowtrackingadaptor.h. Grew with the
 // per-desktop membership change: the membership pass and its helpers, the
 // per-desktop seed / restore-desktop resolution, the window-scoped resnap,
-// the pinned-desktop store resolution and the float residence helper.
+// the pinned-desktop store resolution and the float residence helper. Grew
+// with the cross-output bounce fix (#1124): the free-frame capture before a
+// user snap.
 
 #pragma once
 

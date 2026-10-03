@@ -113,6 +113,9 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/screens.cpp
     plasmazoneseffect/window_lifecycle.cpp
     plasmazoneseffect/window_connections.cpp
+    plasmazoneseffect/window_output_connections.cpp
+    plasmazoneseffect/window_metadata_connections.cpp
+    plasmazoneseffect/window_moveresize_connections.cpp
     plasmazoneseffect/window_desktop_connections.cpp
     plasmazoneseffect/daemon_bringup.cpp
     plasmazoneseffect/daemon_settings.cpp
@@ -120,6 +123,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/daemon_apply.cpp
     plasmazoneseffect/rule_invalidation.cpp
     plasmazoneseffect/drag_snap.cpp
+    plasmazoneseffect/window_geometry_apply.cpp
     plasmazoneseffect/drag_end.cpp
     plasmazoneseffect/mesh_sim.cpp
     plasmazoneseffect/mesh_sim.h
@@ -169,6 +173,7 @@ set(plasmazones_effect_SRCS
     tilinghandler/pretilegeometry.cpp
     tilinghandler/floatcleanup.cpp
     tilinghandler/tiling.cpp
+    tilinghandler/framecentering.cpp
     tilinghandler/wiring.cpp
     tilinghandler/wheelchord.cpp
     tilinghandler/scrolltabs.cpp

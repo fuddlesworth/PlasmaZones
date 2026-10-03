@@ -419,7 +419,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // across the two paths.
     //
     // Caller-owned memoisation slot, the applyWindowGeometry pattern
-    // (drag_snap.cpp): when the gate builds the WindowQuery for its rule
+    // (window_geometry_apply.cpp): when the gate builds the WindowQuery for its rule
     // probes, the resolver pass below reuses it instead of walking the ~30
     // KWin accessors a second time per animated event.
     std::optional<PhosphorRules::WindowQuery> sharedQuery;

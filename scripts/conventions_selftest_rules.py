@@ -552,17 +552,31 @@ def _baseline_writer_failures(partition_readable) -> list[str]:
     line too low fails on its very next edit.
 
     Drives the real function with REPO, BASELINE and tracked_files redirected, then reads
-    back the JSON it wrote."""
+    back the JSON it wrote. A second run adds files the writer must REFUSE to absorb (a raise
+    and an addition with no FILE-SIZE EXCEPTION comment) and checks that it fails and leaves
+    the baseline untouched."""
     g = partition_readable.__globals__
     update_baseline = g["update_baseline"]
+    marker = g["SIZE_EXCEPTION_MARKER"]
     bad: list[str] = []
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         ceiling = g["SIZE_CEILING"]
 
+        # New and over the ceiling, so it is recorded only because it carries the marker.
         over = "over.cpp"
-        (root / over).write_text("//\n" * (ceiling + 5), encoding="utf-8")
+        (root / over).write_text(f"// {marker}: one class.\n" + "//\n" * (ceiling + 4), encoding="utf-8")
+        # Grandfathered with no marker, unchanged and shrunk: both re-record freely.
+        same = "same.cpp"
+        (root / same).write_text("//\n" * (ceiling + 5), encoding="utf-8")
+        shrunk = "shrunk.cpp"
+        (root / shrunk).write_text("//\n" * (ceiling + 3), encoding="utf-8")
+        # The two shapes the writer must refuse without a marker.
+        grown = "grown.cpp"
+        (root / grown).write_text("//\n" * (ceiling + 5), encoding="utf-8")
+        added = "added.cpp"
+        (root / added).write_text("//\n" * (ceiling + 5), encoding="utf-8")
         at = "at.cpp"
         (root / at).write_text("//\n" * ceiling, encoding="utf-8")
         under = "under.cpp"
@@ -577,27 +591,49 @@ def _baseline_writer_failures(partition_readable) -> list[str]:
 
         (root / "scripts").mkdir()
         baseline = root / "scripts" / "oversize-baseline.json"
-        baseline.write_text(json.dumps({"files": {unreadable: ceiling + 99, "gone.cpp": ceiling + 1}}),
-                            encoding="utf-8")
+        prior = {unreadable: ceiling + 99, "gone.cpp": ceiling + 1, same: ceiling + 5, shrunk: ceiling + 9,
+                 grown: ceiling + 2}
+        baseline.write_text(json.dumps({"files": prior}), encoding="utf-8")
 
         saved = (g["REPO"], g["BASELINE"], g["tracked_files"])
         g["REPO"] = root
         g["BASELINE"] = baseline
-        g["tracked_files"] = lambda: [over, at, under, notcode, unreadable]
         try:
             import contextlib
             import io
+            # Refusal first, so the baseline it must leave alone is still the prior one.
+            g["tracked_files"] = lambda: [over, same, shrunk, grown, added, unreadable]
+            refusal_err = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(refusal_err):
+                refused_rc = update_baseline()
+            after_refusal = json.loads(baseline.read_text(encoding="utf-8"))
+            g["tracked_files"] = lambda: [over, at, under, notcode, unreadable, same, shrunk]
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 rc = update_baseline()
             written = json.loads(baseline.read_text(encoding="utf-8"))
         finally:
             g["REPO"], g["BASELINE"], g["tracked_files"] = saved
 
+    if refused_rc != 1:
+        bad.append(f"update_baseline returned {refused_rc}, not 1, for a raise and an addition with no "
+                   f"{marker} comment; it absorbed growth silently")
+    if after_refusal.get("files") != prior:
+        bad.append("update_baseline wrote the baseline on a run it refused; a partial write hides the refusal")
+    for name in (grown, added):
+        if name not in refusal_err.getvalue():
+            bad.append(f"update_baseline's refusal did not name {name}")
+    for name in (over, same, shrunk):
+        if name in refusal_err.getvalue():
+            bad.append(f"update_baseline refused {name}, which carries the marker or did not grow")
     if rc != 0:
         bad.append(f"update_baseline returned {rc}, not 0")
     rec = written.get("files", {})
     if rec.get(over) != ceiling + 5:
         bad.append(f"update_baseline did not record a file over the ceiling at its real length: {rec.get(over)}")
+    if rec.get(same) != ceiling + 5:
+        bad.append(f"update_baseline did not re-record an unchanged grandfathered file: {rec.get(same)}")
+    if rec.get(shrunk) != ceiling + 3:
+        bad.append(f"update_baseline did not ratchet a shrunk file down to its length: {rec.get(shrunk)}")
     if at in rec:
         bad.append(f"update_baseline recorded a file at EXACTLY the ceiling ({ceiling}), which is not an overrun; "
                    f"the comparison must be > and not >=")

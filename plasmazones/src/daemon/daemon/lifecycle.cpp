@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): the Daemon start/stop lifecycle. stop()
-// is one long, ORDERED teardown whose clear-before-reset contracts reference
-// each other in sequence; splitting it by subsystem would break the
-// top-to-bottom readability that makes the ordering auditable.
+// The Daemon start/stop lifecycle. stop() is one long, ORDERED teardown whose
+// clear-before-reset contracts reference each other in sequence, so it stays
+// whole here rather than split by subsystem. The bridge watchdog's timeout arm
+// lives in bridge_watchdog.cpp and the plasma-workspace.target probe in
+// plasma_workspace.cpp.
 
 #include "daemon/daemon.h"
 #include "helpers.h"
@@ -16,17 +17,11 @@
 #include <QtConcurrent>
 #include <QScreen>
 #include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusObjectPath>
 #include <QDBusPendingCall>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
 #include <QDBusError>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QPluginLoader>
-#include <QRegularExpression>
 #include <QSet>
 #include <QThread>
 #include <array>
@@ -99,7 +94,6 @@
 #include "core/interfaces/shaderregistry.h"
 #include "common/screenidresolver.h"
 #include "common/layoutbundlebuilder.h"
-#include "phosphor_i18n.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
 #include "dbus/overlayadaptor.h"
@@ -116,44 +110,6 @@
 #include "dbus/ruleadaptor.h"
 
 namespace PlasmaZones {
-
-namespace {
-// Grace period (ms) for the KWin effect to register as a compositor bridge
-// after daemon startup. Comfortably longer than a healthy effect takes to
-// register (sub-second once KWin and the daemon's D-Bus name are both up),
-// even when the daemon starts before KWin during login — so a timeout means
-// a genuine failure, not a race.
-constexpr int BRIDGE_WATCHDOG_TIMEOUT_MS = 20000;
-
-// Locate the installed PlasmaZones KWin effect plugin and read the KWin
-// version embedded in its plugin interface ID. The KWin effect is a compiled
-// C++ plugin; KWin bakes its exact version into the IID it accepts
-// (EffectPluginFactory_iid = "org.kde.kwin.EffectPluginFactory" + the KWin
-// version string), and silently rejects any plugin built against a different
-// KWin. metaData() reads only the static metadata section — no dlopen — so it
-// works even on the version-mismatched plugin KWin itself refuses to load.
-// `installed` is set to whether the plugin file was found at all. Returns the
-// KWin version the effect was built against, or empty when the plugin is
-// missing or its IID is not a recognizable KWin effect IID.
-QString probeEffectKWinVersion(bool& installed)
-{
-    static const QLatin1String iidPrefix("org.kde.kwin.EffectPluginFactory");
-    const QString effectRelPath = QStringLiteral("kwin/effects/plugins/kwin_effect_plasmazones.so");
-
-    installed = false;
-    const QStringList libraryPaths = QCoreApplication::libraryPaths();
-    for (const QString& base : libraryPaths) {
-        const QString candidate = base + QLatin1Char('/') + effectRelPath;
-        if (!QFile::exists(candidate)) {
-            continue;
-        }
-        installed = true;
-        const QString iid = QPluginLoader(candidate).metaData().value(QLatin1String("IID")).toString();
-        return iid.startsWith(iidPrefix) ? iid.mid(iidPrefix.size()) : QString();
-    }
-    return QString();
-}
-} // anonymous namespace
 
 void Daemon::start()
 {
@@ -262,124 +218,6 @@ void Daemon::start()
     if (m_compositorBridge && !m_compositorBridge->isBridgeRegistered()) {
         m_bridgeWatchdogTimer.start(BRIDGE_WATCHDOG_TIMEOUT_MS);
     }
-}
-
-void Daemon::warnCompositorBridgeMissing()
-{
-    // Stay silent during shutdown. The watchdog may still be armed when the
-    // session ends, and a warning/notification raised on the way out is just
-    // noise — mirrors the OSD suppression gated on m_running/m_shuttingDown.
-    if (m_shuttingDown) {
-        return;
-    }
-
-    // Re-check: the watchdog is stopped on bridgeRegistered, but a registration
-    // landing in the same event-loop turn as the timeout could still reach
-    // here. Treat a registered bridge as success and stay silent.
-    if (!m_compositorBridge || m_compositorBridge->isBridgeRegistered()) {
-        return;
-    }
-
-    // Inspect the installed effect plugin (synchronous, cheap). The most common
-    // silent failure is a stale effect build whose IID no longer matches the
-    // running KWin, so KWin's effect loader rejects it without surfacing an
-    // error and the effect never registers.
-    bool effectInstalled = false;
-    const QString effectKWinVersion = probeEffectKWinVersion(effectInstalled);
-
-    if (!effectInstalled) {
-        emitBridgeMissingWarning(
-            PhosphorI18n::tr("The PlasmaZones KWin effect plugin is not installed where KWin can find it. "
-                             "Reinstall PlasmaZones."));
-        return;
-    }
-    if (effectKWinVersion.isEmpty()) {
-        // Plugin present but its IID is not a recognizable KWin effect IID —
-        // nothing specific to report, fall back to the generic guidance.
-        emitBridgeMissingWarning(QString());
-        return;
-    }
-
-    // Compare the effect's build-time KWin version against the running KWin.
-    // supportInformation() is the only reliable D-Bus source for KWin's
-    // version; query it asynchronously so this degraded startup path never
-    // blocks the daemon's event loop (mirrors the fire-and-forget notification
-    // call in emitBridgeMissingWarning).
-    QDBusMessage req =
-        QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
-                                       QStringLiteral("org.kde.KWin"), QStringLiteral("supportInformation"));
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(req, 3000), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, effectKWinVersion](QDBusPendingCallWatcher* call) {
-                call->deleteLater();
-
-                // The 3s round-trip widens the window in which a late effect
-                // registration can land; stay silent if shutdown began or the
-                // bridge registered after all.
-                if (m_shuttingDown || (m_compositorBridge && m_compositorBridge->isBridgeRegistered())) {
-                    return;
-                }
-
-                QString diagnosis;
-                const QDBusPendingReply<QString> reply = *call;
-                if (!reply.isError()) {
-                    const QRegularExpressionMatch match =
-                        QRegularExpression(QStringLiteral("KWin version:\\s*(\\S+)")).match(reply.value());
-                    if (match.hasMatch()) {
-                        const QString runningKWinVersion = match.captured(1);
-                        if (runningKWinVersion != effectKWinVersion) {
-                            diagnosis = PhosphorI18n::tr(
-                                            "The PlasmaZones KWin effect was built for KWin %1 but "
-                                            "KWin %2 is running, so KWin will not load it. Rebuild and "
-                                            "reinstall PlasmaZones against the running KWin.")
-                                            .arg(effectKWinVersion, runningKWinVersion);
-                        }
-                    }
-                }
-                emitBridgeMissingWarning(diagnosis);
-            });
-}
-
-void Daemon::emitBridgeMissingWarning(const QString& diagnosis)
-{
-    if (diagnosis.isEmpty()) {
-        qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
-                            << "s of startup — the PlasmaZones KWin effect is not running or"
-                            << "failed to register. Window dragging, keyboard shortcuts, and"
-                            << "snapping will not work. Enable the PlasmaZones effect in System"
-                            << "Settings > Desktop Effects, then restart the Plasma session so"
-                            << "KWin loads it.";
-    } else {
-        qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
-                            << "s of startup — window control is dead." << diagnosis;
-    }
-
-    const QString body = diagnosis.isEmpty()
-        ? PhosphorI18n::tr(
-              "The PlasmaZones KWin effect has not registered with the daemon, so window "
-              "dragging and shortcuts will not work. Make sure it is enabled in System "
-              "Settings > Desktop Effects, then restart the Plasma session.")
-        : diagnosis;
-
-    // Raise a desktop notification via the freedesktop spec so the user sees
-    // the problem without having to read the journal. A direct method call
-    // (rather than QDBusInterface) keeps this off the main thread's critical
-    // path: QDBusInterface's constructor does a blocking Introspect round-trip,
-    // whereas createMethodCall + asyncCall is genuinely fire-and-forget. A
-    // missing notification server just makes the async call error out, which
-    // is fine. Mirrors the createMethodCall pattern used elsewhere in daemon.
-    QDBusMessage notify = QDBusMessage::createMethodCall(
-        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("/org/freedesktop/Notifications"),
-        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("Notify"));
-    notify << QStringLiteral("PlasmaZones") // app_name
-           << 0u // replaces_id
-           << QStringLiteral("plasmazones") // app_icon
-           << PhosphorI18n::tr("Window manager integration is inactive") // summary
-           << body // body
-           << QStringList() // actions
-           << QVariantMap() // hints
-           << -1; // timeout (server default)
-    QDBusConnection::sessionBus().asyncCall(notify);
 }
 
 void Daemon::stop()
@@ -1146,135 +984,6 @@ void Daemon::stop()
     // m_running gate) so this point requires no further teardown.
 
     m_running = false;
-}
-
-void Daemon::queryPlasmaWorkspaceState()
-{
-    // Query the user-bus systemd for `plasma-workspace.target`'s ActiveState
-    // to distinguish a real Plasma session from a phantom plasma-restore session.
-    //
-    // During user-logout → SDDM handoff, systemd may respawn the daemon into a
-    // transient "phantom" state: a stray `kwin_wayland` from a fallback session-
-    // restore mechanism briefly publishes a fresh `wayland-N` socket inside the
-    // still-dying `user@.service`, and `Restart=on-failure` schedules a daemon
-    // retry after Qt's wayland QPA aborts on the vanished `wl_display`. The
-    // phantom daemon fires welcome OSDs against an output about to be unbound.
-    //
-    // Why this signal works: `plasma-workspace.target` is only flipped to `active`
-    // by `startplasma-wayland`'s orchestration after SDDM hands off. The phantom
-    // has no `startplasma-wayland` leader, so the target stays inactive — a signal
-    // the phantom cannot fake. logind's `User.State` stays `active` whenever
-    // `user@.service` is up (can't distinguish phantom from real), and the
-    // wayland-socket existence probe passes during the phantom.
-    //
-    // Fail-open on all D-Bus errors: `m_plasmaWorkspaceActive` defaults to `true`,
-    // so non-systemd setups and headless tests aren't accidentally silenced.
-    QDBusConnection sessionBus = QDBusConnection::sessionBus();
-    if (!sessionBus.isConnected()) {
-        qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: session bus unavailable, leaving m_plasmaWorkspaceActive=true";
-        return;
-    }
-
-    QDBusMessage subscribeMsg = QDBusMessage::createMethodCall(
-        QStringLiteral("org.freedesktop.systemd1"), QStringLiteral("/org/freedesktop/systemd1"),
-        QStringLiteral("org.freedesktop.systemd1.Manager"), QStringLiteral("Subscribe"));
-    auto* subscribeWatcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(subscribeMsg), this);
-    connect(subscribeWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<> reply = *w;
-        if (reply.isError()) {
-            qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: Subscribe failed:" << reply.error().message()
-                              << "— PropertiesChanged signals may not arrive";
-        }
-    });
-
-    QDBusMessage getUnitMsg = QDBusMessage::createMethodCall(
-        QStringLiteral("org.freedesktop.systemd1"), QStringLiteral("/org/freedesktop/systemd1"),
-        QStringLiteral("org.freedesktop.systemd1.Manager"), QStringLiteral("GetUnit"));
-    getUnitMsg << QStringLiteral("plasma-workspace.target");
-    auto* getUnitWatcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(getUnitMsg), this);
-    connect(getUnitWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        // A stop() may have landed between the async call and this reply; do not
-        // continue into fetchPlasmaWorkspaceActiveState (which installs the
-        // PropertiesChanged subscription) after shutdown began.
-        if (m_shuttingDown) {
-            return;
-        }
-        QDBusPendingReply<QDBusObjectPath> reply = *w;
-        if (reply.isError()) {
-            qCInfo(lcDaemon) << "queryPlasmaWorkspaceState: GetUnit('plasma-workspace.target') failed:"
-                             << reply.error().message() << "— leaving fail-open (target not loaded)";
-            return;
-        }
-        m_plasmaWorkspaceTargetPath = reply.value().path();
-        if (m_plasmaWorkspaceTargetPath.isEmpty()) {
-            return;
-        }
-        fetchPlasmaWorkspaceActiveState();
-    });
-}
-
-void Daemon::fetchPlasmaWorkspaceActiveState()
-{
-    QDBusConnection sessionBus = QDBusConnection::sessionBus();
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
-                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
-    msg << QStringLiteral("org.freedesktop.systemd1.Unit") << QStringLiteral("ActiveState");
-    auto* watcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(msg), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        if (m_shuttingDown) {
-            return;
-        }
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isError()) {
-            qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: ActiveState Get failed:" << reply.error().message();
-            return;
-        }
-        const QString state = reply.value().toString();
-        m_plasmaWorkspaceActive = (state == QLatin1String("active"));
-        qCInfo(lcDaemon) << "plasma-workspace.target ActiveState at startup:" << state
-                         << "plasmaWorkspaceActive=" << m_plasmaWorkspaceActive
-                         << "path=" << m_plasmaWorkspaceTargetPath;
-
-        QDBusConnection bus = QDBusConnection::sessionBus();
-        // Disconnect first: a stop() -> start() cycle re-runs this whole query,
-        // and QDBusConnectionPrivate appends identical signal hooks without
-        // deduping, so without this the slot would fire once per registration
-        // per signal. Harmless (the handler is idempotent) but wasteful.
-        bus.disconnect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
-                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
-                       SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));
-        const bool ok =
-            bus.connect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
-                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
-                        SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));
-        if (!ok) {
-            qCWarning(lcDaemon) << "queryPlasmaWorkspaceState: failed to subscribe to Unit PropertiesChanged on"
-                                << m_plasmaWorkspaceTargetPath;
-        }
-    });
-}
-
-void Daemon::onPlasmaWorkspaceTargetPropertiesChanged(const QString& interfaceName,
-                                                      const QVariantMap& changedProperties,
-                                                      const QStringList& /*invalidatedProperties*/)
-{
-    if (interfaceName != QLatin1String("org.freedesktop.systemd1.Unit")) {
-        return;
-    }
-    const auto it = changedProperties.constFind(QStringLiteral("ActiveState"));
-    if (it == changedProperties.constEnd()) {
-        return;
-    }
-    const QString state = it->toString();
-    const bool nowActive = (state == QLatin1String("active"));
-    if (m_plasmaWorkspaceActive != nowActive) {
-        qCInfo(lcDaemon) << "plasma-workspace.target state changed:" << state;
-    }
-    m_plasmaWorkspaceActive = nowActive;
 }
 
 } // namespace PlasmaZones

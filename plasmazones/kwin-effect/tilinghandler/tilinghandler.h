@@ -2,18 +2,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // FILE-SIZE EXCEPTION (sanctioned): TilingHandler is one class declaration,
-// and the implementation is already partitioned across the fourteen TUs in
-// this directory (tiling.cpp, tilinghandler.cpp, state.cpp, wiring.cpp,
-// signals.cpp, windowedfullscreen.cpp, pretilegeometry.cpp, floatcleanup.cpp,
-// minimizefloat.cpp, outputchange.cpp, screenschanged.cpp, scrolltabs.cpp,
-// wheelchord.cpp, fullscreenhold.cpp) —
-// every one of those TUs calls back
-// through this single declaration, which C++ requires to be whole. Most of the
-// length is the per-member invariant prose the split files depend on: the
-// per-session daemon state (managed/scrolling/axis sets and their teardown
-// pairings), the generation guards, and the inline predicates those TUs share.
+// and the implementation is already partitioned across the fifteen TUs in
+// this directory (tiling.cpp, framecentering.cpp, tilinghandler.cpp, state.cpp,
+// wiring.cpp, signals.cpp, windowedfullscreen.cpp, pretilegeometry.cpp,
+// floatcleanup.cpp, minimizefloat.cpp, outputchange.cpp, screenschanged.cpp,
+// scrolltabs.cpp, wheelchord.cpp, fullscreenhold.cpp) — every one of those TUs
+// calls back through this single declaration, which C++ requires to be whole.
+// Most of the length is the per-member invariant prose the split files depend
+// on: the per-session daemon state (managed/scrolling/axis sets and their
+// teardown pairings), the generation guards, and the inline predicates those
+// TUs share.
 // Splitting the class itself would mean a second handler type with the same
-// state, which is the coupling this file exists to avoid.
+// state, which is the coupling this file exists to avoid. Grew with the
+// cross-output bounce fix (#1124): dropCenteringTarget, which every geometry
+// command the effect issues calls to retire a stale centring target.
 
 #pragma once
 

@@ -29,7 +29,7 @@ namespace PlasmaZones {
 /// screen-level desktop legs from
 /// @c kwin-effect/plasmazoneseffect/lifecycle_wiring.cpp, the snap geometry
 /// legs through @c applyWindowGeometry in
-/// @c kwin-effect/plasmazoneseffect/drag_snap.cpp, and the read-only
+/// @c kwin-effect/plasmazoneseffect/window_geometry_apply.cpp, and the read-only
 /// @c packOwnsEvent predicate inside @c syncStockEffectSuppression
 /// (@c kwin-effect/plasmazoneseffect/lifecycle.cpp), which resolves the
 /// DesktopPeek / WindowMinimize / WindowPlaceIn / WindowPlaceOut paths already listed
@@ -67,7 +67,7 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::WindowMove,
         PP::WindowFocus,
         // Placement window animations driven by the kwin-effect's
-        // applyWindowGeometry chokepoint (drag_snap.cpp and every engine
+        // applyWindowGeometry chokepoint (window_geometry_apply.cpp and every engine
         // batch), which resolves through resolveShaderWithDefault rather than
         // tryBeginShaderForEvent, applying the same rule-then-tree cascade so
         // the user can pick a distinct shader per placement event. The

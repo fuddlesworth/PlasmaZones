@@ -6,7 +6,9 @@
 // back-pointer surface the split-out implementation files
 // (plasmazoneseffect/*.cpp, handlers, autotilehandler) call back through.
 // The implementation is already partitioned; the class declaration is the
-// one place KWin's plugin contract requires to be whole.
+// one place KWin's plugin contract requires to be whole. Grew with the
+// cross-output bounce fix (#1124) and its audit: the per-window wiring split
+// and the members those fixes add.
 
 #pragma once
 
@@ -408,6 +410,14 @@ private:
     /// seed that stamp. Called once per window from setupWindowConnections,
     /// inside its idempotency guard; defined in window_desktop_connections.cpp.
     void wireDesktopChangeHandler(KWin::EffectWindow* w);
+    /// The rest of setupWindowConnections' per-window wiring, split by concern
+    /// and called from it in this order: cross-output and virtual-screen moves
+    /// (window_output_connections.cpp), identity and metadata pushes
+    /// (window_metadata_connections.cpp), and the interactive move/resize pair
+    /// (window_moveresize_connections.cpp).
+    void wireOutputChangeHandlers(KWin::EffectWindow* w);
+    void wireMetadataHandlers(KWin::EffectWindow* w);
+    void wireUserMoveResizeHandlers(KWin::EffectWindow* w);
 
     /**
      * @brief Push current metadata for a window to the daemon's WindowRegistry.
@@ -1153,7 +1163,7 @@ private:
     /// rect differ by the centring offset).
     ///
     /// "Predict" is the honest word, not "commit" — the implementation
-    /// (drag_snap.cpp) enumerates the two known divergences from what KWin
+    /// (window_geometry_apply.cpp) enumerates the two known divergences from what KWin
     /// finally commits, and why every consumer as written tolerates them. Do
     /// not add an equality comparand without reading that note.
     ///

@@ -176,7 +176,7 @@ int main(int argc, char* argv[])
     // This is a Wayland-only daemon, so "no wayland socket" means "nothing to
     // do". Resolving the socket path handles the empty/unset WAYLAND_DISPLAY
     // case too (Qt's default "wayland-0"), which previously bypassed this guard
-    // and let Qt abort. See queryPlasmaWorkspaceState() in daemon/lifecycle.cpp
+    // and let Qt abort. See queryPlasmaWorkspaceState() in daemon/plasma_workspace.cpp
     // for the full phantom-session analysis.
     //
     // Skip the probe entirely when WAYLAND_SOCKET is set: libwayland (and thus

@@ -10,7 +10,9 @@
 // which of those owns what. Same rationale as
 // PhosphorTileEngine/AutotileEngine.h. Grew with the per-desktop membership
 // change: the forget / renumber wrappers over the persisted per-desktop
-// zones, the membership-aware zone walk and the per-desktop zone read.
+// zones, the membership-aware zone walk and the per-desktop zone read. Grew
+// with the cross-output bounce fix (#1124): the tiling held-screen resolver
+// the resnap buffer consults before it hands a snap zone back.
 
 #pragma once
 

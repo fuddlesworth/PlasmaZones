@@ -5,7 +5,9 @@
 // because it declares BOTH the D-Bus wire surface (slots whose signatures are
 // pinned by the interface XML) and the in-process orchestration API the daemon
 // wires. Splitting would sever the wire methods from the state they document
-// against; the cost of the split outweighs the ceiling here.
+// against; the cost of the split outweighs the ceiling here. Grew with the
+// cross-output bounce fix (#1124): the activeWindowScreenChanged slot and the
+// focused-window screen resolution behind it.
 
 #pragma once
 

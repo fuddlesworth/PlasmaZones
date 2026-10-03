@@ -6,7 +6,9 @@
 // signal fan-out in the one place the ordering contract between them can be
 // read top to bottom. Splitting by engine would scatter the cross-engine
 // defer/reciprocity wiring this file exists to keep adjacent. Grew with the
-// per-desktop membership change: the snap resolver's membership arm.
+// per-desktop membership change: the snap resolver's membership arm. Grew
+// with the cross-output bounce fix (#1124): the tiling held-screen resolver
+// wired into the placement service.
 
 #include "daemon/daemon.h"
 #include "helpers.h"
