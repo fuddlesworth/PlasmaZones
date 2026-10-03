@@ -2251,18 +2251,22 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // hold seated. So a live entry records a genuine refusal; without
                 // those guards a raced centring stamped it and this skip latched.
                 bool skipMoveResize = false;
-                if (snap.window->isWaylandClient()) {
+                // Never on a strip: the strip shed below runs after this read, so
+                // an autotile stamp surviving a mode flip could skip a column.
+                if (snap.window->isWaylandClient() && !isScrollingScreen(snap.screenId)) {
                     auto prevIt = m_centeredWaylandZones.find(snap.windowId);
-                    if (prevIt != m_centeredWaylandZones.end() && prevIt.value() == geo) {
+                    const auto frameIt = m_centeredWaylandFrames.constFind(snap.windowId);
+                    if (prevIt != m_centeredWaylandZones.end() && prevIt.value() == geo
+                        && frameIt != m_centeredWaylandFrames.constEnd()) {
+                        // Still EXACTLY where the pass centred it (a 1px
+                        // tolerance covers fractional-scale snap). Containment
+                        // alone let any in-zone change nothing re-centres (a
+                        // client self-resize, a KWin or script move) latch.
                         const QRectF actual = snap.window->frameGeometry();
-                        // Window is still within the zone bounds — already
-                        // centered. Exclusive-edge arithmetic (x + width), like
-                        // the centring bounds clamp below, because QRectF::right()
-                        // and QRect::right() disagree by one; a symmetric 1px
-                        // tolerance on every edge covers fractional-scale snap.
-                        if (actual.x() >= geo.x() - 1.0 && actual.y() >= geo.y() - 1.0
-                            && actual.x() + actual.width() <= geo.x() + geo.width() + 1.0
-                            && actual.y() + actual.height() <= geo.y() + geo.height() + 1.0) {
+                        const QRectF& was = *frameIt;
+                        if (qAbs(actual.x() - was.x()) <= 1.0 && qAbs(actual.y() - was.y()) <= 1.0
+                            && qAbs(actual.width() - was.width()) <= 1.0
+                            && qAbs(actual.height() - was.height()) <= 1.0) {
                             skipMoveResize = true;
                             qCDebug(lcEffect) << "Skipping redundant moveResize for centered Wayland window"
                                               << snap.windowId << "zone=" << geo;
@@ -2913,20 +2917,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // reaping the animation. (The ack branch in
                 // slotWindowFullScreenChanged re-commits the column rect.)
                 //
-                // ORDER NOTE: this write lands AFTER the apply above, so the
-                // synchronous frameGeometryChanged that apply emits re-enters
-                // slotWindowFrameGeometryChanged while this map still holds the
-                // PREVIOUS batch's zone for this window. The reactive centring
-                // block there now sits behind the inGeometryApply gate, so the
-                // mid-apply re-entry returns before reaching the map; a
-                // surviving previous-batch entry is overwritten by the
-                // per-entry write below in the same pass, and is otherwise
-                // consumed only by the next out-of-bracket frame change, where
-                // the window is normally already at that rect and the
-                // near-zero delta arm consumes it harmlessly. Moving the
-                // write above the apply would close the window entirely; it is
-                // left here because the reactive centring is deliberately
-                // re-entrant-driven and the reordering has not been exercised.
+                // ORDER NOTE: the centring-target write below must stay AFTER
+                // the apply above. applyWindowGeometry drops the window's
+                // target and centred stamp before it commits (the
+                // dropCenteringTarget call), so a target written first would be
+                // erased by its own apply. The synchronous frame change the
+                // apply emits returns at the centring pass's inGeometryApply
+                // gate, so nothing reads the map mid-apply either.
                 if (isScrollingScreen(snap.screenId)) {
                     // A COLUMN-MAXIMIZED Wayland window arms the counter-assert,
                     // which is otherwise X11-only. The exclusion below is about
@@ -2992,7 +2989,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // (clamping it is the "slides around the edge" symptom), and
                     // its moveResize would fight the strip's animation leg. The
                     // entry was removed before this split, which also covers the
-                    // monocle and windowed-fullscreen kinds that never get here.
+                    // monocle and X11 entries that never get here.
                 } else if (!snap.isWindowedFullscreen) {
                     // Armed only while an ack the pass is waiting for is coming.
                     // A tile in the window's own fullscreen hold keeps it: the

@@ -795,6 +795,7 @@ void TilingHandler::clearCenteringTargetsForTeardown()
     // left to the bring-up drain like the rest of the per-session state.
     m_tileTargetZones.clear();
     m_centeredWaylandZones.clear();
+    m_centeredWaylandFrames.clear();
 }
 
 void TilingHandler::dropCenteringTarget(const QString& windowId)

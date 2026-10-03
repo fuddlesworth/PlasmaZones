@@ -165,9 +165,9 @@ public:
     void releaseWindowTracking(const QString& windowId, const QString& screenId);
     /// Tear down all effect-side autotile tracking for @p windowId (shared +
     /// KWin-specific state, incl. the pending cross-screen-restore connection)
-    /// WITHOUT notifying the daemon. Shared by onWindowClosed (which adds the
-    /// daemon windowClosed call) and the cross-mode-move marker path (where the
-    /// daemon already relinquished the window via handoffRelease).
+    /// WITHOUT notifying the daemon. Shared by onWindowClosed and
+    /// releaseWindowTracking (which add their own daemon call) and the
+    /// cross-mode-move marker path (the daemon already ran handoffRelease).
     /// No screenId parameter: every container this touches is either keyed by
     /// windowId or swept across all screens. The saved stacking orders used to
     /// be pruned only for a caller-supplied screen, which left the id behind on
@@ -1281,9 +1281,8 @@ private:
     /// captured departure rect; false on every skip (not a member, window
     /// gone, still fullscreen) and on a member that KWin already reports as
     /// restored, where maximize() emits nothing and the capture is stale.
-    /// The tile batch reads it to anchor the placement leg's origin at the
-    /// pre-maximize rect; most other callers discard it, which is why there
-    /// is no [[nodiscard]]. Mirrors releaseMaximizedToEdges.
+    /// The tile batch anchors the placement leg's origin on it; most callers
+    /// discard it (no [[nodiscard]]). Mirrors releaseMaximizedToEdges.
     bool unmaximizeMonocleWindow(const QString& windowId);
 
     /**
@@ -1291,8 +1290,8 @@ private:
      *
      * Updates the float cache, clears tiled tracking, removes the border
      * overlay, and unmaximizes monocle (title-bar restores flow through the
-     * rule path). Used by the per-window D-Bus signal, batch float, and
-     * drag-to-float paths.
+     * rule path). Used by the per-window D-Bus signal, batch float,
+     * drag-to-float and both minimize-float paths (claimAlreadyMinimizedAsFloated).
      *
      * ALL THREE COMPOSITOR CLAIMS are released here, not just monocle: the
      * windowed-fullscreen hold goes first (before the geometry work, which is
@@ -1989,6 +1988,7 @@ private:
     QHash<QString, uint64_t> m_tileStaggerGenByScreen;
     QHash<QString, QRect> m_tileTargetZones;
     QHash<QString, QRect> m_centeredWaylandZones; ///< zones where Wayland windows were last centered
+    QHash<QString, QRectF> m_centeredWaylandFrames; ///< the frame each stamp centred (read only with a stamp)
     QString m_pendingAutotileFocusWindowId;
     QPointer<KWin::EffectWindow> m_pendingReactivateWindow; ///< re-activate after raise loop (daemon restart)
     QSet<QString> m_monocleMaximizedWindows;

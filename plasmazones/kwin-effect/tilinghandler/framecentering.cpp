@@ -217,44 +217,44 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // WAYLAND-ONLY despite reading engine-general: m_tileTargetZones has
     // exactly one writer (the batch apply in this file), and that write sits
     // inside an `isWaylandClient()` arm. An X11 client never reaches this
-    // block — constrainTileGeometry pre-centres its frame inside the zone
-    // before the apply commits, and an external mover is dealt with by the
-    // counter-assert above, not here.
+    // block: constrainTileGeometry pre-centres its frame inside the zone
+    // before the apply commits. An external mover is the counter-assert's on a
+    // scrolling screen; on an autotile screen nothing counters it, and the
+    // backstop below drops a target the mover took the window out of.
     if (m_tileTargetZones.isEmpty()) {
         return;
     }
 
-    // Never centre from inside the effect's own apply bracket. This is the
-    // same gate the two other consumers in this slot take (the counter-assert
-    // and the virtual-screen crossing check above), and its absence here was
-    // a defect on its own.
-    //
-    // What it costs us without the gate: `applyWindowGeometry` commits at the
-    // top of the batch loop but the target zone is not recorded until the end
-    // of it, so a batch cannot trip its own apply — the map is still empty
-    // when its moveResize lands. A SECOND batch carrying the same zone can,
-    // and the autotile engine emits exactly that on a removal, which it
-    // retiles immediately and uncoalesced (AutotileEngine::onWindowRemoved).
-    // The first batch's entry is live while the second one applies, so the
-    // frame change KWin emits mid-apply — position taken, size still awaiting
-    // the client's ack — reaches the pass with the PRE-resize frame. The pass
-    // reads that stale size as "the client refused to fill its zone" and
-    // issues a competing moveResize at the old size, which supersedes the
-    // enlarge the client was still answering. The window is then pinned a
-    // zone-width short for the rest of its life, because the centring stamps
-    // m_centeredWaylandZones and the redundant-apply skip in
-    // slotWindowsTileRequested honours that entry on every later batch.
-    //
-    // Discussion #1028: a window count dropping 2 -> 1 hands the survivor the
-    // ungapped full-screen zone, and losing that enlarge leaves it centred
-    // with a dead band down each side that belongs to no tiled window — which
-    // is where focus-follows-mouse then finds nothing to focus.
+    // Never centre from inside the effect's own apply bracket, the gate the two
+    // other consumers in this slot take (the counter-assert and the VS
+    // crossing check). A frame change emitted mid-apply carries the position
+    // already but the size still awaiting the client's ack, and the pass would
+    // read that stale size as a refusal and issue a competing moveResize that
+    // supersedes the resize the client is answering. applyWindowGeometry
+    // drops the window's entry before it commits, so this gate is what covers
+    // the bracketed raw moveResize sites (the counter-assert, the fullscreen
+    // re-commit) and this pass's own synchronous re-entry. Losing an enlarge
+    // that way pinned the window a zone-width short for good, the centred
+    // stamp latching it on every later batch (discussion #1028: dead bands
+    // either side of a survivor, where focus-follows-mouse finds nothing).
     if (m_effect->m_daemonGate.inGeometryApply) {
         return;
     }
 
     auto it = m_tileTargetZones.find(windowId);
     if (it == m_tileTargetZones.end()) {
+        return;
+    }
+
+    // The user owns the frame for the length of a move or resize. Centring a
+    // mid-gesture frame would moveResize the window under the pointer (the
+    // first step of a shrinking resize, a drag of a centred tile, a Reorder
+    // drag) and stamp the old zone as centred. The tile no longer describes
+    // the window either way, so the target and the stamp both go; whatever
+    // the gesture ends in (a drop outcome, the next batch) commands it anew.
+    if (w->isUserMove() || w->isUserResize()) {
+        m_tileTargetZones.erase(it);
+        m_centeredWaylandZones.remove(windowId);
         return;
     }
 
@@ -293,10 +293,13 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         // into the dead tile rect would drag the window back, possibly onto
         // an output it has left. The commanded origin is the witness: a tile
         // apply and every refusing or oversized commit keep it at the zone
-        // origin, so an origin outside the zone means another command owns
-        // the window now. The centred stamp goes too, or the redundant-apply
-        // skip in slotWindowsTileRequested would honour it if the window is
-        // tiled into the same zone again.
+        // origin. Containment rather than equality on purpose: a centred
+        // origin also sits inside the zone, and an entry armed by an older
+        // batch must not read a window this pass centred as moved away. An
+        // origin outside the zone means another command owns the window now.
+        // The centred stamp goes too, or the redundant-apply skip in
+        // slotWindowsTileRequested would honour it if the window is tiled into
+        // the same zone again.
         if (!QRectF(targetZone).adjusted(-1.0, -1.0, 1.0, 1.0).contains(commandedRect.topLeft())) {
             qCDebug(lcEffect) << "Autotile centering: target superseded for" << windowId
                               << "commanded=" << commandedRect << "target=" << targetZone << "- dropping";
@@ -439,9 +442,14 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         }
     }
 
-    // Already at the centered position — record and consume
+    // Already at the centered position — record and consume. The stamp keeps
+    // the centred FRAME beside the zone: the redundant-apply skip honours it
+    // only while the window still sits exactly there, so an in-zone change
+    // nothing re-centres (a client self-resize, a KWin or script move) cannot
+    // latch the window uncentred.
     if (qAbs(actual.x() - centered.x()) < 1.0 && qAbs(actual.y() - centered.y()) < 1.0) {
         m_centeredWaylandZones[windowId] = targetZone;
+        m_centeredWaylandFrames[windowId] = actual;
         m_tileTargetZones.erase(it);
         return;
     }
@@ -460,8 +468,35 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // windowFrameGeometryChanged synchronously, which would re-enter
     // this slot and find the entry still present → infinite recursion → crash.
     m_centeredWaylandZones[windowId] = targetZone;
+    m_centeredWaylandFrames[windowId] = centered;
     m_tileTargetZones.erase(it);
-    m_effect->m_windowAnimator->removeAnimation(w);
+    // A live leg (usually the tile apply's own, still running at the client's
+    // first ack) is RETARGETED onto the centred rect, not reaped: a reap jumped
+    // the window mid-leg, and a geometry-owning morph lost its progress source,
+    // fell to the expiry path and never ran its completion. PreservePosition
+    // keeps the pixels on screen and bends toward the new rect, and the morph
+    // is re-anchored at the same departure rect the animator now uses. Not
+    // routed through applyWindowGeometry: its dropCenteringTarget would erase
+    // the stamp just written.
+    if (m_effect->m_windowAnimator->hasAnimation(w)) {
+        const QRectF visualPos = m_effect->m_windowAnimator->currentValue(w, actual);
+        const auto retarget = m_effect->m_windowAnimator->retargetWithResult(
+            w, centered, PhosphorAnimation::RetargetPolicy::PreservePosition);
+        auto* mt = m_effect->m_shaderManager.findTransition(w);
+        if (retarget == PhosphorAnimation::RetargetResult::Accepted && mt && mt->cached
+            && mt->cached->iFromRectLoc >= 0) {
+            mt->fromGeometry = visualPos;
+            mt->toGeometry = centered;
+        }
+    }
+    // Bracketed like every other effect-issued commit: the synchronous frame
+    // change this emits must not reach the VS-crossing detector as an
+    // external move, and the pass's own re-entry returns at the gate above.
+    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+    m_effect->m_daemonGate.inGeometryApply = true;
+    const auto applyGuard = qScopeGuard([this, prevInApply] {
+        m_effect->m_daemonGate.inGeometryApply = prevInApply;
+    });
     kw->moveResize(centered);
 }
 

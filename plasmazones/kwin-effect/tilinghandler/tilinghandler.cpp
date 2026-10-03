@@ -764,6 +764,7 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
         m_centeredWaylandZones, m_monocleMaximizedWindows, m_preTileGeometries};
     TilingStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
     m_minimizeFloatMarks.remove(windowId);
+    m_centeredWaylandFrames.remove(windowId); // its stamp went in the helper
     m_unfloatInFlight.remove(windowId);
     dropFullscreenHoldRecords(windowId);
     // Same reasoning as the retry budget below: a dead id's entry must not
@@ -775,9 +776,8 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     m_maximizeToggleInFlight.remove(windowId);
     m_monocleRestoreOwed.remove(windowId);
     // Retry budget and route/provenance markers die with the tracking: a dead
-    // id must not keep an exhausted budget around, and every direct
-    // caller of this cleanup (not just onWindowClosed) must drop the
-    // spawn-provenance entries or they leak past cross-mode moves.
+    // id must not keep an exhausted budget, and every caller of this cleanup
+    // must drop the spawn-provenance entries or they leak past mode moves.
     m_unfloatRetryAttempts.remove(windowId);
     m_pendingFreshWindows.remove(windowId);
     m_deferredWindowRoutes.remove(windowId);
@@ -1237,13 +1237,13 @@ void TilingHandler::clearPerSessionDaemonState()
     // swallows the first cursor move that lands within the resume radius.
     m_ffmSuppressPending = false;
     // Centering state is per-retile transient: the restarted daemon has no
-    // memory of the zones these entries point at, and a stale
-    // m_centeredWaylandZones entry that happens to equal the first
+    // memory of these zones, and a stale centred stamp equal to the first
     // post-restart tile request would trip the skipMoveResize short-circuit
-    // in slotWindowsTileRequested against a freshly-restored decoration,
-    // leaving a title-bar-height gap because the geometry is never re-asserted.
+    // against a freshly-restored decoration, leaving a title-bar-height gap
+    // because the geometry is never re-asserted.
     m_tileTargetZones.clear();
     m_centeredWaylandZones.clear();
+    m_centeredWaylandFrames.clear();
     // Per-screen stagger generations describe the dead session's in-flight
     // batches. They are otherwise only ever inserted (one entry per distinct
     // screenId ever seen, never pruned), so resetting here both restarts the

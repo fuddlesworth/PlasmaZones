@@ -533,8 +533,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                             const QPoint centred(offered.x() + qMax(0, offered.width() - live.width()) / 2,
                                                  offered.y() + qMax(0, offered.height() - live.height()) / 2);
                             if (live.topLeft() != centred && safeW->window()) {
-                                // Bracketed like every other geometry commit
-                                // in the tree. The move emits a synchronous
+                                // Bracketed like the effect's other commits
+                                // (applies, centring). The move emits a synchronous
                                 // frameGeometryChanged, which re-enters this
                                 // signal's whole connection list from the top
                                 // — including the virtual-screen crossing
