@@ -101,8 +101,19 @@ public:
     /// additionally change which dispatch branch is taken.
     QStringList reclaimOffers;
 
+    /// The focus intent the adaptor stated, read at each open and claim as
+    /// "<id>=1" (may take focus) or "<id>=0" (re-placement), in order.
+    QStringList focusIntentAtOpen;
+    QStringList focusIntentAtClaim;
+    bool openFocusEligible = true;
+    void setOpenFocusEligible(bool eligible) override
+    {
+        openFocusEligible = eligible;
+    }
+
     void windowOpened(const QString& windowId, const QString&, int, int) override
     {
+        focusIntentAtOpen.append(windowId + (openFocusEligible ? QStringLiteral("=1") : QStringLiteral("=0")));
         dispatched.append(windowId);
         if (burstDepth == 0) {
             dispatchedOutsideBurst.append(windowId);
@@ -113,6 +124,7 @@ public:
     }
     bool claimCrossScreenReopen(const QString& windowId, const QString&, int, int) override
     {
+        focusIntentAtClaim.append(windowId + (openFocusEligible ? QStringLiteral("=1") : QStringLiteral("=0")));
         reclaimOffers.append(windowId);
         return false; // decline, so the arrival-screen dispatch still runs
     }
@@ -251,6 +263,42 @@ private Q_SLOTS:
     // leaves the opening output), so the adaptor offers every announce, the
     // re-announce after a release included, and the engine decides.
     // -------------------------------------------------------------------------
+    // F428 / F449 / F450: "Focus new windows" focuses genuine opens only. The
+    // adaptor states each entry's intent to the engines for the whole
+    // dispatch, the reopen claim included, and restores the default after.
+    // A genuine open queued behind the panel gate keeps its intent.
+    void testFocusIntentFollowsTheEntryPoint()
+    {
+        // Queued behind the panel gate, then flushed.
+        PhosphorScreens::ScreenManager mgr;
+        RecordingEngine gatedEngine;
+        QObject adaptorParent;
+        TilingAdaptor gated(&mgr, &adaptorParent);
+        gated.setLifecycleEngines({&gatedEngine});
+        gated.windowOpened(QStringLiteral("open|q"), QStringLiteral("HDMI-1"), 0, 0);
+        gated.windowReannounced(QStringLiteral("re|q"), QStringLiteral("HDMI-1"), 0, 0);
+        QVERIFY(emitPanelGeometryReady(mgr));
+        QCoreApplication::processEvents();
+        const QStringList queued{QStringLiteral("open|q=1"), QStringLiteral("re|q=0")};
+        QCOMPARE(gatedEngine.focusIntentAtOpen, queued);
+        QCOMPARE(gatedEngine.focusIntentAtClaim, queued);
+        QVERIFY2(gatedEngine.openFocusEligible, "the default must be restored after every dispatch");
+
+        // Immediate: a null screen manager never engages the gate.
+        RecordingEngine engine;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+        adaptor.windowOpened(QStringLiteral("open|i"), QStringLiteral("HDMI-1"), 0, 0);
+        adaptor.windowReannounced(QStringLiteral("re|i"), QStringLiteral("HDMI-1"), 0, 0);
+        PhosphorProtocol::WindowOpenedEntry batchEntry{QStringLiteral("batch|b"), QStringLiteral("HDMI-1"), 0, 0};
+        batchEntry.focusEligible = true; // an in-process caller's value must not leak through
+        adaptor.windowsOpenedBatch({batchEntry});
+        const QStringList immediate{QStringLiteral("open|i=1"), QStringLiteral("re|i=0"), QStringLiteral("batch|b=0")};
+        QCOMPARE(engine.focusIntentAtOpen, immediate);
+        QCOMPARE(engine.focusIntentAtClaim, immediate);
+        QVERIFY2(engine.openFocusEligible, "the default must be restored after every dispatch");
+    }
+
     void testLiveReleaseDoesNotSuppressTheNextClaimRound()
     {
         RecordingEngine engine;

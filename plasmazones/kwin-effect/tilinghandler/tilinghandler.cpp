@@ -456,7 +456,7 @@ bool TilingHandler::rectAtScrollPark(const QRect& rect) const
     return !unionRect.isEmpty() && !unionRect.intersects(rect);
 }
 
-bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
+bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating, bool focusEligible)
 {
     // Deleted windows bail before getWindowId (cache-pollution hazard).
     if (!w || w->isDeleted()) {
@@ -496,16 +496,10 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
         m_notifiedWindowScreens[windowId] = screenId;
         // Save pre-autotile geometry BEFORE the daemon tiles the window.
         // Without this, a window launched directly into autotile has no saved
-        // geometry — floating it would leave it at its tiled position instead
-        // of restoring to its original free-floating size.
-        //
-        // knownFreeFloating is passed EXPLICITLY by every caller (no default
-        // argument): the genuine window-opened path passes true (the frame is
-        // KWin's spawn geometry and the FloatingCache is not yet populated,
-        // so the isWindowFloating() guard would drop the one-shot save).
-        // RE-ADD callers, and the fullscreen-exit announce of a never-tracked
-        // window (frame still the output rect), pass false so the floating
-        // guard runs and rejects a rect that is not free geometry.
+        // geometry, and floating it would leave it at its tiled position.
+        // knownFreeFloating is passed EXPLICITLY by every caller (see the
+        // header): true lets the genuine open bypass the floating guard, false
+        // makes a re-add run it against a rect that is not free geometry.
         saveAndRecordPreTileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
@@ -526,9 +520,11 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
         const quint64 announceGen = ++m_announceSeq;
         m_announceGen[windowId] = announceGen;
 
+        // Only a genuine open may take focus; a re-placement uses the verb that never does.
         auto* watcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Tiling,
-                                                       QStringLiteral("windowOpened"),
+                                                       focusEligible ? QStringLiteral("windowOpened")
+                                                                     : QStringLiteral("windowReannounced"),
                                                        {windowId, screenId, minSize.width(), minSize.height()}),
             this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this,
@@ -584,8 +580,8 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
                         m_announceGen.remove(windowId);
                     }
                 });
-        qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenId
-                          << "minSize:" << minSize.width() << "x" << minSize.height();
+        qCDebug(lcEffect) << "Notified autotile:" << (focusEligible ? "windowOpened" : "windowReannounced") << windowId
+                          << "on screen" << screenId << "minSize:" << minSize.width() << "x" << minSize.height();
         return true;
     }
     return false;

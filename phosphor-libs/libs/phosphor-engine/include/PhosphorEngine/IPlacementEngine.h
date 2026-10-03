@@ -124,12 +124,9 @@ public:
     /// (it is final: restored only where it names, else released). Default
     /// false: snap restores through resolveWindowRestore instead.
     ///
-    /// Contract: decline unless the opening screen is this engine's; self-gate
-    /// on first observation by MEMBERSHIP (a held window is an in-session
-    /// move); decide via WindowPlacementStore::peekForReclaim, never plain
-    /// peek() (its live-instance exclusion and claim honouring keep a second
-    /// instance off its open sibling's record); return the REAL adoption
-    /// outcome verified by membership.
+    /// Contract: decline unless the opening screen is this engine's; gate on
+    /// first observation by MEMBERSHIP; decide via peekForReclaim, never
+    /// plain peek(); return the REAL adoption outcome, verified by membership.
     virtual bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth = 0,
                                         int minHeight = 0)
     {
@@ -140,10 +137,8 @@ public:
         return false;
     }
 
-    /// INERT, kept for ABI: told an engine's cross-screen defer gate that the
-    /// claim round declined. The defer gates are gone (an engine adopts every
-    /// window that opens on its screen), nothing calls this and the in-tree
-    /// overrides ignore it.
+    /// INERT, kept for ABI: fed the removed cross-screen defer gates. Nothing
+    /// calls it and the in-tree overrides ignore it.
     virtual void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
     {
         Q_UNUSED(windowId)
@@ -159,15 +154,12 @@ public:
     /// This exists for the adaptor's post-claim ownership check: after a
     /// claim onto another virtual screen, the effect's already-queued arrival
     /// announce still carries the ARRIVAL screen, and dispatching it would
-    /// migrate the window straight back. isWindowTracked cannot serve — its contract
-    /// is PER-ENGINE: ScrollEngine answers from the raw reverse-map key,
-    /// which a refused adoption can leave dangling, while SnapEngine and
-    /// AutotileEngine verify membership as well (a phantom key answers
-    /// false there — see AutotileEngine's override doc for why that engine
-    /// needed the stricter form). Callers wanting one uniform answer across
-    /// engines cannot get it from that predicate. isWindowManaged/isWindowTiled
-    /// cannot serve either — both exclude engine-floating windows, which a
-    /// claim can legitimately produce.
+    /// migrate the window straight back. isWindowTracked cannot serve: its
+    /// contract is PER-ENGINE (ScrollEngine answers from the raw reverse-map
+    /// key a refused adoption can leave dangling; SnapEngine and
+    /// AutotileEngine verify membership). isWindowManaged/isWindowTiled
+    /// cannot either: both exclude engine-floating windows, which a claim
+    /// can produce.
     ///
     /// CURRENT-context only, and that restriction is what keeps the check
     /// from suppressing repair. A claim's adoption always keys by the home
@@ -1320,6 +1312,14 @@ public:
     /// manages this screen" — use isActiveOnScreen() for that check.
     virtual IPlacementState* stateForScreen(const QString& screenId) = 0;
     virtual const IPlacementState* stateForScreen(const QString& screenId) const = 0;
+
+    /// OPTIONAL: whether the opens dispatched next may take focus ("Focus new
+    /// windows"): true for a genuine open, false for a re-placement. The
+    /// tiling adaptor sets it around each dispatch. Appended last for ABI.
+    virtual void setOpenFocusEligible(bool eligible)
+    {
+        Q_UNUSED(eligible)
+    }
 };
 
 } // namespace PhosphorEngine

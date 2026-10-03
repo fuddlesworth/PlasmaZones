@@ -80,8 +80,22 @@ public:
     // Public dtor required for unique_ptr<PlacementEngineBase> in Daemon.
     ~PlacementEngineBase() override;
 
+    void setOpenFocusEligible(bool eligible) override
+    {
+        m_openFocusEligible = eligible;
+    }
+
 protected:
     explicit PlacementEngineBase(QObject* parent = nullptr);
+
+    /// Whether the open being handled may take focus (see
+    /// IPlacementEngine::setOpenFocusEligible). True unless the dispatching
+    /// adaptor said this is a re-placement, so a direct windowOpened call
+    /// (tests, embedders without the adaptor) keeps the setting's behaviour.
+    bool openFocusEligible() const
+    {
+        return m_openFocusEligible;
+    }
 
     /// Emit the activation + navigationFeedback pair for a resolved layer
     /// focus switch (resolveLayerFocusSwitch). Success: activation first,
@@ -272,6 +286,8 @@ Q_SIGNALS:
 
 private:
     QPointer<QObject> m_engineSettings;
+    /// Appended last for ABI. See openFocusEligible().
+    bool m_openFocusEligible = true;
 };
 
 } // namespace PhosphorEngine

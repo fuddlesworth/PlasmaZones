@@ -13,6 +13,7 @@
 #include <QTest>
 
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
 
@@ -90,6 +91,36 @@ private Q_SLOTS:
         engine.windowFocused(QStringLiteral("a3"), QStringLiteral("DP-1"));
         QTRY_COMPARE(spotlightWindow(d1), QStringLiteral("a3"));
         QVERIFY2(tiledSpy.count() > 0, "focus change did not emit a retile to the compositor");
+    }
+
+    // "Focus new windows" focuses genuine opens only (F428): an open the
+    // adaptor marked as a re-placement (a re-announce, a catch-scan or
+    // unminimize re-add) is tiled the same way but takes no focus.
+    void focusNewWindows_replacementTakesNoFocus()
+    {
+        PhosphorScreens::FakePhysicalScreenSource provider;
+        provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager manager(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
+        manager.start();
+        AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("DP-1")});
+        engine.config()->focusNewWindows = true;
+        QSignalSpy activateSpy(&engine, &AutotileEngine::activateWindowRequested);
+
+        // Positive control: a genuine open is focused once its tile lands.
+        engine.windowOpened(QStringLiteral("app|f428open"), QStringLiteral("DP-1"));
+        QTRY_VERIFY(!activateSpy.isEmpty());
+        QCOMPARE(activateSpy.last().at(0).toString(), QStringLiteral("app|f428open"));
+        activateSpy.clear();
+
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        engine.setOpenFocusEligible(false);
+        engine.windowOpened(QStringLiteral("app|f428re"), QStringLiteral("DP-1"));
+        engine.setOpenFocusEligible(true);
+        QTRY_VERIFY(!tiledSpy.isEmpty());
+        QVERIFY(engine.tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("app|f428re")));
+        QCOMPARE(activateSpy.count(), 0);
     }
 
     void theater_focusBeforeTrack_seedsSpotlightOnAdd()

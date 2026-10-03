@@ -325,8 +325,9 @@ public Q_SLOTS:
     /**
      * @brief Notify the engine that a window was opened
      *
-     * Called by KWin effect when a new window is added. Routes the window
+     * Called by KWin effect when a window genuinely opens. Routes the window
      * to whichever pipeline engine owns the (possibly rule-routed) screen.
+     * The only announce that may take focus ("Focus new windows").
      *
      * @param windowId Window identifier from KWin
      * @param screenId Screen where the window appeared
@@ -334,6 +335,15 @@ public Q_SLOTS:
      * @param minHeight Window minimum height in pixels (0 if unconstrained)
      */
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight);
+
+    /**
+     * @brief Hand an already-shown window (back) to the tiling engines
+     *
+     * Same placement as windowOpened, for a window that did not just open: a
+     * desktop-switch catch-scan, a cross-output re-add, an unminimize. A
+     * re-placement never takes focus, so KWin's own pick stands.
+     */
+    void windowReannounced(const QString& windowId, const QString& screenId, int minWidth, int minHeight);
 
     /**
      * @brief Batch window-opened notifications
@@ -646,6 +656,11 @@ private:
      * invoke the engine identically.
      */
     void dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEntry& entry);
+    /// Shared body of windowOpened and windowReannounced: validation, the
+    /// panel-geometry deferral and the dispatch, with the entry stamped with
+    /// @p focusEligible ("Focus new windows" applies to genuine opens only).
+    void announceWindow(const char* method, const QString& windowId, const QString& screenId, int minWidth,
+                        int minHeight, bool focusEligible);
 
     /**
      * @brief Decide whether an incoming windowOpened must be deferred

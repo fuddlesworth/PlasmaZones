@@ -406,13 +406,14 @@ QSet<QString> TilingHandler::completeDeferredWindowRoutes()
                         // knownFreeFloating only when the restore did NOT
                         // apply — a zone-placed window's live frame is the
                         // zone rect, not a genuine free frame.
-                        if (!notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/!snapApplied)
+                        if (!notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/!snapApplied,
+                                               /*focusEligible=*/true)
                             && !m_notifiedWindows.contains(windowId)) {
                             m_effect->endRestoreSuppression(safeWindow.data());
                         }
                     },
                     /*releaseSuppressionOnMiss=*/false);
-            } else if (!notifyWindowAdded(window, /*knownFreeFloating=*/true)
+            } else if (!notifyWindowAdded(window, /*knownFreeFloating=*/true, /*focusEligible=*/true)
                        && !m_notifiedWindows.contains(windowId)) {
                 m_effect->endRestoreSuppression(window);
             }

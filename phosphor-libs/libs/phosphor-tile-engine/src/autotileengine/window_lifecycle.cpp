@@ -866,7 +866,9 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
         emitInsertFloatStateSync(windowId, screenId);
     }
 
-    if (inserted && m_config && m_config->focusNewWindows) {
+    // A re-placement (a daemon-restart re-announce, a catch-scan or unminimize
+    // re-add) never takes focus: "Focus new windows" focuses genuine opens only.
+    if (inserted && openFocusEligible() && m_config && m_config->focusNewWindows) {
         // Defer focus until after applyTiling emits windowsTiled. The KWin effect's
         // onComplete raises windows in tiling order; emitting focus before retile
         // causes the raise loop to bury the new window behind existing ones.

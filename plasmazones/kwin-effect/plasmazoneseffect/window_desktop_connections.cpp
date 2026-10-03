@@ -324,7 +324,11 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // knownFreeFloating=false, matching the catch-scan: the frame is very
         // likely the SOURCE desktop's tiled rect, and the floating guard has to
         // run and reject it rather than persist it as free-floating geometry.
-        m_tilingHandler->notifyWindowAdded(window, /*knownFreeFloating=*/false);
+        // A move onto the desktop in view is an arrival, which "Focus new
+        // windows" may focus. An un-stick is not: that window was on screen
+        // all along.
+        m_tilingHandler->notifyWindowAdded(window, /*knownFreeFloating=*/false,
+                                           /*focusEligible=*/!stickyFallThrough);
         qCInfo(lcEffect) << "Window moved onto current desktop, added to autotile:" << windowId;
     });
 }

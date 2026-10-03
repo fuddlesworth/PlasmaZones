@@ -74,7 +74,8 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             // track the window as tiled: the handoffReceive that placed it has
             // its frame sitting in the destination zone rect, and passing true
             // would push that rect as the daemon's free/float-back geometry.
-            notifyWindowAdded(w, /*knownFreeFloating=*/!TilingStateHelpers::isTiledWindow(m_border, windowId));
+            notifyWindowAdded(w, /*knownFreeFloating=*/!TilingStateHelpers::isTiledWindow(m_border, windowId),
+                              /*focusEligible=*/false);
             m_effect->updateAllDecorations();
         }
         return;
@@ -548,7 +549,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // frame now sits below the user's min-size threshold) or a pending
         // close can filter it locally — a no-op then, the daemon's tile path
         // owns any follow-up.
-        notifyWindowAdded(w, /*knownFreeFloating=*/false);
+        notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
     } else if (oldIsAutotile && !newIsAutotile) {
         // Autotile → snapping: restore the window's original (pre-snap/pre-tile)
         // SIZE after the drag ends.  The effect-side m_preTileGeometries may

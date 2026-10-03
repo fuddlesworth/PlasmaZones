@@ -56,7 +56,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="windowOpened">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window was opened (called from KWin effect)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window genuinely opened (called from KWin effect). The only announce that may take focus under Focus new windows."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
             </arg>
@@ -71,8 +71,24 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
+        <method name="windowReannounced">
+            <annotation name="org.gtk.GDBus.DocString" value="Hand an already-shown window (back) to the tiling engines without it counting as an open: a desktop-switch catch-scan, a cross-output re-add, an unminimize. Placed exactly like windowOpened, but never takes focus. Added in API v10."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen the window is on."/>
+            </arg>
+            <arg name="minWidth" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window minimum width in pixels (0 if unconstrained)."/>
+            </arg>
+            <arg name="minHeight" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window minimum height in pixels (0 if unconstrained)."/>
+            </arg>
+        </method>
+
         <method name="windowsOpenedBatch">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch window-opened notifications: process multiple windowOpened in one D-Bus call. Used on daemon startup/restart and mode toggle-on. Array of (windowId, screenId, minWidth, minHeight)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch re-announce: process multiple windows in one D-Bus call. Used on daemon startup/restart and mode toggle-on, so its entries are re-placements and never take focus. Array of (windowId, screenId, minWidth, minHeight)."/>
             <arg name="entries" type="a(ssii)" direction="in">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::WindowOpenedList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of window-opened entry structs."/>

@@ -346,10 +346,13 @@ private:
      * refused: missing dependencies, the global `snappingEnabled()` kill-switch
      * is off, or the target context is disabled by the cascade. A false return
      * means no commit happened; callers must skip any post-snap work (e.g.
-     * success logging).
+     * success logging). @p intent is AutoRestored for a placement that may
+     * take focus (a genuine open, a drop's auto-fill) and AutoReplaced for a
+     * re-placement of a window that did not just open.
      */
     bool applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY, int& snapWidth,
-                         int& snapHeight, bool& shouldSnap);
+                         int& snapHeight, bool& shouldSnap,
+                         PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::AutoRestored);
 
     /**
      * @brief The two user-facing refusals every auto-snap answer this facade

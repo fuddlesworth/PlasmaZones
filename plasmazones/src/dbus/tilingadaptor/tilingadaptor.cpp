@@ -12,6 +12,8 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include <QScopeGuard>
+
 #include <algorithm>
 #include <utility>
 
@@ -434,6 +436,18 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
 void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
                                                  bool allowCrossScreenClaim)
 {
+    // "Focus new windows" focuses genuine opens only. State the entry's intent
+    // to every lifecycle engine for the length of this dispatch, at the HEAD so
+    // the reopen claim below (which re-enters windowOpened on the claiming
+    // engine) reads it too, and restore the default on every exit.
+    for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+        engine->setOpenFocusEligible(entry.focusEligible);
+    }
+    const auto restoreFocusIntent = qScopeGuard([this] {
+        for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+            engine->setOpenFocusEligible(true);
+        }
+    });
     // The reopen claim FIRST, before the arrival-screen dispatch: a window
     // opening on one virtual screen of an output may restore into a FIFO
     // record (another instance of the app) on another virtual screen of the
@@ -638,15 +652,26 @@ void TilingAdaptor::flushPendingWindowOpens()
 
 void TilingAdaptor::windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
-    if (!ensurePipeline("windowOpened")) {
+    announceWindow("windowOpened", windowId, screenId, minWidth, minHeight, /*focusEligible=*/true);
+}
+
+void TilingAdaptor::windowReannounced(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
+{
+    announceWindow("windowReannounced", windowId, screenId, minWidth, minHeight, /*focusEligible=*/false);
+}
+
+void TilingAdaptor::announceWindow(const char* method, const QString& windowId, const QString& screenId, int minWidth,
+                                   int minHeight, bool focusEligible)
+{
+    if (!ensurePipeline(method)) {
         return;
     }
     if (windowId.isEmpty()) {
-        qCDebug(lcDbusTiling) << "windowOpened: empty window ID";
+        qCDebug(lcDbusTiling) << method << ": empty window ID";
         return;
     }
     if (screenId.isEmpty()) {
-        qCDebug(lcDbusTiling) << "windowOpened: empty screen ID for window" << windowId;
+        qCDebug(lcDbusTiling) << method << ": empty screen ID for window" << windowId;
         return;
     }
     // Non-blocking startup gate: if the first panel D-Bus query has not completed
@@ -654,15 +679,17 @@ void TilingAdaptor::windowOpened(const QString& windowId, const QString& screenI
     // against the unreserved full-screen rect (PhosphorScreens::ScreenManager's availability cache
     // is empty until the sensor windows and Plasma D-Bus panel query finish), and
     // the daemon would emit a visible correction a frame later. Flushing happens in
-    // flushPendingWindowOpens() when panelGeometryReady fires.
+    // flushPendingWindowOpens() when panelGeometryReady fires. The focus intent
+    // rides the queued entry, so a deferred genuine open still takes focus.
     PhosphorProtocol::WindowOpenedEntry entry{windowId, screenId, minWidth, minHeight};
+    entry.focusEligible = focusEligible;
     if (deferUntilPanelReady(1)) {
-        qCInfo(lcDbusTiling) << "windowOpened: deferring" << windowId
+        qCInfo(lcDbusTiling) << method << ": deferring" << windowId
                              << "until panel geometry ready (queue size=" << (m_pendingOpens.size() + 1) << ")";
         m_pendingOpens.append(entry);
         return;
     }
-    qCDebug(lcDbusTiling) << "windowOpened: windowId=" << windowId << "screen=" << screenId << "minSize=" << minWidth
+    qCDebug(lcDbusTiling) << method << ": windowId=" << windowId << "screen=" << screenId << "minSize=" << minWidth
                           << "x" << minHeight;
     dispatchWindowOpened(entry);
 }
@@ -673,17 +700,25 @@ void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
         return;
     }
 
-    // See windowOpened() above for the startup-race rationale. The batch path queues
+    // The batch is the daemon-ready / mode-flip RE-ANNOUNCE of windows already
+    // on screen, so no entry may take focus, whatever an in-process caller
+    // left in the off-wire field.
+    PhosphorProtocol::WindowOpenedList reannounced = entries;
+    for (auto& entry : reannounced) {
+        entry.focusEligible = false;
+    }
+
+    // See announceWindow() for the startup-race rationale. The batch path queues
     // all entries atomically so windows in the same batch retain their original order
     // when flushed.
-    if (deferUntilPanelReady(entries.size())) {
-        qCInfo(lcDbusTiling) << "windowsOpenedBatch: deferring" << entries.size()
+    if (deferUntilPanelReady(reannounced.size())) {
+        qCInfo(lcDbusTiling) << "windowsOpenedBatch: deferring" << reannounced.size()
                              << "windows until panel geometry ready";
-        m_pendingOpens.append(entries);
+        m_pendingOpens.append(reannounced);
         return;
     }
 
-    qCInfo(lcDbusTiling) << "windowsOpenedBatch: processing" << entries.size() << "windows";
+    qCInfo(lcDbusTiling) << "windowsOpenedBatch: processing" << reannounced.size() << "windows";
 
     // Burst bracket (IPlacementEngine::beginArrivalBurst): engines that
     // apply geometry per arrival defer to one apply per screen, so a
@@ -698,7 +733,7 @@ void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
     // as separate calls). Empty ids fall through to dispatchWindowOpened's
     // own validation.
     QSet<QString> seenWindowIds;
-    for (const auto& entry : entries) {
+    for (const auto& entry : std::as_const(reannounced)) {
         if (!entry.windowId.isEmpty() && seenWindowIds.contains(entry.windowId)) {
             qCDebug(lcDbusTiling) << "windowsOpenedBatch: dropping duplicate entry for" << entry.windowId;
             continue;

@@ -467,7 +467,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             const QString currentScreen = m_effect->getWindowScreenId(w);
             if (m_managedScreens.contains(currentScreen)) {
                 m_pendingFreshWindows.remove(windowId);
-                notifyWindowAdded(w, /*knownFreeFloating=*/false);
+                notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
             }
             // Pay any maximize claim before leaving. This is an OWNERSHIP exit:
             // the untrack funnel already dropped m_notifiedWindows, so the

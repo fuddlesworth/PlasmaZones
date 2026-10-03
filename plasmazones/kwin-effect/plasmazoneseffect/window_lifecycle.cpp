@@ -354,7 +354,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // strip member re-announced at effect bring-up arrives here and must
     // still reach the daemon — see the re-adoption contract in
     // floatcleanup.cpp.
-    m_tilingHandler->notifyWindowAdded(w, /*knownFreeFloating=*/true);
+    m_tilingHandler->notifyWindowAdded(w, /*knownFreeFloating=*/true, /*focusEligible=*/true);
 }
 
 void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)

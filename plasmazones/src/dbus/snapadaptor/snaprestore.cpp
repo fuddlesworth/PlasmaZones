@@ -316,7 +316,13 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
-    applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
+    // "Focus new windows" focuses a genuine open only: every other reason
+    // re-places a window that was already on screen (or, for a desktop
+    // arrival, one that opened while its desktop was away), so KWin keeps
+    // its focus pick.
+    applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap,
+                    reason == PhosphorEngine::RestoreReason::Open ? SnapIntent::AutoRestored
+                                                                  : SnapIntent::AutoReplaced);
     // Return value intentionally ignored: applySnapResult has already set
     // shouldSnap (false on a disabled-context refusal) and there is no
     // post-snap work in this slot to skip.
@@ -381,7 +387,7 @@ bool SnapAdaptor::snapPermittedForContext(const QString& windowId, const QString
 }
 
 bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY,
-                                  int& snapWidth, int& snapHeight, bool& shouldSnap)
+                                  int& snapWidth, int& snapHeight, bool& shouldSnap, SnapIntent intent)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
@@ -414,21 +420,18 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     shouldSnap = true;
 
     // Mark auto-snapped first so the flag persists through commitSnap
-    // (AutoRestored leaves it alone). commitSnap runs the full
+    // (neither automatic intent clears it). commitSnap runs the full
     // orchestration — clears any pre-existing floating state (emits
     // windowFloatingClearedForSnap which the adaptor relays as
     // windowFloatingChanged), assigns to zone(s), emits state change.
     m_adaptor->service()->markAsAutoSnapped(windowId);
     if (zoneIds.size() > 1) {
-        m_engine->commitMultiZoneSnap(windowId, zoneIds, result.screenId, SnapIntent::AutoRestored,
-                                      result.virtualDesktop);
+        m_engine->commitMultiZoneSnap(windowId, zoneIds, result.screenId, intent, result.virtualDesktop);
     } else {
-        m_engine->commitSnap(windowId, zoneIds.first(), result.screenId, SnapIntent::AutoRestored,
-                             result.virtualDesktop);
+        m_engine->commitSnap(windowId, zoneIds.first(), result.screenId, intent, result.virtualDesktop);
     }
-    // Focus-new-windows is handled inside SnapEngine::commitSnapImpl on the
-    // AutoRestored path (mirrors AutotileEngine), so it covers every auto-snap-on-open
-    // entry point in one place — not just this D-Bus facade.
+    // Focus-new-windows is decided inside SnapEngine::commitSnapImpl from the
+    // intent: AutoRestored may focus, AutoReplaced never does.
     return true;
 }
 

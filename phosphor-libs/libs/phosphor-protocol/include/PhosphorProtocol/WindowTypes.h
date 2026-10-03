@@ -119,6 +119,12 @@ struct WindowOpenedEntry
     QString screenId;
     int minWidth = 0;
     int minHeight = 0;
+    /// NOT on the wire (the marshalling carries the four fields above): the
+    /// daemon stamps it from the method the entry arrived through, so it
+    /// survives the panel-gate queue and the parked-open retry. True only for
+    /// Tiling.windowOpened, a genuine open that may take focus; a re-announce
+    /// (windowsOpenedBatch) or re-placement (windowReannounced) never does.
+    bool focusEligible = false;
 };
 
 using WindowOpenedList = QList<WindowOpenedEntry>;

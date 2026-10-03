@@ -125,6 +125,29 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    // F386: one focus rule for every mode, genuine opens only. A re-placement
+    // (AutoReplaced: a restart or pending sweep, an unminimize, a desktop
+    // arrival) never focuses, and neither does a genuine open committed onto a
+    // desktop its screen is not showing.
+    void testFocusNewWindows_replacementAndHiddenDesktop_neverEmit()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        m_settings->setSnappingFocusNewWindows(true);
+
+        QSignalSpy spy(&engine, &SnapEngine::activateWindowRequested);
+        engine.commitSnap(QStringLiteral("win-focus-r"), QStringLiteral("zone-1"), QStringLiteral("DP-1"),
+                          PhosphorEngine::SnapIntent::AutoReplaced);
+        QCOMPARE(spy.count(), 0);
+
+        const int hiddenDesktop = engine.currentVirtualDesktopForScreen(QStringLiteral("DP-1")) + 1;
+        engine.commitSnap(QStringLiteral("win-focus-h"), QStringLiteral("zone-1"), QStringLiteral("DP-1"),
+                          PhosphorEngine::SnapIntent::AutoRestored, hiddenDesktop);
+        QCOMPARE(spy.count(), 0);
+        m_wts->setSnapState(nullptr);
+    }
+
     void testFocusNewWindows_autoRestored_silentWhenDisabled()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);

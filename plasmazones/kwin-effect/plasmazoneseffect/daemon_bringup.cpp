@@ -423,8 +423,9 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     // Snapshot the active window so the autotile raise loop can re-activate it
     // after putting all tiled windows on top (which would bury non-tiled windows
     // like the KCM settings panel). Only set if the active window is NOT on an
-    // autotile screen — autotile screens handle their own focus via
-    // m_pendingAutotileFocusWindowId in the onComplete callback.
+    // autotile screen: there the raise loop re-raises the active window itself,
+    // and the re-announce takes no focus of its own (a re-placement never
+    // does), so focus stays where it was.
     KWin::EffectWindow* activeWin = KWin::effects->activeWindow();
     if (activeWin && !m_tilingHandler->isManagedScreen(getWindowScreenId(activeWin))) {
         m_tilingHandler->setPendingReactivateWindow(activeWin);

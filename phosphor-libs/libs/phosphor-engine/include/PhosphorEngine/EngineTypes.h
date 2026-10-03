@@ -61,7 +61,13 @@ using TilingStateKey = PlacementStateKey;
 
 enum class SnapIntent {
     UserInitiated,
+    /// An automatic placement of a window that genuinely opened: may take
+    /// focus under "Focus new windows".
     AutoRestored,
+    /// The same automatic placement for a window that did NOT just open (a
+    /// restart or pending sweep, an unminimize, a desktop arrival). Identical
+    /// bookkeeping to AutoRestored, never takes focus. Appended for ABI.
+    AutoReplaced,
 };
 
 /// Coarse structural classification of a window, carried on the open and close

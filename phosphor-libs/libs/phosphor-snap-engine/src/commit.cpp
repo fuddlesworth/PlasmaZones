@@ -96,25 +96,24 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     }
 
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
-        << "commitSnap:" << windowId << "zones=" << zoneIds << "screen=" << screenId
-        << "intent=" << (intent == SnapIntent::UserInitiated ? "user" : "auto");
+        << "commitSnap:" << windowId << "zones=" << zoneIds << "screen=" << screenId << "intent="
+        << (intent == SnapIntent::UserInitiated ? "user" : (intent == SnapIntent::AutoRestored ? "auto" : "replaced"));
 
     Q_EMIT windowSnapStateChanged(windowId,
                                   PhosphorProtocol::WindowStateEntry{windowId, primaryZoneId, screenId, false,
                                                                      QStringLiteral("snapped"), zoneIds, false});
 
-    // Focus-new-windows: activate a window that was just auto-placed into a zone on
-    // open. AutoRestored is used only by the auto-snap-on-open paths (windowOpened and
-    // the D-Bus resolveWindowRestore facade); manual drag, keyboard snap, snap-all,
-    // unfloat, and navigation all use UserInitiated, so they keep KWin's normal focus.
-    // This matches AutotileEngine's focusNewWindows intent-gating, but emits
-    // immediately rather than deferring like autotile does. Autotile defers focus to
-    // after its windowsTiled reflow because its post-commit raise-in-tiling-order loop
-    // would otherwise bury an early-focused window. Snap has no such batch raise — each
-    // window's geometry is applied independently — so activating now is safe and lets
-    // this stay the single chokepoint for both single- and multi-zone auto-restored
-    // commits.
-    if (intent == SnapIntent::AutoRestored) {
+    // Focus-new-windows: activate a window that was just auto-placed into a zone
+    // because it genuinely opened. Only AutoRestored asks for it: the D-Bus restore
+    // facade commits AutoReplaced for every other reason (a restart or pending
+    // sweep, an unminimize, a desktop arrival), and manual drag, keyboard snap,
+    // snap-all, unfloat and navigation commit UserInitiated, so all of those keep
+    // KWin's focus. Only for a commit onto the desktop its screen shows: a commit
+    // pinned to another desktop (RouteToDesktop, a background-desktop restore)
+    // would activate a window the user cannot see. Emitted immediately, unlike
+    // autotile's deferred focus, because snap has no post-commit raise loop to
+    // bury it; this stays the single chokepoint for single- and multi-zone commits.
+    if (intent == SnapIntent::AutoRestored && assignmentDesktop == currentVirtualDesktopForScreen(screenId)) {
         if (auto* settings = snapSettings(); settings && settings->focusNewWindows()) {
             Q_EMIT activateWindowRequested(windowId);
         }

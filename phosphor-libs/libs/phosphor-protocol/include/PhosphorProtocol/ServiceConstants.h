@@ -580,6 +580,12 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       the daemon lacks gets a D-Bus error and leaves the tile in the strip,
 //       and an old daemon emitting a signal the effect no longer connects
 //       simply goes unheard.
+//
+//       Also in v10, Tiling gains windowReannounced (s s i i): the same
+//       placement as windowOpened for a window that did not just open (a
+//       desktop-switch catch-scan, a cross-output re-add, an unminimize), so
+//       "Focus new windows" can focus genuine opens only. windowOpened now
+//       means a genuine open, and windowsOpenedBatch entries never take focus.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

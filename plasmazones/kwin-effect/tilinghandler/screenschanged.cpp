@@ -1012,10 +1012,10 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     m_notifiedWindowScreens[windowId] = screenId;
                     settleParkedFullscreenHold(w, windowId, screenId);
                 } else {
-                    // Genuinely new window opened while this desktop was away: free only if
-                    // KWin spawned it meanwhile (spawn marker; lost on an unmanaged screen, the
-                    // daemon's own spawn capture stands in). A formerly-held tile sits at its column rect.
-                    notifyWindowAdded(w, /*knownFreeFloating=*/m_pendingFreshWindows.contains(windowId));
+                    // Opened while this desktop was away: free only if KWin spawned it meanwhile (spawn
+                    // marker; else the daemon's spawn capture stands in), and a re-placement for focus.
+                    const bool fresh = m_pendingFreshWindows.contains(windowId);
+                    notifyWindowAdded(w, /*knownFreeFloating=*/fresh, /*focusEligible=*/false);
                 }
             }
             // Only remove entries for windows on screens we just processed.
@@ -1103,7 +1103,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                         // guard so a tiled rect is not persisted as free geometry
                         // (a stash restore above already populated the local
                         // bucket for windows that had one; this protects the rest).
-                        notifyWindowAdded(w, /*knownFreeFloating=*/false);
+                        notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
                     }
                     // Whether this scan re-announced the window or found it
                     // already tracked, it is now on the current desktop and

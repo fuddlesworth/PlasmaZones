@@ -91,25 +91,24 @@ public:
     // Integration points (called by PlasmaZonesEffect)
     // ═══════════════════════════════════════════════════════════════════
 
-    /// Returns true when the window was on an autotile screen and a
-    /// `windowOpened` D-Bus call was issued (i.e. the daemon is expected
-    /// to tile it, producing a moveResize). Returns false when the call
-    /// was filtered out locally (ineligible window, non-autotile screen,
-    /// already-notified) — callers that depend on a follow-up tile must
-    /// not wait for one in that case (used by the first-frame open
-    /// suppression path to release suppression immediately on a no-op).
-    ///
-    /// @p knownFreeFloating governs the pre-autotile geometry capture: the
-    /// genuine window-opened/spawn path passes `true` (the frame is KWin's
-    /// spawn geometry and the FloatingCache is not yet populated, so the
-    /// isWindowFloating() guard must be bypassed). RE-ADD callers (a window
-    /// already known to the engine being re-announced — cross-screen
-    /// transfer, desktop-return catch-scan) and the fullscreen-exit announce of
-    /// a never-tracked window pass `false`: the frame may be a tiled zone rect
-    /// or still the output rect, so the floating guard MUST run and reject it,
-    /// otherwise the tiled rect would be persisted as the window's
-    /// free-floating geometry and clobber the daemon's real float-back.
-    bool notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating);
+    /// Returns true when the window was on an autotile screen and the
+    /// announce was sent (the daemon is expected to tile it). Returns false
+    /// when it was filtered out locally (ineligible window, non-autotile
+    /// screen, already notified): callers that depend on a follow-up tile
+    /// must not wait for one (the first-frame open suppression path releases
+    /// suppression immediately on a no-op). @p knownFreeFloating governs the
+    /// pre-autotile geometry capture: the genuine open passes `true` (the frame
+    /// is KWin's spawn geometry and the FloatingCache is not yet populated, so
+    /// the isWindowFloating() guard must be bypassed). RE-ADD callers (a window
+    /// already known to the engine being re-announced — cross-screen transfer,
+    /// desktop-return catch-scan) and the fullscreen-exit announce of a
+    /// never-tracked window pass `false`: the frame may be a tiled zone rect or
+    /// still the output rect, so the floating guard MUST run and reject it, or
+    /// the tiled rect would clobber the daemon's real float-back.
+    /// @p focusEligible: true only for a genuine open or an arrival on the
+    /// desktop in view (Tiling.windowOpened, may take focus); a re-placement
+    /// passes false (Tiling.windowReannounced, never focuses).
+    bool notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating, bool focusEligible);
 
     /**
      * @brief Batch-notify windows added to engine-managed screens

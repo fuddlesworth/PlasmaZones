@@ -739,7 +739,12 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // Lazy on purpose: value_or would evaluate the settings read even when the
     // rule already decided, and that read walks the override map and does a
     // qobject_cast on the settings object.
-    const bool focusNew = openParams.focused ? *openParams.focused : effectiveFocusNewWindows(screenId);
+    // A re-placement (a daemon-restart re-announce, a catch-scan or unminimize
+    // re-add) never takes focus, whatever the tiers say: "Focus new windows"
+    // focuses genuine opens only, and a false here also keeps the strip's
+    // active column where it was.
+    const bool focusNew =
+        openFocusEligible() && (openParams.focused ? *openParams.focused : effectiveFocusNewWindows(screenId));
     const bool arrivalTookFocus = focusNew && state->strip().activeWindowId() == windowId;
     // Paired with the insertOpenedWindow report above: arrivalTookFocus is what
     // decides whether the deferred/immediate applyLayout re-centres the view on
@@ -780,8 +785,10 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // Skipped inside an arrival burst (daemon-restart re-announce, mode
         // flip): those re-announce EXISTING windows, the user is not opening
         // anything, and firing an activation per arrival would fight the
-        // burst's own deferred focus restore.
-        if (m_arrivalBurstDepth == 0) {
+        // burst's own deferred focus restore. Skipped for any re-placement for
+        // the same reason: the compositor is not focusing an existing window,
+        // and an activation here would take focus from whatever KWin picked.
+        if (m_arrivalBurstDepth == 0 && openFocusEligible()) {
             m_declinedOpenFocus.insert(windowId);
             queueSelfActivation(priorActive);
             Q_EMIT activateWindowRequested(priorActive);
