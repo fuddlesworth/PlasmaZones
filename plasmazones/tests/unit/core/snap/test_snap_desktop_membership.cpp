@@ -816,26 +816,22 @@ private Q_SLOTS:
     }
 
     // Removing a desktop renumbers every bare desktop number the service
-    // keeps, not only the persisted map: a pending restore queued across the
-    // removal must land on the desktop it was queued for.
-    void removingADesktopRenumbersPendingRestores()
+    // keeps, not only the persisted map: a resnap buffered across the removal
+    // must land on the desktop it was buffered for, and a row on the removed
+    // desktop falls back to 0, the all-desktops sentinel.
+    void removingADesktopRenumbersTheResnapBuffer()
     {
-        PhosphorEngine::PendingRestore onThree;
-        onThree.zoneIds = {m_zoneIds[0]};
-        onThree.screenId = kScreen;
-        onThree.virtualDesktop = 3;
-        PhosphorEngine::PendingRestore onTwo = onThree;
-        onTwo.virtualDesktop = 2;
-        m_service->setPendingRestoreQueues({{QStringLiteral("app"), {onThree, onTwo}}});
-        m_service->clearDirty();
+        snapOn(3, kWindow, m_zoneIds[0]);
+        snapOn(2, kOther, m_zoneIds[1]);
+        m_service->populateResnapBufferForAllScreens({}, {kScreen});
 
         m_engine->renumberDesktopsAfterRemoval(2);
-        const QList<PhosphorEngine::PendingRestore> queue =
-            m_service->pendingRestoreQueues().value(QStringLiteral("app"));
-        QCOMPARE(queue.size(), 2);
-        QCOMPARE(queue.at(0).virtualDesktop, 2);
-        QCOMPARE(queue.at(1).virtualDesktop, 0);
-        QVERIFY2(m_service->peekDirty() != 0, "the shift must mark the service dirty");
+        QHash<QString, int> desktopByWindow;
+        for (const PhosphorEngine::ResnapEntry& entry : m_service->takeResnapBuffer()) {
+            desktopByWindow.insert(entry.windowId, entry.virtualDesktop);
+        }
+        QCOMPARE(desktopByWindow.value(kWindow, -1), 2);
+        QCOMPARE(desktopByWindow.value(kOther, -1), 0);
     }
 
     // The close the daemon relays goes through the service, and has to reach

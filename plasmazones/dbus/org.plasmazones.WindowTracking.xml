@@ -259,7 +259,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="pendingRestoresAvailable">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the daemon's layout becomes available and there are pending zone restores. The KWin effect should retry restoring untracked windows when receiving this signal."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted at most once per session, once the placement store held records at load or at a layout change and panel geometry is known. The KWin effect should retry restoring untracked windows when receiving this signal."/>
         </signal>
         <signal name="reapplyWindowGeometriesRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted after panel geometry has settled so the KWin effect should call getUpdatedWindowGeometries and apply those geometries to snapped windows. Fixes shifted windows after closing the KDE panel editor."/>
@@ -407,12 +407,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="windowClosed">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was closed (cleanup). The window's structural kind is captured into the PendingRestore entry if one is recorded, so the consume path can refuse to assign that entry to a window of a different kind on reopen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was closed (cleanup)."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
             <arg name="windowKind" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the closing window (0=Unknown, 1=Normal, 2=Transient). Recorded on the PendingRestore entry if one is enqueued. Pass 0 to opt out of the gate (legacy callers)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the closing window (0=Unknown, 1=Normal, 2=Transient). Unused: it gated the pending-restore queue, which was removed. Kept so the signature does not change."/>
             </arg>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="The window's authoritative current screen at close (KWin's getWindowScreenId). Used by the final placement capture to record the float-back on the screen the window actually closed on, even when a cross-screen move has torn down both engines' tracking. Empty opts out (legacy callers)."/>

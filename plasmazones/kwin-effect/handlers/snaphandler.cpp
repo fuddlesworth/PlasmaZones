@@ -714,10 +714,10 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
     // store's per-app FIFO on a path that is not an open.
     //
     // Tracked-ness MUST be checked, not resolved blindly:
-    // resolveWindowRestore consumes the single-shot FIFO pending-restore
-    // entry for the window's appId, and burning it on a window the daemon
-    // still owns robs a sibling window's restore. A failed query counts
-    // as tracked for the same reason.
+    // resolveWindowRestore claims a placement record for the window's
+    // appId, and spending it on a window the daemon still owns robs a
+    // sibling window's restore. A failed query counts as tracked for the
+    // same reason.
     if (window) {
         struct QueryJoin
         {
@@ -1285,9 +1285,9 @@ void SnapHandler::slotPendingRestoresAvailable()
         // Now iterate through all visible windows and restore untracked ones
         const auto windows = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* window : windows) {
-            // !isDeleted: a close-grabbed dying window would consume the
-            // single-shot FIFO pending-restore entry for its appId, robbing
-            // the app's next REAL window of its restore.
+            // !isDeleted: a close-grabbed dying window would claim a
+            // placement record for its appId, robbing the app's next REAL
+            // window of its restore.
             if (!window || window->isDeleted() || !m_effect->shouldHandleWindow(window)) {
                 continue;
             }

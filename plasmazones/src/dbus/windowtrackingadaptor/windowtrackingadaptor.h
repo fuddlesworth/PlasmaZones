@@ -405,7 +405,8 @@ public Q_SLOTS:
      * Clean up all tracking data for a closed window
      * @param windowId Window ID that was closed
      * @param windowKind PhosphorEngine::WindowKind wire value (Unknown/Normal/
-     *        Transient) — gates the snap-restore consume on reopen
+     *        Transient). Unused: it gated the pending-restore queue, which was
+     *        removed; kept so the wire signature does not change
      * @param screenId The window's authoritative current screen at close (KWin's
      *        getWindowScreenId). Threaded into the final placement capture so a
      *        window dragged cross-screen and closed records its float-back on the
@@ -1267,7 +1268,7 @@ public:
      *
      * Safe to call at any time. An empty @p patterns short-circuits.
      */
-    void pruneExcludedPendingRestores(const QStringList& patterns);
+    void pruneExcludedPlacements(const QStringList& patterns);
 
     /**
      * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles).
@@ -1336,9 +1337,10 @@ Q_SIGNALS:
     /**
      * @brief Emitted when pending window restores become available
      *
-     * This signal is emitted when:
-     * 1. The active layout becomes available after startup
-     * 2. There are pending zone assignments waiting to be applied
+     * Emitted at most once per session, once both of these hold:
+     * 1. The placement store held at least one record at load or at a
+     *    layout change
+     * 2. Panel geometry has been received
      *
      * The KWin effect should respond by calling resolveWindowRestore()
      * for all visible windows that haven't yet been tracked.
@@ -1477,7 +1479,7 @@ public:
     // Internal-only members below — plain `public:` placement (not Q_SLOTS)
     // to keep QDBusAbstractAdaptor's runtime introspection from exposing
     // them on the bus when the XML doesn't list them. Same pattern as the
-    // `pruneExcludedPendingRestores` / `requestReapplyWindowGeometries`
+    // `pruneExcludedPlacements` / `requestReapplyWindowGeometries`
     // pair above.
     /**
      * @brief Single broadcast chokepoint for engine-relayed float changes.
@@ -1605,7 +1607,8 @@ private Q_SLOTS:
      * @brief Handle panel geometry becoming ready
      *
      * Called when PhosphorScreens::ScreenManager reports panel geometry is known.
-     * If there are pending restores waiting for geometry, emits pendingRestoresAvailable.
+     * Emits pendingRestoresAvailable when the placement store held records at
+     * load and the signal has not been emitted yet this session.
      */
     void onPanelGeometryReady();
 
@@ -1909,15 +1912,17 @@ private:
      * @brief Try to emit pendingRestoresAvailable if conditions are met
      *
      * Conditions required:
-     * 1. PhosphorZones::Layout is available with pending restores
+     * 1. The placement store held records at load or at a layout change
+     *    (m_hasPendingRestores)
      * 2. Panel geometry has been received by PhosphorScreens::ScreenManager
+     * 3. The signal has not been emitted yet this session
      *
      * This prevents windows from restoring with incorrect geometry
      * before panel positions are known.
      */
     void tryEmitPendingRestoresAvailable();
 
-    bool m_hasPendingRestores = false; // True if layout has pending restores waiting
+    bool m_hasPendingRestores = false; // True once the placement store held records at load or a layout change
     bool m_pendingRestoresEmitted = false; // True if we already emitted pendingRestoresAvailable
     bool m_shutdownSaveGuard = false; // True after saveStateOnShutdown() to prevent destruction-phase saves
 };

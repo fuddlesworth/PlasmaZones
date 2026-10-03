@@ -420,7 +420,7 @@ void WindowTrackingAdaptor::refreshOpenWindowPlacements()
     }
 }
 
-void WindowTrackingAdaptor::pruneExcludedPendingRestores(const QStringList& patterns)
+void WindowTrackingAdaptor::pruneExcludedPlacements(const QStringList& patterns)
 {
     if (patterns.isEmpty() || !m_service) {
         return;
@@ -573,7 +573,6 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     if (PhosphorSnapEngine::SnapEngine* snap = snapEngine()) {
         snap->migrateWindowToScreen(windowId, resolvedNewScreen);
     }
-    m_service->consumePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
 
     // Emit unified state change for screen-change-triggered unsnap. Report the

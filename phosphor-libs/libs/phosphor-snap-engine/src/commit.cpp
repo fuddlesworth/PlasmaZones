@@ -61,9 +61,6 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     bool wasAutoSnapped = false;
     if (intent == SnapIntent::UserInitiated) {
         wasAutoSnapped = m_windowTracker->clearAutoSnapped(windowId);
-        if (!wasAutoSnapped) {
-            m_windowTracker->consumePendingAssignment(windowId);
-        }
     }
 
     // A pinned desktop (virtualDesktop >= 1) is preserved as-is: RouteToDesktop
@@ -191,7 +188,6 @@ void SnapEngine::uncommitSnap(const QString& windowId)
         return;
     }
 
-    m_windowTracker->consumePendingAssignment(windowId);
     m_windowTracker->unassignWindow(windowId);
 
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "uncommitSnap:" << windowId << "from zone" << previousZoneId;

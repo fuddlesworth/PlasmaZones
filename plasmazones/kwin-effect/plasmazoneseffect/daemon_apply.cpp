@@ -881,9 +881,9 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // Invalidate any stale instant-restore entry for this app. The snap
         // restore cache (SnapHandler) is a single-shot latency cache populated at
         // daemon-ready from the daemon's pending restores. Once a window
-        // floats, its saved zone no longer applies: windowClosed() will NOT
-        // persist a PendingRestore for a floating window (it should reopen
-        // floating). But a stale cache entry would still "Instant snap restore"
+        // floats, its saved zone no longer applies: the close capture records
+        // a floating window as floating (it should reopen floating). But a
+        // stale cache entry would still "Instant snap restore"
         // the reopened window into its old zone WITHOUT a daemon commit
         // (resolveWindowRestore finds nothing), leaving a ghost — visually
         // snapped but untracked. Dropping the entry makes the reopen take the
@@ -1093,7 +1093,7 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
         // Normalize X11 "resourceName resourceClass" to just resourceClass
         // (lowercased), matching the canonical form `normalizeAppId` produces
         // for every other appId entry point — getWindowId, rule evaluators,
-        // pending-restore prune patterns. An inline first-space split would
+        // placement prune patterns. An inline first-space split would
         // drift in two ways: (1) a three-token resource string like
         // "foo bar baz" yields "bar baz" here but "baz" through
         // normalizeAppId; (2) case is preserved here but lowercased

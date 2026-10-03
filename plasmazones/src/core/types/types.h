@@ -22,7 +22,6 @@ using PhosphorEngine::qHash;
 
 using SnapIntent = PhosphorEngine::SnapIntent;
 using ResnapEntry = PhosphorEngine::ResnapEntry;
-using PendingRestore = PhosphorEngine::PendingRestore;
 using SnapResult = PhosphorEngine::SnapResult;
 using UnfloatResult = PhosphorEngine::UnfloatResult;
 using ZoneAssignmentEntry = PhosphorEngine::ZoneAssignmentEntry;

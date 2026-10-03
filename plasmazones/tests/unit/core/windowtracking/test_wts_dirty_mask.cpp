@@ -14,11 +14,10 @@
  *     rest of the mask.
  *  3. updateLastUsedZone sets DirtyLastUsedZone only.
  *  4. recordSnapIntent(true) sets DirtyUserSnapped only.
- *  5. consumePendingAssignment sets DirtyPendingRestores only.
- *  6. takeDirty() returns the current mask and resets to DirtyNone.
- *  7. markDirty() OR-merges bits and emits stateChanged (used by both
+ *  5. takeDirty() returns the current mask and resets to DirtyNone.
+ *  6. markDirty() OR-merges bits and emits stateChanged (used by both
  *     mutators and the retry-on-write-failure path).
- *  8. Initial mask is DirtyAll so first save after construction writes
+ *  7. Initial mask is DirtyAll so first save after construction writes
  *     every field.
  *
  * These invariants are what the saveload.cpp gate relies on. If a mutator
@@ -154,10 +153,10 @@ private Q_SLOTS:
         // chain to schedule the next tick without an explicit call.
         m_service->clearDirty();
         QSignalSpy spy(m_service, &PhosphorPlacement::WindowTrackingService::stateChanged);
-        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyPendingRestores);
+        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyPreTileGeometries);
         QCOMPARE(m_service->peekDirty(),
                  static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
-                     PhosphorPlacement::WindowTrackingService::DirtyPendingRestores));
+                     PhosphorPlacement::WindowTrackingService::DirtyPreTileGeometries));
         QCOMPARE(spy.count(), 1);
     }
 
@@ -172,11 +171,11 @@ private Q_SLOTS:
         m_service->markDirty(
             PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments); // new mutation during in-flight write
         m_service->markDirty(
-            PhosphorPlacement::WindowTrackingService::DirtyPendingRestores); // committed-snapshot retry
+            PhosphorPlacement::WindowTrackingService::DirtyPreTileGeometries); // committed-snapshot retry
         QCOMPARE(m_service->peekDirty(),
                  static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
                      PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments
-                     | PhosphorPlacement::WindowTrackingService::DirtyPendingRestores));
+                     | PhosphorPlacement::WindowTrackingService::DirtyPreTileGeometries));
     }
 
     void testAssignWindowToZone_marksZoneAssignmentsOnly()
@@ -355,7 +354,6 @@ private Q_SLOTS:
         // needs the new bit appended below by hand.
         for (const auto bit : {PhosphorPlacement::WindowTrackingService::DirtyActiveLayoutId,
                                PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments,
-                               PhosphorPlacement::WindowTrackingService::DirtyPendingRestores,
                                PhosphorPlacement::WindowTrackingService::DirtyPreTileGeometries,
                                PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone,
                                PhosphorPlacement::WindowTrackingService::DirtyPreFloatZones,

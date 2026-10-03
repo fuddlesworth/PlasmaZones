@@ -516,7 +516,7 @@ private:
     bool isExcludedByDecorationRule(KWin::EffectWindow* w,
                                     std::optional<PhosphorRules::WindowQuery>* sharedQuery = nullptr) const;
 
-    /// Classify a window's structural kind for the snap-restore consume gate.
+    /// Classify a window's structural kind for the open and close wire calls.
     PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;
 
     /**

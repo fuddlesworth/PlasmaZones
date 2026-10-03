@@ -12,9 +12,8 @@ namespace PlasmaZones {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Snap-commit D-Bus slots — thin forwarders over SnapEngine.
 //
-// The full orchestration (clear floating, clear auto-snapped flag, consume
-// pending restore, assign to zone, update last-used tracking, emit state-
-// change signal) lives in SnapEngine::commitSnap / commitMultiZoneSnap /
+// The full orchestration (clear floating, clear auto-snapped flag, assign to
+// zone, update last-used tracking, emit state-change signal) lives in SnapEngine::commitSnap / commitMultiZoneSnap /
 // uncommitSnap. These D-Bus entry points survive as the external contract,
 // but their bodies do only two things:
 //

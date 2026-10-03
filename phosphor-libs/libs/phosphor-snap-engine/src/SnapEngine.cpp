@@ -583,28 +583,22 @@ PhosphorEngine::ISnapSettings* SnapEngine::snapSettings() const
 // header (forward-declared in SnapEngine.h).
 SnapEngine::~SnapEngine() = default;
 
-void SnapEngine::markWindowReported(const QString& windowId)
-{
-    if (!windowId.isEmpty()) {
-        m_effectReportedWindows.insert(windowId);
-    }
-}
-
 int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
-    // The return mixes two buckets: per-store state prunes from the base class
-    // and runtime effect-reported-flag erasures below, so a window present in
-    // both counts once per bucket. The caller sums it into a cleanup log line
-    // and gates its dirty-mark on > 0 — safe either way, since any positive
-    // value means something was erased — but no consumer may treat it as a
-    // distinct-window count.
-    int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
-    for (auto it = m_effectReportedWindows.begin(); it != m_effectReportedWindows.end();) {
-        if (!aliveWindowIds.contains(*it)) {
-            it = m_effectReportedWindows.erase(it);
-            ++pruned;
-        } else {
-            ++it;
+    // Called by WindowTrackingService::pruneStaleAssignments with the alive
+    // set already canonicalized, after it has pruned every SnapState's own
+    // per-window data. What is left for a window that died without a close
+    // signal is its membership in the state index, which would otherwise
+    // leak and keep every membership reconcile walking a dead id. Only the
+    // membership goes: the per-desktop zones are the persisted record's,
+    // nothing is announced, and the index is runtime-only, so the drops are
+    // not counted (the caller marks persisted state dirty on a positive
+    // return).
+    const int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
+    const QStringList tracked = m_states.trackedWindowIds();
+    for (const QString& windowId : tracked) {
+        if (!aliveWindowIds.contains(windowId)) {
+            m_states.removeWindow(windowId);
         }
     }
     return pruned;
@@ -771,7 +765,10 @@ bool SnapEngine::isActiveOnScreen(const QString& screenId) const
 
 void SnapEngine::windowClosed(const QString& windowId)
 {
-    m_effectReportedWindows.remove(windowId);
+    // Snap keeps no engine-side close state. A snap window's close runs
+    // through WindowTrackingService::windowClosed, which clears its SnapState
+    // and its snap resolver entry, so nothing in the daemon calls this.
+    Q_UNUSED(windowId)
 }
 
 std::optional<PhosphorEngine::PlacementStateKey> SnapEngine::heldKeyForWindow(const QString& windowId) const

@@ -432,13 +432,9 @@ void Daemon::stop()
     // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
     // SnapAdaptor, TilingAdaptor, AutotileAdaptor, ScrollingAdaptor) all
     // ship destructors that don't
-    // deref any borrowed pointer — most are `= default` / empty-body
-    // (no member access), and the two outliers do only self-cleanup
-    // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
-    // line body, and WindowTrackingAdaptor's `~WindowTrackingAdaptor`
-    // calls `m_service->setShouldTrackPredicate({})` on its Qt-child
-    // m_service to clear a captured-this lambda before the child
-    // tears down (see Pass-3 commit c4e3c5125). The substantive
+    // deref any borrowed pointer — they are `= default` or empty-body
+    // (no member access); DBusScreenAdaptor ships an empty out-of-line
+    // body. The substantive
     // safety claim is "no borrowed-pointer deref runs in any of their
     // destructors" — confirmed by inspecting each header + cpp pair,
     // not header alone. QDBusConnection::unregisterObject (invoked above) blocks new

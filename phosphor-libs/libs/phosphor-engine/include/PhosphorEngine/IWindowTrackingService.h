@@ -138,12 +138,10 @@ public:
     virtual void clearPreFloatZone(const QString& windowId) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Auto-snap / pending restore
+    // Auto-snap
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual bool clearAutoSnapped(const QString& windowId) = 0;
-    virtual bool consumePendingAssignment(const QString& windowId) = 0;
-    virtual const QHash<QString, QList<PendingRestore>>& pendingRestoreQueues() const = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Last-used zone tracking

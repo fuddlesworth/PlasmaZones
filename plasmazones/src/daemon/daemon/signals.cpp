@@ -547,7 +547,7 @@ void Daemon::finalizeStartup()
     // autotile load. Patterns derive from the unified Rule store via
     // PhosphorRules::ExclusionRules; the WTA prune removeIf's the placement store.
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->pruneExcludedPendingRestores(
+        m_windowTrackingAdaptor->pruneExcludedPlacements(
             PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
     }
 

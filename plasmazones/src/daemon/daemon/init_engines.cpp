@@ -494,16 +494,16 @@ void Daemon::initEnginesAndWiring()
     //     stable address. The pointer never changes after this; the
     //     evaluator picks up subsequent in-place edits through the
     //     revision counter, so subsequent re-fences would be no-ops.
-    //   - The first `setRules` + `pruneExcludedPendingRestores` priming
-    //     pair seeds the filter and drains any restore queue entries
-    //     populated by WTA::loadState above.
+    //   - The first `setRules` + `pruneExcludedPlacements` priming
+    //     pair seeds the filter and drops the placement records of excluded
+    //     apps that WTA::loadState loaded above.
     // m_ruleStore is ctor-owned and non-null for the daemon's lifetime (same
     // one-comment contract as m_overlayService above), so this function
     // derefs it unguarded; the refilter lambda's null check below exists
     // only for a future refactor that moves store ownership.
     snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
     m_excludeRuleSet.setRules(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(m_ruleStore->ruleSet()).rules());
-    m_windowTrackingAdaptor->pruneExcludedPendingRestores(
+    m_windowTrackingAdaptor->pruneExcludedPlacements(
         PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
 
     auto refilterExcludeRules = [this, snapEnginePtr = QPointer(snapEngine)] {
@@ -533,7 +533,7 @@ void Daemon::initEnginesAndWiring()
         // (rename, priority change, non-placement-exclusion action edit, …) fires
         // this lambda, but only changes that affect the placement-exclusion
         // slice (Exclude ∪ ExcludePlacement) should bump the evaluator's
-        // revision and walk the (potentially long) pending-restore queues.
+        // revision and walk the (potentially long) placement store.
         // The guard below compares the two `QList<Rule>` slices element-wise
         // (the same semantics as `RuleSet::operator==`, which delegates to
         // this list compare) — exactly the rules-list-only comparison we want.
@@ -548,15 +548,15 @@ void Daemon::initEnginesAndWiring()
         // index / cache automatically. No `setExcludeRuleSet` re-fence
         // — the pointer was wired once at init above.
         m_excludeRuleSet.setRules(newSlice);
-        // Prune any pending-restore queues for apps now covered by an
-        // Exclude or ExcludePlacement rule. Snap-engine's resolveWindowRestore
-        // already refuses them at runtime, but stale queue entries spam logs and bloat the
-        // saved state. The autotile-side queues don't exist yet at init
-        // — daemon/signals.cpp's finalizeStartup re-runs the prune once
-        // AutotileEngine::loadState has populated them.
+        // Drop the placement records of apps now covered by an Exclude or
+        // ExcludePlacement rule. Snap-engine's resolveWindowRestore already
+        // refuses them at runtime, but stale records spam logs and bloat the
+        // saved state. Autotile's records are not loaded yet at init, so
+        // daemon/signals.cpp's finalizeStartup re-runs the prune once
+        // AutotileEngine::loadState has loaded them.
         if (m_windowTrackingAdaptor) {
             // Shutdown-window guard, mirrors snapEnginePtr null-check above.
-            m_windowTrackingAdaptor->pruneExcludedPendingRestores(
+            m_windowTrackingAdaptor->pruneExcludedPlacements(
                 PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
         }
     };
@@ -580,8 +580,8 @@ void Daemon::initEnginesAndWiring()
     // the shutdown window (overlay reset before ~Daemon disconnects).
     //
     // Deliberately UNCONDITIONAL — no slice-equality guard like the exclude path
-    // above. That guard exists because its work is expensive (walking long
-    // pending-restore queues + bumping an evaluator revision); these two
+    // above. That guard exists because its work is expensive (walking the
+    // placement store + bumping an evaluator revision); these two
     // refreshes are cheap and self-bounding: refreshContextLockState only acts
     // on live selector/picker slots, and refreshOverlayPropertiesIfShown
     // early-returns unless the overlay is currently shown. rulesChanged also

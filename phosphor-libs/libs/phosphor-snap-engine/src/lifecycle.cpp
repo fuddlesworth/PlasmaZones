@@ -16,7 +16,6 @@
 
 namespace PhosphorSnapEngine {
 
-using PhosphorEngine::PendingRestore;
 using PhosphorEngine::SnapIntent;
 using PhosphorEngine::SnapResult;
 
@@ -24,6 +23,10 @@ using PhosphorEngine::SnapResult;
 // windowOpened — delegates to resolveWindowRestore() and applies the result
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// No daemon path calls this: the tiling adaptor's lifecycle engines are
+// autotile and scrolling, and a snap window's open restore runs through the
+// adaptor facade (SnapAdaptor::resolveWindowRestore) the KWin effect calls. The
+// IPlacementEngine override stays for the interface's sake and for the tests.
 void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
     Q_UNUSED(minWidth)
@@ -33,19 +36,9 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
         return;
     }
 
-    // Mark this window as reported by the effect (confirmed live), distinguishing
-    // live windows from stale identity entries after a KWin restart (UUIDs change).
-    markWindowReported(windowId);
-
-    // Guard: skip if already snapped (prevents double-assignment when both
-    // windowOpened and the WTA D-Bus resolveWindowRestore path run for the
-    // same window — e.g., effect calls windowOpened then D-Bus resolveWindowRestore).
-    // Also consume the appId-based pending entry so other instances of the same app
-    // (with different UUIDs) don't incorrectly steal this window's zone.
+    // Guard: skip a window that is already snapped, so a second open never
+    // double-assigns it.
     if (const SnapState* openState = stateForWindow(windowId); openState && openState->isWindowSnapped(windowId)) {
-        if (m_windowTracker) {
-            m_windowTracker->consumePendingAssignment(windowId);
-        }
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "SnapEngine::windowOpened: window" << windowId << "already snapped, skipping";
         return;
@@ -101,7 +94,7 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 // restore is served by the store block, not a chain level.
 //
 // Mostly decision logic: returns a SnapResult for the caller to apply geometry.
-// Side effects: consumePendingAssignment; marks floated windows floating
+// Side effects: marks floated windows floating
 // (setFloatingOnScreen + windowFloatingChanged) on the floated-restore branch,
 // the float-by-rule terminal and the no-match default; geometryRestoreRequested
 // for the floated position restore; sizeRestoreRequested (via
@@ -380,11 +373,11 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // Unified placement store — the single authoritative restore record for this
     // window. Consulted before the legacy "already has assignment" skip and the
     // snap/float chains (but after a matched SnapToZone rule, above). This
-    // ordering is load-bearing: on a daemon-only
-    // restart the old WindowZoneAssignmentsFull is still loaded, so a window that
-    // was FLOATED (floating keeps its zone assignment) comes back isWindowSnapped()
-    // == true and would hit the legacy skip below — never floating. Consulting the
-    // store first lets the floated record override that stale assignment.
+    // ordering is load-bearing: the record is the window's authoritative restore
+    // answer, and the legacy skip below would otherwise answer first for any
+    // window the live stores already hold (a re-resolve within one daemon
+    // lifetime: windowOpened after the D-Bus resolve, a DesktopArrival
+    // re-drive), so a floated record would never restore floating.
     // Mutual exclusivity (one record per window) means a snapped window never
     // resurrects a stale float (the floated→snapped→login bug). Only snap-owned
     // records on a matching screen are handled here; autotile records are left for
@@ -588,15 +581,13 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                         // freeGeo already lives in the record (the single float-back
                         // store) — a later float toggle reads it directly; nothing to
                         // re-seed into a separate per-engine store.
-                        // Daemon-only restart already loaded the exact assignment:
-                        // re-committing would be a redundant apply. If the window is
-                        // already snapped to these zones, just consume the pending
-                        // entry and no-op — the float-back re-seed above is the only
-                        // thing that needed doing.
+                        // A window this daemon lifetime already committed to these
+                        // zones (windowOpened after the D-Bus resolve, a
+                        // DesktopArrival re-drive) needs no re-commit, which would
+                        // only be a redundant apply: no-op.
                         const SnapState* liveState = stateForWindow(windowId);
                         if (liveState && liveState->isWindowSnapped(windowId)
                             && liveState->zonesForWindow(windowId) == zoneIds) {
-                            m_windowTracker->consumePendingAssignment(windowId);
                             qCInfo(PhosphorSnapEngine::lcSnapEngine)
                                 << "resolveWindowRestore: placement(snapped) already assigned, no-op for" << windowId;
                             return SnapResult::noSnap();
@@ -771,12 +762,11 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // Disabled-context gate: refuse auto-snap onto a (screen, virtualDesktop,
     // activity) the user has disabled snap for. Catches BOTH windowOpened
     // and the direct D-Bus resolveWindowRestore path the KWin effect uses,
-    // so a PendingRestore authored before the toggle can no longer drag a
+    // so a placement record saved before the toggle can no longer drag a
     // freshly opened window into a zone the user told us to stay out of.
-    // Without this gate the only fix was a daemon restart — the
-    // `isPersistedContextDisabled` filter on disk load fired only once per
-    // session, leaving any in-memory entry recorded earlier free to leak
-    // through. Discussion #461 item 7.
+    // The `isPersistedContextDisabled` filter on disk load fires only once
+    // per session, so without this gate a record saved during the running
+    // session would leak through. Discussion #461 item 7.
     //
     // Placed AFTER the isWindowSnapped/consume guard so windows that are
     // already snapped still consume their appId pending entry; placed
@@ -855,8 +845,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
 
     // (Persisted session restore is now served entirely by the unified
     // WindowPlacementStore block at the top of this function — a snapped window
-    // reopens from its WindowPlacement record. It is no longer a chain level; the
-    // legacy PendingRestoreQueues / calculateRestoreFromSession path is gone.)
+    // reopens from its WindowPlacement record. It is no longer a chain level.)
 
     // Levels 2 and 3 inherently target the caller's screen (the empty-zone /
     // last-zone lookups are scoped to screenId, not to a saved zone). If the
