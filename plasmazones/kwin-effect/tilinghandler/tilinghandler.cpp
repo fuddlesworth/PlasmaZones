@@ -614,14 +614,14 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         }
 
         const QString windowId = m_effect->getWindowId(w);
-        // A caller-supplied id wins over the positional resolve, and is then
-        // the ONE value the filter, the notified-screen stamp, the pre-tile
-        // capture and the wire entry all read (see the header): the engine
-        // flip resolves under the pre-flip scrolling set, where a parked strip
-        // column is still attributed to its own output.
+        // A caller-supplied id wins over the positional resolve (where a moving
+        // window is GOING, not the output it leaves), and is then the ONE value
+        // the filter, the notified-screen stamp, the pre-tile capture and the
+        // wire entry read (see the header): the engine flip resolves under the
+        // pre-flip scrolling set, where a parked strip column is on its output.
         const auto overrideIt = screenOverrides.constFind(w);
         const QString screenId =
-            overrideIt != screenOverrides.constEnd() ? overrideIt.value() : m_effect->getWindowScreenId(w);
+            overrideIt != screenOverrides.constEnd() ? overrideIt.value() : m_effect->pendingWindowScreenId(w);
         if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
             continue;
         }

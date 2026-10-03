@@ -927,6 +927,14 @@ private:
     /// passes it here instead of paying the id-cache probe twice. Behaviour is
     /// otherwise identical — the id is the ONLY thing the overloads differ on.
     QString getWindowScreenId(KWin::EffectWindow* w, const QString& windowId) const;
+    /// getWindowScreenId, except that while a move KWin has been asked for is
+    /// still in flight (the requested geometry's position differs from the
+    /// committed frame) it answers the screen the window is going to.
+    QString pendingWindowScreenId(KWin::EffectWindow* w) const;
+    /// Tell the daemon its focused window is now on @p screenId (or on its
+    /// pendingWindowScreenId when empty). A no-op for any window but the one
+    /// this effect last reported activated.
+    void reportActiveWindowScreen(KWin::EffectWindow* w, const QString& screenId = QString());
     /// The KWin output a window sits on by POSITION (centre containment),
     /// falling back to w->screen() only when no output contains the centre
     /// (KWin can pick the wrong one of two identical outputs, #724).
@@ -3684,6 +3692,10 @@ private:
     // Per-window tracked screen ID for cross-screen move detection.
     // Replaces the per-window `new QString` heap allocation that was leaked.
     QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
+    // The window notifyWindowActivated last reported to the daemon, which is
+    // the daemon's focused window until the next report. reportActiveWindowScreen
+    // gates on it.
+    QPointer<KWin::EffectWindow> m_lastReportedActiveWindow;
 
     // Per-window VirtualDesktop id set as of the last windowDesktopsChanged, so
     // that handler can tell a genuine MOVE onto the desktop in view from the

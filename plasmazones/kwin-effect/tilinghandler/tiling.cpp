@@ -1426,6 +1426,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // id-keyed consumer (close records, minimize routing, rule
             // Mode stamp, drag drop) to the old monitor forever.
             m_effect->m_trackedScreenPerWindow[snap.window] = snap.screenId;
+            // A tile move of the daemon's focused window between virtual
+            // screens fires no outputChanged, so report it here, with the
+            // daemon's own answer, like the daemon applies do.
+            m_effect->reportActiveWindowScreen(snap.window, snap.screenId);
             // Gated on tracked membership: a batch can still carry a window
             // whose open rolled back or was demoted by the desktop-switch
             // pass — writing its screen here would desynchronise the pair

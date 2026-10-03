@@ -887,7 +887,11 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     }
 
     QString windowId = getWindowId(w);
-    QString screenId = getWindowScreenId(w);
+    // Where the window is going when a configure is still in flight: an
+    // activation landing between a move request and its ack (the bring-up
+    // re-notify after an effect reload, among others) otherwise reports the
+    // output the window is leaving.
+    QString screenId = pendingWindowScreenId(w);
 
     // Push the output's current desktop BEFORE the activation notifies. On a
     // virtual-desktop switch KWin activates the destination desktop's
@@ -928,6 +932,7 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     qCDebug(lcEffect) << "Notifying daemon: windowActivated" << windowId << "on screen" << screenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                    QStringLiteral("windowActivated"), {windowId, screenId});
+    m_lastReportedActiveWindow = w;
 
     // Notify the placement engines of the focus change so m_windowToScreen is
     // updated. NOT gated on isManagedScreen: the managed set tracks the
@@ -946,6 +951,31 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
                                                    QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                    QStringLiteral("notifyWindowFocused"));
     return true;
+}
+
+void PlasmaZonesEffect::reportActiveWindowScreen(KWin::EffectWindow* w, const QString& screenId)
+{
+    // The daemon acts on its focused window's screen for every window
+    // shortcut, and learns it otherwise only from an activation, so a move of
+    // that window (an output change, a virtual-screen crossing, a split
+    // added or removed under it, a daemon apply) has to be reported or the
+    // next snap-to-zone key puts the window back on the screen it left.
+    //
+    // Gated on the window this effect last REPORTED activated, not on KWin's
+    // active window: the daemon honours the report only for its own last
+    // activated window, and a dialog or other window the effect does not
+    // report can hold KWin's focus while its parent, still the daemon's
+    // focused window, moves.
+    if (!w || w->isDeleted() || w != m_lastReportedActiveWindow.data() || !m_daemonGate.serviceRegistered) {
+        return;
+    }
+    const QString screen = screenId.isEmpty() ? pendingWindowScreenId(w) : screenId;
+    if (screen.isEmpty()) {
+        return;
+    }
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("activeWindowScreenChanged"),
+        {getWindowId(w), screen}, QStringLiteral("activeWindowScreenChanged"));
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowByIdExact(const QString& windowId) const

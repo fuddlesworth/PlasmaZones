@@ -423,6 +423,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         if (!screenId.isEmpty()) {
             m_trackedScreenPerWindow[w] = screenId;
             m_tilingHandler->updateNotifiedScreen(liveWindowId, screenId);
+            // A daemon move of its own focused window, reported now: a
+            // virtual-screen move fires no outputChanged to report it later.
+            reportActiveWindowScreen(w, screenId);
         }
         // Genuine snap commit only (same trio the tracking discriminator
         // below tests): a float-restore places FREE geometry, where KWin's
@@ -614,6 +617,8 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             if (!p.screenId.isEmpty()) {
                 m_trackedScreenPerWindow[p.window] = p.screenId;
                 m_tilingHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
+                // Same report as the single-window apply.
+                reportActiveWindowScreen(p.window, p.screenId);
             }
             const auto guard = geometryApplyScope();
             // Minimized guard for float/restore entries (empty screenId), the

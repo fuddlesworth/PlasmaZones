@@ -34,8 +34,11 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
     if (kw) {
         QPointer<KWin::EffectWindow> safeW = w;
         // Track the window's screen ID so we can detect cross-screen moves for snapping windows
-        // (not tracked by the autotile handler's m_notifiedWindowScreens).
-        m_trackedScreenPerWindow[w] = getWindowScreenId(w);
+        // (not tracked by the autotile handler's m_notifiedWindowScreens). Where
+        // it is going, when a move is in flight: a window wired by a reloaded
+        // effect between a move request and its ack sits on the output it is
+        // leaving.
+        m_trackedScreenPerWindow[w] = pendingWindowScreenId(w);
         // Flags-settle eviction backstop: a client can set keep-above,
         // skip-switcher or its transient parent AFTER mapping (Yakuake
         // queues the first two in its map-time request burst; another client
@@ -84,21 +87,19 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             if (!safeW || safeW->isDeleted()) {
                 return;
             }
-            // The daemon acts on the focused window's screen for every window
-            // shortcut, and otherwise learns it only from an activation. A
-            // focused window moved to another output without being activated
-            // again (a KWin or user move, or a daemon apply) left the daemon
-            // naming the output it had left, so the next snap-to-zone key put
-            // it back there. Reported ahead of the apply gate below on purpose:
-            // a move the daemon drives is still a move of the focused window,
-            // and getWindowScreenId answers from the engine for a strip tile,
+            // The window's screen, and where it is going when this output
+            // change is the ack of a move KWin has since been asked to
+            // replace: a held "move to output" key (or a move reversed inside
+            // one round trip) acks the intermediate output after the daemon
+            // stored the final one, and reading the frame unsnapped the window
+            // there (see pendingWindowScreenId).
+            const QString newScreenId = pendingWindowScreenId(safeW);
+            // The daemon's focused window moved: report it (see
+            // reportActiveWindowScreen). Ahead of the apply gate below on
+            // purpose: a move the daemon drives is still a move of the focused
+            // window, and the screen answers from the engine for a strip tile,
             // so a parked column crossing outputs does not flip the record.
-            if (KWin::effects && safeW == KWin::effects->activeWindow() && m_daemonGate.serviceRegistered) {
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    this, PhosphorProtocol::Service::Interface::WindowTracking,
-                    QStringLiteral("activeWindowScreenChanged"), {getWindowId(safeW), getWindowScreenId(safeW)},
-                    QStringLiteral("activeWindowScreenChanged"));
-            }
+            reportActiveWindowScreen(safeW, newScreenId);
             // Daemon-driven geometry applies must not be mistaken for user
             // moves (symmetric with the frameGeometryChanged VS-crossing
             // handler below). This matters for the scrolling engine: parked
@@ -110,7 +111,6 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             if (m_daemonGate.inGeometryApply) {
                 return;
             }
-            const QString newScreenId = getWindowScreenId(safeW);
             const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
             m_trackedScreenPerWindow[safeW] = newScreenId;
             // A cross-screen move changes the Mode/screenId inputs of the
@@ -221,12 +221,19 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             if (m_daemonGate.inGeometryApply) {
                 return;
             }
-            const QString newScreenId = getWindowScreenId(safeW);
+            // Pending-aware like the output arm: a frame change that acks a
+            // superseded move must not read as a crossing to where the window
+            // is no longer going.
+            const QString newScreenId = pendingWindowScreenId(safeW);
             const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
             if (!PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
                 return;
             }
             m_trackedScreenPerWindow[safeW] = newScreenId;
+            // A virtual-screen crossing moves the focused window between the
+            // screens the daemon's shortcuts act on, exactly like an output
+            // change, and outputChanged never fires for one.
+            reportActiveWindowScreen(safeW, newScreenId);
 
             // A virtual-screen crossing stales this window's cached rule verdict
             // exactly like the physical cross-screen move above: ScreenId,
