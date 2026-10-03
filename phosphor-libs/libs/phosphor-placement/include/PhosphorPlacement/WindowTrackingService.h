@@ -243,6 +243,14 @@ public:
     /// that engine's reopen accept.
     QString owningModeEngineId(const QString& windowId, const QString& screenId) const;
 
+    /// The reopen contract's claim (the store's screen-aware claimForOpen) for
+    /// @p windowId opening on @p openingScreenId under @p openingEngineId: its
+    /// own record, else the newest sibling record that engine can restore on
+    /// this output (managed and in its mode, or floating with a free geometry
+    /// on this very screen). An empty engine id applies no engine predicate.
+    std::optional<PhosphorEngine::WindowPlacement>
+    claimPlacementForOpen(const QString& windowId, const QString& openingScreenId, const QString& openingEngineId);
+
     /**
      * @brief Downgrade managed slots recorded against a different screen.
      *
@@ -812,13 +820,10 @@ public:
      */
     QHash<QString, QRect> updatedWindowGeometries() const;
 
-    /**
-     * @brief Pre-computed snap restore target: zone geometry, the saved screen
-     * it lives on (so the effect can tell "saved zone is on snap-mode screen X"
-     * from "KWin placed it on autotile screen Y"), and the record's window id
-     * (so the effect can drop an entry for a window it can still see, which a
-     * daemon-only restart builds before the registry is repopulated).
-     */
+    /// A pre-computed snap restore target for the effect's instant-restore
+    /// cache: zone geometry, the saved screen (so the effect only applies it on
+    /// that screen's output) and the record's window id (an entry for a window
+    /// the effect can still see is dropped).
     struct PendingRestoreTarget
     {
         QRect geometry;
@@ -826,21 +831,12 @@ public:
         QString windowId;
     };
 
-    /**
-     * @brief Pre-compute zone geometries for the restorable snapped records.
-     * @return Map of appId -> {geometry, savedScreenId, windowId}
-     *
-     * Used by the KWin effect to cache expected snap positions so that
-     * windows can be teleported to their zone immediately on windowAdded,
-     * eliminating the visible "flash" from KWin's session-restored position.
-     * Sourced from the WindowPlacementStore's snapped records minus those of
-     * still-open windows (#1106), every remaining record of an appId in one
-     * list, NEWEST first: the open claim reserves the newest unclaimed record
-     * for the first opener, so the head is the zone the resolve will confirm.
-     * A best-effort anti-flash hint the async resolver corrects. Skips saved
-     * screens in autotile mode, zones the record's context no longer runs
-     * (the #1104 layout gate) and desktop contexts the resolver would reject.
-     */
+    /// appId -> list of {geometry, screenId, windowId}, newest first: the
+    /// snapped records minus still-open windows' (#1106). A best-effort
+    /// anti-flash hint the async resolve corrects; the effect applies the
+    /// newest entry on the opener's own output. Skips saved screens in autotile
+    /// mode, zones the record's context no longer runs (#1104) and desktop
+    /// contexts the resolver would reject.
     QHash<QString, QList<PendingRestoreTarget>> pendingRestoreGeometries() const;
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -374,10 +374,18 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     // Claim this instance's placement record before any selector reads one, the
     // same reason the snap channel does it at the head of resolveWindowRestore.
     // The two open channels and every later re-drive must agree on WHICH record
-    // belongs to this window.
+    // belongs to this window. Screen-aware like the snap channel's: only a
+    // record the engine running the opening screen can restore on this output.
     if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
         auto* svc = m_windowTrackingAdaptor->service();
-        svc->placementStore().claimForOpen(entry.windowId, svc->currentAppIdFor(entry.windowId));
+        QString openingEngineId;
+        for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+            if (engine->isActiveOnScreen(entry.screenId)) {
+                openingEngineId = engine->engineId();
+                break;
+            }
+        }
+        svc->claimPlacementForOpen(entry.windowId, entry.screenId, openingEngineId);
     }
 
     // Window-rule open routing (RouteToScreen / RouteToDesktop). The WTA owns the

@@ -351,13 +351,12 @@ WindowTrackingService::pendingRestoreGeometries() const
     // geometry, grouped by appId. The async resolveWindowRestore re-validates and
     // corrects, so this is a best-effort anti-flash fast path (an invalid/stale
     // zone resolves to an empty rect and is skipped). Each app's list is ordered
-    // NEWEST record first, because that is the record the daemon hands the
-    // first opener: claimForOpen reserves the newest unclaimed record and the
-    // engine's take() then consumes exactly the claimed one, so a cache that
-    // teleported the first opener into the OLDEST record's zone was corrected
-    // a moment later by the resolve, the flash-then-move this cache exists to
-    // prevent. The effect keeps the whole list so a record it can see is
-    // still open (daemon-only restart, before re-announce) costs nothing.
+    // NEWEST record first, because the daemon's open claim reserves the newest
+    // unclaimed record ON THE OPENER'S OUTPUT and the effect applies the newest
+    // entry saved on that same output, so the teleport and the resolve agree
+    // instead of a flash-then-move. The effect keeps the whole list: entries on
+    // other outputs serve openers there, and a record it can see is still open
+    // (daemon-only restart, before re-announce) costs nothing.
     QHash<QString, QList<quint64>> sequences;
     for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
         const PhosphorEngine::EngineSlot snapSlot = p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());

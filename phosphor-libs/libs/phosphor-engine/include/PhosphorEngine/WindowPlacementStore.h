@@ -352,6 +352,25 @@ public:
     /// is redundant identity.
     void releaseOpenClaim(const QString& windowId);
 
+    /// The reopen-contract claim: claimForOpen restricted to what the opening
+    /// screen can restore. The window's OWN record (same instance) is final:
+    /// when an engine has ever captured it, it is claimed if it carries
+    /// restorable content and nothing is claimed otherwise, never a sibling's.
+    /// Without one, the newest record that passes claimForOpen's sibling rules
+    /// AND sits on the opening KWin output (or has no screen) AND satisfies
+    /// @p restorableHere (the opening engine's "can I restore this here",
+    /// unset meaning any) is claimed. An empty @p openingScreenId applies no
+    /// output filter. Same idempotence as claimForOpen.
+    std::optional<WindowPlacement> claimForOpen(const QString& windowId, const QString& appId,
+                                                const QString& openingScreenId,
+                                                const std::function<bool(const WindowPlacement&)>& restorableHere);
+
+    /// Drop every open claim whose instance is not in @p aliveInstanceIds
+    /// (instance ids, as PhosphorIdentity::WindowId::extractInstanceId gives
+    /// them), so a claimer that died without a close signal stops reserving a
+    /// record another instance could restore from. Returns how many went.
+    int releaseOpenClaimsExcept(const QSet<QString>& aliveInstanceIds);
+
     /// Inject the live-window probe behind every live-sibling exclusion in the
     /// store (take, takeForReopen, claimForOpen, peekForReclaim,
     /// burnReclaimCredit, peekLiveSibling, peek's opt-in, the eviction and
@@ -575,6 +594,15 @@ private:
     /// markInstanceMovedLive. TRANSIENT and never serialized: it describes
     /// moves in flight and means nothing across a restart.
     QSet<QString> m_movedLiveInstances;
+
+    /// The one claim walk both claimForOpen overloads share. @p ownRecordFinal
+    /// makes a captured own record final (claimed or nothing); otherwise a
+    /// non-restorable own record falls through to the siblings, the original
+    /// overload's rule. @p openingScreenId (empty: no filter) and
+    /// @p restorableHere (unset: any) restrict the sibling step.
+    std::optional<WindowPlacement> claimForOpenImpl(const QString& windowId, const QString& appId, bool ownRecordFinal,
+                                                    const QString& openingScreenId,
+                                                    const std::function<bool(const WindowPlacement&)>& restorableHere);
 };
 
 } // namespace PhosphorEngine

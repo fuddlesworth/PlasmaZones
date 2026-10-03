@@ -4,6 +4,7 @@
 #pragma once
 
 #include "compositor/deferredwindowcommits.h"
+#include "handlers/instantrestoredecisions.h"
 
 #include <PhosphorCompositor/TilingState.h>
 #include <PhosphorEngine/EngineTypes.h>
@@ -35,19 +36,6 @@ using PhosphorCompositor::BorderState;
 namespace TilingStateHelpers = PhosphorCompositor::TilingStateHelpers;
 
 class PlasmaZonesEffect;
-
-/// Pre-computed snap restore target for a pending app (appId → geometry + saved
-/// screen). Fetched once from the daemon on ready; consumed single-shot by the
-/// deferred-route dispatch (PlasmaZonesEffect::tryInstantSnapRestore) for instant
-/// teleport (no D-Bus round-trip visible flash). The screenId lets the effect tell "cached saved zone is on
-/// snap-mode screen X" from "current KWin placement is autotile screen Y" — we
-/// trust the saved screen, not the placement, so cross-VS / cross-monitor
-/// restores work.
-struct CachedSnapRestore
-{
-    QRect geometry;
-    QString screenId;
-};
 
 /**
  * @brief Handles snapping integration for PlasmaZones.
@@ -101,18 +89,20 @@ public:
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
     // ── Snap restore cache (instant snap-restore-on-open latency cache) ──
-    // Populated from the daemon's pending restores on daemon-ready; consumed
-    // single-shot by tryInstantSnapRestore for flash-free teleport, and
-    // dropped for an app whenever a zone restore applies (markWindowSnapped):
-    // the record it was built from is then bound to a live window, and a
-    // later same-app open would otherwise teleport into that window's zone.
+    // Populated from the daemon's pending restores on daemon-ready (every
+    // record per app, newest first); an opener takes only the entry its own
+    // output may apply (InstantRestoreDecisions::pickEntry), leaving the rest
+    // for openers elsewhere. Dropped for a whole app whenever a zone restore
+    // applies (markWindowSnapped): the record it was built from is then bound
+    // to a live window, and a later same-app open would otherwise teleport
+    // into that window's zone.
     void clearRestoreCache()
     {
         m_restoreCache.clear();
     }
     void cacheRestore(const QString& appId, const CachedSnapRestore& entry)
     {
-        m_restoreCache.insert(appId, entry);
+        m_restoreCache[appId].append(entry);
     }
     bool restoreCacheEmpty() const
     {
@@ -120,23 +110,36 @@ public:
     }
     int restoreCacheSize() const
     {
-        return m_restoreCache.size();
+        int n = 0;
+        for (const auto& list : m_restoreCache) {
+            n += list.size();
+        }
+        return n;
     }
     void invalidateRestore(const QString& appId)
     {
         m_restoreCache.remove(appId);
     }
-    /// Look up and REMOVE the restore entry for @p appId (single-shot consume).
-    /// Returns nullopt if none. The entry is erased on lookup regardless of
-    /// whether the caller ends up applying it.
-    std::optional<CachedSnapRestore> takeRestore(const QString& appId)
+    /// Take (and REMOVE) the entry an opener on @p openerPhysicalId may apply
+    /// for @p appId, per InstantRestoreDecisions::pickEntry. Only that entry is
+    /// consumed; nullopt (and nothing consumed) when none qualifies.
+    std::optional<CachedSnapRestore> takeRestore(const QString& appId, const QString& openerPhysicalId,
+                                                 bool openerManaged,
+                                                 const std::function<bool(const QString&)>& isManagedScreen)
     {
         auto it = m_restoreCache.find(appId);
         if (it == m_restoreCache.end()) {
             return std::nullopt;
         }
-        const CachedSnapRestore entry = it.value();
-        m_restoreCache.erase(it);
+        const int picked =
+            InstantRestoreDecisions::pickEntry(it.value(), openerPhysicalId, openerManaged, isManagedScreen);
+        if (picked < 0) {
+            return std::nullopt;
+        }
+        const CachedSnapRestore entry = it.value().takeAt(picked);
+        if (it.value().isEmpty()) {
+            m_restoreCache.erase(it);
+        }
         return entry;
     }
 
@@ -364,7 +367,7 @@ private:
     BorderState m_border;
     // Single-shot instant-restore latency cache (appId → saved zone geometry +
     // screen), populated on daemon-ready and consumed on window-open.
-    QHash<QString, CachedSnapRestore> m_restoreCache;
+    QHash<QString, QList<CachedSnapRestore>> m_restoreCache;
     // Snap-mode windows floated because they were minimized (mirrors
     // TilingHandler::m_minimizeFloatedWindows). Removed on unminimize / close.
     // Deliberately NOT cleared on daemon restart, unlike the autotile twin

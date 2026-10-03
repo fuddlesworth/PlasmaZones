@@ -39,6 +39,7 @@
 #include <PhosphorZones/Zone.h>
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/WindowPlacementBuilders.h"
 
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
@@ -864,6 +865,45 @@ private Q_SLOTS:
         QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
         QCOMPARE(resnap.size(), 1);
         QCOMPARE(resnap.first().windowId, snappedId);
+    }
+
+    // The reopen claim reads the OPENING engine's mode, not only the output
+    // (F671). One monitor split into an autotile half and a snapping half:
+    // a snapped record (newer) on the snapping half and an autotile float
+    // with a free geometry (older) on the autotile half. An opener on the
+    // autotile half claims its float record rather than the newer snapped
+    // one; an opener on the snapping half then claims the snapped record.
+    void testClaimPlacementForOpen_modeAxis()
+    {
+        using PhosphorEngine::WindowPlacement;
+        const QString autotileHalf = QStringLiteral("DP-1/vs:0");
+        const QString snappingHalf = QStringLiteral("DP-1/vs:1");
+        const int desktop = m_layoutManager->currentVirtualDesktop();
+        PhosphorZones::AssignmentEntry autotileEntry;
+        autotileEntry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotileEntry.tilingAlgorithm = QStringLiteral("bsp");
+        m_layoutManager->setAssignmentEntryDirect(autotileHalf, desktop, QString(), autotileEntry);
+        QCOMPARE(m_layoutManager->modeForScreen(autotileHalf, desktop), PhosphorZones::AssignmentEntry::Autotile);
+
+        auto floated = PlasmaZones::TestHelpers::makePlacement(
+            QStringLiteral("app|k2"), QStringLiteral("app"), WindowPlacement::stateFloating(),
+            WindowPlacement::autotileEngineId(), autotileHalf, QRect(10, 10, 300, 200));
+        floated.virtualDesktop = desktop;
+        QVERIFY(m_service->placementStore().record(floated));
+        auto snapped = PlasmaZones::TestHelpers::makePlacement(QStringLiteral("app|k1"), QStringLiteral("app"),
+                                                               WindowPlacement::stateSnapped(),
+                                                               WindowPlacement::snapEngineId(), snappingHalf);
+        snapped.virtualDesktop = desktop;
+        QVERIFY(m_service->placementStore().record(snapped));
+
+        const auto onAutotile = m_service->claimPlacementForOpen(QStringLiteral("app|n1"), autotileHalf,
+                                                                 QString(WindowPlacement::autotileEngineId()));
+        QVERIFY(onAutotile.has_value());
+        QCOMPARE(onAutotile->windowId, QStringLiteral("app|k2"));
+        const auto onSnapping = m_service->claimPlacementForOpen(QStringLiteral("app|n2"), snappingHalf,
+                                                                 QString(WindowPlacement::snapEngineId()));
+        QVERIFY(onSnapping.has_value());
+        QCOMPARE(onSnapping->windowId, QStringLiteral("app|k1"));
     }
 
 private:

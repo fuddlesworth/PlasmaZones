@@ -5,6 +5,7 @@
 
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorIdentity/WindowId.h>
 
 #include <QHash>
 #include <QJsonArray>
@@ -597,6 +598,59 @@ bool pendingCrossScreenSnapRestore(const WindowPlacement& p, const QString& open
 {
     return pendingCrossScreenManagedRestore(p, WindowPlacement::snapEngineId(), WindowPlacement::stateSnapped(),
                                             openingScreenId, std::forward<IsSnappingMode>(isSnappingMode));
+}
+
+/// The reopen contract over pendingCrossScreenManagedRestore. Restores happen
+/// only on the opening output: a record on ANOTHER KWin output is a leave,
+/// whoever it belongs to. The window's OWN record (same instance) is compared
+/// at the virtual-screen level, so its own record on another virtual screen,
+/// even of the same output, is a leave too. Only a FIFO record (another
+/// instance of the app) on another virtual screen of the SAME output, in the
+/// same mode, is pending. Callers reach this only when the opening screen is
+/// in @p engineId's mode, so "the recorded screen is in that mode" is the
+/// same-mode test.
+template<typename IsEngineMode>
+bool pendingCrossScreenManagedRestore(const WindowPlacement& p, QLatin1String engineId, QLatin1String managedState,
+                                      const QString& openingWindowId, const QString& openingScreenId,
+                                      IsEngineMode&& isEngineMode)
+{
+    if (PhosphorIdentity::WindowId::sameWindowInstance(p.windowId, openingWindowId)) {
+        return false;
+    }
+    if (!PhosphorIdentity::VirtualScreenId::samePhysical(p.screenId, openingScreenId)) {
+        return false;
+    }
+    return pendingCrossScreenManagedRestore(p, engineId, managedState, openingScreenId,
+                                            std::forward<IsEngineMode>(isEngineMode));
+}
+
+/// The snap specialization of the reopen contract above.
+template<typename IsSnappingMode>
+bool pendingCrossScreenSnapRestore(const WindowPlacement& p, const QString& openingWindowId,
+                                   const QString& openingScreenId, IsSnappingMode&& isSnappingMode)
+{
+    return pendingCrossScreenManagedRestore(p, WindowPlacement::snapEngineId(), WindowPlacement::stateSnapped(),
+                                            openingWindowId, openingScreenId,
+                                            std::forward<IsSnappingMode>(isSnappingMode));
+}
+
+/// Whether a window's OWN record names a different screen than the one it is
+/// opening on while some engine still holds a live slot for it: the "left its
+/// screen" test of the reopen contract. Exact (virtual-screen level) compare.
+/// Such a window is not restored, and every engine slot of the record is
+/// released rather than left to read as a home later. Released slots do not
+/// count: they are already a verdict.
+inline bool ownRecordLeftScreen(const WindowPlacement& own, const QString& openingScreenId)
+{
+    if (own.screenId.isEmpty() || openingScreenId.isEmpty() || own.screenId == openingScreenId) {
+        return false;
+    }
+    for (auto it = own.engines.constBegin(); it != own.engines.constEnd(); ++it) {
+        if (!it.value().state.isEmpty() && it.value().state != WindowPlacement::stateReleased()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace PhosphorEngine

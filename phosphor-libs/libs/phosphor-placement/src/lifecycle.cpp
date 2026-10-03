@@ -730,6 +730,47 @@ QString WindowTrackingService::owningModeEngineId(const QString& windowId, const
     return QString(PhosphorEngine::WindowPlacement::snapEngineId());
 }
 
+std::optional<PhosphorEngine::WindowPlacement>
+WindowTrackingService::claimPlacementForOpen(const QString& windowId, const QString& openingScreenId,
+                                             const QString& openingEngineId)
+{
+    using PhosphorEngine::WindowPlacement;
+    using Mode = PhosphorZones::AssignmentEntry::Mode;
+    const QString appId = currentAppIdFor(windowId);
+    std::function<bool(const WindowPlacement&)> restorableHere;
+    if (!openingEngineId.isEmpty()) {
+        const QLatin1String engine = openingEngineId == WindowPlacement::autotileEngineId()
+            ? WindowPlacement::autotileEngineId()
+            : (openingEngineId == WindowPlacement::scrollingEngineId() ? WindowPlacement::scrollingEngineId()
+                                                                       : WindowPlacement::snapEngineId());
+        const QLatin1String managed =
+            engine == WindowPlacement::snapEngineId() ? WindowPlacement::stateSnapped() : WindowPlacement::stateTiled();
+        const Mode mode = engine == WindowPlacement::autotileEngineId()
+            ? Mode::Autotile
+            : (engine == WindowPlacement::scrollingEngineId() ? Mode::Scrolling : Mode::Snapping);
+        // Permissive without a layout manager (tests), like every sibling gate.
+        const auto inMode = [this, mode](const QString& screenId, int desktop, const QString& activity) {
+            return !m_layoutManager || m_layoutManager->modeForScreen(screenId, desktop, activity) == mode;
+        };
+        restorableHere = [=](const WindowPlacement& p) {
+            const auto slot = p.slotFor(engine);
+            if (slot.state == managed) {
+                if (p.screenId.isEmpty() || p.screenId == openingScreenId) {
+                    return p.screenId.isEmpty() || inMode(p.screenId, p.virtualDesktop, p.activity);
+                }
+                return PhosphorEngine::pendingCrossScreenManagedRestore(p, engine, managed, windowId, openingScreenId,
+                                                                        inMode);
+            }
+            // A float is screen-local: only on this very screen, and only with a
+            // free geometry the window can float back to here.
+            return slot.state == WindowPlacement::stateFloating()
+                && (p.screenId.isEmpty() || p.screenId == openingScreenId)
+                && p.freeGeometryFor(openingScreenId).isValid();
+        };
+    }
+    return placementStore().claimForOpen(windowId, appId, openingScreenId, restorableHere);
+}
+
 PhosphorEngine::WindowRegistry* WindowTrackingService::windowRegistry() const
 {
     return m_windowRegistry;

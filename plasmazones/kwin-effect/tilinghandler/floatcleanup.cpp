@@ -357,13 +357,13 @@ QSet<QString> TilingHandler::completeDeferredWindowRoutes()
         // window doesn't return to compositing at its centred spawn placement
         // between deadline expiry and the reposition below.
         m_effect->refreshRestoreSuppressionDeadline(window);
-        // Consume (and maybe apply) the instant snap-restore cache entry —
-        // a deferred window must not leave its entry alive for a later
-        // same-app sibling to claim.
-        // A teleport can move the window to another screen; re-resolve after.
-        QString screenId = m_effect->getWindowScreenId(window);
-        if (canSnapRestore && !window->isMinimized() && m_effect->tryInstantSnapRestore(window, windowId)) {
-            screenId = m_effect->getWindowScreenId(window);
+        // Apply (and consume) the instant snap-restore entry saved on this
+        // window's own output, if any. A teleport only moves between
+        // unmanaged screens of one output, so the managed-screen branch below
+        // reads the same screen either way and needs no re-resolve.
+        const QString screenId = m_effect->getWindowScreenId(window);
+        if (canSnapRestore && !window->isMinimized()) {
+            m_effect->tryInstantSnapRestore(window, windowId, screenId);
         }
         if (m_managedScreens.contains(screenId)) {
             if (window->isMinimized()) {

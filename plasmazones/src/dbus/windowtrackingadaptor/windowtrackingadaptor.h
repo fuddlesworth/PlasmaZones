@@ -590,10 +590,10 @@ public Q_SLOTS:
      * @brief Pre-computed zone geometries for pending restore entries.
      * @return JSON object, one ARRAY per app, newest record first:
      *         { appId: [ {x, y, width, height, screenId, windowId}, ... ], ... }
-     * The effect caches these so slotWindowAdded can teleport windows to their
-     * zone without a round trip. It takes an app's first entry whose instance
-     * is not live, so a second window of a snapped app never gets the rect its
-     * open sibling still uses.
+     * The effect caches these so the open dispatch can teleport windows to
+     * their zone without a round trip. It applies the newest entry on the
+     * opener's own output whose instance is not live, so a second window of a
+     * snapped app never gets the rect its open sibling still uses.
      */
     QString getPendingRestoreGeometries();
 

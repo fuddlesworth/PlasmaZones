@@ -121,28 +121,27 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowByInstanceId(const QString& win
     return nullptr;
 }
 
-bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId)
+bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId,
+                                              const QString& openerScreenId)
 {
     if (!w || w->isDeleted() || m_snapHandler->restoreCacheEmpty()) {
         return false;
     }
     const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-    // Single-shot semantics: takeRestore erases the entry on lookup, so any
-    // entry seen here is consumed regardless of which branch below runs (the
-    // entry has been considered for routing whether or not it was applied,
-    // so the next open of the same appId won't re-evaluate a dead entry).
-    // Sole caller is the deferred-routing dispatch
-    // (completeDeferredWindowRoutes) — every tileable window routes through
-    // the settle defer now, and the dispatch consumes the cache so a
-    // deferred window cannot leave its entry alive for a later same-app
-    // sibling to claim.
-    const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(appId);
-    if (!cached) {
-        return false;
-    }
-    const bool savedScreenNowAutotile =
-        !cached->screenId.isEmpty() && m_tilingHandler->isManagedScreen(cached->screenId);
-    if (cached->geometry.isValid() && !savedScreenNowAutotile) {
+    // Restores happen where the window opens: only the newest entry saved on
+    // the opener's OWN output (position-based, so a window KWin has not yet
+    // reassigned reads its real output), never one on another monitor, and
+    // nothing at all when the opener's screen is engine-managed (its engine
+    // places it) or the saved screen now is. Only the applied entry is
+    // consumed: entries for other outputs stay for an opener there. Sole
+    // caller is the deferred-routing dispatch (completeDeferredWindowRoutes),
+    // which decides this BEFORE any screen re-resolve.
+    const QString openerPhysicalId = outputScreenId(windowOutput(w));
+    const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(
+        appId, openerPhysicalId, m_tilingHandler->isManagedScreen(openerScreenId), [this](const QString& screenId) {
+            return m_tilingHandler->isManagedScreen(screenId);
+        });
+    if (cached) {
         qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached->geometry
                          << "screen:" << cached->screenId;
         // skipAnimation=true: teleport straight into the zone.
@@ -161,15 +160,6 @@ bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QStri
                             PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
                             /*demoteMaximizeOnDeferredReplay=*/true);
         return true;
-    }
-    if (savedScreenNowAutotile) {
-        qCDebug(lcEffect) << "Skipping instant snap restore for" << appId
-                          << "- saved screen now autotile:" << cached->screenId;
-    } else {
-        // Cached geometry is invalid (corrupt / zero-size persisted
-        // rect on a snap-mode screen).
-        qCDebug(lcEffect) << "Discarding instant snap restore entry for" << appId
-                          << "- geometry invalid:" << cached->geometry << "screen:" << cached->screenId;
     }
     return false;
 }

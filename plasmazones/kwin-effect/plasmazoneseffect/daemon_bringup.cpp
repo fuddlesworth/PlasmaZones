@@ -510,10 +510,10 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                     liveInstances.insert(liveId);
                 }
             }
-            // One array per app, newest record first: the first entry whose
-            // window is not visible wins, so a live sibling's record at the
-            // head (a daemon-only restart, before the re-announce) does not
-            // cost the app its instant restore.
+            // One array per app, newest record first: every entry whose window
+            // is not visible is cached, in order, so each opener takes the
+            // newest one saved on its OWN output (a live sibling's record at
+            // the head, from a daemon-only restart, is skipped here).
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 const QJsonArray entries = it.value().toArray();
                 for (const QJsonValue& entry : entries) {
@@ -534,7 +534,6 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                     const QString savedScreen = geo[QLatin1String("screenId")].toString();
                     if (gw > 0 && gh > 0) {
                         m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(gx, gy, gw, gh), savedScreen});
-                        break;
                     }
                 }
             }

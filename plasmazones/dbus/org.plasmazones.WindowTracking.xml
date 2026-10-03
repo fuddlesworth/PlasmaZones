@@ -204,7 +204,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="getPendingRestoreGeometries">
             <annotation name="org.gtk.GDBus.DocString" value="Pre-computed zone geometries for pending restore entries. The effect caches these for instant window teleport on open (no D-Bus round-trip flash)."/>
             <arg name="geometriesJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON object: { appId: [ {x, y, width, height, screenId, windowId}, ... ], ... }, newest record first. windowId is the record's; the effect takes the first entry whose window it cannot still see."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object: { appId: [ {x, y, width, height, screenId, windowId}, ... ], ... }, newest record first. windowId is the record's; the effect applies the newest entry on the opener's output whose window it cannot still see."/>
             </arg>
         </method>
         <method name="reportNavigationFeedback">

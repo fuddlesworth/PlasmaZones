@@ -3130,10 +3130,10 @@ private:
     void beginRestoreSuppression(KWin::EffectWindow* window);
     /// Re-arm a suppressed window's deadline (no-op otherwise), so a decision deferred past it cannot flash.
     void refreshRestoreSuppressionDeadline(KWin::EffectWindow* window);
-    /// Consume (single-shot) and, when valid for a snap-mode screen, apply the
-    /// app's instant snap-restore cache entry. True when teleported. Sole
-    /// caller: the dispatch.
-    bool tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId);
+    /// Apply (and consume) the app's newest instant snap-restore entry saved on
+    /// the opener's own output, for an unmanaged @p openerScreenId. True when
+    /// teleported. Sole caller: the dispatch.
+    bool tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId, const QString& openerScreenId);
     void endRestoreSuppression(KWin::EffectWindow* window);
     /// endRestoreSuppression for a resolve miss; an in-flight reposition holds.
     void releaseRestoreSuppressionOnMiss(KWin::EffectWindow* window);

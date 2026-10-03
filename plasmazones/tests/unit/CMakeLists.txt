@@ -1262,6 +1262,15 @@ target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_pretile_decisions COMMAND test_pretile_decisions)
 
+# Pure-logic test for the instant snap-restore pick
+# (handlers/instantrestoredecisions.h): an opener applies only the newest
+# entry saved on its own output, never one on another monitor, and nothing
+# on an engine-managed screen. Same header-only reach.
+add_executable(test_instant_restore_decisions ui/effect/test_instant_restore_decisions.cpp)
+target_link_libraries(test_instant_restore_decisions PRIVATE Qt6::Test Qt6::Core PhosphorIdentity::PhosphorIdentity)
+target_include_directories(test_instant_restore_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_instant_restore_decisions COMMAND test_instant_restore_decisions)
+
 # Pure-logic test for the minimize-float qualifiers
 # (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
 # can still be the tile it is about to get. Same header-only reach.

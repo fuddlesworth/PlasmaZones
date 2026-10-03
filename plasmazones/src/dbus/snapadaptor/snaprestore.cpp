@@ -198,20 +198,25 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // this instance for the whole open and for the re-drives that follow it:
     // without it an already-home window could consume a sibling's record
     // outright, and a multi-window app's later re-resolve could answer from a
-    // different record than the one its open used.
+    // different record than the one its open used. The claim takes only a
+    // record the OPENING screen's engine can restore on this output (the
+    // reopen contract), so two instances of one app on two monitors each keep
+    // the record of their own monitor instead of the first opener taking the
+    // newest wherever it lives.
     //
     // Open AND PendingSweep. The sweep re-resolves windows that are already
     // OPEN, but for the placement store it CAN still be a first touch: a window
     // whose open resolve arrived before the daemon was ready never got past the
     // readiness gate above, so it never claimed anything. For one that did
-    // already claim, claimForOpen is idempotent and this is harmless. Without this the pairing guard was
-    // absent in exactly the slow-daemon login the feature exists for.
-    //
-    // The other drivers are true re-entries (Unminimize, DesktopArrival) or run
-    // with stable uuids that route to the store's same-instance branch
-    // (DaemonRestartSweep), so their claim or consumption is already settled.
+    // already claim, the claim is idempotent and this is harmless. Without
+    // this the pairing guard was absent in exactly the slow-daemon login the
+    // feature exists for. The other drivers are re-entries (Unminimize,
+    // DesktopArrival) or run with stable uuids (DaemonRestartSweep).
     if (isOpen || reason == PhosphorEngine::RestoreReason::PendingSweep) {
-        svc->placementStore().claimForOpen(windowId, svc->currentAppIdFor(windowId));
+        svc->claimPlacementForOpen(windowId, screenId,
+                                   m_engine->isSnapModeScreen(screenId)
+                                       ? QString(PhosphorEngine::WindowPlacement::snapEngineId())
+                                       : svc->owningModeEngineId(windowId, screenId));
     }
 
     // Engine-neutral RouteToDesktop runs first — a window can be routed to a
