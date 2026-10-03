@@ -112,10 +112,10 @@ public:
     /// Whether @p screenId resolves to SNAPPING mode in its current
     /// (desktop, activity) context — the same verdict resolveWindowRestore's
     /// screen-mode ownership gate reads, permissive when no layout manager is
-    /// wired (tests). Public for the SnapAdaptor's open-path reclaim-credit
-    /// burn, which must partition opens the way the open channels do: a
-    /// tiling-screen open burns via that engine's takeForReopen, a snap-screen
-    /// open has only the adaptor's resolve to do it.
+    /// wired (tests). Public for the SnapAdaptor: its open claim names the
+    /// opening screen's engine from it, and its DesktopArrival held-zone
+    /// re-apply only runs on a screen that snaps (a re-statement of a zone on
+    /// a screen another engine runs would fight that engine).
     bool isSnapModeScreen(const QString& screenId) const;
 
     /// Resolve the zone on @p screenId's @p targetDesktop layout that is
@@ -271,16 +271,16 @@ public:
         m_liveModeResolver = std::move(resolver);
     }
 
-    /// Whether the tiling engine owning @p mode is actually LIVE on
-    /// @p screenId — the liveness half of resolveWindowRestore's
-    /// cross-screen tile-defer gate. The gate must ask exactly what the
-    /// CLAIMING side answers: both tiling engines' claimCrossScreenReopen
-    /// require the recorded home in their live screen set on top of the
-    /// record-context mode verdict, so a defer keyed on mode alone stands
-    /// down for a window the tiling engine then declines — the both-skipped
-    /// strand. Only the daemon sees the engines' live sets, hence the
-    /// injection. Unset → the gate falls back to mode alone (headless/test
-    /// path). Clear with {} at teardown.
+    /// INERT, kept for ABI: whether the tiling engine owning @p mode is LIVE
+    /// on @p screenId. It fed resolveWindowRestore's cross-screen tile-defer
+    /// gate, which is gone: under the reopen contract snap never defers a
+    /// window to another engine's reclaim of a record on another screen, and
+    /// nothing reads the stored resolver any more. The daemon no longer wires
+    /// it. A setter call is harmless; the resolver is held and never invoked.
+    /// (A new caller wanting engine liveness must ask the daemon, which is the
+    /// only side that sees the engines' live screen sets.)
+    ///
+    /// Clear with {} at teardown, like every injected resolver.
     using TilingEngineLiveResolver =
         std::function<bool(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId)>;
     void setTilingEngineLiveResolver(TilingEngineLiveResolver resolver)
@@ -476,19 +476,19 @@ public:
      *
      * A matched SnapToZone rule (chain level 1) outranks any stored placement
      * (the store still re-binds the record first, so the float-back geometry
-     * survives). Otherwise the WindowPlacementStore reopens the window from
-     * its snapped (may cross screens) or floated (screen-local) record. With
-     * neither, levels 2 (empty zone) and 3 (last-used zone) run. A window
-     * nothing places is FLOATED, by a matched Float rule before the chain or
-     * the no-match default after it; a first-placement float that does not
-     * move gets its free size back. An already-floating window is skipped.
+     * survives). Otherwise the WindowPlacementStore reopens the window from a
+     * record it may restore WHERE IT OPENS (its own, on its screen; another
+     * instance's, on its output), never one that would move it to another
+     * monitor; a window whose own record names another screen left it and is
+     * released. Then levels 2 (empty zone) and 3 (last-used zone). A window
+     * nothing places is FLOATED; a re-entry never re-snaps a floating one.
      *
      * @param windowId Window identifier
      * @param screenId Screen where the window appeared
      * @param sticky Whether the window is on all desktops
      * @param kind Accepted for D-Bus wire-compatibility but no longer gates
      *             restore — the matched record carries its own kind.
-     * @param reason Why this resolve runs; gates the size restore only.
+     * @param reason Why this resolve runs: gates the size restore, the FIFO, a re-entry re-snap and a leaver's rule.
      * @return PhosphorEngine::SnapResult with geometry and zone info, or PhosphorEngine::SnapResult::noSnap()
      */
     PhosphorEngine::SnapResult
@@ -655,18 +655,18 @@ public:
     void setFloating(const QString& windowId, bool floating);
     QStringList floatingWindows() const;
 
-    /// The no-match float-default terminal of resolveWindowRestore, callable by
-    /// the SnapAdaptor when a deferredToTilingEngine verdict's reclaim was then
-    /// DECLINED; without it the window ended the open with no state in any
-    /// engine. No-op with a definite snap state, snapping off, or empty args.
-    /// Pins the residence and restores the free size like the in-line
-    /// terminals. @p placedBefore is the caller's pre-reclaim snapshot.
+    /// The no-match float-default terminal of resolveWindowRestore for a caller
+    /// outside it. No in-tree caller since the tile-defer channel was removed
+    /// (installed API, kept). No-op with a definite snap state, snapping off,
+    /// or empty args. Pins the residence and restores the free size like the
+    /// in-line terminals; the caller must establish that the screen snaps.
+    /// @p placedBefore is the caller's lineage snapshot (wasPlacedByPreviousLineage).
     /// @p placedBefore has no default: false lets the resize through.
     void applyNoMatchFloatDefault(const QString& windowId, const QString& screenId,
                                   PhosphorEngine::RestoreReason reason, bool placedBefore);
 
-    /// That snapshot. A tiling claim reaching takeForReopen re-binds the record
-    /// under this uuid with its own slot and leaves it there on a decline.
+    /// That snapshot, taken before anything can re-bind a slot-bearing record
+    /// under this uuid. No in-tree caller (see applyNoMatchFloatDefault).
     bool wasPlacedByPreviousLineage(const QString& windowId) const;
 
     /// Primary zone of @p windowId across the per-screen stores (empty if none).

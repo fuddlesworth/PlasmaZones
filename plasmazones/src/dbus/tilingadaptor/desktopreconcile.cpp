@@ -123,10 +123,9 @@ void TilingAdaptor::applyMembershipResult(PhosphorEngine::IPlacementEngine* engi
     }
     // Windows that lost EVERY context in this engine. For a lifecycle engine
     // that is a full release and carries the pipeline bookkeeping the engine
-    // cannot do itself: the replay cache, the float-relay dedup, the parked
-    // opens, and the move excuses that keep the next announce from being
-    // read as a session restore. The engine's own windowClosed is a no-op
-    // by then, so the bookkeeping is the whole point.
+    // cannot do itself: the replay cache, the float-relay dedup and the
+    // parked opens. The engine's own windowClosed is a no-op by then, so the
+    // bookkeeping is the whole point.
     QSet<QString> fullyReleased;
     for (const auto& [windowId, key] : result.released) {
         if (lifecycleEngine && !engine->heldKeyForWindow(windowId)) {
@@ -158,11 +157,8 @@ void TilingAdaptor::applyMembershipResult(PhosphorEngine::IPlacementEngine* engi
                                  << "holds no context in its engine any more — releasing it from the pipeline";
             // Released through the engine that ANSWERED, not by re-resolving
             // the id: engineOwningWindow decides on isWindowTracked, which is
-            // not the same predicate across engines. The adaptor's move excuse
-            // stays unarmed: every other caller is the effect immediately
-            // before a re-announce; this one has no such pairing, and an
-            // unconsumed excuse is spent by a later unrelated announce.
-            releaseWindowTrackingVia(windowId, engine, /*armMoveExcuse=*/false);
+            // not the same predicate across engines.
+            releaseWindowTrackingVia(windowId, engine);
         }
     }
 }

@@ -186,12 +186,12 @@ private Q_SLOTS:
                  "the exclusion is about liveness, not about siblings");
     }
 
-    // An open claim dies with its instance on BOTH close funnels. The prune
-    // backstop (a window that died without a close signal) reaches only
-    // markInstanceClosed, which used to leave the claim standing, so the
-    // record the dead window claimed stayed unpairable for every later
-    // same-app open. Pinned through peek() AND through take(), the two
-    // production readers of a claim.
+    // An open claim dies with its instance on every close funnel. The prune
+    // backstop (a window that died without a close signal) drops the claims
+    // of every instance missing from the alive set, and the inert close mark
+    // still releases its own, so the record a dead window claimed never stays
+    // unpairable for later same-app opens. Pinned through peek() AND through
+    // take(), the two production readers of a claim.
     void testClaim_releasedByMarkInstanceClosedAndClear()
     {
         WindowPlacementStore store;
@@ -201,10 +201,19 @@ private Q_SLOTS:
         // While the claim stands, another instance may not read that record.
         QVERIFY(!store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value());
 
-        // The claimer dies unobserved: the backstop funnel.
-        store.markInstanceClosed(QStringLiteral("app|claimer"), /*graceEligible=*/false);
+        // The claimer dies unobserved: the alive-set backstop. An alive set
+        // naming the claimer keeps the claim, one without it drops it.
+        QCOMPARE(store.releaseOpenClaimsExcept({QStringLiteral("claimer")}), 0);
+        QVERIFY(!store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value());
+        QCOMPARE(store.releaseOpenClaimsExcept({QStringLiteral("other")}), 1);
         QVERIFY2(store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value(),
                  "a dead claimer must not keep a record unpairable");
+
+        // The close mark releases the claim too, and reports no revoke.
+        QVERIFY(store.claimForOpen(QStringLiteral("app|claimer1"), QStringLiteral("app")).has_value());
+        QVERIFY(!store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value());
+        QVERIFY(!store.markInstanceClosed(QStringLiteral("app|claimer1")));
+        QVERIFY(store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value());
 
         // Same through clear(): the instance's own claim on a SIBLING's record
         // goes too, not only the claims naming the records clear() removes.
@@ -273,11 +282,10 @@ private Q_SLOTS:
     void testClaim_droppedByCollapseAndRemoveIf()
     {
         WindowPlacementStore store;
-        // A closed floating sibling (credit revoked so the collapse may prune
-        // it), claimed by an opener BEFORE the keeper is recorded: the bucket
-        // claim picks the newest record, and the keeper must not be it.
+        // A closed floating sibling, claimed by an opener BEFORE the keeper is
+        // recorded: the bucket claim picks the newest record, and the keeper
+        // must not be it.
         QVERIFY(store.record(floatingApp(QStringLiteral("app|sibling"), QRect(0, 0, 300, 200))));
-        store.markInstanceClosed(QStringLiteral("app|sibling"), /*graceEligible=*/false);
         const auto claimed = store.claimForOpen(QStringLiteral("app|claimer"), QStringLiteral("app"));
         QVERIFY(claimed.has_value());
         QCOMPARE(claimed->windowId, QStringLiteral("app|sibling"));

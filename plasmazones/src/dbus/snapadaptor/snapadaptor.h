@@ -155,11 +155,12 @@ public Q_SLOTS:
      *                   placement record now carries the kind, so it no longer gates restore.
      * @param restoreReason Why this resolve is running — see
      *                   PhosphorEngine::RestoreReason. Clamped from the wire, so an
-     *                   unrecognised value reads as Open. Gates the open claim, the
-     *                   RouteToDesktop / RouteToScreen routing, the cross-screen
-     *                   tile reclaim and the per-open reclaim-credit burn, and is
-     *                   forwarded to the engine, where it gates the free-size
+     *                   unrecognised value reads as Open. Gates the open claim and
+     *                   the RouteToDesktop / RouteToScreen routing, and is
+     *                   forwarded to the engine, where it gates the FIFO, a
+     *                   re-entry re-snap, a leaver's rule and the free-size
      *                   restore of a floated open (#1106).
+     * @param minWidth, minHeight Pinned by the v9 signature, accepted and ignored.
      */
     void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
                               int restoreReason, int minWidth, int minHeight, int& snapX, int& snapY, int& snapWidth,
@@ -329,28 +330,6 @@ public:
     /// answers with the first of them.
     void moveWindowToZoneOnScreen(const QString& windowId, const QString& zoneId, const QString& screenHint);
 
-    /// Cross-screen tiling-engine reclaim hook, invoked as (windowId,
-    /// openingScreenId) → claimed. This channel exists because the tiling
-    /// dispatch only ever hears about ENGINE-MANAGED screens: a session
-    /// window KWin dropped on a SNAP-mode screen while its placement record
-    /// homes it TILED elsewhere would otherwise never be offered to the
-    /// engine that owns it. The effect drives resolveWindowRestore for a
-    /// window on a non-managed screen, and for a managed-screen window that
-    /// is also a snap-restore candidate; both are gated on the effect's
-    /// candidate test (plasmazones/kwin-effect/plasmazoneseffect/window_lifecycle.cpp),
-    /// so a window failing that gate — minimized at open — reaches this
-    /// channel not at all and is covered only by the tiling dispatch. (The
-    /// different-pid sibling exclusion that gate used to carry is gone since
-    /// #1106.) Wired by the daemon over both pipeline
-    /// engines' claimCrossScreenReopen; cleared in clearEngine and in
-    /// Daemon::stop (same contract as the engines' injected closures).
-    /// Unset → no reclaim (headless/test path).
-    void setCrossScreenTileReclaim(
-        std::function<bool(const QString& windowId, const QString& screenId, int minWidth, int minHeight)> hook)
-    {
-        m_crossScreenTileReclaim = std::move(hook);
-    }
-
 private:
     // ═══════════════════════════════════════════════════════════════════════════
     // Private helpers
@@ -401,8 +380,6 @@ private:
     /// Late-bound by Daemon via setContextResolver — replaces the inline
     /// `(modeFor → isContextDisabled)` cascade in snaprestore.cpp.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
-    /// See setCrossScreenTileReclaim.
-    std::function<bool(const QString&, const QString&, int, int)> m_crossScreenTileReclaim;
 
     // Stored handles for the signal relays wired in the constructor so
     // clearEngine() can disconnect exactly the connections this class

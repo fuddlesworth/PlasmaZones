@@ -49,7 +49,7 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
 {
     // An empty screenId is never a valid snap owner: the per-screen buckets are
     // keyed by screenId, so recording under "" would pollute the set with an
-    // entry that the per-screen cross-screen cleanup can never reclaim.
+    // entry that the per-screen cross-screen cleanup can never remove.
     // Callers route unresolved/float windows through clearWindowSnapped instead;
     // this guard is defensive depth for any path that slips an empty screen in.
     if (windowId.isEmpty() || screenId.isEmpty()) {
@@ -292,15 +292,12 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
             onComplete(*snapApplied);
         }
     };
-    // Client-declared minimum, the same value the tiling channel sends: on a
-    // cross-screen reclaim the adopting engine evaluates its oversized/float
-    // verdict once from this, and 0,0 left an oversized window tiled.
-    const QSize declaredMin = TilingHandler::declaredMinSize(window);
-    m_effect->tryAsyncSnapCall(
-        PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-        {windowId, screenId, sticky, kindInt, static_cast<int>(reason), declaredMin.width(), declaredMin.height()},
-        safeWindow, windowId, false, onMiss, markApplied,
-        /*skipAnimation=*/true, completeWithOutcome, releaseSuppression);
+    // The trailing minimum-size pair is pinned by the v9 protocol and ignored
+    // by the daemon: no engine adopts a window through this call any more.
+    m_effect->tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
+                               {windowId, screenId, sticky, kindInt, static_cast<int>(reason), 0, 0}, safeWindow,
+                               windowId, false, onMiss, markApplied,
+                               /*skipAnimation=*/true, completeWithOutcome, releaseSuppression);
 }
 
 void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
@@ -743,9 +740,8 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
                 return;
             }
             qCInfo(lcEffect) << "Snap: unminimized window is untracked by daemon — retrying restore:" << windowId;
-            // Unminimize, not an open. Without the distinction the daemon's
-            // cross-screen tile reclaim could TELEPORT the just-unminimized
-            // window to its recorded home monitor.
+            // Unminimize, not an open: the daemon restores the window only
+            // from its own record, and never onto another screen.
             callResolveWindowRestore(safeWindow.data(), nullptr, /*releaseSuppressionOnMiss=*/true,
                                      PhosphorEngine::RestoreReason::Unminimize);
         };
@@ -1306,8 +1302,8 @@ void SnapHandler::slotPendingRestoresAvailable()
 
             // Window is not tracked - try to restore it.
             // PendingSweep: the pending-restores sweep re-resolves
-            // already-open windows; it must not drive the cross-screen tile
-            // reclaim and move windows the user is looking at.
+            // already-open windows, so a window that left its recorded
+            // screen stays where the user put it and fires no placement rule.
             qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
             callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true,
                                      PhosphorEngine::RestoreReason::PendingSweep);
@@ -1411,10 +1407,9 @@ bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWi
     // reached by a different route.
     m_awaitingDesktopArrivalRestore.remove(windowId);
 
-    // DesktopArrival: not an open, so the daemon retires no reclaim credit for
-    // it — the open that parked this window already spent that. It IS still
-    // eligible for the cross-screen reclaim, which is the distinction the old
-    // bool could not make.
+    // DesktopArrival: not an open of its own, so it never borrows a sibling's
+    // record, but it still runs the screen routing the parked open owes,
+    // which is the distinction the old bool could not make.
     qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId;
     callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true,
                              PhosphorEngine::RestoreReason::DesktopArrival);

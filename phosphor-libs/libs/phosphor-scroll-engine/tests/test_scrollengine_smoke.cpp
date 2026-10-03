@@ -133,13 +133,11 @@ private Q_SLOTS:
     void contextSwitchFlagRidesChangedScreenSets();
 
 private:
-    // NOTE: windowOpened's cross-screen snap-restore defer gate
-    // (setSnappingModeResolver + placementStore().peek) is deliberately
-    // untested here: makeEngine passes a null IWindowTrackingService, and
-    // faking the full tracking service just for the peek would drag half
-    // of phosphor-placement into this smoke suite. The gate's daemon-side
-    // wiring mirrors AutotileEngine's, whose twin is covered at the
-    // integration layer.
+    // NOTE: the reopen claim (claimCrossScreenReopen, which reads the
+    // placement store) is deliberately untested here: makeEngine passes a
+    // null IWindowTrackingService, and faking the full tracking service just
+    // for the store would drag half of phosphor-placement into this smoke
+    // suite. It is covered at the integration layer.
     static ScrollEngine* makeEngine(QObject* parent)
     {
         auto* engine = new ScrollEngine(nullptr, nullptr, parent);

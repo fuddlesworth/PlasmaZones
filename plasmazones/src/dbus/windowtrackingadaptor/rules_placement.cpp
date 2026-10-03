@@ -426,7 +426,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
 {
     // Owned by this function, not the caller: a set-only out-param leaves a
     // caller's pre-set value standing on every no-match path, which reads as
-    // "a rule matched" and silently vetoes the reclaim.
+    // "a rule matched" and silently vetoes the reopen claim.
     if (directiveMatched) {
         *directiveMatched = false;
     }
@@ -445,7 +445,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     // RouteToDesktop is engine-neutral — emit it for autotile windows too.
     // Deliberately NOT folded into `directiveMatched`: a desktop route says
     // nothing about which monitor the window belongs on, so it must not veto
-    // the cross-screen reclaim the way a RouteToScreen match does.
+    // the reopen claim the way a RouteToScreen match does.
     emitRouteToDesktopIfMatched(resolved, windowId);
 
     const auto markMatched = [&] {
@@ -456,7 +456,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
 
     // A valid SnapToZone placement directive owns the window's placement even
     // on this channel (the snap facade acts on it) — signal the match so the
-    // caller's reclaim veto sees it, mirroring the snap twin's target check.
+    // caller's reopen-claim veto sees it, mirroring the snap twin's target check.
     // The routed-screen RETURN stays empty: placement is not a tiling
     // redirect.
     if (hasValidPlacementTarget(resolved)) {
@@ -478,7 +478,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     // already-on-target and target-not-connected. The snap twin
     // (applyOpenScreenRouting) folds both into one bool; overloading THIS
     // function's empty return the same way is what let the two channels
-    // apply opposite reclaim precedence.
+    // apply opposite reopen-claim precedence.
     const std::optional<PhosphorRules::RuleAction> route =
         resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
     if (!route) {

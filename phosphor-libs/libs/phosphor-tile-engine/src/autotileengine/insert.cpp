@@ -425,8 +425,8 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         qCWarning(PhosphorTileEngine::lcTileEngine)
             << "insertWindow: state refused" << windowId << "on" << screenId << "- window left unmanaged";
         // windowOpened keys the reverse map before calling in here, so the
-        // sweep has to drop that key too — the same cleanup the defer gate and
-        // claimCrossScreenReopen run for their own refusals. ONLY this
+        // sweep has to drop that key too — the same cleanup
+        // claimCrossScreenReopen runs for its own refusal. ONLY this
         // context's membership: a window present on other desktops keeps its
         // tiles there, and the per-window caches below describe a window that
         // is still live, so they go only when no context is left.

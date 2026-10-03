@@ -113,24 +113,23 @@ public:
         windowOpened(windowId, screenId, 0, 0);
     }
 
-    /// OPTIONAL: cross-screen session reclaim, the tiling-engine counterpart
-    /// of the snap engine's recorded-screen restore. Offered a window that
-    /// opened on @p openingScreenId — a screen this engine may not own — the
-    /// engine checks the unified placement store for ITS OWN managed slot
-    /// recorded on a DIFFERENT screen that is still in this engine's mode
-    /// (PhosphorEngine::pendingCrossScreenManagedRestore), and on a match
-    /// adopts the window into that recorded home screen (its retile then
-    /// physically moves the window there). KWin's session restore opens
-    /// windows on a nondeterministic output, so without this a whole strip's
-    /// windows strand floated on whatever monitor KWin picked at login.
-    /// Default false: an engine without a cross-screen restore story (snap
-    /// claims through resolveWindowRestore instead) never claims here.
+    /// OPTIONAL: the reopen claim, under the reopen contract (restores happen
+    /// where a window opens). Offered a window opening on @p openingScreenId,
+    /// an engine that RUNS that screen checks the placement store for a FIFO
+    /// record (another instance of the app) with ITS managed slot recorded on
+    /// another virtual screen of the SAME KWin output, still in its mode
+    /// (PhosphorEngine::pendingCrossScreenManagedRestore, the 6-argument
+    /// overload), and on a match adopts the window into that virtual screen.
+    /// Never a record on another output, and never the window's own record
+    /// (it is final: restored only where it names, else released). Default
+    /// false: snap restores through resolveWindowRestore instead.
     ///
-    /// Contract: self-gate on first observation by MEMBERSHIP (a held window
-    /// is an in-session move); decide via WindowPlacementStore::peekForReclaim,
-    /// never plain peek() (its live-instance exclusion stops a fresh second
-    /// instance being yanked onto its open sibling's monitor); return the REAL
-    /// adoption outcome verified by membership.
+    /// Contract: decline unless the opening screen is this engine's; self-gate
+    /// on first observation by MEMBERSHIP (a held window is an in-session
+    /// move); decide via WindowPlacementStore::peekForReclaim, never plain
+    /// peek() (its live-instance exclusion and claim honouring keep a second
+    /// instance off its open sibling's record); return the REAL adoption
+    /// outcome verified by membership.
     virtual bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth = 0,
                                         int minHeight = 0)
     {
@@ -141,11 +140,10 @@ public:
         return false;
     }
 
-    /// OPTIONAL: whether the claim round for THIS announce of @p windowId ran
-    /// and every claimCrossScreenReopen declined. A reciprocal defer gate
-    /// reads it and adopts rather than deferring again, leaving the window
-    /// with no engine. Stated either way on every announce reaching an arrival
-    /// engine, never sticky; a claim re-entering windowOpened clears it first.
+    /// INERT, kept for ABI: told an engine's cross-screen defer gate that the
+    /// claim round declined. The defer gates are gone (an engine adopts every
+    /// window that opens on its screen), nothing calls this and the in-tree
+    /// overrides ignore it.
     virtual void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
     {
         Q_UNUSED(windowId)
@@ -158,10 +156,10 @@ public:
     /// empty when the engine does not hold it or holds it only in a
     /// background context.
     ///
-    /// This exists for the adaptor's post-reclaim ownership check: after a
-    /// cross-screen reclaim, the effect's already-queued arrival announce
-    /// still carries the ARRIVAL screen, and dispatching it would migrate
-    /// the window straight back. isWindowTracked cannot serve — its contract
+    /// This exists for the adaptor's post-claim ownership check: after a
+    /// claim onto another virtual screen, the effect's already-queued arrival
+    /// announce still carries the ARRIVAL screen, and dispatching it would
+    /// migrate the window straight back. isWindowTracked cannot serve — its contract
     /// is PER-ENGINE: ScrollEngine answers from the raw reverse-map key,
     /// which a refused adoption can leave dangling, while SnapEngine and
     /// AutotileEngine verify membership as well (a phantom key answers
@@ -169,13 +167,13 @@ public:
     /// needed the stricter form). Callers wanting one uniform answer across
     /// engines cannot get it from that predicate. isWindowManaged/isWindowTiled
     /// cannot serve either — both exclude engine-floating windows, which a
-    /// reclaim can legitimately produce.
+    /// claim can legitimately produce.
     ///
     /// CURRENT-context only, and that restriction is what keeps the check
-    /// from suppressing repair. A reclaim's adoption always keys by the home
-    /// screen's current context, so a fresh reclaim is always visible here;
+    /// from suppressing repair. A claim's adoption always keys by the home
+    /// screen's current context, so a fresh claim is always visible here;
     /// a hold in a BACKGROUND context (a mode flip preserves other-desktop
-    /// states and their keys) is never a fresh reclaim, and the announce
+    /// states and their keys) is never a fresh claim, and the announce
     /// that would heal such a stale hold — the engines' own cross-screen
     /// migration in windowOpened — must not be refused. A stale hold in the
     /// CURRENT context is still indistinguishable from a fresh one here and
@@ -224,7 +222,7 @@ public:
     /// Bracket a BURST of windowOpened calls delivered together (the
     /// adaptor's three dispatch loops: windowsOpenedBatch, the deferred-open
     /// flush, and the parked-open replay — daemon bring-up re-announce and
-    /// mode flips; a cross-screen reclaim's re-entry inherits the loop's
+    /// mode flips; a reopen claim's re-entry inherits the loop's
     /// bracket, while the snap facade's is deliberately UNBRACKETED since each
     /// resolveWindowRestore is its own D-Bus message). An engine that applies
     /// geometry per arrival may defer those applies until endArrivalBurst so

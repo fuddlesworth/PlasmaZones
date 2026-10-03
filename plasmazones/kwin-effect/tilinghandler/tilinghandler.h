@@ -1469,16 +1469,7 @@ private:
      * overlays) are skipped entirely — KWin's InternalWindow::minSize()
      * segfaults when the backing QWindow is null (discussion #511).
      */
-    // Public because the SNAP handler needs the same value: a cross-screen
-    // reclaim driven off resolveWindowRestore adopts the window into a
-    // tiling engine, which evaluates its oversized/float verdict once from
-    // the declared minimum — so both channels must report the same number
-    // from the same reader. Stateless static; no TilingHandler instance is
-    // needed or implied.
-public:
     static QSize declaredMinSize(KWin::EffectWindow* w);
-
-private:
     void reportMinSizeIfChanged(const QString& windowId, const QSize& declared); ///< see framecentering.cpp
 
     // ═══════════════════════════════════════════════════════════════════

@@ -154,6 +154,12 @@ add_test(NAME test_snap_engine_restore COMMAND test_snap_engine_restore)
 add_executable(test_snap_restore_layout_context core/snap/test_snap_restore_layout_context.cpp helpers/SnapEngineTestFixture.h)
 target_link_libraries(test_snap_restore_layout_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_restore_layout_context COMMAND test_snap_restore_layout_context)
+# The reopen contract on the snap engine: a window is restored only on the
+# screen it opens on, and a window that left its recorded screen is released.
+add_executable(test_snap_engine_reopen_contract core/snap/test_snap_engine_reopen_contract.cpp
+               helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_engine_reopen_contract PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_engine_reopen_contract COMMAND test_snap_engine_reopen_contract)
 # Free-size restore on the float terminals (#1106). Its own target because
 # test_snap_engine_restore sits inside the 1150-line grace band. Needs the
 # FakePhysicalScreenSource: the screen-containment gate and the size clamp only
@@ -1382,6 +1388,17 @@ target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/p
 target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                                                       PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_wta_capture_guards COMMAND test_wta_capture_guards)
+
+# The reopen contract through TilingAdaptor's open dispatch: a window is placed
+# where it announces, never pulled back to its own record's screen. Same
+# FakePhysicalScreenSource compile-in and scroll-engine link as the capture
+# guards, which it mirrors.
+add_executable(test_reopen_same_screen dbus/test_reopen_same_screen.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_reopen_same_screen PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_reopen_same_screen PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                      PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_reopen_same_screen COMMAND test_reopen_same_screen)
 
 # WindowTrackingAdaptor windowScreenChanged tests — the stored-screen
 # comparison that keeps or drops a snap when the compositor reports a window

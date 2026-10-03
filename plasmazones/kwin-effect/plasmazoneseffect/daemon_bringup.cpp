@@ -449,7 +449,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             // run on the serviceRegistered edge and refills async, so no screen
             // is scrolling here and the plain call would list every
             // own-fullscreen strip tile as dead, dropping the engine's hold
-            // (and its reclaim credit and frame shadow) before the exit could
+            // (and its frame shadow) before the exit could
             // return it.
             if (w && !w->isDeleted() && shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/w->isFullScreen())) {
                 aliveWindowIds.append(getWindowId(w));
@@ -702,9 +702,8 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                     // DaemonRestartSweep: this sweep re-resolves windows that
                     // are ALREADY open and on screen, exactly like the
                     // pending-restores sweep. It restores zone geometry and
-                    // stacking; it must not drive the cross-screen tile
-                    // reclaim and re-home the monitors of every window the
-                    // user is looking at because the daemon restarted.
+                    // stacking, and a window that left its recorded screen
+                    // while the daemon was down stays where the user put it.
                     PhosphorEngine::RestoreReason::DaemonRestartSweep);
             }
         });

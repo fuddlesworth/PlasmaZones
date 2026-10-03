@@ -531,7 +531,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             // DELIBERATE SCOPE NOTE: of the injections the scroll engine
             // takes, THIS seam owns three — the float predicate, the
             // open-params resolver, and the float-position restore predicate.
-            // The engine also takes setSnappingModeResolver and
+            // The engine also takes setScrollingModeResolver and
             // setContextGapProvider, but those are wired (and cleared) by the
             // daemon composition root in init_engines.cpp / lifecycle.cpp
             // because they close over daemon-owned state, not the adaptor.

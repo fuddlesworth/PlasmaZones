@@ -95,15 +95,15 @@ inline WindowKind clampWindowKindFromWire(int wire)
 /// Why a snap restore is being resolved. Replaces the `isOpenPath` bool the
 /// Snap.resolveWindowRestore wire used to carry.
 ///
-/// The bool conflated FIVE drivers into "open / not open". The daemon-side gate
-/// that reads it is the cross-screen tile reclaim, which genuinely wants "is
-/// this an open", so it is `== Open` and nothing changed for it. What the bool
-/// could NOT express is the DesktopArrival re-drive. That is the continuation of
-/// an open whose window a RouteToDesktop rule sent to another desktop, so the
-/// effect parked it and re-drives once the desktop is shown. It is not a user
-/// action and not an open of its own: it must be eligible for the reclaim, which
-/// the bool permanently denied it, while retiring no reclaim credit, since the
-/// open pass that preceded it already spent this open's one credit.
+/// The bool conflated FIVE drivers into "open / not open". The daemon gates on
+/// it: the open claim and the appId FIFO serve a genuine Open (the two sweeps
+/// get the FIFO only for a window no engine ever captured), and every other
+/// reason is a re-entry of the window's own record. What the bool could NOT
+/// express is the DesktopArrival re-drive: the continuation of an open whose
+/// window a RouteToDesktop rule sent to another desktop, so the effect parked
+/// it and re-drives once the desktop is shown. It is not a user action and
+/// not an open of its own, so it never borrows a sibling's record, but it
+/// does run the screen routing a parked open still owes.
 ///
 /// A third gate reads it on the EFFECT side: the open-path setFrameGeometry
 /// shadow seed, which is what lets the daemon translate a bare RouteToScreen for
@@ -159,13 +159,11 @@ struct SnapResult
     QString zoneId;
     QStringList zoneIds;
     QString screenId;
-    /// Set (with shouldSnap false) when snap's resolve stood down because the
-    /// record homes the window TILED on another engine's screen — the signal
-    /// for the SnapAdaptor to offer the window to the tiling engines'
-    /// claimCrossScreenReopen, and for nothing else. Distinguished from a
-    /// plain no-snap so the reclaim runs ONLY on this verdict: an exclusion
-    /// refusal, a disabled context, or an ordinary no-match must not hand
-    /// the window to a reclaim the user's rules or gates already vetoed.
+    /// INERT, kept for ABI layout: snap's resolve once set it when it stood
+    /// down for a record that homed the window TILED on another engine's
+    /// screen, so the adaptor would offer the window to that engine's
+    /// cross-screen reclaim. The reopen contract removed both halves; nothing
+    /// sets or reads it now, and it stays false.
     bool deferredToTilingEngine = false;
     /// Target virtual desktop the snap should be committed in (1-based). 0 means
     /// "the window's current desktop" — the historical behaviour. Set non-zero only

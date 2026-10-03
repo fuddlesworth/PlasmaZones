@@ -655,9 +655,6 @@ void Daemon::stop()
         // closure null-checks the router, but clearing it here keeps the
         // teardown grep-discoverable like every other late-bound borrow.
         concreteSnap->setLiveModeResolver({});
-        // Same contract for the tile-defer liveness resolver, which captures
-        // QPointers to both tiling engines.
-        concreteSnap->setTilingEngineLiveResolver({});
         // The window-registry borrow belongs here too. Member order means the
         // registry outlives the engines, so nothing can deref it in the
         // teardown gap; this is the grep-discoverable contract, and it matches
@@ -695,7 +692,6 @@ void Daemon::stop()
     // setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
-        concreteAutotile->setScrollingModeResolver({});
         // The cross-surface resolver borrow all three engines took (enginefactory.cpp).
         concreteAutotile->setCrossSurfaceResolver(nullptr);
         concreteAutotile->setPersistenceDelegate({}, {});
@@ -704,20 +700,9 @@ void Daemon::stop()
     // (init_engines.cpp) under the same clear-before-destroy contract.
     if (auto* concreteScroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
         concreteScroll->setContextGapProvider({});
-        concreteScroll->setSnappingModeResolver({});
         concreteScroll->setScrollingModeResolver({});
-        concreteScroll->setAutotileModeResolver({});
         concreteScroll->setCrossSurfaceResolver(nullptr);
         concreteScroll->setPersistenceDelegate({}, {});
-    }
-
-    // Sever the snap adaptor's cross-screen reclaim hook BEFORE the engines
-    // it captures raw pointers to are destroyed — same clear-before-destroy
-    // contract as the engine closures above. (The adaptor itself is deleted
-    // in initCoreAdaptors' preamble on a re-cycle, but stop() must not leave
-    // a hook that could dangle if a late D-Bus call raced teardown.)
-    if (m_snapAdaptor) {
-        m_snapAdaptor->setCrossScreenTileReclaim({});
     }
 
     // Everything ABOVE this gate is init/ctor-origin teardown that must run on

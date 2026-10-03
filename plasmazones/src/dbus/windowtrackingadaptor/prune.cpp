@@ -67,18 +67,14 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     for (const QString& shadowId : shadowIds) {
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(shadowId))) {
             captureWindowPlacement(shadowId);
-            // The second close funnel, and it needs windowClosed's credit
-            // revoke for the same reason it needs the capture above: this is
-            // the backstop for a window that died with no close signal, and
-            // without the revoke its record keeps a cross-screen reclaim
-            // credit that homes every later same-app window on the dead
-            // window's monitor for the rest of the session (#1017). AFTER the
-            // capture, matching windowClosed's ordering. graceEligible=false:
-            // the death happened at some unobserved earlier moment, so dating
-            // it "now" would grant a shutdown grace it never earned.
-            m_service->placementStore().markInstanceClosed(shadowId, /*graceEligible=*/false);
         }
     }
+    // The open claims of windows that died with no close signal go with them,
+    // or each would hold the record it took at open away from every later
+    // same-app open until eviction. Swept against the alive set rather than
+    // the shadow keys above, so a claimer that never had a frame shadow is
+    // reached too.
+    m_service->placementStore().releaseOpenClaimsExcept(aliveInstances);
     int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine || m_scrollEngine) {
         // The engines key every internal map (m_states reverse maps,

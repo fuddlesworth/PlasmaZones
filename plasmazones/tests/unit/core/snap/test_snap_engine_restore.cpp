@@ -462,19 +462,17 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // resolveWindowRestore — cross-screen ownership gate (multi-monitor login)
+    // resolveWindowRestore — the reopen contract (multi-monitor login)
     //
-    // A window snapped on a SNAP monitor can be reopened by KWin's session
-    // restore on a DIFFERENT monitor that happens to be in autotile mode. The
-    // opening-screen ownership gate must NOT blindly defer such a window to
-    // autotile: its snapped record's RECORDED screen is in snapping mode, so the
-    // restore migrates cross-screen back to that monitor (mirrors main, which
-    // gated the defer on the saved screen). Conversely, a snapped record whose
-    // OWN recorded screen is now autotile-owned must still defer (and must not be
-    // consumed), leaving the record for the autotile engine.
+    // A window is restored only on the output it opens on. A window snapped on
+    // a SNAP monitor that KWin's session restore reopens on an AUTOTILE monitor
+    // belongs to the autotile engine there: snap defers on the opening screen's
+    // mode and never pulls it back. Conversely, a window opening on a snap
+    // monitor is snap's, whatever another output's tiling engine remembers for
+    // the app: snap neither defers it nor consumes that record.
     // =========================================================================
 
-    void testResolveWindowRestore_crossScreenSnap_doesNotDeferOnAutotileOpeningScreen()
+    void testResolveWindowRestore_crossScreenSnap_defersOnAutotileOpeningScreen()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
@@ -500,23 +498,15 @@ private Q_SLOTS:
         m_wts->placementStore().record(rec);
 
         // The session reopens the window (new uuid) on the AUTOTILE monitor DP-2.
-        // The opening-screen ownership gate must NOT defer — the snapped record's
-        // recorded screen (DP-1) is in snapping mode, so the restore migrates
-        // cross-screen. (Geometry can't resolve in this guiless fixture, so we
-        // assert via the absence of the defer log rather than result.shouldSnap.)
         PhosphorEngine::SnapResult result;
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-2"), &result);
 
-        const QString joinedCross = lines.join(QLatin1Char('\n'));
-        QVERIFY2(captureIsNonEmpty(lines),
-                 "snap-engine log capture produced nothing — the absence assertions below would pass vacuously");
-        QVERIFY2(!joinedCross.contains(QStringLiteral("defers to the owning engine")),
-                 "a pending cross-screen snap restore must NOT be deferred by the opening-screen ownership gate");
-        // resolveWindowRestore has TWO defer branches now; this test's whole
-        // point is that neither may swallow this window, so assert both.
-        QVERIFY2(!joinedCross.contains(QStringLiteral("deferring to its recorded engine")),
-                 "nor may the cross-screen TILE defer claim a snapped record");
+        QVERIFY2(!result.shouldSnap, "a window opening on an autotile screen is never snapped back to another one");
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("defers to the owning engine")),
+                 "the opening-screen gate must defer to autotile");
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "the snapped record stays for an instance that opens on DP-1");
         m_wts->setSnapState(nullptr);
     }
 
@@ -543,14 +533,13 @@ private Q_SLOTS:
         rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         m_wts->placementStore().record(rec);
 
-        // Reopen on DP-2. No cross-screen restore is pending (the recorded screen
-        // is autotile), so the gate must defer AND must not consume the record —
+        // Reopen on DP-2: the gate must defer AND must not consume the record —
         // autotile still needs it.
         PhosphorEngine::SnapResult result;
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-2"), &result);
 
-        QVERIFY2(!result.shouldSnap, "a window on an autotile screen with no cross-screen snap restore must not snap");
+        QVERIFY2(!result.shouldSnap, "a window on an autotile screen must not snap");
         QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("defers to the owning engine")),
                  "the opening-screen ownership gate must defer to autotile");
         QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
@@ -558,19 +547,31 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
-    void testResolveWindowRestore_crossScreenScrollingTiledRecord_defersOnSnapScreen()
+    // A record that tiles the app on ANOTHER output, in either tiling engine,
+    // does not stop snap from owning a window that opens on a snap monitor.
+    void testResolveWindowRestore_tiledRecordOnAnotherOutput_snapKeepsTheWindow_data()
     {
+        QTest::addColumn<int>("mode");
+        QTest::addColumn<QString>("engineId");
+        QTest::newRow("scrolling") << static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)
+                                   << QString(PhosphorEngine::WindowPlacement::scrollingEngineId());
+        QTest::newRow("autotile") << static_cast<int>(PhosphorZones::AssignmentEntry::Autotile)
+                                  << QString(PhosphorEngine::WindowPlacement::autotileEngineId());
+    }
+
+    void testResolveWindowRestore_tiledRecordOnAnotherOutput_snapKeepsTheWindow()
+    {
+        QFETCH(int, mode);
+        QFETCH(QString, engineId);
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
-        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
 
-        // DP-2 is a scrolling-mode screen; DP-1 stays snapping (the default).
-        PhosphorZones::AssignmentEntry scrolling;
-        scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
-        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
+        PhosphorZones::AssignmentEntry tiling;
+        tiling.mode = static_cast<PhosphorZones::AssignmentEntry::Mode>(mode);
+        tiling.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), tiling);
 
-        // A window recorded TILED in DP-2's strip last session.
         PhosphorEngine::WindowPlacement rec;
         rec.windowId = QStringLiteral("app|orig");
         rec.appId = QStringLiteral("app");
@@ -578,116 +579,20 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
         slot.order = 0;
-        rec.engines.insert(PhosphorEngine::WindowPlacement::scrollingEngineId(), slot);
+        rec.engines.insert(engineId, slot);
         m_wts->placementStore().record(rec);
 
         // KWin's session restore drops the fresh-uuid window on the SNAP
-        // monitor DP-1 (the login-restore wrong-output bug). Snap must defer
-        // entirely — no auto-snap, no floating default, record untouched —
-        // so the adaptor's reclaim hook can hand the window back to the
-        // scroll engine, which pulls it home to DP-2.
+        // monitor DP-1. It stays there, and snap places it.
         PhosphorEngine::SnapResult result;
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
-        const QString joined = lines.join(QLatin1Char('\n'));
 
-        QVERIFY2(captureIsNonEmpty(lines),
-                 "snap-engine log capture produced nothing — the absence assertions below would pass vacuously");
-        QVERIFY2(!result.shouldSnap, "a pending cross-screen tile restore must never be snapped here");
-        QVERIFY2(result.deferredToTilingEngine,
-                 "the verdict must be reported as a tile-defer, not a bare no-snap: the adaptor gates the reclaim "
-                 "on it, and an exclusion or disabled-context refusal must not be mistaken for one");
-        QVERIFY2(joined.contains(QStringLiteral("deferring to its recorded engine")),
-                 "the tile-defer gate must fire for a scrolling-tiled record homed on a scrolling screen");
-        QVERIFY2(!joined.contains(QStringLiteral("defaulting to floated")),
-                 "the defer must run BEFORE the no-match floating default — float state written here would "
-                 "fight the scroll engine's re-tile of the same window");
-        // The behavioural half of that claim: no float announcement either.
-        // The log assertion alone survives a message rewording; this pins the
-        // contract the daemon and the effect actually observe.
-        QCOMPARE(floatSpy.count(), 0);
+        QVERIFY2(captureIsNonEmpty(lines), "snap-engine log capture produced nothing");
+        QVERIFY2(!result.shouldSnap, "another output's tiled record is never snapped here");
+        QVERIFY2(!result.deferredToTilingEngine, "nothing defers a snap-screen open to another output's engine");
         QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
-                 "deferring must not consume the record — the scroll engine's reclaim still needs it");
-        m_wts->setSnapState(nullptr);
-    }
-
-    void testResolveWindowRestore_crossScreenAutotileTiledRecord_defersOnSnapScreen()
-    {
-        // The gate's OTHER term. Deleting the autotile half left every test
-        // green, yet an autotile-tiled record arriving on a snap screen is
-        // the same reported bug shape as the scrolling one.
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
-        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
-
-        PhosphorZones::AssignmentEntry autotile;
-        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
-        autotile.tilingAlgorithm = QStringLiteral("dwindle");
-        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
-
-        PhosphorEngine::WindowPlacement rec;
-        rec.windowId = QStringLiteral("app|orig");
-        rec.appId = QStringLiteral("app");
-        rec.screenId = QStringLiteral("DP-2");
-        PhosphorEngine::EngineSlot slot;
-        slot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
-        slot.order = 0;
-        rec.engines.insert(PhosphorEngine::WindowPlacement::autotileEngineId(), slot);
-        m_wts->placementStore().record(rec);
-
-        PhosphorEngine::SnapResult result;
-        const QStringList lines =
-            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
-
-        QVERIFY2(captureIsNonEmpty(lines),
-                 "snap-engine log capture produced nothing — the absence assertions below would pass vacuously");
-        QVERIFY2(!result.shouldSnap, "an autotile-homed cross-screen tiled record must not be snapped here");
-        QVERIFY2(result.deferredToTilingEngine, "the autotile term of the tile-defer gate must fire");
-        QCOMPARE(floatSpy.count(), 0);
-        QVERIFY(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")));
-        m_wts->setSnapState(nullptr);
-    }
-
-    void testResolveWindowRestore_excludedWindow_neverDefersToTilingEngine()
-    {
-        // A gate that says "nobody should manage this" outranks one that
-        // says "someone else should". Without the exclusion check the defer
-        // fired first and handed an excluded window to a reclaim the user's
-        // rules had vetoed.
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
-        // Size-based exclusion, the same lever test_snap_engine_exclude uses:
-        // a sub-threshold full query makes isWindowExcluded true.
-        m_settings->setMinimumWindowWidth(200);
-        m_settings->setMinimumWindowHeight(150);
-        engine.setExclusionQueryProvider([](const QString&, const QString&) {
-            PhosphorRules::WindowQuery q;
-            q.width = 80;
-            q.height = 60;
-            return std::optional<PhosphorRules::WindowQuery>(q);
-        });
-
-        PhosphorZones::AssignmentEntry scrolling;
-        scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
-        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
-
-        PhosphorEngine::WindowPlacement rec;
-        rec.windowId = QStringLiteral("app|orig");
-        rec.appId = QStringLiteral("app");
-        rec.screenId = QStringLiteral("DP-2");
-        PhosphorEngine::EngineSlot slot;
-        slot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
-        slot.order = 0;
-        rec.engines.insert(PhosphorEngine::WindowPlacement::scrollingEngineId(), slot);
-        m_wts->placementStore().record(rec);
-
-        PhosphorEngine::SnapResult result;
-        captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
-
-        QVERIFY2(!result.deferredToTilingEngine, "an excluded window must not be offered to the cross-screen reclaim");
-        engine.setExclusionQueryProvider({});
+                 "the tiled record stays for an instance that opens on DP-2");
         m_wts->setSnapState(nullptr);
     }
 

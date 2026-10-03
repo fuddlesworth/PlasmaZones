@@ -392,7 +392,7 @@ QSet<QString> TilingHandler::completeDeferredWindowRoutes()
                         }
                         if (!m_managedScreens.contains(m_effect->getWindowScreenId(safeWindow.data()))) {
                             m_pendingFreshWindows.remove(windowId);
-                            // A cross-screen reclaim onto a snap screen has
+                            // A RouteToScreen move onto a snap screen has
                             // its configure still in flight (this callback
                             // runs synchronously after the apply on
                             // Wayland): the settle hook releases it once the

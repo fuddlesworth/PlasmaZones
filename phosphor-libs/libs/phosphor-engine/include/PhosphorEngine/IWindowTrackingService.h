@@ -226,9 +226,9 @@ public:
 
     /// Downgrade @p engineId's slot on @p windowId's record to
     /// WindowPlacement::stateReleased() and mark the placements dirty. Called
-    /// by an engine that KNOWINGLY gives a window up (cross-mode handoff), so
-    /// its slot stops advertising a home the cross-screen reclaim would pull
-    /// the window back to. Default no-op: an embedder without persistence has
+    /// by an engine that KNOWINGLY gives a window up (cross-mode handoff), and
+    /// for a window that left its screen, because a stale managed slot would
+    /// read as a restorable home. Default no-op: an embedder without persistence has
     /// nothing to downgrade. NOT for ordinary close — a window that closed
     /// tiled keeps its slot, which is what login restore reads.
     virtual void releaseEngineSlot(const QString& windowId, const QString& engineId)

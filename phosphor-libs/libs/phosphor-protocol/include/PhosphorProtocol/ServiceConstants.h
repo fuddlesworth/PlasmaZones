@@ -391,7 +391,10 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       cannot express. The min sizes exist because a reclaim ADOPTS the window into
 //       a strip or layout and the adopting engine evaluates its oversized /
 //       float verdict exactly once from them, so passing 0,0 left an oversized
-//       window tiled for the session.
+//       window tiled for the session. The reclaim was later removed (a window
+//       is restored only on the output it opens on); restoreReason still gates
+//       sibling borrowing and placement rules, and the min sizes are accepted
+//       and ignored.
 //
 //       Why the handshake and not signature matching. Most of the above widens
 //       a signature, and Qt matches signal-hook signatures before demarshalling,

@@ -10,6 +10,7 @@
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutUtils.h>
+#include <PhosphorScreens/Manager.h>
 #include "snapenginelogging.h"
 
 #include <optional>
@@ -106,20 +107,23 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 // The caller (windowOpened or WTA D-Bus facade) handles zone assignment and
 // geometry application.
 //
-// Screen mode semantics:
-//   - SNAPPED placement-store restore may cross-screen migrate: a snapped record's
-//     own screenId can route a window to a different screen, and the store's take()
-//     accept predicate / snapped-branch screen check keep a non-snap-mode screen
-//     from being snapped onto (the tiling engine on that screen will own it). SnapToZone
-//     placement rules (chain level 1) resolve on the window's CURRENT screen — a
-//     screen constraint is expressed as a ScreenId match on the rule itself, not a
-//     cross-screen move. FLOATED records are screen-local — a float-back is restored
-//     only when the window reopens on its recorded screen, never moved across
-//     monitors (the accept predicate gates floated records on the opening screen).
-//   - The empty-zone (level 2) and last-zone (level 3) fallbacks inherently use
-//     the caller screen as the target, so they are ONLY valid when the caller's
-//     screen is in snap mode. On a tiling engine's screen they're short-circuited —
-//     stale snap zones on a now-tiled screen must not bleed into placement.
+// Screen mode semantics (the reopen contract: restores happen where a window
+// opens):
+//   - A window opening on a screen another engine runs is that engine's; snap
+//     restores nothing there.
+//   - The window's OWN record (same instance) restores only on the virtual
+//     screen it names. Recorded on any other screen, the window "left its
+//     screen": nothing is restored, every engine slot of the record is
+//     released, and no sibling record stands in.
+//   - A FIFO record (another instance of the app) restores only on the opening
+//     KWin output: on this very screen, or a SNAPPED record on another virtual
+//     screen of the same output that also runs snapping. A FLOATED record is
+//     screen-local: only on the screen it names.
+//   - SnapToZone placement rules resolve on the window's CURRENT screen; a
+//     screen constraint is a ScreenId match on the rule itself.
+//   - The empty-zone (level 2) and last-zone (level 3) fallbacks target the
+//     caller screen, so they run only when it is in snap mode, and never for a
+//     window that left its screen (it takes the float default in place).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 int SnapEngine::restoreDesktopFor(const QString& windowId, const PhosphorEngine::WindowPlacement& rec,
@@ -176,119 +180,92 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
 
     using PhosphorEngine::WindowPlacement;
 
-    // A snapped record's RECORDED screen (its own screenId, or the opening screen
-    // when unscreened) is what governs whether it may snap-restore — not the screen
-    // the window happens to open on. Two DISTINCT questions share the mode lookup:
-    // the store branch's accept/prefer filter below asks only "is the recorded
-    // screen still snapping?" (same-screen restores included), while the ownership
-    // gate asks the stricter shared cross-screen predicate
-    // (PhosphorEngine::pendingCrossScreenSnapRestore) that the tiling engines'
-    // defer gates evaluate reciprocally — that one also requires the recorded
-    // screen to DIFFER from the opening one. Folding the two into one lambda is
-    // exactly the regression that broke same-screen snap restores when the
-    // cross-screen term was added. (No layout manager → permissive, matching the
-    // unit-test path.)
-    // Both mode checks ask about the LIVE activity, the one the restore keys
-    // its grant and seeds under (restoreActivity below): the window is being
-    // restored into the activity the session is in, whatever activity the
-    // record was captured under, so a record captured under A while B is
-    // live is admitted on B's mode for the context, not A's.
+    // Whether the RECORDED screen of a snapped record (its own screenId, or the
+    // opening screen when unscreened) still runs snapping, asked in the LIVE
+    // activity the restore keys its grant and seeds under (restoreActivity
+    // below), whatever activity the record was captured under. (No layout
+    // manager → permissive, matching the unit-test path.)
+    const auto screenIsSnapping = [&](const QString& rec, int desktop) {
+        return !m_layoutManager
+            || m_layoutManager->modeForScreen(rec, desktop, currentActivity())
+            == PhosphorZones::AssignmentEntry::Mode::Snapping;
+    };
     const auto recordedSnapScreenIsSnapping = [&](const WindowPlacement& p) {
         if (p.slotFor(WindowPlacement::snapEngineId()).state != WindowPlacement::stateSnapped()) {
             return false;
         }
-        const QString rec = p.screenId.isEmpty() ? screenId : p.screenId;
-        return !m_layoutManager
-            || m_layoutManager->modeForScreen(rec, p.virtualDesktop, currentActivity())
-            == PhosphorZones::AssignmentEntry::Mode::Snapping;
+        return screenIsSnapping(p.screenId.isEmpty() ? screenId : p.screenId, p.virtualDesktop);
     };
-    const auto pendingCrossScreenRestore = [&](const WindowPlacement& p) {
-        return PhosphorEngine::pendingCrossScreenSnapRestore(
-            p, screenId, [&](const QString& rec, int desktop, const QString&) {
-                return !m_layoutManager
-                    || m_layoutManager->modeForScreen(rec, desktop, currentActivity())
-                    == PhosphorZones::AssignmentEntry::Mode::Snapping;
-            });
+    // A snapped record this open may restore: on the opening screen (or
+    // unscreened) when that screen snaps, else only a FIFO record on another
+    // virtual screen of the SAME output that snaps too (the reopen contract;
+    // the shared predicate refuses the window's own record and other outputs).
+    // A re-entry never re-snaps a window snap already tracks as floating.
+    const auto snappedRecordRestorable = [&](const WindowPlacement& p) {
+        if (reason != PhosphorEngine::RestoreReason::Open && isFloating(windowId)) {
+            return false;
+        }
+        if (p.screenId.isEmpty() || p.screenId == screenId) {
+            return recordedSnapScreenIsSnapping(p);
+        }
+        return PhosphorEngine::pendingCrossScreenSnapRestore(p, windowId, screenId,
+                                                             [&](const QString& rec, int desktop, const QString&) {
+                                                                 return screenIsSnapping(rec, desktop);
+                                                             });
     };
 
-    // Screen-mode ownership gate (BEFORE the store branch). A window opening on a
-    // screen in any non-snap mode (autotile or scrolling) is normally owned by that
-    // tiling engine — snap must not restore a stale record onto it (which would both
-    // wrongly snap a tiled window AND overwrite its tiling record via the store's
-    // mutual-exclusivity invariant, defeating that engine's own float restore in
-    // insertWindow()).
-    // EXCEPTION: a window may carry a SNAPPED record whose RECORDED screen is itself
-    // in snapping mode — i.e. it was snapped on another (snap) monitor and KWin
-    // merely opened the session window on this tiled screen. That window must
-    // still restore cross-screen to its snap monitor (mirrors main, which gated the
-    // defer on the SAVED screen, not the opening one). So defer ONLY when no such
-    // cross-screen snap restore is pending; the store branch below then consumes the
-    // snapped record and restores it to its recorded screen. A same-screen snapped
-    // record (recorded screen == this tiled screen) is never cross-screen — the
-    // predicate bails on screen equality itself, WHATEVER the record's (desktop,
-    // activity) context resolves to — so the peek misses and we correctly defer,
-    // leaving the record for the owning engine.
-    // True when the gate below was bypassed: the opening screen belongs to a
-    // tiling engine and we are continuing ONLY because this window carries a
-    // cross-screen snapped record. Everything downstream must then stay scoped
-    // to that record — see the two uses below.
-    bool deferredByMode = false;
+    // Screen-mode gate (BEFORE the store branch). A window opening on a screen
+    // in any non-snap mode (autotile or scrolling) is that engine's: snap must
+    // not restore a record onto it (which would both wrongly snap a tiled
+    // window AND overwrite its tiling record via the store's mutual-exclusivity
+    // invariant). Under the reopen contract there is no exception for a
+    // snapped record saved on another monitor: the window stays where it opens.
     if (!isSnapModeScreen(screenId)) {
-        bool crossScreenSnapRestorePending = false;
-        if (m_windowTracker) {
-            const QString appId = m_windowTracker->currentAppIdFor(windowId);
-            // excludeLiveSiblings: this peek asks whether the take() below
-            // will find a cross-screen record, and take() refuses a record
-            // bound to a still-open sibling. Without the same exclusion here
-            // a second instance's open read "restore pending" off its live
-            // sibling's record, took the bypass, and then consumed nothing.
-            crossScreenSnapRestorePending = m_windowTracker->placementStore()
-                                                .peek(windowId, appId, pendingCrossScreenRestore,
-                                                      /*excludeLiveSiblings=*/true)
-                                                .has_value();
-        }
-        if (!crossScreenSnapRestorePending) {
-            qCDebug(PhosphorSnapEngine::lcSnapEngine)
-                << "resolveWindowRestore:" << windowId << "opens on non-snap-mode screen" << screenId
-                << "— snap defers to the owning engine";
-            return SnapResult::noSnap();
-        }
-        deferredByMode = true;
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore:" << windowId << "opens on non-snap-mode screen" << screenId
-            << "but carries a cross-screen snap restore — not deferring";
+            << "— snap defers to the owning engine";
+        return SnapResult::noSnap();
     }
 
+    // The reopen contract on the window's OWN record: recorded on another screen
+    // than the one it opens on (with a live slot), the window LEFT its screen
+    // while nothing tracked it (a move while the daemon was down, a restart
+    // after a move). It is not restored, every engine slot of the record is
+    // released so no engine reads it as a home later, and no sibling record
+    // stands in. A window snap still tracks is a re-resolve, not a leave. A
+    // record on an output that is not present now stays parked (the wake-return
+    // park reads it when the output comes back).
+    const std::optional<WindowPlacement> own =
+        m_windowTracker ? m_windowTracker->placementStore().peekExact(windowId) : std::nullopt;
+    const PhosphorScreens::ScreenManager* screens = m_windowTracker ? m_windowTracker->screenManager() : nullptr;
+    const bool leftScreen = own && PhosphorEngine::ownRecordLeftScreen(*own, screenId) && !isWindowTracked(windowId)
+        && (!screens || screens->physicalScreenFor(own->screenId).isValid());
+
     // Highest-priority placement: a matched SnapToZone rule. An explicit "this app
-    // snaps to these zones" directive outranks ANY remembered placement — a floated
-    // position, a prior snap to a different zone, or a cross-screen tiled
-    // record (the tile-defer gate below stands down when the rule wins, or the
-    // documented precedence would invert). Resolved up front (after the
-    // screen-mode ownership gate, so tiled screens still own their windows) but
-    // APPLIED below, AFTER the placement store has re-bound the window's record: the
-    // rule overrides WHERE the window goes, while the store still preserves the
+    // snaps to these zones" directive outranks ANY remembered placement, a floated
+    // position or a prior snap to a different zone. Resolved up front (after the
+    // screen-mode gate, so tiled screens still own their windows) but APPLIED
+    // below, AFTER the placement store has re-bound the window's record: the rule
+    // overrides WHERE the window goes, while the store still preserves the
     // window's float-back geometry so a later Meta+F returns it to its remembered
-    // free position rather than the zone rect. When the rule's own target context is
-    // disabled, it does NOT win and we fall through to the normal store restore.
-    // Suppressed under the cross-screen bypass: we are only here to land ONE
-    // remembered snapped record on its own (snapping) screen. A placement rule
-    // firing now would resolve against the tiled opening screen and snap the
-    // window there, overwriting the owning engine's slot. calculateSnapToPlacementRule
-    // validates its target's mode independently, so this is belt-and-braces for
-    // the case where the rule's target IS a snapping screen but the window is
-    // not the one the bypass was granted for.
+    // free position rather than the zone rect. When the rule's own target context
+    // is disabled, it does NOT win and we fall through to the normal store
+    // restore. It stands down for a window that left its screen unless this is
+    // its genuine open: after a restart, a re-enable or a sweep, a window the
+    // user moved stays where they put it, rule or not.
     // Resolved ONCE: the same directive feeds the SnapToZone placement and
     // the desktop the float terminals pin their residence to. The adaptor
     // emitted the RouteToDesktop move before this resolve and the registry
     // is stamped only once the compositor has moved the window, so the
-    // screen's current desktop is the one the window is LEAVING; the DesktopArrival
-    // re-drive returns at the already-floating guard and never re-homes a
-    // residence, so the open pass has to get it right.
-    const PlacementDirective directive = (!deferredByMode && m_placementZonesResolver)
+    // screen's current desktop is the one the window is LEAVING. A later
+    // DesktopArrival re-drive re-homes a floating residence only from the
+    // window's own floated record, so the open pass has to get it right.
+    const bool ruleMayApply = !leftScreen || reason == PhosphorEngine::RestoreReason::Open;
+    const PlacementDirective directive = (ruleMayApply && m_placementZonesResolver)
         ? m_placementZonesResolver(windowId, screenId)
         : PlacementDirective{};
     const SnapResult placementRuleResult =
-        deferredByMode ? SnapResult::noSnap() : calculateSnapToPlacementRule(windowId, screenId, sticky, directive);
+        ruleMayApply ? calculateSnapToPlacementRule(windowId, screenId, sticky, directive) : SnapResult::noSnap();
     const int openDesktop =
         directive.targetDesktop >= 1 ? directive.targetDesktop : currentVirtualDesktopForScreen(screenId);
     // A matched RouteToDesktop can send the window to a desktop whose context
@@ -314,60 +291,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                                             ? placementRuleResult.virtualDesktop
                                             : currentVirtualDesktopForScreen(placementRuleResult.screenId)));
 
-    // Reciprocal tiling-engine defer, the snap side of the N-way
-    // pendingCrossScreenManagedRestore agreement: a window that opens here but
-    // is recorded TILED on another screen still in that engine's mode belongs
-    // to that engine's cross-screen reclaim (claimCrossScreenReopen, run by
-    // the SnapAdaptor exactly when this verdict is returned, and by the
-    // tiling dispatch). Snap must neither auto-snap it into a zone here nor
-    // default it to floating below — float state written for a window the
-    // tiling engine is about to re-tile on its home screen leaves the two
-    // engines disagreeing about the same window. Stands down for: the
-    // cross-screen snap bypass (mode exclusivity means the recorded home
-    // cannot satisfy both verdicts); a WINNING placement rule (an explicit
-    // directive outranks the remembered tiled home — the block above
-    // documents that precedence); and an EXCLUDED window (a gate that says
-    // "nobody should manage this" outranks a gate that says "someone else
-    // should" — without the check, the defer handed excluded windows to a
-    // reclaim the user's rules vetoed). peekForReclaim, not peek, for exact
-    // agreement with what the tiling claims will actually match: a live
-    // sibling's record that no claim would act on must not make snap defer.
-    if (!deferredByMode && !placementRuleWins && m_layoutManager && m_windowTracker && !isWindowExcluded(windowId)) {
-        const QString appId = m_windowTracker->currentAppIdFor(windowId);
-        if (PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
-            // Mode AND engine liveness: the claiming side requires the
-            // recorded home in its own live screen set, so a defer keyed on
-            // mode alone stands down for a window the tiling engine then
-            // declines — the both-skipped strand. The liveness half is
-            // daemon-injected because only the daemon sees the engines'
-            // live sets; unset (tests) degrades to mode alone.
-            const auto tileModeIs = [&](PhosphorZones::AssignmentEntry::Mode mode) {
-                return [this, mode](const QString& rec, int desktop, const QString& activity) {
-                    if (m_layoutManager->modeForScreen(rec, desktop, activity) != mode) {
-                        return false;
-                    }
-                    return !m_tilingEngineLiveResolver || m_tilingEngineLiveResolver(mode, rec);
-                };
-            };
-            const auto tileCrossRestorePending = [&](const WindowPlacement& p) {
-                return PhosphorEngine::pendingCrossScreenManagedRestore(
-                           p, WindowPlacement::autotileEngineId(), WindowPlacement::stateTiled(), screenId,
-                           tileModeIs(PhosphorZones::AssignmentEntry::Mode::Autotile))
-                    || PhosphorEngine::pendingCrossScreenManagedRestore(
-                           p, WindowPlacement::scrollingEngineId(), WindowPlacement::stateTiled(), screenId,
-                           tileModeIs(PhosphorZones::AssignmentEntry::Mode::Scrolling));
-            };
-            if (m_windowTracker->placementStore()
-                    .peekForReclaim(windowId, appId, tileCrossRestorePending)
-                    .has_value()) {
-                qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                    << "resolveWindowRestore:" << windowId
-                    << "carries a cross-screen tiled record — deferring to its recorded engine";
-                SnapResult deferred = SnapResult::noSnap();
-                deferred.deferredToTilingEngine = true;
-                return deferred;
-            }
+    // The leave: release every engine slot of the window's own record (snap's
+    // and any tiling engine's), silently, so none of them reads as a home to
+    // pull the window back to later. Released slots stay as a verdict.
+    if (leftScreen) {
+        for (auto it = own->engines.constBegin(); it != own->engines.constEnd(); ++it) {
+            m_windowTracker->releaseEngineSlot(windowId, it.key());
         }
+        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "left its recorded screen"
+                                                 << own->screenId << "for" << screenId << "— not restored, released";
     }
 
     // Unified placement store — the single authoritative restore record for this
@@ -383,8 +315,19 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // records on a matching screen are handled here; autotile records are left for
     // autotile's own open path. Falls through to the legacy skip + chain when the
     // store has no record (windows persisted under the old keys before migration).
-    if (m_windowTracker) {
-        const QString appId = m_windowTracker->currentAppIdFor(windowId);
+    // A window that left its screen restores nothing (see leftScreen above).
+    if (m_windowTracker && !leftScreen) {
+        // The appId FIFO (another instance's record) serves a genuine open and,
+        // for a window whose own record no engine ever captured, the two sweeps.
+        // A captured own record is final (its slots are the window's verdict,
+        // released ones included), and DesktopArrival / Unminimize are re-entries
+        // of the window's own record only: they never borrow a sibling's.
+        const bool ownIsFinal = own && !own->engines.isEmpty();
+        const bool fifoAllowed = reason == PhosphorEngine::RestoreReason::Open
+            || ((reason == PhosphorEngine::RestoreReason::DaemonRestartSweep
+                 || reason == PhosphorEngine::RestoreReason::PendingSweep)
+                && !ownIsFinal);
+        const QString appId = fifoAllowed ? m_windowTracker->currentAppIdFor(windowId) : QString();
         // Whether a FLOATED record for THIS window may restore its recorded
         // position on open — the daemon resolves the
         // `snappingRestoreFloatedWindowsOnLogin` setting plus the per-window
@@ -403,33 +346,14 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         auto rec = m_windowTracker->placementStore().take(
             windowId, appId,
             [&](const WindowPlacement& p) {
-                // A SNAPPED record carries its own authoritative screen + zone, so
-                // it is eligible regardless of which monitor the window happens to
-                // open on. KWin can place a session window on a different output at
-                // login (e.g. a window snapped on screen A reopens on screen B); the
-                // window must still return to the screen + zone it was snapped to.
-                // This mirrors main's calculateRestoreFromSession, which keyed the
-                // restore by appId and honoured the saved screen (`savedScreen =
-                // entry.screenId ?: callerScreen`), explicitly supporting cross-screen
-                // restore migration. Gating snapped records on the OPENING screen —
-                // which the unified-store rewrite introduced — stranded such windows
-                // on the wrong monitor, unsnapped. The RECORDED screen must still be
-                // in snapping mode, though: a snapped record whose own screen is now
-                // autotile-owned must not snap-restore there (the early gate leaves it
-                // for autotile). A floated position is ALWAYS screen-local: it is
-                // eligible only when the window opens on its recorded monitor (the
-                // gate below). Float restore never MOVES a window across monitors.
-                // Under the cross-screen bypass the opening screen belongs to a
-                // tiling engine, so the ONLY record we may consume is the
-                // cross-screen snapped one that earned the bypass. Without this
-                // scope the floated branch below could accept a record recorded
-                // on this very tiled screen and write snap float state for a
-                // window the tiling engine owns.
-                if (deferredByMode) {
-                    return pendingCrossScreenRestore(p);
-                }
+                // A SNAPPED record restores only where the window opens: on this
+                // screen while it snaps, or (another instance's record only) on
+                // another virtual screen of the same output that snaps too. A
+                // record on another monitor stays for an instance that opens
+                // there; a window that opens elsewhere is left where KWin put it.
+                // A FLOATED position is screen-local (the gate below).
                 if (p.slotFor(engineId()).state == WindowPlacement::stateSnapped()) {
-                    return recordedSnapScreenIsSnapping(p);
+                    return snappedRecordRestorable(p);
                 }
                 // A contentless {floating, no geometry, no zones} residue record
                 // (left by an earlier-closed instance captured frame-less) has nothing
@@ -469,15 +393,12 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 return p.screenId.isEmpty() || p.screenId == screenId;
             },
             [&](const WindowPlacement& p) {
-                // Among an app's FIFO records, restore a snapped placement on a
-                // still-snapping screen ahead of an unsnapped (free/floating) sibling
-                // that is merely older — snapping is the stronger restore intent, and
-                // this keeps a cross-screen snapped record from losing to an older
-                // free/floating record (or being passed over so a snap-screen open
-                // consumes and destroys an autotile-owned record it cannot use).
+                // Among an app's FIFO records, restore a snapped placement this
+                // open may restore ahead of an unsnapped (free/floating) sibling
+                // that is merely older: snapping is the stronger restore intent.
                 // Contentless residue is already excluded by the accept predicate, so
                 // the second (merely-accepted) pass only ever sees real placements.
-                return recordedSnapScreenIsSnapping(p);
+                return p.slotFor(engineId()).state == WindowPlacement::stateSnapped() && snappedRecordRestorable(p);
             });
         if (rec) {
             // Re-record the restored placement bound to the LIVE windowId so the
@@ -635,20 +556,6 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // That gate refuses to auto-SNAP a window onto a context the user
                 // disabled snapping for; a floated window is not being snapped into a
                 // zone, so restoring its floating state is correct regardless.
-                // Under the cross-screen bypass this engine was granted the
-                // open for ONE snapped record on its own snapping screen. A
-                // multi-desktop record whose restore desktop names no zone
-                // falls through to here, and writing float residence on the
-                // other monitor for a window physically on a tiled screen,
-                // then sizing it against that monitor, is the desync the
-                // bypass forbids. The record is already re-bound; the tiling
-                // dispatch owns the opening screen.
-                if (deferredByMode) {
-                    qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                        << "resolveWindowRestore:" << windowId << "cross-screen record names no zone on desktop"
-                        << restoreDesktop << "— leaving the window to the opening screen's engine";
-                    return SnapResult::noSnap();
-                }
                 // Pinned to restoreDesktop: the float lives in that desktop's
                 // store, not the one the screen happens to show.
                 // Read BEFORE the float write below: this branch runs ahead of
@@ -821,15 +728,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // that restore returns before reaching here), but before the auto-snap chain —
     // so a rule-floated window never auto-snaps to a zone.
     // Mirrors the no-match default-float terminal at the end of this function.
-    //
-    // Gated on !deferredByMode for the same reason the placement rule at the
-    // top is: when the window opens on a screen a TILING engine owns, this
-    // engine must not write a snap float verdict for it. Float is per engine,
-    // and the tiling engine runs its own float predicate for that window. The
-    // non-snap-mode short-circuit further down would catch it, but it sits
-    // AFTER this terminal, so without the guard the record and the
-    // windowFloatingChanged broadcast were already written by the time it ran.
-    if (!deferredByMode && !routedIntoForeignMode && m_floatPredicate && m_floatPredicate(windowId, screenId)) {
+    if (!routedIntoForeignMode && m_floatPredicate && m_floatPredicate(windowId, screenId)) {
         // Residence pinned to the routed open desktop (see openDesktop), size
         // emit ahead of the float emit (see the header comment).
         stateForWindowOnScreen(windowId, screenId, openDesktop)->setFloatingOnScreen(windowId, screenId, openDesktop);
@@ -863,8 +762,10 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         }
     }
 
+    // A window that left its screen takes the float default below, in place:
+    // the auto-snap levels would put it into a zone the user never chose.
     // 2. Auto-assign to empty zone
-    {
+    if (!leftScreen) {
         SnapResult result = calculateSnapToEmptyZone(windowId, screenId, sticky);
         if (result.shouldSnap) {
             qCInfo(PhosphorSnapEngine::lcSnapEngine)
@@ -874,7 +775,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     }
 
     // 3. Snap to last zone (final fallback)
-    {
+    if (!leftScreen) {
         SnapResult result = calculateSnapToLastZone(windowId, screenId, sticky);
         if (result.shouldSnap) {
             qCInfo(PhosphorSnapEngine::lcSnapEngine)
@@ -892,12 +793,10 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // short-circuit returns before the empty/last-zone chain — so this is always a
     // genuine snap-mode window with no zone match.
     //
-    // This terminal carries no explicit !deferredByMode guard because the mode
-    // short-circuit above is always evaluated first (a deferredByMode verdict
-    // implies a non-null m_layoutManager). That short-circuit asks the SCREEN'S
-    // CURRENT desktop, so the routed case needs its own answer, which
-    // routedIntoForeignMode supplies: a window a RouteToDesktop sent onto a
-    // tiling-mode desktop is that engine's, and gets no snap float residence.
+    // The mode short-circuit above asks the SCREEN'S CURRENT desktop, so the
+    // routed case needs its own answer, which routedIntoForeignMode supplies: a
+    // window a RouteToDesktop sent onto a tiling-mode desktop is that engine's,
+    // and gets no snap float residence.
     if (routedIntoForeignMode) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore:" << windowId << "routed onto desktop" << openDesktop

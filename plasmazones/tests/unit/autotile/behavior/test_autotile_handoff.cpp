@@ -367,15 +367,14 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Cross-engine coordination: a window that opens on an autotile screen but
-    // carries a SNAPPED record whose recorded screen is in snapping mode is being
-    // cross-restored by snap. Autotile must NOT track or tile it (or both engines
-    // claim the same window), and must NOT consume the record (snap is the
-    // consumer). Reciprocal of SnapEngine::resolveWindowRestore's recorded-screen
-    // ownership gate.
+    // The reopen contract across engines: a window that opens on an autotile
+    // screen is autotile's, even when its app carries a SNAPPED record on a
+    // snapping monitor elsewhere. Snap never pulls it back there, so autotile
+    // tiles it, and leaves the snapped record for an instance that opens on
+    // the snap monitor.
     // =========================================================================
 
-    void testWindowOpened_defersCrossScreenSnapRestoreToSnap()
+    void testWindowOpened_snapRecordOnAnotherOutput_autotileAdopts()
     {
         // root parents the registry so it outlives the engine/wts that borrow it.
         QObject root;
@@ -414,19 +413,13 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("app|new"), autotileScreen);
         QCoreApplication::processEvents();
 
-        QVERIFY2(!engine.isWindowTracked(QStringLiteral("app|new")),
-                 "autotile must not track a window snap will cross-restore");
+        QVERIFY2(engine.isWindowTracked(QStringLiteral("app|new")),
+                 "autotile must adopt a window that opens on its screen");
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(autotileScreen);
-        QVERIFY2(!state || !state->containsWindow(QStringLiteral("app|new")),
-                 "the deferred window must not be tiled on the autotile screen");
+        QVERIFY(state);
+        QVERIFY2(state->containsWindow(QStringLiteral("app|new")), "the window is tiled where it opened");
         QVERIFY2(wts.placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
-                 "deferring must not consume the snapped record — snap is the consumer");
-
-        // Control: a window with NO cross-screen snap record IS tracked/tiled.
-        engine.windowOpened(QStringLiteral("other|1"), autotileScreen);
-        QCoreApplication::processEvents();
-        QVERIFY2(engine.isWindowTracked(QStringLiteral("other|1")),
-                 "a normal window on the autotile screen must still be tiled");
+                 "autotile must not consume the snapped record of another output");
     }
 
     void testWindowOpened_globalSnappingDisabled_tilesInsteadOfOrphaning()

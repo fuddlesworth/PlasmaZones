@@ -757,10 +757,10 @@ private:
     /// order and master assignment. Rule routing is baked into the parked
     /// entry's screenId so its side effects run once. Entries are dropped
     /// on close and on clearEngine.
-    /// A parked open carries its reclaim eligibility with it: routing is
+    /// A parked open carries its claim eligibility with it: routing is
     /// baked into the parked entry's screenId and is not re-run on retry, so
     /// without the flag a rule-routed entry took the retry path's default
-    /// and was offered to the cross-screen reclaim after all — the rule won
+    /// and was offered to the reopen claim after all — the rule won
     /// on the first dispatch and lost on the retry.
     struct ParkedOpen
     {
@@ -768,37 +768,6 @@ private:
         bool allowCrossScreenClaim = true;
     };
     QList<ParkedOpen> m_unclaimedOpens;
-    /// Instance ids of LIVE windows released via releaseWindowTracking. The
-    /// case that motivated it is the effect's cross-screen MOVE transfer
-    /// (release on the old screen, then re-announce on the new one), but the
-    /// effect calls releaseWindowTracking from every live tracking drop —
-    /// the drag-bypass revert, the float cleanup, and the desktop/activity
-    /// demotion handlers as well as the output transfer — so the one-shot
-    /// arms on all of them. That is the intended reading rather than an
-    /// over-reach: every one of those is the user (or a rule) deliberately
-    /// moving a LIVE window, and none is a session restore, so none of them
-    /// wants the next announce reclaimed back to a remembered home.
-    ///
-    /// The daemon's own desktop-membership reconcile is the one caller that
-    /// does NOT arm this, and it is the exception that shows what the
-    /// justification above rests on: every effect caller re-announces the
-    /// window in the same breath, so the excuse is consumed immediately. The
-    /// reconcile has no such pairing, and an excuse left standing is spent by
-    /// whatever announce comes next.
-    /// The re-announce looks like a first
-    /// observation to claimCrossScreenReopen, whose same-instance branch then
-    /// matches the window's own stale record (still tiled on the OLD screen —
-    /// releaseWindowTracking deliberately captures nothing) and reclaims the
-    /// window straight back, silently undoing the user's move-to-screen
-    /// shortcut / script / rule. One-shot: consumed by the window's next
-    /// dispatch, which skips the claim round so the ARRIVAL screen's engine
-    /// adopts it — exactly what a move means. A genuine session restore never
-    /// passes through releaseWindowTracking, and a daemon restart clears the
-    /// set, so the reclaim's real audiences are untouched. Entries die with
-    /// the window (windowClosed / onTrackedWindowDestroyed), are swept by
-    /// pruneStaleFloatBroadcasts for a window that produced neither, and go
-    /// wholesale at clearEngine.
-    QSet<QString> m_moveReleasedInstances;
     void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
                                       bool allowCrossScreenClaim = true);
     void removeUnclaimedOpen(const QString& windowId);
@@ -840,16 +809,7 @@ private:
     ///        through the membership-grade heldKeyForWindow must not have that
     ///        answer re-derived by a weaker predicate. The screen read for the
     ///        focus refresh is taken from the same engine for the same reason.
-    /// @param armMoveExcuse Whether to arm the adaptor's move-release
-    ///        one-shot. True for the effect's live-move callers, which
-    ///        re-announce the window immediately afterwards and would
-    ///        otherwise have that announce read as a session restore. FALSE
-    ///        for the desktop reconcile: nothing is guaranteed to re-announce,
-    ///        and an unconsumed one-shot is spent by a later unrelated
-    ///        announce, suppressing a legitimate cross-screen reclaim. The
-    ///        placement store's own move marker is armed either way — that one
-    ///        is consumed by takeForReopen and is load-bearing on both paths.
-    void releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner, bool armMoveExcuse);
+    void releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner);
     /// Per-screen map state that follows the managed set: every screen the
     /// coalesced announce dropped loses its retained batch and, if it had a
     /// broadcast focus, announces the empty one; every announced screen is

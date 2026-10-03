@@ -122,27 +122,15 @@ struct WindowPlacement
     // ── Recency (most-recent-wins ordering; stamped by the store) ──
     quint64 sequence = 0;
 
-    // ── Cross-screen reclaim credit ──
-    /// Whether this record may power the cross-screen reclaim's appId-sibling
-    /// fallback (WindowPlacementStore::peekForReclaim). The reclaim exists for
-    /// SESSION RESTORE — KWin reopening a logout-surviving window on a
-    /// nondeterministic output — so only a record whose window was live at the
-    /// last save is evidence of a misplaced restore. A record whose window
-    /// closed mid-session is reopen memory, not restore evidence: left
-    /// eligible, it teleports every later same-app window (a detached browser
-    /// tab, a Ctrl+N) to wherever the last sibling died. Defaults true (a
-    /// runtime capture describes a live window); cleared by
-    /// markInstanceClosed on close and by takeForReopen's per-open credit
-    /// burn; persisted as "liveAtSave" with serialize() re-deriving the value
-    /// from the live-instance probe (plus a shutdown-close grace) so the
-    /// graveyard dies across sessions while logout closes keep their credit.
-    /// Deliberately OUTSIDE sameContentAs (like sequence): credit flips must
-    /// not defeat the merge's content-identical short-circuit.
+    // ── Retired reclaim credit (INERT, kept for ABI layout) ──
+    /// The cross-screen reclaim's credit, retired with the reclaim: a window
+    /// is now restored only on the output it opens on, so nothing rations
+    /// cross-monitor pulls any more. Nothing reads it. It still round-trips
+    /// as "liveAtSave" so an older daemon reading a newer file sees the
+    /// default it always wrote for a live window, and stays OUTSIDE
+    /// sameContentAs like sequence.
     bool reclaimEligible = true;
-    /// When markInstanceClosed saw this window close (msecs since epoch), 0 if
-    /// never. In-memory only — serialize() reads it for the shutdown-close
-    /// grace (a close moments before the final logout save must still persist
-    /// as restore evidence); never written to JSON.
+    /// INERT, kept for ABI layout. Never stamped or read.
     qint64 closedAtMsecs = 0;
 
     bool isValid() const
@@ -320,8 +308,8 @@ struct WindowPlacement
     /// released window must keep that verdict — dropping the slot outright
     /// made it indistinguishable from a fresh open, which then consumed a
     /// SIBLING instance's floating record and restored at the sibling's
-    /// position. It is equally not a managed state: the cross-screen reclaim
-    /// keys on snapped/tiled, so a released slot can no longer advertise a
+    /// position. It is equally not a managed state: the reopen claim keys on
+    /// snapped/tiled, so a released slot can no longer advertise a
     /// home the engine has given up.
     static QLatin1String stateReleased()
     {
@@ -474,62 +462,39 @@ struct WindowPlacement
         }
 
         p.sequence = static_cast<quint64>(obj.value(QLatin1String("seq")).toDouble());
-        // Missing key (a record persisted by a pre-credit build) reads TRUE:
-        // one legacy session behaves exactly as before, and the next save
-        // stamps the derived value. Not migration code — a default.
+        // Inert field, read back only so it round-trips (see its declaration).
         p.reclaimEligible = obj.value(QLatin1String("liveAtSave")).toBool(true);
         return p;
     }
 };
 
-/// Shared cross-engine ownership predicate over a placement record: does this
-/// record carry @p engineId's slot in its MANAGED state (@p managedState —
-/// snap "snapped", autotile/scrolling "tiled") with a RECORDED screen that is
-/// a DIFFERENT screen than the opening one, itself currently in that engine's
-/// mode, resolved in the RECORD'S OWN (desktop, activity) context? A
-/// same-screen record (or one with no screen of its own) is never
-/// "cross-screen": the window is already where its managed slot lives, so the
-/// engine owning the OPENING context claims it and the slot merely lies
-/// dormant. Without the same-screen bail, a record whose (desktop, activity)
-/// context differs from the opening one — a sticky window, or a per-desktop
-/// mode split on one monitor — would defer here while the owner's reciprocal
-/// gate also stands down, stranding the window unmanaged.
+/// The REOPEN CONTRACT, which the predicates below implement: a window is
+/// restored only on the KWin output it opens on. Each engine restores from
+/// the window's record only when the record's screen is the opening screen,
+/// or another virtual screen of the same output in that engine's mode, and
+/// never pulls a window onto another output. A window whose OWN record names
+/// another screen has left it: it is not restored there, and its engine
+/// slots are released (WindowPlacementStore::releaseEngineSlot) so they
+/// cannot read as a home later. A placement rule fires on that window only
+/// for a genuine open.
 ///
-/// Every engine is BOTH a claimer and a deferrer through this one predicate:
-/// the engine whose (engineId, managedState) matches the record — with the
-/// recorded screen still in that engine's mode — claims the window
-/// cross-screen (snap via resolveWindowRestore's recorded-screen restore, the
-/// tiling engines via claimCrossScreenReopen), and every OTHER engine's open
-/// path stands down. KWin's session restore opens windows on a
-/// nondeterministic output, so a window whose record homes it on monitor A
-/// routinely arrives on monitor B; without the reclaim it strands there,
-/// unmanaged, on whatever engine owns B (the login-restore
-/// windows-on-the-wrong-monitor bug). Every engine must reach its verdict
-/// from the same record or the window ends up both-claimed or both-skipped.
-/// Keying on the record's context (not each engine's live current desktop,
-/// which can differ under per-screen virtual-desktop overrides) plus running
-/// this ONE predicate on every side makes the N-way agreement hold by
-/// construction: mode is exclusive per (screen, desktop, activity), so at
-/// most one engine's mode check passes for the recorded home. A new tiling
-/// engine must add both the defer gate and the claim.
-///
-/// Callers must pass a MANAGED token as @p managedState (stateSnapped /
-/// stateTiled) — the function itself matches whatever token it is handed.
-/// Float restore is screen-local by doctrine (it restores a position WITHIN
-/// the monitor KWin chose, never moves the window across monitors), so a
-/// FLOATING state must never be used to earn a cross-screen pull.
+/// pendingCrossScreenManagedRestore, the 5-argument form, answers the bare
+/// question underneath: does this record carry @p engineId's slot in its
+/// MANAGED state (@p managedState, snap "snapped", autotile/scrolling
+/// "tiled") with a RECORDED screen other than the opening one, itself in
+/// that engine's mode in the RECORD'S OWN (desktop, activity) context? A
+/// same-screen record (or one with no screen) is never "cross-screen". It
+/// predates the contract and no longer gates anything on its own; the
+/// 6-argument form adds the contract's output and instance rules, and every
+/// caller uses that one. Callers must pass a MANAGED token: float restore
+/// is screen-local, so a FLOATING state never earns a pull.
 ///
 /// A matched slot is NOT proof of current ownership. Engine slots are only
 /// ever merged, never cleared on ordinary close (a window that closed tiled
-/// keeps its slot — that persistence IS what login restore reads), and an
-/// engine that knowingly gives a window up mid-session must clear its slot
-/// via WindowPlacementStore::clearEngineSlot, or the stale slot plus the
-/// record-level screenId will read as a home to pull the window back to.
-/// The record-level screenId is likewise only as fresh as the last owning
-/// engine's successful capture; engine-miss captures leave it stale. Both
-/// halves are why claimants must validate the verdict against LIVE state
-/// (live screen set, membership after adoption) rather than trusting the
-/// record alone.
+/// keeps its slot, which is what login restore reads), and the record-level
+/// screenId is only as fresh as the last owning engine's capture. Claimants
+/// validate the verdict against LIVE state (live screen set, membership
+/// after adoption) rather than trusting the record alone.
 ///
 /// @p isEngineMode is invoked as (screenId, virtualDesktop, activity) → bool
 /// and must answer whether that context resolves to @p engineId's mode;
@@ -554,9 +519,9 @@ inline bool hasStableAppIdFor(const QString& appId, const QString& windowId)
 
 /// Whether a record's own (desktop, activity) context is compatible with the
 /// live context an engine would INSERT it into — the guard a cross-screen
-/// claim needs because the reclaim VERDICT is granted on the record's context
+/// claim needs because the claim VERDICT is granted on the record's context
 /// while the adoption keys the window by the home screen's CURRENT context.
-/// Without it, a window recorded on desktop 3 is reclaimed onto the strip or
+/// Without it, a window recorded on desktop 3 is claimed onto the strip or
 /// layout of whatever desktop that screen happens to show, displacing that
 /// desktop's windows while KWin still has the window on its own.
 ///
@@ -588,10 +553,9 @@ bool pendingCrossScreenManagedRestore(const WindowPlacement& p, QLatin1String en
     return isEngineMode(p.screenId, p.virtualDesktop, p.activity);
 }
 
-/// The snap-engine specialization of pendingCrossScreenManagedRestore — the
-/// original three-way gate (SnapEngine claims, AutotileEngine and ScrollEngine
-/// defer). Kept as a named form because "snapped snap-slot on a
-/// snapping-mode home" is the verdict three call sites spell.
+/// The snap-engine specialization of the 5-argument form. Superseded by the
+/// 4-argument reopen-contract overload below and kept for source
+/// compatibility.
 template<typename IsSnappingMode>
 bool pendingCrossScreenSnapRestore(const WindowPlacement& p, const QString& openingScreenId,
                                    IsSnappingMode&& isSnappingMode)

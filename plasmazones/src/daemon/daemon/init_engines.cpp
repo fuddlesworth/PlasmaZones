@@ -202,49 +202,19 @@ void Daemon::initEnginesAndWiring()
                 m_settings.get(), screenId);
         });
 
-    // Snap-restore defer gate (ScrollEngine::windowOpened): bakes BOTH the
-    // global snapping toggle and the recorded context's mode into one
-    // closure, matching the predicate autotile's twin gate evaluates
-    // through its own layout-manager reference. When snapping is disabled
-    // SnapEngine::resolveWindowRestore never claims, so the gate must
-    // answer false or the window would strand unmanaged.
-    scrollEngine->setSnappingModeResolver([this](const QString& screenId, int desktop, const QString& activity) {
-        return m_layoutManager && m_layoutManager->snappingPreferred()
-            && m_layoutManager->modeForScreen(screenId, desktop, activity)
-            == PhosphorZones::AssignmentEntry::Mode::Snapping;
-    });
-
-    // Own-mode resolver for the scroll engine's cross-screen reclaim
+    // Own-mode resolver for the scroll engine's reopen claim
     // (claimCrossScreenReopen): answers whether the RECORDED context still
-    // resolves to Scrolling mode, so a session window KWin dropped on the
-    // wrong output is pulled back into its recorded strip. No global-toggle
-    // term (unlike the snapping resolver above): a Scrolling-mode verdict
-    // already implies a live scroll assignment for that context.
+    // resolves to Scrolling mode, the same-mode half of the reopen contract (a
+    // FIFO record on another virtual screen of the opening output). No global
+    // toggle term: a Scrolling-mode verdict already implies a live scroll
+    // assignment for that context. (The engine's Snapping and Autotile
+    // resolvers fed the cross-screen defer gates, which are gone; they are not
+    // wired.)
     scrollEngine->setScrollingModeResolver([this](const QString& screenId, int desktop, const QString& activity) {
         return m_layoutManager
             && m_layoutManager->modeForScreen(screenId, desktop, activity)
             == PhosphorZones::AssignmentEntry::Mode::Scrolling;
     });
-
-    // Autotile-mode resolver for the scroll-side cross-screen defer gate,
-    // the reciprocal of autotile's scrolling defer.
-    //
-    // LIVENESS is part of the question, not just mode. The deferring side
-    // must ask exactly what the CLAIMING side will answer: autotile's claim
-    // requires the recorded home in its LIVE screen set on top of the
-    // record-context mode verdict, so a defer keyed on mode alone stands
-    // down for a window autotile then declines — leaving it unmanaged.
-    // The two can disagree during a per-desktop-mode context switch or
-    // before a screen set is announced. Only the daemon sees both engines,
-    // so the liveness term is baked in here rather than inside either
-    // library.
-    scrollEngine->setAutotileModeResolver(
-        [this, autotileEngine](const QString& screenId, int desktop, const QString& activity) {
-            return m_layoutManager
-                && m_layoutManager->modeForScreen(screenId, desktop, activity)
-                == PhosphorZones::AssignmentEntry::Mode::Autotile
-                && autotileEngine->isActiveOnScreen(screenId);
-        });
 
     // Scroll "zone numbers" for the navigation OSD: a strip window's zone
     // number is its 1-based VISIBLE tile slot — the same sequential
@@ -355,19 +325,8 @@ void Daemon::initEnginesAndWiring()
     // CONTRACT: createEngines() above always constructs both engines and
     // initCoreAdaptors() ran first, so autotileEngine / snapEngine and the
     // adaptor members are non-null throughout this method — no per-use guards.
-    // Autotile's scrolling defer term, the reciprocal of scroll's autotile
-    // term above and subject to the same liveness requirement: the claiming
-    // side (ScrollEngine::claimCrossScreenReopen) checks its own live screen
-    // set, so the defer must ask mode AND liveness or a disagreement leaves
-    // the window unmanaged by both engines.
-    autotileEngine->setScrollingModeResolver(
-        [this, scrollEngine](const QString& screenId, int desktop, const QString& activity) {
-            return m_layoutManager
-                && m_layoutManager->modeForScreen(screenId, desktop, activity)
-                == PhosphorZones::AssignmentEntry::Mode::Scrolling
-                && scrollEngine->isActiveOnScreen(screenId);
-        });
-
+    // (Autotile's scrolling-mode resolver fed its cross-screen defer gate,
+    // which the reopen contract removed; it is not wired.)
     autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
         if (!m_layoutManager || screenId.isEmpty()) {
             return {};
@@ -1168,41 +1127,9 @@ void Daemon::initEnginesAndWiring()
     // this function — so these members are null here on a re-cycle.
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
-    // Cross-screen tiling reclaim off the resolveWindowRestore channel. It
-    // covers arrivals on SNAP-mode screens, which the tiling dispatch below
-    // never hears about — without it a session window KWin dropped on a snap
-    // screen would never be offered back to the engine whose record homes
-    // it. The client-declared min sizes ride the same D-Bus call (API v9):
-    // the adopting engine evaluates its oversized/float verdict ONCE from
-    // them, so a 0,0 here left an oversized window tiled for the session.
-    // Cleared in stop() and in SnapAdaptor::clearEngine alongside the
-    // engines' other injected closures.
-    m_snapAdaptor->setCrossScreenTileReclaim(
-        [autotile = QPointer<PhosphorTileEngine::AutotileEngine>(autotileEngine),
-         scroll = QPointer<PhosphorScrollEngine::ScrollEngine>(scrollEngine)](
-            const QString& windowId, const QString& screenId, int minWidth, int minHeight) {
-            // QPointer + null check, matching every sibling closure in this
-            // file: the hook is cleared in stop() and in SnapAdaptor's
-            // clearEngine, but a late D-Bus call racing teardown must not
-            // deref a dead engine.
-            return (autotile && autotile->claimCrossScreenReopen(windowId, screenId, minWidth, minHeight))
-                || (scroll && scroll->claimCrossScreenReopen(windowId, screenId, minWidth, minHeight));
-        });
-    // Liveness half of the snap engine's cross-screen tile-defer gate: the
-    // claiming engines check their own live screen sets, so the deferring
-    // side must ask the same question or a disagreement leaves the window
-    // unmanaged by every engine.
-    snapEngine->setTilingEngineLiveResolver([autotile = QPointer<PhosphorTileEngine::AutotileEngine>(autotileEngine),
-                                             scroll = QPointer<PhosphorScrollEngine::ScrollEngine>(scrollEngine)](
-                                                PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId) {
-        if (mode == PhosphorZones::AssignmentEntry::Mode::Autotile) {
-            return autotile && autotile->isActiveOnScreen(screenId);
-        }
-        if (mode == PhosphorZones::AssignmentEntry::Mode::Scrolling) {
-            return scroll && scroll->isActiveOnScreen(screenId);
-        }
-        return false;
-    });
+    // (No cross-screen tiling reclaim hangs off the snap channel any more: under
+    // the reopen contract a window arriving on a snap screen is restored only
+    // from a record on that output, so no engine pulls it to another one.)
     // org.plasmazones.Tiling is the engine-NEUTRAL transport shared by the
     // whole tiling family (the effect keeps one engine-managed screen set
     // and one tile pipeline; the adaptor routes per screen through

@@ -133,14 +133,14 @@ public:
 
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
-    /// Cross-screen session reclaim (see IPlacementEngine for the base
-    /// contract). This implementation: first-observation gate by ScrollState
-    /// MEMBERSHIP (not the raw reverse-map key); decides via the store's
-    /// live-instance-excluding peekForReclaim over the registry-aware appId;
-    /// requires the recorded home in the LIVE scrolling set AND the record's
-    /// (desktop, activity) to match the home screen's current key (sticky and
-    /// unknown-context sentinel records stay eligible — see
-    /// recordContextMatchesLive); and
+    /// The reopen claim (see IPlacementEngine for the contract): only a FIFO
+    /// record on another virtual screen of the opening output, in scrolling
+    /// mode, for a window opening on a scrolling screen; never a record on
+    /// another monitor and never the window's own. This implementation:
+    /// first-observation gate by ScrollState MEMBERSHIP; the store's
+    /// claim-honouring, live-excluding peekForReclaim over the registry-aware
+    /// appId; the home in the LIVE scrolling set with the record's (desktop,
+    /// activity) matching its current key (sentinel records stay eligible);
     /// returns the REAL adoption outcome verified by membership after the
     /// windowOpened re-entry. Peek-not-take: consumption stays with the open
     /// path's own restore machinery (strip stash claim, takeForReopen).
@@ -880,37 +880,26 @@ public:
     /// other injected closures.
     using ModeResolver = std::function<bool(const QString& screenId, int desktop, const QString& activity)>;
 
-    /// Snapping-mode resolver for windowOpened's cross-screen restore defer
-    /// gate (one term of the N-way reciprocity with the other engines'
-    /// gates and claims). Must answer whether the RECORDED context resolves
-    /// to Snapping mode AND snapping is globally preferred — a disabled snap
-    /// engine never claims, so deferring to it would strand the window.
-    /// Unset → this gate TERM is off (the autotile term below self-gates
-    /// independently); with neither resolver set every open is claimed
-    /// (headless/test path).
+    /// INERT, kept for ABI: a snapping-mode resolver that fed windowOpened's
+    /// cross-screen restore defer gate, which the reopen contract removed (a
+    /// window opening on a scrolling screen is scroll's). Nothing reads it and
+    /// the daemon no longer wires it; a setter call is harmless.
     void setSnappingModeResolver(ModeResolver resolver)
     {
         m_snappingModeResolver = std::move(resolver);
     }
 
-    /// Scrolling-mode resolver for claimCrossScreenReopen — must answer
-    /// whether the RECORDED context resolves to Scrolling mode, so a session
-    /// window KWin dropped on the wrong output is pulled back to its recorded
-    /// scrolling screen. Unset → this engine never claims cross-screen
-    /// (headless/test path).
+    /// Scrolling-mode resolver for claimCrossScreenReopen: whether the
+    /// RECORDED context resolves to Scrolling mode, the same-mode half of the
+    /// reopen contract (a FIFO record on another virtual screen of the opening
+    /// output). Unset → this engine never claims (headless/test path).
     void setScrollingModeResolver(ModeResolver resolver)
     {
         m_scrollingModeResolver = std::move(resolver);
     }
 
-    /// Autotile-mode resolver for windowOpened's cross-screen tile-restore
-    /// defer gate: a window arriving here that carries a TILED autotile slot
-    /// recorded on an autotile-mode screen belongs to autotile's cross-screen
-    /// reclaim, and this engine must not splice it into the strip. Must
-    /// answer mode AND autotile liveness on that screen (the daemon owns
-    /// both engines and bakes the liveness term in — deferring to an engine
-    /// whose live set disagrees with the assignment would strand the
-    /// window). Unset → this gate TERM is off.
+    /// INERT, kept for ABI: an autotile-mode resolver that fed the same removed
+    /// defer gate. Nothing reads it and the daemon no longer wires it.
     void setAutotileModeResolver(ModeResolver resolver)
     {
         m_autotileModeResolver = std::move(resolver);
@@ -1494,7 +1483,7 @@ private:
     /// focus); the outermost endArrivalBurst applies once per screen.
     int m_arrivalBurstDepth = 0;
     QHash<PhosphorEngine::PlacementStateKey, bool> m_burstPendingApplies;
-    /// Re-stated per announce by the dispatch (noteCrossScreenClaimsExhausted); read by the defer gate.
+    /// INERT, kept for ABI layout: the defer gate it fed is gone, and nothing writes or reads it.
     QSet<QString> m_crossScreenClaimsExhausted;
     /// Armed by the context setters (desktop/activity switch), consumed by
     /// setActiveScreens so the identical-set re-emit only claims
@@ -2002,9 +1991,9 @@ private:
     FloatPredicate m_floatPredicate;
     RestorePositionPredicate m_restorePositionPredicate{};
     OpenParamsResolver m_openParamsResolver;
-    ModeResolver m_snappingModeResolver;
+    ModeResolver m_snappingModeResolver; ///< INERT (see setSnappingModeResolver)
     ModeResolver m_scrollingModeResolver;
-    ModeResolver m_autotileModeResolver;
+    ModeResolver m_autotileModeResolver; ///< INERT (see setAutotileModeResolver)
     ContextGapProvider m_contextGapProvider;
 };
 

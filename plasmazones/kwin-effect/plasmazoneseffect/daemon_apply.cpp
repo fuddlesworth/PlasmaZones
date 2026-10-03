@@ -320,7 +320,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // window has painted, so it is a teleport: an animated move would play
     // over the open shader from a spot the user never saw. An apply that
     // lands after the suppression was released (deadline expired, or a late
-    // reclaim-declined float default) animates instead, which is right for
+    // float default) animates instead, which is right for
     // a window already visible.
     const bool freshOpen = m_restoreSuppress.contains(w);
 
