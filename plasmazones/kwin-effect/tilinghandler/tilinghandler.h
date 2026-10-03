@@ -1001,8 +1001,8 @@ public:
     /// Drop @p windowId's centring target and centred stamp. Called by the
     /// effect's geometry apply for every command it issues: whatever it puts
     /// the window at supersedes the tile the centring pass was waiting to
-    /// centre it in. The tile batch records its own target after its apply,
-    /// so a tile command keeps the entry it needs.
+    /// centre it in. The tile batch records its own target after its apply when
+    /// an ack is coming; a tile deferred to a gesture's end records none.
     void dropCenteringTarget(const QString& windowId);
 
     /// The set this discriminator actually answers over.

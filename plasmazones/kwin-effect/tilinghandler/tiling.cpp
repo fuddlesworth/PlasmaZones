@@ -1648,23 +1648,28 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // strip position. The gate keeps the steady state (same visual
             // pos every batch) at zero repaint cost.
             //
-            // The fullscreen-bail term makes the write take the REMOVE arm
-            // for a self-fullscreened non-member: the apply below commits
-            // nothing for it (the fullscreen bail), so an inserted relocation
-            // would only be removed again by a later batch's re-evaluation —
-            // insert-repaint-remove-repaint churn, since the change gate can
-            // never latch on an entry that never survives. Selecting the
-            // remove arm converges on a stable ABSENT entry. Evaluated AFTER
-            // the windowed-fullscreen block above, so the membership term
-            // reflects this batch's own adopt/clear — evaluated before it,
-            // the effect-restart adopt batch read "non-member", wrongly
-            // dropped a legitimate relocation and disarmed the commanded-rect
-            // counter for that batch. Also read by the commanded-rect disarm
-            // at the tail of this lambda.
+            // The fullscreen-bail term makes the write take the REMOVE arm for
+            // a self-fullscreened non-member: the apply below commits nothing
+            // for it, so an inserted relocation would be removed again by the
+            // next batch (insert-repaint-remove-repaint churn the change gate
+            // can never latch); the remove arm converges on a stable ABSENT
+            // entry. Evaluated AFTER the windowed-fullscreen block above so
+            // membership reflects this batch's own adopt/clear (before it, the
+            // effect-restart adopt read "non-member" and dropped a legitimate
+            // relocation). Also read by the commanded-rect disarm, the restore
+            // seat below and the centring-target record.
             KWin::Window* kwcForBail = snap.window->window();
             const bool fullscreenBailSkippedCommit = snap.window->isFullScreen()
                 && (!kwcForBail || kwcForBail->isRequestedFullScreen())
                 && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
+            // Seat the tile this hold's exit must land on. KWin captured the
+            // restore rect when fullscreen began and the bailed apply moves
+            // nothing, so the exit returned the window to its PRE-hold tile
+            // while the engine held this one (a neighbour opened or closed
+            // during the hold). Autotile only: the strip's exit re-emits.
+            if (fullscreenBailSkippedCommit && kwcForBail && !isScrollingScreen(snap.screenId)) {
+                kwcForBail->setFullscreenGeometryRestore(KWin::RectF(snap.geometry));
+            }
             // The rect this entry actually OFFERED the client, recorded as the
             // commanded rect at the tail of this lambda so the counter-assert
             // compares the client's commit against what was really asked for.
@@ -2230,27 +2235,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
                 // For Wayland windows being retiled to the same zone, skip the
                 // moveResize if the window was previously centered in this zone.
-                // This prevents flicker where the window jumps from its centered
-                // position back to the zone origin, then gets re-centered by the
-                // reactive pass in slotWindowFrameGeometryChanged. It also avoids
-                // flooding the Wayland client with configure events which can
-                // freeze terminals like Ghostty.
+                // This prevents the flicker of a jump back to the zone origin and
+                // a re-centre by slotWindowFrameGeometryChanged, and avoids
+                // flooding the client with configures (freezes Ghostty).
                 //
-                // The re-centring used to run off a 200ms QTimer, which is what
-                // the flicker window described above was; it has been reactive
-                // since the timer was removed, so there is no delay to name here.
                 // The skip is deliberately CONTAINMENT, not fill: an entry only
                 // exists for a window the centring pass placed undersized in
                 // exactly this zone, so "still inside the zone" means "still
                 // sitting where we centred it" for the population the skip was
                 // built for. What makes that reading safe is that the entry can
-                // no longer be stamped from a stale mid-configure frame — the
-                // reactive pass now refuses to run inside the apply bracket and
-                // while a resize configure is in flight — so a live entry
-                // records a genuine refusal, not a lost race. Without those
-                // guards this branch was a self-perpetuating latch: a raced
-                // centring stamped the entry, and the skip then suppressed the
-                // re-assert that would have fixed it, on every later batch.
+                // no longer be stamped from a stale frame: the reactive pass
+                // refuses to run inside the apply bracket and while a resize
+                // configure is in flight, its target is armed only while an ack
+                // is coming, and a fullscreen exit lands on the restore rect the
+                // hold seated. So a live entry records a genuine refusal; without
+                // those guards a raced centring stamped it and this skip latched.
                 bool skipMoveResize = false;
                 if (snap.window->isWaylandClient()) {
                     auto prevIt = m_centeredWaylandZones.find(snap.windowId);
@@ -2986,35 +2985,35 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // the next batch commands something.
                         m_effect->m_scrollCommandedRects.remove(snap.windowId);
                     }
-                    // A STRIP entry never takes the reactive centring pass.
-                    //
-                    // That pass is an autotile repair: it re-centres a Wayland
-                    // client whose committed frame is smaller than its zone,
-                    // and then CLAMPS the result fully inside the output
-                    // containing the zone's centre. Both halves are wrong on a
-                    // strip. A strip column is routinely meant to sit off the
-                    // viewport — parked below every output, or straddling a
-                    // screen edge so the effect can crop it — and clamping it
-                    // back on screen is exactly the "window slides around the
-                    // edge instead of being cropped at it" symptom. It also
-                    // reaps the window's animation leg mid-flight and issues
-                    // its own moveResize, so the strip's placement and this
-                    // pass fight each other every frame.
-                    //
-                    // Only ever observable for a client whose commit diverges
-                    // from its column, because the pass no-ops when the frame
-                    // already fills the zone. A window that accepts its column
-                    // — nearly all of them — was never touched, which is why
-                    // this went unnoticed.
-                    //
-                    // Removed rather than merely not written: a window that
-                    // moves from an autotile screen to a scrolling one would
-                    // otherwise keep the entry its autotile placement armed.
-                    // The removal itself now happens before this split, so it
-                    // also covers the monocle and windowed-fullscreen kinds
-                    // that never reach here. (A self-fullscreened entry is re-written each batch of its hold.)
+                    // A STRIP entry never takes the reactive centring pass. That
+                    // autotile repair re-centres an undersized client and CLAMPS
+                    // it inside the output, while a strip column is routinely
+                    // parked off the viewport or straddling an edge to be cropped
+                    // (clamping it is the "slides around the edge" symptom), and
+                    // its moveResize would fight the strip's animation leg. The
+                    // entry was removed before this split, which also covers the
+                    // monocle and windowed-fullscreen kinds that never get here.
                 } else if (!snap.isWindowedFullscreen) {
-                    m_tileTargetZones[snap.windowId] = snap.geometry;
+                    // Armed only while an ack the pass is waiting for is coming.
+                    // A tile in the window's own fullscreen hold keeps it: the
+                    // restore rect seated above lands the exit on this tile, and
+                    // the entry centres it there if the client refuses it.
+                    // Otherwise only an apply that left a resize configure pending
+                    // arms it. A mid-gesture commit (its drag-end replay drops the
+                    // entry anyway), the redundant-apply skip and a same-size move
+                    // have no ack coming, and an entry left armed at rest would
+                    // centre whatever a later KWin-imposed resize or move produced
+                    // into this tile and latch it there.
+                    KWin::Window* kwRecord = snap.window->window();
+                    const QRectF framed = snap.window->frameGeometry();
+                    const bool ackPending = kwRecord && !snap.window->isUserMove() && !snap.window->isUserResize()
+                        && (qAbs(kwRecord->moveResizeGeometry().width() - framed.width()) > 1.0
+                            || qAbs(kwRecord->moveResizeGeometry().height() - framed.height()) > 1.0);
+                    if (fullscreenBailSkippedCommit || ackPending) {
+                        m_tileTargetZones[snap.windowId] = snap.geometry;
+                    } else {
+                        m_tileTargetZones.remove(snap.windowId);
+                    }
                 }
             } else if (!snap.isMonocle && isScrollingScreen(snap.screenId)) {
                 // X11 leg of the reactive repair, deliberately NOT the
