@@ -236,7 +236,20 @@ struct WindowCommandStamps
     void forget(const KWin::EffectWindow* w)
     {
         byWindow.remove(w);
+        staleAcks.remove(w);
     }
+
+    /// A command KWin applied WITHOUT a configure (it asked for the size the
+    /// client already has) while an older configure for a different size was
+    /// still unacked. That older configure stays outstanding, and when the
+    /// client acks it the stale size lands. The frame-change hook answers that
+    /// ack once by re-issuing @c target, valid only while @c stamp is current.
+    struct StaleAck
+    {
+        QRect target;
+        quint64 stamp = 0;
+    };
+    QHash<const KWin::EffectWindow*, StaleAck> staleAcks;
 
     QHash<const KWin::EffectWindow*, quint64> byWindow;
     quint64 seq = 0;

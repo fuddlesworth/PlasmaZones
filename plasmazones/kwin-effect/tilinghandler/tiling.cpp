@@ -2102,12 +2102,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // the size stops drifting. The offer only changes when the
                 // COLUMN changes.
                 //
-                // Keyed on the column size, never on position — that is the
-                // whole point. An earlier attempt gated on the target being
-                // off-screen, which made a column scrolling in and out
-                // alternate between two sizes and resize its way across the
-                // strip. Position must not enter, because a column keeps its
-                // size wherever it sits.
+                // Keyed on the column size, never on position: a gate on the
+                // target being off-screen made a column scrolling in and out
+                // alternate between two sizes across the strip.
                 //
                 // Inert for a window that accepts its column: the sizes match,
                 // so the offer is the column rect unchanged and every branch
@@ -2124,15 +2121,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // maximized window at its pre-maximize size in the middle of
                 // the screen.
                 //
-                // It is also self-sustaining once entered, which is what made
-                // this present as "maximize sometimes does nothing". The first
-                // batch after the toggle finds no entry for the new column
-                // size, offers the full raw area and records it; a client that
-                // answers smaller then makes EVERY later batch for that column
-                // read columnUnchanged and re-issue the shrunken centred rect,
-                // and the entry is deliberately never removed. Since a maximized
-                // column's batches arrive on any focus change or scroll tick,
-                // the full-width frame is typically gone before the user sees it.
+                // Self-sustaining once entered ("maximize sometimes does
+                // nothing"): a client answering the full area smaller makes every
+                // later batch re-issue the shrunken rect, and the entry stays.
                 // Null unless this batch is a plain strip entry that reaches
                 // the record below; see the capture site for why the two are
                 // separated.
@@ -2169,8 +2160,16 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // three declared-rect states — but it is passed rather than
                     // hardcoded so the predicate stays complete on its own
                     // terms and the table documents why they are excluded.
-                    if (ScrollDecisions::mayCarryCommittedSize(/*declaredRect=*/false, columnUnchanged, committedSize,
-                                                               columnSize)) {
+                    // Never while a resize configure is unacked: the committed
+                    // size is then the one the client is being moved OFF, and
+                    // offering it centred would let the pending size land
+                    // overhanging the neighbour column.
+                    KWin::Window* kwCarry = snap.window->window();
+                    const bool resizeInFlight =
+                        kwCarry && QRectF(kwCarry->moveResizeGeometry()).toRect().size() != committedSize;
+                    if (!resizeInFlight
+                        && ScrollDecisions::mayCarryCommittedSize(/*declaredRect=*/false, columnUnchanged,
+                                                                  committedSize, columnSize)) {
                         // Centred the same way the paint resolver centres
                         // (scrollVisualTranslationFor), so the drawn and
                         // committed positions agree: same toRect() rounding on

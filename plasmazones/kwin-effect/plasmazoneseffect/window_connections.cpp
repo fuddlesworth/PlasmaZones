@@ -360,7 +360,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             &TilingHandler::slotWindowFrameGeometryChanged);
 
     // Single windowFrameGeometryChanged lambda combining the effect-side
-    // per-tick work, in the order the bodies run: a strip-animation retarget
+    // per-tick work, in the order the bodies run: the answer to a superseded
+    // configure's late ack (Body -1.5), a strip-animation retarget
     // onto the rect the client actually committed (Body -1), the offered-column
     // centring for a client that would not take its column (Body -0.5),
     // deferred maximize completion (Body 0), first-frame suppression release
@@ -407,6 +408,35 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // before the lookup.
                 if (!safeW || safeW->isDeleted()) {
                     return;
+                }
+                // Body -1.5 — answer a superseded configure's late ack. An
+                // apply that asked for the size the client already had, while a
+                // different size was still in flight, was applied by KWin with
+                // no configure, so that older configure stayed outstanding and
+                // its ack just landed the stale size (WindowCommandStamps::
+                // StaleAck). Re-issue the command once: its size now differs
+                // from the client's, so KWin sends a real configure. Void once
+                // a newer command has landed or the user has the frame.
+                if (const auto staleIt = m_daemonGate.commandStamps.staleAcks.find(safeW.data());
+                    staleIt != m_daemonGate.commandStamps.staleAcks.end() && !m_daemonGate.inGeometryApply) {
+                    const WindowCommandStamps::StaleAck stale = *staleIt;
+                    const QSize committed = safeW->frameGeometry().toRect().size();
+                    if (!m_daemonGate.commandStamps.isCurrent(safeW.data(), stale.stamp) || safeW->isUserMove()
+                        || safeW->isUserResize()) {
+                        m_daemonGate.commandStamps.staleAcks.erase(staleIt);
+                    } else if (committed != stale.target.size()) {
+                        m_daemonGate.commandStamps.staleAcks.erase(staleIt);
+                        if (KWin::Window* kwStale = safeW->window()) {
+                            qCInfo(lcEffect) << "Re-issuing" << stale.target << "over a superseded configure's ack"
+                                             << committed << "for" << getWindowId(safeW.data());
+                            const bool prevInApply = m_daemonGate.inGeometryApply;
+                            m_daemonGate.inGeometryApply = true;
+                            const auto staleGuard = qScopeGuard([this, prevInApply] {
+                                m_daemonGate.inGeometryApply = prevInApply;
+                            });
+                            kwStale->moveResize(QRectF(stale.target));
+                        }
+                    }
                 }
                 // Body -1 — retarget a strip animation onto the rect the
                 // client actually committed.

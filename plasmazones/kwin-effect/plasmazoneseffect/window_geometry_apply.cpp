@@ -28,6 +28,40 @@
 
 namespace PlasmaZones {
 
+namespace {
+// The rect the window holds once every configure sent so far is acked: KWin's
+// moveResizeGeometry, which is the committed frame at rest and the pending
+// request while a resize is unacked. Comparing against the committed frame
+// instead treated a bounce back to the committed size, issued while a
+// different size was still in flight, as already done (or as a pure move),
+// and the stale pending size then landed.
+QRect commandedRectOf(KWin::EffectWindow* window)
+{
+    if (KWin::Window* kw = window->window()) {
+        return QRectF(kw->moveResizeGeometry()).toRect();
+    }
+    return window->frameGeometry().toRect();
+}
+
+// moveResize @p target, arming the stale-ack answer (WindowCommandStamps::
+// StaleAck) when KWin will apply it without a configure: it asks for the size
+// the client already has while a different size is still in flight
+// (XdgSurfaceWindow::moveResizeInternal sends no configure for an equal client
+// size), so the in-flight configure's ack would otherwise land the stale size.
+void moveResizeAnsweringStaleAck(KWin::EffectWindow* window, KWin::Window* kw, const QRectF& target, quint64 stamp,
+                                 WindowCommandStamps& stamps)
+{
+    const QSize committed = window->frameGeometry().toRect().size();
+    const bool supersedesUnacked = commandedRectOf(window).size() != committed && target.toRect().size() == committed;
+    kw->moveResize(target);
+    if (supersedesUnacked) {
+        stamps.staleAcks.insert(window, {target.toRect(), stamp});
+    } else {
+        stamps.staleAcks.remove(window);
+    }
+}
+} // namespace
+
 void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo)
 {
     // Null-guarded beside the KWin::effects guard below: every current call
@@ -83,8 +117,9 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
     // through here so it and applyWindowGeometry read the column rect alike.
     //
     // Three equalities against this rect are sanctioned, all in
-    // applyWindowGeometry, and all comparing against `frameGeometry().toRect()`
-    // so they share one rounding rule:
+    // applyWindowGeometry, and all comparing against commandedRectOf() (KWin's
+    // moveResizeGeometry, `.toRect()`) so they share one rounding rule and see
+    // a still-unacked resize as the window's size:
     //
     //   1. the already-at-target no-op skip, on the whole rect;
     //   2. the size-preserving move()/moveResize() split on the non-animated
@@ -190,6 +225,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // gesture's end. A replay re-entering here has already dropped its own
     // handle, and the defer below registers a fresh one under this stamp.
     const quint64 commandStamp = m_daemonGate.commandStamps.bump(window);
+    // A repeat of the same rect (engines often emit a batch twice) still owes
+    // the answer to a superseded configure's ack, so the answer follows it.
+    if (auto stale = m_daemonGate.commandStamps.staleAcks.find(window);
+        stale != m_daemonGate.commandStamps.staleAcks.end() && stale->target == geo) {
+        stale->stamp = commandStamp;
+    }
     if (auto prior = m_deferredGeometryReplay.find(window); prior != m_deferredGeometryReplay.end()) {
         disconnect(*prior);
         m_deferredGeometryReplay.erase(prior);
@@ -265,11 +306,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // (float → unfloat, rotate → rotate back) legitimately targets the same
     // committed geometry and must NOT be skipped, because the animation needs
     // to play from the current visual position to that target.
-    // Compare integer-aligned rects: `frameGeometry()` carries qreal
-    // precision and on fractional-scale outputs may keep sub-pixel residue
-    // from prior moveResize commits, so a float-bit-exact equality against
-    // an integer `geo` would silently miss and run a redundant moveResize.
-    if (geo == window->frameGeometry().toRect() && !m_windowAnimator->hasAnimation(window)) {
+    // Compared against the COMMANDED rect (commandedRectOf): a target equal to
+    // the committed frame while a different size is still unacked is not a
+    // no-op, it is the command that cancels the pending one. Integer-aligned:
+    // the geometry carries qreal precision and fractional-scale residue, so a
+    // float-bit-exact equality against an integer `geo` would silently miss.
+    if (geo == commandedRectOf(window) && !m_windowAnimator->hasAnimation(window)) {
         qCDebug(lcEffect) << "moveResize: window already at target geometry, skipping:" << geo;
         // Release first-frame open suppression here. The settle-detection
         // hook on windowFrameGeometryChanged would otherwise wait forever
@@ -486,13 +528,13 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // Picture-in-Picture case actually takes — fixing only the sibling left
         // the common path on the configure route.
         //
-        // Integer-aligned like the sibling: frameGeometry() carries qreal
-        // precision and a fractional-scale output leaves sub-pixel residue, so
-        // an exact QSizeF equality would miss.
-        if (targetFrame.toRect().size() == kw->frameGeometry().toRect().size()) {
+        // Against the commanded rect and integer-aligned, like the sibling: the
+        // geometry carries qreal precision and a fractional-scale output leaves
+        // sub-pixel residue, so an exact QSizeF equality would miss.
+        if (targetFrame.toRect().size() == commandedRectOf(window).size()) {
             kw->move(targetFrame.topLeft());
         } else {
-            kw->moveResize(targetFrame);
+            moveResizeAnsweringStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps);
         }
 
         // Per-window animation motion-cascade: rule → per-event motion node
@@ -842,14 +884,14 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // Size-equal is the whole gate: a real resize has to keep the
         // configure path, because the size genuinely needs the client's
         // agreement.
-        // Integer-aligned, matching the no-op skip above: frameGeometry()
-        // carries qreal precision and a fractional-scale output leaves
+        // Against the commanded rect and integer-aligned, matching the no-op
+        // skip above: the geometry carries qreal precision and a fractional-scale output leaves
         // sub-pixel residue, so an exact QSizeF equality would miss and send a
         // size-preserving placement down the configure path anyway.
-        if (geo.size() == kwinWindow->frameGeometry().toRect().size()) {
+        if (geo.size() == commandedRectOf(window).size()) {
             kwinWindow->move(QRectF(geo).topLeft());
         } else {
-            kwinWindow->moveResize(QRectF(geo));
+            moveResizeAnsweringStaleAck(window, kwinWindow, QRectF(geo), commandStamp, m_daemonGate.commandStamps);
         }
 
         repaintSnapRegions(window, trueOldFrame, geo);
