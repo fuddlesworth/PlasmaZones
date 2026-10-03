@@ -1819,51 +1819,27 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
             // overlap.
             QRectF animatedFrame;
             ShaderTransition* st = m_shaderManager.findTransition(w);
-            const bool shaderOwnsGeometry = st && st->cached && st->cached->iFromRectLoc >= 0;
-            if (shaderOwnsGeometry && st->fromGeometry.isValid() && st->toGeometry.isValid() && st->durationMs > 0) {
-                // Same progress the draw will use, via the shared SSOT.
-                // stepCurve=false: paintWindow owns the stateful curve's single
-                // per-frame step, so this read must not advance it. The reverse
-                // flip is applied here, as paintWindow does.
-                bool stActive = false;
-                qreal t = timeDrivenProgress(*st, frameNowMs, /*stepCurve=*/false, stActive);
-                // Honour `active`: an installed-but-expired leg (elapsed past
-                // durationMs, not held) paints no shader this frame and the window
-                // sits at its rest rect. Lerping its 0-progress would snap the pane
-                // back to fromGeometry — the PRE-maximize rect — on the expiry
-                // frame. Leaving animatedFrame invalid falls back to the rest-rect
-                // capture, which is where the draw actually is.
-                if (stActive) {
-                    if (st->reverse) {
-                        t = 1.0 - t;
-                    }
-                    // Mirror the pack's OWN split: POSITION takes the raw t (the
-                    // overshoot IS the bounce, and it is where the eye reads it),
-                    // SIZE takes the clamped t. That is exactly what window-morph
-                    // does — `mix(iFromRect.xy, iToRect.xy, t)` alongside
-                    // `mix(iFromRect.zw, iToRect.zw, tc)` — because extrapolating an
-                    // EXTENT is nonsense at a large ratio (a maximize computes a
-                    // negative width) while extrapolating a POSITION is the feature.
-                    // Lerping both axes with the raw t, as this briefly did, fixed
-                    // the position and broke the size.
-                    //
-                    // CAVEAT, and it is real: one hard-coded lerp shape cannot track
-                    // five packs that each choose their own. `fold` eases its rect
-                    // through a smoothstep, `ripple-snap` squares a time-compressed
-                    // progress, and `flow` / `phosphor-stream` stagger it PER VERTEX —
-                    // there is no single rect to predict for those. The predictor
-                    // approximates for everything except window-morph, and always has.
-                    // Making it exact needs the rect curve to come from the pack (a
-                    // metadata field), not from a guess here. The cost of being wrong
-                    // is bounded: the frost pane samples a slightly-off scene slice.
-                    // It does not corrupt the draw.
-                    const qreal tc = qBound(0.0, t, 1.0);
-                    const QRectF& f = st->fromGeometry;
-                    const QRectF& g = st->toGeometry;
-                    animatedFrame = QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
-                                           qMax(1.0, f.width() + (g.width() - f.width()) * tc),
-                                           qMax(1.0, f.height() + (g.height() - f.height()) * tc));
-                }
+            if (st) {
+                // Same progress the draw will use, via the shared SSOT
+                // (predictedMorphRect over timeDrivenProgress, stepCurve=false:
+                // paintWindow owns the stateful curve's single per-frame step).
+                // It honours `active`: an installed-but-expired leg paints no
+                // shader this frame and the window sits at its rest rect, so
+                // lerping its 0-progress would snap the pane back to the
+                // PRE-maximize rect on the expiry frame; an invalid result falls
+                // back to the rest-rect capture, which is where the draw is.
+                //
+                // CAVEAT, and it is real: one hard-coded lerp shape cannot track
+                // five packs that each choose their own. `fold` eases its rect
+                // through a smoothstep, `ripple-snap` squares a time-compressed
+                // progress, and `flow` / `phosphor-stream` stagger it PER VERTEX —
+                // there is no single rect to predict for those. The predictor
+                // approximates for everything except window-morph, and always has.
+                // Making it exact needs the rect curve to come from the pack (a
+                // metadata field), not from a guess here. The cost of being wrong
+                // is bounded: the frost pane samples a slightly-off scene slice.
+                // It does not corrupt the draw.
+                animatedFrame = predictedMorphRect(*st, frameNowMs);
             }
             if (!animatedFrame.isValid()) {
                 // No morph owns the geometry (or it is a durationMs == 0 morph

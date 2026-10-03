@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 #include "shader_internal.h"
+#include "paint_internal.h"
 #include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -245,23 +246,29 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // (monocleBitWritten / monocleBitReleased in the tile batch) —
             // not by a second morph replayed over it from this handler.
             //
-            // On Wayland the MONOCLE echo has no skip here: it arrives with
-            // the counter back at 0, and the interception above declines
-            // it because a monocle screen is not scrolling. It falls
-            // through to beginMaximizeShaderMorph. Whether that ABSORBS
-            // onto the batch's live placement leg or SUPERSEDES it is
-            // decided by tryBeginShaderForEvent's same-effect short-circuit,
-            // which keeps the prior leg only when both resolve the same
-            // pack — so the two must ride the same node for the monocle
-            // echo to be absorbed rather than replayed. When they do, the
-            // morph only re-asserts the endpoints the batch already
-            // installed (toGeometry becomes the frame the client committed,
-            // and fromGeometry is left alone once the snapshot exists, or
-            // re-read from the same m_preMaximizeFrame capture the batch
-            // anchored on).
+            // On Wayland the MONOCLE echo arrives with the counter back at 0
+            // and the interception above declines it (a monocle screen is not
+            // scrolling); the one-shot below absorbs it instead.
             if (m_tilingHandler->isSuppressingMaximizeChanged()) {
                 m_shaderManager.m_pendingMaximizeMorph.remove(window);
                 return;
+            }
+            // ...and the Wayland MONOCLE echo, which arrives with the counter
+            // back at 0, is absorbed the same way when the batch armed it
+            // (ShaderTransitionManager::m_monocleEchoOwed). Without this it fell
+            // through to beginMaximizeShaderMorph, whose time-driven leg never
+            // matches the batch's animator-driven one in timing mode, so the
+            // same-effect short-circuit could not absorb it either: the echo
+            // replayed a second placement morph over the batch's leg.
+            if (const auto echoIt = m_shaderManager.m_monocleEchoOwed.find(window);
+                echoIt != m_shaderManager.m_monocleEchoOwed.end()) {
+                const bool matchingEcho = echoIt.value() == fullyMaximized;
+                m_shaderManager.m_monocleEchoOwed.erase(echoIt);
+                if (matchingEcho) {
+                    qCDebug(lcEffect) << "Absorbed the monocle maximize echo for" << getWindowId(window);
+                    m_shaderManager.m_pendingMaximizeMorph.remove(window);
+                    return;
+                }
             }
             // Drag-restore guard: KWin unmaximizes a window mid interactive
             // move when the user grabs the maximized title bar and pulls
@@ -470,17 +477,20 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // size mismatch, and during an effect apply that mismatch is
                 // transient, so acting on it would fight the write in flight.
                 //
-                // The re-entrant case is also cheap: an effect moveResize
-                // commits synchronously, so frameGeometry() already equals the
-                // target and either isAnimatingToTarget short-circuits or the
-                // retarget lands on the window's own rect and reaps the
-                // converged leg, which is the outcome this correction wants.
+                // NOT for applyWindowGeometry's own animated commit, which it
+                // makes BEFORE retargeting the leg itself: the synchronous
+                // re-entry would retarget first with PreservePosition and zero
+                // the leg's velocity, so a spring curve lost its momentum on
+                // every animated re-apply. The apply marks that one commit
+                // (DaemonGateState::animatedApplyCommit); every other effect
+                // commit is a new destination the leg should adopt.
                 //
                 // Scoped to strip members: this is the only path that
                 // relocates a window away from its committed rect, so it is
                 // the only one where a divergent commit desynchronises the
                 // leg from where the window will actually be.
-                if (m_windowAnimator->hasAnimation(safeW.data()) && scrollManagedOutputFor(safeW.data())) {
+                if (m_windowAnimator->hasAnimation(safeW.data()) && scrollManagedOutputFor(safeW.data())
+                    && m_daemonGate.animatedApplyCommit != safeW.data()) {
                     const QRectF committed = safeW->frameGeometry();
                     if (!committed.isEmpty() && !m_windowAnimator->isAnimatingToTarget(safeW.data(), committed)) {
                         // PreservePosition: the leg keeps the pixels it is
@@ -489,15 +499,24 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         // correction that is a few hundred pixels at most and
                         // overshoot it.
                         //
-                        // Result deliberately discarded, unlike the drag-snap
-                        // caller which starts a replacement leg on a
-                        // DegenerateReap. A reap here means the retarget landed
-                        // on the rect the window already occupies — the leg has
-                        // converged, which is the outcome this correction wants,
-                        // and reaping it runs the completion handler that ends
-                        // the leg cleanly. There is nothing to replace it with.
-                        static_cast<void>(m_windowAnimator->retargetWithResult(
-                            safeW.data(), committed, PhosphorAnimation::RetargetPolicy::PreservePosition));
+                        // A DegenerateReap needs no replacement: the retarget
+                        // landed on the rect the window already occupies, the
+                        // leg has converged, and the reap's completion handler
+                        // ends it cleanly. An ACCEPTED retarget restarts the
+                        // animator's progress from the pixels on screen, so a
+                        // geometry-owning morph riding it is re-anchored there
+                        // too, as applyWindowGeometry does after its own
+                        // retarget. Left alone, the morph replayed the whole leg
+                        // from its original departure rect (the #795 jump-back).
+                        const QRectF visualPos = m_windowAnimator->currentValue(safeW.data(), committed);
+                        const auto retarget = m_windowAnimator->retargetWithResult(
+                            safeW.data(), committed, PhosphorAnimation::RetargetPolicy::PreservePosition);
+                        auto* morph = m_shaderManager.findTransition(safeW.data());
+                        if (retarget == PhosphorAnimation::RetargetResult::Accepted && morph && morph->cached
+                            && morph->cached->iFromRectLoc >= 0 && morph->durationMs == 0) {
+                            morph->fromGeometry = visualPos;
+                            morph->toGeometry = committed;
+                        }
                     }
                 }
                 // Body -0.5 — centre a client that answered its column with
@@ -762,6 +781,17 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
     // handler.
     const KWin::Window* kw = window->window();
     const bool toMaximized = kw && kw->maximizeMode() == KWin::MaximizeFull;
+    // A second maximize edge while this handler's own leg is still live (a
+    // rapid toggle) SUPERSEDES that leg, departing from the rect it is drawing
+    // now (see ShaderTransition::maximizeLeg). The drawn rect mirrors the paint
+    // predictor's split: position on the raw progress, size on the clamped one.
+    QRectF drawnDeparture;
+    if (ShaderTransition* live = m_shaderManager.findTransition(window); live && live->maximizeLeg) {
+        drawnDeparture = predictedMorphRect(*live, ShaderInternal::shaderClockNowMs());
+        endShaderTransition(window);
+    }
+    const ShaderTransition* liveBefore = m_shaderManager.findTransition(window);
+    const quint64 generationBefore = liveBefore ? liveBefore->generation : 0;
     bool ownsMaximizeLeg = false;
     tryBeginShaderForEvent(window,
                            toMaximized ? PhosphorAnimation::ProfilePaths::WindowPlaceIn
@@ -791,7 +821,7 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
         return;
     }
     const QRectF newFrame = window->frameGeometry();
-    QRectF preFrame = departureFrame;
+    QRectF preFrame = drawnDeparture.isValid() ? drawnDeparture : departureFrame;
     if (preFrame.isEmpty()) {
         // Degenerate departure rect: degrade to a static morph at the live
         // frame — visible, just motionless — rather than the transparent
@@ -799,15 +829,15 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
         preFrame = newFrame;
     }
     // Always retarget the destination; anchor the departure + snapshot only
-    // on a fresh morph. A rapid maximize→unmaximize toggle with the same
-    // shader lands here while the first leg is still live (same effect,
-    // same direction, same timing mode → beginShaderTransition's
-    // same-effect short-circuit keeps the prior transition), and the
-    // captured snapshot already holds the ORIGINAL content — re-anchoring
-    // fromGeometry or re-capturing mid-flight would jump the drawn rect and
-    // collapse the cross-fade. Mirrors the drag-snap retarget rule.
+    // on a FRESH install. A leg the same-effect short-circuit KEPT (another
+    // placement leg of the same pack, already running) has its own departure
+    // and snapshot, and re-anchoring it mid-flight would jump the drawn rect
+    // and collapse the cross-fade. Fresh is decided by the generation, not by
+    // the snapshot: the default window-morph is vertex-only and never takes
+    // one, so a missing snapshot said nothing about whether the leg was new.
     st->toGeometry = newFrame;
-    if (!st->oldSnapshot) {
+    if (!liveBefore || st->generation != generationBefore) {
+        st->maximizeLeg = true;
         st->fromGeometry = preFrame;
         // preFrame is a REAL rect the window occupied, so any synthetic-origin
         // marker a kept scroll leg carried no longer describes fromGeometry.

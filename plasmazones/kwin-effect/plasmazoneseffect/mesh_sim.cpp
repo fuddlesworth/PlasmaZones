@@ -229,6 +229,31 @@ void integrateOne(MeshSim& sim, const QRectF& rect, qreal time)
 
 } // namespace
 
+namespace {
+// The grip: the node nearest the cursor (KWin's picked-point pick).
+int gripIndex(const QRectF& frame, const QPointF& cursor)
+{
+    const qreal xl = frame.width() / (MeshSim::kW - 1.0);
+    const qreal yl = frame.height() / (MeshSim::kH - 1.0);
+    int gi = int((cursor.x() - frame.x()) / (xl > 0 ? xl : 1.0) + 0.5);
+    int gj = int((cursor.y() - frame.y()) / (yl > 0 ? yl : 1.0) + 0.5);
+    gi = qBound(0, gi, MeshSim::kW - 1);
+    gj = qBound(0, gj, MeshSim::kH - 1);
+    return gj * MeshSim::kW + gi;
+}
+} // namespace
+
+void regripMeshSim(MeshSim& sim, const QRectF& frame, const QPointF& cursor, const MeshSimParams& params)
+{
+    sim.params = params;
+    updateOrigins(sim, frame);
+    for (int i = 0; i < MeshSim::kCount; ++i) {
+        sim.constraint[i] = false;
+    }
+    sim.constraint[gripIndex(frame, cursor)] = true;
+    sim.settled = false;
+}
+
 void initMeshSim(MeshSim& sim, const QRectF& frame, const QPointF& cursor, const MeshSimParams& params)
 {
     sim.params = params;
@@ -239,14 +264,7 @@ void initMeshSim(MeshSim& sim, const QRectF& frame, const QPointF& cursor, const
         sim.accel[i] = QPointF();
         sim.constraint[i] = false;
     }
-    // Grip: pin the node nearest the cursor (KWin's picked-point pick).
-    const qreal xl = frame.width() / (MeshSim::kW - 1.0);
-    const qreal yl = frame.height() / (MeshSim::kH - 1.0);
-    int gi = int((cursor.x() - frame.x()) / (xl > 0 ? xl : 1.0) + 0.5);
-    int gj = int((cursor.y() - frame.y()) / (yl > 0 ? yl : 1.0) + 0.5);
-    gi = qBound(0, gi, MeshSim::kW - 1);
-    gj = qBound(0, gj, MeshSim::kH - 1);
-    sim.constraint[gj * MeshSim::kW + gi] = true;
+    sim.constraint[gripIndex(frame, cursor)] = true;
     // ONLY the grip is constrained — the entire rest of the sheet hangs off
     // it and trails, like cloth dragged by one corner. NO interior pinning
     // (that made a rigid centre with wiggling edges = a jiggling blob) and

@@ -531,10 +531,19 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // Against the commanded rect and integer-aligned, like the sibling: the
         // geometry carries qreal precision and a fractional-scale output leaves
         // sub-pixel residue, so an exact QSizeF equality would miss.
-        if (targetFrame.toRect().size() == commandedRectOf(window).size()) {
-            kw->move(targetFrame.topLeft());
-        } else {
-            moveResizeAnsweringStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps);
+        {
+            // This commit precedes this arm's own retarget of the leg below;
+            // the frame-change hook's strip retarget must leave it alone.
+            const KWin::EffectWindow* prevCommit = m_daemonGate.animatedApplyCommit;
+            m_daemonGate.animatedApplyCommit = window;
+            const auto commitGuard = qScopeGuard([this, prevCommit] {
+                m_daemonGate.animatedApplyCommit = prevCommit;
+            });
+            if (targetFrame.toRect().size() == commandedRectOf(window).size()) {
+                kw->move(targetFrame.topLeft());
+            } else {
+                moveResizeAnsweringStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps);
+            }
         }
 
         // Per-window animation motion-cascade: rule → per-event motion node
@@ -853,7 +862,8 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // else-branch is defensive.
     KWin::Window* kwinWindow = window->window();
     if (kwinWindow) {
-        if (m_windowAnimator->hasAnimation(window)) {
+        const bool droppedLeg = m_windowAnimator->hasAnimation(window);
+        if (droppedLeg) {
             m_windowAnimator->removeAnimation(window);
         }
         // DEBUG: the resolved rect is already logged at INFO above ("Setting
@@ -892,6 +902,17 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             kwinWindow->move(QRectF(geo).topLeft());
         } else {
             moveResizeAnsweringStaleAck(window, kwinWindow, QRectF(geo), commandStamp, m_daemonGate.commandStamps);
+        }
+        // removeAnimation runs no completion, and an animator-driven shader
+        // leg (durationMs == 0, the default window-morph on the placement
+        // legs) has no other progress source or teardown: left installed it
+        // reads as inactive and the expiry path presents one frame at the
+        // stale mid-leg rect after this commit. End it, as the animated arm's
+        // declined branch does. Time-driven legs keep their own timer.
+        if (droppedLeg) {
+            if (const auto* orphan = m_shaderManager.findTransition(window); orphan && orphan->durationMs == 0) {
+                endShaderTransition(window);
+            }
         }
 
         repaintSnapRegions(window, trueOldFrame, geo);

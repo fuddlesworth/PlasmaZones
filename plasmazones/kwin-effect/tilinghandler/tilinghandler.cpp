@@ -836,11 +836,11 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // release can re-seed the tracked-screen map after its suppressed move.
     KWin::EffectWindow* const liveWindow = m_effect->findWindowByIdExact(windowId);
     releaseAllClaims(windowId, liveWindow, ScrollDecisions::ClaimScope::UntrackFunnel);
-    // Every caller is a genuine release, and a release is a command: a tile
-    // cascade entry still pending for the window (it applies to an untracked
-    // window by design) must not move it back into the tile it just left
-    // before the daemon's own post-release retile supersedes it.
+    // Every caller is a genuine release, and a release is a command: a pending
+    // tile cascade entry (it applies to an untracked window by design) must not
+    // move it back into the tile it left before the daemon's retile does.
     m_effect->m_daemonGate.commandStamps.bump(liveWindow);
+    m_effect->m_shaderManager.dropMonocleEcho(liveWindow); // no echo to absorb once released
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared

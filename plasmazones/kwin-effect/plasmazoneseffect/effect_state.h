@@ -296,6 +296,11 @@ struct DaemonGateState
     /// authoritative source of the window's intended VS during these applies, so the crossing check
     /// is unsafe and must be skipped.
     bool inGeometryApply = false;
+    /// The window whose commit applyWindowGeometry's ANIMATED arm is making
+    /// right now (null otherwise). That arm commits before it retargets its
+    /// own leg, and the frame-change hook's strip retarget must not answer
+    /// the synchronous re-entry, or it zeroes the leg's velocity first.
+    const KWin::EffectWindow* animatedApplyCommit = nullptr;
     /// Per-screen epoch for slotApplyGeometriesBatch cascades, read ONLY by a
     /// cascade's z-order restore: each batch bumps and captures it for every
     /// screen it targets, and the restore skips when every screen it targeted

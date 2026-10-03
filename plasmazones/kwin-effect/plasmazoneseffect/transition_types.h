@@ -225,6 +225,12 @@ struct ShaderTransition
     /// "fully revealed", which is exactly the semantic users expect for
     /// the corresponding `disappear` event.
     bool reverse = false;
+    /// True for a leg beginMaximizeShaderMorph installed for a KWin maximize
+    /// edge. A second edge inside it (a rapid toggle) supersedes it from the
+    /// rect it is drawing instead of riding it: the same-effect short-circuit
+    /// would keep the progress running while the endpoints swap, so the drawn
+    /// rect jumped from mix(from, to, p) to mix(to, from, p).
+    bool maximizeLeg = false;
     /// True when the active animation declares `fboExtent: "surface"` in
     /// its metadata. Surface-extent shaders (bounce, fly-in, broken-glass,
     /// morph) paint past the window bounds, so `apply()` expands the

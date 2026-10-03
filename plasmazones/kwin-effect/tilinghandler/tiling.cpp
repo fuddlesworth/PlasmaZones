@@ -1948,6 +1948,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         applyMaximizeSuppressed(kw, KWin::MaximizeFull);
                         monocleBitWritten = !wasAlreadyMaximized;
                     }
+                    if (monocleBitWritten && snap.window->isWaylandClient()) { // absorb KWin's echo (m_monocleEchoOwed)
+                        m_effect->m_shaderManager.armMonocleEcho(snap.window, true);
+                    }
                     if (!wasAlreadyMaximized) {
                         m_monocleMaximizedWindows.insert(snap.windowId);
                     }
@@ -1956,18 +1959,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // earlier — the engine has changed its mind inside the
                     // gesture, and the gesture end must re-drive, not restore.
                     m_monocleRestoreOwed.remove(snap.windowId);
-                    // Same departure-rect fix the column arm takes, for the
-                    // same reason and by the same mechanism. maximize() above
-                    // has already moved the window to KWin's maximize area, so
-                    // a leg departing from the live frame animates almost
-                    // nothing growing and nothing at all shrinking. The
-                    // capture at windowMaximizedStateAboutToChange is the only
-                    // place the pre-monocle rect still exists, and this arm's
-                    // own maximize() is what just refreshed it.
-                    //
-                    // Gated on that call having actually happened AND on the
-                    // state having changed: on the already-maximized path
-                    // maximize() emits nothing, so the entry would be stale.
+                    // The column arm's departure-rect fix: maximize() already
+                    // moved the window, so a leg from the live frame animates
+                    // nothing; the windowMaximizedStateAboutToChange capture
+                    // still holds the pre-monocle rect. Only when this arm's
+                    // maximize() ran AND changed state (else it emits nothing
+                    // and the capture is stale).
                     QRectF monocleOrigin;
                     if (monocleBitWritten) {
                         const QRectF preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
@@ -1999,6 +1996,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // same departure the column Release arm gets through
                 // maximizeBitWrittenThisBatch.
                 const bool monocleBitReleased = unmaximizeMonocleWindow(snap.windowId);
+                if (monocleBitReleased && snap.window->isWaylandClient()) { // absorb KWin's echo (m_monocleEchoOwed)
+                    m_effect->m_shaderManager.armMonocleEcho(snap.window, false);
+                }
                 // Clear any KWin maximize state before tiling. A user-
                 // maximized window keeps its MaximizeFull flag through
                 // moveResize; KWin then re-asserts the maximize-area

@@ -146,10 +146,19 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
                 // mesh-consuming pack (wobble, ...) gets neighbour-coupled
                 // physics from the first frame. The grip is the node
                 // nearest the cursor at grab; physics constants use KWin's
-                // middle preset (per-pack tuning can layer on later).
+                // middle preset (per-pack tuning can layer on later). A
+                // re-grab while the previous release is still ringing out
+                // (this leg kept by the same-effect short-circuit) keeps the
+                // deformation and moves only the grip; seeding it flat jumped
+                // the sheet to a flat rect on the re-grab frame.
                 if (st->cached->iMoveMeshLoc >= 0 && KWin::effects) {
-                    ShaderInternal::initMeshSim(st->meshSim, window->frameGeometry(), KWin::effects->cursorPos(),
-                                                st->meshParams);
+                    if (st->meshSim.initialized && !st->meshSim.settled) {
+                        ShaderInternal::regripMeshSim(st->meshSim, window->frameGeometry(), KWin::effects->cursorPos(),
+                                                      st->meshParams);
+                    } else {
+                        ShaderInternal::initMeshSim(st->meshSim, window->frameGeometry(), KWin::effects->cursorPos(),
+                                                    st->meshParams);
+                    }
                 }
             }
         }

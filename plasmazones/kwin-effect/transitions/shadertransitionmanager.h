@@ -125,6 +125,21 @@ public:
         m_pendingMaximizeMorph.remove(w);
     }
 
+    /// The tile batch wrote (@p maximized true) or released (false) @p w's
+    /// monocle maximize bit; see m_monocleEchoOwed. Null-guarded like
+    /// noteMaximizeDemotedForSnap.
+    void armMonocleEcho(KWin::EffectWindow* w, bool maximized)
+    {
+        if (w) {
+            m_monocleEchoOwed.insert(w, maximized);
+        }
+    }
+    /// Drop @p w's owed echo (the window left tiling, so no echo is owed).
+    void dropMonocleEcho(KWin::EffectWindow* w)
+    {
+        m_monocleEchoOwed.remove(w);
+    }
+
     /// Rebuild the effect-rule `RuleSet` from `m_ruleAnimationRules`
     /// — the rules from `rules.json` that carry any effect-consumed
     /// action (admitted via `ActionRegistry::hasTag(type, Tag::Effect)`;
@@ -545,6 +560,14 @@ private:
         qint64 armedAtMs = 0;
     };
     QHash<KWin::EffectWindow*, PendingMaximizeMorph> m_pendingMaximizeMorph;
+    // The tile batch wrote (true) or released (false) a Wayland monocle
+    // window's maximize bit itself. KWin's committed maximizedChanged echo
+    // arrives a round trip later with the suppression counter back at 0, and
+    // is absorbed (no morph) instead of replaying a full maximize morph over
+    // the batch's own placement leg; the edge tracking and the rule-cache
+    // invalidation still run for it. One-shot: consumed by the matching edge,
+    // dropped by a non-matching one, on the untrack funnel and on windowDeleted.
+    QHash<KWin::EffectWindow*, bool> m_monocleEchoOwed;
     QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
 };
 
