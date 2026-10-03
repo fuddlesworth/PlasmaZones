@@ -1480,7 +1480,7 @@ public:
     static QSize declaredMinSize(KWin::EffectWindow* w);
 
 private:
-    void reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight);
+    void reportMinSizeIfChanged(const QString& windowId, const QSize& declared); ///< see framecentering.cpp
 
     // ═══════════════════════════════════════════════════════════════════
     // Member variables

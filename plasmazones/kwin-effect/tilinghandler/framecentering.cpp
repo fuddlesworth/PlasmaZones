@@ -4,8 +4,8 @@
 // Frame-commit handling for TilingHandler: slotWindowFrameGeometryChanged,
 // which centres a tile whose client committed a smaller size than it was
 // asked for and reports a minimum size it discovers on the way, and
-// reportDiscoveredMinSize. Split out of tiling.cpp, which keeps the tile
-// batch pipeline.
+// reportMinSizeIfChanged, the min-size reporter it shares with the batch.
+// Split out of tiling.cpp, which keeps the tile batch pipeline.
 
 #include "tilinghandler.h"
 #include "scrolldecisions.h"
@@ -23,6 +23,7 @@
 #include <window.h>
 
 #include <QDateTime>
+#include <QDBusPendingCallWatcher>
 #include <QLoggingCategory>
 #include <QScopeGuard>
 
@@ -392,26 +393,13 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                           << ") returned null — skipping bounds clamp for" << windowId;
     }
 
-    // Already at the centered position — record and consume
-    if (qAbs(actual.x() - centered.x()) < 1.0 && qAbs(actual.y() - centered.y()) < 1.0) {
-        m_centeredWaylandZones[windowId] = targetZone;
-        m_tileTargetZones.erase(it);
-        return;
-    }
-
-    KWin::Window* kw = w->window();
-    if (!kw) {
-        // No KWin::Window — consume stale entry to prevent perpetual lookups
-        m_tileTargetZones.erase(it);
-        return;
-    }
-
-    qCInfo(lcEffect) << "Centering autotile window" << windowId << "actual=" << actual.size()
-                     << "zone=" << targetZone.size() << "offset=(" << dx << "," << dy << ")";
-
     // Window refused to shrink below its actual size — report its declared
     // minimum to the daemon so future retiles can account for it. Only report
     // when the window is larger than the zone (negative delta = oversized).
+    // Ahead of the already-centred return below: an oversized window is
+    // left-aligned at the zone origin, which is usually where it already
+    // sits, so a report placed after that return never ran for the common
+    // oversized shape and a hint the client raised late went unreported.
     //
     // IMPORTANT: Only use the window's declared minSize() from the compositor.
     // The frame geometry is the current size, which may be transiently larger
@@ -437,20 +425,31 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // discussion #511); internal windows never reach the autotile-centering
     // pipeline, but the helper keeps the call site safe independently of the
     // upstream eligibility filter.
+    // The whole declared pair, through the same change-gated cache as the
+    // batch poll (reportMinSizeIfChanged), so the two writers always agree.
     if (dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
         const QSize declaredMin = declaredMinSize(w);
-        int discoveredMinW = 0;
-        int discoveredMinH = 0;
-        if (dw < -MinCenteringDelta && declaredMin.width() > 0) {
-            discoveredMinW = declaredMin.width();
-        }
-        if (dh < -MinCenteringDelta && declaredMin.height() > 0) {
-            discoveredMinH = declaredMin.height();
-        }
-        if (discoveredMinW > 0 || discoveredMinH > 0) {
-            reportDiscoveredMinSize(windowId, discoveredMinW, discoveredMinH);
+        if (declaredMin.width() > 0 || declaredMin.height() > 0) {
+            reportMinSizeIfChanged(windowId, declaredMin);
         }
     }
+
+    // Already at the centered position — record and consume
+    if (qAbs(actual.x() - centered.x()) < 1.0 && qAbs(actual.y() - centered.y()) < 1.0) {
+        m_centeredWaylandZones[windowId] = targetZone;
+        m_tileTargetZones.erase(it);
+        return;
+    }
+
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        // No KWin::Window — consume stale entry to prevent perpetual lookups
+        m_tileTargetZones.erase(it);
+        return;
+    }
+
+    qCInfo(lcEffect) << "Centering autotile window" << windowId << "actual=" << actual.size()
+                     << "zone=" << targetZone.size() << "offset=(" << dx << "," << dy << ")";
 
     // Erase BEFORE moveResize to prevent re-entrancy: moveResize emits
     // windowFrameGeometryChanged synchronously, which would re-enter
@@ -461,33 +460,52 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     kw->moveResize(centered);
 }
 
-void TilingHandler::reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight)
+void TilingHandler::reportMinSizeIfChanged(const QString& windowId, const QSize& declared)
 {
-    if (minWidth <= 0 && minHeight <= 0) {
+    // The ONE writer of windowMinSizeUpdated after announce, shared by the
+    // batch's change poll and the centring pass. It always sends the whole
+    // declared pair, because the daemon's store replaces the whole QSize and
+    // re-tiles on any change: a centring pass that sent only the oversized
+    // axis (0 in the other) flipped the stored minimum against the batch's
+    // full pair on every round, and each flip re-tiled, re-applied and
+    // re-centred the window, for as long as it stayed oversized.
+    const auto lastIt = m_effect->m_lastReportedMinSize.constFind(windowId);
+    if (lastIt != m_effect->m_lastReportedMinSize.constEnd() && *lastIt == declared) {
         return;
     }
-
-    qCInfo(lcEffect) << "Discovered min size for" << windowId << ":" << minWidth << "x" << minHeight
-                     << "- reporting to daemon for future retiles";
-
-    // This is a SECOND writer of windowMinSizeUpdated carrying a per-axis
-    // pair with 0 in the axis that did not shrink, and the daemon's store
-    // replaces the whole QSize — so a (900, 0) discovery clears a stored
-    // height minimum. Evict the last-reported cache rather than recording
-    // the half-pair as sent: the next batch's change poll then re-asserts
-    // the true declared pair instead of being silenced by its own cache.
-    m_effect->m_lastReportedMinSize.remove(windowId);
-
-    // Gate like every other fireAndForget in this handler: with no daemon
-    // registered the call only queues a D-Bus error, and the eviction above
-    // already ensures the discovery is re-reported after bring-up.
+    // Gate like every other call in this handler: with no daemon registered
+    // the call only queues a D-Bus error, and the cache is left unwritten so
+    // the first batch after bring-up reports it.
     if (!m_effect->m_daemonGate.serviceRegistered) {
         return;
     }
-
-    PhosphorProtocol::ClientHelpers::fireAndForget(
-        m_effect, PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowMinSizeUpdated"),
-        {windowId, minWidth, minHeight}, QStringLiteral("windowMinSizeUpdated"));
+    m_effect->m_lastReportedMinSize.insert(windowId, declared);
+    qCDebug(lcEffect) << "Reporting min size for" << windowId << ":" << declared;
+    // Watched rather than fire-and-forget, purely for the rollback: this leg
+    // is change-gated, so a lost call would leave the cache recording a size
+    // the daemon never heard and the engine modelling the old minimum until
+    // the hints move AGAIN or the window closes — the "full-width game over a
+    // half-width model" failure the batch poll exists to fix. The announce
+    // sites roll back for the same reason.
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Tiling,
+                                                   QStringLiteral("windowMinSizeUpdated"),
+                                                   {windowId, declared.width(), declared.height()}),
+        m_effect);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId, declared](QDBusPendingCallWatcher* pw) {
+        pw->deleteLater();
+        if (!pw->isError()) {
+            return;
+        }
+        qCWarning(lcEffect) << "windowMinSizeUpdated failed for" << windowId << pw->error().message();
+        // Only roll back OUR value: a newer report may have landed while this
+        // call was in flight, and clearing that would cost a redundant
+        // re-report.
+        const auto cached = m_effect->m_lastReportedMinSize.constFind(windowId);
+        if (cached != m_effect->m_lastReportedMinSize.constEnd() && *cached == declared) {
+            m_effect->m_lastReportedMinSize.remove(windowId);
+        }
+    });
 }
 
 } // namespace PlasmaZones

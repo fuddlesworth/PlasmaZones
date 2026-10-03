@@ -1482,47 +1482,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // daemon's windowMinSizeUpdated widens the column and retiles.
             // A cache miss (effect-restart adoption, where no announce seeded
             // it) reports too: the call is idempotent daemon-side, so at
-            // worst it confirms what the engine already holds.
-            {
-                const QSize declared = declaredMinSize(snap.window);
-                const auto lastIt = m_effect->m_lastReportedMinSize.constFind(snap.windowId);
-                if ((lastIt == m_effect->m_lastReportedMinSize.constEnd() || *lastIt != declared)
-                    && m_effect->m_daemonGate.serviceRegistered) {
-                    m_effect->m_lastReportedMinSize.insert(snap.windowId, declared);
-                    // Watched rather than fire-and-forget, purely for the
-                    // rollback: this leg is change-gated, so a lost call would
-                    // leave the cache recording a size the daemon never heard
-                    // and the engine modelling the old minimum until the hints
-                    // move AGAIN or the window closes — the "full-width game
-                    // over a half-width model" failure this block exists to
-                    // fix. Both sibling announce sites roll back for the same
-                    // reason. No extra cost: fireAndForget builds a watcher
-                    // anyway, it just gives the caller no hook.
-                    const QString minSizeWid = snap.windowId;
-                    auto* minSizeWatcher = new QDBusPendingCallWatcher(
-                        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Tiling,
-                                                                   QStringLiteral("windowMinSizeUpdated"),
-                                                                   {minSizeWid, declared.width(), declared.height()}),
-                        m_effect);
-                    connect(minSizeWatcher, &QDBusPendingCallWatcher::finished, this,
-                            [this, minSizeWid, declared](QDBusPendingCallWatcher* pw) {
-                                pw->deleteLater();
-                                if (!pw->isError()) {
-                                    return;
-                                }
-                                qCWarning(lcEffect)
-                                    << "windowMinSizeUpdated failed for" << minSizeWid << pw->error().message();
-                                // Only roll back OUR value: a newer report (or
-                                // reportDiscoveredMinSize) may have landed while
-                                // this call was in flight, and clearing that
-                                // would cost a redundant re-report.
-                                const auto cached = m_effect->m_lastReportedMinSize.constFind(minSizeWid);
-                                if (cached != m_effect->m_lastReportedMinSize.constEnd() && *cached == declared) {
-                                    m_effect->m_lastReportedMinSize.remove(minSizeWid);
-                                }
-                            });
-                }
-            }
+            // worst it confirms what the engine already holds. Change-gated
+            // and rolled back on failure inside reportMinSizeIfChanged, the
+            // writer this poll shares with the centring pass.
+            reportMinSizeIfChanged(snap.windowId, declaredMinSize(snap.window));
             // Title-bar (borderless) state is driven by rules through the
             // effect's reconcileRuleHiddenTitleBar → DecorationManager path.
 

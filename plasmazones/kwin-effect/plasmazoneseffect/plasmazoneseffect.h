@@ -2895,8 +2895,8 @@ private:
     /// the clamped real frame can never match. Seeded at announce (rolled
     /// back on a failed BATCH announce; the single-window error arm relies
     /// on the re-announce re-seeding instead). Dropped on close and the
-    /// deleted backstop, evicted per-window by the min-size discovery leg
-    /// (so the next batch re-asserts the true pair), and cleared wholesale
+    /// deleted backstop, written by TilingHandler::reportMinSizeIfChanged
+    /// (the batch poll and the centring pass), and cleared wholesale
     /// on daemon loss AND at bring-up (drainDeadSessionState). NOT dropped by
     /// cleanupAutotileTracking — the re-announce re-seeds it inline.
     QHash<QString, QSize> m_lastReportedMinSize;
