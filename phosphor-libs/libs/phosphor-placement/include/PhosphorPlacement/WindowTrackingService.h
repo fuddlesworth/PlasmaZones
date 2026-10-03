@@ -1274,7 +1274,6 @@ private:
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     AutotileModePredicate m_autotileModePredicate{};
     EngineTiledPredicate m_engineTiledPredicate{};
-    TilingHeldScreenResolver m_tilingHeldScreenResolver{};
     ModeEngineIdResolver m_modeEngineIdResolver{};
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
@@ -1317,6 +1316,10 @@ private:
     // save after daemon startup to serialize every field. Cleared by
     // loadState() once in-memory state mirrors the disk file.
     DirtyMask m_dirtyMask = DirtyAll;
+
+    // Appended last: this is an installed class, and a member added after a
+    // release goes after every member that release shipped.
+    TilingHeldScreenResolver m_tilingHeldScreenResolver{};
 
     // Note: No save timer - persistence is the WindowTrackingAdaptor's debounced
     // JSON save. Service emits stateChanged() signal when state needs saving
