@@ -66,8 +66,9 @@ public:
     /// back to the DURABLE placement-record snap slot when the live cache is cold.
     /// The live per-store zone maps are runtime-only — a daemon restart (and
     /// `handoffRelease` on autotile entry) clears them — so consumers that must
-    /// survive a restart (the autotile→snap resnap) read this instead. Returns an
-    /// empty list for a window that was never snapped in either source.
+    /// survive a restart (the autotile→snap resnap) read this instead. Only the
+    /// window's OWN record counts, never a sibling instance's: a window that was
+    /// never snapped in either source answers an empty list.
     virtual QStringList recordedSnapZones(const QString& windowId) const = 0;
 
     virtual QString zoneForWindow(const QString& windowId) const = 0;

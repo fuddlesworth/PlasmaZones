@@ -155,43 +155,23 @@ QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) co
         }
     }
     // Cold cache (post-restart, or after handoffRelease cleared the live map):
-    // fall back to the DURABLE snap slot in the placement record. windowId is the
-    // exact `appId|uuid`; KWin uuids are stable across a daemon restart, so peek's
-    // exact-id branch resolves the right window. The appId fallback is DELIBERATE
-    // relogin support (pinned by testRecordedSnapZones_appIdFallbackAfterRelogin):
-    // a new-uuid window resolves its app's durable zone for the resnap /
-    // never-snapped consumers. Accepted tradeoff: a record-less LIVE window with
-    // no live zones reads the same app-level answer — indistinguishable from the
-    // relogin case at this layer, and a live-ASSIGNED sibling always resolves via
-    // its own live store first (see the sameAppInstancesEachKeepOwnZone test).
-    // The window's OWN record stays authoritative: an exact-instance record
-    // whose snap slot is NOT snapped answers "no zones" outright — falling
-    // through to the app-level fallback there would hand a window that
-    // explicitly floats a sibling's zone list.
+    // fall back to the DURABLE snap slot in the window's OWN placement record.
+    // windowId is the exact `appId|uuid`; KWin uuids are stable across a daemon
+    // restart, so the exact-instance read resolves the right window. A record
+    // whose snap slot is not snapped answers "no zones".
+    //
+    // Never a sibling's record: a window with no record of its own has no
+    // zones. Another instance's zone describes where THAT window was, and
+    // answering with it would resnap this window there or read it as snapped
+    // on a monitor it never occupied (the reopen contract). Every open writes
+    // a slot-less record under the live uuid, so the case this used to serve
+    // (a relogin's fresh uuid) already reads as "no zones" after the first
+    // save.
     if (const auto own = m_placementStore.peekExact(windowId)) {
         const PhosphorEngine::EngineSlot ownSlot = own->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         return ownSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()
             ? snapZonesOnDesktopInView(ownSlot, own->screenId)
             : QStringList{};
-    }
-    // Record-less window: the appId fallback, with an accept selecting
-    // genuinely SNAPPED records. peek's appId branch returns the newest
-    // record by sequence, and close captures restamp a pure-float sibling to
-    // the highest sequence — without the accept, that float record shadowed
-    // an older sibling's real snapped slot and a durably-snapped window read
-    // as "never snapped" (mis-seeding it into autotile and losing its resnap
-    // target). validatedUnmanagedGeometry documents the same shadowing trap
-    // for the geometry axis.
-    const auto rec =
-        m_placementStore.peek(QString(), currentAppIdFor(windowId), [](const PhosphorEngine::WindowPlacement& p) {
-            return p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state
-                == PhosphorEngine::WindowPlacement::stateSnapped();
-        });
-    if (rec) {
-        const PhosphorEngine::EngineSlot snapSlot = rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
-        if (snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()) {
-            return snapZonesOnDesktopInView(snapSlot, rec->screenId);
-        }
     }
     return {};
 }

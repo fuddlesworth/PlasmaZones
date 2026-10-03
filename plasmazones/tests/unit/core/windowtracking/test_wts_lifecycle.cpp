@@ -724,11 +724,11 @@ private Q_SLOTS:
         QCOMPARE(rec->freeGeometryFor(QStringLiteral("DP-1")), closeGeometry);
     }
 
-    void testRecordedSnapZones_appIdFallbackAfterRelogin()
+    void testRecordedSnapZones_neverAnswersASiblingsRecord()
     {
-        // After a relogin the window's uuid changes; the durable record stored under
-        // the OLD uuid must still resolve for a NEW same-app window via the appId
-        // bucket (the exact-uuid branch misses, the appId fallback hits).
+        // A window with no record of its own has no recorded zones, even when
+        // another instance of its app (here under an older uuid) was snapped.
+        // That zone describes where the other window was, not this one.
         const QString oldId = QStringLiteral("firefox|old-uuid");
         PhosphorEngine::WindowPlacement p;
         p.windowId = oldId;
@@ -739,8 +739,16 @@ private Q_SLOTS:
         p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
         m_service->placementStore().record(p);
 
-        const QString newId = QStringLiteral("firefox|new-uuid");
-        QCOMPARE(m_service->recordedSnapZones(newId), QStringList{m_zoneIds[1]});
+        QVERIFY(m_service->recordedSnapZones(QStringLiteral("firefox|new-uuid")).isEmpty());
+        QCOMPARE(m_service->recordedSnapZones(oldId), QStringList{m_zoneIds[1]});
+    }
+
+    void testRecordedSnapZones_neverAnswersALiveSiblingsZone()
+    {
+        // The live-store half of the same rule: a sibling snapped LIVE does
+        // not lend its zone to a record-less instance of the app.
+        m_service->assignWindowToZone(QStringLiteral("firefox|live"), m_zoneIds[0], QString(), 0);
+        QVERIFY(m_service->recordedSnapZones(QStringLiteral("firefox|other")).isEmpty());
     }
 
     void testResnapFromAutotileOrder_sameAppInstancesEachKeepOwnZone()
