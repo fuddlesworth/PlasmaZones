@@ -537,6 +537,10 @@ void ScreenChangeHandler::applyOutputCrossing(KWin::EffectWindow* w, const QStri
     if (!w || w->isDeleted()) {
         return;
     }
+    const QString windowId = m_effect->getWindowId(w);
+    // The adopt below reads the exclusion verdict, and the queued
+    // invalidation further down lands after it.
+    m_effect->evictExclusionVerdicts(windowId);
     // Tiling transfer (autotile to autotile, autotile to snapping, and so
     // on). Runs even mid-drag so the engine drops the window from the old
     // screen's state at once.
@@ -544,7 +548,6 @@ void ScreenChangeHandler::applyOutputCrossing(KWin::EffectWindow* w, const QStri
     if (oldScreenId.isEmpty() || oldScreenId == newScreenId) {
         return;
     }
-    const QString windowId = m_effect->getWindowId(w);
     // ScreenId, ScreenOrientation and the screen's active layout are all
     // per-screen rule inputs, and the verdict cache is keyed on (windowId,
     // rule-set revision), neither of which moves here. Mid-drag the
@@ -596,6 +599,7 @@ void ScreenChangeHandler::applyVirtualScreenCrossing(KWin::EffectWindow* w, cons
         return;
     }
     const QString windowId = m_effect->getWindowId(w);
+    m_effect->evictExclusionVerdicts(windowId);
     // The same rule-verdict staleness as an output crossing, and it runs ahead
     // of the delegation below, which returns early for tracked and autotile
     // windows whose verdicts are stale all the same.

@@ -2390,16 +2390,16 @@ private:
     /// frame-geometry edge: evicts ONLY @p windowId's entry from the three
     /// per-window verdict caches and re-drives that window's decoration,
     /// title-bar and layer reconciles directly. The coalesced helper above
-    /// clears the GLOBAL animation match cache per flush — fine for discrete
-    /// placement flips, but the geometry edge fires per 50 ms flush for the
-    /// whole duration of a drag, and a global clear there cold-starts every
-    /// other window's verdict twenty times a second (the same cost argument
-    /// that keeps caption changes from clearing at all). The layer and
-    /// title-bar reconciles are change-gated; updateWindowDecoration re-runs
-    /// its chain resolve but keeps the cached prefix fold when the fold
-    /// inputs have not moved, and the extra damage lands on a window that is
-    /// already repainting every frame of its own motion.
+    /// clears the GLOBAL animation match cache per flush, but the geometry edge
+    /// fires per 50 ms flush for a whole drag, and a global clear there
+    /// cold-starts every other window's verdict twenty times a second. The
+    /// layer and title-bar reconciles are change-gated; updateWindowDecoration
+    /// keeps the cached prefix fold when its inputs have not moved, and the
+    /// damage lands on a window already repainting for its own motion.
     void invalidateRuleCachesForWindowGeometry(const QString& windowId, KWin::EffectWindow* w);
+    /// Drop @p windowId's cached exclusion verdicts at once, ahead of a placement
+    /// decision taken in the context it just moved into (per window, so mid-drag too).
+    void evictExclusionVerdicts(const QString& windowId);
 
     /// Bulk analog of invalidateRuleCacheForStateChange for placement changes that
     /// affect EVERY window at once — daemon loss (the zone / floating caches are

@@ -74,6 +74,17 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
     }
 }
 
+void PlasmaZonesEffect::evictExclusionVerdicts(const QString& windowId)
+{
+    // A desktop, activity or monitor move changes the rule inputs, and the
+    // verdict cache is keyed on (windowId, rule-set revision), neither of
+    // which moves. The coalesced invalidation lands a turn later, after the
+    // adopt or the arrival drain has read the stale verdict, so the two
+    // exclusion caches are dropped here, synchronously (F233, F292).
+    m_snappingExclusionEvaluator.evictCached(windowId);
+    m_decorationExclusionEvaluator.evictCached(windowId);
+}
+
 void PlasmaZonesEffect::invalidateRuleCachesForWindowGeometry(const QString& windowId, KWin::EffectWindow* w)
 {
     // See the header doc: per-window eviction only — never a global clear on
@@ -87,8 +98,7 @@ void PlasmaZonesEffect::invalidateRuleCachesForWindowGeometry(const QString& win
     // otherwise keep answering from the pre-resize verdict for the rest of
     // the window's life.
     m_shaderManager.effectVerdictRuleEvaluator().evictCached(windowId);
-    m_snappingExclusionEvaluator.evictCached(windowId);
-    m_decorationExclusionEvaluator.evictCached(windowId);
+    evictExclusionVerdicts(windowId);
     if (!w || w->isDeleted()) {
         return;
     }

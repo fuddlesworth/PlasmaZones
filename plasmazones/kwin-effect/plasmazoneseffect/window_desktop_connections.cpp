@@ -65,6 +65,9 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
             return;
         }
         updateWindowStickyState(window);
+        // The arms below adopt or drain by the exclusion verdict, which must
+        // be judged on the desktop the window moved to.
+        evictExclusionVerdicts(getWindowId(window));
         // Re-stamp SECOND, ahead of every early return below, and read the
         // previous value out here: this signal reports any edit to the desktop
         // set, and each arm below returns from a different point. A stamp
@@ -286,6 +289,14 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // guard would send it away with nothing done. The set-grew case the
         // guard is written for is already excluded by the discriminator above.
         if (!stickyFallThrough && m_tilingHandler->isTrackedWindow(windowId)) {
+            // A tile still held for the desktop it came from is carried here
+            // by the daemon's membership reconcile, which reads no rules. A
+            // rule excluding it on this desktop lets it go again (F292).
+            if (isExcludedBySnappingRule(window)) {
+                m_tilingHandler->releaseWindowTracking(windowId, screenId);
+                reconcileDecorationOnPlacementFlip(windowId);
+                qCInfo(lcEffect) << "Window moved onto current desktop is excluded there, released:" << windowId;
+            }
             return;
         }
         if (stickyFallThrough) {
