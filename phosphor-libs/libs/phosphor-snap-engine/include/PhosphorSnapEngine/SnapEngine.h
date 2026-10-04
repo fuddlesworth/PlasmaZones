@@ -162,9 +162,8 @@ public:
      * Returns true if the screenId is currently active for snap mode, false
      * if disabled. The engine library is intentionally settings-agnostic
      * (LGPL boundary) so the daemon adaptor injects the predicate; SnapEngine
-     * itself has no notion of disabled contexts. The daemon-side closure is
-     * responsible for resolving the current virtual desktop / activity at
-     * call time — SnapState does not track those.
+     * itself has no notion of disabled contexts. The daemon closure passes
+     * the current activity.
      *
      * Applied inside `resolveWindowRestore` so BOTH the engine's own
      * `windowOpened` path AND the D-Bus `SnapAdaptor::resolveWindowRestore`
@@ -1322,9 +1321,7 @@ private:
 
     // Auto-snap entry gate. Empty until the daemon wires it; while empty
     // the engine treats every screen as active — preserving the
-    // historical default that unit tests rely on. (The predicate takes
-    // the screen and the desktop being restored onto; the activity is
-    // resolved by the daemon-side closure at call time; see the
+    // historical default that unit tests rely on. (See the
     // ShouldRestorePredicate doc above and discussion #461 item 7.)
     ShouldRestorePredicate m_shouldRestorePredicate{};
 

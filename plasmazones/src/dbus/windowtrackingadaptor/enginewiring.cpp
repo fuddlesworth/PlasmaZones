@@ -195,15 +195,16 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // re-loaded from disk, where the read-time filter dropped the same
         // entries; this gate makes the running session match.
         //
-        // Activity is left unset — SnapState carries no per-window activity
-        // tag, mirroring isPersistedContextDisabled's snap-side default.
+        // Activity: the current one, because every restore lands in the
+        // activity in view.
         //
         // Desktop: the engine passes the desktop the window is being restored
         // ONTO (the registry's answer, else the record's), so a session
         // restore onto a background desktop is gated by that desktop's
         // disable state, not by whatever the screen is showing.
         snap->setShouldRestorePredicate([this](const QString& screenId, int desktop) -> bool {
-            return !isPersistedContextDisabled(screenId, desktop >= 1 ? desktop : currentDesktopForScreen(screenId));
+            return !isPersistedContextDisabled(screenId, desktop >= 1 ? desktop : currentDesktopForScreen(screenId),
+                                               m_layoutManager->currentActivity());
         });
 
         // Floated-position restore gate (snap-floated windows). On open the engine

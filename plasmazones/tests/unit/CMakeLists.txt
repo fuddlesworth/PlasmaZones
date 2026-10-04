@@ -1415,6 +1415,14 @@ target_link_libraries(test_wta_rule_context PRIVATE Qt6::Test Qt6::Core Qt6::DBu
                       PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_rule_context COMMAND test_wta_rule_context)
 
+# The disabled-context gates on the snap restore paths ask about the current
+# activity (F480).
+add_executable(test_wta_activity_gate dbus/test_wta_activity_gate.cpp)
+target_link_libraries(test_wta_activity_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorEngine::PhosphorEngine
+                      PhosphorZones::PhosphorZones PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_activity_gate COMMAND test_wta_activity_gate)
+
 add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)

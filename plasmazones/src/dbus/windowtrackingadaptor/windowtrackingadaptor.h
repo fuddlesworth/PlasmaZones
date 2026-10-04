@@ -1677,11 +1677,8 @@ private:
      * carries through to the resolver, which treats it as a sentinel
      * (matches no per-screen disable entry).
      *
-     * The activity parameter is optional and defaults to empty — snap-mode
-     * storage carries no per-window activity tag (SnapState does not track it)
-     * so snap callers leave it unset and the activity-mode disable list never
-     * applies to them. The WindowPlacementStore serialize keep-predicate passes
-     * each record's activity tag explicitly so autotile records gate correctly.
+     * The live gates (the snap restore predicate, the instant-restore cache)
+     * pass the current activity; the store keep-predicate passes the record's.
      */
     bool isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
                                     const QString& activity = QString()) const;

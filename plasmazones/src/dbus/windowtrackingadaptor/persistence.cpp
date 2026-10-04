@@ -197,10 +197,9 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
     // guards saveState, loadState and the engine restore path so all four
     // paths can never drift.
     //
-    // The gate keys on the record screen's CURRENT desktop, the same
-    // two-argument check saveState and loadState apply; the record's own
-    // activity is deliberately not part of it (isPersistedContextDisabled
-    // asks about the screen and desktop only).
+    // The gate keys on the record screen's CURRENT desktop and the CURRENT
+    // activity: the opener lands in the activity in view, so a record from
+    // another activity must not teleport it into a context disabled here.
     //
     // One ARRAY per appId, newest record first: the effect takes the first
     // entry whose window it cannot see, so on a daemon-only restart (where
@@ -212,7 +211,7 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
         for (const auto& target : it.value()) {
             // Per-output virtual desktops (#648): gate each record on ITS screen's desktop.
             const int desktop = currentDesktopForScreen(target.screenId);
-            if (isPersistedContextDisabled(target.screenId, desktop)) {
+            if (isPersistedContextDisabled(target.screenId, desktop, m_layoutManager->currentActivity())) {
                 qCDebug(lcDbusWindow) << "getPendingRestoreGeometries: skipping" << it.key()
                                       << "— disabled context on screen" << target.screenId;
                 continue;
