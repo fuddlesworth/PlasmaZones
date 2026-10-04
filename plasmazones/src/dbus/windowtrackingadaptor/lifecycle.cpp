@@ -29,6 +29,7 @@
 #include "core/platform/logging.h"
 #include "core/resolve/screenmoderouter.h"
 #include "core/utils/utils.h"
+#include "core/utils/dbusvariantutils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/types/types.h"
 #include <PhosphorEngine/WindowRegistry.h>
@@ -689,8 +690,9 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             } else if (k == Key::VirtualDesktops) {
                 // Multi-desktop span list (absent for single-desktop / sticky
                 // windows, so an absent key correctly clears a previous span).
-                // Same lenient QVariant conversion policy as the fields above.
-                const QVariantList list = v.toList();
+                // Over the bus it arrives as a QDBusArgument, which toList()
+                // reads as empty, so it is unwrapped first (F1003).
+                const QVariantList list = DBusVariantUtils::convertDbusArgument(v).toList();
                 meta.virtualDesktops.reserve(list.size());
                 for (const QVariant& d : list) {
                     const int desktop = d.toInt();
