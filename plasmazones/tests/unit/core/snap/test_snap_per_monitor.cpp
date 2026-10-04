@@ -12,18 +12,16 @@
  * handoff guard):
  *
  * 1. e2eDeterministicUnfloatAcrossMonitors: the acceptance scenario for the entire
- *    effort. Snap on B, float, migrate to A → the window reports A, the pre-float still
- *    names B (preserved), and an unfloat (on A or back on B) restores the window to its
- *    remembered home zone on B (cross-monitor restore is allowed).
- * 2. unfloatRestoresToHomeZoneRegardlessOfDriverScreen: SnapEngine::setWindowFloat(
- *    id, false, A) restores the window to its home zone on B — the restore resolves
- *    against the pre-float home screen regardless of the driver screen.
+ *    effort. Snap on B, float, migrate to A → the window reports A and has forgotten
+ *    its home on B, so no unfloat (on A or back on B) throws it back into B's zone.
+ * 2. unfloatDrivenFromAnotherMonitorRefusesTheHome: SnapEngine::setWindowFloat(
+ *    id, false, A) refuses a home on B and keeps the window floating.
  * 3. perMonitorSnapIndependence: two windows snapped on two monitors keep independent
  *    per-screen state; floating one does not disturb the other, and same-index zones on
  *    different monitors do not collide.
- * 4. migrationMovesAllPerWindowFields: SnapState::migrateWindowTo carries zone, screen,
- *    desktop, floating bit, pre-float zone/screen and the auto-snap flag to the
- *    destination store and leaves none behind in the source.
+ * 4. migrationMovesEveryFieldButTheZone: a cross-monitor migrate carries the screen,
+ *    floating bit and auto-snap flag to the destination store, re-stamps the desktop,
+ *    drops the zone and the pre-float home, and leaves nothing behind in the source.
  * 5. pruneRemovedScreenDropsOnlyThatMonitor: a physically removed output's stores
  *    (including its virtual sub-screens) are reclaimed; the other monitor and the
  *    global holder survive.
@@ -111,8 +109,8 @@ private Q_SLOTS:
     //
     // A window snapped on monitor B, floated, then re-homed to monitor A via the
     // migration analogue of the activation/drift path must never teleport back to
-    // B's zone when unfloated on A — and must still restore B's zone when unfloated
-    // back on B. This is the end-to-end determinism the entire effort exists for.
+    // B's zone when unfloated on A. It forgot that home when it moved, so moving
+    // back to B does not bring it back either.
     // =====================================================================
     void e2eDeterministicUnfloatAcrossMonitors()
     {
@@ -139,40 +137,29 @@ private Q_SLOTS:
         QCOMPARE(m_service->screenForWindow(windowId), monitorA);
         QCOMPARE(m_engine->screenForTrackedWindow(windowId), monitorA);
 
-        // (b) The pre-float home zone/screen still name B (behaviour A: preserved).
-        QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
-        QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
+        // (b) The pre-float home on B is forgotten, and the window still floats.
+        QVERIFY(m_service->preFloatZones(windowId).isEmpty());
+        QVERIFY(m_service->preFloatScreen(windowId).isEmpty());
+        QVERIFY(m_service->isWindowFloating(windowId));
 
-        // (c) Cross-monitor restore is ALLOWED: unfloating while on A returns the
-        // window to its remembered home zone on B (resolved against the pre-float
-        // home screen), regardless of the current monitor.
-        UnfloatResult onA = m_engine->resolveUnfloatGeometry(windowId, monitorA);
-        if (QGuiApplication::screens().size() > 0) {
-            QVERIFY2(onA.found, "cross-monitor unfloat restores the window to its home zone");
-            QCOMPARE(onA.zoneIds, QStringList{m_zoneIds[0]});
-        }
+        // (c) Unfloating while on A finds no home to throw it back to.
+        QVERIFY(!m_engine->resolveUnfloatGeometry(windowId, monitorA).found);
 
-        // (d) Migrating back to B and unfloating there also restores the original B zone.
+        // (d) Nor does migrating back to B bring the forgotten home back.
         QVERIFY(m_engine->migrateWindowToScreen(windowId, monitorB));
         QCOMPARE(m_service->screenForWindow(windowId), monitorB);
-        UnfloatResult onB = m_engine->resolveUnfloatGeometry(windowId, monitorB);
-        if (QGuiApplication::screens().size() > 0) {
-            QVERIFY2(onB.found, "unfloat back on the original monitor must restore the pre-float zone");
-            QCOMPARE(onB.zoneIds, QStringList{m_zoneIds[0]});
-        }
-        // The pre-float bookkeeping still names B regardless of screen availability.
-        QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
+        QVERIFY(!m_engine->resolveUnfloatGeometry(windowId, monitorB).found);
     }
 
     // =====================================================================
-    // Test 2 (Discussion #724 follow-up): unfloat restores to the HOME zone.
+    // Test 2: an unfloat driven from another monitor refuses the home.
     //
-    // Cross-monitor restore is allowed, so an unfloat returns the window to its
-    // remembered home zone (zone0 on B) regardless of the screen the unfloat is
-    // driven with — driving setWindowFloat(id, false, A) restores it to B's zone
-    // rather than leaving it floating in limbo.
+    // The screen setWindowFloat is driven with is where the window is. A home
+    // on another monitor is stale there, so driving setWindowFloat(id, false, A)
+    // with the home on B keeps the window floating (the fallback setting is
+    // off), and never throws it back to B.
     // =====================================================================
-    void unfloatRestoresToHomeZoneRegardlessOfDriverScreen()
+    void unfloatDrivenFromAnotherMonitorRefusesTheHome()
     {
         installFullResolver();
 
@@ -186,21 +173,20 @@ private Q_SLOTS:
         m_service->setWindowFloating(windowId, true);
         QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
 
-        // Drive the unfloat with a different screen (A). The restore resolves against
-        // the pre-float home screen B, so the window returns to its home zone. The
-        // snap commit needs a real QScreen for the zone geometry, so gate on it.
+        // Drive the unfloat with a different screen (A): refused, still floating.
         QSignalSpy applySpy(m_engine, &SnapEngine::applyGeometryRequested);
         m_engine->setWindowFloat(windowId, false, monitorA);
+        QCOMPARE(applySpy.count(), 0);
+        QVERIFY(!m_service->isWindowSnapped(windowId));
+        QVERIFY(m_service->isWindowFloating(windowId));
 
+        // Driven from B, the monitor it floated on, the home restores. The snap
+        // commit needs a real QScreen for the zone geometry, so gate on it.
+        m_engine->setWindowFloat(windowId, false, monitorB);
         if (QGuiApplication::screens().size() > 0) {
-            QVERIFY2(applySpy.count() >= 1, "unfloat must restore the window to its home zone");
-            // Pin WHICH zone the restore targeted: the applyGeometryRequested zoneId
-            // arg (index 5) must be the home zone (zone0), not an empty string (the
-            // effect's float-restore discriminator). Asserting the re-snap alone would
-            // pass even if it landed on the wrong zone.
+            QCOMPARE(applySpy.count(), 1);
             QCOMPARE(applySpy.at(0).at(5).toString(), m_zoneIds[0]);
             QVERIFY(m_service->isWindowSnapped(windowId));
-            QVERIFY(!m_service->isWindowFloating(windowId));
         }
     }
 
@@ -273,9 +259,9 @@ private Q_SLOTS:
     // Test 4 (Discussion #724): migration moves every per-window field but the zone.
     //
     // A cross-monitor migrate carries the live screen (rewritten to the
-    // destination), the floating bit, pre-float zone/screen and auto-snap flag
-    // onto the destination store, re-stamps the desktop to the destination
-    // key's, and leaves the zone behind: it names a zone of the source screen's
+    // destination), the floating bit and auto-snap flag onto the destination
+    // store, and re-stamps the desktop to the destination key's. The zone and
+    // the pre-float home stay behind, dropped: both name the source screen's
     // layout. The source store holds none of them afterwards.
     // =====================================================================
     void migrationMovesEveryFieldButTheZone()
@@ -313,9 +299,9 @@ private Q_SLOTS:
         QVERIFY(stateB->desktopForWindow(windowId) != desktop);
         QVERIFY(stateB->isFloating(windowId));
         QVERIFY(stateB->isAutoSnapped(windowId));
-        // Pre-float rides along UNCHANGED (names the source's home context).
-        QCOMPARE(stateB->preFloatZones(windowId), QStringList{m_zoneIds[2]});
-        QCOMPARE(stateB->preFloatScreen(windowId), homeScreen);
+        // The pre-float home is forgotten, not carried.
+        QVERIFY(stateB->preFloatZones(windowId).isEmpty());
+        QVERIFY(stateB->preFloatScreen(windowId).isEmpty());
 
         // The source store retains none of them.
         QVERIFY(stateA->zonesForWindow(windowId).isEmpty());

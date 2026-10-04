@@ -912,8 +912,10 @@ private Q_SLOTS:
         registry->upsert(instanceId, meta);
 
         // Snap on A, float out (captures the home zone on A), move to B while
-        // floating via the cross-engine handoff — the state the real drag
-        // routes leave behind.
+        // floating through the snap-to-snap handoff windowScreenChanged's
+        // floating branch runs after a KWin output move. That move drops the
+        // home, so the stale one a path that does not drop it leaves behind is
+        // written back directly: without it the refusal has nothing to refuse.
         m_wta->service()->assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
         m_wta->service()->unsnapForFloat(windowId);
         m_wta->service()->setWindowFloating(windowId, true);
@@ -924,6 +926,10 @@ private Q_SLOTS:
         ctx.fromEngineId = PhosphorEngine::WindowPlacement::snapEngineId();
         ctx.wasFloating = true;
         m_snapEngine->handoffReceive(ctx);
+        QVERIFY(m_wta->service()->preFloatZones(windowId).isEmpty());
+        m_snapEngine->snapState()->addPreFloatZone(windowId, QStringList{m_zoneIds[0]});
+        m_snapEngine->snapState()->addPreFloatScreen(windowId, monitorA);
+        QCOMPARE(m_wta->service()->preFloatScreen(windowId), monitorA);
 
         // Minimize edge: metadata first (the effect pushes it ahead of float
         // traffic), then the suspension float write.
@@ -945,13 +951,13 @@ private Q_SLOTS:
                  "the suspension unfloat must not re-snap the stale home zone");
         QVERIFY2(m_wta->service()->isSuspensionFloat(windowId),
                  "a REFUSED unfloat must retain the suspension classification — the effect retries, and a "
-                 "declassified retry would run unconfined and teleport the window");
+                 "declassified retry would take the user tiers");
 
         // The effect's retry: it observes the window still floating after the
         // unminimize and re-drives the same call (up to three times, 250 ms
         // apart). Every retry must behave identically. Clearing the suspension
-        // bit unconditionally on the first call made retry #1 an unconfined
-        // USER unfloat, which is how the original fix was defeated.
+        // bit unconditionally on the first call made retry #1 a USER unfloat,
+        // which is how the original fix was defeated.
         for (int retry = 0; retry < 3; ++retry) {
             m_wta->setWindowFloatingForScreen(windowId, monitorB, false);
             QVERIFY2(m_snapEngine->isFloating(windowId), "every unminimize retry must keep the window floating on B");

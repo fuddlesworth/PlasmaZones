@@ -1259,12 +1259,12 @@ void Daemon::initEnginesAndWiring()
     // re-float — go out as windowFloatingStateSynced and land on the passive
     // handler below. Routing them all through here treated every one as a user
     // float: a floating window dragged onto a scrolling screen was teleported
-    // away from the drop point to its stored free geometry (the discussion #271
-    // class), and every window open or stale-key migration raised a spurious
-    // floated/tiled OSD. Autotile has always split the two the same way.
+    // to its stored free geometry (the discussion #271 class), and every open
+    // raised a spurious OSD. A snap pre-float home goes, as in the autotile arm.
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, this,
             [this](const QString& windowId, bool floating, const QString& screenId) {
                 if (floating && m_windowTrackingAdaptor) {
+                    m_windowTrackingAdaptor->service()->clearPreFloatZone(windowId);
                     m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
                 }
                 if (navigationOsdAllowed(screenId)) {

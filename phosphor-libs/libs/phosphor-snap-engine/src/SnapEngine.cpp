@@ -234,6 +234,9 @@ bool SnapEngine::migrateWindowToKey(const QString& windowId, const PhosphorEngin
         if (m_windowTracker && oldKey.desktop >= 1) {
             m_windowTracker->forgetDesktopZones(canonical, engineId(), oldKey.desktop);
         }
+        // A floating window moved to another monitor forgets the zone it
+        // floated from, so an unfloat there never throws it back across.
+        dropPreFloatHome(oldState, windowId);
     }
     oldState->migrateWindowTo(newState, canonical, newKey.screenId);
     m_states.migrate(canonical, oldKey, newKey);
@@ -273,6 +276,27 @@ bool SnapEngine::migrateWindowToKey(const QString& windowId, const PhosphorEngin
         << "SnapEngine::migrateWindowToScreen:" << canonical << "from" << oldKey.screenId << "to" << newKey.screenId
         << "desktop" << newKey.desktop;
     return true;
+}
+
+void SnapEngine::dropPreFloatHome(SnapState* state, const QString& windowId)
+{
+    if (!state) {
+        return;
+    }
+    const QString canonical = canonicalWindowId(windowId);
+    const QStringList home = state->preFloatZones(canonical);
+    state->clearPreFloatZone(canonical);
+    if (!m_windowTracker || home.isEmpty()) {
+        return;
+    }
+    // The appId alias the float wrote beside it (for a close and reopen)
+    // answers every pre-float lookup from any store, so it goes too, but
+    // only while it still names this window's home: a sibling of the same
+    // app may have written its own since.
+    const QString appId = m_windowTracker->currentAppIdFor(windowId);
+    if (!appId.isEmpty() && appId != canonical && state->preFloatZones(appId) == home) {
+        state->clearPreFloatZone(appId);
+    }
 }
 
 void SnapEngine::setCurrentDesktop(int desktop)

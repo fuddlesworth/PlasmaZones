@@ -615,12 +615,13 @@ private Q_SLOTS:
         QVERIFY(r.geometry.isValid());
     }
 
-    // The record's screenId is only a HINT: when it names a screen that no
-    // longer exists (monitor unplugged since the record was captured),
-    // resolveUnfloatScreen must reject it and degrade to the caller's live
-    // fallback screen — the restore still succeeds, on the fallback screen,
-    // instead of resolving against the missing monitor or failing outright.
-    void testResolveUnfloat_recordScreenGone_degradesToFallbackScreen()
+    // A record naming a screen that no longer exists (monitor unplugged since
+    // the record was captured) names another monitor than the one the window
+    // is on now. A window that left a monitor forgets the zone it floated
+    // from there, so a user unfloat refuses that home too rather than
+    // snapping a foreign layout's zone onto the live screen. The caller then
+    // takes the fallback-zone tier.
+    void testResolveUnfloat_recordScreenGone_refuses()
     {
         SnapEngine& engine = *m_engine;
 
@@ -638,10 +639,7 @@ private Q_SLOTS:
                                    QStringLiteral("PZTEST-UNPLUGGED-1")));
 
         const PhosphorEngine::UnfloatResult r = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
-        QVERIFY2(r.found, "a record naming a missing screen must still restore via the fallback screen");
-        QCOMPARE(r.zoneIds, QStringList{homeZone});
-        QCOMPARE(r.screenId, QStringLiteral("DP-1"));
-        QVERIFY(r.geometry.isValid());
+        QVERIFY2(!r.found, "a record naming a missing screen must refuse, not degrade onto the live screen");
     }
 
     // Composed end-to-end join of the two resolvers through the public toggle:
@@ -680,11 +678,10 @@ private Q_SLOTS:
         QVERIFY2(!r.found, "no live capture and no record → not-found (caller falls to the fallback-zone path)");
     }
 
-    // Suspension confinement (Discussion #724, 3.3.x regression): with
-    // confineToFallbackScreen=true (a minimize/unminimize round trip), a
-    // placement record whose screen names a DIFFERENT physical monitor than
-    // the live screen is stale cross-monitor state and must NOT supply the
-    // unfloat target — the caller keeps the window floating where it is.
+    // Discussion #724: a placement record whose screen names a DIFFERENT
+    // physical monitor than the live screen is stale cross-monitor state and
+    // must NOT supply the unfloat target, for a suspension (minimize) unfloat
+    // and a user toggle alike.
     void testResolveUnfloat_confined_recordOnOtherMonitor_staysNotFound()
     {
         SnapEngine& engine = *m_engine;
@@ -701,13 +698,10 @@ private Q_SLOTS:
             engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
         QVERIFY2(!r.found, "a suspension unfloat must refuse a record home on another monitor");
 
-        // The same record restores unconfined (a user float toggle keeps its
-        // deliberate cross-monitor unfloat-to-home behaviour), resolved on the
-        // record's home screen — the screen is the point of the feature, so
-        // pin it rather than only the zone.
+        // The user-toggle form refuses it too: a window that moved forgets the
+        // zone it floated from.
         const PhosphorEngine::UnfloatResult unconfined = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
-        QVERIFY2(unconfined.found, "a user unfloat must still restore the cross-monitor home from the record");
-        QCOMPARE(unconfined.zoneIds, QStringList{homeZone});
+        QVERIFY2(!unconfined.found, "a user unfloat must refuse a record home on another monitor too");
     }
 
     // The confinement compares PHYSICAL monitors: a per-virtual-screen home id
@@ -765,12 +759,11 @@ private Q_SLOTS:
         QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
                                    QStringLiteral("PZTEST-UNPLUGGED-1")));
 
-        // Deliberate divergence from the UNCONFINED twin
-        // (testResolveUnfloat_recordScreenGone_degradesToFallbackScreen): a
-        // suspension unfloat compares the RAW recorded home before
-        // resolveUnfloatScreen can degrade it, so a home monitor unplugged
-        // while the window was minimized refuses instead of silently snapping
-        // the window into a foreign layout's zone on the live screen.
+        // Same as the user-toggle twin (testResolveUnfloat_recordScreenGone_refuses):
+        // the RAW recorded home is compared before resolveUnfloatScreen can
+        // degrade it, so a home monitor unplugged while the window was
+        // minimized refuses instead of silently snapping the window into a
+        // foreign layout's zone on the live screen.
         const PhosphorEngine::UnfloatResult r =
             engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
         QVERIFY2(!r.found, "a home screen that no longer exists must refuse under confinement, not degrade");
@@ -871,12 +864,11 @@ private Q_SLOTS:
         QVERIFY(!engine.snapState()->isFloating(w));
     }
 
-    // Suspension confinement through the public entry point: a remembered home
-    // on another monitor is refused, and the refusal deliberately leaves that
-    // home intact so a later USER unfloat can still go there (the cross-monitor
-    // go-home restore). The second call proves the refusal repaired nothing and
-    // needed to repair nothing.
-    void testSetWindowFloat_suspension_crossMonitorHomeRefused_userToggleStillRestores()
+    // The refusal through the public entry point: a remembered home on another
+    // monitor is refused by a suspension unfloat, and by a USER unfloat too
+    // (with the fallback setting off, the window stays floating). Nothing
+    // throws the window back to the monitor it left.
+    void testSetWindowFloat_suspension_crossMonitorHomeRefused_userToggleRefusesToo()
     {
         SnapEngine& engine = *m_engine;
 
@@ -896,7 +888,8 @@ private Q_SLOTS:
 
         m_wts->clearSuspensionFloat(w);
         engine.setWindowFloat(w, false, QStringLiteral("DP-1"));
-        QCOMPARE(engine.snapState()->zoneForWindow(w), homeZone);
+        QVERIFY2(engine.snapState()->isFloating(w), "a user unfloat must not restore a cross-monitor home either");
+        QVERIFY(engine.snapState()->zoneForWindow(w).isEmpty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════

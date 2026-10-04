@@ -838,19 +838,13 @@ public:
     /// tiling engine is sitting on its tile rect.
     void recordFreeFrameBeforeUserSnap(const QString& windowId, const QString& screenId);
 
-    /// Unconfined (user-toggle) form. Also the ABI-stable signature the
-    /// installed library exported before the confinement parameter existed.
+    /// The ABI-stable signature exported before the confinement parameter.
     PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
-    /// @p confineToFallbackScreen refuses (returns not-found) when the
-    /// RECORDED (raw, unresolved) home screen names a different physical
-    /// monitor than @p fallbackScreen — the comparison runs BEFORE
-    /// resolveUnfloatScreen, so a home screen that no longer resolves
-    /// (monitor unplugged) also refuses rather than degrading into snapping
-    /// a foreign layout's zone onto the live screen. True for suspension
-    /// (minimize) unfloats — the minimize round trip must never move the
-    /// window across monitors, and a cross-monitor home can only be stale
-    /// state (Discussion #724). False for user float toggles, whose
-    /// cross-monitor unfloat-to-home restore is deliberate.
+    /// Not-found when the RECORDED (raw) home screen names a different
+    /// physical monitor than @p fallbackScreen, for every cause: a window
+    /// moved to another monitor forgets the zone it floated from, so a home
+    /// there can only be stale. Compared before resolveUnfloatScreen, so an
+    /// unplugged home refuses too. @p confineToFallbackScreen is inert.
     PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen,
                                                          bool confineToFallbackScreen) const;
 
@@ -1131,6 +1125,9 @@ private:
     /// migrateWindowToScreen onto an explicit key: a pinned commit or a
     /// cross-desktop handoff lands in exactly the context it names.
     bool migrateWindowToKey(const QString& windowId, const PhosphorEngine::PlacementStateKey& newKey);
+    /// Forget @p windowId's pre-float home in @p state, with the appId alias
+    /// while it still names the same zones. For a window leaving the screen.
+    void dropPreFloatHome(SnapState* state, const QString& windowId);
 
     /// The store whose last-used zone should drive a placement on @p screenId: the
     /// screen's own per-key store when it has a recorded last-used, else the global
@@ -1209,15 +1206,13 @@ private:
     /// What is asking for the unfloat — one fact driving all three tier
     /// decisions, so callers cannot set them inconsistently (#724).
     enum class UnfloatCause {
-        /// Explicit user action (Meta+F, D-Bus toggle): SnapToZone rule tier
-        /// allowed, cross-monitor restore to the remembered home allowed, and
-        /// the opt-in fallback-zone tier applies. Always used for a user
-        /// toggle even when the window is still classified as a suspension
-        /// float, so a refused unminimize can never dead-end the window.
+        /// Explicit user action (Meta+F, D-Bus toggle): the SnapToZone rule
+        /// tier and the opt-in fallback-zone tier apply. Used even for a
+        /// window still classified as a suspension float, so a refused
+        /// unminimize can never dead-end it.
         UserToggle,
-        /// The minimize/unminimize round trip: no rule tier, confined to the
-        /// caller's physical monitor, and no fallback-zone tier — it restores
-        /// prior state or nothing.
+        /// The minimize/unminimize round trip: no rule tier and no
+        /// fallback-zone tier. It restores prior state or nothing.
         Suspension,
     };
     bool unfloatToZone(const QString& windowId, const QString& screenId, UnfloatCause cause);

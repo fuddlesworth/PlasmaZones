@@ -530,8 +530,8 @@ void SnapState::migrateWindowTo(SnapState* target, const QString& rawWindowId, c
         target->m_floatingWindows.insert(windowId);
         moved = true;
     }
-    // Pre-float zone/screen carry over UNCHANGED (they name the source monitor's
-    // home zone — behaviour A).
+    // Pre-float zone/screen carry over UNCHANGED; a cross-screen caller has
+    // already dropped them.
     if (const auto it = m_preFloatZoneAssignments.constFind(windowId); it != m_preFloatZoneAssignments.constEnd()) {
         target->m_preFloatZoneAssignments[windowId] = it.value();
         m_preFloatZoneAssignments.remove(windowId);

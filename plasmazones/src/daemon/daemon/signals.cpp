@@ -676,15 +676,11 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
         if (floating) {
             m_windowTrackingAdaptor->setWindowFloating(windowId, true);
             m_autotileEngine->markModeSpecificFloated(windowId);
-            // Clear stale snap-mode pre-float state ONLY when the pre-float data
-            // is for the SAME screen (autotile re-float on the same screen).
-            // When the window crosses from a snap VS (e.g. vs:0) to an autotile VS
-            // (e.g. vs:1), the pre-float data for vs:0 must be preserved — it's
-            // needed to restore the snap zone when the window returns to vs:0.
-            const QString preFloatScreen = wts->preFloatScreen(windowId);
-            if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-                wts->clearPreFloatZone(windowId);
-            }
+            // The snap-mode pre-float home goes, whatever screen it names. On
+            // this screen it is stale. On another one the window has moved away
+            // from it, and a window that moves forgets the zone it floated from:
+            // keeping it threw the window back across on the next unfloat there.
+            wts->clearPreFloatZone(windowId);
         } else {
             // The window's snap-mode float (if any) already lives in its placement
             // record's snap slot — captured at the mode-switch snapshot / save time —
@@ -767,12 +763,8 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);
         m_autotileEngine->markModeSpecificFloated(windowId);
-        // Mirror syncAutotileFloatState's cross-VS pre-float preservation so
-        // zone-restore on return to the snap VS still works.
-        const QString preFloatScreen = wts->preFloatScreen(windowId);
-        if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-            wts->clearPreFloatZone(windowId);
-        }
+        // The snap-mode pre-float home goes, as in syncAutotileFloatState.
+        wts->clearPreFloatZone(windowId);
     } else {
         // Snap-mode float persists in the placement record's snap slot (single
         // source of truth); nothing to save into a parallel set here.
@@ -816,10 +808,8 @@ void Daemon::syncScrollFloatStatePassive(const QString& windowId, bool floating,
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);
         m_scrollEngine->markModeSpecificFloated(windowId);
-        const QString preFloatScreen = wts->preFloatScreen(windowId);
-        if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-            wts->clearPreFloatZone(windowId);
-        }
+        // The snap-mode pre-float home goes, as in syncAutotileFloatState.
+        wts->clearPreFloatZone(windowId);
     } else {
         m_windowTrackingAdaptor->setWindowFloating(windowId, false);
         // A release-time hold clear (announceReleasedFullscreenHolds) arrives
@@ -860,11 +850,8 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
         wts->setWindowFloating(windowId, true);
         m_windowTrackingAdaptor->relayWindowFloatingChanged(windowId, true, screenId);
         m_autotileEngine->markModeSpecificFloated(windowId);
-        // Same cross-VS preservation logic as the single-window handler
-        const QString preFloatScreen = wts->preFloatScreen(windowId);
-        if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-            wts->clearPreFloatZone(windowId);
-        }
+        // The snap-mode pre-float home goes, as in the single-window handler.
+        wts->clearPreFloatZone(windowId);
     }
     if (!windowIds.isEmpty() && navigationOsdAllowed(screenId)) {
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), QStringLiteral("overflow"), QString(),
