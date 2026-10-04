@@ -196,6 +196,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // interactive-gesture early return (the verdict must refresh
             // even when the shader is skipped).
             invalidateRuleCacheForStateChange(getWindowId(window));
+            // The daemon's registry holds the maximize state its float-back
+            // capture reads (fillsOutputState): without a push on the edge it
+            // kept the open-time value and recorded an output-sized frame
+            // over a good float-back (F33).
+            pushWindowMetadata(window);
             // MAXIMIZE INTERCEPTION. On a scroll-managed tile the request
             // belongs to the scrolling engine's maximize-to-edges verb, not
             // to KWin: the strip owns the column's width, so letting both
@@ -327,6 +332,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // sweeps when the answer actually moved.
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, this, [this]() {
         refreshFullscreenSuppression();
+    });
+    // IsFullscreen is a matchable rule field, and the daemon's float-back
+    // capture reads it through fillsOutputState: the edge refreshes the
+    // window's rule verdicts and pushes its metadata, as the full-maximize
+    // edge does (F33, F73).
+    connect(w, &KWin::EffectWindow::windowFullScreenChanged, this, [this](KWin::EffectWindow* window) {
+        if (!window || window->isDeleted()) {
+            return;
+        }
+        invalidateRuleCacheForStateChange(getWindowId(window));
+        pushWindowMetadata(window);
     });
 
     // The same gate's OTHER edges. A fullscreen window keeps isFullScreen()

@@ -117,7 +117,12 @@ private Q_SLOTS:
         reg.upsert(QStringLiteral("u1"), meta);
         QVERIFY(!reg.fillsOutputState(QStringLiteral("u1")).has_value());
 
+        // One state known off, the other unknown: not an answer (F141).
         meta.isMaximized = false;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QVERIFY(!reg.fillsOutputState(QStringLiteral("u1")).has_value());
+
+        meta.isFullscreen = false;
         reg.upsert(QStringLiteral("u1"), meta);
         QCOMPARE(reg.fillsOutputState(QStringLiteral("u1")), std::optional<bool>(false));
 

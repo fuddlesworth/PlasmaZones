@@ -155,7 +155,9 @@ std::optional<bool> WindowRegistry::fillsOutputState(const QString& windowId) co
     if (it->isMaximized.value_or(false) || it->isFullscreen.value_or(false)) {
         return true;
     }
-    if (it->isMaximized.has_value() || it->isFullscreen.has_value()) {
+    // Off only when BOTH are known off: an unknown maximize next to a known
+    // fullscreen=false may well be on (F141).
+    if (it->isMaximized.has_value() && it->isFullscreen.has_value()) {
         return false;
     }
     return std::nullopt;

@@ -116,8 +116,8 @@ public:
     // shipped.
 
     /// Whether @p windowId is maximized or fullscreen as last reported: engaged
-    /// true when either state is on, engaged false when a state is known and
-    /// neither is on, nullopt when neither was delivered or the window is
+    /// true when either state is on, engaged false when both are known off,
+    /// nullopt when either was never delivered or the window is
     /// unknown. Such a window's frame is the output, not a free position, and
     /// only the compositor knows its restore rect. Default reports unknown,
     /// like minimizedState.
