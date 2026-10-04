@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Private (non-installed) header — Zone/Layout validation helpers shared
-// between lifecycle.cpp (onLayoutChanged stale-assignment cleanup) and
-// virtualscreenmigration.cpp (the VS migration cluster). Defined `inline` (not
+// Private (non-installed) header — the Zone/Layout validation helper of the
+// VS migration cluster (virtualscreenmigration.cpp). Defined `inline` (not
 // `static`) so a file that does not use it raises no -Wunused-function.
 
 #pragma once

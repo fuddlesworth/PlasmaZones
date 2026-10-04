@@ -373,14 +373,20 @@ WindowTrackingService::pendingRestoreGeometries() const
         const int currentDesktop =
             m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 
-        // Skip screens currently in autotile mode — autotile owns placement there
-        // and would otherwise fight a stale snap teleport. Both context
-        // dimensions come from the RECORD (mirrors the cross-engine claim
-        // gates, which key desktop AND activity off the record so the
-        // engines reach identical verdicts).
-        if (m_layoutManager
-            && m_layoutManager->modeForScreen(screenId, p.virtualDesktop, p.activity)
-                != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+        // Skip screens a tiling engine owns: it places there and would fight
+        // a stale snap teleport. Both context dimensions come from the RECORD
+        // (mirrors the cross-engine claim gates). For the context in view the
+        // live mode answers, so a configured tiling mode whose engine is off
+        // runs snapping here as everywhere else (F112).
+        const bool recordInView = (p.virtualDesktop == 0 || p.virtualDesktop == currentDesktop)
+            && (!m_layoutManager || activityInView(p.activity, m_layoutManager->currentActivity()));
+        if (recordInView && m_snapEngine) {
+            if (!m_snapEngine->isActiveOnScreen(screenId)) {
+                continue;
+            }
+        } else if (m_layoutManager
+                   && m_layoutManager->modeForScreen(screenId, p.virtualDesktop, p.activity)
+                       != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             continue;
         }
 

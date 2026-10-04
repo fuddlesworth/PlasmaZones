@@ -8,11 +8,7 @@
 // is already split by concern across src/*.cpp (snap, resnap, navigation,
 // virtualscreenmigration, lifecycle), and the member ordering here encodes
 // which of those owns what. Same rationale as
-// PhosphorTileEngine/AutotileEngine.h. Grew with the per-desktop membership
-// change: the forget / renumber wrappers over the persisted per-desktop
-// zones, the membership-aware zone walk and the per-desktop zone read. Grew
-// with the cross-output bounce fix (#1124): the tiling held-screen resolver
-// the resnap buffer consults before it hands a snap zone back.
+// PhosphorTileEngine/AutotileEngine.h.
 
 #pragma once
 
@@ -707,16 +703,9 @@ public:
      */
     void clearResnapBuffer();
 
-    /**
-     * @brief Build a zone-ordered window list for a screen from current zone assignments
-     *
-     * Iterates all window-zone assignments for the given screen, resolves each window's
-     * primary zone number from the active layout, and returns the window IDs sorted by
-     * zone number ascending. Used to pre-seed autotile window order during transitions.
-     *
-     * @param screenId Screen identifier to filter windows by
-     * @return Window IDs sorted by zone number ascending
-     */
+    /// The windows snapped on @p screenId in the context in view, sorted by
+    /// their primary zone's number in the screen's layout. Seeds the autotile
+    /// order on a switch to tiling.
     QStringList buildZoneOrderedWindowList(const QString& screenId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -825,9 +814,20 @@ public:
      */
     void windowClosed(const QString& windowId, PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown);
 
-    /**
-     * @brief Handle layout change - validate/clear stale zone assignments
-     */
+    /// @c unsnapped: windows left in no zone in view (windowId, targetScreenId).
+    /// @c narrowed: spans that kept some zones, as a re-statement batch.
+    struct ZonePruneResult
+    {
+        QVector<PhosphorEngine::ZoneAssignmentEntry> unsnapped;
+        QVector<PhosphorEngine::ZoneAssignmentEntry> narrowed;
+    };
+
+    /// Drop stale zones in the store holding each: an id no layout holds, in
+    /// every context, and for a context in view that runs snapping, a zone its
+    /// layout lacks (None keeps them). A window left in no zone and not floating
+    /// gives up its snap record slot. The adaptor relays the result.
+    ZonePruneResult pruneStaleZoneAssignments();
+    /// The prune alone; the adaptor calls pruneStaleZoneAssignments to relay.
     void onLayoutChanged();
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1092,6 +1092,8 @@ private:
     /// representative that lives on the global holder.
     bool clearGlobalLastUsedIfRemoved(const QStringList& removedZones,
                                       const PhosphorSnapEngine::SnapState* owningStore);
+    /// unassignWindow's body on @p store, which need not be the primary.
+    bool unassignFromStore(const QString& windowId, PhosphorSnapEngine::SnapState* store);
 
     /// Unassign every window in @p windowsToRemove (live windows whose zones
     /// did not survive the change) and drop its pre-float zone, keeping its
@@ -1153,13 +1155,8 @@ private:
     EngineTiledPredicate m_engineTiledPredicate{};
     ModeEngineIdResolver m_modeEngineIdResolver{};
 
-    // Floating windows: full windowId at runtime, appId for session-restored entries
-    // Converted from windowId to appId on window close for persistence.
-    //
-    // LEGACY FALLBACK ONLY: used when no per-engine resolver/writer is wired
-    // (unit tests / early init). In production the daemon injects
-    // m_engineFloatResolver / m_engineFloatWriter and this set is never read or
-    // written by isWindowFloating / setWindowFloating.
+    // Floating windows, read and written only while no per-engine float
+    // resolver/writer is wired (unit tests, early init).
     QSet<QString> m_floatingWindows;
 
     // Suspension-float classification — see isSuspensionFloat(). Canonical-

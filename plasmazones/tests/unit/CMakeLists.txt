@@ -1483,6 +1483,18 @@ target_link_libraries(test_wta_screen_changed PRIVATE Qt6::Test Qt6::Core Qt6::D
                       PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_screen_changed COMMAND test_wta_screen_changed)
 
+# The stale-zone prune: its triggers (an active-layout switch, an edit of any
+# layout, a layout added or removed), the store it prunes in, and the
+# "unsnapped" states and re-statement batch it relays (F363, F328, F442).
+add_executable(test_wta_zone_prune dbus/test_wta_zone_prune.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_zone_prune PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_zone_prune PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_zone_prune COMMAND test_wta_zone_prune)
+
 # releaseLeftScreens, the drop-on-leave primitive every cross-screen move runs,
 # and the daemon-driven move sites that call it. Same fixture and links.
 add_executable(test_wta_drop_on_leave dbus/test_wta_drop_on_leave.cpp

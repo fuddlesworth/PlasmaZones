@@ -1555,10 +1555,10 @@ private Q_SLOTS:
      */
     void handleCrossModeFocus(const QString& targetScreenId, const QString& direction, bool* handled);
 
-    /// The active layout changed: assignments to zones it no longer has are
-    /// removed, with a windowZoneChanged for each, so navigation never acts
-    /// on a zone that is gone.
+    /// Active layout changed: prune and relay, then look for records to restore.
     void onLayoutChanged();
+    /// Relay a prune: "unsnapped" per window left in no zone, spans re-stated.
+    void relayZonePrune(const PhosphorPlacement::WindowTrackingService::ZonePruneResult& result);
 
     /**
      * @brief Handle panel geometry becoming ready

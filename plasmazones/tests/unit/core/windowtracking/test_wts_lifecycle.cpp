@@ -272,15 +272,27 @@ private Q_SLOTS:
         QVERIFY(
             PhosphorLayout::LayoutId::isScrolling(m_layoutManager->assignmentIdForScreen(scrollingScreen, desktop)));
 
-        // Retire the layout m_zoneIds came from. This is what makes the test
-        // DISCRIMINATE rather than merely pass: for a non-snapping entry the
-        // cascade ignores the snappingLayout slot and falls back to an unrelated
-        // layout (exactly the hazard the production comment describes), and while
-        // that fallback was the fixture's own 3-zone layout the zone still
-        // existed, so the assignment survived with or without the skip. With it
-        // gone, any screen that actually reaches resolveLayoutForScreen prunes.
-        m_layoutManager->removeLayout(m_testLayout);
-        m_testLayout = nullptr;
+        // Point the cascade's fallback at newLayout. This is what makes the
+        // test DISCRIMINATE: for a non-snapping entry the cascade ignores the
+        // snappingLayout slot and falls back to the default layout (exactly
+        // the hazard the production comment describes), so a screen that
+        // reached resolveLayoutForScreen would prune. m_testLayout stays
+        // registered: its zone ids are live, and a dead id is pruned in every
+        // context whatever the mode (F431).
+        const QString newLayoutId = newLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([newLayoutId]() {
+            return newLayoutId;
+        });
+        // The engines run there LIVE: the prune asks the snap engine's live
+        // mode, and a configured tiling mode whose engine is off runs
+        // snapping (F112).
+        m_engine->setLiveModeResolver([autotileScreen, scrollingScreen](const QString& screenId) {
+            if (screenId == autotileScreen) {
+                return PhosphorZones::AssignmentEntry::Mode::Autotile;
+            }
+            return screenId == scrollingScreen ? PhosphorZones::AssignmentEntry::Mode::Scrolling
+                                               : PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
 
         m_service->onLayoutChanged();
 
@@ -289,6 +301,7 @@ private Q_SLOTS:
         // Control: the snapping screen still prunes, so the skip above is a
         // genuine mode discrimination rather than onLayoutChanged doing nothing.
         QVERIFY2(!m_service->isWindowSnapped(snappingWindow), "a snapping screen's stale assignment must be pruned");
+        m_engine->setLiveModeResolver({});
     }
 
     void testResnapFromAutotileOrder_preClaimedZoneSkippedByPositionalFallback()

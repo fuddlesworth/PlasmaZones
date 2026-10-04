@@ -171,6 +171,25 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         }
         onLayoutChanged();
     });
+    // An edit of any layout, and a layout added or removed, can leave zones
+    // stale as an active-layout switch does (F363). layoutModified is emitted
+    // once at the end of an editor batch, never mid-batch (clearZones emits
+    // zoneRemoved for every zone, so those are not listened to). Each
+    // layout's connection is remade whenever the set changes, a reload
+    // replacing every layout object.
+    const auto wireLayoutEdits = [this]() {
+        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
+            disconnect(layout, &PhosphorZones::Layout::layoutModified, this, nullptr);
+            connect(layout, &PhosphorZones::Layout::layoutModified, this, [this]() {
+                relayZonePrune(m_service->pruneStaleZoneAssignments());
+            });
+        }
+    };
+    wireLayoutEdits();
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this, wireLayoutEdits]() {
+        wireLayoutEdits();
+        relayZonePrune(m_service->pruneStaleZoneAssignments());
+    });
 
     // Deferred: PhosphorScreens::ScreenManager may not be initialized yet during adaptor construction.
     // If PhosphorScreens::ScreenManager is still unavailable after the first event loop iteration,

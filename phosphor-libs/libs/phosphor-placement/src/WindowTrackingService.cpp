@@ -185,9 +185,13 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
 void WindowTrackingService::unassignWindow(const QString& windowId)
 {
     Q_ASSERT(hasSnapState());
-    PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
+    unassignFromStore(windowId, snapForWindow(windowId));
+}
+
+bool WindowTrackingService::unassignFromStore(const QString& windowId, PhosphorSnapEngine::SnapState* snapState)
+{
     if (!snapState)
-        return;
+        return false;
     // Capture the removed zones BEFORE the unassign. The window's own store clears
     // its per-key last-used inside unassignWindow; the global holder still carries
     // the representative restored from disk, so clear it too if it named a removed zone.
@@ -200,7 +204,7 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
     const int unsnappedDesktop = snapState->desktopForWindow(windowId);
     auto result = snapState->unassignWindow(windowId);
     if (!result.wasAssigned) {
-        return;
+        return false;
     }
     if (unsnappedDesktop >= 1) {
         forgetDesktopZones(windowId, PhosphorEngine::WindowPlacement::snapEngineId(), unsnappedDesktop);
@@ -208,8 +212,13 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
     bool lastUsedCleared = result.lastUsedZoneCleared;
     lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, snapState);
 
-    Q_EMIT windowZoneChanged(windowId, QString());
+    // Another store's membership (another desktop of a spanned window) is
+    // not the zone the window reads as holding.
+    if (snapState == snapForWindow(windowId)) {
+        Q_EMIT windowZoneChanged(windowId, QString());
+    }
     markDirty(DirtyZoneAssignments | (lastUsedCleared ? DirtyLastUsedZone : DirtyNone));
+    return true;
 }
 
 QString WindowTrackingService::zoneForWindow(const QString& windowId) const

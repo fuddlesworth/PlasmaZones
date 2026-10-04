@@ -3,6 +3,7 @@
 
 #include "windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -236,8 +237,7 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
 
 void WindowTrackingAdaptor::onLayoutChanged()
 {
-    // Delegate to service
-    m_service->onLayoutChanged();
+    relayZonePrune(m_service->pruneStaleZoneAssignments());
 
     // After layout becomes available, check if we have placement records to
     // restore. The unified WindowPlacementStore is the only restore source.
@@ -246,6 +246,25 @@ void WindowTrackingAdaptor::onLayoutChanged()
         qCDebug(lcDbusWindow) << "Layout available with" << m_service->placementStore().size()
                               << "placement records, checking if panel geometry is ready";
         tryEmitPendingRestoresAvailable();
+    }
+}
+
+void WindowTrackingAdaptor::relayZonePrune(const PhosphorPlacement::WindowTrackingService::ZonePruneResult& result)
+{
+    // The effect clears its snapped mark on "unsnapped" (F328): a window the
+    // prune left in no zone kept its snap decoration, and a later minimize
+    // floated it as a snap suspension.
+    for (const PhosphorEngine::ZoneAssignmentEntry& entry : result.unsnapped) {
+        Q_EMIT windowStateChanged(entry.windowId,
+                                  PhosphorProtocol::WindowStateEntry{entry.windowId, QString(), entry.targetScreenId,
+                                                                     false, QStringLiteral("unsnapped"), QStringList{},
+                                                                     false});
+    }
+    // A span that kept some zones moves to them. The batch commits through
+    // the engine as a re-statement, which states "snapped" with the new
+    // primary (F442).
+    if (!result.narrowed.isEmpty() && m_cachedSnapEngine) {
+        m_cachedSnapEngine->emitBatchedResnap(result.narrowed);
     }
 }
 
