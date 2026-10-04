@@ -92,14 +92,15 @@ public:
                                    IGeometryResolver* geometryResolver = nullptr, PlacementConfig config = {},
                                    QObject* parent = nullptr);
 
-    /// The placement config installed at construction. Read-only after wiring:
-    /// the constructor is the sole entry point. Consumers that observe
-    /// `m_config` directly (no notify signal) rely on it being frozen
-    /// post-construction; reassigning it later would silently desynchronise
-    /// their cached values, which is why no setter is exposed.
+    /// The placement config. The adaptor keeps it current with the settings
+    /// (F327); every reader reads it at the time of use, none caches it.
     const PlacementConfig& config() const
     {
         return m_config;
+    }
+    void setPlacementConfig(const PlacementConfig& config)
+    {
+        m_config = config;
     }
 
     QObject* asQObject() override;
@@ -769,12 +770,8 @@ public:
     // Resolution Change Handling
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /**
-     * @brief Get updated geometries for all tracked windows
-     * @return Map of windowId -> new geometry
-     *
-     * Used when screen resolution changes to recalculate zone positions.
-     */
+    /// windowId -> its zone rect now, for the work-area settle's re-apply.
+    /// Empty while keepWindowsInZonesOnResolutionChange is off.
     QHash<QString, QRect> updatedWindowGeometries() const;
 
     /// A pre-computed snap restore target for the effect's instant-restore

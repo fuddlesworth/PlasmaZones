@@ -89,6 +89,12 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     m_service = new PhosphorPlacement::WindowTrackingService(
         layoutManager, screenManager, virtualDesktopManager, m_geometryResolver.get(),
         PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()}, this);
+    // Live, not frozen at construction: turning "keep windows in zones on a
+    // resolution change" on or off took effect only after a restart (F327).
+    connect(settings, &ISettings::keepWindowsInZonesOnResolutionChangeChanged, this, [this, settings]() {
+        m_service->setPlacementConfig(
+            PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()});
+    });
 
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on

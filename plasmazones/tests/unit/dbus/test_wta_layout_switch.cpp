@@ -186,6 +186,17 @@ private Q_SLOTS:
         QVERIFY2(!m_wta->getUpdatedWindowGeometries().isEmpty(), "control: snapping on, the zone is re-applied");
     }
 
+    // "Keep windows in zones on a resolution change" takes effect when it is
+    // changed: it was read once at construction (F327).
+    void resolutionChangeSettingTakesEffectLive()
+    {
+        service()->assignWindowToZone(QStringLiteral("app|resolution"), m_zoneIds[0], m_screenId, m_desktop);
+        m_settings->setKeepWindowsInZonesOnResolutionChange(false);
+        QVERIFY(m_wta->getUpdatedWindowGeometries().isEmpty());
+        m_settings->setKeepWindowsInZonesOnResolutionChange(true);
+        QCOMPARE(m_wta->getUpdatedWindowGeometries().size(), 1);
+    }
+
 private:
     PhosphorZones::Layout* addThreeZoneLayout()
     {
