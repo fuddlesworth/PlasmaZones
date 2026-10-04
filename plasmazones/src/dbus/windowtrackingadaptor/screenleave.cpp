@@ -213,6 +213,63 @@ void WindowTrackingAdaptor::windowCrossedScreens(const QString& windowId, const 
     }
 }
 
+bool WindowTrackingAdaptor::dragEndedOnScreen(const QString& windowId, const QString& releaseScreenId,
+                                              bool floatIfSnapped)
+{
+    if (!m_service || windowId.isEmpty() || releaseScreenId.isEmpty()) {
+        return false;
+    }
+    // A drop on a screen a tiling engine runs is that engine's drag handling.
+    for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.data(), m_scrollEngine.data()}) {
+        if (engine && engine->isActiveOnScreen(releaseScreenId)) {
+            return false;
+        }
+    }
+    PhosphorSnapEngine::SnapEngine* snap = snapEngine();
+    if (!snap) {
+        return false;
+    }
+    // Only a window snap holds on another screen than the one it was dropped on.
+    const QString trackedScreen = snap->screenForTrackedWindow(windowId);
+    const QString zoneScreen = WindowTrackingInternal::snapZoneScreen(snap, windowId, releaseScreenId);
+    const bool trackedElsewhere =
+        !trackedScreen.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(trackedScreen, releaseScreenId);
+    if (!trackedElsewhere && zoneScreen.isEmpty()) {
+        return false;
+    }
+    const QString sourceScreen = !zoneScreen.isEmpty() ? zoneScreen : trackedScreen;
+    const bool wasSnapped = !WindowTrackingInternal::snapZoneScreen(snap, windowId, QString()).isEmpty();
+    // The pre-snap size, read before the release consumes the source screen's
+    // memory: the window keeps where it was dropped and gets back its size.
+    std::optional<QRect> preSnapGeo;
+    if (wasSnapped && shouldRestoreSizeOnUnsnap(windowId)) {
+        preSnapGeo = m_service->validatedUnmanagedGeometry(windowId, sourceScreen);
+    }
+    qCInfo(lcDbusWindow) << "dragEndedOnScreen:" << windowId << "dropped on" << releaseScreenId << "from"
+                         << sourceScreen;
+    // The move itself: a snapped window loses its zone and everything on the
+    // monitor left, a floating one floats on here with no home there.
+    windowScreenChanged(windowId, releaseScreenId);
+    // A snapped window dragged off without the trigger floats where it was
+    // dropped, as it would have on its own screen (F677).
+    if (floatIfSnapped && wasSnapped) {
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = releaseScreenId;
+        ctx.wasFloating = true;
+        ctx.heldFocus = m_lastActiveWindowId == shadowWindowId(windowId);
+        ctx.sourceGeometry = m_frameGeometry.value(shadowWindowId(windowId));
+        snap->handoffReceive(ctx);
+        captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
+    }
+    if (preSnapGeo && preSnapGeo->width() > 0 && preSnapGeo->height() > 0) {
+        Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapGeo->width(), preSnapGeo->height(), QString(),
+                                      releaseScreenId, true);
+        m_service->clearFreeGeometry(windowId, sourceScreen);
+    }
+    return true;
+}
+
 void WindowTrackingAdaptor::announceOutputMove(const QString& windowId, const QString& targetScreenId,
                                                const QString& sourceScreenId,
                                                const PhosphorEngine::IPlacementEngine* arrival)

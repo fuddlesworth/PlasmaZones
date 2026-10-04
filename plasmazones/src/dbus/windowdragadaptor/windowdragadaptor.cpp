@@ -118,7 +118,9 @@ WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPo
                                      : PhosphorScreens::ScreenIdentity::findByIdOrName(result.physicalId);
     if (!result.qscreen) {
         result.qscreen = screenAtPoint(qRound(globalPos.x()), qRound(globalPos.y()));
-        if (result.qscreen) {
+        // An id the screen manager resolved stands: only a point it could not
+        // place takes the QScreen's.
+        if (result.qscreen && result.screenId.isEmpty()) {
             result.physicalId = PhosphorScreens::ScreenIdentity::identifierFor(result.qscreen);
             // Try virtual screen resolution before falling back to physical ID
             auto* mgr = m_screenManager;

@@ -9,7 +9,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <interface name="org.plasmazones.WindowTracking">
         <annotation name="org.gtk.GDBus.DocString" value="Window-to-zone tracking: pre-snap geometry for restore, floating state, zone geometry, drag-out unsnap, resolution-change handling, keyboard-navigation feedback, window-metadata registration, and the Phosphor shell surface (activateWindow, getWindowMetadata, moveWindowToDesktop, getUrgentWindows, getWindowStatesForDesktop, findWindowByPid with the windowMetadataChanged and windowUrgencyChanged announcements). Snap commits, snap-restore fallback chains, and daemon-driven navigation targets live on the org.plasmazones.Snap adaptor."/>
         <method name="notifyDragOutUnsnap">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without the activation trigger. Saves pre-float zone, marks floating, and clears zone assignment so the window does not auto-restore to the zone on close/reopen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without the activation trigger and dropped on the screen it is snapped on. Saves pre-float zone, marks floating, and clears zone assignment so the window does not auto-restore to the zone on close/reopen. A drag that ends on another screen is resolved by the drag adaptor at the end of the drag."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID from the effect."/>
             </arg>

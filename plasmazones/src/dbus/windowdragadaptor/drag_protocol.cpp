@@ -632,6 +632,16 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
                              << "cancelled=" << cancelled;
         clearPendingSnapDragState();
         m_currentDragPolicy = {};
+        // Dropped on another snapping screen than the one snap holds the
+        // window on: it leaves its snap memory there and floats where it
+        // was dropped (F677). Nothing else would: the effect holds every
+        // crossing back for the whole drag.
+        if (!cancelled && m_windowTracking
+            && m_windowTracking->dragEndedOnScreen(windowId, resolveScreenAt(QPointF(cursorX, cursorY)).screenId,
+                                                   /*floatIfSnapped=*/true)) {
+            outcome.action = PhosphorProtocol::DragOutcome::NoOp;
+            return outcome;
+        }
         // If the window was snapped at drag start and dragged without holding the
         // activation trigger, unsnap it so it floats at the drop location instead of
         // leaving a stale zone assignment.
@@ -781,7 +791,18 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         // window detached.
         cancelDragInsertIfActive();
         clearScrollDropIndicator();
-        outcome.action = PhosphorProtocol::DragOutcome::NoOp;
+        // A dead drag still moved the window: dropped on another screen, it
+        // leaves its snap memory on the one it came from, free here (F360).
+        // Read here, not from the drag start: a dead drag never ran the
+        // snap path's setup that records it.
+        {
+            const bool wasSnapped = m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty();
+            const bool left = !cancelled && m_windowTracking
+                && m_windowTracking->dragEndedOnScreen(windowId, resolveScreenAt(QPointF(cursorX, cursorY)).screenId,
+                                                       /*floatIfSnapped=*/false);
+            outcome.action = left && wasSnapped ? PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap
+                                                : PhosphorProtocol::DragOutcome::NoOp;
+        }
         hideOverlayAndSelector();
         resetDragState();
         return outcome;
@@ -865,9 +886,9 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
     // the drag policy for the whole never-activated phase (the flip block
     // below never runs), which is deliberate and safe: a pending drag
     // exercises none of the policy-driven activation behaviors, its endDrag
-    // takes the pending NoOp branch, and a window the compositor move lands
-    // on another screen is adopted or unsnapped by the WTA's
-    // windowScreenChanged handoff independently of the policy.
+    // takes the pending branch, which hands a window dropped on another
+    // screen to WindowTrackingAdaptor::dragEndedOnScreen (the effect holds
+    // every crossing back for the whole drag, so nothing else would).
     if (m_draggedWindowId.isEmpty() && m_pendingSnapDragWindowId == windowId) {
         if (!activateSnapDragIfNeeded(modifiers, mouseButtons, cursorX, cursorY)) {
             return;

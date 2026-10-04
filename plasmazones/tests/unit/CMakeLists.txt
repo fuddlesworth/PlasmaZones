@@ -1632,6 +1632,16 @@ target_link_libraries(test_windowdrag_cancel_sweeps PRIVATE Qt6::Test Qt6::Core 
                                                             PhosphorTileEngine::PhosphorTileEngine)
 add_test(NAME test_windowdrag_cancel_sweeps COMMAND test_windowdrag_cancel_sweeps)
 
+# A drag ending on another monitor than the one snap holds the window on:
+# the pending and dead arms through dragEndedOnScreen, an activated drop
+# through its cross-screen block. Two snapping outputs on a fake source.
+add_executable(test_windowdrag_cross_screen dbus/test_windowdrag_cross_screen.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_windowdrag_cross_screen PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_windowdrag_cross_screen PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                           PhosphorSnapEngine::PhosphorSnapEngine)
+add_test(NAME test_windowdrag_cross_screen COMMAND test_windowdrag_cross_screen)
+
 # The shell's drop proxy on WindowDragAdaptor (registerDropProxy /
 # unregisterDropProxy, dropproxy.h): strict parsing and hit-testing of the
 # registry, and the drag path resolving a proxy cell to its real zone through

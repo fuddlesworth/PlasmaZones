@@ -154,9 +154,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Cross-screen drag: when the window's owning engine differs from the
     // engine that owns the release screen, run the IPlacementEngine handoff
     // contract NOW — before any destination-side snap/tile logic runs.
-    // During drag, outputChanged's windowScreenChanged is skipped (drag owns
-    // state), so this is the single point where cross-screen ownership
-    // transfer happens.
+    // During a drag the effect holds every crossing back, so this is where an
+    // activated drag's cross-screen transfer happens (a pending or dead drag
+    // goes through WindowTrackingAdaptor::dragEndedOnScreen from endDrag).
     //
     // The release uses the contract so both source modes (snap zone, autotile
     // tile) drop tracking via the same call; the receive only fires when the
@@ -236,9 +236,20 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // helper's release clears live tracking first).
                     ctx.sourceZoneIds = QStringList{capturedZoneId};
                 }
-                WindowTrackingInternal::guardedHandoff(sourceEngine, destEngine, ctx, sourceScreen);
+                // What every other engine still holds of the window on the
+                // monitor it left goes once the destination took it.
+                if (WindowTrackingInternal::guardedHandoff(sourceEngine, destEngine, ctx, sourceScreen)) {
+                    m_windowTracking->releaseLeftScreens(windowId, releaseScreenId, destEngine);
+                }
+            } else if (sourceEngine == snapEngine) {
+                // Snapping to snapping: the same move as a KWin one. A snapped
+                // window loses its zone on the monitor left (the commit below
+                // places it here); a floating one keeps floating here, with no
+                // home there (F177). A release dropped it untracked instead.
+                m_windowTracking->windowScreenChanged(windowId, releaseScreenId);
             } else {
                 sourceEngine->handoffRelease(windowId);
+                m_windowTracking->releaseLeftScreens(windowId, releaseScreenId, sourceEngine);
             }
         }
         // The handoff above runs for ONE source, snap first. A tiling engine

@@ -318,14 +318,12 @@ public Q_SLOTS:
     // windowSnapped, windowSnappedMultiZone, windowUnsnapped, windowsSnappedBatch,
     // recordSnapIntent moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
 
-    /// A snapped window was dragged without the activation trigger: unsnap it
-    /// as a drag-out (pre-float zone saved, floating, zone cleared so a reopen
-    /// does not restore it there).
+    /// A snapped window was dragged without the activation trigger and dropped
+    /// on its own screen: unsnap it as a drag-out (floating, zone cleared).
     void notifyDragOutUnsnap(const QString& windowId);
 
-    /// A window KWin moved between two screens no tiling engine runs: its snap
-    /// memory off the new one goes (a snapped window loses its zone unless the
-    /// daemon put it there; a floating one forgets its home).
+    /// KWin moved a window between screens no tiling engine runs: its snap memory off
+    /// the new one goes (its zone, unless the daemon put it there; a float's home).
     void windowScreenChanged(const QString& windowId, const QString& newScreenId);
     /// KWin moved a window across screens a tiling engine runs: drop every hold off the new one.
     void windowCrossedScreens(const QString& windowId, const QString& fromScreenId, const QString& toScreenId);
@@ -767,6 +765,8 @@ public:
     /// Drop what every engine holds of @p windowId off @p keepScreenId (screenleave.cpp).
     void releaseLeftScreens(const QString& windowId, const QString& keepScreenId,
                             const PhosphorEngine::IPlacementEngine* arrival);
+    /// A drop with no snap commit off the screen snap holds the window on; true if handled.
+    bool dragEndedOnScreen(const QString& windowId, const QString& releaseScreenId, bool floatIfSnapped);
 
     /// Internal: returns QRect directly (avoids JSON round-trip for daemon-internal callers)
     QRect zoneGeometryRect(const QString& zoneId, const QString& screenId);
