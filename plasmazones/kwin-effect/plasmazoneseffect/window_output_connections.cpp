@@ -126,7 +126,9 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             // and replays only the crossings it calls user moves. Nothing is
             // re-homed and nothing is skipped (the old involuntary-move skip
             // lost a genuine move made during the debounce, and misread every
-            // move off a split monitor as involuntary).
+            // move off a split monitor as involuntary). Outside one, the body
+            // runs at once and the daemon hears of every crossing that is the
+            // window's own, whichever modes the two screens run.
             if (m_screenChangeHandler->isScreenChangeInProgress()) {
                 m_screenChangeHandler->deferCrossing(safeW, oldScreenId);
                 return;

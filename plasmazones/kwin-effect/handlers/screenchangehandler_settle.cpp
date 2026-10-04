@@ -540,7 +540,7 @@ void ScreenChangeHandler::applyOutputCrossing(KWin::EffectWindow* w, const QStri
     // Tiling transfer (autotile to autotile, autotile to snapping, and so
     // on). Runs even mid-drag so the engine drops the window from the old
     // screen's state at once.
-    m_effect->m_tilingHandler->handleWindowOutputChanged(w);
+    const bool ownCrossing = m_effect->m_tilingHandler->handleWindowOutputChanged(w);
     if (oldScreenId.isEmpty() || oldScreenId == newScreenId) {
         return;
     }
@@ -557,18 +557,36 @@ void ScreenChangeHandler::applyOutputCrossing(KWin::EffectWindow* w, const QStri
     } else {
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }
-    // Neither end managed by a tiling engine: the daemon decides whether this
-    // is a placement of its own (a restore or resnap that stored the new
-    // screen already) or a move that unsnaps. A window KWin moved off an
-    // output that went away, or back onto one that returned, never reaches
-    // here: the settle classified it. Not mid-drag, where the drop owns the
-    // snap transitions.
+    // The daemon drops what it held of the window on the screen left. A
+    // window KWin moved off an output that went away, or back onto one that
+    // returned, never reaches here: the settle classified it. Not mid-drag,
+    // where the drop owns the transitions.
+    if (ownCrossing && !dragging) {
+        reportCrossing(w, oldScreenId, newScreenId);
+    }
+}
+
+void ScreenChangeHandler::reportCrossing(KWin::EffectWindow* w, const QString& oldScreenId, const QString& newScreenId)
+{
+    if (!w || oldScreenId.isEmpty() || newScreenId.isEmpty() || oldScreenId == newScreenId) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
     TilingHandler* const tiling = m_effect->m_tilingHandler.get();
-    if (!tiling->isManagedScreen(oldScreenId) && !tiling->isManagedScreen(newScreenId) && !dragging) {
+    if (!tiling->isManagedScreen(oldScreenId) && !tiling->isManagedScreen(newScreenId)) {
+        // Snap memory decides: a placement of the daemon's own (a restore or
+        // resnap that stored the new screen already) keeps its zone.
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("windowScreenChanged"), {windowId, newScreenId},
                                                        QStringLiteral("cross-screen move"));
+        return;
     }
+    // A tiling engine runs an end: the effect already handed the window over,
+    // and the daemon drops every hold left on the screen it came from (F401,
+    // F446, F470).
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowCrossedScreens"),
+        {windowId, oldScreenId, newScreenId}, QStringLiteral("cross-screen move"));
 }
 
 void ScreenChangeHandler::applyVirtualScreenCrossing(KWin::EffectWindow* w, const QString& oldScreenId,
@@ -589,17 +607,14 @@ void ScreenChangeHandler::applyVirtualScreenCrossing(KWin::EffectWindow* w, cons
     }
     m_effect->invalidateRuleCacheForStateChange(windowId);
     // A tracked window's crossing is the tiling handler's own per-frame
-    // detector's to handle. Only an untracked window (snapping entering an
-    // autotile virtual screen) needs the delegation.
+    // detector's to handle (it reports too). Only an untracked window
+    // (snapping entering an autotile virtual screen) needs the delegation.
     TilingHandler* const tiling = m_effect->m_tilingHandler.get();
     if (tiling->isTrackedWindow(windowId)) {
         return;
     }
-    tiling->handleWindowOutputChanged(w);
-    if (!tiling->isManagedScreen(oldScreenId) && !tiling->isManagedScreen(newScreenId)) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                       QStringLiteral("windowScreenChanged"), {windowId, newScreenId},
-                                                       QStringLiteral("virtual screen crossing"));
+    if (tiling->handleWindowOutputChanged(w)) {
+        reportCrossing(w, oldScreenId, newScreenId);
     }
 }
 

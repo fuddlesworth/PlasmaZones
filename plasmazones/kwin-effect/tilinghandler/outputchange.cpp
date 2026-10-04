@@ -32,10 +32,10 @@
 
 namespace PlasmaZones {
 
-void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
+bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
 {
     if (!w || w->isDeleted()) {
-        return;
+        return false;
     }
 
     const QString windowId = m_effect->getWindowId(w);
@@ -47,7 +47,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // permanently, since the caller has already pre-written the tracked-screen
     // record and the detector never re-fires for the same physical move.
     if (m_outputChangeInFlight.contains(windowId)) {
-        return;
+        return false;
     }
     m_outputChangeInFlight.insert(windowId);
     const auto guard = qScopeGuard([this, windowId] {
@@ -62,7 +62,12 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // arrival IS the marker's expected echo, so consume the one-shot
         // UNCONDITIONALLY (an ineligible arrival — minimized, off-desktop,
         // unmanaged screen — still IS the echo; leaving the marker armed
-        // would swallow the window's next genuine outputChanged).
+        // would swallow the window's next genuine outputChanged). Its target
+        // matching where the window landed makes this the daemon's own move,
+        // which the daemon needs no notice of.
+        const auto marker = m_expectedOutputMove.constFind(windowId);
+        const bool daemonMove =
+            marker != m_expectedOutputMove.constEnd() && marker.value().targetScreenId == newScreenId;
         m_expectedOutputMove.remove(windowId);
         // Window not tracked — but if it moved TO an autotile screen, add
         // it. The daemon already placed it via handoffReceive; the
@@ -75,7 +80,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             // re-seats it there, or announces it if the daemon does not.
             if (m_effect->m_screenChangeHandler->holdsUnclassifiedRecord(w)) {
                 m_effect->m_screenChangeHandler->noteSkippedAnnounce(w);
-                return;
+                return false;
             }
             // knownFreeFloating only when the border state does NOT already
             // track the window as tiled: the handoffReceive that placed it has
@@ -85,7 +90,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                               /*focusEligible=*/false);
             m_effect->updateAllDecorations();
         }
-        return;
+        return !daemonMove;
     }
 
     const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
@@ -239,7 +244,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 m_centeredWaylandZones.remove(windowId);
             }
             m_effect->updateAllDecorations();
-            return;
+            return false;
         }
     }
 
@@ -316,7 +321,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 m_expectedOutputMove.erase(expIt);
             }
         }
-        return; // Same screen or unknown — no transfer needed
+        return false; // Same screen or unknown — no transfer needed
     }
 
     // A window still in a SCROLLING screen's tiled bucket belongs to that
@@ -355,7 +360,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // scroll transfer signal, and the same-screen drain above already
     // handles its disposal for scroll windows.
     if (inScrollStrip()) {
-        return;
+        return false;
     }
 
     const bool oldIsAutotile = m_managedScreens.contains(oldScreenId);
@@ -382,7 +387,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         if (m_notifiedWindowScreens.contains(windowId)) {
             m_notifiedWindowScreens[windowId] = newScreenId;
         }
-        return;
+        return true;
     }
 
     // A marker surviving to this point is SUPERSEDED: the marker-first
@@ -754,6 +759,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     }
 
     m_effect->updateAllDecorations();
+    return true;
 }
 
 } // namespace PlasmaZones

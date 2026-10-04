@@ -10,6 +10,7 @@
 #include "tilinghandler.h"
 #include "scrolldecisions.h"
 #include "handlers/dragtracker.h"
+#include "handlers/screenchangehandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/windowanimator.h"
 #include "compositor/effectlogging.h"
@@ -205,8 +206,13 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                 // Virtual screen changed on the same physical monitor — delegate to
                 // the same handler used by outputChanged. The re-entrancy guard
                 // inside handleWindowOutputChanged prevents infinite loops from
-                // geometry changes caused by tiling.
-                handleWindowOutputChanged(w);
+                // geometry changes caused by tiling. The transfer itself runs
+                // during a screen change too (the tile must follow its frame);
+                // only the daemon notice waits, since the settle replays nothing
+                // for a tracked tile.
+                if (handleWindowOutputChanged(w) && !m_effect->m_screenChangeHandler->isScreenChangeInProgress()) {
+                    m_effect->m_screenChangeHandler->reportCrossing(w, oldScreenId, newScreenId);
+                }
                 return;
             }
         }

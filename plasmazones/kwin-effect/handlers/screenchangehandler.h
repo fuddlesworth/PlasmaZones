@@ -114,6 +114,9 @@ public:
     void applyOutputCrossing(KWin::EffectWindow* w, const QString& oldScreenId, const QString& newScreenId);
     /// The body of a crossing between virtual screens of one output.
     void applyVirtualScreenCrossing(KWin::EffectWindow* w, const QString& oldScreenId, const QString& newScreenId);
+    /// Tell the daemon @p w crossed screens on its own: windowScreenChanged
+    /// when no tiling engine runs either end, windowCrossedScreens otherwise.
+    void reportCrossing(KWin::EffectWindow* w, const QString& oldScreenId, const QString& newScreenId);
 
 public Q_SLOTS:
     void slotScreenGeometryChanged();

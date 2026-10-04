@@ -350,12 +350,12 @@ public:
     /// after the move returns to the original free position rather than the
     /// source desktop's tiled frame. MUST run after the re-add path's
     /// releaseWindowTracking (which wipes the bucket) and before
-    /// notifyWindowAdded. Declines a rect stashed under a different screen —
-    /// saved rects are absolute in the SOURCE monitor's coordinate space and
-    /// would land off-target after a combined cross-desktop + cross-screen
-    /// move. Consumes the entry either way; a window with no stash is a no-op.
+    /// notifyWindowAdded. Declines a rect stashed under another screen (its
+    /// rects are in the SOURCE monitor's coordinates). Consumes the entry.
     void restorePreTileForDesktopMove(const QString& windowId, const QString& screenId);
-    void handleWindowOutputChanged(KWin::EffectWindow* w);
+    /// The tiling side of a crossing. True when it is the window's own (not a daemon
+    /// move's echo nor a strip column's hop), for ScreenChangeHandler::reportCrossing.
+    bool handleWindowOutputChanged(KWin::EffectWindow* w);
 
     // D-Bus signal connections and settings
     void connectSignals();
