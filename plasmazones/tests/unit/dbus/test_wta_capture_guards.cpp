@@ -845,6 +845,51 @@ private Q_SLOTS:
                  "the floating branch must release a tiling hold off the new screen");
         QVERIFY(wta->service()->zoneForWindow(snapped).isEmpty());
     }
+
+    // A scroll engine tracking the window only on another desktop does not
+    // capture first: the snap placement in view is what the record keeps, or
+    // a multi-desktop window snapped here loses its zone at the next restart
+    // (F361). Held in view, scroll does capture first.
+    void testBackgroundScrollHoldDoesNotCaptureFirst()
+    {
+        StubTileRectEngine scrollEngine; // outlives the adaptor, see the tests above
+        scrollEngine.id = QString(PhosphorEngine::WindowPlacement::scrollingEngineId());
+        scrollEngine.captureState = QString(PhosphorEngine::WindowPlacement::stateTiled());
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta =
+            new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr, &parent);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap->setEngineSettings(m_settings);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr, &scrollEngine);
+        const auto teardown = qScopeGuard([wta, &snap] {
+            wta->setEngines(nullptr, nullptr, nullptr);
+            wta->service()->setSnapState(nullptr);
+            wta->service()->setSnapEngine(nullptr);
+            snap.reset();
+        });
+
+        const QString w = QStringLiteral("app|background-column");
+        scrollEngine.trackedElsewhere.insert(w);
+        snap->snapState()->assignWindowToZone(w, QUuid::createUuid().toString(), QStringLiteral("DP-1"), 1);
+
+        wta->captureWindowPlacement(w);
+        auto rec = wta->service()->placementStore().peekExact(w);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+        QVERIFY(rec->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).state.isEmpty());
+
+        scrollEngine.trackedElsewhere.clear();
+        scrollEngine.heldScreen.insert(w, QStringLiteral("DP-1"));
+        wta->captureWindowPlacement(w);
+        rec = wta->service()->placementStore().peekExact(w);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateTiled()));
+    }
 };
 
 QTEST_MAIN(TestWtaCaptureGuards)

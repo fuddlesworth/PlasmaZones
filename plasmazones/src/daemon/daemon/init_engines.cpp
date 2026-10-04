@@ -707,21 +707,12 @@ void Daemon::initEnginesAndWiring()
     m_windowTrackingAdaptor->setEngines(snapEngine, autotileEngine, scrollEngine);
 
     // ───────────────────────────────────────────────────────────────────────────
-    // Per-engine float state (root fix for the shared-bit float defect).
-    //
-    // Float state is genuinely per-engine: a window floated in autotile mode is
-    // NOT floating in snapping mode and vice versa. The authoritative store lives
-    // in each engine (SnapEngine→SnapState::isFloating / AutotileEngine→
-    // TilingState::isFloating). WTS is engine-agnostic (LGPL boundary), so we
-    // inject a resolver (reader) and writer that route to the engine owning the
-    // window's CURRENT screen mode. This replaces the old single shared
-    // m_floatingWindows + m_snapState bit that both engines read/wrote.
-    //
-    // Mode resolution is EngineRouting::windowEngineMode (enginerouting.cpp):
-    // the window's tracked screen at the window's own desktop and activity,
-    // then the owning engine. The float reader and writer, the autotile-mode
-    // predicate and the synthesized-slot engine id all go through it: they
-    // answer "which engine owns this window", and that has one answer.
+    // Per-engine float state. A window floated in one mode is not floating in
+    // another, and each engine keeps its own float store. WTS is engine-agnostic
+    // (LGPL boundary), so the daemon injects a reader and writer that route to
+    // the engine owning the window, as EngineRouting::windowEngineMode decides
+    // (enginerouting.cpp). The autotile-mode predicate and the synthesized-slot
+    // engine id go through it too: "which engine owns this window" has one answer.
     {
         EngineRouting::Inputs routing;
         routing.trackedScreen = [this](const QString& windowId) {
@@ -730,11 +721,10 @@ void Daemon::initEnginesAndWiring()
                 : QString();
         };
         routing.placeOnScreen = [this](const QString& windowId, const QString& screenId) {
-            // Own-desktop / multi-desktop-span / sticky policy lives on
-            // WindowContext (see effectiveDesktop's doc); this supplies the
-            // screen-current fallbacks.
+            // The span and sticky policy is WindowContext's; this supplies the screen-current fallbacks.
             const int screenCurrent = currentDesktopForScreen(screenId);
-            EngineRouting::WindowPlace place{screenCurrent, currentActivity()};
+            const QString activityNow = currentActivity();
+            EngineRouting::WindowPlace place{screenCurrent, activityNow};
             const PhosphorPlacement::WindowTrackingService* wts =
                 m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr;
             if (wts && wts->windowRegistry()) {
@@ -744,6 +734,7 @@ void Daemon::initEnginesAndWiring()
                     place.activity = ctx->effectiveActivity(place.activity);
                 }
             }
+            place.inView = place.desktop == screenCurrent && place.activity == activityNow;
             return place;
         };
         if (m_layoutManager) {
@@ -751,11 +742,15 @@ void Daemon::initEnginesAndWiring()
                 return m_layoutManager->modeForScreen(screenId, desktop, activity);
             };
         }
-        routing.autotileTracks = [autotilePtr = QPointer(autotileEngine)](const QString& windowId) {
-            return autotilePtr && autotilePtr->isWindowTracked(windowId);
+        routing.liveMode = [this](const QString& screenId) {
+            return m_screenModeRouter ? m_screenModeRouter->modeFor(screenId)
+                                      : PhosphorZones::AssignmentEntry::Snapping;
         };
-        routing.scrollTracks = [scrollPtr = QPointer(scrollEngine)](const QString& windowId) {
-            return scrollPtr && scrollPtr->isWindowTracked(windowId);
+        routing.autotileHeldScreen = [autotilePtr = QPointer(autotileEngine)](const QString& windowId) {
+            return autotilePtr ? autotilePtr->heldScreenForWindow(windowId) : QString();
+        };
+        routing.scrollHeldScreen = [scrollPtr = QPointer(scrollEngine)](const QString& windowId) {
+            return scrollPtr ? scrollPtr->heldScreenForWindow(windowId) : QString();
         };
         auto screenModeForWindow = [routing](const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
             return EngineRouting::windowEngineMode(routing, windowId);
@@ -764,7 +759,9 @@ void Daemon::initEnginesAndWiring()
         // Owning-engine-id resolver for synthesized slots (recordFloatingClose,
         // the minimize preserve): the same resolution, keyed on an EXPLICIT
         // screen. Those call sites hold the authoritative close screen, and
-        // the window's tracked screen may already be stale or gone.
+        // the window's tracked screen may already be stale or gone. A
+        // scrolling slot for a window on a screen whose scrolling is off is
+        // the F112 shape the live mode keeps out.
         m_windowTrackingAdaptor->service()->setModeEngineIdResolver(
             [routing](const QString& windowId, const QString& screenId) -> QString {
                 return EngineRouting::engineIdForMode(EngineRouting::windowEngineMode(routing, windowId, screenId));
@@ -786,21 +783,9 @@ void Daemon::initEnginesAndWiring()
 
         m_windowTrackingAdaptor->service()->setEngineFloatWriter(
             [screenModeForWindow, snapEnginePtr = QPointer(snapEngine)](const QString& windowId, bool floating) {
-                // Write ONLY the snap engine's authoritative float store, and
-                // only for snap-mode windows. The engines keep INDEPENDENT
-                // float state — writing the snap bit for an autotile-mode window
-                // is exactly the cross-mode leak this refactor eliminates.
-                //
-                // Autotile-mode windows are intentionally a no-op here:
-                // TilingState::isFloating is the autotile engine's authoritative
-                // float store and is already set by the engine itself (via
-                // performToggleFloat / setWindowFloat) BEFORE any daemon sync
-                // calls WTS::setWindowFloating. Re-driving setWindowFloat here
-                // would re-toggle the float and retile — so the engine stays the
-                // sole owner of its own float bit.
-                // The scrolling engine keeps sole ownership of its float bit
-                // for the same reason autotile does: the engine flips its
-                // own state before any daemon sync reaches WTS.
+                // Only snap's store, only for snap-owned windows: the tiling
+                // engines set their own float bit before any daemon sync
+                // reaches WTS, and re-driving it would re-toggle and retile.
                 if (screenModeForWindow(windowId) != PhosphorZones::AssignmentEntry::Snapping) {
                     return;
                 }
@@ -809,20 +794,28 @@ void Daemon::initEnginesAndWiring()
                 }
             });
 
-        m_windowTrackingAdaptor->service()->setEngineFloatLister([snapEnginePtr = QPointer(snapEngine),
+        // The floating windows, each once and only where its OWNING engine
+        // floats it: a background store's float bit (another desktop, or a
+        // frozen snap float of a window that moved onto a tiling screen) would
+        // otherwise seed the effect's float cache as a user float (F309).
+        m_windowTrackingAdaptor->service()->setEngineFloatLister([this, snapEnginePtr = QPointer(snapEngine),
                                                                   autotilePtr = QPointer(autotileEngine),
                                                                   scrollPtr = QPointer(scrollEngine)]() -> QStringList {
-            QStringList all;
+            QStringList candidates;
             if (snapEnginePtr) {
-                all += snapEnginePtr->floatingWindows();
+                candidates += snapEnginePtr->floatingWindows();
             }
             if (autotilePtr) {
-                all += autotilePtr->allFloatingWindows();
+                candidates += autotilePtr->allFloatingWindows();
             }
             if (scrollPtr) {
-                all += scrollPtr->allFloatingWindows();
+                candidates += scrollPtr->allFloatingWindows();
             }
-            return all;
+            const PhosphorPlacement::WindowTrackingService* wts =
+                m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr;
+            return EngineRouting::ownedFloatingWindows(candidates, [wts](const QString& windowId) {
+                return !wts || wts->isWindowFloating(windowId);
+            });
         });
 
         // Owning-engine predicate: WTS answers isWindowInAutotileMode with this
@@ -841,12 +834,16 @@ void Daemon::initEnginesAndWiring()
         // the engine-backed answer survives effect reloads, which the
         // effect-side capture guard cannot. Covers BOTH tiling-family
         // engines: a scroll column rect recorded as float-back is the same
-        // poison class the guard exists for.
+        // poison class the guard exists for. Tiled IN VIEW only: a
+        // multi-desktop window tiled on a background desktop and floated by
+        // snap here would otherwise have every float-back write refused (F382).
         m_windowTrackingAdaptor->service()->setEngineTiledPredicate(
             [autotilePtr = QPointer(autotileEngine),
              scrollPtr = QPointer(scrollEngine)](const QString& windowId) -> bool {
-                return (autotilePtr && autotilePtr->isWindowTiled(windowId))
-                    || (scrollPtr && scrollPtr->isWindowTiled(windowId));
+                return (autotilePtr && autotilePtr->isWindowTiled(windowId)
+                        && !autotilePtr->heldScreenForWindow(windowId).isEmpty())
+                    || (scrollPtr && scrollPtr->isWindowTiled(windowId)
+                        && !scrollPtr->heldScreenForWindow(windowId).isEmpty());
             });
 
         // Held-screen resolver (membership-grade, tiled OR engine-floating):

@@ -844,6 +844,11 @@ QString SnapEngine::currentActivity() const
 
 bool SnapEngine::isSnapModeScreen(const QString& screenId) const
 {
+    // The mode the screen RUNS when the daemon wired the router: a configured
+    // tiling mode whose engine is off runs snapping (F112).
+    if (m_liveModeResolver) {
+        return m_liveModeResolver(screenId) == PhosphorZones::AssignmentEntry::Mode::Snapping;
+    }
     // Permissive without a layout manager, matching resolveWindowRestore's
     // ownership gate (the unit-test path).
     return !m_layoutManager

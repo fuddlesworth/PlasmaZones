@@ -182,14 +182,14 @@ public:
      *
      * Injected by the daemon (same LGPL-boundary pattern as
      * AutotileModePredicate); the production wiring ORs both engines'
-     * isWindowTiled. Distinct from the MODE predicate: a fresh spawn on an
+     * isWindowTiled, each only where the engine holds the window in the
+     * context in view (a background desktop's tile does not count).
+     * Distinct from the MODE predicate: a fresh spawn on an
      * engine-managed screen is in that mode but not yet tiled — its frame
      * is a genuine free geometry — while a tiled window's frame IS the
      * engine's rect and must never be recorded as a float-back.
-     * recordFreeGeometry uses this to refuse tiled frames the same way it
-     * refuses snapped frames; it complements the effect-side capture guard,
-     * which cannot help on an effect reload (the effect's border tracking
-     * starts empty while the engines still hold their tiling state).
+     * recordFreeGeometry refuses tiled frames with it, which the effect-side
+     * capture guard cannot do after an effect reload.
      */
     using EngineTiledPredicate = std::function<bool(const QString& windowId)>;
     void setEngineTiledPredicate(EngineTiledPredicate predicate);

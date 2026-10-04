@@ -15,6 +15,7 @@
 
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorEngine/WindowPlacement.h>
 
 #include <QHash>
 #include <QList>
@@ -24,6 +25,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <optional>
+
 class StubPlacementEngine : public PhosphorEngine::PlacementEngineBase
 {
 public:
@@ -32,16 +35,38 @@ public:
     {
     }
 
+    QString id; ///< engineId()
     QRect managedRect; ///< answered by lastManagedRect for every window
     QHash<QString, QString> heldScreen; ///< windowId -> the screen it is held on (current context)
+    QSet<QString> trackedElsewhere; ///< tracked only in another (desktop, activity) context
+    QString captureState; ///< when set, capturePlacement answers a slot in this state for a tracked window
     QSet<QString> activeScreens; ///< screens this engine runs
     QList<QPair<QString, QString>> releasedOffScreen; ///< (windowId, keepScreenId) per call
     QStringList handoffReleased; ///< windowIds handed off
     QList<HandoffContext> received; ///< handoffReceive contexts, in order
 
+    QString engineId() const override
+    {
+        return id;
+    }
     QRect lastManagedRect(const QString&) const override
     {
         return managedRect;
+    }
+    std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override
+    {
+        if (captureState.isEmpty() || !isWindowTracked(windowId)) {
+            return std::nullopt;
+        }
+        PhosphorEngine::WindowPlacement placement;
+        placement.windowId = windowId;
+        placement.appId = windowId.section(QLatin1Char('|'), 0, 0);
+        placement.screenId = heldScreen.value(windowId);
+        PhosphorEngine::EngineSlot slot;
+        slot.state = captureState;
+        slot.order = 0;
+        placement.engines.insert(id, slot);
+        return placement;
     }
     void releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId) override
     {
@@ -57,7 +82,7 @@ public:
     }
     bool isWindowTracked(const QString& windowId) const override
     {
-        return heldScreen.contains(windowId);
+        return heldScreen.contains(windowId) || trackedElsewhere.contains(windowId);
     }
     void handoffRelease(const QString& windowId) override
     {

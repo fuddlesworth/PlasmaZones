@@ -185,11 +185,13 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     }
     // The scrolling engine joins the capture chain the same way. Its
     // capturePlacement returns nullopt for untracked windows, so trying it
-    // FIRST when it tracks the window is the same ordering insurance the
+    // FIRST when it holds the window is the same ordering insurance the
     // autotile swap above provides (snap would otherwise claim the window
-    // as a stale floated record).
+    // as a stale floated record). Held IN VIEW: a background desktop's
+    // column of a multi-desktop window snapped here must not capture first,
+    // or its snap slot is never recorded (F361).
     PhosphorEngine::PlacementEngineBase* scrollFirst = nullptr;
-    if (m_scrollEngine && m_scrollEngine->isWindowTracked(windowId)) {
+    if (m_scrollEngine && !m_scrollEngine->heldScreenForWindow(windowId).isEmpty()) {
         scrollFirst = m_scrollEngine.data();
     }
     PhosphorEngine::PlacementEngineBase* engines[] = {scrollFirst, primary, secondary,
@@ -787,10 +789,11 @@ void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int old
 
     const QRect oldFrame(oldX, oldY, oldWidth, oldHeight);
     // Scroll strips reconcile the interactive resize into the column's
-    // stored intent; autotile reflows the tree. Route to whichever engine
-    // tracks the window (empty screen ⇒ not tracked there).
+    // stored intent; autotile reflows the tree. Route to the engine holding
+    // the window IN VIEW: a hidden desktop's column of a multi-desktop window
+    // would otherwise take the resize meant for the tiles in view (F361).
     if (m_scrollEngine) {
-        const QString scrollScreen = m_scrollEngine->screenForTrackedWindow(windowId);
+        const QString scrollScreen = m_scrollEngine->heldScreenForWindow(windowId);
         if (!scrollScreen.isEmpty()) {
             m_scrollEngine->onWindowResized(windowId, oldFrame, newFrame, scrollScreen);
             return;
@@ -799,7 +802,7 @@ void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int old
     if (!m_autotileEngine) {
         return;
     }
-    const QString screenId = m_autotileEngine->screenForTrackedWindow(windowId);
+    const QString screenId = m_autotileEngine->heldScreenForWindow(windowId);
     if (screenId.isEmpty()) {
         return;
     }
