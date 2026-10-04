@@ -15,6 +15,8 @@
 
 #include "wta_float_back_fixture.h"
 
+#include "helpers/WindowPlacementBuilders.h"
+
 class TestWtaFloatBackModel : public QObject
 {
     Q_OBJECT
@@ -174,6 +176,140 @@ private Q_SLOTS:
         f.snap->recordFreeFrameBeforeUserSnap(w, kLeft);
 
         QCOMPARE(f.floatBack(w, kLeft), free);
+    }
+
+    // (S) at the snap pre-snap capture: a minimized window's frame is the
+    // hidden rect, so it is not recorded over the float-back. The write point
+    // no longer refuses it (F413), so this is where the refusal lives (F816).
+    void snapHelperRefusesAMinimizedWindow()
+    {
+        FloatBackFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f816"));
+        f.snapThenFloat(w, kLeft);
+        const QRect free(300, 200, 640, 480);
+        f.wta->service()->recordFreeGeometry(w, kLeft, free, true);
+        f.setFrame(w, QRect(900, 500, 400, 300));
+        f.registerWindow(QStringLiteral("f816"), {}, {}, true);
+
+        f.snap->recordFreeFrameBeforeUserSnap(w, kLeft);
+
+        QCOMPARE(f.floatBack(w, kLeft), free);
+    }
+
+    // ── The capture's own branches (F849) ────────────────────────────────
+
+    // A floated window that has not moved stands on the zone it floated from:
+    // the capture records nothing (F849 a).
+    void captureRefusesTheZoneAFloatedWindowStillStandsOn()
+    {
+        FloatBackFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f849a"));
+        f.snapThenFloat(w, kLeft);
+        f.wta->service()->clearFreeGeometry(w);
+        f.setFrame(w, f.zoneRect(0, kLeft));
+
+        f.wta->captureWindowPlacement(w);
+
+        QVERIFY(!f.floatBack(w, kLeft).isValid());
+    }
+
+    // The zone a window holds on another desktop is a managed frame too: a
+    // window floated here that stands on its zone there records nothing
+    // (F849 b, the per-desktop form of a).
+    void captureRefusesTheZoneTheWindowHoldsOnAnotherDesktop()
+    {
+        FloatBackFixture f;
+        // On desktops 1 and 2, floating on 1 and in zone 2 on desktop 2: the
+        // restore on desktop 1 floats it and seeds desktop 2's store.
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.isMaximized = false;
+        meta.isFullscreen = false;
+        meta.isMinimized = false;
+        meta.virtualDesktop = 1;
+        meta.virtualDesktops = {1, 2};
+        f.registry.upsert(QStringLiteral("f849b"), meta);
+        const QString w = QStringLiteral("app|f849b");
+        f.registry.canonicalizeWindowId(w);
+        WindowPlacement rec;
+        rec.windowId = w;
+        rec.appId = QStringLiteral("app");
+        rec.screenId = kLeft;
+        rec.virtualDesktop = 1;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = WindowPlacement::stateFloating();
+        slot.zonesByDesktop.insert(2, {f.zone(2)});
+        rec.engines.insert(WindowPlacement::snapEngineId(), slot);
+        QVERIFY(f.wta->service()->placementStore().record(rec));
+        (void)f.snap->resolveWindowRestore(w, kLeft, false);
+        QVERIFY(f.snap->isFloating(w));
+        f.wta->service()->clearFreeGeometry(w);
+        const QRect otherDesktopZone = f.zoneRect(2, kLeft);
+        QVERIFY(f.wta->service()->isManagedFrame(w, otherDesktopZone));
+        f.setFrame(w, otherDesktopZone);
+
+        f.wta->captureWindowPlacement(w);
+
+        QVERIFY(!f.floatBack(w, kLeft).isValid());
+    }
+
+    // An unchanged re-capture leaves the store as it was and marks nothing
+    // dirty, so an idle window does not re-arm the save timer (F849 c).
+    void anUnchangedRecaptureMarksNothingDirty()
+    {
+        FloatBackFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f849c"));
+        f.snapThenFloat(w, kLeft);
+        f.setFrame(w, QRect(300, 200, 640, 480));
+        f.wta->captureWindowPlacement(w);
+        QVERIFY(f.wta->service()->peekDirty() & PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+        f.wta->service()->clearDirty();
+
+        f.wta->captureWindowPlacement(w);
+
+        QVERIFY(!(f.wta->service()->peekDirty() & PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements));
+    }
+
+    // A live capture never prunes the app's other pure-float records; the
+    // close capture, the freshest word on the app's float-back there, does
+    // (F849 d).
+    void onlyTheCloseCaptureCollapsesPureFloatSiblings()
+    {
+        FloatBackFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f849d"));
+        const QString old = QStringLiteral("app|f849d-old");
+        QVERIFY(f.wta->service()->placementStore().record(PlasmaZones::TestHelpers::makePlacement(
+            old, QStringLiteral("app"), WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(), kLeft,
+            QRect(100, 100, 500, 400))));
+        f.snapThenFloat(w, kLeft);
+        f.setFrame(w, QRect(300, 200, 640, 480));
+
+        f.wta->captureWindowPlacement(w);
+        QVERIFY(f.wta->service()->placementStore().contains(old));
+
+        f.wta->captureWindowPlacement(w, kLeft);
+        QVERIFY(!f.wta->service()->placementStore().contains(old));
+    }
+
+    // A registered window whose minimize state never arrived cannot be shown
+    // to be visible: a live capture preserves its record instead of sampling
+    // the frame, and a visible one samples it (F849 e).
+    void aWindowOfUnknownMinimizeStateKeepsItsRecord()
+    {
+        FloatBackFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f849e"), {}, {}, std::nullopt);
+        f.snapThenFloat(w, kLeft);
+        const QRect free(300, 200, 640, 480);
+        f.wta->service()->recordFreeGeometry(w, kLeft, free, true);
+        const QRect moved(900, 500, 400, 300);
+        f.setFrame(w, moved);
+
+        f.wta->captureWindowPlacement(w);
+        QCOMPARE(f.floatBack(w, kLeft), free);
+
+        f.registerWindow(QStringLiteral("f849e"));
+        f.wta->captureWindowPlacement(w);
+        QCOMPARE(f.floatBack(w, kLeft), moved);
     }
 
     // ── The frame a managed window settled at (M[w]) ─────────────────────
