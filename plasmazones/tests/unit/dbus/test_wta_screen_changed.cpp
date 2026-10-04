@@ -481,6 +481,31 @@ private Q_SLOTS:
         QCOMPARE(m_snapEngine->screenForTrackedWindow(w), other);
     }
 
+    // An activation reported with the physical id of the monitor whose
+    // virtual screen the float lives on names the same place: no re-home
+    // (F854). Offscreen screens carry no EDID, so the connector-name / EDID
+    // form of one monitor cannot be built here; this is the id-form pair the
+    // effect does send, before its virtual screen configs load.
+    void testActivation_physicalIdOfTheFloatsMonitorDoesNotRehome()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString w = QStringLiteral("app|float-vs-form");
+        const QString vs0 = QStringLiteral("DP-1/vs:0");
+        m_snapEngine->setCurrentDesktopForScreen(vs0, 1);
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], vs0, 1);
+        m_snapEngine->setWindowFloat(w, true, vs0);
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(w), vs0);
+
+        m_wta->windowActivated(w, m_screenId);
+
+        QVERIFY(m_snapEngine->isFloating(w));
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(w), vs0);
+    }
+
     // A zone held on a background desktop of the window's monitor keeps the
     // backstop off: the migrate would leave that zone behind (F259).
     void testActivation_backgroundDesktopZoneBlocksTheRehome()
