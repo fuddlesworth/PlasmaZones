@@ -234,6 +234,33 @@ void SnapState::recordResidence(const QString& rawWindowId, const QString& scree
     }
 }
 
+void SnapState::renumberDesktopsAfterRemoval(int removedDesktop)
+{
+    if (removedDesktop < 1) {
+        return;
+    }
+    const auto shifted = [removedDesktop](int desktop) {
+        if (desktop == removedDesktop) {
+            return 0;
+        }
+        return desktop > removedDesktop ? desktop - 1 : desktop;
+    };
+    bool changed = false;
+    for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end(); ++it) {
+        if (const int next = shifted(it.value()); next != it.value()) {
+            it.value() = next;
+            changed = true;
+        }
+    }
+    if (const int next = shifted(m_lastUsedDesktop); next != m_lastUsedDesktop) {
+        m_lastUsedDesktop = next;
+        changed = true;
+    }
+    if (changed) {
+        Q_EMIT stateChanged();
+    }
+}
+
 int SnapState::desktopForWindow(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);

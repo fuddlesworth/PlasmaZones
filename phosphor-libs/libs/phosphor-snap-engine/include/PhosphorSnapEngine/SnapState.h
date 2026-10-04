@@ -280,6 +280,11 @@ public:
     {
         return m_lastUsedDesktop;
     }
+    /// Shift every desktop number this store records (each window's desktop
+    /// and the last-used zone's) the way Plasma renumbers desktops when
+    /// @p removedDesktop goes: higher numbers move down by one, and a value ON
+    /// the removed desktop reads as unknown (0).
+    void renumberDesktopsAfterRemoval(int removedDesktop);
     /// Monotonic stamp bumped every time this store's last-used zone is set to a
     /// non-empty value (via updateLastUsedZone / restoreLastUsedZone). 0 means
     /// "never set". The facade compares stamps across stores to pick the single

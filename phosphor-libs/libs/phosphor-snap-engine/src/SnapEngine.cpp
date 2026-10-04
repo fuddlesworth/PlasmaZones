@@ -465,6 +465,15 @@ void SnapEngine::renumberDesktopsAfterRemoval(int removedDesktop)
         }
     }
     m_context.renumberDesktopsAfterRemoval(removedDesktop);
+    // So do the desktop numbers the stores hold for each window and for their
+    // last-used zone (the global holder included): left alone they name the
+    // desktop that takes the old number, which the resnap stamp, the
+    // per-desktop forget and the last-zone gate then act on (F145).
+    for (SnapState* state : m_states.states()) {
+        if (state) {
+            state->renumberDesktopsAfterRemoval(removedDesktop);
+        }
+    }
     // The persisted per-desktop zone maps follow the same renumbering, or a
     // restart seeds a zone under a number that now belongs to another
     // desktop. The removed desktop's own entry goes with it (the prune ahead

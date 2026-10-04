@@ -191,6 +191,27 @@ private Q_SLOTS:
         m_layoutManager->setCurrentActivity(QString());
     }
 
+    // Removing desktop 2 renumbers 3 to 2: the stores move, and so do the
+    // desktop numbers they hold for each window and for the last-used zone,
+    // which otherwise named the desktop that took the old number (F145).
+    void aDesktopRemovalRenumbersTheDesktopsTheStoresHold()
+    {
+        snapOn(3, kWindow, m_zoneIds[0]);
+        auto* onThree = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
+        onThree->restoreLastUsedZone(m_zoneIds[0], kScreen, QStringLiteral("app"), 3);
+        QCOMPARE(onThree->desktopForWindow(kWindow), 3);
+
+        m_engine->pruneStatesForDesktop(2);
+        m_engine->renumberDesktopsAfterRemoval(2);
+
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        auto* onTwo = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
+        QCOMPARE(onTwo, onThree);
+        QCOMPARE(onTwo->zonesForWindow(kWindow), QStringList{m_zoneIds[0]});
+        QCOMPARE(onTwo->desktopForWindow(kWindow), 2);
+        QCOMPARE(onTwo->lastUsedDesktop(), 2);
+    }
+
 private:
     void installFullResolver()
     {
