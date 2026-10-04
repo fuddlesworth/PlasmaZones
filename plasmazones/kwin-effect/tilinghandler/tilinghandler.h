@@ -1435,16 +1435,16 @@ private:
      * round-trip (re-notified, autotile screen, snap commit, float, user
      * move/resize, desktop switched again). Callers must only invoke this
      * for windows that were verifiably autotile-managed (tracked in
-     * m_notifiedWindows at demotion time) — the daemon store is mode-shared,
-     * appId-fuzzy and session-persisted, so an ungated call can teleport a
-     * never-autotiled window.
+     * m_notifiedWindows at demotion time): the daemon store is mode-shared and
+     * appId-fuzzy, so an ungated call can teleport a never-autotiled window.
+     * `capturedScreenId` is the caller's screen taken while the engine's
+     * override was still live; by reply time a positional re-resolve of a
+     * parked (off-canvas) frame can name a neighbouring output.
      */
-    /// `capturedScreenId` is the caller's screen resolution taken while the
-    /// engine-authoritative override was still live; the reply guard tests it
-    /// instead of re-resolving, because by reply time the window's tracking
-    /// has been demoted and a positional re-resolve of a parked (off-canvas)
-    /// frame can name a neighbouring output.
     void requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId, const QString& capturedScreenId);
+    /// Apply @p rect as @p w's free geometry on a desktop switch: crossing
+    /// detectors muted, KWin's maximize cleared through the ledger, screen re-seeded.
+    void applyFreeGeometryRestore(KWin::EffectWindow* w, const QString& windowId, const QRectF& rect);
 
     /**
      * @brief Declared compositor min-size for @p w, rounded up to ints.

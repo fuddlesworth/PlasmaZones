@@ -274,8 +274,8 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 }
 
                 // Suppress the VS-crossing detectors across the synchronous
-                // frameGeometryChanged this apply emits — same rationale as the
-                // local-bucket restore path in slotScreensChanged.
+                // frameGeometryChanged this apply emits, for the reason given
+                // in applyFreeGeometryRestore.
                 // Save/restore, not set/clear: a clearing guard nested inside an outer
                 // apply would hand the outer scope back an un-flagged window.
                 const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
@@ -287,15 +287,14 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // the maximize-area rect and defeats the restore (discussion #461).
                 //
                 // Through the ledger when the ledger owns the bit, so membership
-                // and the bit move TOGETHER — the same shape the two sibling
-                // pre-tile restores in screenschanged.cpp use, and for the reason
-                // stated there: a bare clear strips a column-maximize member's bit
+                // and the bit move TOGETHER, the same shape applyFreeGeometryRestore
+                // uses and for the reason stated there: a bare clear strips a column-maximize member's bit
                 // while leaving the effect recorded as still holding it, which is
                 // the exact split m_maximizedToEdgesWindows' contract forbids.
                 if (m_maximizedToEdgesWindows.contains(windowId)) {
                     releaseMaximizedToEdges(windowId, safeW);
                     // REQUESTED maximize, matching releaseMaximizedToEdges and
-                    // the twin in screenschanged.cpp. The committed bit lags a
+                    // applyFreeGeometryRestore. The committed bit lags a
                     // client round-trip on Wayland in both directions, so a
                     // maximize requested but not yet committed would read as
                     // "not maximized" and skip the clear, letting KWin
@@ -321,7 +320,7 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                     // The gesture terms are REDUNDANT in this file: the
                     // enclosing lambda already returns early on the same pair
                     // above. They are kept so this arm reads identically to
-                    // its twin in screenschanged.cpp, where they are live.
+                    // applyFreeGeometryRestore, where they are live.
                     // Do not treat this as the place that guard lives.
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
@@ -344,6 +343,68 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 qCInfo(lcEffect) << "Desktop switch: restored pre-snap geometry from daemon for orphaned window"
                                  << windowId;
             });
+}
+
+void TilingHandler::applyFreeGeometryRestore(KWin::EffectWindow* w, const QString& windowId, const QRectF& rect)
+{
+    // applyWindowGeometry's moveResize, and the maximize clear below, emit
+    // windowFrameGeometryChanged synchronously. Suppress the VS-crossing
+    // detectors (autotile slotWindowFrameGeometryChanged and the snapping
+    // windowFrameGeometryChanged handler) so a same-screen restore is not
+    // mistaken for a virtual-screen crossing, as the retile path does
+    // (tiling.cpp). Save/restore, not set/clear (nesting-safe).
+    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+    m_effect->m_daemonGate.inGeometryApply = true;
+    const auto geomGuard = qScopeGuard([this, prevInApply] {
+        m_effect->m_daemonGate.inGeometryApply = prevInApply;
+    });
+    // Clear any lingering KWin maximize flag first: a still-maximized window
+    // makes KWin re-assert the maximize-area rect and defeat the restore, which
+    // the tile-request path clears for the same reason (discussion #461).
+    //
+    // Through the ledger when the ledger owns the bit, so membership and the
+    // bit move TOGETHER. A bare clear would strip a column-maximize member's
+    // bit while leaving the effect recorded as still holding it, which is the
+    // exact split m_maximizedToEdgesWindows' contract forbids.
+    //
+    // The GUARD is what earns its place here, not the call behind it. Every
+    // caller has already called releaseMaximizedToEdges for this window, so
+    // membership survives to here in exactly one case: that call SKIPPED a
+    // still-fullscreen window and retained the entry on purpose. Re-calling it
+    // skips again for the same reason, making the then-branch a no-op.
+    // Deleting the condition and keeping only the else-branch would hand that
+    // retained member the bare clear the paragraph above forbids, so keep the
+    // test even though the call inside it does nothing.
+    if (m_maximizedToEdgesWindows.contains(windowId)) {
+        releaseMaximizedToEdges(windowId, w);
+    } else if (KWin::Window* kw = w->window(); kw && kw->requestedMaximizeMode() != KWin::MaximizeRestore
+               && !kw->isRequestedFullScreen() && !w->isUserMove() && !w->isUserResize()) {
+        // REQUESTED bits on both axes, never the committed ones. On Wayland
+        // the committed bit trails a client round-trip, and the windowed
+        // fullscreen caller runs one loop body after
+        // releaseWindowedFullscreenState called setFullScreen(false), inside
+        // the exit gap where the requested bit already reads false and the
+        // committed one is still true. Testing isFullScreen() made the clear
+        // certain to skip for that population, so KWin re-asserted the
+        // maximize-area rect over the restore (discussion #461). The
+        // requested fullscreen term also keeps a window whose fullscreen is
+        // requested but not yet committed from being moveResized down to its
+        // restore rect while presenting, since maximize() has no fullscreen
+        // conditional, and the gesture pair keeps it from snapping under the
+        // user's pointer. This arm holds no ledger, so a skip here is
+        // permanent rather than deferred.
+        applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
+    }
+    // Snap-out: leaving tile-managed sizing.
+    m_effect->applyWindowGeometry(w, rect.toRect(), /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                  PhosphorAnimation::ProfilePaths::WindowPlaceOut);
+    // Re-seed the tracked screen: the bracket above suppressed the
+    // VS-crossing detectors whose early return sits BEFORE their tracker
+    // write, and applyWindowGeometry does not self-seed. The restore can
+    // legitimately land in a different virtual screen than the tiled rect,
+    // and a stale entry makes the next genuine geometry change read as a
+    // spurious crossing.
+    m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
 }
 
 QRectF TilingHandler::preTileRestoreRectFor(const QString& windowId, const QString& screenId,

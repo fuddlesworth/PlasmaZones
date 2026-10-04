@@ -8,6 +8,7 @@
 #include "tilinghandler.h"
 
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "handlers/screenchangehandler.h"
 #include "handlers/snaphandler.h"
 #include "compositor/effectlogging.h"
@@ -75,7 +76,7 @@ bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // daemon does not touch, and is a no-op daemon-side (insertWindow
         // rejects an already-tracked window).
         if (m_managedScreens.contains(newScreenId) && m_effect->shouldHandleWindow(w) && !w->isMinimized()
-            && w->isOnCurrentDesktop() && w->isOnCurrentActivity()) {
+            && isOnOwnOutputCurrentDesktop(w) && w->isOnCurrentActivity()) {
             // KWin returned it to an output it was parked for: the settle
             // re-seats it there, or announces it if the daemon does not.
             if (m_effect->m_screenChangeHandler->holdsUnclassifiedRecord(w)) {

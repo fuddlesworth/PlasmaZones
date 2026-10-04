@@ -17,6 +17,7 @@
 #include "handlers/navigationhandler.h"
 #include "handlers/snaphandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "compositor/effectlogging.h"
 
 #include <effect/effectwindow.h>
@@ -197,7 +198,7 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (fullscreen)" << fullscreenWindowId;
         return false;
     }
-    if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+    if (!isOnOwnOutputCurrentDesktop(w) || !w->isOnCurrentActivity()) {
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (wrong desktop/activity)" << m_effect->getWindowId(w);
         return false;
     }
