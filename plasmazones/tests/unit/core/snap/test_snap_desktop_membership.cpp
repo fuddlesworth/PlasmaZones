@@ -285,19 +285,14 @@ private Q_SLOTS:
         QCOMPARE(batch.first().targetZoneId, sortedZoneIds(destination).at(1));
         QCOMPARE(zonesOn(2, kWindow), QStringList{sortedZoneIds(destination).at(1)});
         QVERIFY2(zonesOn(1, kWindow).isEmpty(), "the desktop it left keeps nothing");
-        // Desktop 2 is not the one in view, and its client is suspended there,
-        // so the geometry apply above may never be acked. The window is parked
-        // for the effect's desktop-arrival restore instead, and parked AFTER
-        // the batch, because a geometry apply cancels a park it finds.
-        QCOMPARE(parkSpy.count(), 1);
-        QCOMPARE(parkSpy.first().at(0).toString(), kWindow);
-        QCOMPARE(parkSpy.first().at(1).toInt(), 2);
+        // Desktop 2 is not in view, so the apply may never be acked; the effect
+        // parks a window whose zone apply lands on a hidden desktop. The carry
+        // asks for no desktop move, which would pin a window to one desktop.
+        QVERIFY2(parkSpy.isEmpty(), "a carry to a hidden desktop asks for no desktop move");
     }
 
-    // The park is asked for over windowDesktopMoveRequested, which the effect
-    // answers by REPLACING the window's desktop set. For a window on several
-    // desktops that would drop the ones it is not being carried to, so the
-    // carry takes the geometry apply alone and the desktops stay as they are.
+    // ...nor for a window on several desktops, whose desktop set a move would
+    // replace.
     void aMultiDesktopWindowIsCarriedButNeverParked()
     {
         PhosphorZones::Layout* destination = addLayout(3);

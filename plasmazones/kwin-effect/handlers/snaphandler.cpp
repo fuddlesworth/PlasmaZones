@@ -77,9 +77,9 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     TilingStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
     TilingStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
     m_restartSnapCandidates.remove(windowId);
-    // Placed by some route already — whether this restore or another — so the
-    // desktop-arrival park has nothing left to do.
-    cancelDesktopArrivalRestore(windowId);
+    // A zone apply in view lands and ends the park; one on a hidden desktop
+    // parks the window to re-apply its zone when the desktop is shown.
+    m_desktopArrivalParks.onZoneApplied(windowId, isOnOwnOutputCurrentDesktop(w) && w->isOnCurrentActivity());
 
     // Title-bar (borderless) state is driven entirely by rules through
     // the effect's reconcileRuleHiddenTitleBar → DecorationManager path; this

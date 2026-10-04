@@ -53,6 +53,19 @@ public:
         m_parks.remove(windowId);
     }
 
+    /// A zone apply reached @p windowId. In view it lands, so the park is done
+    /// with; on a hidden desktop its suspended client may never ack it (a grow
+    /// is dropped for good), so the window is parked to re-apply its zone on
+    /// arrival (F491, CS).
+    void onZoneApplied(const QString& windowId, bool visible)
+    {
+        if (visible) {
+            cancel(windowId);
+        } else {
+            arm(windowId, Cause::ReapplyOnly);
+        }
+    }
+
     /// Spend @p windowId's park, answering the cause it was parked for.
     std::optional<Cause> take(const QString& windowId)
     {

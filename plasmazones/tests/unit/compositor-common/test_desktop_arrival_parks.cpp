@@ -52,6 +52,34 @@ private Q_SLOTS:
         QVERIFY(parks.isEmpty());
     }
 
+    // A zone apply on a hidden desktop parks the window to re-apply its zone
+    // when the desktop is shown: its suspended client may never ack the apply,
+    // and a grow is dropped for good (F491, CS).
+    void hiddenZoneApplyArmsAReapplyPark()
+    {
+        DesktopArrivalParks parks;
+        parks.onZoneApplied(QStringLiteral("a"), /*visible=*/false);
+        QCOMPARE(parks.take(QStringLiteral("a")), std::optional<Cause>(Cause::ReapplyOnly));
+    }
+
+    // ...and it keeps an open's continuation an open's continuation.
+    void hiddenZoneApplyKeepsAnOpenContinuation()
+    {
+        DesktopArrivalParks parks;
+        parks.arm(QStringLiteral("a"), Cause::OpenContinuation);
+        parks.onZoneApplied(QStringLiteral("a"), /*visible=*/false);
+        QCOMPARE(parks.take(QStringLiteral("a")), std::optional<Cause>(Cause::OpenContinuation));
+    }
+
+    // A zone apply in view lands, so the park is done with.
+    void visibleZoneApplyCancelsIt()
+    {
+        DesktopArrivalParks parks;
+        parks.arm(QStringLiteral("a"), Cause::OpenContinuation);
+        parks.onZoneApplied(QStringLiteral("a"), /*visible=*/true);
+        QVERIFY(parks.isEmpty());
+    }
+
     void anEmptyIdIsNeverParked()
     {
         DesktopArrivalParks parks;

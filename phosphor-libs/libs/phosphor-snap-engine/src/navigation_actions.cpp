@@ -505,8 +505,9 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     // Re-snap into the equivalent zone: update SnapState (zone + screen +
     // desktop), refresh the placement-store record (desktop + snap slot), ask
     // the compositor to relocate the real window, then apply the target zone's
-    // geometry. The effect's geometry apply has no current-desktop guard, so it
-    // lands correctly even though the target desktop isn't visible yet.
+    // geometry. The target desktop is not in view, so its suspended client may
+    // not ack the apply; the effect parks it and re-applies the zone when the
+    // desktop is shown (F408, F491).
     // Pinned to the TARGET desktop's store: the assignment belongs to the
     // desktop the window is moving to, not the one in view.
     stateForWindowOnScreen(windowId, screenId, targetDesktop)

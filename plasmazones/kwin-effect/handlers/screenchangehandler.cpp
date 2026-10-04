@@ -3,6 +3,8 @@
 
 #include "screenchangehandler.h"
 #include "tilinghandler/tilinghandler.h"
+#include "handlers/snaphandler.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -299,6 +301,13 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             if (!entry.screenId.isEmpty()
                 && m_effect->outputForScreenId(entry.screenId) != m_effect->windowOutput(window)) {
                 qCDebug(lcScreenChange) << "Skipping" << entry.windowId << "whose zone is on" << entry.screenId;
+                continue;
+            }
+            // A window on a desktop or activity not in view would not ack the
+            // configure: its zone is re-applied when that desktop is shown.
+            if (!isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity()) {
+                m_effect->snapHandler()->armDesktopArrivalRestore(entry.windowId,
+                                                                  DesktopArrivalParks::Cause::ReapplyOnly);
                 continue;
             }
             QRect newGeometry = entry.toRect();

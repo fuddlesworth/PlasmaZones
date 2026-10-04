@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "navigationhandler.h"
+#include "handlers/snaphandler.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
@@ -117,6 +119,13 @@ void NavigationHandler::syncZonesFromDaemon()
         for (const PhosphorProtocol::WindowStateEntry& state : states) {
             if (!state.zoneId.isEmpty()) {
                 m_zoneCache.setZone(state.windowId, state.zoneId);
+                // The parks died with the previous effect: a snapped window on
+                // a hidden desktop is parked again to re-apply its zone there.
+                KWin::EffectWindow* window = m_effect->findWindowByIdExact(state.windowId);
+                if (window && (!isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity())) {
+                    m_effect->snapHandler()->armDesktopArrivalRestore(state.windowId,
+                                                                      DesktopArrivalParks::Cause::ReapplyOnly);
+                }
             }
         }
         qCDebug(lcEffect) << "Synced" << zoneEntryCount() << "snapped-window zones from daemon";

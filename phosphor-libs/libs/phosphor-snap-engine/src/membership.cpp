@@ -210,14 +210,6 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
     // emitted as ONE batch after the loop, since the commit it goes through
     // mutates the very stores this loop walks.
     QVector<PhosphorEngine::ZoneAssignmentEntry> carried;
-    // The windows whose carry may also be PARKED for the effect's
-    // desktop-arrival restore. The park is asked for over
-    // windowDesktopMoveRequested, and the effect answers that with
-    // windowToDesktops(w, {target}), which REPLACES the window's desktop set —
-    // a true no-op only while the window names one desktop. For a window
-    // present on several, asking would silently drop the others, so it takes
-    // the geometry apply alone and keeps its desktops.
-    QSet<QString> parkable;
     // Planned before the release below wipes the zones it reads. Fills
     // @p carriedFrom with the context the snap was taken from when the window
     // stays snapped, and leaves it default for the float-back, which is a
@@ -348,13 +340,6 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             && assign->virtualDesktop == currentKey.desktop;
         if (assign) {
             carried.append(*assign);
-            // One desktop in the span means the move the park is asked for
-            // names the desktop the window is already on, and nothing else.
-            // The staleness that got us here is a desktop the span dropped,
-            // so the source is never counted here.
-            if (entry.span.desktops.size() == 1) {
-                parkable.insert(entry.windowId);
-            }
         }
         for (const PlacementStateKey& stale : entry.stale) {
             if (SnapState* state = m_states.stateForKey(stale)) {
@@ -475,33 +460,10 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                 qCDebug(lcSnapEngine) << "reconcileDesktopMemberships: capturePlacement miss for" << entry.windowId
                                       << "— placement-store desktop not updated to" << entry.virtualDesktop;
             }
-            if (entry.virtualDesktop == currentKey.desktop) {
-                continue;
-            }
-            if (!parkable.contains(entry.windowId)) {
-                // On several desktops, so the move the park rides would pin it
-                // to one of them (see `parkable`). It keeps its desktops and
-                // takes the geometry apply alone, which is what every carry
-                // did before the park existed.
-                qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: not parking" << entry.windowId
-                                     << "— it is on more than one desktop, and the park is asked for as a move that"
-                                     << "would pin it to one";
-                continue;
-            }
-            // The window went to a desktop nobody is looking at, where the
-            // compositor suspends its client: it never acks the configure, and
-            // a resize that asks for MORE room than the window has is dropped
-            // for good (KWin does not re-send it when the desktop comes back).
-            // So park it for the effect's desktop-arrival restore, which
-            // re-drives the placement the moment the desktop is shown and finds
-            // the record this pass has just written. Emitted AFTER the batch
-            // above, because the geometry apply cancels a park it finds; on one
-            // D-Bus connection the two keep that order. The move itself asks
-            // for the desktop the window is already on, which is how the effect
-            // learns it has a window to park.
-            qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: parking" << entry.windowId
-                                 << "for a placement retry when desktop" << entry.virtualDesktop << "is shown";
-            Q_EMIT windowDesktopMoveRequested(entry.windowId, entry.virtualDesktop);
+            // A carry onto a desktop nobody is looking at needs no park request:
+            // the effect parks a window whose zone apply lands on a hidden
+            // desktop and re-applies the zone when it is shown, and a move
+            // request would have pinned a window on several desktops to one.
         }
     }
 
