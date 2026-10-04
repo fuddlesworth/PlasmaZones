@@ -413,16 +413,20 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // virtual-screen move fires no outputChanged to report it later.
             reportActiveWindowScreen(w, screenId);
         }
-        // Genuine snap commit only (same trio the tracking discriminator
-        // below tests): a float-restore places FREE geometry, where KWin's
-        // maximize is the user's business, and an autotile-managed screen's
-        // maximize belongs to TilingHandler's own ledgers. After the
-        // pre-seed above, whose coverage the demote's committed configure
-        // rides; before the bracketed apply.
-        const bool demoteForSnap =
-            !zoneId.isEmpty() && !screenId.isEmpty() && !m_tilingHandler->isManagedScreen(screenId);
-        if (demoteForSnap) {
-            m_tilingHandler->demoteMaximizeForSnapPlacement(w, geometry);
+        // The placement statement, on a snapping screen only: a tiling
+        // engine's maximize belongs to TilingHandler's own ledgers. A zone
+        // commit and a user verb's free apply (the float toggle, Restore:
+        // the window lands at its float-back, not maximized, F582) take it; a
+        // re-stated free spot leaves a maximize to the user. After the
+        // pre-seed above, whose coverage its committed configure rides;
+        // before the bracketed apply.
+        std::optional<PlacementStatement::Purpose> statement;
+        if (!screenId.isEmpty() && !m_tilingHandler->isManagedScreen(screenId)
+            && (!zoneId.isEmpty() || purpose == PhosphorProtocol::PlacementPurpose::UserVerb)) {
+            statement = purpose == PhosphorProtocol::PlacementPurpose::Restatement
+                ? PlacementStatement::Purpose::Restatement
+                : PlacementStatement::Purpose::UserVerb;
+            m_tilingHandler->preparePlacement(w, geometry, *statement);
         }
         const auto applyGuard = geometryApplyScope();
         // A float-position restore on a fresh open teleports like the
@@ -433,7 +437,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/zoneId.isEmpty() && freshOpen,
                             zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
                                              : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
-                            QRectF(), QRectF(), /*demoteMaximizeOnDeferredReplay=*/demoteForSnap);
+                            QRectF(), QRectF(), statement);
     }
     // Track snapping's own border set (mirrors how autotile records at its
     // tile-apply) using a discriminator analogous to the batch path
@@ -442,7 +446,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // single-window path uses the empty zoneId as the float discriminator, since it
     // is only reached for explicit snap commits (which legitimately un-float) and
     // float-restores (which arrive with an empty zoneId). A window can never land in
-    // both the snap and autotile border sets:
+    // both the snap and autotile border sets (preparePlacement untracked a window the
+    // tiling side still held):
     //   - empty zoneId         → float-restore: leave snapping's set
     //   - empty/autotile screen → autotile-managed or unresolved: leave the set
     //                             (TilingHandler tracks autotile-screen windows)
@@ -623,13 +628,15 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 // authoritative screenId that is not autotile-managed marks a
                 // real zone commit, and a surviving KWin maximize would fight
                 // its rect and arm a cross-screen restore.
-                const bool demoteForSnap = !p.screenId.isEmpty() && !m_tilingHandler->isManagedScreen(p.screenId);
-                if (demoteForSnap) {
-                    m_tilingHandler->demoteMaximizeForSnapPlacement(p.window, p.geometry);
+                // Every batch entry re-states: no batch producer is the
+                // subject of a user verb.
+                std::optional<PlacementStatement::Purpose> statement;
+                if (!p.screenId.isEmpty() && !m_tilingHandler->isManagedScreen(p.screenId)) {
+                    statement = PlacementStatement::Purpose::Restatement;
+                    m_tilingHandler->preparePlacement(p.window, p.geometry, *statement);
                 }
                 applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
-                                    /*skipAnimation=*/false, batchProfilePath, QRectF(), QRectF(),
-                                    /*demoteMaximizeOnDeferredReplay=*/demoteForSnap);
+                                    /*skipAnimation=*/false, batchProfilePath, QRectF(), QRectF(), statement);
             }
             // Snapping owns its border set (mirrors autotile). The daemon
             // supplies a non-empty authoritative screenId only for real

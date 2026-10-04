@@ -170,6 +170,7 @@ set(plasmazones_effect_SRCS
     tilinghandler/screenschanged.cpp
     tilinghandler/state.cpp
     tilinghandler/windowedfullscreen.cpp
+    tilinghandler/placementhandback.cpp
     tilinghandler/pretilegeometry.cpp
     tilinghandler/floatcleanup.cpp
     tilinghandler/tiling.cpp

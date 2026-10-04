@@ -1037,22 +1037,17 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         m_effect->m_trackedScreenPerWindow[targetWindow] = screenId;
         m_effect->tilingHandler()->updateNotifiedScreen(m_effect->getWindowId(targetWindow), screenId);
     }
-    // AFTER the pre-snap capture (freeGeometryForCapture reads the maximize
-    // state to substitute the true free rect) and the pre-seed above (the
-    // demote's committed configure is exactly the async follow-up it covers),
-    // BEFORE the apply: a surviving KWin maximize fights the zone rect and
-    // arms a cross-screen restore. Deliberately UNGATED on isManagedScreen
-    // (the daemon_apply sites gate because their slots also carry float
-    // restores): this path always commits a zone placement and applies the
-    // rect unconditionally, the demote already skips engine-held claims
-    // internally, and gating only the demote would leave the maximize
-    // fighting the rect on managed screens — the defect it exists to fix.
-    m_effect->m_tilingHandler->demoteMaximizeForSnapPlacement(targetWindow, geometry);
+    // A pick is a user verb: after the pre-snap capture (which reads the
+    // maximize state) and the pre-seed above (which covers the hand-back's
+    // configure), before the apply, so the window lands in the zone with
+    // neither fullscreen nor maximize. Ungated on isManagedScreen, since this
+    // path always applies a zone rect.
+    m_effect->m_tilingHandler->preparePlacement(targetWindow, geometry, PlacementStatement::Purpose::UserVerb);
     {
         const auto applyGuard = m_effect->geometryApplyScope();
         m_effect->applyWindowGeometry(targetWindow, geometry, false, false,
                                       PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
-                                      /*demoteMaximizeOnDeferredReplay=*/true);
+                                      PlacementStatement::Purpose::UserVerb);
     }
 
     if (m_effect->isDaemonReady("snap assist windowSnapped")) {

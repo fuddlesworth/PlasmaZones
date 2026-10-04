@@ -217,7 +217,7 @@ bool PlasmaZonesEffect::fullscreenBailsApply(KWin::EffectWindow* window) const
 void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
                                             bool skipAnimation, const QString& profilePath,
                                             const QRectF& originOverride, const QRectF& visualTargetOverride,
-                                            bool demoteMaximizeOnDeferredReplay)
+                                            std::optional<PlacementStatement::Purpose> statementOnDeferredReplay)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -356,7 +356,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         auto conn = std::make_shared<QMetaObject::Connection>();
         *conn = connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
                         [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, commandStamp,
-                         originOverride, visualTargetOverride, demoteMaximizeOnDeferredReplay](KWin::EffectWindow*) {
+                         originOverride, visualTargetOverride, statementOnDeferredReplay](KWin::EffectWindow*) {
                             disconnect(*conn);
                             // Drop the handle on every exit, not just the applying
                             // one: a stale entry would make the next defer for this
@@ -385,15 +385,13 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                                 endRestoreSuppression(safeWindow.data());
                                 return;
                             }
-                            // Pay the demote claim the caller's mid-gesture bail
-                            // skipped (see the header doc): the gesture is over
-                            // now, so the demote's isUserMove/isUserResize guard
-                            // passes, and it must run before the moveResize below
-                            // for the same reason it runs before the immediate
-                            // apply — a surviving KWin maximize fights the zone
-                            // rect and arms a cross-screen restore.
-                            if (demoteMaximizeOnDeferredReplay) {
-                                m_tilingHandler->demoteMaximizeForSnapPlacement(safeWindow.data(), geo);
+                            // Pay the placement statement the caller's mid-gesture
+                            // preparePlacement skipped (see the header doc): the
+                            // gesture is over now, and the hand-back must run before
+                            // the moveResize below for the same reason it runs before
+                            // the immediate apply.
+                            if (statementOnDeferredReplay) {
+                                m_tilingHandler->preparePlacement(safeWindow.data(), geo, *statementOnDeferredReplay);
                             }
                             // Re-assert the self-caused-frame-change guard the
                             // original (batch) apply held — without it the
@@ -414,7 +412,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                             // dropped the replay if any newer command for this window landed
                             // since (another window moving does not invalidate them).
                             applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath, originOverride,
-                                                visualTargetOverride, demoteMaximizeOnDeferredReplay);
+                                                visualTargetOverride, statementOnDeferredReplay);
                         });
         m_deferredGeometryReplay.insert(window, *conn);
         return;

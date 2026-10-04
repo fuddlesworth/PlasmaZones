@@ -107,7 +107,7 @@ public:
     }
 
     /// Pre-write the maximize edge tracking for a maximize demote the
-    /// effect itself authored (TilingHandler::demoteMaximizeForSnapPlacement):
+    /// effect itself authored (TilingHandler::preparePlacement):
     /// stamps the window not-fully-maximized so the demote's committed
     /// Wayland echo reads as no-edge in the maximize lambda instead of
     /// replaying a placeOut morph over the batch's placeIn leg, and drops any

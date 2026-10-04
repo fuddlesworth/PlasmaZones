@@ -5,7 +5,20 @@
 
 #include "plasmazoneseffect/placementstatement.h"
 
+using PlasmaZones::PlacementStatement::decide;
 using PlasmaZones::PlacementStatement::fullscreenBails;
+using PlasmaZones::PlacementStatement::Inputs;
+using PlasmaZones::PlacementStatement::Purpose;
+using PlasmaZones::PlacementStatement::Verdict;
+
+namespace {
+Inputs inputs(Purpose purpose)
+{
+    Inputs in;
+    in.purpose = purpose;
+    return in;
+}
+} // namespace
 
 /**
  * @brief The pure placement-statement decisions: what a placement does to a
@@ -43,6 +56,90 @@ private Q_SLOTS:
     {
         QVERIFY(fullscreenBails(/*hasKWinWindow=*/false, /*committed=*/true, /*requested=*/false, false));
         QVERIFY(!fullscreenBails(false, false, true, false));
+    }
+
+    // A user verb on a fullscreen window ends the fullscreen, so its apply
+    // lands instead of bailing (F505, F524). The old demote returned for a
+    // window that was not maximized and never touched fullscreen.
+    void userVerbEndsFullscreen()
+    {
+        Inputs in = inputs(Purpose::UserVerb);
+        in.requestedFullScreen = true;
+        const Verdict v = decide(in);
+        QVERIFY(v.endFullScreen);
+        QVERIFY(!v.endMaximize);
+    }
+
+    // Fullscreen over a maximize: both end (the effect writes fullscreen first).
+    void userVerbEndsFullscreenThenMaximize()
+    {
+        Inputs in = inputs(Purpose::UserVerb);
+        in.requestedFullScreen = true;
+        in.maximized = true;
+        const Verdict v = decide(in);
+        QVERIFY(v.endFullScreen);
+        QVERIFY(v.endMaximize);
+    }
+
+    // A tiling engine's claim is shed for any purpose: the window is leaving
+    // the stack or strip that owns it (F342). The old demote returned early.
+    void engineClaimIsShedForAnyPurpose()
+    {
+        for (const Purpose purpose : {Purpose::UserVerb, Purpose::Restatement}) {
+            Inputs in = inputs(purpose);
+            in.maximized = true;
+            in.engineMaximizeClaim = true;
+            const Verdict v = decide(in);
+            QVERIFY(v.shedEngineMaximize);
+            QVERIFY2(!v.endMaximize, "the claim's own release ends the maximize");
+        }
+    }
+
+    // A windowed-fullscreen member placed into a snap zone is handed back,
+    // not exempted (F529).
+    void windowedFullscreenMemberIsHandedBack()
+    {
+        Inputs in = inputs(Purpose::UserVerb);
+        in.requestedFullScreen = true;
+        in.windowedFsMember = true;
+        const Verdict v = decide(in);
+        QVERIFY(v.shedWindowedFullscreen);
+        QVERIFY2(!v.endFullScreen, "the claim's release ends it");
+    }
+
+    // A user verb's free apply (Restore, the float toggle) ends a maximize, so
+    // the window lands at its float-back (F582).
+    void userVerbEndsAMaximize()
+    {
+        Inputs in = inputs(Purpose::UserVerb);
+        in.maximized = true;
+        QVERIFY(decide(in).endMaximize);
+    }
+
+    // A re-statement ends a maximize but never a fullscreen, and leaves a
+    // maximized fullscreen window alone.
+    void restatementNeverEndsFullscreen()
+    {
+        Inputs in = inputs(Purpose::Restatement);
+        in.maximized = true;
+        QVERIFY(decide(in).endMaximize);
+        in.requestedFullScreen = true;
+        const Verdict v = decide(in);
+        QVERIFY(!v.endFullScreen);
+        QVERIFY(!v.endMaximize);
+    }
+
+    // A live gesture the placement does not own: nothing is written, the
+    // replay decides again.
+    void aLiveGestureWritesNothing()
+    {
+        Inputs in = inputs(Purpose::UserVerb);
+        in.maximized = true;
+        in.requestedFullScreen = true;
+        in.engineMaximizeClaim = true;
+        in.gestureLive = true;
+        const Verdict v = decide(in);
+        QVERIFY(!v.endFullScreen && !v.endMaximize && !v.shedEngineMaximize && !v.shedWindowedFullscreen);
     }
 };
 

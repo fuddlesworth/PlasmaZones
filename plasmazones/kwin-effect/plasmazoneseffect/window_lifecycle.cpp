@@ -155,10 +155,10 @@ bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QStri
         // A client that maps itself maximized (a browser restoring session
         // state) and is instant-restored into a zone would otherwise keep
         // KWin's maximize bit fighting the zone rect from its first frame.
-        m_tilingHandler->demoteMaximizeForSnapPlacement(w, cached->geometry);
+        m_tilingHandler->preparePlacement(w, cached->geometry, PlacementStatement::Purpose::Restatement);
         applyWindowGeometry(w, cached->geometry, false, /*skipAnimation=*/true,
                             PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
-                            /*demoteMaximizeOnDeferredReplay=*/true);
+                            PlacementStatement::Purpose::Restatement);
         return true;
     }
     return false;

@@ -98,7 +98,9 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             // reportActiveWindowScreen). Ahead of the apply gate below on
             // purpose: a move the daemon drives is still a move of the focused
             // window, and the screen answers from the engine for a strip tile,
-            // so a parked column crossing outputs does not flip the record.
+            // so a parked column crossing outputs does not flip the record (a
+            // window a snap placement took off its strip is untracked by then
+            // and answers by position).
             // Not onto KWin's placeholder output, which the daemon has no
             // screen for (F729).
             if (const KWin::Window* const win = safeW->window();

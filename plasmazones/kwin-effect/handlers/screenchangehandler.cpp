@@ -326,14 +326,14 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             }
             qCInfo(lcScreenChange) << "Repositioning window" << m_effect->getWindowId(e.window) << "to" << e.geometry;
             // A monitor reconnect can hand back a window the session left
-            // KWin-maximized; placing its zone rect without dropping that
-            // state re-arms the cross-screen restore the demote exists for.
-            m_effect->m_tilingHandler->demoteMaximizeForSnapPlacement(e.window, e.geometry);
+            // KWin-maximized; placing its zone rect without the placement
+            // statement re-arms the cross-screen restore it exists for.
+            m_effect->m_tilingHandler->preparePlacement(e.window, e.geometry, PlacementStatement::Purpose::Restatement);
             // Resolution-change resnap: the effect-local twin of the daemon's
             // "resnap" action, which daemon_apply.cpp routes to WindowLayoutSwitch.
             m_effect->applyWindowGeometry(e.window, e.geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                                           PhosphorAnimation::ProfilePaths::WindowLayoutSwitch, QRectF(), QRectF(),
-                                          /*demoteMaximizeOnDeferredReplay=*/true);
+                                          PlacementStatement::Purpose::Restatement);
         }
     });
 }

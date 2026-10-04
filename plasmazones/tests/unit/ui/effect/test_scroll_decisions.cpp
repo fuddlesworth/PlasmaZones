@@ -436,6 +436,11 @@ private Q_SLOTS:
         QTest::newRow("evacuation/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::Evacuation) << false;
         QTest::newRow("evacuation/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::Evacuation) << false;
         QTest::newRow("evacuation/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::Evacuation) << false;
+
+        // A snap placement handed every claim back already, at its own rect.
+        QTest::newRow("snapPlacement/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::SnapPlacement) << false;
+        QTest::newRow("snapPlacement/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::SnapPlacement) << false;
+        QTest::newRow("snapPlacement/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::SnapPlacement) << false;
     }
 
     void claimReleaseTable()

@@ -321,6 +321,10 @@ enum class ClaimScope {
     /// fullscreen evacuee stays that way, so KWin can still return it as it
     /// was when the output comes back.
     Evacuation,
+    /// A placement on a snapping screen took the window: preparePlacement has
+    /// already handed every claim back, anchored at the placement rect, so the
+    /// untrack it runs releases none.
+    SnapPlacement,
 };
 
 /// Whether @p claim releases on @p scope.
@@ -355,6 +359,9 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
     case ClaimScope::Evacuation:
         // No claim releases: a release restores KWin's state, and an evacuee
         // keeps it. The caller scrubs the ledgers bare instead.
+        return false;
+    case ClaimScope::SnapPlacement:
+        // Released already, by the placement, at the placement's rect.
         return false;
     }
     return false;

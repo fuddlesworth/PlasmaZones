@@ -25,6 +25,7 @@
 // ClaimScope is part of releaseAllClaims' signature; the header is pure and
 // header-only, so this costs nothing beyond the enum.
 #include "scrolldecisions.h"
+#include "plasmazoneseffect/placementstatement.h"
 
 #include <PhosphorCompositor/TilingState.h>
 #include <PhosphorCompositor/TriggerParser.h>
@@ -547,34 +548,22 @@ public:
         return m_suppressMaximizeChanged > 0;
     }
 
-    /// Drop KWin's maximize state before a SNAP-mode zone placement lands.
+    /// The placement statement, run before a placement on a SNAPPING screen
+    /// applies @p rect (placementhandback.cpp, PlacementStatement::decide).
     ///
-    /// A zone placement is authoritative over the window's geometry, but a
-    /// KWin-maximized window carries two pieces of state a bare moveResize
-    /// never touches: the maximize bit itself (which KWin re-enforces against
-    /// the zone rect, and which the client keeps re-asserting through its
-    /// configure acks) and geometryRestore (which can sit on ANOTHER monitor
-    /// entirely — the screen the window was last maximized on). Left standing,
-    /// the next maximize press toggles OFF and KWin restores the window
-    /// cross-screen; the daemon then reads the teleport as the user moving the
-    /// window off its zone and unsnaps it (the #1028-family report's Brave
-    /// trace: commitSnap on one screen, windowScreenChanged-unsnap two seconds
-    /// later).
-    ///
-    /// Seeds geometryRestore with @p zoneRect FIRST, so the restore moveResize
-    /// inside maximize() goes straight to the zone — one configure, on the
-    /// target screen, with no interim hop through a stale rect whose async
-    /// Wayland ack could land on the wrong output and re-trigger the very
-    /// unsnap this exists to prevent.
-    ///
-    /// Lives on this handler rather than the effect because the maximize
-    /// OWNERSHIP LEDGERS live here: a window whose maximize the engine holds
-    /// (monocle, maximize-to-edges) is skipped — those bits are handed back by
-    /// their own release arms, and writing over them would strand the ledger.
-    /// No-op for a window that is not KWin-maximized, so call sites need no
-    /// pre-check. Callers apply the zone rect immediately after, under their
-    /// own inGeometryApply bracket or not — this method brackets its own write.
-    void demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const QRect& zoneRect);
+    /// A KWin-maximized or fullscreen window carries state a bare moveResize
+    /// never touches, and its restore rect can sit on another monitor: left
+    /// standing, KWin re-enforces it against the placement, and the next
+    /// maximize press restores the window cross-screen, which the daemon reads
+    /// as the user moving it off its zone (the #1028-family Brave trace). So a
+    /// tiling engine's claim is shed for any @p purpose, a user verb ends the
+    /// window's own fullscreen and then its maximize, and a re-statement ends a
+    /// maximize only. Every hand-back is anchored at @p rect (its restore rect
+    /// is seated first, one configure on the target screen), and a window the
+    /// tiling handler still tracks is untracked here. Writes nothing under a
+    /// live gesture; the deferred replay calls again once it ends. Lives here
+    /// because the maximize and fullscreen OWNERSHIP LEDGERS do.
+    void preparePlacement(KWin::EffectWindow* w, const QRect& rect, PlacementStatement::Purpose purpose);
 
     /// Arm the clear-in-flight marker and dispatch Scrolling.
     /// clearWindowedFullscreen reply-gated: the error arm drops the marker

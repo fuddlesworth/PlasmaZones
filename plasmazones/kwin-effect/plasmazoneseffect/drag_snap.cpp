@@ -59,7 +59,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
     QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(interface, method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, window, windowId, method, fallback, onSnapSuccess, args, skipAnimation, onComplete,
+            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation, onComplete,
              onError](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 QDBusPendingReply<int, int, int, int, bool> reply = *w;
@@ -86,25 +86,22 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                     QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(),
                               reply.argumentAt<3>());
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
-                    // A surviving KWin maximize fights the zone rect and arms
-                    // a cross-screen restore — drop it before the apply. The
-                    // pre-snap capture ran before the call, so its
+                    // The placement statement before the apply. The pre-snap
+                    // capture ran before the call, so its
                     // freeGeometryForCapture already read the maximize state
-                    // this demote consumes.
-                    //
-                    // Deliberately UNGATED on isManagedScreen, unlike the
-                    // daemon_apply sites: their slots also carry float
-                    // restores, so they ride the pre-existing commit
-                    // discriminator, while this funnel always commits a zone
+                    // the hand-back consumes. Ungated on isManagedScreen,
+                    // unlike the daemon_apply sites (their slots also carry
+                    // float restores): this funnel always commits a zone
                     // placement and applies the rect unconditionally below.
-                    // Engine-held claims are already skipped inside the
-                    // demote, and gating only the demote here would leave the
-                    // maximize fighting the rect on managed screens — the
-                    // defect this call exists to fix.
-                    m_tilingHandler->demoteMaximizeForSnapPlacement(window, geo);
+                    //
+                    // The purpose follows storePreSnap, which only a user
+                    // verb sets (the auto-fill on drop); a restore reply
+                    // re-states a placement the window had.
+                    const PlacementStatement::Purpose purpose =
+                        storePreSnap ? PlacementStatement::Purpose::UserVerb : PlacementStatement::Purpose::Restatement;
+                    m_tilingHandler->preparePlacement(window, geo, purpose);
                     applyWindowGeometry(window, geo, false, skipAnimation,
-                                        PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
-                                        /*demoteMaximizeOnDeferredReplay=*/true);
+                                        PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(), purpose);
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
                     // committed — record in snapping's border set, but only for
                     // a resolved snap-mode screen (autotile windows are tracked

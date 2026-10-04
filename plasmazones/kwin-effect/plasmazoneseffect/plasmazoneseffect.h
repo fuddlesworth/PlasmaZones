@@ -42,6 +42,7 @@
 // this block sits with the other project includes rather than after the Qt /
 // KDE ones (own header → project → KDE → Qt).
 #include "effect_state.h"
+#include "placementstatement.h"
 #include "kwincompat.h" // KWinCompat::PaintResult — the paint hooks' return type per KWin version
 #include "shader_resolve.h"
 #include "types.h"
@@ -1159,15 +1160,14 @@ private:
     // never visible. Do NOT use this to end an animation somewhere on screen —
     // the window would visibly snap at the end.
     //
-    // demoteMaximizeOnDeferredReplay: the caller's maximize demote bails while
-    // a user gesture is live, which is also when this function DEFERS. True
-    // makes the deferred replay re-run the demote before its moveResize; a
-    // dropped replay drops it. Read only on the deferral path.
+    // statementOnDeferredReplay: the caller's preparePlacement writes nothing under a live
+    // gesture, which is also when this function DEFERS; the replay prepares again with this
+    // purpose before its moveResize, and a dropped replay drops it. Deferral path only.
     void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
                              bool skipAnimation = false,
                              const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF(),
-                             bool demoteMaximizeOnDeferredReplay = false);
+                             std::optional<PlacementStatement::Purpose> statementOnDeferredReplay = std::nullopt);
     /// Whether applyWindowGeometry skips @p window as fullscreen (PlacementStatement::fullscreenBails);
     /// shared by the apply, its deferred replay and the tile path.
     bool fullscreenBailsApply(KWin::EffectWindow* window) const;

@@ -465,13 +465,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                             kw->cancelInteractiveMoveResize();
                         }
                         // After the cancel (its gesture guard must see the
-                        // flags clear), before the apply: a surviving KWin
-                        // maximize would fight the zone rect and leave a
-                        // cross-screen restore armed — see the declaration.
-                        m_tilingHandler->demoteMaximizeForSnapPlacement(safeWindow, snapGeometry);
+                        // flags clear), before the apply: a drop is a user
+                        // verb, so the window leaves fullscreen and maximize
+                        // and lands in the zone — see the declaration.
+                        m_tilingHandler->preparePlacement(safeWindow, snapGeometry,
+                                                          PlacementStatement::Purpose::UserVerb);
                         applyWindowGeometry(safeWindow, snapGeometry, false, false,
                                             PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
-                                            /*demoteMaximizeOnDeferredReplay=*/true);
+                                            PlacementStatement::Purpose::UserVerb);
                     }
                     // Drag-drop snap committed — record in snapping's border set,
                     // but only for a resolved snap-mode screen. An empty
