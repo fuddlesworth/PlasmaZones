@@ -22,9 +22,12 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
 #include "FakePhysicalScreenSource.h"
 #include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -196,6 +199,80 @@ private Q_SLOTS:
 
         tiling->clearEngine();
         wta->setEngines(nullptr, nullptr, nullptr);
+    }
+
+    // F1000: a snap float on DP-1 moved to autotile DP-2 while nothing
+    // reported the crossing (an effect reload) is announced on DP-2 only.
+    // Its adoption there releases snap's memory on DP-1.
+    void testAdoptionReleasesSnapMemoryOnTheScreenLeft()
+    {
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), kOutput1, QStringLiteral("DP-1"));
+        fake.addScreen(QStringLiteral("DP-2"), kOutput2, QStringLiteral("DP-2"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        PhosphorZones::Layout* layout = createTestLayout(3, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+        assignMode(QStringLiteral("DP-2"), PhosphorZones::AssignmentEntry::Autotile);
+        PhosphorSnapEngine::SnapEngine snap(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap.setEngineSettings(m_settings);
+        wta->service()->setSnapState(snap.snapState());
+        wta->service()->setSnapEngine(&snap);
+        // Per-screen stores, as the daemon wires them.
+        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
+        resolver.forWindow = [&snap](const QString& id) {
+            return snap.stateForWindow(id);
+        };
+        resolver.forWindowOnScreen = [&snap](const QString& id, const QString& s, int desktop) {
+            return snap.stateForWindowOnScreen(id, s, desktop);
+        };
+        resolver.forScreen = [&snap](const QString& s) {
+            return static_cast<PhosphorSnapEngine::SnapState*>(snap.stateForScreen(s));
+        };
+        resolver.globals = [&snap]() {
+            return snap.globalState();
+        };
+        resolver.allStates = [&snap]() {
+            return snap.allSnapStates();
+        };
+        resolver.forgetWindow = [&snap](const QString& id) {
+            snap.forgetWindow(id);
+        };
+        resolver.holdsWindow = [&snap](const QString& id, const PhosphorSnapEngine::SnapState* state) {
+            return snap.holdsWindowInState(id, state);
+        };
+        wta->service()->setSnapStateResolver(resolver);
+        PhosphorTileEngine::AutotileEngine autotile(m_layoutManager, wta->service(), nullptr,
+                                                    PlasmaZones::TestHelpers::testRegistry());
+        autotile.setAutotileScreens({QStringLiteral("DP-2")});
+        wta->setEngines(&snap, &autotile, nullptr);
+        auto* tiling = new TilingAdaptor(nullptr, &parent);
+        tiling->setWindowTrackingAdaptor(wta);
+        tiling->setLifecycleEngines(QVector<PhosphorEngine::IPlacementEngine*>{&autotile});
+
+        const QString w = QStringLiteral("term|f1000");
+        snap.setCurrentDesktopForScreen(QStringLiteral("DP-1"), 1);
+        snap.commitSnap(w, layout->zones().first()->id().toString(), QStringLiteral("DP-1"));
+        snap.setWindowFloat(w, true, QStringLiteral("DP-1"));
+        QCOMPARE(snap.screenForTrackedWindow(w), QStringLiteral("DP-1"));
+
+        tiling->windowOpened(w, QStringLiteral("DP-2"), 0, 0);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(autotile.heldScreenForWindow(w), QStringLiteral("DP-2"));
+        QVERIFY2(snap.screenForTrackedWindow(w).isEmpty(), "snap must not keep the window on the screen it left");
+        QVERIFY(!snap.isFloating(w));
+
+        tiling->clearEngine();
+        wta->setEngines(nullptr, nullptr, nullptr);
+        wta->service()->setSnapState(nullptr);
+        wta->service()->setSnapEngine(nullptr);
     }
 };
 

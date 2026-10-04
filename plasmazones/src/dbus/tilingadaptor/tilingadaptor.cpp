@@ -543,6 +543,13 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
         if (engine->isActiveOnScreen(entry.screenId)) {
             removeUnclaimedOpen(entry.windowId);
             engine->windowOpened(entry.windowId, entry.screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
+            // The window is on this screen now, so what any other engine
+            // still holds for it elsewhere goes: a window moved while nothing
+            // reported the crossing (an effect reload) is announced here and
+            // nowhere else (F1000).
+            if (m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->releaseLeftScreens(entry.windowId, entry.screenId, engine);
+            }
             return;
         }
     }
