@@ -245,6 +245,76 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         QCOMPARE(tiledSpy.count(), 0);
     }
+
+    // An arrival the membership reconcile already adopted, because the
+    // window's own desktop edit pushed its metadata first, is still focused by
+    // "Focus new windows" when the effect's open for it arrives (F583). The
+    // tiled and floating variants take different arms of onWindowAdded, and a
+    // re-announce of the same held window stays unfocused.
+    void focusNewWindows_arrivalAdoptedByTheReconcileTakesFocus_data()
+    {
+        QTest::addColumn<bool>("floated");
+        QTest::addColumn<bool>("eligible");
+        QTest::newRow("tile") << false << true;
+        QTest::newRow("float") << true << true;
+        QTest::newRow("re-announce") << false << false;
+    }
+
+    void focusNewWindows_arrivalAdoptedByTheReconcileTakesFocus()
+    {
+        QFETCH(bool, floated);
+        QFETCH(bool, eligible);
+        const QString screen = QStringLiteral("DP-1");
+        const QString stays = QStringLiteral("app|f583stays");
+        const QString moved = QStringLiteral("app|f583moved");
+        PhosphorScreens::FakePhysicalScreenSource provider;
+        provider.addScreen(screen, QRect(0, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager manager(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
+        manager.start();
+        AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({screen});
+        engine.config()->focusNewWindows = true;
+        QSignalSpy activateSpy(&engine, &AutotileEngine::activateWindowRequested);
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+
+        engine.setCurrentDesktopForScreen(screen, 1);
+        engine.windowOpened(stays, screen);
+        QTRY_VERIFY(!activateSpy.isEmpty());
+        engine.setCurrentDesktopForScreen(screen, 2);
+        engine.windowOpened(moved, screen);
+        QTRY_COMPARE(activateSpy.last().at(0).toString(), moved);
+        if (floated) {
+            engine.setWindowFloat(moved, true, screen);
+        }
+        QCoreApplication::processEvents();
+
+        // The window is moved onto desktop 1 while it is in view.
+        engine.setCurrentDesktopForScreen(screen, 1);
+        const PhosphorEngine::DesktopSpanQuery spanOf = [&moved](const QString& windowId) {
+            PhosphorEngine::DesktopSpan span;
+            span.known = true;
+            span.desktops = {windowId == moved ? 1 : 2};
+            return span;
+        };
+        engine.reconcileWindowMemberships(moved, spanOf);
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(moved));
+        QCOMPARE(engine.tilingStateForScreen(screen)->isFloating(moved), floated);
+        QCoreApplication::processEvents();
+        activateSpy.clear();
+        tiledSpy.clear();
+
+        engine.setOpenFocusEligible(eligible);
+        engine.windowOpened(moved, screen);
+        engine.setOpenFocusEligible(true);
+        if (eligible) {
+            QTRY_VERIFY(!activateSpy.isEmpty());
+            QCOMPARE(activateSpy.last().at(0).toString(), moved);
+        } else {
+            QTest::qWait(50);
+            QCOMPARE(activateSpy.count(), 0);
+        }
+    }
 };
 
 QTEST_MAIN(TestAutotileFocusRetile)

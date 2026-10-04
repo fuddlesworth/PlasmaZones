@@ -839,6 +839,19 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
                 sweepPhantomTracking(windowId);
             }
         }
+        // A window the membership reconcile already adopted here as a FLOAT
+        // (its own desktop edit pushed the metadata first) takes this return,
+        // because shouldTileWindow refuses a current-context float. It is still
+        // an arrival the user is looking at, focused like a floating open
+        // (F583). isAutotileScreen first, so no state is made for a screen
+        // another engine owns.
+        if (isAutotileScreen(screenId) && openFocusEligible() && m_config && m_config->focusNewWindows) {
+            if (const PhosphorTiles::TilingState* current = m_states.stateForKey(currentKeyForScreen(screenId));
+                current && current->containsWindow(windowId)) {
+                requestPostRetileFocus(screenId, windowId);
+                scheduleRetileForScreen(screenId);
+            }
+        }
         return;
     }
 
@@ -868,11 +881,20 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     // A re-placement (a daemon-restart re-announce, a catch-scan or unminimize
     // re-add) never takes focus: "Focus new windows" focuses genuine opens only.
-    if (inserted && openFocusEligible() && m_config && m_config->focusNewWindows) {
+    // A window the membership reconcile already adopted into this context (its
+    // own desktop or activity edit pushed the metadata first) is held here, not
+    // inserted, and is still an arrival the user is looking at (F583). Only the
+    // effect's in-view arrival sends an eligible open for a held window.
+    const bool adoptedArrival = !inserted && state && state->containsWindow(windowId);
+    if ((inserted || adoptedArrival) && openFocusEligible() && m_config && m_config->focusNewWindows) {
         // Defer focus until after applyTiling emits windowsTiled. The KWin effect's
         // onComplete raises windows in tiling order; emitting focus before retile
         // causes the raise loop to bury the new window behind existing ones.
         m_pendingFocusByScreen.insert(screenId, windowId);
+        if (adoptedArrival) {
+            // The adopt's own retile may already have run.
+            scheduleRetileForScreen(screenId);
+        }
     }
 
     // Replay a focus notification that arrived before this window was tracked (see

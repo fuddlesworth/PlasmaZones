@@ -8,6 +8,8 @@
 // that a floated window crosses as floating.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorScrollEngine/ScrollState.h>
+#include <PhosphorScrollEngine/ScrollStrip.h>
 
 #include "scrollstriptestutils.h"
 
@@ -447,6 +449,62 @@ private Q_SLOTS:
         for (const auto& emission : syncSpy) {
             QVERIFY2(!(emission.at(0).toString() == kMover && !emission.at(1).toBool()),
                      "the float mirror is not withdrawn");
+        }
+    }
+
+    // An arrival the membership reconcile already adopted, because the
+    // window's own desktop edit pushed its metadata first, is still focused by
+    // "Focus new windows" when the effect's open for it arrives (F583). A
+    // column is focused in the strip, a float is activated directly, and a
+    // re-announce of the same held window stays unfocused.
+    void arrivalAdoptedByTheReconcileTakesFocus_data()
+    {
+        QTest::addColumn<bool>("floated");
+        QTest::addColumn<bool>("eligible");
+        QTest::newRow("column") << false << true;
+        QTest::newRow("float") << true << true;
+        QTest::newRow("re-announce") << false << false;
+    }
+
+    void arrivalAdoptedByTheReconcileTakesFocus()
+    {
+        QFETCH(bool, floated);
+        QFETCH(bool, eligible);
+        QObject owner;
+        ScrollEngine* engine = moverEngine(&owner);
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        engine->windowOpened(kD1, kS1, 0, 0);
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        engine->windowOpened(kMover, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        if (floated) {
+            engine->setWindowFloat(kMover, true, kS1);
+            QCoreApplication::processEvents();
+        }
+
+        // The window is moved onto desktop 1 while it is in view.
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        engine->reconcileWindowMemberships(kMover, moverOn(1));
+        QCoreApplication::processEvents();
+        QVERIFY(holdsPlaceOn(engine, kS1, 1, kMover));
+        QCOMPARE(engine->isWindowFloatingInScroll(kMover), floated);
+
+        QSignalSpy activateSpy(engine, &ScrollEngine::activateWindowRequested);
+        engine->setOpenFocusEligible(eligible);
+        engine->windowOpened(kMover, kS1, 0, 0);
+        engine->setOpenFocusEligible(true);
+        QCoreApplication::processEvents();
+        bool activated = false;
+        for (const auto& emission : activateSpy) {
+            activated = activated || emission.at(0).toString() == kMover;
+        }
+        // The adoption already made a column the strip's active one; what an
+        // arrival owes is the compositor's focus.
+        QCOMPARE(activated, eligible);
+        if (eligible && !floated) {
+            auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+            QVERIFY(state);
+            QCOMPARE(state->strip().activeWindowId(), kMover);
         }
     }
 };

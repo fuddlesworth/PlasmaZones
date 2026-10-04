@@ -553,6 +553,21 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // the screen carries no seed, which is the usual case here.
         consumePendingInitialOrder(screenId, windowId);
         settleReannouncedFullscreenHold(windowId);
+        // The other same-key producer is an arrival in view: the membership
+        // reconcile adopted the window when its own desktop edit pushed the
+        // metadata, and the effect's eligible open follows. The user is
+        // looking at it, so it is focused like an open (F583). A floating
+        // arrival has no column to focus and is activated directly.
+        if (openFocusEligible() && m_arrivalBurstDepth == 0 && effectiveFocusNewWindows(screenId)) {
+            if (oldState->strip().containsWindow(windowId)) {
+                oldState->strip().focusWindow(windowId, layoutParamsForScreen(screenId));
+                m_activeScreen = screenId;
+                applyLayout(screenId, /*focusWindowAfter=*/true);
+            } else if (oldState->isFloating(windowId)) {
+                queueSelfActivation(windowId);
+                Q_EMIT activateWindowRequested(windowId);
+            }
+        }
         return;
     }
 
