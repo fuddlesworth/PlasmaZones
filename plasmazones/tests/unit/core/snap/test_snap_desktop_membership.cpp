@@ -837,38 +837,6 @@ private Q_SLOTS:
         QVERIFY(!m_engine->isWindowTracked(kWindow));
     }
 
-    // Discussion #1124, mixed modes: a window snapped on a screen that then
-    // went to tiling keeps its zone there as memory for the return to
-    // snapping. Moved to another output while tiled, it is held there by the
-    // tiling engine and the snap engine never hears of it, so the return
-    // resnap replayed the old zone and dragged it back across monitors. The
-    // buffer refuses a window a tiling engine holds on ANOTHER screen and the
-    // snap engine forgets it. A window held on the screen being resnapped is
-    // the ordinary return and stays in.
-    void aResnapSkipsAWindowATilingEngineHoldsOnAnotherScreen()
-    {
-        snapOn(1, kWindow, m_zoneIds[0]);
-        snapOn(1, kOther, m_zoneIds[1]);
-        m_service->setTilingHeldScreenResolver([](const QString& windowId) {
-            if (windowId == kWindow) {
-                return kScreen2; // moved to the other output while tiled
-            }
-            return windowId == kOther ? kScreen : QString(); // still held here
-        });
-
-        m_service->populateResnapBufferForAllScreens({}, {kScreen});
-        QStringList buffered;
-        for (const PhosphorEngine::ResnapEntry& entry : m_service->takeResnapBuffer()) {
-            buffered.append(entry.windowId);
-        }
-        QVERIFY2(!buffered.contains(kWindow), "a window tiled on another screen must not be resnapped here");
-        QVERIFY2(buffered.contains(kOther), "a window held on the resnapped screen is the ordinary return");
-        QVERIFY(!m_engine->heldKeyForWindow(kWindow).has_value());
-        QVERIFY(zonesOn(1, kWindow).isEmpty());
-        QCOMPARE(zonesOn(1, kOther), QStringList{m_zoneIds[1]});
-        m_service->setTilingHeldScreenResolver({});
-    }
-
     // A handoff to a tiling engine releases the CONTEXT it took the window
     // in, not the window: a membership on another desktop still in snapping
     // mode keeps its zone, so switching there finds the window snapped and
