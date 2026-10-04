@@ -15,6 +15,7 @@
 #include <QJsonArray>
 #include <QRect>
 #include <QScopeGuard>
+#include <QSignalSpy>
 #include <QString>
 #include <QStringList>
 #include <QUuid>
@@ -486,6 +487,21 @@ private Q_SLOTS:
                  "the same window without a hint has no screen, so the rule must stay inert");
         QVERIFY2(m_snapEngine->isWindowExcluded(windowId, m_screenId),
                  "the caller's screen hint must reach the stamp and resolve the rule");
+    }
+
+    // The effect's seed for a returning output reaches the desktop manager as
+    // a seed, never as a switch, and invalid input is refused (F700).
+    void testSeedScreenDesktop_forwardsAsSeed()
+    {
+        QSignalSpy switched(m_desktopManager, &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopChanged);
+        QSignalSpy seeded(m_desktopManager, &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopSeeded);
+        m_wta->seedScreenDesktop(m_screenId, 2);
+        QCOMPARE(seeded.count(), 1);
+        QCOMPARE(switched.count(), 0);
+        QCOMPARE(m_desktopManager->currentDesktopForScreen(m_screenId), 2);
+        m_wta->seedScreenDesktop(QString(), 2);
+        m_wta->seedScreenDesktop(m_screenId, 0);
+        QCOMPARE(seeded.count(), 1);
     }
 
 private:

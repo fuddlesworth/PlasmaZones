@@ -127,11 +127,8 @@ void Daemon::connectScreenSignals()
                 // is non-null here.
                 m_overlayService->handleScreenAdded(screen.qscreen);
                 // Recalculate zone geometries for all effective screen IDs on this physical screen.
-                // Note: VS cache restoration on screen re-add is no longer needed —
-                // PhosphorScreens::ScreenManager::onScreenRemoved no longer wipes m_virtualConfigs, so
-                // the entry survives a disconnect and is reused as-is when the screen
-                // comes back. Settings is the source of truth and pushes updates via
-                // refreshVirtualConfigs() in response to its own change signal.
+                // No VS cache restore is needed: ScreenManager keeps m_virtualConfigs across a
+                // disconnect, and Settings pushes updates through refreshVirtualConfigs().
                 const QString physId = screen.identifier;
                 const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
                 const QString activity = currentActivity();
@@ -145,10 +142,9 @@ void Daemon::connectScreenSignals()
                             GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
                     }
                 }
-                // Re-admit the output to the tiling engines now (F765): a
-                // returning output's windows are classified against its mode,
-                // and the desktop the effect reports for it only pins the
-                // desktop.
+                // Re-admit the output to the tiling engines now (F765): its
+                // returning windows are classified against its mode, and the
+                // effect's seed only pins its desktop (applyScreenDesktopSeed).
                 updateEngineScreens();
                 updateLayoutFilter();
                 // Record the new screen's resolved assignment so a later
@@ -449,6 +445,10 @@ void Daemon::connectDesktopActivity()
                 // assignment against the old and falsely re-resnap this screen.
                 diffActiveAssignments();
             });
+
+    // The desktop an output shows as it comes (back): a seed, not a switch.
+    connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopSeeded, this,
+            &Daemon::applyScreenDesktopSeed);
 
     // A desktop was removed and we know WHICH position it held, so the engines'
     // per-desktop state can be corrected properly rather than swept by count.

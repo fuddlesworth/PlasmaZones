@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemon/daemon.h"
+#include "helpers.h"
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -52,6 +54,30 @@ void Daemon::retireOutputPlacements(const QString& physicalScreenId)
         it = PhosphorIdentity::VirtualScreenId::samePhysical(it.key().screenId, physicalScreenId)
             ? m_lastEngineOrders.erase(it)
             : std::next(it);
+    }
+}
+
+void Daemon::applyScreenDesktopSeed(const QString& screenId, int desktop)
+{
+    // KWin picks the desktop a returning output shows without a desktop
+    // change, and every engine dropped the output's desktop when it went
+    // away: without this they lay it out under the desktop they started on
+    // while the desktop manager answers the live one (F700). Not a switch,
+    // so no OSD, no drag cancel and no switch announce: the engines take the
+    // desktop, the managed screens are recomputed, and the windows spanning
+    // that desktop get their share.
+    if (m_autotileEngine) {
+        m_autotileEngine->setCurrentDesktopForScreen(screenId, desktop);
+    }
+    if (m_snapEngine) {
+        m_snapEngine->setCurrentDesktopForScreen(screenId, desktop);
+    }
+    if (m_scrollEngine) {
+        m_scrollEngine->setCurrentDesktopForScreen(screenId, desktop);
+    }
+    updateEngineScreens();
+    if (m_screenManager) {
+        reconcileMembershipsForScreens(m_tilingAdaptor, m_screenManager->virtualScreenIdsFor(screenId));
     }
 }
 

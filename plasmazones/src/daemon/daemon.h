@@ -277,16 +277,16 @@ private:
     /// Destroy the per-screen strip-preview settle timers: every one when
     /// @p screenId is empty, else that output's and its virtual screens'.
     void reapScrollingOsdSettleTimers(const QString& screenId = QString());
+    /// Reap the settle timers whose screen id satisfies @p pred. The overload
+    /// above matches by physical output, WRONG for a virtual-screen
+    /// reconfigure, where the output survives and only some vs:N ids go: the
+    /// dropped sub-screens' timers would accumulate and could still fire.
+    void reapScrollingOsdSettleTimersWhere(const std::function<bool(const QString&)>& pred);
     /// An output went away: park its windows, reap every engine's states on
     /// it, release the parked windows' slots, drop its remembered orders.
     void retireOutputPlacements(const QString& physicalScreenId);
-    /// Reap the settle timers whose screen id satisfies @p pred. The overload
-    /// above matches by physical output, right for an unplug and WRONG for a
-    /// virtual-screen reconfigure, where the output survives and only some
-    /// vs:N ids go away. Un-subdividing needs no unplug, and without this the
-    /// dropped sub-screens' timers accumulate, one per vs id ever seen, and an
-    /// armed one can still fire for a screen that no longer exists.
-    void reapScrollingOsdSettleTimersWhere(const std::function<bool(const QString&)>& pred);
+    /// The desktop an output shows as it comes (back), set without a switch.
+    void applyScreenDesktopSeed(const QString& screenId, int desktop);
     void clearHighlight();
 
     /**

@@ -481,27 +481,24 @@ public Q_SLOTS:
      */
     void cursorScreenChanged(const QString& screenId);
 
-    /**
-     * The focused window changed output without a new activation: a user or
-     * KWin move, or a daemon apply. Shortcuts act on the focused window's
-     * screen, which is otherwise refreshed only by windowActivated, so a key
-     * pressed after such a move acted on the output the window had left.
-     * Updates only that record, with none of an activation's side effects,
-     * and only for the window that is focused.
-     * @param windowId Window identifier
-     * @param screenId Screen the window is now on
-     */
+    /// The focused window changed output without a new activation (a user or
+    /// KWin move, or a daemon apply). Shortcuts act on the focused window's
+    /// screen, otherwise refreshed only by windowActivated. Updates only that
+    /// record, for the focused window, with none of an activation's effects.
     void activeWindowScreenChanged(const QString& windowId, const QString& screenId);
 
     /**
      * Record a screen's current virtual desktop (Plasma 6.7 per-output virtual
-     * desktops). Called by the KWin effect on KWin::EffectsHandler::desktopChanged.
-     * Forwarded to VirtualDesktopManager::updateScreenDesktop — KWin's own D-Bus
-     * VirtualDesktopManager interface only exposes the global current desktop.
+     * desktops). The effect calls it on desktopChanged, on a window activation
+     * and in its bring-up re-sync. Forwarded to updateScreenDesktop: KWin's own
+     * D-Bus interface only exposes the global current desktop.
      * @param screenId Physical screen whose desktop changed
      * @param desktop  The screen's current virtual desktop, 1-based
      */
     void screenDesktopChanged(const QString& screenId, int desktop);
+    /// The desktop an output shows as it is (re)connected: a seed, not a
+    /// switch (VirtualDesktopManager::seedScreenDesktop, F700).
+    void seedScreenDesktop(const QString& screenId, int desktop);
 
     /**
      * Report navigation feedback from KWin effect (D-Bus method)

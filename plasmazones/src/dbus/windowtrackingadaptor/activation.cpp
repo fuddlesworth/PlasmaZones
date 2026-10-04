@@ -102,6 +102,14 @@ void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int de
     m_virtualDesktopManager->updateScreenDesktop(screenId, desktop);
 }
 
+void WindowTrackingAdaptor::seedScreenDesktop(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager) {
+        return;
+    }
+    m_virtualDesktopManager->seedScreenDesktop(screenId, desktop);
+}
+
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenId)
 {
     if (!validateWindowId(windowId, QStringLiteral("process windowActivated"))) {

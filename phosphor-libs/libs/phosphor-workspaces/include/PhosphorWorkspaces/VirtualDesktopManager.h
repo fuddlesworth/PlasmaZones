@@ -70,6 +70,12 @@ public:
     /// init() returns true unconditionally and so cannot be used for this.
     bool isAvailable() const;
 
+    /// Record the desktop an output shows as it is connected or comes back.
+    /// KWin picks it without a desktop change, so it is a seed, not a switch:
+    /// it emits screenDesktopSeeded, never screenDesktopChanged, and always,
+    /// because the engines dropped the output's desktop when it went away.
+    void seedScreenDesktop(const QString& screenId, int desktop);
+
 Q_SIGNALS:
     void currentDesktopChanged(int desktop);
     void desktopCountChanged(int count);
@@ -101,6 +107,9 @@ Q_SIGNALS:
     /// subscribes to; in single-desktop mode it is driven the same for every
     /// screen so downstream has one code path.
     void screenDesktopChanged(const QString& screenId, int desktop);
+    /// A screen's desktop was recorded as the output (re)connected
+    /// (seedScreenDesktop). Not a switch.
+    void screenDesktopSeeded(const QString& screenId, int desktop);
 
 private Q_SLOTS:
     /// KWin's countChanged carries `u`, not `i`. A slot declared `int`

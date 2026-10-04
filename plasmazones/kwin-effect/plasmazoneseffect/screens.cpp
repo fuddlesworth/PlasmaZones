@@ -11,6 +11,7 @@
 
 #include <core/output.h>
 #include <effect/effecthandler.h>
+#include <virtualdesktops.h>
 #include <window.h>
 
 #include <QDBusConnection>
@@ -867,6 +868,23 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     pruneToLiveScreens(m_lastScreenDesktop, m_idCaches.connectedPhysicalIds);
     // The windows KWin returns to it wait for the settle's verdict.
     m_screenChangeHandler->noteOutputAdded(output);
+    // The desktop it shows. KWin picks it with no desktop change, so nothing
+    // else reports it and the engines would lay the output out under the
+    // desktop they started on (F700). Sent as a seed, which the daemon takes
+    // without a desktop switch, on the connection ahead of the settle report.
+    if (!output->isPlaceholder()) {
+        const QString screenId = outputScreenId(output);
+        const KWin::VirtualDesktop* const vd = KWin::effects->currentDesktop(output);
+        if (vd && !screenId.isEmpty()) {
+            const int desktop = static_cast<int>(vd->x11DesktopNumber());
+            m_lastScreenDesktop.insert(screenId, desktop);
+            if (m_daemonGate.serviceRegistered) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("seedScreenDesktop"),
+                    {screenId, desktop});
+            }
+        }
+    }
 
     // Construct a bound clock for this output. Idempotent: if the same output
     // arrives twice (rare, but possible on some compositors' hotplug

@@ -596,7 +596,9 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       or treat the crossing as the user's move). parkDropped tells the effect
 //       to forget its record of a window the daemon no longer keeps parked. An
 //       old daemon answers the call with an error and the effect replays every
-//       crossing as a move; an old effect never calls.
+//       crossing as a move; an old effect never calls. WindowTracking also
+//       gains seedScreenDesktop (s i): the desktop an output shows as it is
+//       added, taken by the engines without a desktop switch.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

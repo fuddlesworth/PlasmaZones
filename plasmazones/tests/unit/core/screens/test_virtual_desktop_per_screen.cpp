@@ -85,6 +85,35 @@ private Q_SLOTS:
         QCOMPARE(vdm.currentDesktopForScreen(QStringLiteral("DP-1")), vdm.currentDesktop());
     }
 
+    // A returning output's desktop is a seed, not a switch: it is recorded and
+    // announced on the seed signal only, every time (the engines dropped the
+    // output's desktop when it went away, so a value the map still holds is
+    // re-announced too), and invalid input is refused like a switch's (F700).
+    void seedScreenDesktop_recordsWithoutASwitch()
+    {
+        VirtualDesktopManager vdm;
+        QSignalSpy switched(&vdm, &VirtualDesktopManager::screenDesktopChanged);
+        QSignalSpy seeded(&vdm, &VirtualDesktopManager::screenDesktopSeeded);
+
+        vdm.seedScreenDesktop(QStringLiteral("DP-1"), 3);
+        QCOMPARE(vdm.currentDesktopForScreen(QStringLiteral("DP-1")), 3);
+        QCOMPARE(seeded.count(), 1);
+        QCOMPARE(seeded.last().at(0).toString(), QStringLiteral("DP-1"));
+        QCOMPARE(seeded.last().at(1).toInt(), 3);
+
+        vdm.seedScreenDesktop(QStringLiteral("DP-1"), 3);
+        QCOMPARE(seeded.count(), 2);
+
+        vdm.seedScreenDesktop(QString(), 2);
+        vdm.seedScreenDesktop(QStringLiteral("DP-2"), 0);
+        QCOMPARE(seeded.count(), 2);
+        QCOMPARE(switched.count(), 0);
+
+        // A later real switch on that screen still reports as one.
+        vdm.updateScreenDesktop(QStringLiteral("DP-1"), 4);
+        QCOMPARE(switched.count(), 1);
+    }
+
     // Per-screen mode is active iff two screens are on different desktops, and
     // deactivates when they reconverge.
     void perScreenModeActive_tracksDivergence()
