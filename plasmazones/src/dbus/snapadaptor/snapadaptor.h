@@ -79,6 +79,11 @@ public:
      */
     void clearEngine();
 
+    /// Re-apply every window's current zone as a re-statement batch (action
+    /// "restate": no Snap Assist, no OSD), for a gap or work-area reflow. Not a
+    /// D-Bus slot.
+    void restateCurrentAssignments();
+
     /**
      * @brief Set the frozen-snapshot resolver used by snaprestore's disable
      *        gate. Late-bound: created post-construction by Daemon::init.

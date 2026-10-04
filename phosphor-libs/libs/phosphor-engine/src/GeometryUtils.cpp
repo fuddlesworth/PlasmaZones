@@ -43,6 +43,9 @@ QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
         if (entry.virtualDesktop > 0) {
             obj[JsonKeys::VirtualDesktop] = entry.virtualDesktop;
         }
+        if (entry.restatement) {
+            obj[JsonKeys::Restatement] = true;
+        }
         array.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
@@ -85,6 +88,7 @@ QVector<ZoneAssignmentEntry> deserializeZoneAssignments(const QString& json, QSt
         // clamp a nonsensical negative wire value to the same default so no
         // negative desktop ever reaches the commit path.
         entry.virtualDesktop = qMax(0, obj.value(JsonKeys::VirtualDesktop).toInt());
+        entry.restatement = obj.value(JsonKeys::Restatement).toBool();
         if (!entry.windowId.isEmpty() && !entry.targetZoneId.isEmpty()) {
             entries.append(entry);
         }

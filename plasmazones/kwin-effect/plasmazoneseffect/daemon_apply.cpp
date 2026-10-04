@@ -548,8 +548,8 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     // Map the daemon's action string to a shader-tree ProfilePath. "resnap" is a layout
     // change (different layout or autotile recompute) — semantically a layout switch. "rotate"
     // moves windows between existing zones in the same layout — a snap-in. Everything else
-    // ("vs_reconfigure" via the adaptor relay, "snap_all" via the effect-local path, and any
-    // future daemon-emitted string) defaults to WindowPlaceIn.
+    // ("restate" for a carry, re-apply or gap reflow, "vs_reconfigure" via the adaptor relay,
+    // "snap_all" via the effect-local path, and any future string) defaults to WindowPlaceIn.
     const QString batchProfilePath = (action == QLatin1String("resnap"))
         ? PhosphorAnimation::ProfilePaths::WindowLayoutSwitch
         : PhosphorAnimation::ProfilePaths::WindowPlaceIn;
@@ -691,9 +691,10 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             }
             // Show snap assist after resnap if applicable.
             //
-            // A resnap is a bulk operation (autotile→snap toggle, rotate,
-            // vs-reconfigure) — not a per-window snap — so the continuation is
-            // anchored to the active window: snap assist shows ONLY if the
+            // A resnap follows a layout switch or a mode toggle; rotate,
+            // vs_reconfigure and restate carry their own actions and show
+            // none. It is a bulk operation, not a per-window snap, so the
+            // continuation is anchored to the active window: snap assist shows ONLY if the
             // resnap actually placed the active window in a zone. Passing its
             // windowId as the anchor makes showContinuationIfNeeded gate on
             // "this window is snapped", which also guarantees at least one

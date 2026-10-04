@@ -13,6 +13,7 @@
 #include "wta_convenience_fixture.h"
 #include "dbus/controladaptor.h"
 
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorProtocol/AutotileTypes.h>
 #include <QScopeGuard>
 
@@ -136,6 +137,32 @@ private Q_SLOTS:
         QCOMPARE(spy.at(0).at(8).toInt(),
                  static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb)); // a user verb (index 8: purpose)
         QCOMPARE(m_wta->service()->screenForWindow(windowId), otherScreen);
+    }
+
+    // A batch whose every entry re-states a placement (the desktop carry) is
+    // relayed as "restate", which shows no Snap Assist; a placing batch stays
+    // "resnap" (F461).
+    void testHandleBatchedResnap_restatementBatchRelaysRestate()
+    {
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        PhosphorEngine::ZoneAssignmentEntry entry;
+        entry.windowId = QStringLiteral("app|carried");
+        entry.targetZoneId = m_zoneIds[0];
+        entry.targetGeometry = m_wta->service()->zoneGeometry(m_zoneIds[0], m_screenId);
+        entry.targetScreenId = m_screenId;
+        entry.restatement = true;
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+
+        m_snapAdaptor->handleBatchedResnap(PhosphorEngine::GeometryUtils::serializeZoneAssignments({entry}));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.last().at(1).toString(), QStringLiteral("restate"));
+
+        entry.targetZoneId = m_zoneIds[1];
+        entry.targetGeometry = m_wta->service()->zoneGeometry(m_zoneIds[1], m_screenId);
+        entry.restatement = false;
+        m_snapAdaptor->handleBatchedResnap(PhosphorEngine::GeometryUtils::serializeZoneAssignments({entry}));
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.last().at(1).toString(), QStringLiteral("resnap"));
     }
 
     // =====================================================================

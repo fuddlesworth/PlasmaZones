@@ -214,6 +214,11 @@ struct ZoneAssignmentEntry
     /// instead of re-stamping whatever desktop is currently active (which
     /// corrupts off-desktop windows caught in a cross-desktop batch).
     int virtualDesktop = 0;
+    /// The entry re-states a placement the window already has (a carry to the
+    /// desktop it moved to, a re-apply, a gap reflow) rather than making one,
+    /// so the batch is relayed as action "restate": no Snap Assist, no
+    /// layout-switch animation.
+    bool restatement = false;
 };
 
 enum class StickyWindowHandling {

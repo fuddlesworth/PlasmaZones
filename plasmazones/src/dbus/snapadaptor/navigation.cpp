@@ -122,6 +122,18 @@ void SnapAdaptor::resnapCurrentAssignments(const QString& screenFilter)
     }
 }
 
+void SnapAdaptor::restateCurrentAssignments()
+{
+    if (!m_engine) {
+        return;
+    }
+    QVector<ZoneAssignmentEntry> entries = m_engine->calculateResnapFromCurrentAssignments();
+    for (ZoneAssignmentEntry& entry : entries) {
+        entry.restatement = true;
+    }
+    processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("restate"));
+}
+
 void SnapAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId)
 {
     qCDebug(lcDbusWindow) << "resnapFromAutotileOrder: count=" << autotileWindowOrder.size() << "screen=" << screenId;
@@ -200,7 +212,13 @@ void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
         return;
     }
 
-    processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("resnap"));
+    // A batch whose every entry re-states a placement (the desktop carry, the
+    // re-apply on a switch) is relayed as "restate": no Snap Assist (F461).
+    const bool restatement = !entries.isEmpty() && std::all_of(entries.cbegin(), entries.cend(), [](const auto& e) {
+        return e.restatement;
+    });
+    processBatchEntries(m_adaptor, m_engine, entries,
+                        restatement ? QStringLiteral("restate") : QStringLiteral("resnap"));
 }
 
 } // namespace PlasmaZones

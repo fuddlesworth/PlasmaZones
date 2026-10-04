@@ -297,6 +297,8 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             // The destination desktop, not the one in view: the commit pins
             // the assignment to the context the window moved to.
             assign.virtualDesktop = desktop;
+            // The window's own slot carried along: a re-statement (F461).
+            assign.restatement = true;
             carriedFrom = source;
             return assign;
         }
@@ -319,6 +321,7 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         restore.targetZoneId = PhosphorEngine::RestoreSentinel;
         restore.targetGeometry = *freeGeometry;
         restore.targetScreenId = screenId;
+        restore.restatement = true;
         return restore;
     };
     for (const PendingMembership& entry : pending) {
@@ -521,7 +524,13 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: re-applying" << reapply.size() << "window(s) on"
                              << screenId << "for desktop" << currentKey.desktop
                              << "— multi-desktop windows are snapped here";
-        resnapCurrentAssignments(screenId, reapply);
+        // A re-statement batch: no "nothing to resnap" OSD on a desktop
+        // switch, no Snap Assist (F461).
+        QVector<PhosphorEngine::ZoneAssignmentEntry> entries = calculateResnapFromCurrentAssignments(screenId, reapply);
+        for (PhosphorEngine::ZoneAssignmentEntry& entry : entries) {
+            entry.restatement = true;
+        }
+        emitBatchedResnap(entries);
     }
     return result;
 }

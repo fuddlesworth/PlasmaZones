@@ -552,8 +552,9 @@ void Daemon::initLayoutAndSettingsWiring()
         if (!m_snapAdaptor) {
             return;
         }
-        armResnapOsdSuppression(1); // settings-driven reflow, not user navigation
-        m_snapAdaptor->resnapCurrentAssignments();
+        // Settings-driven reflow, not user navigation: a re-statement batch,
+        // which raises no OSD and no Snap Assist.
+        m_snapAdaptor->restateCurrentAssignments();
     }));
     const auto scheduleGapResnap = [this]() {
         m_gapResnapTimer.start();

@@ -281,6 +281,7 @@ private Q_SLOTS:
         QVERIFY2(result.released.isEmpty(), "a window that is re-snapped on its new desktop is not a release");
         QCOMPARE(batch.size(), 1);
         QCOMPARE(batch.first().virtualDesktop, 2);
+        QVERIFY2(batch.first().restatement, "a carry re-states the window's own slot (F461)");
         QCOMPARE(batch.first().targetZoneId, sortedZoneIds(destination).at(1));
         QCOMPARE(zonesOn(2, kWindow), QStringList{sortedZoneIds(destination).at(1)});
         QVERIFY2(zonesOn(1, kWindow).isEmpty(), "the desktop it left keeps nothing");
@@ -702,6 +703,9 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
         QVERIFY2(resnapSpy.count() > 0, "back in snapping mode the switch re-applies the desktop's zone");
+        const auto reapplied =
+            PhosphorEngine::GeometryUtils::deserializeZoneAssignments(resnapSpy.last().at(0).toString(), nullptr);
+        QVERIFY2(!reapplied.isEmpty() && reapplied.first().restatement, "the re-apply is a re-statement (F461)");
         m_engine->setLiveModeResolver({});
     }
 
