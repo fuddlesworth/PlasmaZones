@@ -362,6 +362,11 @@ void WindowDragAdaptor::setEngineInteractiveDragWindow(const QString& windowId)
     if (m_scrollEngine) {
         m_scrollEngine->setInteractiveDragWindow(windowId);
     }
+    // The tracking adaptor's settled-frame memory skips the dragged window the
+    // same way: its frames are where the user moves it, not a managed frame.
+    if (m_windowTracking) {
+        m_windowTracking->setInteractiveDragWindow(windowId);
+    }
 }
 
 void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenId)

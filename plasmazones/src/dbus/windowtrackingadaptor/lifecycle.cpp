@@ -480,6 +480,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // can synchronously re-enter the float relay and re-insert a zombie.
     const QString shadowId = shadowWindowId(windowId);
     m_frameGeometry.remove(shadowId);
+    m_lastManagedFrame.remove(shadowId);
     m_pendingOpenGeometry.remove(shadowId);
     m_pendingOpenSize.remove(shadowId);
     m_broadcastFloating.remove(shadowId);
@@ -727,10 +728,24 @@ void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int
     // Key on the CANONICAL id: a raw key would drop a class-mutating app's
     // float-back. Reads match.
     const QString shadowId = shadowWindowId(windowId);
-    m_frameGeometry[shadowId] = QRect(x, y, width, height);
+    const QRect frame(x, y, width, height);
+    m_frameGeometry[shadowId] = frame;
+    // The frame a managed window settled at, which can differ from the rect
+    // the engine emitted (a size-constrained client centred in its tile, a
+    // size-increment client short of its zone). Never from a drag: the drag
+    // subject's frames are drop positions, a genuine float-back (F452).
+    if (shadowId != m_interactiveDragWindow && m_service
+        && (m_service->isWindowEngineTiled(windowId) || m_service->occupiesZoneInView(windowId))) {
+        m_lastManagedFrame[shadowId] = frame;
+    }
     // A fresh report supersedes what the open path asked for, landed or not.
     m_pendingOpenGeometry.remove(shadowId);
     m_pendingOpenSize.remove(shadowId);
+}
+
+void WindowTrackingAdaptor::setInteractiveDragWindow(const QString& windowId)
+{
+    m_interactiveDragWindow = windowId.isEmpty() ? QString() : shadowWindowId(windowId);
 }
 
 void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth,

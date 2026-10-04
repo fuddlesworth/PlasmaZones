@@ -876,6 +876,8 @@ public:
     void releaseParkedSlots(const QString& physicalScreenId);
     /// The daemon's retire primitive, run when a settle reports an output gone before screenRemoved did.
     void setOutputRetirer(std::function<void(const QString&)> retirer);
+    /// The window an interactive drag moves (empty clears): its frames are not settled managed frames.
+    void setInteractiveDragWindow(const QString& windowId);
     /// Told (windowId, keepScreenId) at the end of every releaseLeftScreens, for the daemon's own per-screen memory.
     void setWindowLeftScreenHook(std::function<void(const QString&, const QString&)> hook);
     /// An evacuee announced on @p screenId that could not be adopted floating when its output
@@ -1694,11 +1696,6 @@ private:
      */
     int currentDesktop() const;
 
-    // clearFloatingStateForSnap was removed — PhosphorSnapEngine::SnapEngine::commitSnap
-    // now handles floating-state clearing internally (and emits
-    // windowFloatingClearedForSnap which the adaptor relays to its own
-    // windowFloatingChanged D-Bus signal).
-
     // ═══════════════════════════════════════════════════════════════════════════════
     // Screen tracking (from KWin effect's D-Bus calls)
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -1718,15 +1715,17 @@ private:
     QHash<QString, QRect> m_pendingOpenGeometry;
     QHash<QString, QSize> m_pendingOpenSize;
 
-    // Last floating value broadcast via windowFloatingChanged, per window. The
-    // setWindowFloating broadcast gate compares against THIS, not a re-query of
-    // the service's float state: with the per-engine float model the owning
-    // engine flips its float bit BEFORE the daemon's sync slot reaches the
-    // writer, so a re-query already reports the post-transition value and would
-    // suppress every autotile float broadcast. Absent entry == not-floating.
-    // Entries are removed on windowClosed and swept by pruneStaleWindows
-    // (defensive, for a window that died without a close signal).
+    // Last floating value broadcast via windowFloatingChanged, per window: the
+    // broadcast gate compares against THIS, because the owning engine flips its
+    // float bit before the sync slot runs, so a re-query would suppress every
+    // autotile float broadcast. Absent == not floating. Dropped on close and prune.
     QHash<QString, bool> m_broadcastFloating;
+
+    // The last frame each window reported while managed (tiled in view, or in a
+    // zone in view), not the drag subject: the frame it SETTLED at, which the
+    // float-back refusal reads (F421). Canonical keys; dropped on close and prune.
+    QHash<QString, QRect> m_lastManagedFrame;
+    QString m_interactiveDragWindow; ///< canonical id of the window being dragged
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Dependencies (kept for signal connections and settings access)

@@ -321,8 +321,8 @@ private Q_SLOTS:
         const QRect floatedGeo(123, 456, 800, 600);
 
         m_snapEngine->commitSnap(w1, m_zoneIds[0], m_screenId);
-        m_wta->setFrameGeometry(w1, floatedGeo.x(), floatedGeo.y(), floatedGeo.width(), floatedGeo.height());
         m_snapEngine->setWindowFloat(w1, true);
+        m_wta->setFrameGeometry(w1, floatedGeo.x(), floatedGeo.y(), floatedGeo.width(), floatedGeo.height());
         QVERIFY(m_snapEngine->snapState()->isFloating(w1));
 
         // Close while floating → captures a floated placement for app "settings".
@@ -479,8 +479,8 @@ private Q_SLOTS:
         const QRect floatedGeo(200, 300, 900, 700);
 
         m_snapEngine->commitSnap(w1, m_zoneIds[0], m_screenId);
-        m_wta->setFrameGeometry(w1, floatedGeo.x(), floatedGeo.y(), floatedGeo.width(), floatedGeo.height());
         m_snapEngine->setWindowFloat(w1, true);
+        m_wta->setFrameGeometry(w1, floatedGeo.x(), floatedGeo.y(), floatedGeo.width(), floatedGeo.height());
         QVERIFY(m_wta->service()->isWindowFloating(w1));
 
         m_wta->refreshOpenWindowPlacements();

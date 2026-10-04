@@ -146,6 +146,9 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     // case — extend the same alive-set filter to m_frameGeometry. The map is
     // keyed on canonical ids, so it is swept in the instance-id key space: a
     // raw sweep would erase a class-mutating app's live entry every pass.
+    m_lastManagedFrame.removeIf([&aliveInstances](const auto& entry) {
+        return !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(entry.key()));
+    });
     int frameGeoPruned = 0;
     for (auto it = m_frameGeometry.begin(); it != m_frameGeometry.end();) {
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {

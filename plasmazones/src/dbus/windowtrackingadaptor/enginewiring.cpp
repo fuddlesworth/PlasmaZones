@@ -160,12 +160,14 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
 
     // The float-back refusal's (M) arm for frames the tiling engines manage:
     // the rect each last emitted for the window, which they keep past a float,
-    // a handoff and their own close. The service is this adaptor's child, so
-    // the capture cannot outlive it.
+    // a handoff and their own close, and the frame the window settled at under
+    // management. The service is this adaptor's child, so the capture cannot
+    // outlive it.
     if (m_service) {
         m_service->setManagedFramePredicate([this](const QString& windowId, const QRect& frame) {
             return (m_autotileEngine && m_autotileEngine->lastManagedRect(windowId) == frame)
-                || (m_scrollEngine && m_scrollEngine->lastManagedRect(windowId) == frame);
+                || (m_scrollEngine && m_scrollEngine->lastManagedRect(windowId) == frame)
+                || m_lastManagedFrame.value(shadowWindowId(windowId)) == frame;
         });
     }
 

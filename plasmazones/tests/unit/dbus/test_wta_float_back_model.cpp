@@ -322,6 +322,100 @@ private Q_SLOTS:
 
         QCOMPARE(f.floatBack(w, kLeft), free);
     }
+
+    // ── The frame a managed window settled at (M[w]) ─────────────────────
+
+    // A tile whose client settled smaller than its tile (centred inside it)
+    // and is then floated still stands on that settled frame: the capture
+    // keeps the float-back recorded before (F421).
+    void floatOfATileThatSettledOffItsRectKeepsTheFloatBack()
+    {
+        FloatBackFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f421"));
+        const QRect free(300, 200, 640, 480);
+        f.wta->service()->recordFreeGeometry(w, kLeft, free, true);
+        tileOnLeft(f, w);
+        f.setFrame(w, QRect(1060, 140, 760, 800)); // centred inside the tile
+
+        floatTheTile(f, w);
+        f.wta->captureWindowPlacement(w);
+
+        QCOMPARE(f.floatBack(w, kLeft), free);
+    }
+
+    // The drag subject's frames are where the user moves it, not a settled
+    // managed frame: released where it was picked up and floated, the drop
+    // point is its float-back (F452).
+    void aDragReleaseOfATileIsAFloatBack()
+    {
+        FloatBackFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f452"));
+        tileOnLeft(f, w);
+        const QRect dropped(500, 300, 760, 800);
+        f.wta->setInteractiveDragWindow(w);
+        f.setFrame(w, dropped);
+        f.wta->setInteractiveDragWindow(QString());
+
+        floatTheTile(f, w);
+        f.wta->captureWindowPlacement(w);
+
+        QCOMPARE(f.floatBack(w, kLeft), dropped);
+    }
+
+    // A tile's settled frame read once the window is no longer tiled in view
+    // (its tile is on another desktop) is still not a float-back (F382).
+    void aSettledTileFrameReadOffViewIsNotAFloatBack()
+    {
+        FloatBackFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f382-settled"));
+        tileOnLeft(f, w);
+        const QRect settled(1060, 140, 760, 800);
+        f.setFrame(w, settled);
+        f.tiling.heldScreen.remove(w);
+
+        f.wta->service()->recordFreeGeometry(w, kLeft, settled, true);
+
+        QVERIFY(!f.floatBack(w, kLeft).isValid());
+    }
+
+    // A size-increment client snapped short of its zone settles off the zone
+    // rect; once the zone is dropped (Restore, a keyboard move out), that
+    // settled frame is still not a free position (F221).
+    void aFrameSettledInAZoneIsNotAFloatBackOnceTheZoneIsDropped()
+    {
+        FloatBackFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f221"));
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        QRect settled = f.zoneRect(0, kLeft);
+        settled.adjust(0, 0, -2, -2);
+        f.setFrame(w, settled);
+        f.wta->service()->unassignWindow(w);
+
+        f.wta->service()->recordFreeGeometry(w, kLeft, settled, true);
+
+        QVERIFY(!f.floatBack(w, kLeft).isValid());
+    }
+
+private:
+    /// @p w tiled on DP-1 by the stub engine, which emitted the whole right
+    /// half of the output for it; the tracking service reads it as tiled in
+    /// view, as the daemon's predicate does.
+    static void tileOnLeft(FloatBackFixture& f, const QString& w)
+    {
+        f.tiling.heldScreen.insert(w, kLeft);
+        f.tiling.managedRect = QRect(960, 0, 960, 1080);
+        f.wta->service()->setEngineTiledPredicate([&f](const QString& id) {
+            return f.tiling.heldScreen.contains(id);
+        });
+    }
+    /// The stub engine floats @p w: it is no longer tiled, and its capture
+    /// answers a floating slot.
+    static void floatTheTile(FloatBackFixture& f, const QString& w)
+    {
+        f.tiling.heldScreen.remove(w);
+        f.tiling.trackedElsewhere.insert(w);
+        f.tiling.captureState = WindowPlacement::stateFloating();
+    }
 };
 
 QTEST_MAIN(TestWtaFloatBackModel)
