@@ -549,12 +549,10 @@ public:
     }
 
     /// The placement statement, run before a placement on a SNAPPING screen
-    /// applies @p rect (placementhandback.cpp, PlacementStatement::decide).
-    ///
-    /// A maximized or fullscreen window's state survives a bare moveResize and
-    /// its restore rect can sit on another monitor, so the next maximize press
-    /// restores it cross-screen, read by the daemon as a move off its zone (the
-    /// #1028-family Brave trace). So: a tiling engine's claim is shed for any
+    /// applies @p rect (placementhandback.cpp, PlacementStatement::decide). A maximized or fullscreen window's state
+    /// survives a bare moveResize and its restore rect can sit on another monitor, so the next maximize press restores
+    /// it cross-screen, read by the daemon as a move off its zone (the #1028-family Brave trace). So: a tiling engine's
+    /// claim is shed for any
     /// @p purpose; a user verb or a move to another output ends the window's
     /// own fullscreen, then its maximize, anchored at @p rect; a re-statement
     /// on the same output keeps both and seats @p rect as their restore rect,
@@ -1054,6 +1052,8 @@ public:
     void markWindowTiled(const QString& screenId, const QString& windowId);
     void clearWindowTiledAllScreens(const QString& windowId);
     void clearWindowTiledOnScreen(const QString& screenId, const QString& windowId);
+    /// A completed batch's untile diff for @p screenId (untilediff.cpp, UntileDecisions).
+    void untileWindowsLeftOnScreen(const QString& screenId, const QSet<QString>& newSet);
 
     // Set a window to re-activate after the next autotile raise loop completes.
     // Used by slotDaemonReady() to preserve focus of non-tiled windows (e.g. KCM).

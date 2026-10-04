@@ -1306,6 +1306,12 @@ target_link_libraries(test_placement_statement PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_placement_statement PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_placement_statement COMMAND test_placement_statement)
 
+# The effect's untile-diff jurisdiction (untiledecisions.h).
+add_executable(test_untile_decisions ui/effect/test_untile_decisions.cpp)
+target_link_libraries(test_untile_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_untile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_untile_decisions COMMAND test_untile_decisions)
+
 # Pure-logic test for the minimize-float qualifiers
 # (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
 # can still be the tile it is about to get. Same header-only reach.
