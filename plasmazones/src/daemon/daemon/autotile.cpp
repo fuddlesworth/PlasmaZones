@@ -1295,11 +1295,11 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
             qCWarning(lcDaemon) << "seedAutotileOrderForScreen: no window registry —"
                                 << "minimized windows cannot be filtered for" << screenId;
         }
-        // Float is per mode: non-minimized entries always seed (a snap-mode
-        // float must not make the window untileable here). Minimized entries
-        // stay as positional placeholders, except user-floated-then-minimized
-        // ones. See filterEngineSeedOrder's doc for the rationale.
-        filterEngineSeedOrder(order, wts, registry, PhosphorEngine::WindowPlacement::autotileEngineId());
+        // Float is per mode, minimized entries stay as placeholders (except
+        // user-floated-then-minimized ones), and a window now on another
+        // screen or desktop is dropped. See filterEngineSeedOrder's doc.
+        filterEngineSeedOrder(order, wts, registry, PhosphorEngine::WindowPlacement::autotileEngineId(),
+                              seedScopeFor(screenId, orderKey.desktop));
     }
 
     if (!order.isEmpty()) {

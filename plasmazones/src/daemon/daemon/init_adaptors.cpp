@@ -217,6 +217,11 @@ void Daemon::initCoreAdaptors()
     m_windowTrackingAdaptor->setOutputRetirer([this](const QString& physicalScreenId) {
         retireOutputPlacements(physicalScreenId);
     });
+    // A window that left a screen leaves the saved engine orders of the
+    // screens it left, or a mode round trip there tiles it back (F695).
+    m_windowTrackingAdaptor->setWindowLeftScreenHook([this](const QString& windowId, const QString& keepScreenId) {
+        pruneEngineOrdersForWindow(PhosphorIdentity::WindowId::extractInstanceId(windowId), keepScreenId);
+    });
 
     // Drop closed windows from m_lastEngineOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would

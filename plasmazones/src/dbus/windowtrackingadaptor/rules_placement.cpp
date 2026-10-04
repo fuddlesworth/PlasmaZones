@@ -278,6 +278,11 @@ void WindowTrackingAdaptor::setRoutedOpenDispatcher(
     m_routedOpenDispatcher = std::move(dispatcher);
 }
 
+void WindowTrackingAdaptor::setWindowLeftScreenHook(std::function<void(const QString&, const QString&)> hook)
+{
+    m_windowLeftScreenHook = std::move(hook);
+}
+
 bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, const QString& screenId,
                                                    PhosphorEngine::RestoreReason reason)
 {

@@ -985,32 +985,6 @@ void Daemon::pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId)
     reapScrollingOsdSettleTimersWhere(droppedSubScreen);
 }
 
-void Daemon::pruneEngineOrdersForWindow(const QString& instanceId)
-{
-    if (instanceId.isEmpty() || m_lastEngineOrders.isEmpty()) {
-        return;
-    }
-    for (auto it = m_lastEngineOrders.begin(); it != m_lastEngineOrders.end();) {
-        QStringList& order = it.value();
-        const int before = order.size();
-        order.erase(std::remove_if(order.begin(), order.end(),
-                                   [&instanceId](const QString& wid) {
-                                       return PhosphorIdentity::WindowId::extractInstanceId(wid) == instanceId;
-                                   }),
-                    order.end());
-        if (order.isEmpty()) {
-            it = m_lastEngineOrders.erase(it);
-        } else {
-            if (order.size() != before) {
-                qCDebug(lcDaemon) << "Pruned closed window" << instanceId
-                                  << "from saved autotile order for screen=" << it.key().screenId
-                                  << "desktop=" << it.key().desktop;
-            }
-            ++it;
-        }
-    }
-}
-
 void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
 {
     // m_screenManager / m_layoutManager / m_virtualDesktopManager are

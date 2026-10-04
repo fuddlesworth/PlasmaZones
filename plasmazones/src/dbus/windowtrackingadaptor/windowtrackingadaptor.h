@@ -876,6 +876,8 @@ public:
     void releaseParkedSlots(const QString& physicalScreenId);
     /// The daemon's retire primitive, run when a settle reports an output gone before screenRemoved did.
     void setOutputRetirer(std::function<void(const QString&)> retirer);
+    /// Told (windowId, keepScreenId) at the end of every releaseLeftScreens, for the daemon's own per-screen memory.
+    void setWindowLeftScreenHook(std::function<void(const QString&, const QString&)> hook);
     /// An evacuee announced on @p screenId that could not be adopted floating when its output
     /// went away (taken once): the caller adopts it floating instead of tiling it.
     bool takeEvacueeFloatPending(const QString& windowId, const QString& screenId);
@@ -944,13 +946,10 @@ public:
                                                                        const QString& screenIdHint = QString()) const;
 
     /// Mode-neutral screen lookup for @p windowId: the snap service first (it
-    /// canonicalizes the composite id), then each engine's own tracker. Returns
-    /// empty when neither engine has placed the window and it holds no snap
-    /// state, and equally when neither engine is wired at all (a test fixture, or
-    /// before Daemon::initEngines runs).
-    /// Used by buildContextualRuleQuery when no caller supplied a hint;
-    /// the service accessor alone is snap-only and reports nothing for
-    /// autotile-tracked windows.
+    /// canonicalizes the composite id), then each engine's own tracker; empty
+    /// when no engine placed the window or none is wired. Used by
+    /// buildContextualRuleQuery when no caller supplied a hint (the service
+    /// accessor alone is snap-only).
     QString resolveScreenForWindow(const QString& windowId) const;
 
     /// Resolve whether a FLOATED window should have its previous position restored
@@ -1771,6 +1770,7 @@ private:
     /// engine once it exists.
     std::function<QJsonObject()> m_scrollStripStateProvider;
     std::function<void(const PhosphorProtocol::WindowOpenedEntry&)> m_routedOpenDispatcher;
+    std::function<void(const QString&, const QString&)> m_windowLeftScreenHook;
     QJsonObject m_loadedScrollStripState;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     PhosphorWorkspaces::ActivityManager* m_activityManager;

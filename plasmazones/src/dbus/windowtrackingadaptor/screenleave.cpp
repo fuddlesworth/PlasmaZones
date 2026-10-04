@@ -152,6 +152,11 @@ void WindowTrackingAdaptor::releaseLeftScreens(const QString& windowId, const QS
     if (m_broadcastFloating.value(canonical) && !m_service->isWindowFloating(windowId)) {
         relayWindowFloatingChanged(windowId, false, keepScreenId);
     }
+    // The daemon keeps per-screen memory of its own: the engine orders a
+    // mode round trip seeds from (F695).
+    if (m_windowLeftScreenHook) {
+        m_windowLeftScreenHook(windowId, keepScreenId);
+    }
 }
 
 void WindowTrackingAdaptor::windowCrossedScreens(const QString& windowId, const QString& fromScreenId,

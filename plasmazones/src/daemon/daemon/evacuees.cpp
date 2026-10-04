@@ -5,11 +5,16 @@
 #include "helpers.h"
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "core/platform/logging.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -54,6 +59,38 @@ void Daemon::retireOutputPlacements(const QString& physicalScreenId)
         it = PhosphorIdentity::VirtualScreenId::samePhysical(it.key().screenId, physicalScreenId)
             ? m_lastEngineOrders.erase(it)
             : std::next(it);
+    }
+}
+
+void Daemon::pruneEngineOrdersForWindow(const QString& instanceId, const QString& keepScreenId)
+{
+    if (instanceId.isEmpty() || m_lastEngineOrders.isEmpty()) {
+        return;
+    }
+    for (auto it = m_lastEngineOrders.begin(); it != m_lastEngineOrders.end();) {
+        // A window that moved keeps its place in the orders of the screen it
+        // is on: only the screens it left lose it.
+        if (!keepScreenId.isEmpty() && PhosphorScreens::ScreenIdentity::screensMatch(it.key().screenId, keepScreenId)) {
+            ++it;
+            continue;
+        }
+        QStringList& order = it.value();
+        const int before = order.size();
+        order.erase(std::remove_if(order.begin(), order.end(),
+                                   [&instanceId](const QString& wid) {
+                                       return PhosphorIdentity::WindowId::extractInstanceId(wid) == instanceId;
+                                   }),
+                    order.end());
+        if (order.isEmpty()) {
+            it = m_lastEngineOrders.erase(it);
+        } else {
+            if (order.size() != before) {
+                qCDebug(lcDaemon) << "Pruned" << (keepScreenId.isEmpty() ? "closed" : "moved") << "window" << instanceId
+                                  << "from saved autotile order for screen=" << it.key().screenId
+                                  << "desktop=" << it.key().desktop;
+            }
+            ++it;
+        }
     }
 }
 

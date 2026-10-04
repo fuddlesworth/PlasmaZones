@@ -251,6 +251,26 @@ private Q_SLOTS:
         QCOMPARE(floatSpy.count(), 1);
     }
 
+    // The daemon hears of every release with the screen kept, for its own
+    // per-screen memory (the engine orders a mode round trip seeds from,
+    // F695).
+    void releaseLeftScreens_tellsTheDaemonTheScreenKept()
+    {
+        QList<QPair<QString, QString>> told;
+        m_wta->setWindowLeftScreenHook([&told](const QString& windowId, const QString& keepScreenId) {
+            told.append({windowId, keepScreenId});
+        });
+        const auto unhook = qScopeGuard([this] {
+            m_wta->setWindowLeftScreenHook({});
+        });
+        const QString w = QStringLiteral("app|left-hook");
+
+        m_wta->releaseLeftScreens(w, QStringLiteral("DP-2"), nullptr);
+
+        QCOMPARE(told.size(), 1);
+        QCOMPARE(told.first(), (QPair<QString, QString>{w, QStringLiteral("DP-2")}));
+    }
+
     // A record naming an output that is no longer connected is the evacuee
     // park's: a move on the remaining output leaves its slot alone. The same
     // record on a connected output is released.

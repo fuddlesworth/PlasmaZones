@@ -91,6 +91,16 @@ void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
     }
 }
 
+SeedScope Daemon::seedScopeFor(const QString& screenId, int desktop) const
+{
+    return SeedScope{screenId, desktop, [this](const QString& windowId) {
+                         const QRect frame =
+                             m_windowTrackingAdaptor ? m_windowTrackingAdaptor->frameGeometry(windowId) : QRect();
+                         return seedWindowScreen(windowId, {m_autotileEngine.get(), m_scrollEngine.get()},
+                                                 m_snapEngine.get(), frame, m_screenManager.get());
+                     }};
+}
+
 void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
 {
     if (!m_scrollEngine || !m_layoutManager || !m_settings) {
@@ -154,7 +164,8 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             continue;
         }
         QStringList order = it.value();
-        filterEngineSeedOrder(order, wts, wts->windowRegistry(), PhosphorEngine::WindowPlacement::scrollingEngineId());
+        filterEngineSeedOrder(order, wts, wts->windowRegistry(), PhosphorEngine::WindowPlacement::scrollingEngineId(),
+                              seedScopeFor(screenId, desktop));
         if (!order.isEmpty()) {
             m_scrollEngine->setInitialWindowOrder(screenId, order);
         }

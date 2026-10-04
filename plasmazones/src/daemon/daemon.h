@@ -592,17 +592,16 @@ private:
      * (m_lastEngineOrders, deterministic re-entry) and only falls back to
      * the zone-ordered window list from WTS. filterEngineSeedOrder runs
      * before seeding: float is PER MODE, so a non-minimized window always
-     * seeds (a snap-mode float must never make it untileable here), and
+     * seeds (a snap-mode float must never make it untileable here),
      * minimized windows stay as positional placeholders except the
-     * user-floated-then-minimized case. See that function's contract — this
-     * summary previously claimed the opposite and is exactly what would lead
-     * a future fixer to reintroduce the untileable-by-mode-swap bug.
+     * user-floated-then-minimized case, and a window now on another screen
+     * or desktop is dropped. See that function's contract.
      * The result goes to the autotile engine's setInitialWindowOrder(). Used
      * by both per-screen toggle and global snapping→autotile transition.
-     *
-     * @param screenId Screen identifier
      */
     void seedAutotileOrderForScreen(const QString& screenId);
+    /// The seed filter's scope for (@p screenId, @p desktop), with the engines' view of where each window is.
+    SeedScope seedScopeFor(const QString& screenId, int desktop) const;
 
     /**
      * @brief Flip every autotile assignment to Snapping and restore each
@@ -1356,18 +1355,17 @@ private:
     /** @brief Prune m_lastEngineOrders for old virtual screen IDs that no longer exist */
     void pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId);
     /**
-     * @brief Drop a closed window from every saved TILING-FAMILY order
-     * (autotile stack orders and scrolling column orders share
-     * m_lastEngineOrders).
+     * @brief Drop a window from every saved TILING-FAMILY order (autotile
+     * stack orders and scrolling column orders share m_lastEngineOrders):
+     * every one when it closed, or each one on a screen other than
+     * @p keepScreenId when it moved there (the window-left-screen hook).
      *
-     * Without this, a window that closes while the screen is in manual mode
-     * stays in m_lastEngineOrders. On the next manual→tiling toggle, the
-     * order seeding feeds the stale id back through setInitialWindowOrder;
-     * setActiveScreens replays it into the engine state and the retile
-     * places a phantom window. Match by instance id — saved entries are
-     * canonical "appId|instanceId" composites.
+     * Without this, the next manual→tiling toggle feeds the stale id back
+     * through setInitialWindowOrder and the retile places a phantom window,
+     * or pulls a moved one back onto the screen it left (F695). Match by
+     * instance id: saved entries are canonical "appId|instanceId" composites.
      */
-    void pruneEngineOrdersForWindow(const QString& instanceId);
+    void pruneEngineOrdersForWindow(const QString& instanceId, const QString& keepScreenId = QString());
 
     /// Arm OSD suppression for @p count upcoming resnap feedback signals. ADDS
     /// to the running count (never clobbers) so overlapping async resnap streams
