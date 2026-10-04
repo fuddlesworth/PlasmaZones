@@ -26,7 +26,8 @@ class RoutedOpenEnv
 {
 public:
     RoutedOpenEnv(PhosphorZones::LayoutRegistry* layouts, StubZoneDetectorConvenience* detector,
-                  StubSettingsConvenience* settings, PhosphorEngine::PlacementEngineBase* tiling, int routeDesktop)
+                  StubSettingsConvenience* settings, PhosphorEngine::PlacementEngineBase* tiling, int routeDesktop,
+                  PhosphorEngine::PlacementEngineBase* scroll = nullptr)
     {
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
         fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080), QStringLiteral("DP-2"));
@@ -61,7 +62,7 @@ public:
             return e->holdsWindowInState(id, state);
         };
         wta->service()->setSnapStateResolver(resolver);
-        wta->setEngines(snap.get(), tiling, nullptr);
+        wta->setEngines(snap.get(), tiling, scroll);
         wta->setRoutedOpenDispatcher([this](const PhosphorProtocol::WindowOpenedEntry& entry) {
             dispatched.append(entry);
         });
@@ -114,6 +115,24 @@ class TestWtaDropOnLeave : public QObject, protected WtaConvenienceFixture
     Q_OBJECT
 
 private:
+    /// @p env's window snapped on DP-1 desktop 1, its placement recorded with
+    /// an autotile slot beside the snap one.
+    void snapOnDp1WithTileSlot(RoutedOpenEnv& env)
+    {
+        env.snap->setCurrentDesktopForScreen(QStringLiteral("DP-1"), 1);
+        env.snap->setCurrentDesktopForScreen(QStringLiteral("DP-2"), 1);
+        env.wta->service()->assignWindowToZone(env.window, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        env.wta->service()->placementStore().record(*env.snap->capturePlacement(env.window));
+        env.wta->service()->placementStore().record(PlasmaZones::TestHelpers::makePlacement(
+            env.window, QStringLiteral("routeapp"), PhosphorEngine::WindowPlacement::stateTiled(),
+            PhosphorEngine::WindowPlacement::autotileEngineId(), QStringLiteral("DP-1")));
+    }
+    static QString slotState(RoutedOpenEnv& env, const QString& engineId)
+    {
+        const auto rec = env.wta->service()->placementStore().peekExact(env.window);
+        return rec ? rec->slotFor(engineId).state : QString();
+    }
+
     /// The open float terminal's state: floating in snap on DP-1, no zone.
     void floatOnSpawnScreen(RoutedOpenEnv& env)
     {
@@ -385,6 +404,112 @@ private Q_SLOTS:
         QVERIFY(env.wta->applyOpenScreenRouting(env.window, QStringLiteral("DP-1")));
 
         QVERIFY(env.dispatched.isEmpty());
+    }
+
+    // ── Hook 2: a KWin move across screens a tiling engine runs ─────────────
+
+    // A tile KWin moved onto a snapping monitor: the zone it kept frozen on
+    // the monitor left goes, with every slot of the record naming that monitor,
+    // and the effect hears it is no longer snapped (F124, F673).
+    void crossedScreens_tileMovedToASnappingMonitorDropsItsFrozenZone()
+    {
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, nullptr, 0);
+        snapOnDp1WithTileSlot(env);
+        QSignalSpy stateSpy(env.wta, &WindowTrackingAdaptor::windowStateChanged);
+
+        env.wta->windowCrossedScreens(env.window, QStringLiteral("DP-1"), QStringLiteral("DP-2"));
+
+        QVERIFY(!env.snap->isWindowTracked(env.window));
+        QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::snapEngineId()),
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
+        QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::autotileEngineId()),
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
+        QCOMPARE(stateSpy.count(), 1);
+        const auto entry = stateSpy.first().at(1).value<PhosphorProtocol::WindowStateEntry>();
+        QCOMPARE(entry.changeType, QStringLiteral("screen_changed"));
+        QCOMPARE(entry.screenId, QStringLiteral("DP-2"));
+    }
+
+    // The engine that took the window onto the new screen keeps its hold and
+    // its slot; the snap memory on the monitor left goes.
+    void crossedScreens_adoptingEngineKeepsItsHoldAndSlot()
+    {
+        StubPlacementEngine autotile;
+        autotile.id = QString(PhosphorEngine::WindowPlacement::autotileEngineId());
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, &autotile, 0);
+        snapOnDp1WithTileSlot(env);
+        autotile.heldScreen.insert(env.window, QStringLiteral("DP-2"));
+
+        env.wta->windowCrossedScreens(env.window, QStringLiteral("DP-1"), QStringLiteral("DP-2"));
+
+        QVERIFY(autotile.releasedOffScreen.isEmpty());
+        QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::autotileEngineId()),
+                 QString(PhosphorEngine::WindowPlacement::stateTiled()));
+        QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::snapEngineId()),
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
+        QVERIFY(!env.snap->isWindowTracked(env.window));
+    }
+
+    // The other tiling engine's hold (a background desktop's column of the
+    // same window) is released off the new screen (F470, F447).
+    void crossedScreens_backgroundTilingHoldIsReleased()
+    {
+        StubPlacementEngine autotile;
+        StubPlacementEngine scroll;
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, &autotile, 0, &scroll);
+        autotile.heldScreen.insert(env.window, QStringLiteral("DP-2"));
+
+        env.wta->windowCrossedScreens(env.window, QStringLiteral("DP-1"), QStringLiteral("DP-2"));
+
+        QVERIFY(scroll.releasedOffScreen.contains(qMakePair(env.window, QStringLiteral("DP-2"))));
+        QVERIFY(autotile.releasedOffScreen.isEmpty());
+    }
+
+    // A crossing between virtual screens of one monitor drops the snap
+    // membership but keeps the record's slots.
+    void crossedScreens_virtualScreenCrossingKeepsTheRecord()
+    {
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, nullptr, 0);
+        const QString vs0 = QStringLiteral("DP-1/vs:0");
+        const QString vs1 = QStringLiteral("DP-1/vs:1");
+        env.snap->setCurrentDesktopForScreen(vs0, 1);
+        env.snap->setCurrentDesktopForScreen(vs1, 1);
+        env.wta->service()->assignWindowToZone(env.window, m_zoneIds[0], vs0, 1);
+        env.wta->service()->placementStore().record(*env.snap->capturePlacement(env.window));
+
+        env.wta->windowCrossedScreens(env.window, vs0, vs1);
+
+        QVERIFY(!env.snap->isWindowTracked(env.window));
+        QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::snapEngineId()),
+                 QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+    }
+
+    // A record naming an output that went away is the evacuee park's.
+    void crossedScreens_recordOnAnUnpluggedOutputStaysParked()
+    {
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, nullptr, 0);
+        env.wta->service()->placementStore().record(PlasmaZones::TestHelpers::makePlacement(
+            env.window, QStringLiteral("routeapp"), PhosphorEngine::WindowPlacement::stateTiled(),
+            PhosphorEngine::WindowPlacement::autotileEngineId(), QStringLiteral("HDMI-9")));
+
+        env.wta->windowCrossedScreens(env.window, QStringLiteral("DP-1"), QStringLiteral("DP-2"));
+
+        QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::autotileEngineId()),
+                 QString(PhosphorEngine::WindowPlacement::stateTiled()));
+    }
+
+    // A notice naming no screen is refused before anything is released.
+    void crossedScreens_emptyScreenIsRefused()
+    {
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, nullptr, 0);
+        snapOnDp1WithTileSlot(env);
+
+        env.wta->windowCrossedScreens(env.window, QString(), QStringLiteral("DP-2"));
+        env.wta->windowCrossedScreens(env.window, QStringLiteral("DP-1"), QString());
+
+        QVERIFY(env.snap->isWindowTracked(env.window));
+        QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::snapEngineId()),
+                 QString(PhosphorEngine::WindowPlacement::stateSnapped()));
     }
 };
 

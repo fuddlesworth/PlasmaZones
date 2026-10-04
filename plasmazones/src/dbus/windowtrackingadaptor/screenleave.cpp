@@ -154,6 +154,65 @@ void WindowTrackingAdaptor::releaseLeftScreens(const QString& windowId, const QS
     }
 }
 
+void WindowTrackingAdaptor::windowCrossedScreens(const QString& windowId, const QString& fromScreenId,
+                                                 const QString& toScreenId)
+{
+    if (!m_service || !validateWindowId(windowId, QStringLiteral("crossed screens"))) {
+        return;
+    }
+    if (fromScreenId.isEmpty() || toScreenId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "windowCrossedScreens: empty screen for" << windowId << fromScreenId << toScreenId;
+        return;
+    }
+    const QString canonical = shadowWindowId(windowId);
+    PhosphorScreens::ScreenManager* mgr = m_service->screenManager();
+    const QString resolved =
+        resolveReportedScreen(mgr, toScreenId, m_service->screenForWindow(windowId), m_frameGeometry.value(canonical));
+    // The tiling engine that took the window there, when one did: the effect
+    // adopted it on arrival or transferred it before this notice.
+    PhosphorEngine::PlacementEngineBase* arrival = nullptr;
+    for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.data(), m_scrollEngine.data()}) {
+        if (engine && PhosphorScreens::ScreenIdentity::screensMatch(engine->heldScreenForWindow(windowId), resolved)) {
+            arrival = engine;
+            break;
+        }
+    }
+    PhosphorSnapEngine::SnapEngine* snap = snapEngine();
+    // Decided before anything is released: the effect still shows the window
+    // snapped while any store holds it off the new screen.
+    const bool heldSnap = WindowTrackingInternal::snapHoldsOffMonitor(snap, windowId, resolved)
+        || !WindowTrackingInternal::snapZoneScreen(snap, windowId, resolved).isEmpty();
+    const auto record = m_service->placementStore().peekExact(canonical);
+
+    releaseLeftScreens(windowId, resolved, arrival);
+
+    // The record names the monitor the window left: every engine's slot there
+    // goes, the arriving engine's excepted, or a reopen or a mode switch on the
+    // new monitor would read a tile or a float of the old one (F673). A record
+    // for an output that went away is the evacuee park's.
+    if (record) {
+        const QString recordPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(record->screenId);
+        const QString resolvedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(resolved);
+        if (!recordPhysical.isEmpty()
+            && !PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(record->screenId, resolvedPhysical) && mgr
+            && mgr->physicalScreenFor(recordPhysical).isValid()) {
+            for (auto it = record->engines.cbegin(); it != record->engines.cend(); ++it) {
+                if (!arrival || it.key() != arrival->engineId()) {
+                    m_service->releaseEngineSlot(windowId, it.key());
+                }
+            }
+        }
+    }
+    qCInfo(lcDbusWindow) << "windowCrossedScreens:" << windowId << "from" << fromScreenId << "to" << resolved
+                         << "arrival" << (arrival ? arrival->engineId() : QString());
+    if (heldSnap) {
+        Q_EMIT windowStateChanged(windowId,
+                                  PhosphorProtocol::WindowStateEntry{windowId, QString(), resolved, false,
+                                                                     QStringLiteral("screen_changed"), QStringList{},
+                                                                     false});
+    }
+}
+
 void WindowTrackingAdaptor::announceOutputMove(const QString& windowId, const QString& targetScreenId,
                                                const QString& sourceScreenId,
                                                const PhosphorEngine::IPlacementEngine* arrival)

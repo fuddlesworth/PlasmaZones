@@ -30,6 +30,7 @@
  */
 
 #include "wta_convenience_fixture.h"
+#include "helpers/StubPlacementEngine.h"
 #include "helpers/VirtualScreenTestHelpers.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -351,6 +352,54 @@ private Q_SLOTS:
         QCOMPARE(entry.changeType, QStringLiteral("screen_changed"));
         QCOMPARE(entry.screenId, other);
         QVERIFY(entry.isFloating);
+    }
+
+    // A floating window moved onto a screen autotile runs is handed to
+    // autotile as a float there, not left in snap (F850).
+    void testScreenChanged_floatingWindowOntoAutotileIsHandedOverFloating()
+    {
+        installPerScreenResolver();
+        StubPlacementEngine autotile;
+        autotile.activeScreens.insert(QStringLiteral("DP-2"));
+        m_wta->setEngines(m_snapEngine, &autotile, nullptr);
+        const auto restore = qScopeGuard([this] {
+            m_wta->setEngines(m_snapEngine, nullptr, nullptr);
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString w = QStringLiteral("app|float-to-autotile");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        m_snapEngine->setWindowFloat(w, true, m_screenId);
+
+        m_wta->windowScreenChanged(w, QStringLiteral("DP-2"));
+
+        QCOMPARE(autotile.received.size(), 1);
+        QCOMPARE(autotile.received.first().toScreenId, QStringLiteral("DP-2"));
+        QVERIFY(autotile.received.first().wasFloating);
+        QVERIFY(!m_snapEngine->isWindowTracked(w));
+    }
+
+    // A free, non-floating window has nothing to move, and a floating one
+    // reported on the screen it is already on stays put: no announcement
+    // either way (F850).
+    void testScreenChanged_freeWindowAndSameScreenFloatAreInert()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString floating = QStringLiteral("app|float-same-screen");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_wta->service()->assignWindowToZone(floating, m_zoneIds[0], m_screenId, 1);
+        m_snapEngine->setWindowFloat(floating, true, m_screenId);
+
+        QSignalSpy stateSpy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+        m_wta->windowScreenChanged(QStringLiteral("app|free"), QStringLiteral("DP-2"));
+        m_wta->windowScreenChanged(floating, m_screenId);
+
+        QCOMPARE(stateSpy.count(), 0);
+        QVERIFY(m_snapEngine->isFloating(floating));
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(floating), m_screenId);
     }
 
     // The unsnap clears the last-used zone of the screen the window left, and

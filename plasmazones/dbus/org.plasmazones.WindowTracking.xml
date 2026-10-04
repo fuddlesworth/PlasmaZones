@@ -498,6 +498,18 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Identifier of the screen the window moved to."/>
             </arg>
         </method>
+        <method name="windowCrossedScreens">
+            <annotation name="org.gtk.GDBus.DocString" value="Record that KWin moved a window between screens where a tiling engine runs on either end (the effect hands the window to the tiling engines itself). The daemon releases what every engine still holds of the window off the new screen: snap zones and floats, another tiling engine's background hold, and the record's slots naming the old monitor, keeping the engine that took the window there."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="fromScreenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Identifier of the screen the window left."/>
+            </arg>
+            <arg name="toScreenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Identifier of the screen the window moved to."/>
+            </arg>
+        </method>
         <method name="queryWindowFloating">
             <annotation name="org.gtk.GDBus.DocString" value="Query the daemon's authoritative floating state for a window. The effect uses this on bringup to reconcile its local cache against persisted state across daemon restarts."/>
             <arg name="windowId" type="s" direction="in">

@@ -323,12 +323,12 @@ public Q_SLOTS:
     /// does not restore it there).
     void notifyDragOutUnsnap(const QString& windowId);
 
-    /**
-     * Handle a window KWin moved to another screen: its snap memory off the
-     * new screen is released. A snapped window loses its zone unless the
-     * daemon put it there itself; a floating one forgets its pre-float home.
-     */
+    /// A window KWin moved between two screens no tiling engine runs: its snap
+    /// memory off the new one goes (a snapped window loses its zone unless the
+    /// daemon put it there; a floating one forgets its home).
     void windowScreenChanged(const QString& windowId, const QString& newScreenId);
+    /// KWin moved a window across screens a tiling engine runs: drop every hold off the new one.
+    void windowCrossedScreens(const QString& windowId, const QString& fromScreenId, const QString& toScreenId);
     /// The effect's screen-change settle report: one verdict per window (see WindowTracking.xml).
     PhosphorProtocol::OutputSettleVerdictList reportOutputSettle(const PhosphorProtocol::OutputSettleRowList& rows);
     /**

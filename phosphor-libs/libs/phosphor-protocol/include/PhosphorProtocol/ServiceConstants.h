@@ -598,7 +598,11 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       old daemon answers the call with an error and the effect replays every
 //       crossing as a move; an old effect never calls. WindowTracking also
 //       gains seedScreenDesktop (s i): the desktop an output shows as it is
-//       added, taken by the engines without a desktop switch.
+//       added, taken by the engines without a desktop switch. And
+//       windowCrossedScreens (s s s): the effect's notice that KWin moved a
+//       window across screens where a tiling engine runs, so the daemon drops
+//       what it held of the window on the screen left. An old daemon answers
+//       with an error, which the fire-and-forget call ignores.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;
