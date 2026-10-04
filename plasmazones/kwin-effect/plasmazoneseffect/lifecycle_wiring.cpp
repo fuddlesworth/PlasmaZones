@@ -906,12 +906,11 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // EffectWindow address inheriting a dead corpse's offset would draw a
         // brand-new window a pan away).
         m_scrollCorpseFreeze.remove(w);
-        // Desktop-set stamp, same raw-pointer keying and the same two reasons
-        // as the tracked screen above: keep the hash bounded, and stop a reused
+        // Context stamp, same raw-pointer keying and the same two reasons as
+        // the tracked screen above: keep the hash bounded, and stop a reused
         // address from inheriting a dead window's desktop set (which would make
-        // the arrival arm misread the new window's first desktop edit).
-        m_trackedDesktopsPerWindow.remove(w);
-        m_preStickyDesktopsPerWindow.remove(w);
+        // the handler misread the new window's first desktop edit).
+        m_contextStampPerWindow.remove(w);
         // Wired-window guard. The connections themselves die with the window, so
         // this is address-reuse safety, not connection hygiene: a stale entry
         // would make setupWindowConnections REFUSE to wire a new window that

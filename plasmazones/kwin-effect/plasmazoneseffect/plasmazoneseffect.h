@@ -46,6 +46,7 @@
 #include "kwincompat.h" // KWinCompat::PaintResult — the paint hooks' return type per KWin version
 #include "shader_resolve.h"
 #include "types.h"
+#include "windowcontextedge.h"
 
 #include "pointer/pointerdecorationpass.h"
 #include "transitions/desktoptransitionmanager.h"
@@ -407,11 +408,15 @@ public:
 private:
     // Window management
     void setupWindowConnections(KWin::EffectWindow* w);
-    /// Wire the window's virtual-desktop-set handling (departure arm, arrival
-    /// arm, and the m_trackedDesktopsPerWindow stamp both diff against) and
-    /// seed that stamp. Called once per window from setupWindowConnections,
-    /// inside its idempotency guard; defined in window_desktop_connections.cpp.
-    void wireDesktopChangeHandler(KWin::EffectWindow* w);
+    /// Wire the window's desktop-set handling (the m_contextStampPerWindow
+    /// stamp and applyWindowContextEdit) and seed the stamp. Called once per
+    /// window from setupWindowConnections, inside its idempotency guard;
+    /// defined in window_desktop_connections.cpp.
+    void wireContextChangeHandlers(KWin::EffectWindow* w);
+    /// The effect's arms for one classified desktop edit, a function of the
+    /// edge and of the window's tracking state (the table is in
+    /// window_desktop_connections.cpp).
+    void applyWindowContextEdit(KWin::EffectWindow* window, const WindowContextEdge::Edge& edge);
     /// The rest of setupWindowConnections' per-window wiring, split by concern
     /// and called from it in this order: cross-output and virtual-screen moves
     /// (window_output_connections.cpp), identity and metadata pushes
@@ -3696,39 +3701,12 @@ private:
     // gates on it.
     QPointer<KWin::EffectWindow> m_lastReportedActiveWindow;
 
-    // Per-window VirtualDesktop id set as of the last windowDesktopsChanged, so
-    // that handler can tell a genuine MOVE onto the desktop in view from the
-    // other edits KWin reports through the same signal: a set that merely grew
-    // (desktop 1 → desktops 1 and 2), one that shrank, and an un-stick. Only a
-    // move makes the window newly present on the desktop the user is looking
-    // at, and only a move may be placed. An EMPTY value means the window was on
-    // all desktops (KWin's sticky encoding), which counts as already present;
-    // contains() is what distinguishes that from an unseeded entry. Keyed on
-    // the raw EffectWindow* like m_trackedScreenPerWindow, seeded at wire time
-    // and erased in the windowDeleted cleanup alongside it.
-    QHash<KWin::EffectWindow*, QSet<QString>> m_trackedDesktopsPerWindow;
-
-    // The desktop set a window had immediately BEFORE it went sticky, for the
-    // one question the stamp above cannot answer on an un-stick: the sticky
-    // stamp is empty, so it says nothing about where the engines adopted the
-    // window, and the un-stick arm has to know whether the desktop it landed
-    // on is that one.
-    //
-    // Without it every un-stick reads as a move: the arm would release and
-    // re-add a window that came back to the desktop it was already keyed
-    // under, appending it to the stack instead of leaving its slot alone. With
-    // it, only an un-stick onto a DIFFERENT desktop takes the re-home path,
-    // which is the case the daemon's reconcile has genuinely released.
-    //
-    // Written when the stamp transitions non-empty → empty, dropped when an
-    // un-stick reaches the discriminator that reads it, and erased in the
-    // windowDeleted cleanup beside the stamp. An un-stick that returns EARLIER
-    // than the discriminator leaves the entry standing, which costs nothing:
-    // it is only ever read when the recorded stamp is empty, and the next
-    // sticky transition overwrites it. A window with no entry (sticky before PlasmaZones saw
-    // it) reads as "adopted somewhere else", which takes the re-home path —
-    // the conservative answer, since the alternative leaves it untracked.
-    QHash<KWin::EffectWindow*, QSet<QString>> m_preStickyDesktopsPerWindow;
+    // Per-window desktop and activity ids as of the last edit, which each
+    // context edit is classified against (WindowContextEdge). Seeded at wire
+    // time, re-stamped by each axis before any of its arms run, erased in the
+    // windowDeleted cleanup. An empty set is KWin's "every one"; contains()
+    // tells it from an unseeded entry.
+    QHash<KWin::EffectWindow*, WindowContextEdge::Stamp> m_contextStampPerWindow;
 
     // Windows that already have their per-window connections. setupWindowConnections
     // issues raw connects with lambda slots, so a second call on the same window

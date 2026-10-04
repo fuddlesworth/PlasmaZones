@@ -2565,6 +2565,7 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench" TIMEOUT 900)
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
 #   test_strip_view_animator: StripViewAnimator per-output view-spring behaviour
 #   test_strip_motion_sampler: StripMotionSampler distance/speed sampling
+#   test_window_context_edge: the desktop handler's edit classification
 #   test_exact_trigger_match: trigger-set exact-match resolution
 #   test_scroll_behaviour_parse: scrolling behaviour token parsing
 #   test_scroll_tab_layout: tab-indicator layout geometry (declared ~300
@@ -2629,6 +2630,11 @@ add_executable(test_strip_motion_sampler compositor-common/test_strip_motion_sam
 target_include_directories(test_strip_motion_sampler PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 target_link_libraries(test_strip_motion_sampler PRIVATE Qt6::Test)
 add_test(NAME test_strip_motion_sampler COMMAND test_strip_motion_sampler)
+
+add_executable(test_window_context_edge compositor-common/test_window_context_edge.cpp)
+target_include_directories(test_window_context_edge PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+target_link_libraries(test_window_context_edge PRIVATE Qt6::Test)
+add_test(NAME test_window_context_edge COMMAND test_window_context_edge)
 
 # The pure half of the screen-level passes' helpers (transitionpasspure.h):
 # the on-screen format to alpha-capable capture format table the strip pass

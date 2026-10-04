@@ -149,30 +149,25 @@ public:
     void onWindowClosed(const QString& windowId, const QString& screenId);
 
     /// Drop a LIVE window from engine tracking without a close (the
-    /// drag-bypass revert, and the desktop arms). The same
-    /// cleanupAutotileTracking teardown as onWindowClosed, minus that one's
-    /// unconditional maximize-ledger scrub, and the daemon relay is
-    /// Tiling.releaseWindowTracking, which runs NO
-    /// placement capture — the window is mid-drag and its frame must never
-    /// be recorded as a float-back.
+    /// drag-bypass revert, a genuine desktop departure, an exclusion on
+    /// arrival). The same cleanupAutotileTracking teardown as onWindowClosed,
+    /// minus its maximize-ledger scrub, and the daemon relay is
+    /// Tiling.releaseWindowTracking, which runs NO placement capture.
     ///
-    /// The daemon relay fires only when @p screenId is managed in the CURRENT
-    /// context. That gate is deliberately NOT lifted for a window arriving
-    /// from another desktop: which desktop's state still lists a window is
-    /// the daemon's question, answered by TilingAdaptor's desktop-membership
-    /// reconcile off the window's registry desktop set (#1076), never by this
-    /// screen's managed set, which says nothing about the desktop it left.
+    /// The relay fires only when @p screenId is managed in the CURRENT
+    /// context. Which desktop's state still lists a window is the daemon's
+    /// question, answered by TilingAdaptor's desktop-membership reconcile off
+    /// the registry desktop set (#1076), so the desktop handler relays only a
+    /// genuine move, after the metadata push.
     void releaseWindowTracking(const QString& windowId, const QString& screenId);
     /// Tear down all effect-side autotile tracking for @p windowId (shared +
     /// KWin-specific state, incl. the pending cross-screen-restore connection)
     /// WITHOUT notifying the daemon. Shared by onWindowClosed and
     /// releaseWindowTracking (which add their own daemon call) and the
     /// cross-mode-move marker path (the daemon already ran handoffRelease).
-    /// No screenId parameter: every container this touches is either keyed by
-    /// windowId or swept across all screens. The saved stacking orders used to
-    /// be pruned only for a caller-supplied screen, which left the id behind on
-    /// every other screen's order — including the DESTINATION's on a
-    /// cross-output transfer, where the caller passes the source. An evacuee
+    /// No screenId parameter: every container this touches is keyed by
+    /// windowId or swept across all screens (a per-screen prune once left the
+    /// id on the cross-output DESTINATION's stacking order). An evacuee
     /// passes ClaimScope::Evacuation: its claims are scrubbed, not released.
     void cleanupAutotileTracking(const QString& windowId,
                                  ScrollDecisions::ClaimScope scope = ScrollDecisions::ClaimScope::UntrackFunnel);
@@ -1011,6 +1006,11 @@ public:
     bool isTrackedWindow(const QString& windowId) const
     {
         return m_notifiedWindows.contains(windowId);
+    }
+    /// A window demoted by a desktop switch: still held in its desktop's state.
+    bool isParkedForDesktopReturn(const QString& windowId) const
+    {
+        return m_savedNotifiedForDesktopReturn.contains(windowId);
     }
 
     /**

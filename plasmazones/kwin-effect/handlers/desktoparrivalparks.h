@@ -83,6 +83,13 @@ public:
         return m_parks.contains(windowId);
     }
 
+    /// The cause @p windowId is parked for, without spending the park.
+    std::optional<Cause> causeOf(const QString& windowId) const
+    {
+        const auto it = m_parks.constFind(windowId);
+        return it == m_parks.constEnd() ? std::nullopt : std::optional<Cause>(*it);
+    }
+
     bool isEmpty() const
     {
         return m_parks.isEmpty();

@@ -80,6 +80,15 @@ private Q_SLOTS:
         QVERIFY(parks.isEmpty());
     }
 
+    void causeOfReadsWithoutSpending()
+    {
+        DesktopArrivalParks parks;
+        parks.arm(QStringLiteral("a"), Cause::ReapplyOnly);
+        QCOMPARE(parks.causeOf(QStringLiteral("a")), std::optional<Cause>(Cause::ReapplyOnly));
+        QVERIFY(parks.contains(QStringLiteral("a")));
+        QCOMPARE(parks.causeOf(QStringLiteral("b")), std::optional<Cause>());
+    }
+
     void anEmptyIdIsNeverParked()
     {
         DesktopArrivalParks parks;

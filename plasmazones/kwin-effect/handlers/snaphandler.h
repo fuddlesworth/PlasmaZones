@@ -339,6 +339,21 @@ public:
     /// in D-Bus reply order, which is nobody's intent.
     bool drainDesktopArrivalFor(const QString& windowId, KWin::EffectWindow* window);
 
+    /// A parked window that became present on every desktop is in view now.
+    /// An open's continuation still owes the window its placement and is
+    /// drained. Any other park is cancelled: the window never moved, so it
+    /// owes no re-apply, and leaving the park would let the next unrelated
+    /// desktop switch spend it (F295, F415).
+    void settleDesktopArrivalOnEverywhere(const QString& windowId, KWin::EffectWindow* window)
+    {
+        const std::optional<DesktopArrivalParks::Cause> cause = m_desktopArrivalParks.causeOf(windowId);
+        if (cause == DesktopArrivalParks::Cause::OpenContinuation) {
+            drainDesktopArrivalFor(windowId, window);
+        } else if (cause) {
+            m_desktopArrivalParks.cancel(windowId);
+        }
+    }
+
 private:
     void cancelPendingMinimizeFloat(const QString& windowId)
     {
