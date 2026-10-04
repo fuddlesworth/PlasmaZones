@@ -611,8 +611,8 @@ public Q_SLOTS:
     // ── Phosphor shell surface (placement map click/drag verbs). All four
     // read the WindowRegistry, so "tracked" here means the compositor has
     // registered the window through setWindowMetadata, which it does for
-    // every window ahead of any other per-window report. Bodies in
-    // shellsurface.cpp. ──
+    // every window before any report naming its context (only the sticky bit
+    // goes first). Bodies in shellsurface.cpp. ──
 
     /**
      * @brief Ask the compositor to activate (focus) a tracked window.

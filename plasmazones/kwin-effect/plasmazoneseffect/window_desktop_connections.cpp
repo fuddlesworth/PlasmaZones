@@ -56,8 +56,9 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
 
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
         // Corpse gate FIRST, ahead of everything. getWindowId on a deleted
-        // window pollutes the id cache, and both updateWindowStickyState and
-        // the stamp below reach it. Nothing downstream wants a corpse's
+        // window pollutes the id cache, and updateWindowStickyState, the
+        // metadata push and both arms call it (the stamp is a raw-pointer
+        // lookup and does not). Nothing downstream wants a corpse's
         // answer either: its row in m_trackedDesktopsPerWindow is erased by
         // the windowDeleted cleanup whether or not this edit stamped it, and
         // its sticky value has no consumer.
@@ -65,6 +66,13 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
             return;
         }
         updateWindowStickyState(window);
+        // The registry, and the daemon's per-window membership reconcile it
+        // drives (the tiling per-key release and in-view adopt, the snap
+        // carry), must see the new desktop set before any notice this handler
+        // sends, so the push leads (F293). The sticky report goes first
+        // because the reconcile's autotile adopt reads it. This is the only
+        // push for a desktop edit.
+        pushWindowMetadata(window);
         // The arms below adopt or drain by the exclusion verdict, which must
         // be judged on the desktop the window moved to.
         evictExclusionVerdicts(getWindowId(window));
@@ -90,12 +98,6 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         if (currentDesktops.isEmpty() && hadPreviousDesktops && !previousDesktops.isEmpty()) {
             m_preStickyDesktopsPerWindow[window] = previousDesktops;
         }
-        // No metadata push here: the daemon's float resolver reads the
-        // window's own desktop/activity from the registry, but that is kept
-        // fresh by the KWin::Window::desktopsChanged → pushLatest connection
-        // below (this signal is KWin's EffectWindow relay of the same event,
-        // so a push here would build and marshal the extended snapshot twice
-        // per desktop move).
 
         // When a window is moved to a different desktop (e.g., "Move to Desktop 2"),
         // treat it as removed from the current desktop's tiling. The normal desktop-
@@ -229,8 +231,7 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
             // from the source desktop's state, which the desktop in view can
             // say nothing about — is the daemon's: TilingAdaptor's
             // desktop-membership reconcile releases it off the registry
-            // desktop set the sibling KWin::Window::desktopsChanged →
-            // pushLatest connection carries (#1076). Here: stash the
+            // desktop set this handler's metadata push carries (#1076). Here: stash the
             // pre-autotile rect before the tracking wipe, exactly as the
             // departure arm does, so a later move back onto a tiled desktop
             // folds it in before its re-add and a float-back there returns to
