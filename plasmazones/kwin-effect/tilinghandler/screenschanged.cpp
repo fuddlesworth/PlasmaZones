@@ -705,8 +705,8 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     // no other effect on the drop path.
     ++m_screensSignalGeneration;
 
-    if (isDesktopSwitch && !screenDesktops.isEmpty()) {
-        QHash<QString, int> announcedDesktops;
+    QHash<QString, int> announcedDesktops;
+    if (!screenDesktops.isEmpty()) {
         announcedDesktops.reserve(screenDesktops.size());
         for (auto it = screenDesktops.constBegin(); it != screenDesktops.constEnd(); ++it) {
             // An a{sv} value arrives either already demarshalled (the property
@@ -737,13 +737,17 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // desktop by construction.
             announcedDesktops.insert(PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()), desktop);
         }
-        if (!PlasmaZones::PreTileDecisions::announceMatchesReportedDesktops(announcedDesktops,
-                                                                            m_effect->lastReportedScreenDesktops())) {
-            qCInfo(lcEffect) << "slotScreensChanged: dropping a desktop-switch announce for" << screenDesktops
-                             << "— already on" << m_effect->lastReportedScreenDesktops();
-            return;
-        }
     }
+    if (isDesktopSwitch && !announcedDesktops.isEmpty()
+        && !PlasmaZones::PreTileDecisions::announceMatchesReportedDesktops(announcedDesktops,
+                                                                           m_effect->lastReportedScreenDesktops())) {
+        qCInfo(lcEffect) << "slotScreensChanged: dropping a desktop-switch announce for" << screenDesktops
+                         << "— already on" << m_effect->lastReportedScreenDesktops();
+        return;
+    }
+    // The desktops this accepted set describes, which setScrollingScreens
+    // reads to tell an engine flip from a desktop switch in flight (F1004).
+    m_managedSetDesktops.insert(announcedDesktops);
 
     const QSet<QString> newScreens(screenIds.begin(), screenIds.end());
     const QSet<QString> removed = m_managedScreens - newScreens;

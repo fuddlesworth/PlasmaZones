@@ -31,6 +31,7 @@
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <effect/effectwindow.h>
@@ -63,6 +64,7 @@ void TilingHandler::clearTiledTracking()
     // scrollingScreenIntersection snapshot/compare/invalidate contract (see
     // the header) — it is valid only while every caller is a teardown.
     m_managedScreens.clear();
+    m_managedSetDesktops.clear();
 }
 
 void TilingHandler::setFocusFollowsMouse(bool enabled)
@@ -487,14 +489,26 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // verb on the new engine refuses. Re-announce the flipped screens'
     // windows here; the daemon routes windowOpened by the screen's current
     // mode, so the receiving engine adopts them (order-seeded from the
-    // capture the daemon took during the flip). Cross-union transitions
-    // (snapping↔scrolling) still announce exactly once regardless of which
-    // signal lands first: whichever handler sees the screen inside
-    // m_managedScreens does the work, the other filters it out
-    // (notifyWindowsAddedBatch drops screens outside the union, and
-    // slotScreensChanged only processes union membership changes).
+    // capture the daemon took during the flip). A cross-union transition
+    // announces once: snapping→scrolling is filtered here (the screen is not
+    // yet in m_managedScreens) and handled by slotScreensChanged, and
+    // scrolling→snapping on a desktop switch is filtered by the stale-set test
+    // below.
     QSet<QString> flipped = (newSet - oldSet) + (oldSet - newSet);
     flipped &= m_managedScreens;
+    // A flip on a screen whose output has switched desktops since the last
+    // managed set is that switch's, not an engine change: the daemon sends the
+    // scrolling set first, so m_managedScreens still describes the desktop
+    // left. Re-announcing there handed a snapping desktop's windows to tiling
+    // on a switch from a scrolling one; the switch's own announce handles the
+    // screen, and the engines already hold the desktop entered (F1004).
+    flipped.removeIf([this](const QString& screenId) {
+        const QString physical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+        const auto announced = m_managedSetDesktops.constFind(physical);
+        const auto reported = m_effect->lastReportedScreenDesktops().constFind(physical);
+        return announced != m_managedSetDesktops.constEnd()
+            && reported != m_effect->lastReportedScreenDesktops().constEnd() && *announced != *reported;
+    });
     const bool announcing = announceFlipped && !flipped.isEmpty();
 
     // The re-announce's per-window screen ids are resolved HERE, under the

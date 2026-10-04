@@ -244,8 +244,7 @@ public:
     {
         return m_unfloatInFlight.contains(windowId);
     }
-    /// Drop a destroyed window's desktop-move stash (only destruction may).
-    void clearDesktopMoveStash(const QString& windowId)
+    void clearDesktopMoveStash(const QString& windowId) ///< a destroyed window's stash (only destruction may)
     {
         m_desktopMoveStash.forget(windowId);
     }
@@ -1803,6 +1802,7 @@ private:
     };
     QHash<QString, ExpectedOutputMove> m_expectedOutputMove;
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
+    QHash<QString, int> m_managedSetDesktops; ///< physical screen → desktop the last accepted managed set described
     DesktopMoveStash m_desktopMoveStash; ///< free geometry of windows that left a desktop (desktopmovestash.h)
     /// Re-entrancy guard for handleWindowOutputChanged, PER WINDOW.
     ///
