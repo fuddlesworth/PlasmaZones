@@ -7,6 +7,7 @@
 // removed-screens pass) and it accounted for most of that file.
 
 #include "tilinghandler.h"
+#include "handlers/screenchangehandler.h"
 #include "pretiledecisions.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
@@ -978,6 +979,16 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     // can re-add windows moved here while the user was away. The added-keyed
     // re-tracking loops are vacuous no-ops in that case (Pass 1 demoted
     // nothing).
+    // A window KWin returned to an output it was parked for waits for the
+    // settle, which re-seats it there or announces it (F730).
+    ScreenChangeHandler* const settle = m_effect->m_screenChangeHandler.get();
+    const auto heldForSettle = [settle](KWin::EffectWindow* w) {
+        const bool held = settle->holdsUnclassifiedRecord(w);
+        if (held) {
+            settle->noteSkippedAnnounce(w);
+        }
+        return held;
+    };
     if (!added.isEmpty() || isDesktopSwitch) {
         if (isDesktopSwitch) {
             // Desktop/activity return: windows are already tiled on this desktop.
@@ -985,13 +996,10 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // re-notified by later notifyWindowAdded calls (e.g., window moves).
             qCInfo(lcEffect) << "slotScreensChanged: desktop return, added screens:" << added
                              << "managed screens:" << m_managedScreens;
-            // One pass over the windows with a set lookup rather than a pass
-            // per added screen. The screen-major form re-resolved
-            // getWindowScreenId and getWindowId for every (screen, window)
-            // pair, and this whole block runs three such nested loops on the
-            // desktop-switch path — at fifty screens by five hundred windows
-            // that is 25k resolves apiece. The screen id is needed inside, so
-            // it is resolved once and reused.
+            // One pass over the windows with a set lookup, not a pass per added
+            // screen: the screen-major form re-resolved both ids for every
+            // (screen, window) pair, 25k resolves at fifty screens by five
+            // hundred windows.
             for (KWin::EffectWindow* w : windows) {
                 if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
                     || !w->isOnCurrentActivity()) {
@@ -1011,7 +1019,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     m_notifiedWindows.insert(windowId);
                     m_notifiedWindowScreens[windowId] = screenId;
                     settleParkedFullscreenHold(w, windowId, screenId);
-                } else {
+                } else if (!heldForSettle(w)) {
                     // Opened while this desktop was away: free only if KWin spawned it meanwhile (spawn
                     // marker; else the daemon's spawn capture stands in), and a re-placement for focus.
                     const bool fresh = m_pendingFreshWindows.contains(windowId);
@@ -1023,19 +1031,11 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // must remain in the set for when their screen returns.
             //
             // ITS NARROW PURPOSE IS MINIMIZED WINDOWS. The catch-scan below
-            // runs over every managed screen under these same filters and
-            // removes the same entries, so for a non-minimized window this
-            // loop is redundant with it. What the catch-scan additionally
-            // skips is `w->isMinimized()`, deliberately — it re-ADDS windows
-            // to tiling, and a minimized window must not be. This loop only
-            // clears bookkeeping, so it has no such reason to skip them, and
-            // dropping it would strand a minimized window's entry until its
-            // screen next left and returned.
-            //
-            // One pass over the windows with a set lookup, not a pass per
-            // added screen: `added` is already a QSet, and the screen-major
-            // form re-resolved getWindowScreenId and getWindowId for every
-            // (screen, window) pair.
+            // removes the same entries under the same filters, except that it
+            // skips minimized windows on purpose (it re-ADDS to tiling). This
+            // loop only clears bookkeeping, and without it a minimized
+            // window's entry would sit until its screen next left and
+            // returned. One pass with a set lookup, as above.
             for (KWin::EffectWindow* w : windows) {
                 if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
                     || !w->isOnCurrentActivity()) {
@@ -1087,7 +1087,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                         m_notifiedWindows.insert(windowId);
                         m_notifiedWindowScreens[windowId] = screenId;
                         settleParkedFullscreenHold(w, windowId, screenId);
-                    } else if (!m_notifiedWindows.contains(windowId)) {
+                    } else if (!m_notifiedWindows.contains(windowId) && !heldForSettle(w)) {
                         // Restore preserved pre-autotile geometry so float-restore
                         // returns to the original position, not the tiled frame from
                         // the source desktop. Shared with the windowDesktopsChanged
@@ -1145,7 +1145,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     continue;
                 }
                 const QString screenId = m_effect->getWindowScreenId(w);
-                if (!added.contains(screenId)) {
+                if (!added.contains(screenId) || heldForSettle(w)) {
                     continue;
                 }
                 const QString windowId = m_effect->getWindowId(w);
@@ -1184,8 +1184,8 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             for (KWin::EffectWindow* window : windows) {
                 // isDeleted mirrors the batch loop in wiring.cpp — a dying
                 // window's getWindowId would re-pollute the scrubbed caches.
-                if (window && !window->isDeleted()
-                    && !completedDeferredRoutes.contains(m_effect->getWindowId(window))) {
+                if (window && !window->isDeleted() && !completedDeferredRoutes.contains(m_effect->getWindowId(window))
+                    && !heldForSettle(window)) {
                     batchWindows.append(window);
                 }
             }

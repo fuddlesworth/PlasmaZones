@@ -31,6 +31,7 @@
 #include <climits>
 
 #include "tilinghandler/tilinghandler.h"
+#include "handlers/screenchangehandler.h"
 #include "compositor/compositorclock.h"
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
@@ -864,6 +865,8 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     m_idCaches.connectedPhysicalIdsValid = false;
     (void)connectedPhysicalIds();
     pruneToLiveScreens(m_lastScreenDesktop, m_idCaches.connectedPhysicalIds);
+    // The windows KWin returns to it wait for the settle's verdict.
+    m_screenChangeHandler->noteOutputAdded(output);
 
     // Construct a bound clock for this output. Idempotent: if the same output
     // arrives twice (rare, but possible on some compositors' hotplug
@@ -921,6 +924,9 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     const auto recordedId = m_idCaches.screenIdByOutput.constFind(output);
     const QString removedScreenId =
         recordedId != m_idCaches.screenIdByOutput.constEnd() ? *recordedId : outputScreenId(output);
+    // Record the windows on it as they are, under that id: KWin moves them
+    // and restores their older state right after this signal (F709).
+    m_screenChangeHandler->captureEvacuees(output, removedScreenId);
     // Unplug twin of the onScreenAdded invalidation: KWin fires
     // screenRemoved BEFORE the per-window outputChanged cascade, and the
     // connected-output gate in scrollTrackedScreenFor exists for exactly

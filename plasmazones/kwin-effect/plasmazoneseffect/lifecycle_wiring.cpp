@@ -897,6 +897,8 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             m_scrollOfferedColumn.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
+        // Its settle records and deferred crossing, keyed by the same pointer.
+        m_screenChangeHandler->forgetWindow(w);
         // The corpse's frozen strip displacement dies with it. This is THE
         // remover, not a backstop: the entry exists precisely so the corpse
         // paints displaced until this moment, and the pointer keying makes
@@ -1007,14 +1009,10 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // Discussion #527 follow-up: latch the screen-change flag the instant KWin
     // tells us an output appeared or disappeared. KWin fires screenAdded /
     // screenRemoved BEFORE the per-window outputChanged signals it emits for
-    // windows it reassigns as part of the layout change, so this beats the
-    // race where outputChanged would reach the autotile-delegation guard in
-    // window_connections.cpp without isScreenChangeInProgress() set — and
-    // when KWin shifts a remaining monitor's x-offset on the second add
-    // (DPMS wake of a dual-monitor setup), oldScreenStillConnected returns
-    // true and is no help on its own. slotScreenLayoutChanged sets the same
-    // pending flag + debounce that virtualScreenGeometryChanged eventually
-    // would, so the existing settle path is unchanged once it catches up.
+    // the windows it moves, so every one of those crossings is deferred to
+    // the settle (window_output_connections.cpp). Connected AFTER
+    // onScreenAdded / onScreenRemoved above on purpose: the evacuee records
+    // and the returned-output note are written before the baseline is taken.
     connect(KWin::effects, &KWin::EffectsHandler::screenAdded, m_screenChangeHandler.get(),
             &ScreenChangeHandler::slotScreenLayoutChanged);
     connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, m_screenChangeHandler.get(),

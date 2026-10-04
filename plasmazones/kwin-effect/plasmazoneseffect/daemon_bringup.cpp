@@ -832,6 +832,12 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("reapplyWindowGeometriesRequested"),
                                           m_screenChangeHandler.get(), SLOT(slotReapplyWindowGeometriesRequested()));
 
+    // A window's evacuee park dropped: its settle record goes with it
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("parkDropped"), m_screenChangeHandler.get(),
+                                          SLOT(slotParkDropped(QString, QString)));
+
     // Floating state sync
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                           PhosphorProtocol::Service::Interface::WindowTracking,

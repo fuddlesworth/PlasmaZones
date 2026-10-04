@@ -8,6 +8,7 @@
 #include "tilinghandler.h"
 
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "handlers/screenchangehandler.h"
 #include "handlers/snaphandler.h"
 #include "compositor/effectlogging.h"
 
@@ -70,6 +71,12 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // rejects an already-tracked window).
         if (m_managedScreens.contains(newScreenId) && m_effect->shouldHandleWindow(w) && !w->isMinimized()
             && w->isOnCurrentDesktop() && w->isOnCurrentActivity()) {
+            // KWin returned it to an output it was parked for: the settle
+            // re-seats it there, or announces it if the daemon does not.
+            if (m_effect->m_screenChangeHandler->holdsUnclassifiedRecord(w)) {
+                m_effect->m_screenChangeHandler->noteSkippedAnnounce(w);
+                return;
+            }
             // knownFreeFloating only when the border state does NOT already
             // track the window as tiled: the handoffReceive that placed it has
             // its frame sitting in the destination zone rect, and passing true

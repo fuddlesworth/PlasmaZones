@@ -5,21 +5,21 @@
 // (KWin outputChanged), the virtual-screen crossing detector that runs off
 // frame geometry because outputChanged cannot see a crossing inside one
 // monitor, the tracked-screen stamp both diff against, and the flags-settle
-// eviction backstop. Called once per window from setupWindowConnections.
+// eviction backstop. Called once per window from setupWindowConnections. The
+// crossing bodies live in ScreenChangeHandler, which also replays a crossing
+// deferred during a screen change at its settle.
 
 #include "plasmazoneseffect.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
-#include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorProtocol/ServiceConstants.h>
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <window.h>
 
 #include <QPointer>
 
 #include "tilinghandler/tilinghandler.h"
-#include "handlers/dragtracker.h"
 #include "handlers/screenchangehandler.h"
 
 namespace PlasmaZones {
@@ -99,7 +99,12 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             // purpose: a move the daemon drives is still a move of the focused
             // window, and the screen answers from the engine for a strip tile,
             // so a parked column crossing outputs does not flip the record.
-            reportActiveWindowScreen(safeW, newScreenId);
+            // Not onto KWin's placeholder output, which the daemon has no
+            // screen for (F729).
+            if (const KWin::Window* const win = safeW->window();
+                !win || !win->moveResizeOutput() || !win->moveResizeOutput()->isPlaceholder()) {
+                reportActiveWindowScreen(safeW, newScreenId);
+            }
             // Daemon-driven geometry applies must not be mistaken for user
             // moves (symmetric with the frameGeometryChanged VS-crossing
             // handler below). This matters for the scrolling engine: parked
@@ -113,90 +118,20 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             }
             const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
             m_trackedScreenPerWindow[safeW] = newScreenId;
-            // A cross-screen move changes the Mode/screenId inputs of the
-            // window's cached rule verdict (tiling vs scrolling screens
-            // especially); nothing else invalidates it when the window stays
-            // tiled through the move. The invalidation itself is issued
-            // below, once the involuntary-move and mid-drag gates have been
-            // applied — an unconditional one here bypassed both (and ran the
-            // per-window decoration rebuild mid-drag, which the drag deferral
-            // exists to avoid).
-
-            // Detect involuntary moves up front: when a monitor drops out
-            // (DPMS standby on Wayland, hotplug-unplug) KWin reassigns the
-            // windows that were on it to a remaining output and fires
-            // outputChanged for each — even though the user did nothing. Both
-            // the autotile and snapping paths below must skip these, because
-            // routing them through the normal cross-screen logic would either
-            // tile a window from the disabled monitor into the active
-            // autotile zone (discussion #527) or fire a spurious unsnap.
-            // Recovery is owned by the daemon's virtualScreensReconfigured /
-            // ScreenChangeHandler debounce, which resettles assignments once
-            // the screen change has stopped chattering.
-            bool oldScreenStillConnected = false;
-            for (const auto* output : KWin::effects->screens()) {
-                if (outputScreenId(output) == oldScreenId) {
-                    oldScreenStillConnected = true;
-                    break;
-                }
+            // During a screen change the crossing waits for the settle. KWin
+            // moves every window off an output that goes away, and back onto
+            // one that returns, and neither is the user's move: the settle
+            // reports what KWin moved to the daemon, which floats an evacuee
+            // where it landed or re-seats a returned one in its parked place,
+            // and replays only the crossings it calls user moves. Nothing is
+            // re-homed and nothing is skipped (the old involuntary-move skip
+            // lost a genuine move made during the debounce, and misread every
+            // move off a split monitor as involuntary).
+            if (m_screenChangeHandler->isScreenChangeInProgress()) {
+                m_screenChangeHandler->deferCrossing(safeW, oldScreenId);
+                return;
             }
-            const bool involuntaryMove = !oldScreenId.isEmpty()
-                && (!oldScreenStillConnected || m_screenChangeHandler->isScreenChangeInProgress());
-
-            // Delegate autotile handling (autotile→autotile, autotile→snapping, etc.)
-            // This must run even during drag so the autotile engine removes the
-            // window from the old screen's tiling state immediately. The
-            // involuntary-move guard is the symmetric partner of the snapping
-            // guard further down — before #527, only the snapping path was
-            // protected and KWin's orphan-reassignment got mistaken for the
-            // window genuinely entering autotile.
-            if (!involuntaryMove) {
-                m_tilingHandler->handleWindowOutputChanged(safeW);
-            }
-
-            // A genuine screen change stales this window's cached rule verdict.
-            // The verdict cache is keyed on (windowId, rule-set revision) and
-            // neither moves here, while ScreenId, ScreenOrientation and (since the
-            // ActiveLayout wire) the screen's active layout are all per-screen
-            // match inputs — so without this the window keeps matching against the
-            // monitor it came FROM, indefinitely, because two monitors sitting on
-            // unchanged layouts produce no broadcast to correct it.
-            //
-            // Gated exactly like the daemon notify below: not for KWin's
-            // orphan-reassignment when a monitor drops out, and not mid-drag,
-            // where the drag system owns the transitions and the deferred flush's
-            // decoration rebuild has not been established as safe.
-            //
-            // Mid-drag the invalidation is deferred, not dropped: the id goes
-            // into m_dragSuppressedRuleInvalidations and callEndDrag drains it
-            // once the daemon's outcome has been applied. Nothing at drag end
-            // could rediscover the crossing on its own, because the stamp above
-            // already made the tracked screen equal to the live one.
-            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId && !involuntaryMove) {
-                if (m_dragTracker->isDragging()) {
-                    m_dragSuppressedRuleInvalidations.insert(getWindowId(safeW));
-                } else {
-                    invalidateRuleCacheForStateChange(getWindowId(safeW));
-                }
-            }
-
-            // For snapping→snapping cross-screen moves: notify the daemon which
-            // decides whether to unsnap based on its own state. If the daemon just
-            // assigned this window to the new screen (restore/resnap/snap assist),
-            // the stored screen matches and no unsnap occurs. If the user moved
-            // the window via "Move to Screen" shortcut, the stored screen differs
-            // and the daemon unsnaps.
-            // Skip during drag: the drag system owns snap state transitions
-            // (float, unsnap, size restore, pre-tile cleanup) and handles them
-            // in dragStopped() with richer context.
-            // Skip involuntary moves: see the involuntaryMove computation above.
-            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId && !m_tilingHandler->isManagedScreen(oldScreenId)
-                && !m_tilingHandler->isManagedScreen(newScreenId) && !m_dragTracker->isDragging() && !involuntaryMove) {
-                const QString windowId = getWindowId(safeW);
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
-                    {windowId, newScreenId}, QStringLiteral("cross-screen move"));
-            }
+            m_screenChangeHandler->applyOutputCrossing(safeW, oldScreenId, newScreenId);
         });
         // Virtual screen boundary detection: KWin's outputChanged only fires when
         // the physical monitor changes. Moving a window between virtual screens on the
@@ -235,53 +170,15 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             // change, and outputChanged never fires for one.
             reportActiveWindowScreen(safeW, newScreenId);
 
-            // A virtual-screen crossing stales this window's cached rule verdict
-            // exactly like the physical cross-screen move above: ScreenId,
-            // ScreenOrientation and the screen's active layout are all per-screen
-            // match inputs, and the verdict cache is keyed on (windowId, rule-set
-            // revision), neither of which moves here. Same gating as the sibling —
-            // not mid-drag, where the drag system owns the transitions — and it
-            // runs ahead of the autotile / daemon delegation below, which return
-            // early for tracked and autotile-screen windows whose verdicts are
-            // stale all the same. The sibling's non-empty / differs terms are
-            // already guaranteed here by isVirtualScreenCrossing above. Mid-drag
-            // the id is parked in m_dragSuppressedRuleInvalidations for
-            // callEndDrag to drain, exactly as the sibling does, because the
-            // stamp above leaves nothing at drag end to detect the crossing from.
-            if (m_dragTracker->isDragging()) {
-                m_dragSuppressedRuleInvalidations.insert(getWindowId(safeW));
-            } else {
-                invalidateRuleCacheForStateChange(getWindowId(safeW));
-            }
-
-            // Skip during drag — the drag system owns state transitions.
-            // Autotile drag handles VS transfers via the drag-policy-changed path.
-            // Snapping drag handles cross-screen unsnap on drag-stop via the daemon.
-            if (m_dragTracker->isDragging()) {
+            // Inside a screen change the virtual-screen definitions may still
+            // describe the old layout (they refresh on the daemon's replies),
+            // so the crossing is deferred and resolved against the new ones
+            // at the settle.
+            if (m_screenChangeHandler->isScreenChangeInProgress()) {
+                m_screenChangeHandler->deferCrossing(safeW, oldScreenId);
                 return;
             }
-
-            // Skip VS detection for autotile-tracked windows — the autotile
-            // handler's slotWindowFrameGeometryChanged owns VS crossing for
-            // windows it already tracks (m_notifiedWindows). Only untracked
-            // windows (snapping-mode entering an autotile VS) need delegation.
-            const QString windowId = getWindowId(safeW);
-            if (m_tilingHandler->isTrackedWindow(windowId)) {
-                return;
-            }
-
-            // Delegate autotile handling for untracked cross-VS transitions
-            // (snapping→autotile). The autotile handler's own detection only
-            // covers windows it already tracks.
-            m_tilingHandler->handleWindowOutputChanged(safeW);
-
-            // For snapping→snapping cross-VS moves: notify the daemon
-            if (!m_tilingHandler->isManagedScreen(oldScreenId) && !m_tilingHandler->isManagedScreen(newScreenId)
-                && !m_screenChangeHandler->isScreenChangeInProgress()) {
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
-                    {windowId, newScreenId}, QStringLiteral("virtual screen crossing"));
-            }
+            m_screenChangeHandler->applyVirtualScreenCrossing(safeW, oldScreenId, newScreenId);
         });
 
         // Clean up the tracked screen entry when the window is destroyed. Capture the RAW

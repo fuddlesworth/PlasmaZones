@@ -171,8 +171,18 @@ public:
     /// windowId or swept across all screens. The saved stacking orders used to
     /// be pruned only for a caller-supplied screen, which left the id behind on
     /// every other screen's order — including the DESTINATION's on a
-    /// cross-output transfer, where the caller passes the source.
-    void cleanupAutotileTracking(const QString& windowId);
+    /// cross-output transfer, where the caller passes the source. An evacuee
+    /// passes ClaimScope::Evacuation: its claims are scrubbed, not released.
+    void cleanupAutotileTracking(const QString& windowId,
+                                 ScrollDecisions::ClaimScope scope = ScrollDecisions::ClaimScope::UntrackFunnel);
+    /// The settle's evacuee and returned-window verdicts (evacuees.cpp): what
+    /// the effect held for @p w is let go of without handing KWin's state
+    /// back, and @p w is tracked on @p screenId when it is managed, with no
+    /// announce (the daemon already placed it).
+    void adoptEvacuee(KWin::EffectWindow* w, const QString& screenId);
+    void readoptEvacuee(KWin::EffectWindow* w, const QString& screenId);
+    /// The windows tiled in @p screenId's strip, wherever their frames sit.
+    QStringList stripMembersOn(const QString& screenId) const;
     /// Drop @p windowId from the minimize-float set and cancel EITHER
     /// deferred edge — the minimize debounce and the unminimize commit —
     /// mirroring SnapHandler::removeMinimizeFloated, plus the qualifier-marks
@@ -281,26 +291,21 @@ public:
     /// the successor cannot have pushed yet, so nothing it sends is ever thrown
     /// away.
     ///
-    /// The serviceUnregistered teardown cannot be the sole drain site, and not
-    /// because it might be skipped: the daemon registers its name with the
-    /// default flags (no replacement, no queueing), so an owner change always
-    /// goes through the name being free and the teardown always fires on a
-    /// restart. The teardown drains a deliberately SMALLER set — the maps this
-    /// function clears have to keep answering for the whole daemon-down
-    /// interval (see clearPerSessionDaemonState). Everything the two have in
-    /// common is cleared idempotently here, so bring-up is authoritative on its
-    /// own rather than depending on what the teardown left behind.
+    /// The serviceUnregistered teardown always fires on a restart (the name is
+    /// registered with no replacement or queueing), but it drains a
+    /// deliberately SMALLER set: the maps this function clears keep answering
+    /// for the daemon-down interval (see clearPerSessionDaemonState). What the
+    /// two share is cleared idempotently here, so bring-up is authoritative on
+    /// its own.
     void drainDeadSessionState();
 
     /// Drop every map whose contents belong to ONE daemon session.
     ///
     /// Called by drainDeadSessionState, which owns the timing argument above.
-    /// The teardown in lifecycle_wiring_daemon.cpp cannot be the sole drain
-    /// site. That teardown drains a DIFFERENT, deliberately smaller
-    /// set (the rule-visible inputs plus the compositor restores), because the
-    /// maps here must keep answering for the daemon-down interval — a window's
-    /// notified screen, its minimize-float ownership and its deferred routes all
-    /// still describe live windows while the daemon is merely absent.
+    /// The teardown in lifecycle_wiring_daemon.cpp drains a deliberately
+    /// smaller set (the rule-visible inputs plus the compositor restores),
+    /// because these maps describe live windows while the daemon is merely
+    /// absent: a window's notified screen, minimize-float ownership, routes.
     ///
     /// Paired invariant, and the reason this is one function rather than an
     /// inline list: anything added to a per-session map must be dropped here.
@@ -316,10 +321,8 @@ public:
     /// expire on read via MaximizeToggleFlightMs — except one carrying a recorded press, whose ENTRY is kept
     /// (stamped armedAtMs = 0) so the press itself survives: only the in-flight suppression lapses, and the
     /// reply still takes the entry and honours the click rather than throwing it away on a slow round trip.
-    /// That take, or cleanupAutotileTracking, is what collects it. And m_windowedFsClearInFlight is
-    /// reply-gated — a toggle or clear
-    /// dispatched to the dead daemon gets a D-Bus error for the vanished peer and its error arm drops the marker,
-    /// so a drain here would only race the same cleanup.
+    /// That take, or cleanupAutotileTracking, is what collects it. And m_windowedFsClearInFlight is reply-gated:
+    /// a toggle or clear dispatched to the dead daemon gets a D-Bus error and its error arm drops the marker.
     void clearPerSessionDaemonState();
 
     /**
@@ -962,24 +965,18 @@ public:
     /// PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap: every rule
     /// whose match references Field::ActiveLayout comes back OUT of the five
     /// effect-bound sets (the three exclusion slices, the shader manager's
-    /// effect-rule set and its effect-verdict set). Leaving them in was the
-    /// defect — the rule sets
-    /// survive daemon loss on purpose, but they were filled while the map was
-    /// seeded, and an unstamped ActiveLayout reads as an ENGAGED empty string,
-    /// so a negated leaf over-matches EVERY window for the whole daemon-down
-    /// interval. Re-slicing restores the both-polarities-inert shape a cold
-    /// start has.
+    /// effect-rule and effect-verdict sets). The sets survive daemon loss on
+    /// purpose, but an unstamped ActiveLayout reads as an ENGAGED empty string,
+    /// so a negated leaf over-matched EVERY window while the daemon was down.
+    /// Re-slicing restores the both-polarities-inert shape of a cold start.
     ///
     /// Neither caller clears the effect's m_activeLayoutRulesWithheld marker
     /// that gates the seed edge, and neither should. The re-slice SETS it
-    /// whenever it removed a rule, so on this path the marker's correctness is
-    /// by construction: the same call that withholds the rules records that it
-    /// did, and the next seeding edge re-drives loadRuleAnimationsFromDbus to
-    /// restore them from the live store. A marker left true from an earlier
-    /// admission pass is still true and must not be cleared here — that would
-    /// strand the withheld rules disarmed for the session whenever the
-    /// following getAllRules errors or times out. A stale-TRUE marker costs
-    /// one redundant re-drive, the safe direction.
+    /// whenever it removed a rule, so the call that withholds the rules records
+    /// that it did, and the next seeding edge re-drives loadRuleAnimationsFromDbus
+    /// to restore them. Clearing a marker left true by an earlier pass would
+    /// strand the withheld rules for the session whenever the following
+    /// getAllRules fails. A stale-TRUE marker costs one redundant re-drive.
     ///
     /// Out-of-line (state.cpp) because the re-slice reaches into effect
     /// internals that are incomplete at this point in the header.
@@ -1186,16 +1183,13 @@ private:
     /// | `m_scrollTabPayloadByScreen` | the pills for THIS strip's columns | no | keep anyway, see below |
     /// | `m_scrollTabScreensByWindow` | reverse index of the above | no | keep anyway, see below |
     ///
-    /// The tab-indicator pair is the one place the rule's answer is overridden
-    /// on purpose, so it is in the table rather than absent from it. Both fail
-    /// the test — they describe the outgoing strip's columns — but retiring
-    /// them would be a REGRESSION, not a fix. The daemon's tab emit is
+    /// The tab-indicator pair overrides the rule on purpose. Both fail the
+    /// test, but retiring them would be a REGRESSION: the daemon's tab emit is
     /// change-gated per screen id with no context term, so a switch onto a
-    /// strip whose pills happen to serialise identically re-pushes nothing,
-    /// and a consumer that had cleared them would show an empty band instead
-    /// of a stale one. Retiring them only becomes correct once the engine's
+    /// strip whose pills serialise identically re-pushes nothing and a cleared
+    /// consumer would show an empty band. Retire them only once the engine's
     /// payload gate is keyed by context, or drops the screen's entry when the
-    /// epoch changes; do that first, then move these two rows.
+    /// epoch changes.
     ///
     /// The rule is DIRECTIONAL and both directions fail, which is why it is
     /// stated rather than left implicit in the loop body:
@@ -1217,10 +1211,8 @@ private:
     /// `m_scrollOfferedColumn` escapes only because what it stores is the
     /// client's settled answer, not a strip coordinate.
     ///
-    /// NOT covered by a test: the effect has no unit-test harness in this tree,
-    /// so nothing turns red if this set is later "tidied" into sweeping all
-    /// four. That is precisely why the rule is written here rather than
-    /// inferred from which maps the loop below happens to skip.
+    /// NOT covered by a test (the effect has no unit-test harness), so the rule
+    /// is written here rather than left to the maps the loop happens to skip.
     void retireStripScopedState(const QString& screenId);
 
     /// Bracketed maximize-mode write, the maximize twin of
@@ -1411,6 +1403,12 @@ private:
      */
     void saveAndRecordPreTileGeometry(const QString& windowId, const QString& screenId, KWin::EffectWindow* w,
                                       const QRectF& frameIn, bool knownFreeFloating = false);
+    /// The effect-side half of an announce: track @p w on @p screenId and
+    /// file its pre-tile geometry. Returns whether a spawn marker was consumed.
+    bool trackWithoutAnnounce(KWin::EffectWindow* w, const QString& screenId, bool knownFreeFloating);
+    /// An evacuee's claims, dropped from the ledgers with KWin's state left as
+    /// it is (ClaimScope::Evacuation releases none of them).
+    void scrubClaimsForEvacuation(const QString& windowId, KWin::EffectWindow* w);
 
     /**
      * @brief All-bucket pre-autotile geometry lookup.

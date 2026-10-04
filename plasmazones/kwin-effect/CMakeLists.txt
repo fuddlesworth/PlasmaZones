@@ -178,11 +178,13 @@ set(plasmazones_effect_SRCS
     tilinghandler/wheelchord.cpp
     tilinghandler/scrolltabs.cpp
     tilinghandler/fullscreenhold.cpp
+    tilinghandler/evacuees.cpp
     handlers/snaphandler.cpp
     handlers/snaphandler.h
     handlers/navigationhandler.cpp
     handlers/navigationhandler.h
     handlers/screenchangehandler.cpp
+    handlers/screenchangehandler_settle.cpp
     handlers/screenchangehandler.h
     handlers/snapassisthandler.cpp
     handlers/snapassisthandler.h

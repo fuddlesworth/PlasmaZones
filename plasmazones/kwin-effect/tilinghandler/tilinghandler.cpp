@@ -486,21 +486,7 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
 
     // Only notify autotile daemon for windows on autotile screens
     if (m_managedScreens.contains(screenId)) {
-        // Consume the spawn-provenance marker UNCONDITIONALLY — a short-circuit
-        // (|| with remove second) would leave the entry behind whenever the
-        // caller already passed true, and a later RE-ADD that deliberately
-        // passes false would then flip to true off the stale entry.
-        const bool wasFresh = m_pendingFreshWindows.remove(windowId) > 0;
-        knownFreeFloating = knownFreeFloating || wasFresh;
-        m_notifiedWindows.insert(windowId);
-        m_notifiedWindowScreens[windowId] = screenId;
-        // Save pre-autotile geometry BEFORE the daemon tiles the window.
-        // Without this, a window launched directly into autotile has no saved
-        // geometry, and floating it would leave it at its tiled position.
-        // knownFreeFloating is passed EXPLICITLY by every caller (see the
-        // header): true lets the genuine open bypass the floating guard, false
-        // makes a re-add run it against a rect that is not free geometry.
-        saveAndRecordPreTileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
+        const bool wasFresh = trackWithoutAnnounce(w, screenId, knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
         // Seed the change-poll cache with the announced value so the batch
@@ -752,7 +738,7 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
     qCInfo(lcEffect) << "Notified autotile: windowsOpenedBatch with" << batchEntries.size() << "windows";
 }
 
-void TilingHandler::cleanupAutotileTracking(const QString& windowId)
+void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecisions::ClaimScope scope)
 {
     // Compositor-agnostic state cleanup (shared helper).
     TilingStateHelpers::TilingWindowState windowState{
@@ -830,8 +816,15 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     //
     // The window is resolved so the bit goes back while it is alive and the
     // release can re-seed the tracked-screen map after its suppressed move.
+    //
+    // An evacuee (Evacuation) releases nothing and is scrubbed bare instead:
+    // KWin keeps its maximize or fullscreen, so it can still return the window
+    // as it was when its output comes back.
     KWin::EffectWindow* const liveWindow = m_effect->findWindowByIdExact(windowId);
-    releaseAllClaims(windowId, liveWindow, ScrollDecisions::ClaimScope::UntrackFunnel);
+    releaseAllClaims(windowId, liveWindow, scope);
+    if (scope == ScrollDecisions::ClaimScope::Evacuation) {
+        scrubClaimsForEvacuation(windowId, liveWindow);
+    }
     // Every caller is a genuine release, and a release is a command: a pending
     // tile cascade entry (it applies to an untracked window by design) must not
     // move it back into the tile it left before the daemon's retile does.

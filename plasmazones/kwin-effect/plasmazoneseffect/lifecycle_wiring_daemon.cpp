@@ -21,6 +21,7 @@
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/screenchangehandler.h"
 #include "handlers/snaphandler.h"
 
 namespace PlasmaZones {
@@ -345,6 +346,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // authoritatively repopulated on daemon-ready.
         m_navigationHandler->clearAllZoneState();
         m_navigationHandler->clearAllFloatingState();
+        // The evacuee parks died with the daemon: their records go too (F767).
+        m_screenChangeHandler->dropEvacueeRecords();
         // The placement caches above feed placement-scoped rule match inputs. A
         // SetOpacity rule keyed on IsSnapped/IsFloating/Zone caches its verdict
         // per (windowId, ruleSet revision) — neither moves here — so drop the

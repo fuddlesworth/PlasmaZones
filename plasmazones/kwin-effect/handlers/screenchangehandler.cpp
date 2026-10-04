@@ -72,6 +72,11 @@ void ScreenChangeHandler::stop()
     // turn — without this guard it would fire a stray D-Bus call between
     // stop() and this handler's destruction.
     m_stopped = true;
+    m_evacueeRecords.clear();
+    m_settleBaseline.clear();
+    m_deferredCrossings.clear();
+    m_skippedAnnounces.clear();
+    m_outputSetChanged = false;
 }
 
 void ScreenChangeHandler::slotScreenGeometryChanged()
@@ -95,6 +100,9 @@ void ScreenChangeHandler::slotScreenGeometryChanged()
         return;
     }
 
+    if (!m_pendingScreenChange) {
+        takeBaseline();
+    }
     m_pendingScreenChange = true;
     m_screenChangeDebounce.start(); // Restart timer (debounce)
 
@@ -131,6 +139,11 @@ void ScreenChangeHandler::applyScreenGeometryChange()
         m_effect->fetchAllVirtualScreenConfigs();
     }
 
+    // The settle runs whatever the size did: a 1080p monitor sleeping onto
+    // KWin's 1080p placeholder, or an unplug and replug inside one debounce,
+    // leaves the size unchanged and still moved windows (F749).
+    sendSettleReport();
+
     if (!sizeChanged) {
         // Even when physical size is unchanged, virtual screen split ratio changes
         // require window repositioning. Only proceed if VS configs exist; otherwise
@@ -159,12 +172,15 @@ void ScreenChangeHandler::slotScreenLayoutChanged()
     // virtualScreenGeometryChanged — which the geometry-debounce slot above
     // listens for — fires later in the same cascade, leaving a window where
     // outputChanged can be processed with no screen-change flag set. The
-    // guard in PlasmaZonesEffect's outputChanged lambda (window_lifecycle.cpp)
-    // depends on isScreenChangeInProgress() to recognize involuntary moves
-    // when oldScreenStillConnected is true (DPMS-wake layout shift onto a
-    // monitor that simply moved to a new x-offset rather than disappearing),
-    // so latch the flag at the earliest point KWin tells us anything is
-    // happening to the output set.
+    // output arm (window_output_connections.cpp) defers every crossing while
+    // isScreenChangeInProgress(), and the baseline the settle compares
+    // against has to be taken before KWin moves anything, so both start at
+    // the earliest point KWin tells us anything is happening to the output
+    // set.
+    if (!m_pendingScreenChange) {
+        takeBaseline();
+    }
+    m_outputSetChanged = true;
     m_pendingScreenChange = true;
     m_screenChangeDebounce.start();
 
@@ -221,6 +237,10 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
                     self->fetchAndApplyWindowGeometries();
                 }
             });
+        } else {
+            // A crossing deferred while this reapply was in flight has no
+            // settle of its own left to replay it.
+            self->replayDeferredCrossings();
         }
     });
 }
@@ -269,6 +289,15 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             if (m_effect->m_tilingHandler->isManagedScreen(winScreenId)) {
                 qCDebug(lcScreenChange) << "Skipping autotile-managed window" << entry.windowId << "on screen"
                                         << winScreenId;
+                continue;
+            }
+            // A zone on another output is never applied from here: a window
+            // KWin moved off its zone's output was classified at the settle
+            // (an evacuee floats where it is, a user move unsnaps it), and
+            // putting it back is the daemon's verdict, not a resnap (F616).
+            if (!entry.screenId.isEmpty()
+                && m_effect->outputForScreenId(entry.screenId) != m_effect->windowOutput(window)) {
+                qCDebug(lcScreenChange) << "Skipping" << entry.windowId << "whose zone is on" << entry.screenId;
                 continue;
             }
             QRect newGeometry = entry.toRect();
