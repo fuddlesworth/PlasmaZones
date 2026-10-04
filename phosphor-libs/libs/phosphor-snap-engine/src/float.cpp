@@ -625,8 +625,14 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     // adopted fresh from another engine (untracked here). This also moves the
     // per-window state (floating bit, live screen rewritten to the
     // destination) so screenForTrackedWindow reflects the new monitor (#724);
-    // the pre-float zone rides along UNCHANGED (behaviour A).
-    migrateWindowToScreen(ctx.windowId, ctx.toScreenId);
+    // the pre-float zone rides along UNCHANGED (behaviour A). The key carries
+    // the handoff's desktop: re-homing onto the screen's current one and then
+    // placing on ctx.toDesktop left the window a member of both.
+    PhosphorEngine::PlacementStateKey arrivalKey = currentKeyForScreen(ctx.toScreenId);
+    if (ctx.toDesktop > 0) {
+        arrivalKey.desktop = ctx.toDesktop;
+    }
+    migrateWindowToKey(ctx.windowId, arrivalKey);
 
     if (!ctx.sourceZoneIds.isEmpty()) {
         QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);

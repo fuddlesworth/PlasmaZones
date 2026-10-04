@@ -28,9 +28,9 @@
  *    zone regardless of the monitor it is currently on.
  * 7. unfloatRestoresWithinSamePhysicalMonitorAcrossIdForms: an id-form difference
  *    (virtual vs bare) of the same monitor still restores.
- * 8. migrateWindowToScreen_movesSnapStateAndReverseMap: the per-monitor migration
- *    mechanism moves a window's snap state and reverse-map entry to the destination
- *    monitor's store.
+ * 8. migrateWindowToScreen_leavesTheZoneBehind: the per-monitor migration moves
+ *    the reverse map and residence to the destination monitor's store, and the
+ *    zone stays behind, unassigned, with the source store's last-used naming it.
  *
  * Phase 4 (per-(screen,desktop,activity) last-used):
  * 9. lastUsedZoneIsPerScreen: last-used zone is tracked per store, so recording it
@@ -467,13 +467,15 @@ private Q_SLOTS:
     //
     // Acceptance test for SnapEngine::migrateWindowToScreen: a window snapped on
     // monitor A moves to monitor B's per-(screen,desktop,activity) store, the
-    // reverse map re-points at B, and its live screen (screenForTrackedWindow —
-    // the unfloat cross-monitor guard's input) reflects B. This is the mechanism
-    // that makes the #724 unfloat resolve deterministically.
+    // reverse map re-points at B, and its live screen (screenForTrackedWindow,
+    // the unfloat cross-monitor guard's input) reflects B. The zone names a zone
+    // of A's layout, so it is NOT carried: it is unassigned on A, and A's
+    // last-used naming it goes with it while B's own last-used is untouched.
     // =====================================================================
-    void testMigrateWindowToScreen_movesSnapStateAndReverseMap()
+    void testMigrateWindowToScreen_leavesTheZoneBehind()
     {
         const QString windowId = QStringLiteral("konsole|dddddddd-0000-0000-0000-000000000009");
+        const QString neighbour = QStringLiteral("dolphin|dddddddd-0000-0000-0000-000000000010");
         const QString monitorA = QStringLiteral("DP-1");
         const QString monitorB = QStringLiteral("HDMI-1");
 
@@ -481,25 +483,34 @@ private Q_SLOTS:
         SnapState* stateA = m_engine->stateForWindowOnScreen(windowId, monitorA);
         QVERIFY(stateA);
         stateA->assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
+        stateA->restoreLastUsedZone(m_zoneIds[0], monitorA, QString(), 1);
         QVERIFY(stateA->isWindowSnapped(windowId));
         QCOMPARE(stateA->screenId(), monitorA);
         QCOMPARE(m_engine->stateForWindow(windowId), stateA);
+        // B's store remembers the same zone id as ITS last-used (a shared layout).
+        SnapState* stateBSeed = m_engine->stateForWindowOnScreen(neighbour, monitorB);
+        QVERIFY(stateBSeed);
+        stateBSeed->restoreLastUsedZone(m_zoneIds[0], monitorB, QString(), 1);
 
         // Migrate to monitor B.
         QVERIFY(m_engine->migrateWindowToScreen(windowId, monitorB));
 
-        // The snap state moved to B's store and the reverse map now resolves to it.
+        // The reverse map now resolves to B's store, and the window resides there.
         SnapState* stateB = m_engine->stateForWindow(windowId);
         QVERIFY(stateB);
         QVERIFY(stateB != stateA);
+        QCOMPARE(stateB, stateBSeed);
         QCOMPARE(stateB->screenId(), monitorB);
-        QVERIFY(stateB->isWindowSnapped(windowId));
-        QCOMPARE(stateB->zonesForWindow(windowId), QStringList{m_zoneIds[0]});
+        QVERIFY(!stateB->isWindowSnapped(windowId));
+        QVERIFY(stateB->zonesForWindow(windowId).isEmpty());
         QCOMPARE(stateB->screenForWindow(windowId), monitorB);
+        QCOMPARE(stateB->desktopForWindow(windowId), 1);
+        QCOMPARE(stateB->lastUsedZoneId(), m_zoneIds[0]);
 
-        // The source store no longer holds the window.
+        // The source store no longer holds the window, nor a last-used naming its zone.
         QVERIFY(!stateA->isWindowSnapped(windowId));
         QVERIFY(stateA->screenForWindow(windowId).isEmpty());
+        QVERIFY(stateA->lastUsedZoneId().isEmpty());
 
         // screenForTrackedWindow (the guard input) reflects the destination monitor.
         QCOMPARE(m_engine->screenForTrackedWindow(windowId), monitorB);

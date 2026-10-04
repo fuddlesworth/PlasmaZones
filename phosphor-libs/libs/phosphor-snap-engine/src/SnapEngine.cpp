@@ -124,11 +124,13 @@ SnapState* SnapEngine::stateForWindowOnScreen(const QString& windowId, const QSt
         // the old one: every read answered with the zone it had left, and the
         // membership pass took the pair for a multi-desktop window and
         // re-applied the old zone, throwing the window back across monitors
-        // (discussion #1124).
-        if (const auto primary = m_states.windowKey(canonical); primary && primary->screenId != screenId) {
-            migrateWindowToScreen(windowId, screenId);
-        }
+        // (discussion #1124). The move lands in the pinned key itself: a
+        // migrate to the screen's CURRENT key followed by this membership
+        // left a pinned commit to another desktop a member of two.
         const PhosphorEngine::PlacementStateKey pinned{screenId, desktop, currentActivity()};
+        if (const auto primary = m_states.windowKey(canonical); primary && primary->screenId != screenId) {
+            migrateWindowToKey(windowId, pinned);
+        }
         owner = ensureStateForKey(pinned);
         if (owner) {
             m_states.addMembership(canonical, pinned);
@@ -194,6 +196,11 @@ bool SnapEngine::migrateWindowToScreen(const QString& windowId, const QString& n
     if (newScreenId.isEmpty()) {
         return false;
     }
+    return migrateWindowToKey(windowId, currentKeyForScreen(newScreenId));
+}
+
+bool SnapEngine::migrateWindowToKey(const QString& windowId, const PhosphorEngine::PlacementStateKey& newKey)
+{
     const QString canonical = canonicalWindowId(windowId);
     PhosphorEngine::PlacementStateKey oldKey;
     SnapState* oldState = m_states.forWindow(canonical, &oldKey);
@@ -202,7 +209,6 @@ bool SnapEngine::migrateWindowToScreen(const QString& windowId, const QString& n
         // from another engine via handoffReceive) — nothing to migrate.
         return false;
     }
-    const PhosphorEngine::PlacementStateKey newKey = currentKeyForScreen(newScreenId);
     if (newKey == oldKey || newKey.screenId.isEmpty()) {
         return false; // same (screen, desktop, activity) context — nothing to move
     }
@@ -210,8 +216,38 @@ bool SnapEngine::migrateWindowToScreen(const QString& windowId, const QString& n
     if (!newState || newState == oldState) {
         return false;
     }
-    oldState->migrateWindowTo(newState, canonical, newScreenId);
+    const bool crossScreen = oldKey.screenId != newKey.screenId;
+    const bool hadResidence = !oldState->screenForWindow(canonical).isEmpty();
+    const bool onAllDesktops = hadResidence && oldState->desktopForWindow(canonical) == 0;
+    if (crossScreen) {
+        // The zone stays behind, unassigned: it names a zone of the old
+        // screen's layout, and carrying it let a read on the new screen answer
+        // with a zone the window had left. The store's own last-used naming it
+        // clears inside the unassign; the global representative follows.
+        if (oldState->isWindowSnapped(canonical)) {
+            const QStringList removed = oldState->zonesForWindow(canonical);
+            oldState->unassignWindow(canonical);
+            if (m_globals && m_globals != oldState && removed.contains(m_globals->lastUsedZoneId())) {
+                m_globals->restoreLastUsedZone({}, {}, {}, 0);
+            }
+        }
+        if (m_windowTracker && oldKey.desktop >= 1) {
+            m_windowTracker->forgetDesktopZones(canonical, engineId(), oldKey.desktop);
+        }
+    }
+    oldState->migrateWindowTo(newState, canonical, newKey.screenId);
     m_states.migrate(canonical, oldKey, newKey);
+    // The window lives where the destination key says: its desktop is
+    // re-stamped to that key's (desktop 0, on all desktops, stays 0), and a
+    // residence the unassign above cleared is written back on the new screen.
+    if (hadResidence) {
+        newState->recordResidence(canonical, newKey.screenId, onAllDesktops ? 0 : newKey.desktop);
+    }
+    if (!crossScreen) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine)
+            << "SnapEngine::migrateWindowToKey:" << canonical << "re-keyed on" << newKey.screenId;
+        return true;
+    }
     // A window is on exactly one screen. The primary moved above; every OTHER
     // membership on the screen it left goes with it, or those stores keep
     // listing the window as a zone occupant there and the next membership
@@ -219,7 +255,8 @@ bool SnapEngine::migrateWindowToScreen(const QString& windowId, const QString& n
     // across monitors. Released rather than migrated: the destination screen
     // has its own desktops, and a zone of the old screen's layout means
     // nothing there. The persisted per-desktop map follows, since the store
-    // merges it and would otherwise re-seed those zones on restore.
+    // merges it and would otherwise re-seed those zones on restore. A
+    // same-screen re-key keeps them: they are the window's other desktops.
     for (const PhosphorEngine::PlacementStateKey& key : m_states.membershipsForWindow(canonical)) {
         if (key == newKey || key.screenId != oldKey.screenId) {
             continue;
@@ -233,7 +270,8 @@ bool SnapEngine::migrateWindowToScreen(const QString& windowId, const QString& n
         }
     }
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
-        << "SnapEngine::migrateWindowToScreen:" << canonical << "from" << oldKey.screenId << "to" << newKey.screenId;
+        << "SnapEngine::migrateWindowToScreen:" << canonical << "from" << oldKey.screenId << "to" << newKey.screenId
+        << "desktop" << newKey.desktop;
     return true;
 }
 

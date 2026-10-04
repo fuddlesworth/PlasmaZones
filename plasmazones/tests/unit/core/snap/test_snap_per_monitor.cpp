@@ -270,15 +270,15 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // Test 4 (Discussion #724): migration moves EVERY per-window field.
+    // Test 4 (Discussion #724): migration moves every per-window field but the zone.
     //
-    // SnapState::migrateWindowTo must carry the window's zone assignment, live
-    // screen (rewritten to the destination), desktop, floating bit, pre-float
-    // zone/screen and auto-snap flag onto the destination store and leave the
-    // source store holding none of them. The engine's migrateWindowToScreen is the
-    // driver; this asserts the underlying move's completeness.
+    // A cross-monitor migrate carries the live screen (rewritten to the
+    // destination), the floating bit, pre-float zone/screen and auto-snap flag
+    // onto the destination store, re-stamps the desktop to the destination
+    // key's, and leaves the zone behind: it names a zone of the source screen's
+    // layout. The source store holds none of them afterwards.
     // =====================================================================
-    void migrationMovesAllPerWindowFields()
+    void migrationMovesEveryFieldButTheZone()
     {
         const QString windowId = QStringLiteral("kate|55555555-0000-0000-0000-000000000005");
         const QString monitorA = QStringLiteral("DP-1");
@@ -306,10 +306,11 @@ private Q_SLOTS:
         QVERIFY(stateB != stateA);
         QCOMPARE(stateB->screenId(), monitorB);
 
-        // Every per-window field is now on B's store.
-        QCOMPARE(stateB->zonesForWindow(windowId), QStringList{m_zoneIds[1]});
+        // Every per-window field but the zone is now on B's store, on B's desktop.
+        QVERIFY(stateB->zonesForWindow(windowId).isEmpty());
         QCOMPARE(stateB->screenForWindow(windowId), monitorB); // live screen rewritten to destination
-        QCOMPARE(stateB->desktopForWindow(windowId), desktop);
+        QCOMPARE(stateB->desktopForWindow(windowId), m_engine->heldKeyForWindow(windowId)->desktop);
+        QVERIFY(stateB->desktopForWindow(windowId) != desktop);
         QVERIFY(stateB->isFloating(windowId));
         QVERIFY(stateB->isAutoSnapped(windowId));
         // Pre-float rides along UNCHANGED (names the source's home context).

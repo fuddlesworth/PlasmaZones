@@ -128,9 +128,12 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     // by screensMatch so a mere virtual/physical id-form difference on the same
     // monitor never churns the stores. windowScreenChanged handles the primary
     // drift path; this catches activations that arrive without a screen-change report.
+    // A SNAPPED window is left alone: a migrate leaves the zone behind, and an
+    // activation report racing a snap commit would silently unsnap it.
     if (PhosphorSnapEngine::SnapEngine* snap = snapEngine(); snap && !resolvedScreen.isEmpty()) {
         const QString owning = snap->screenForTrackedWindow(windowId);
-        if (!owning.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(owning, resolvedScreen)) {
+        if (!owning.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(owning, resolvedScreen)
+            && snap->zoneForWindow(windowId).isEmpty()) {
             snap->migrateWindowToScreen(windowId, resolvedScreen);
         }
         // Snap's layer-focus memories (the switch verb's "return to the

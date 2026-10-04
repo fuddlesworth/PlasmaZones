@@ -575,14 +575,15 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
 
     qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to"
                          << resolvedNewScreen << "- unsnapping";
-    // A window is on one screen: the migration re-homes the primary to the
-    // new screen and releases the old screen's OTHER desktop memberships
+    // A window is on one screen: the unassign clears its zone (and the
+    // relay subscribers see it go), then the migration re-homes the primary to
+    // the new screen and releases the old screen's OTHER desktop memberships
     // (their zones dragged the window back on the next switch, seen live on
-    // two outputs); the unassign then clears the zone that came along.
+    // two outputs).
+    m_service->unassignWindow(windowId);
     if (PhosphorSnapEngine::SnapEngine* snap = snapEngine()) {
         snap->migrateWindowToScreen(windowId, resolvedNewScreen);
     }
-    m_service->unassignWindow(windowId);
 
     // Emit unified state change for screen-change-triggered unsnap. Report the
     // resolved (effective) screen — the same value the decision + log above use —

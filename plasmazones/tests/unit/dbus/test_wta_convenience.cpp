@@ -91,6 +91,29 @@ private Q_SLOTS:
         QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-2"));
     }
 
+    // The activation backstop re-homes a window whose snap store names
+    // another monitor, but never a SNAPPED one: a migrate leaves the zone
+    // behind, so an activation report naming a stale output (one racing a
+    // snap commit) would silently unsnap the window.
+    void testActivationOnAnotherScreen_keepsASnappedWindowSnapped()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString windowId = QStringLiteral("firefox|activated-1");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(QStringLiteral("DP-2"), 1);
+        m_wta->service()->assignWindowToZone(windowId, m_zoneIds[0], m_screenId, 1);
+        QCOMPARE(m_snapEngine->zoneForWindow(windowId), m_zoneIds[0]);
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(windowId), m_screenId);
+
+        m_wta->windowActivated(windowId, QStringLiteral("DP-2"));
+
+        QCOMPARE(m_snapEngine->zoneForWindow(windowId), m_zoneIds[0]);
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(windowId), m_screenId);
+    }
+
     // A daemon-driven snap of a floating window records its live frame as the
     // float-back before the commit. The effect's own pre-snap capture arrives
     // after the commit, when the window is in a zone, so recordFreeGeometry
@@ -344,31 +367,7 @@ private Q_SLOTS:
     // and drag the window back across monitors (seen live on two outputs).
     void testScreenChanged_releasesEveryMembershipOnTheOldOutput()
     {
-        // Per-screen stores need the full resolver; the fixture wires the
-        // single-store convenience.
-        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
-        resolver.forWindow = [e = m_snapEngine](const QString& id) {
-            return e->stateForWindow(id);
-        };
-        resolver.forWindowOnScreen = [e = m_snapEngine](const QString& id, const QString& s, int desktop) {
-            return e->stateForWindowOnScreen(id, s, desktop);
-        };
-        resolver.forScreen = [e = m_snapEngine](const QString& s) {
-            return static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(s));
-        };
-        resolver.globals = [e = m_snapEngine]() {
-            return e->globalState();
-        };
-        resolver.allStates = [e = m_snapEngine]() {
-            return e->allSnapStates();
-        };
-        resolver.forgetWindow = [e = m_snapEngine](const QString& id) {
-            e->forgetWindow(id);
-        };
-        resolver.holdsWindow = [e = m_snapEngine](const QString& id, const PhosphorSnapEngine::SnapState* state) {
-            return e->holdsWindowInState(id, state);
-        };
-        m_wta->service()->setSnapStateResolver(resolver);
+        installPerScreenResolver();
 
         const QString w = QStringLiteral("app|two-desktops");
         const QString other = QStringLiteral("DP-2");
@@ -995,6 +994,36 @@ private Q_SLOTS:
                  "a LANDED unfloat must declassify the suspension float");
 
         m_wta->setWindowRegistry(nullptr);
+    }
+
+private:
+    /// Per-screen stores need the full resolver; the fixture wires the
+    /// single-store convenience. Undo with setSnapState(snapState()).
+    void installPerScreenResolver()
+    {
+        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
+        resolver.forWindow = [e = m_snapEngine](const QString& id) {
+            return e->stateForWindow(id);
+        };
+        resolver.forWindowOnScreen = [e = m_snapEngine](const QString& id, const QString& s, int desktop) {
+            return e->stateForWindowOnScreen(id, s, desktop);
+        };
+        resolver.forScreen = [e = m_snapEngine](const QString& s) {
+            return static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(s));
+        };
+        resolver.globals = [e = m_snapEngine]() {
+            return e->globalState();
+        };
+        resolver.allStates = [e = m_snapEngine]() {
+            return e->allSnapStates();
+        };
+        resolver.forgetWindow = [e = m_snapEngine](const QString& id) {
+            e->forgetWindow(id);
+        };
+        resolver.holdsWindow = [e = m_snapEngine](const QString& id, const PhosphorSnapEngine::SnapState* state) {
+            return e->holdsWindowInState(id, state);
+        };
+        m_wta->service()->setSnapStateResolver(resolver);
     }
 };
 

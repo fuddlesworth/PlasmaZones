@@ -706,6 +706,98 @@ private Q_SLOTS:
         QCOMPARE(resnapSpy.count(), 0);
     }
 
+    // A commit pinned to a desktop of the other screen that is NOT in view
+    // there lands in exactly that context. Re-homing onto the screen's
+    // current key first and then adding the pinned one left the window a
+    // member of both. The desktop it resides on is the pinned one, and the
+    // zone it left on the first screen is forgotten in the record too, or a
+    // restart would seed it back.
+    void aPinnedSnapOnAnotherScreenLandsInThatContextOnly()
+    {
+        snapOn(1, kWindow, m_zoneIds[2]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(persistedZonesByDesktop(kWindow).contains(1));
+        QVERIFY(persistedZonesByDesktop(kWindow).contains(2));
+
+        m_engine->setCurrentDesktopForScreen(kScreen2, 1);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[0], kScreen2, 2);
+
+        const auto held = m_engine->heldKeyForWindow(kWindow);
+        QVERIFY(held.has_value());
+        QCOMPARE(held->screenId, kScreen2);
+        QCOMPARE(held->desktop, 2);
+        if (SnapState* inView = static_cast<SnapState*>(m_engine->stateForScreen(kScreen2))) {
+            QVERIFY2(!m_engine->holdsWindowInState(kWindow, inView), "the desktop in view must not hold the window");
+        }
+        m_engine->setCurrentDesktopForScreen(kScreen2, 2);
+        SnapState* pinned = static_cast<SnapState*>(m_engine->stateForScreen(kScreen2));
+        QVERIFY(pinned);
+        QCOMPARE(pinned->zonesForWindow(kWindow), QStringList{m_zoneIds[0]});
+        QCOMPARE(pinned->desktopForWindow(kWindow), 2);
+        QVERIFY(zonesOn(1, kWindow).isEmpty());
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
+        QVERIFY2(persistedZonesByDesktop(kWindow).isEmpty(), "the zones left on the first screen must be forgotten");
+    }
+
+    // An all-activities window snapped on two desktops of one screen and moved
+    // by keyboard to the other screen: the per-desktop map is activity-blind,
+    // so a zone of the first screen surviving in it was adopted on the second
+    // screen at the next activity switch and the window bounced between zones.
+    void anActivitySwitchAfterAMoveAdoptsNothingFromTheScreenLeft()
+    {
+        snapOn(1, kWindow, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+
+        m_engine->setCurrentDesktopForScreen(kScreen2, 1);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[0], kScreen2, 1);
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        const QHash<int, QStringList> persisted = persistedZonesByDesktop(kWindow);
+        QVERIFY2(!persisted.value(1).contains(m_zoneIds[1]), "the first screen's desktop 1 zone must be forgotten");
+        QVERIFY2(!persisted.value(2).contains(m_zoneIds[1]), "the first screen's desktop 2 zone must be forgotten");
+
+        m_engine->setCurrentActivity(QStringLiteral("activity-y"));
+        m_engine->reconcileDesktopMemberships(kScreen2, spanOf(sticky()));
+        SnapState* there = static_cast<SnapState*>(m_engine->stateForScreen(kScreen2));
+        QVERIFY(!there || !there->zonesForWindow(kWindow).contains(m_zoneIds[1]));
+        m_engine->setCurrentActivity(QString());
+    }
+
+    // A re-key on the SAME screen (a refused cross-mode move recovered onto
+    // its source screen) keeps the window's other desktops there, zone and
+    // persisted entry alike: they are not on a screen it left.
+    void aSameScreenReKeyKeepsTheOtherDesktops()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        for (int desktop : {3, 4}) {
+            m_engine->setCurrentDesktopForScreen(kScreen, desktop);
+            m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+            snapOn(desktop, kWindow, m_zoneIds[desktop - 2]);
+        }
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QCOMPARE(persistedZonesByDesktop(kWindow).size(), 3);
+
+        // The primary moves onto desktop 2 with its zone; the other two stay.
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        QVERIFY(m_engine->migrateWindowToScreen(kWindow, kScreen));
+        QCOMPARE(zonesOn(2, kWindow).size(), 1);
+        int kept = 0;
+        for (int desktop : {1, 3, 4}) {
+            if (!zonesOn(desktop, kWindow).isEmpty()) {
+                ++kept;
+            }
+        }
+        QCOMPARE(kept, 2);
+        QCOMPARE(persistedZonesByDesktop(kWindow).size(), 3);
+    }
+
     // Discussion #1124, mixed modes: a window snapped on a screen that then
     // went to tiling keeps its zone there as memory for the return to
     // snapping. Moved to another output while tiled, it is held there by the

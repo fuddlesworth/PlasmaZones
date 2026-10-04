@@ -590,19 +590,14 @@ public:
     /// through the resolver seam.
     bool holdsWindowInState(const QString& windowId, const SnapState* state) const;
 
-    /// Re-home a tracked window's snap state onto @p newScreenId's per-key store
-    /// when it crosses monitors. Moves the window's per-window entries (zone, live
-    /// screen, desktop, floating bit, pre-float zone/screen, auto-snap flag) from
-    /// its current owning store to the store for @p newScreenId's current context
-    /// and updates the reverse map. The live screen value is rewritten to
-    /// @p newScreenId so screenForTrackedWindow reflects the destination (the #724
-    /// cross-monitor determinism requirement); the pre-float zone is preserved so an
-    /// unfloat back on the source monitor still restores the home zone. No-op when
-    /// the window is untracked here (e.g. adopted fresh from another engine) or the
-    /// resolved key is unchanged. Returns true when a migration happened. Driven by
-    /// the daemon's per-window screen handlers (windowScreenChanged / windowActivated)
-    /// and by handoffReceive; the analogue of AutotileEngine's windowFocused
-    /// cross-screen migration.
+    /// Re-home a tracked window onto the store for @p newScreenId's current
+    /// context. A zone never crosses screens: on a screen change the zone is
+    /// unassigned in the store it leaves (that store's last-used naming it goes
+    /// too), and the window's other memberships on the screen it left are
+    /// released with their persisted entries. The floating bit, auto-snap flag,
+    /// pre-float capture and residence move, the desktop re-stamped to the
+    /// destination key's. A same-screen move only re-keys. No-op when the window
+    /// is untracked here or the key is unchanged; true when it moved.
     bool migrateWindowToScreen(const QString& windowId, const QString& newScreenId);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1132,6 +1127,10 @@ private:
     /// a per-screen unassign has to sweep all stores in case another context pointed
     /// at the same zone. Call with the window's zones captured BEFORE the unassign.
     void syncGlobalLastUsedForRemovedZones(const QStringList& removedZones);
+
+    /// migrateWindowToScreen onto an explicit key: a pinned commit or a
+    /// cross-desktop handoff lands in exactly the context it names.
+    bool migrateWindowToKey(const QString& windowId, const PhosphorEngine::PlacementStateKey& newKey);
 
     /// The store whose last-used zone should drive a placement on @p screenId: the
     /// screen's own per-key store when it has a recorded last-used, else the global
