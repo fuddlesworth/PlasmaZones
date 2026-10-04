@@ -85,12 +85,12 @@ void SnapEngine::seedPersistedDesktopZones(const QString& windowId, const Phosph
     // is not; the membership pass would only release it again, and until it
     // ran the zone counted a phantom occupant. A known, narrower span drops
     // the persisted entry with the seed, so a later capture does not revive
-    // it. Sticky, or unknown, seeds everything the record names.
+    // it. Sticky, or unknown, seeds everything the record names. A window on
+    // one desktop is a span of one, not unknown (F263).
     std::optional<QSet<int>> presentOn;
     if (m_windowRegistry) {
-        if (const auto ctx = m_windowRegistry->desktopContext(windowId);
-            ctx && !ctx->sticky.value_or(false) && !ctx->virtualDesktops.isEmpty()) {
-            presentOn = QSet<int>(ctx->virtualDesktops.cbegin(), ctx->virtualDesktops.cend());
+        if (const auto ctx = m_windowRegistry->desktopContext(windowId)) {
+            presentOn = ctx->desktopSet();
         }
     }
     for (auto it = slot.zonesByDesktop.constBegin(); it != slot.zonesByDesktop.constEnd(); ++it) {
