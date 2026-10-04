@@ -755,10 +755,10 @@ public:
     /// resnapToNewLayout().
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
 
-    /// Re-emit the snap geometry for every currently-snapped (non-floating)
-    /// window so the compositor re-applies its snap border / hidden title bar
-    /// after a bridge reconnect. Does not recompute zone assignments. See
-    /// IPlacementEngine::reapplyManagedWindowAppearance().
+    /// Re-emit the zone geometry of every non-floating window snapped in view
+    /// (the shown desktop's store on a screen snap runs) so the compositor
+    /// re-applies its snap border / hidden title bar after a bridge reconnect.
+    /// See IPlacementEngine::reapplyManagedWindowAppearance().
     void reapplyManagedWindowAppearance() override;
 
     /// Unified placement model — report this window's current snap state

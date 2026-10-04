@@ -527,7 +527,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="reapplyWindowAppearance">
-            <annotation name="org.gtk.GDBus.DocString" value="Re-drive each placement engine's per-window decoration inputs (snap border / hidden title bar, autotile border) for every window it manages. The compositor effect calls this after (re)registering its bridge so a freshly-(re)started effect converges on the daemon's authoritative appearance without waiting for the next natural change. Window-rule decoration overrides flow separately via the Rules rulesChanged broadcast."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Re-drive each placement engine's per-window decoration inputs (snap border / hidden title bar, autotile border; the scrolling engine has none of its own) for every window it manages. Snap re-states the zone only of a window it holds on the desktop shown on a screen it runs, so no window is moved into a zone it is not in. The compositor effect calls this after (re)registering its bridge so a freshly-(re)started effect converges on the daemon's authoritative appearance without waiting for the next natural change. Window-rule decoration overrides flow separately via the Rules rulesChanged broadcast."/>
         </method>
         <signal name="snapAllWindowsRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when snap-all-windows shortcut is triggered. KWin effect should collect unsnapped windows and call calculateSnapAllWindows (on org.plasmazones.Snap)."/>

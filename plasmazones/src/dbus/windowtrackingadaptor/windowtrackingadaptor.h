@@ -545,8 +545,8 @@ public Q_SLOTS:
     /// by the KWin effect once the daemon is ready: on a daemon or effect
     /// restart the compositor drops its window-chrome state, so it must be
     /// re-applied from the daemon's authoritative placement state. Delegates to
-    /// the common IPlacementEngine::reapplyManagedWindowAppearance() on all
-    /// three engines (snap, autotile, scrolling) — does not move windows.
+    /// IPlacementEngine::reapplyManagedWindowAppearance() on all three engines;
+    /// snap re-states only the zones it places in view, so nothing moves.
     void reapplyWindowAppearance();
 
     /**

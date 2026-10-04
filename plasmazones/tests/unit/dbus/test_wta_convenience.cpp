@@ -210,8 +210,13 @@ private Q_SLOTS:
         // (snap border / hidden title bar) for already-snapped windows — the
         // effect cleared it on daemon loss. reapplyWindowAppearance fans out
         // through the common IPlacementEngine API; the snap engine re-emits a
-        // snap-commit applyGeometryRequested (non-empty zoneId) per snapped,
-        // non-floating window, without moving anything.
+        // snap-commit applyGeometryRequested (non-empty zoneId) per window
+        // snapped in view and not floating (gate rows: test_snap_per_monitor).
+        // Per-screen stores as in the daemon: the global holder is never in view.
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
         const QString snapped1 = QStringLiteral("app1|reapply-1");
         const QString snapped2 = QStringLiteral("app2|reapply-2");

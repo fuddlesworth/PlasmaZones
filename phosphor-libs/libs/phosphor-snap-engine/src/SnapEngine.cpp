@@ -926,20 +926,26 @@ void SnapEngine::reapplyManagedWindowAppearance()
     if (!m_windowTracker) {
         return;
     }
-    // Re-emit the current zone geometry for every snapped, non-floating window.
-    // The compositor routes a non-empty-zoneId applyGeometryRequested through
-    // its snap-commit path (markWindowSnapped), which re-hides the title bar and
-    // redraws the snap border. The window is already in its zone, so the
-    // compositor's applyWindowGeometry no-ops the move — this only re-drives the
-    // chrome the compositor dropped on bridge reconnect. No zone reassignment.
-    // Iterate every per-screen store so windows on all monitors are refreshed.
-    for (SnapState* state : m_states.states()) {
-        if (!state) {
+    // Re-drive the snap chrome the compositor dropped on bridge reconnect: a
+    // non-empty-zoneId applyGeometryRequested goes through its snap-commit
+    // path (markWindowSnapped), which re-hides the title bar and redraws the
+    // snap border, and a window already in its zone does not move. No zone
+    // reassignment. Only what snap places IN VIEW is re-stated: a store of a
+    // desktop or activity not shown, or of a screen a tiling engine runs,
+    // holds memory rather than a placement, and its zone geometry would pull
+    // the window into a zone it is not in (F104). So is a leftover in a store
+    // the window is not a member of.
+    const auto& allStates = m_states.states();
+    for (auto it = allStates.constBegin(); it != allStates.constEnd(); ++it) {
+        SnapState* state = it.value();
+        const PhosphorEngine::PlacementStateKey& key = it.key();
+        if (!state || key.screenId.isEmpty() || !(key == currentKeyForScreen(key.screenId))
+            || !isActiveOnScreen(key.screenId)) {
             continue;
         }
         const QStringList snapped = state->snappedWindows();
         for (const QString& windowId : snapped) {
-            if (state->isFloating(windowId)) {
+            if (state->isFloating(windowId) || !holdsWindowInState(windowId, state)) {
                 continue;
             }
             const QStringList zoneIds = state->zonesForWindow(windowId);

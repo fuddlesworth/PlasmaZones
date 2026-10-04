@@ -486,6 +486,59 @@ private Q_SLOTS:
         m_service->setSnapState(m_engine->snapState());
     }
 
+    // The chrome re-apply on an effect reload re-states only zones snap
+    // places in view: a zone held for a desktop not shown would pull its
+    // window into a zone it is not in (F104).
+    void reapplyAppearanceSkipsABackgroundDesktop()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        const QString hidden = QStringLiteral("app|on-desktop-1");
+        const QString shown = QStringLiteral("app|on-desktop-2");
+        m_layoutManager->assignLayout(screen, 1, QString(), m_testLayout);
+        m_layoutManager->assignLayout(screen, 2, QString(), m_testLayout);
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+        m_service->assignWindowToZone(hidden, m_zoneIds[0], screen, 1);
+        m_engine->setCurrentDesktopForScreen(screen, 2);
+        m_service->assignWindowToZone(shown, m_zoneIds[1], screen, 2);
+
+        QSignalSpy spy(m_engine, &SnapEngine::applyGeometryRequested);
+        m_engine->reapplyManagedWindowAppearance();
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), shown);
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // ...and neither is the zone snap remembers on a screen a tiling engine
+    // runs now.
+    void reapplyAppearanceSkipsATilingScreen()
+    {
+        installFullResolver();
+        const QString snapping = QStringLiteral("DP-1");
+        const QString tiling = QStringLiteral("HDMI-1");
+        const QString kept = QStringLiteral("app|on-snapping");
+        const QString frozen = QStringLiteral("app|on-tiling");
+        m_layoutManager->assignLayout(snapping, 1, QString(), m_testLayout);
+        m_layoutManager->assignLayout(tiling, 1, QString(), m_testLayout);
+        m_engine->setCurrentDesktopForScreen(snapping, 1);
+        m_engine->setCurrentDesktopForScreen(tiling, 1);
+        m_service->assignWindowToZone(kept, m_zoneIds[0], snapping, 1);
+        m_service->assignWindowToZone(frozen, m_zoneIds[0], tiling, 1);
+        m_engine->setLiveModeResolver([tiling](const QString& screenId) {
+            return screenId == tiling ? PhosphorZones::AssignmentEntry::Mode::Autotile
+                                      : PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
+
+        QSignalSpy spy(m_engine, &SnapEngine::applyGeometryRequested);
+        m_engine->reapplyManagedWindowAppearance();
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), kept);
+        m_engine->setLiveModeResolver({});
+        m_service->setSnapState(m_engine->snapState());
+    }
+
 private:
     /// Install the FULL per-key resolver so the WTS facade and the engine agree on
     /// the same per-(screen,desktop,activity) stores (the default single-store
