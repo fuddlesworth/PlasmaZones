@@ -169,7 +169,11 @@ PhosphorProtocol::WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeom
     PhosphorProtocol::WindowGeometryList result;
     result.reserve(geometries.size());
     for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
-        result.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value()));
+        // The screen the zone is on, so the effect re-applies only a window
+        // that is on that output (F616): a window KWin moved off it is the
+        // settle's to classify, not this pass's to pull back.
+        result.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value(),
+                                                                      m_service->screenForWindow(it.key())));
     }
     qCDebug(lcDbusWindow) << "Returning updated geometries for" << result.size() << "windows";
     return result;

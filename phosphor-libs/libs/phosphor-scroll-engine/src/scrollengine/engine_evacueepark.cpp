@@ -69,10 +69,10 @@ QStringList ScrollEngine::parkOutput(const QString& physicalScreenId)
             }
         }
     }
-    // A second park of the same output replaces the first.
-    if (parked.isEmpty()) {
-        m_evacueePark->byOutput.remove(physicalScreenId);
-    } else {
+    // A second park of the same output replaces the first, but only with
+    // something to park: once the prune has run there is nothing left, and the
+    // daemon's retire can run twice for one removal.
+    if (!parked.isEmpty()) {
         m_evacueePark->byOutput.insert(physicalScreenId, std::move(parked));
         qCInfo(lcScrollEngine) << "ScrollEngine::parkOutput:" << physicalScreenId << "parked" << windows.size()
                                << "window(s)";

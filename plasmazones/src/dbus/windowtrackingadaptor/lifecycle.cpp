@@ -656,6 +656,8 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
 
     // Release the open claim BEFORE the capture reads the store.
     m_service->placementStore().releaseOpenClaim(windowId);
+    // A closed window has nothing left to return to an output.
+    dropEvacueeParks(windowId);
 
     // Capture the window's final live placement before teardown drops the
     // frame-geometry shadow + per-engine state below: a floated WindowPlacement at

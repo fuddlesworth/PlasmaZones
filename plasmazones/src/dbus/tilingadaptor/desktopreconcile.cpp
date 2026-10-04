@@ -198,6 +198,12 @@ void TilingAdaptor::reconcileWindowMembership(const QString& windowId, const Pho
     for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_membershipEngines)) {
         applyMembershipResult(engine, /*lifecycleEngine=*/false, engine->reconcileWindowMemberships(windowId, spanOf));
     }
+    // A window parked for an output that went away keeps no context on a
+    // desktop or activity it left while away: KWin still returns it, and the
+    // re-seat must not put it back where it no longer is.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->dropParkedOutsideSpan(windowId, span);
+    }
 }
 
 void TilingAdaptor::reconcileDesktopMemberships(const QString& screenId)

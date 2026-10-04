@@ -374,6 +374,18 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
         return;
     }
+    // An evacuee that could not float in place when its output went away
+    // (minimized, or out of view) floats now instead of tiling (F643), and one
+    // announced on the output it is parked for re-enters its parked place.
+    if (m_windowTrackingAdaptor) {
+        if (m_windowTrackingAdaptor->takeEvacueeFloatPending(entry.windowId, entry.screenId)) {
+            m_windowTrackingAdaptor->setWindowFloatingForScreen(entry.windowId, entry.screenId, true);
+            return;
+        }
+        if (m_windowTrackingAdaptor->readoptOnArrival(entry.windowId, entry.screenId)) {
+            return;
+        }
+    }
     // Claim this instance's placement record before any selector reads one, the
     // same reason the snap channel does it at the head of resolveWindowRestore.
     // The two open channels and every later re-drive must agree on WHICH record

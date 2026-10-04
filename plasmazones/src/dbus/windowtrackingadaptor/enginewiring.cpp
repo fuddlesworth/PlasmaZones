@@ -591,6 +591,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                                        "open-behaviour rules will not be applied";
         }
     }
+
+    // The evacuee park's touch watches, rewired on the new engines.
+    wireEvacueeTouches();
 }
 
 void WindowTrackingAdaptor::setRuleStore(PhosphorRules::RuleStore* store)

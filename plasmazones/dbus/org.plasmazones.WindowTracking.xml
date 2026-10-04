@@ -201,6 +201,17 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). Matches the marshalling format in libs/phosphor-protocol/src/marshalling.cpp — the trailing screenId field was added alongside applyGeometriesBatch's (siiiis) signature so the effect can route the geometry to the correct screen on multi-monitor setups."/>
             </arg>
         </method>
+        <method name="reportOutputSettle">
+            <annotation name="org.gtk.GDBus.DocString" value="Report the windows a screen-change settle moved. Sent when a settle added or removed an output, or held back a crossing during the debounce. The daemon compares each window with the state it had before its output went away and answers with one verdict per window. A window KWin returned untouched is re-seated in its old zone, tile or column. An evacuee floats where KWin put it. A placement KWin moved is re-asserted, and anything else is the user's move."/>
+            <arg name="rows" type="a(ssssbiiiiiiiiiiibbbbssiiibiiii)" direction="in">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::OutputSettleRowList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, outputUuid, screenId, sourceScreenId, sourceConnected, x, y, width, height, baseX, baseY, baseWidth, baseHeight, moveResizeCount, maximizeMode, quickTileMode, fullscreen, kwinOnly, placeableNow, hasS0, s0Uuid, s0ScreenId, s0MoveResizeCount, s0MaximizeMode, s0QuickTileMode, s0Fullscreen, s0X, s0Y, s0Width, s0Height)."/>
+            </arg>
+            <arg name="verdicts" type="a(sis)" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::OutputSettleVerdictList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, verdict, screenId). verdict: 0 none, 1 re-seated, 2 evacuee floating, 3 re-asserted, 4 the user's move. screenId names the screen the verdict placed the window on."/>
+            </arg>
+        </method>
         <method name="getPendingRestoreGeometries">
             <annotation name="org.gtk.GDBus.DocString" value="Pre-computed zone geometries for pending restore entries. The effect caches these for instant window teleport on open (no D-Bus round-trip flash)."/>
             <arg name="geometriesJson" type="s" direction="out">
@@ -537,6 +548,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="state" type="(sssbsasb)">
                 <annotation name="org.gtk.GDBus.DocString" value="WindowStateEntry: (windowId, zoneId, screenId, isFloating, changeType, zoneIds, isSticky). changeType: snapped, unsnapped, floated, unfloated, screen_changed."/>
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PhosphorProtocol::WindowStateEntry"/>
+            </arg>
+        </signal>
+        <signal name="parkDropped">
+            <annotation name="org.gtk.GDBus.DocString" value="The daemon no longer keeps a window parked for the return of an output that went away: it was re-seated, touched, closed, or moved off every desktop the park held it on. The effect forgets its record of the window's state on that output."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="The window."/>
+            </arg>
+            <arg name="outputUuid" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="KWin's uuid of the output the window was parked for. Empty when the daemon never learned it, which means every record of the window."/>
             </arg>
         </signal>
         <method name="activateWindow">

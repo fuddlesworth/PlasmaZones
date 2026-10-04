@@ -1419,6 +1419,17 @@ target_link_libraries(test_wta_screen_changed PRIVATE Qt6::Test Qt6::Core Qt6::D
                       PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_screen_changed COMMAND test_wta_screen_changed)
 
+# The evacuee ledger: reportOutputSettle's verdicts for a window KWin moved off
+# an output that went away and back. Same shared fixture as the two above.
+add_executable(test_wta_evacuees dbus/test_wta_evacuees.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_evacuees PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_evacuees PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_evacuees COMMAND test_wta_evacuees)
+
 add_executable(test_wta_reactive_metadata dbus/test_wta_reactive_metadata.cpp)
 target_link_libraries(test_wta_reactive_metadata PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)

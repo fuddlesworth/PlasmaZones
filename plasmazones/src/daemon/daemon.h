@@ -274,20 +274,18 @@ private:
     /// from every showScrollingModeOsd arm that does NOT arm it, so a toggle
     /// followed by a reconcile cannot land a duplicate card a beat later.
     void stopScrollingOsdSettleTimer(const QString& screenId);
-    /// Destroy the per-screen strip-preview settle timers. An empty
-    /// @p screenId reaps all of them (stop()); a screen id reaps that
-    /// output's, including every virtual sub-screen of it (screenRemoved).
+    /// Destroy the per-screen strip-preview settle timers: every one when
+    /// @p screenId is empty, else that output's and its virtual screens'.
     void reapScrollingOsdSettleTimers(const QString& screenId = QString());
-    /// Reap the settle timers whose screen id satisfies @p pred.
-    ///
-    /// The screenId overload above is keyed on samePhysical, which is right
-    /// for an unplug and WRONG for a virtual-screen reconfigure: there the
-    /// physical output survives and only some vs:N ids go away, so a physical
-    /// match would reap the survivors too. Un-subdividing an output is
-    /// reachable with no unplug at all, and without this the timers of the
-    /// dropped sub-screens are never destroyed — one dead QTimer accumulates
-    /// per vs id ever seen, and an armed one can still fire for a screen that
-    /// no longer exists.
+    /// An output went away: park its windows, reap every engine's states on
+    /// it, release the parked windows' slots, drop its remembered orders.
+    void retireOutputPlacements(const QString& physicalScreenId);
+    /// Reap the settle timers whose screen id satisfies @p pred. The overload
+    /// above matches by physical output, right for an unplug and WRONG for a
+    /// virtual-screen reconfigure, where the output survives and only some
+    /// vs:N ids go away. Un-subdividing needs no unplug, and without this the
+    /// dropped sub-screens' timers accumulate, one per vs id ever seen, and an
+    /// armed one can still fire for a screen that no longer exists.
     void reapScrollingOsdSettleTimersWhere(const std::function<bool(const QString&)>& pred);
     void clearHighlight();
 

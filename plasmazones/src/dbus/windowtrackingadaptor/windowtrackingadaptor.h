@@ -82,6 +82,7 @@ class ScreenModeRouter;
 
 class PersistenceWorker;
 class ISettings;
+struct EvacueeLedger;
 
 class ZoneDetectionAdaptor;
 
@@ -332,6 +333,8 @@ public Q_SLOTS:
      * daemon put it there itself; a floating one forgets its pre-float home.
      */
     void windowScreenChanged(const QString& windowId, const QString& newScreenId);
+    /// The effect's screen-change settle report: one verdict per window (see WindowTracking.xml).
+    PhosphorProtocol::OutputSettleVerdictList reportOutputSettle(const PhosphorProtocol::OutputSettleRowList& rows);
     /**
      * Record whether a window is sticky (on all virtual desktops).
      * @param windowId Window ID from the effect
@@ -874,6 +877,22 @@ public:
     /// fields stop matching against a zone the window has left.
     void relayWindowReleasedFromContext(const QString& windowId, const QString& screenId);
 
+    // ── Evacuee park (evacuees.cpp; see EvacueeLedger) ──────────────────────
+    /// Park every engine's windows on @p physicalScreenId before the prunes,
+    /// and release their record's snap slot naming it. Returns the windows.
+    QStringList parkOutput(const QString& physicalScreenId);
+    /// The tiling engines' record slots of the windows parked for @p physicalScreenId, after their prunes.
+    void releaseParkedSlots(const QString& physicalScreenId);
+    /// The daemon's retire primitive, run when a settle reports an output gone before screenRemoved did.
+    void setOutputRetirer(std::function<void(const QString&)> retirer);
+    /// An evacuee announced on @p screenId that could not be adopted floating when its output
+    /// went away (taken once): the caller adopts it floating instead of tiling it.
+    bool takeEvacueeFloatPending(const QString& windowId, const QString& screenId);
+    /// A window announced on the output it is parked for: re-seated from the park. True when it was.
+    bool readoptOnArrival(const QString& windowId, const QString& screenId);
+    /// Drop the window's parked contexts on desktops and activities @p span no longer covers.
+    void dropParkedOutsideSpan(const QString& windowId, const PhosphorEngine::DesktopSpan& span);
+
     /// Re-capture EVERY open window's live placement into the unified store
     /// at save time — engine-agnostic, not floating-only: floated windows
     /// contribute their live geometry (no per-move hook fires for drags),
@@ -1059,64 +1078,38 @@ private:
     static QVariantMap tabColorsFromResolved(const PhosphorRules::ResolvedActions& resolved);
 
     /// tabColorRuleParams' PRIVATE memo, deliberately separate from the
-    /// RuleEvaluator's shared one.
+    /// RuleEvaluator's shared one. Seeding the shared memo would poison it (its
+    /// key excludes the admit filter, and this query is unstamped) and break
+    /// the stamper-first ordering invariant; reading it would miss forever for
+    /// every already-open window (all six seeders run on the OPEN path and a
+    /// rules save bumps the revision), and this runs once per tab per colour
+    /// query plus once per window per title change. It caches the extracted
+    /// COLOUR MAP: the three slots are all this path reads, and the map keeps
+    /// this header free of the rules-engine include.
     ///
-    /// The shared memo cannot serve this path in either direction. Seeding it
-    /// would poison it (its key excludes the admit filter, and this query is
-    /// unstamped) and would break the stamper-first ordering invariant. Merely
-    /// reading it is no good either: all six of its seeders run on the OPEN
-    /// path, and a rules save bumps the revision, so the peek would miss
-    /// forever for every already-open window — and this runs once per tab
-    /// every time the effect queries the colours, plus once per window on
-    /// every title change.
-    /// Caches the extracted COLOUR MAP rather than the ResolvedActions: the
-    /// three slots are all this path ever reads, the map is what every caller
-    /// wants back, and it keeps this header free of the rules-engine include.
+    /// Keyed by the rule revision plus title, captionNormal (title-derived),
+    /// virtual desktop, activity and the colour-scheme token. Title because the
+    /// daemon re-drives this consumer per window on a title change, so a `Title
+    /// contains …` rule would otherwise stick until the next rules save.
+    /// ColorScheme because a light/dark flip changes a `ColorScheme Equals
+    /// dark` verdict with no rules edit; this path re-reads the token each call
+    /// and invalidateRuleMemosForColorSchemeChange() drops stale entries at the
+    /// flip.
     ///
-    /// The key carries the rule revision plus title, captionNormal
-    /// (title-derived), virtual desktop, activity and the colour-scheme token.
-    /// Title especially — the daemon re-drives this memo's consumer per window
-    /// on a title change, so keying on the revision alone would leave a `Title contains …`
-    /// tab-colour rule stuck on its first verdict until the next rules save.
-    ///
-    /// ColorScheme is in the key because it is the one context field
-    /// buildRuleQueryForWindow stamps that moves WITHOUT any rules edit: a
-    /// light/dark flip changes the verdict of a `ColorScheme Equals dark`
-    /// tab-colour rule while the revision stands still. The key alone is enough
-    /// here — unlike the extended fields below, this path re-reads the token on
-    /// every call, so the compare sees the flip on the next refresh, and
-    /// invalidateRuleMemosForColorSchemeChange() drops the stale entries at the
-    /// moment of the flip rather than waiting for one.
-    ///
-    /// KNOWN GAP, deliberate. buildRuleQueryForWindow also copies ~20 EXTENDED
-    /// fields that move under a live window (isMaximized, isFocused,
-    /// isMinimized, keepAbove, the geometry quartet, and the rest of the state
-    /// flags). None is in this key, so a tab-colour rule conditioned on one
-    /// resolves once and stays pinned until the title, desktop, activity,
-    /// colour scheme or rule revision moves. Widening the key would NOT fix
-    /// such a rule: nothing re-drives the effect's query on those fields
-    /// either. The re-drive set is exactly three edges. The daemon broadcasts
-    /// scrollTabColorsChanged on a rules change and on a colour-scheme change,
-    /// which makes the effect re-query every tab, and it relays the signal for
-    /// a single window when that window's title changes or its first registry
-    /// record lands (TilingAdaptor::relayScrollTabColorsForWindow). None fires on
-    /// isMaximized or any other extended field, so the verdict would still be
-    /// stale between re-drives.
-    /// ColorScheme is the exception that proves the shape of the argument, and
-    /// that is why it IS keyed: it has a re-drive signal
-    /// (ISettings::systemColorSchemeChanged, routed here through
-    /// invalidateRuleMemosForColorSchemeChange), so keying it actually buys
-    /// freshness rather than just extra compares. The
-    /// honest fix is a second trigger, not a bigger key, and it is not worth ~20
-    /// extra comparisons per tab per refresh until someone wants those pairings.
-    /// Genuinely immutable for a given window id: windowRole, pid and
-    /// windowType. appId and desktopFile are NOT — setWindowMetadata documents
-    /// both as mutable (a class-mutating app renames mid-life), and the memo key
-    /// is the INSTANCE-derived shadow id, which survives such a rename, so an
-    /// AppId-matched tab-colour rule would stay pinned across one. They are left
-    /// out of the key for the same reason as the extended fields: nothing
-    /// re-drives the effect's query on an appId change either, so a wider key
-    /// would not make that verdict fresh.
+    /// KNOWN GAP, deliberate: the ~20 EXTENDED fields buildRuleQueryForWindow
+    /// copies (isMaximized, isFocused, isMinimized, keepAbove, the geometry
+    /// quartet, the other state flags) are not keyed, so a rule on one stays
+    /// pinned until title, desktop, activity, scheme or revision moves. A wider
+    /// key would not fix it: the effect re-queries only on three edges (the
+    /// scrollTabColorsChanged broadcast on a rules or colour-scheme change, and
+    /// the per-window relay on a title change or a first registry record,
+    /// TilingAdaptor::relayScrollTabColorsForWindow), none of them on those
+    /// fields. ColorScheme is keyed precisely because it has a re-drive signal
+    /// (ISettings::systemColorSchemeChanged). The fix is a second trigger, not a
+    /// bigger key. windowRole, pid and windowType are immutable per id; appId
+    /// and desktopFile are not (a class-mutating app renames mid-life while the
+    /// INSTANCE-derived key survives), and stay unkeyed for the same no-re-drive
+    /// reason.
     struct TabColorMemoEntry
     {
         quint64 revision = 0;
@@ -1283,6 +1276,8 @@ Q_SIGNALS:
      * contract (absent from the XML) and nothing external subscribes.
      */
     void windowClosedNotification(const QString& windowId);
+    /// The daemon no longer keeps @p windowId parked for @p outputUuid (empty: any output).
+    void parkDropped(const QString& windowId, const QString& outputUuid);
 
     /**
      * @brief Qt signal emitted during pruneStaleWindows with the INSTANCE-id
@@ -1579,18 +1574,9 @@ private Q_SLOTS:
      */
     void handleCrossModeFocus(const QString& targetScreenId, const QString& direction, bool* handled);
 
-    /**
-     * @brief Handle layout change by validating zone assignments
-     *
-     * When the active layout changes, windows may be assigned to zones that
-     * no longer exist in the new layout. This slot:
-     * 1. Validates all zone assignments against the new layout
-     * 2. Removes assignments for zones that no longer exist
-     * 3. Emits windowZoneChanged for each removed assignment
-     *
-     * This prevents stale zone references that cause navigation failures
-     * and incorrect "was snapped" detection.
-     */
+    /// The active layout changed: assignments to zones it no longer has are
+    /// removed, with a windowZoneChanged for each, so navigation never acts
+    /// on a zone that is gone.
     void onLayoutChanged();
 
     /**
@@ -1916,6 +1902,15 @@ private:
     bool m_pendingRestoresEmitted = false; // True if we already emitted pendingRestoresAvailable
     bool m_shutdownSaveGuard = false; // True after saveStateOnShutdown() to prevent destruction-phase saves
     bool m_startupLeaveSweepDone = false; // True once pruneStaleWindows ran its once-per-daemon leave release
+
+    // Evacuee park helpers (evacuees.cpp).
+    void wireEvacueeTouches();
+    void noteEvacueeTouched(const QString& windowId, const QString& placedOnScreen);
+    void dropEvacueeParks(const QString& windowId);
+    bool readoptEvacuee(const QString& windowId, const QString& onScreen, const QString& parkedPhysicalId);
+    void floatEvacuee(const PhosphorProtocol::OutputSettleRow& row);
+    QString reassertEvacuee(const PhosphorProtocol::OutputSettleRow& row, QSet<QString>& reassertedScreens);
+    std::unique_ptr<EvacueeLedger> m_evacuees;
 };
 
 } // namespace PlasmaZones

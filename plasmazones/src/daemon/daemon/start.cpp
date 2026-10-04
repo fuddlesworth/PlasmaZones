@@ -145,6 +145,12 @@ void Daemon::connectScreenSignals()
                             GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
                     }
                 }
+                // Re-admit the output to the tiling engines now (F765): a
+                // returning output's windows are classified against its mode,
+                // and the desktop the effect reports for it only pins the
+                // desktop.
+                updateEngineScreens();
+                updateLayoutFilter();
                 // Record the new screen's resolved assignment so a later
                 // (unrelated) rule edit doesn't diff it as a change and
                 // spuriously resnap it — the screen-add path lays it out here.
@@ -196,23 +202,9 @@ void Daemon::connectScreenSignals()
                     m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(removedScreenId);
                 }
 
-                // All three engines need the explicit whole-output reap:
-                // snap's per-(screen,desktop,activity) stores are created
-                // lazily on placement, and the two tiling engines'
-                // updateEngineScreens sweep only reaps CURRENT-context
-                // states, so sibling-context states (other desktops or
-                // activities) of the removed output would leak and
-                // resurface ghost tiles on replug. Each engine matches
-                // every virtual sub-screen of the removed physical id.
-                if (m_snapEngine) {
-                    m_snapEngine->pruneStatesForRemovedScreen(removedScreenId);
-                }
-                if (m_autotileEngine) {
-                    m_autotileEngine->pruneStatesForRemovedScreen(removedScreenId);
-                }
-                if (m_scrollEngine) {
-                    m_scrollEngine->pruneStatesForRemovedScreen(removedScreenId);
-                }
+                // Park the output's windows, then reap every engine's states
+                // on it (see retireOutputPlacements).
+                retireOutputPlacements(removedScreenId);
 
                 // The removed output's strip-preview settle timers, including
                 // every virtual sub-screen of it. Without this they are only

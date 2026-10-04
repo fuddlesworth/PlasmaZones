@@ -212,6 +212,11 @@ void Daemon::initCoreAdaptors()
     // Full rule set for per-window RestorePosition evaluation (overrides the
     // per-engine *RestoreFloatedWindowsOnLogin settings for matched windows).
     m_windowTrackingAdaptor->setRuleStore(m_ruleStore.get());
+    // The effect's settle report can name an output gone before the daemon's
+    // own screen-removed handler runs; both retire it the same way.
+    m_windowTrackingAdaptor->setOutputRetirer([this](const QString& physicalScreenId) {
+        retireOutputPlacements(physicalScreenId);
+    });
 
     // Drop closed windows from m_lastEngineOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would

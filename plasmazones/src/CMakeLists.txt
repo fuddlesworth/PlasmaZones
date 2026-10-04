@@ -175,6 +175,8 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/lifecycle.cpp
     dbus/windowtrackingadaptor/activation.cpp
     dbus/windowtrackingadaptor/prune.cpp
+    dbus/windowtrackingadaptor/evacuees.cpp
+    dbus/windowtrackingadaptor/evacueeledger.h
     dbus/windowtrackingadaptor/queries.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
     dbus/windowtrackingadaptor/rules.cpp
@@ -543,6 +545,7 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/shortcutmanager_catalog.cpp
     daemon/controllers/shortcutmanager_ids.h
     daemon/daemon/start.cpp
+    daemon/daemon/evacuees.cpp
     daemon/daemon/shortcuts_wiring.cpp
     daemon/daemon/autotile_init.cpp
     daemon/daemon/scrolling_init.cpp

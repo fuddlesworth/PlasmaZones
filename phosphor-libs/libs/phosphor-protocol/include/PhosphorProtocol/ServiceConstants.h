@@ -586,6 +586,17 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       desktop-switch catch-scan, a cross-output re-add, an unminimize), so
 //       "Focus new windows" can focus genuine opens only. windowOpened now
 //       means a genuine open, and windowsOpenedBatch entries never take focus.
+//
+//       Also in v10, WindowTracking gains reportOutputSettle
+//       (a(ssssbiiiiiiiiiiibbbbssiiibiiii) -> a(sis)) and the parkDropped
+//       (s s) signal: the effect reports the windows a screen-change settle
+//       moved, with the state they had before their output went away, and the
+//       daemon answers each with a verdict (re-seat a window KWin returned
+//       untouched, float an evacuee in place, re-assert a placement KWin moved,
+//       or treat the crossing as the user's move). parkDropped tells the effect
+//       to forget its record of a window the daemon no longer keeps parked. An
+//       old daemon answers the call with an error and the effect replays every
+//       crossing as a move; an old effect never calls.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

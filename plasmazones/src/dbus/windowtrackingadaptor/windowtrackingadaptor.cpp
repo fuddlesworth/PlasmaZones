@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
+#include "evacueeledger.h"
 #include "core/resolve/daemongeometryresolver.h"
 #include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
@@ -20,6 +21,7 @@
 #include "core/platform/logging.h"
 #include "core/resolve/screenmoderouter.h"
 #include "core/utils/utils.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/types/types.h"
 #include <PhosphorEngine/WindowRegistry.h>
@@ -46,6 +48,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     , m_virtualDesktopManager(virtualDesktopManager)
     , m_activityManager(activityManager)
     , m_sessionBackend(createSessionBackend())
+    , m_evacuees(std::make_unique<EvacueeLedger>())
 {
     // Null dependencies are a daemon-wiring bug, not a recoverable runtime
     // condition: the earlier "refuse to wire" early-return left m_service,
@@ -369,6 +372,25 @@ void WindowTrackingAdaptor::reapplyWindowAppearance()
     // / hidden title bars). No window moves — see the interface doc comment.
     // The scrolling engine inherits the interface's no-op default today, so
     // its arm costs nothing until it grows a real implementation.
+    //
+    // A snapped window found on another output than its zone's (KWin moved it
+    // while the effect was away) has left that zone: it goes through the same
+    // path as a KWin move first, so the snap fan-out never pulls it back
+    // (F594). The frame shadow is current here: the effect re-reports frames
+    // before it asks for this.
+    if (m_service && m_service->screenManager()) {
+        for (const QString& windowId : m_service->snappedWindows()) {
+            const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
+            const QString stored = m_service->screenForWindow(windowId);
+            if (!frame.isValid() || stored.isEmpty()) {
+                continue;
+            }
+            const QString at = Utils::effectiveScreenIdAt(m_service->screenManager(), frame.center());
+            if (!at.isEmpty() && !PhosphorIdentity::VirtualScreenId::samePhysical(at, stored)) {
+                windowScreenChanged(windowId, at);
+            }
+        }
+    }
     if (m_snapEngine) {
         m_snapEngine->reapplyManagedWindowAppearance();
     }
