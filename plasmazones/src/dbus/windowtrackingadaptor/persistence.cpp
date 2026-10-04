@@ -237,7 +237,11 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
 
 void WindowTrackingAdaptor::onLayoutChanged()
 {
-    relayZonePrune(m_service->pruneStaleZoneAssignments());
+    // Mid-removal the layoutsChanged that closes it moves the windows, then
+    // prunes; pruning here first would unsnap them before they move.
+    if (!m_layoutRemovalPending) {
+        relayZonePrune(m_service->pruneStaleZoneAssignments());
+    }
 
     // After layout becomes available, check if we have placement records to
     // restore. The unified WindowPlacementStore is the only restore source.

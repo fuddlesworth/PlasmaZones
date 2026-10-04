@@ -671,25 +671,15 @@ public:
     QRect multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;
 
     /**
-     * @brief Populate the resnap buffer for all screens independently.
-     *
-     * For each window, looks up its current zone assignment and determines
-     * the zone position using a global zoneId→position map built from all
-     * loaded layouts. This avoids relying on the global activeLayout/previousLayout
-     * which only tracks one layout at a time.
-     *
-     * Every layout switch builds its buffer here, and the result replaces
-     * the buffer even when it is empty.
+     * @brief Populate the resnap buffer: each window's primary zone position,
+     * read from a map over every loaded layout. Every layout switch builds its
+     * buffer here, and the result replaces the buffer even when it is empty.
      *
      * @param excludeScreens Screens to skip (e.g. autotile screens handled separately)
      * @param includeScreens When non-empty, only process windows on these
      *        screens. Only memberships of the activity in view are taken.
-     * @param desktopFilter When > 0, restrict the resnap to a single virtual
-     *        desktop so per-desktop layout changes don't reposition windows on
-     *        other desktops. Each window is compared against ITS screen's
-     *        current desktop (Plasma 6.7 per-output virtual desktops); the
-     *        passed value is the comparison fallback when no VDM is wired or
-     *        the VDM doesn't know the screen's desktop. Sticky/unknown windows
+     * @param desktopFilter When > 0, only windows on their screen's current
+     *        desktop (this value when the screen's is unknown); sticky windows
      *        (virtualDesktop==0) always pass.
      */
     void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {},
@@ -707,6 +697,11 @@ public:
     /// their primary zone's number in the screen's layout. Seeds the autotile
     /// order on a switch to tiling.
     QStringList buildZoneOrderedWindowList(const QString& screenId) const;
+
+    /// Replace the resnap buffer with the windows in view on a snapping screen
+    /// whose primary zone @p layout (being removed, still alive) holds, by
+    /// zone position, so a resnap moves them to the layout their context runs.
+    void bufferWindowsOfRemovedLayout(PhosphorZones::Layout* layout);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Virtual Screen Migration

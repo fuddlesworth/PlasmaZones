@@ -33,6 +33,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTimer>
+#include <utility>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -186,8 +187,21 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         }
     };
     wireLayoutEdits();
+    // A deleted layout's windows in view move to the same-numbered zone of
+    // the layout their context runs afterwards, or their float spot, for an
+    // active and a per-context delete alike; a hidden context's are unsnapped
+    // (F403, F429). layoutRemoved fires with the layout still alive, before
+    // the registry picks the replacement; layoutsChanged closes the removal.
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutRemoved, this,
+            [this](PhosphorZones::Layout* layout) {
+                m_service->bufferWindowsOfRemovedLayout(layout);
+                m_layoutRemovalPending = true;
+            });
     connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this, wireLayoutEdits]() {
         wireLayoutEdits();
+        if (std::exchange(m_layoutRemovalPending, false) && m_cachedSnapEngine) {
+            m_cachedSnapEngine->resnapToNewLayout(PhosphorSnapEngine::SnapEngine::ResnapFeedback::Silent);
+        }
         relayZonePrune(m_service->pruneStaleZoneAssignments());
     });
 

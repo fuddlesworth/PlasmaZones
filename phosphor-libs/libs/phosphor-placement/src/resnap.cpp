@@ -198,6 +198,45 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     qCDebug(lcPlacement) << "Resnap buffer (all screens):" << m_resnapBuffer.size() << "windows";
 }
 
+void WindowTrackingService::bufferWindowsOfRemovedLayout(PhosphorZones::Layout* layout)
+{
+    QVector<ResnapEntry> buffer;
+    if (layout && hasSnapState() && m_layoutManager) {
+        const QHash<QString, int> positions = PhosphorZones::LayoutUtils::buildZonePositionMap(layout);
+        const QString currentActivity = m_layoutManager->currentActivity();
+        QSet<QString> added;
+        // In view only: a hidden desktop's or activity's window keeps nothing
+        // of a deleted layout and is unsnapped by the prune that follows
+        // (F403, F429). A window floating in its store is not snapped there.
+        forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                      int desktop, const QString& activity, PhosphorSnapEngine::SnapState* store) {
+            const int position = zoneIds.isEmpty() ? 0 : positions.value(zoneIds.first(), 0);
+            if (position <= 0 || screenId.isEmpty() || store->isFloating(windowId)) {
+                return;
+            }
+            const int shown = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+            const bool inView =
+                (desktop == 0 || (shown > 0 && desktop == shown)) && activityInView(activity, currentActivity);
+            if (!inView || (m_snapEngine && !m_snapEngine->isActiveOnScreen(screenId))) {
+                return;
+            }
+            const QString key = canonicalizeForLookup(windowId);
+            if (added.contains(key)) {
+                return;
+            }
+            added.insert(key);
+            ResnapEntry entry;
+            entry.windowId = windowId;
+            entry.zonePosition = position;
+            entry.screenId = screenId;
+            entry.virtualDesktop = desktop;
+            buffer.append(entry);
+        });
+    }
+    m_resnapBuffer = std::move(buffer);
+    qCDebug(lcPlacement) << "Resnap buffer (removed layout):" << m_resnapBuffer.size() << "windows";
+}
+
 QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& screenId) const
 {
     if (!m_layoutManager) {

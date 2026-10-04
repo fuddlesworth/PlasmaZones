@@ -12,6 +12,7 @@
 #include "wta_convenience_fixture.h"
 
 #include <PhosphorEngine/GeometryUtils.h>
+#include <PhosphorZones/LayoutUtils.h>
 
 class TestWtaLayoutSwitch : public QObject, protected WtaConvenienceFixture
 {
@@ -108,7 +109,79 @@ private Q_SLOTS:
         QCOMPARE(feedback.count(), 1);
     }
 
+    // Deleting the layout a screen runs as the default moves its windows in
+    // view to the same-numbered zone of the layout the screen falls back to
+    // (F403). The removal re-activated another layout with no switch to move
+    // by, and the prune unsnapped the window where it was.
+    void deletingTheDefaultLayoutMovesItsWindowsBySlot()
+    {
+        PhosphorZones::Layout* doomed = addThreeZoneLayout();
+        m_defaultId = doomed->id().toString();
+        m_layoutManager->setActiveLayout(doomed);
+        const QString w = QStringLiteral("app|delete-default");
+        service()->assignWindowToZone(w, doomed->zones().at(1)->id().toString(), m_screenId, m_desktop);
+        QSignalSpy batch(m_wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+
+        QVERIFY(m_layoutManager->removeLayout(doomed));
+
+        PhosphorZones::Layout* fallback = m_layoutManager->resolveLayoutForScreen(m_screenId);
+        QVERIFY(fallback);
+        QVector<PhosphorZones::Zone*> zones = fallback->zones();
+        PhosphorZones::LayoutUtils::sortZonesByNumber(zones);
+        QCOMPARE(service()->zoneForWindow(w), zones.at(1)->id().toString());
+        QVERIFY(batchCarries(batch, w));
+    }
+
+    // Deleting a layout assigned to the context itself leaves the context on
+    // the explicit no-layout word (the registry's purge does not hand it the
+    // default), so there is nothing to move into: the window in view is
+    // unsnapped where it is and the effect told. It used to keep the deleted
+    // layout's zone id (F429).
+    void deletingAContextLayoutUnsnapsItsWindows()
+    {
+        PhosphorZones::Layout* doomed = addThreeZoneLayout();
+        m_layoutManager->assignLayout(m_screenId, m_desktop, QString(), doomed);
+        const QString w = QStringLiteral("app|delete-context");
+        service()->assignWindowToZone(w, doomed->zones().at(1)->id().toString(), m_screenId, m_desktop);
+        QSignalSpy states(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+
+        QVERIFY(m_layoutManager->removeLayout(doomed));
+
+        QVERIFY(!m_layoutManager->resolveLayoutForScreen(m_screenId));
+        QVERIFY(service()->zoneForWindow(w).isEmpty());
+        bool unsnapped = false;
+        for (const QList<QVariant>& args : std::as_const(states)) {
+            unsnapped |= args.at(0).toString() == w
+                && args.at(1).value<PhosphorProtocol::WindowStateEntry>().changeType == QStringLiteral("unsnapped");
+        }
+        QVERIFY(unsnapped);
+    }
+
+    // A window holding the deleted layout's zone on a desktop not in view is
+    // unsnapped: its zone exists nowhere any more.
+    void deletingALayoutUnsnapsItsHiddenWindows()
+    {
+        PhosphorZones::Layout* doomed = addThreeZoneLayout();
+        m_defaultId = doomed->id().toString();
+        const QString hidden = QStringLiteral("app|delete-hidden");
+        service()->assignWindowToZone(hidden, doomed->zones().at(0)->id().toString(), m_screenId, m_desktop + 1);
+
+        QVERIFY(m_layoutManager->removeLayout(doomed));
+
+        QVERIFY(service()->zoneForWindow(hidden).isEmpty());
+    }
+
 private:
+    PhosphorZones::Layout* addThreeZoneLayout()
+    {
+        m_layoutManager->setDefaultLayoutIdProvider([this]() {
+            return m_defaultId;
+        });
+        PhosphorZones::Layout* layout = createTestLayout(3, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        return layout;
+    }
+
     PhosphorPlacement::WindowTrackingService* service() const
     {
         return m_wta->service();
@@ -128,6 +201,7 @@ private:
 
     int m_desktop = 1;
     PhosphorZones::Layout* m_twoZones = nullptr;
+    QString m_defaultId;
 };
 
 QTEST_MAIN(TestWtaLayoutSwitch)

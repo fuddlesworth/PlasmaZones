@@ -1553,13 +1553,11 @@ private Q_SLOTS:
      */
     void handleCrossModeFocus(const QString& targetScreenId, const QString& direction, bool* handled);
 
-    /// Active layout changed: prune and relay, then look for records to restore.
+    /// Active layout changed: prune and relay unless mid-removal, then restore.
     void onLayoutChanged();
 
     /**
-     * @brief Handle panel geometry becoming ready
-     *
-     * Called when PhosphorScreens::ScreenManager reports panel geometry is known.
+     * @brief Panel geometry became known (PhosphorScreens::ScreenManager).
      * Emits pendingRestoresAvailable when the placement store held records at
      * load and the signal has not been emitted yet this session.
      */
@@ -1746,6 +1744,7 @@ private:
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
     QPointer<PhosphorTileEngine::AutotileEngine> m_cachedAutotileEngine;
     QPointer<PhosphorScrollEngine::ScrollEngine> m_cachedScrollEngine;
+    bool m_layoutRemovalPending = false; ///< layoutRemoved .. layoutsChanged
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.
