@@ -985,13 +985,13 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     } else {
         // Cursor left all zones: restore pre-snap size immediately if window was snapped.
         // The record is read for the CURSOR's screen, the same basis the
-        // drop-time commit uses (drop.cpp reads validatedUnmanagedGeometry
-        // for the release screen) — getValidatedPreTileGeometry resolves the
+        // drop-time commit uses (drop.cpp reads preSnapSizeFor for the
+        // release screen) — getValidatedPreTileGeometry resolves the
         // window's TRACKED screen instead, so a cross-monitor drag-out
         // previewed one monitor's remembered size and committed the other's.
         if (m_wasSnapped && !m_restoreSizeEmittedDuringDrag && m_windowTracking
             && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId)) {
-            const auto preSnap = m_windowTracking->service()->validatedUnmanagedGeometry(windowId, cursorScreenId);
+            const auto preSnap = preSnapSizeFor(windowId, cursorScreenId);
             if (preSnap) {
                 m_restoreSizeEmittedDuringDrag = true;
                 m_lastEmittedZoneGeometry = QRect(); // Reset so re-entering zone will emit

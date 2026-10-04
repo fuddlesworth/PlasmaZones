@@ -228,6 +228,28 @@ private Q_SLOTS:
         QCOMPARE(f.snap->screenForTrackedWindow(w), f.other);
     }
 
+    // A drag-out on a monitor where the window has no float-back restores the
+    // size it had free on the monitor it left; only the size travels (F269).
+    void activeDragOut_restoresTheSizeRememberedOnAnotherMonitor()
+    {
+        Fixture f;
+        f.settings.setRestoreOriginalSizeOnUnsnap(true);
+        const QString w = QStringLiteral("app|drag-out-size");
+        const QRect onFirst(200, 150, 640, 480);
+        f.wta->service()->recordFreeGeometry(w, QStringLiteral("DP-1"), onFirst, true);
+        f.snapOn(w, f.other);
+        QVERIFY(!f.wta->service()->validatedUnmanagedGeometry(w, f.other).has_value());
+        const int ctrl = static_cast<int>(Qt::ControlModifier);
+        f.adaptor->beginDrag(w, f.otherGeometry.x() + 50, f.otherGeometry.y() + 50, 400, 300, f.other, 0);
+        f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), ctrl, 0);
+
+        const PhosphorProtocol::DragOutcome outcome =
+            f.adaptor->endDrag(w, f.inOther().x(), f.inOther().y(), ctrl, 0, false);
+
+        QCOMPARE(outcome.action, PhosphorProtocol::DragOutcome::RestoreSize);
+        QCOMPARE(QSize(outcome.width, outcome.height), onFirst.size());
+    }
+
     // A drag ending on the window's own monitor is the drag-out it always was.
     void pendingDrag_sameScreenIsTheUsualDragOut()
     {

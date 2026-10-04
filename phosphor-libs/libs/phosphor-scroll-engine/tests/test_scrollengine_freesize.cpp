@@ -208,9 +208,8 @@ private Q_SLOTS:
         rig.engine->windowClosed(QStringLiteral("app|b2"));
 
         // Move opted in but the rect does not lie on this screen: the
-        // containment gate refuses it for the move AND as a size source (a
-        // size from another output says nothing about this one), so with no
-        // live sibling nothing is applied at all.
+        // containment gate refuses it for the move, and only its size is
+        // restored, the way a size from another output is (F269).
         rig.engine->setRestorePositionPredicate({});
         rig.tracker->belongsToScreen = [](const QRect&, const QString&) {
             return false;
@@ -220,7 +219,8 @@ private Q_SLOTS:
         rig.engine->windowOpened(QStringLiteral("app|c2"), kS1, 0, 0);
         QVERIFY(stateOn(rig.engine, kS1)->isFloating(QStringLiteral("app|c2")));
         QCOMPARE(geoSpy.count(), 0);
-        QCOMPARE(sizeSpy.count(), 0);
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), ownFree.size());
     }
 
     // A recorded rect of a live column's size is a spawn frame the window

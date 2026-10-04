@@ -136,9 +136,10 @@ protected:
     ///     tiled and reopens under a Float rule has neither an own rect nor
     ///     a live sibling, yet its old record still knows its free size.
     ///
-    /// A rect is usable only when it lies on @p screenId (screen-local, like
-    /// the position restore; the containment check fails open without a
-    /// screen manager, which is accepted for embedders and tests) and its size
+    /// A rect on @p screenId is preferred (the containment check fails open
+    /// without a screen manager, accepted for embedders and tests). With none
+    /// in any record, the same order is run again for the record's rect from
+    /// another screen, of which only the size is used. Either way its size
     /// is not within two pixels of any of @p managedSizes (isManagedSize), the
     /// sizes a managed window on that screen can have (zones and live spans
     /// for snap, the live tile or column rects for the tiling engines): a

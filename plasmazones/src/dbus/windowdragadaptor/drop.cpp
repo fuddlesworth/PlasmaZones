@@ -527,12 +527,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // WindowTrackingAdaptor::notifyDragOutUnsnap): setWindowFloating's
         // capture refresh records the live dragged frame into the same
         // per-screen map this read consumes.
-        std::optional<QRect> preSnapGeo;
+        std::optional<QSize> preSnapSize;
         // Evaluated once (it routes through the rule evaluator) and reused by
         // the restore gate below.
         const bool restoreSizeOnUnsnap = m_windowTracking && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId);
         if (restoreSizeOnUnsnap) {
-            preSnapGeo = m_windowTracking->service()->validatedUnmanagedGeometry(windowId, releaseScreenId);
+            preSnapSize = preSnapSizeFor(windowId, releaseScreenId);
         }
         if (m_windowTracking) {
             // unsnapForFloat on WTS: saves zone for restore, clears assignment.
@@ -543,26 +543,24 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
 
         // On drag-to-unsnap: restore pre-snap width/height; window keeps drop position.
         // Float-toggle shortcut uses calculateUnfloatRestore and restores full x/y/w/h.
-        // Pass the release screen for proper cross-screen geometry validation (the float
-        // toggle path passes screenId to validatedUnmanagedGeometry; without it,
-        // coordinates captured on another screen may fail the service's on-screen
-        // visibility check and not restore).
+        // Read for the release screen: the float-back there, else the size of
+        // the one the window has on another monitor (preSnapSizeFor).
         if (restoreSizeOnUnsnap) {
             auto* wts = m_windowTracking->service();
-            const auto& geo = preSnapGeo;
+            const auto& size = preSnapSize;
             // Require strictly-positive dimensions: a degenerate stored
             // rect would produce a RestoreSize outcome that validates to
             // "requires non-zero size" and gets dropped effect-side, so
             // the window would never actually restore.
-            if (geo && geo->width() > 0 && geo->height() > 0) {
-                snapWidth = geo->width();
-                snapHeight = geo->height();
+            if (size && size->width() > 0 && size->height() > 0) {
+                snapWidth = size->width();
+                snapHeight = size->height();
                 shouldApplyGeometry = true;
                 restoreSizeOnlyOut = true;
                 // Consume-once, per screen — other monitors' remembered
                 // positions stay intact.
                 wts->clearFreeGeometry(windowId, releaseScreenId);
-                qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
+                qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << size->width() << "x" << size->height();
             } else {
                 qCInfo(lcDbusWindow) << "Drag-out unsnap: no valid pre-tile geometry for" << windowId;
             }

@@ -1031,6 +1031,30 @@ bool WindowDragAdaptor::windowFillsOutput(const QString& windowId) const
     return registry && registry->fillsOutputState(windowId).value_or(false);
 }
 
+std::optional<QSize> WindowDragAdaptor::preSnapSizeFor(const QString& windowId, const QString& screenId) const
+{
+    auto* wts = m_windowTracking ? m_windowTracking->service() : nullptr;
+    if (!wts) {
+        return std::nullopt;
+    }
+    if (const auto here = wts->validatedUnmanagedGeometry(windowId, screenId)) {
+        return here->size();
+    }
+    const auto own = wts->placementStore().peekExact(windowId);
+    const QRect elsewhere = own ? own->anyFreeGeometry() : QRect();
+    if (!elsewhere.isValid()) {
+        return std::nullopt;
+    }
+    QSize size = elsewhere.size();
+    // An unresolvable screen answers an invalid rect, whose 0x0 size would
+    // bound the size to nothing.
+    const QRect available = wts->screenAvailableGeometry(screenId);
+    if (available.isValid() && !available.isEmpty()) {
+        size = size.boundedTo(available.size());
+    }
+    return size;
+}
+
 void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry,
                                                 bool fillsOutput)
 {

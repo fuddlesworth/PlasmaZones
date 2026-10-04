@@ -1036,6 +1036,10 @@ private:
     void tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry, bool fillsOutput);
     /// The registry's fills-output verdict for @p windowId, false when unknown.
     bool windowFillsOutput(const QString& windowId) const;
+    /// The pre-snap size a drag-out restores on @p screenId: the float-back
+    /// there, else the size of the window's float-back on another monitor,
+    /// bounded to this one. The position stays screen-local; only the size travels.
+    std::optional<QSize> preSnapSizeFor(const QString& windowId, const QString& screenId) const;
 
 private Q_SLOTS:
     /**

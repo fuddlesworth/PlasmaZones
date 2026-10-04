@@ -131,12 +131,13 @@ private Q_SLOTS:
         QCOMPARE(floatSpy.count(), 1);
     }
 
-    // The sibling's free geometry is keyed to another screen: a size from a
-    // different output says nothing about this one, so nothing is applied. A
-    // closed sibling's record is a different thing: it is reopen memory that
-    // the opener CONSUMES and re-binds as its own, so the size then comes from
-    // the own-record source.
-    void testNewSibling_otherScreenKeyRefused_closedSiblingBecomesOwnRecord()
+    // The two-screen #1106 case (F269): the first window's free geometry is
+    // keyed to the monitor it left (snapped on another one since), and the
+    // second opens on this one with no rect here, so it takes that rect's size
+    // (the position stays screen-local). A closed sibling's record is a
+    // different thing: it is reopen memory that the opener CONSUMES and
+    // re-binds as its own, so the size then comes from the own-record source.
+    void testNewSibling_otherScreenKeyGivesItsSize_closedSiblingBecomesOwnRecord()
     {
         EngineOn on(m_wts, m_layoutManager, m_settings);
         m_liveInstances.insert(QStringLiteral("first"));
@@ -152,8 +153,11 @@ private Q_SLOTS:
         const PhosphorEngine::SnapResult second =
             on.engine.resolveWindowRestore(QStringLiteral("app|second"), kScreen, /*sticky*/ false);
         QVERIFY(!second.shouldSnap);
-        QCOMPARE(floatSpy.count(), 1); // the float terminal ran, so the size path was consulted
-        QCOMPARE(sizeSpy.count(), 0);
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(sizeSpy.count(), 1);
+        const QList<QVariant> fromOther = sizeSpy.takeFirst();
+        QCOMPARE(fromOther.at(1).toSize(), QSize(800, 600));
+        QCOMPARE(fromOther.at(2).toString(), kScreen);
 
         // The sibling closes and had a DP-1 rect after all: the next open
         // consumes its record, re-binds it, and reads the size as its own.
@@ -508,15 +512,17 @@ private Q_SLOTS:
         setLiveProbe(svc.get());
         auto* layout = activateLayout();
 
-        // Keyed to DP-1 but lying on DP-2: refused by the containment gate,
-        // which the per-screen key alone cannot catch.
+        // Keyed to DP-1 but lying on DP-2: the containment gate, which the
+        // per-screen key alone cannot catch, keeps it out of the first pass,
+        // and the second takes only its size, as from any other screen (F269).
         QVERIFY(svc->placementStore().record(
             snappedRecord(QStringLiteral("app|first"), firstZoneId(layout), kScreen, QRect(2000, 100, 800, 600))));
         QSignalSpy floatSpy(&on.engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
         QSignalSpy sizeSpy(&on.engine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
         (void)on.engine.resolveWindowRestore(QStringLiteral("app|second"), kScreen, /*sticky*/ false);
         QCOMPARE(floatSpy.count(), 1);
-        QCOMPARE(sizeSpy.count(), 0);
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), QSize(800, 600));
 
         // A rect captured at a larger resolution overlaps DP-1, so it passes
         // the gate, and its size is clamped to what the screen can show.
