@@ -152,10 +152,13 @@ bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QStri
         // already reports the resolved zone — the surface-extent
         // open shader (bounce, fly-in) plays into the zone from
         // the first painted frame without any anchor pinning.
-        // A client that maps itself maximized (a browser restoring session
-        // state) and is instant-restored into a zone would otherwise keep
-        // KWin's maximize bit fighting the zone rect from its first frame.
-        m_tilingHandler->preparePlacement(w, cached->geometry, PlacementStatement::Purpose::Restatement);
+        // A client that maps itself maximized or fullscreen (a browser
+        // restoring session state) keeps that state: the zone is seated as the
+        // rect it returns to, nothing moves, and the resolve that follows
+        // re-states the same zone (F560).
+        if (!m_tilingHandler->preparePlacement(w, cached->geometry, PlacementStatement::Purpose::Restatement).apply) {
+            return false;
+        }
         applyWindowGeometry(w, cached->geometry, false, /*skipAnimation=*/true,
                             PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
                             PlacementStatement::Purpose::Restatement);

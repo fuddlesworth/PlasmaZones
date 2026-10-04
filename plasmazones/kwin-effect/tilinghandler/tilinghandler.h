@@ -551,19 +551,18 @@ public:
     /// The placement statement, run before a placement on a SNAPPING screen
     /// applies @p rect (placementhandback.cpp, PlacementStatement::decide).
     ///
-    /// A KWin-maximized or fullscreen window carries state a bare moveResize
-    /// never touches, and its restore rect can sit on another monitor: left
-    /// standing, KWin re-enforces it against the placement, and the next
-    /// maximize press restores the window cross-screen, which the daemon reads
-    /// as the user moving it off its zone (the #1028-family Brave trace). So a
-    /// tiling engine's claim is shed for any @p purpose, a user verb ends the
-    /// window's own fullscreen and then its maximize, and a re-statement ends a
-    /// maximize only. Every hand-back is anchored at @p rect (its restore rect
-    /// is seated first, one configure on the target screen), and a window the
-    /// tiling handler still tracks is untracked here. Writes nothing under a
-    /// live gesture; the deferred replay calls again once it ends. Lives here
-    /// because the maximize and fullscreen OWNERSHIP LEDGERS do.
-    void preparePlacement(KWin::EffectWindow* w, const QRect& rect, PlacementStatement::Purpose purpose);
+    /// A maximized or fullscreen window's state survives a bare moveResize and
+    /// its restore rect can sit on another monitor, so the next maximize press
+    /// restores it cross-screen, read by the daemon as a move off its zone (the
+    /// #1028-family Brave trace). So: a tiling engine's claim is shed for any
+    /// @p purpose; a user verb or a move to another output ends the window's
+    /// own fullscreen, then its maximize, anchored at @p rect; a re-statement
+    /// on the same output keeps both and seats @p rect as their restore rect,
+    /// and the verdict says apply false. A window the tiling handler still
+    /// tracks is untracked here. Nothing is written under a live gesture (the
+    /// deferred replay calls again). Here because the OWNERSHIP LEDGERS are.
+    PlacementStatement::Verdict preparePlacement(KWin::EffectWindow* w, const QRect& rect,
+                                                 PlacementStatement::Purpose purpose);
 
     /// Arm the clear-in-flight marker and dispatch Scrolling.
     /// clearWindowedFullscreen reply-gated: the error arm drops the marker

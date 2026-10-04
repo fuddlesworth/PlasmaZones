@@ -121,6 +121,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/daemon_settings.cpp
     plasmazoneseffect/daemon_settings_scrolltabs.cpp
     plasmazoneseffect/daemon_apply.cpp
+    plasmazoneseffect/size_restore.cpp
     plasmazoneseffect/rule_invalidation.cpp
     plasmazoneseffect/drag_snap.cpp
     plasmazoneseffect/window_geometry_apply.cpp

@@ -280,7 +280,7 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
     // that window or nothing, and only an entry naming no live window falls
     // back to the ONE unclaimed window of its app. The old first-seen app map
     // handed a stale entry to whichever same-app window it met first.
-    const QVector<KWin::EffectWindow*> resolved = m_effect->resolveDaemonWindowIds(validIds);
+    const QVector<KWin::EffectWindow*> resolved = m_effect->resolveDaemonWindowIds(validIds, /*admitFullscreen=*/true);
     for (int i = 0; i < valid.size(); ++i) {
         const auto& entry = *valid.at(i);
         KWin::EffectWindow* const window = resolved.at(i);
@@ -328,7 +328,11 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             // A monitor reconnect can hand back a window the session left
             // KWin-maximized; placing its zone rect without the placement
             // statement re-arms the cross-screen restore it exists for.
-            m_effect->m_tilingHandler->preparePlacement(e.window, e.geometry, PlacementStatement::Purpose::Restatement);
+            if (!m_effect->m_tilingHandler
+                     ->preparePlacement(e.window, e.geometry, PlacementStatement::Purpose::Restatement)
+                     .apply) {
+                return; // a maximized or fullscreen window keeps it, the zone seated (F509)
+            }
             // Resolution-change resnap: the effect-local twin of the daemon's
             // "resnap" action, which daemon_apply.cpp routes to WindowLayoutSwitch.
             m_effect->applyWindowGeometry(e.window, e.geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,

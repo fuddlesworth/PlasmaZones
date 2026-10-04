@@ -252,9 +252,10 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     // only: the daemon translates a bare RouteToScreen from that shadow, and a
     // freshly opened window has no entry there, so the rule silently did
     // nothing for it (confirmed live). Fire-and-forget is safe: both calls
-    // ride one D-Bus connection, whose message order is preserved.
+    // ride one D-Bus connection, whose message order is preserved. The free
+    // rect, so a window that maps maximized routes its restore rect (F575).
     if (isOpenPath) {
-        const QRect openGeo = window->frameGeometry().toRect();
+        const QRect openGeo = m_effect->freeGeometryForCapture(window, window->frameGeometry()).toRect();
         if (openGeo.isValid()) {
             PhosphorProtocol::ClientHelpers::fireAndForget(
                 m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setFrameGeometry"),
@@ -1039,8 +1040,7 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
     }
     // A pick is a user verb: after the pre-snap capture (which reads the
     // maximize state) and the pre-seed above (which covers the hand-back's
-    // configure), before the apply, so the window lands in the zone with
-    // neither fullscreen nor maximize. Ungated on isManagedScreen, since this
+    // configure), before the apply. Ungated on isManagedScreen, since this
     // path always applies a zone rect.
     m_effect->m_tilingHandler->preparePlacement(targetWindow, geometry, PlacementStatement::Purpose::UserVerb);
     {

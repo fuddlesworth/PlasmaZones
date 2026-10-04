@@ -59,7 +59,8 @@ QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap() const
     return windowMap;
 }
 
-QVector<KWin::EffectWindow*> PlasmaZonesEffect::resolveDaemonWindowIds(const QStringList& windowIds) const
+QVector<KWin::EffectWindow*> PlasmaZonesEffect::resolveDaemonWindowIds(const QStringList& windowIds,
+                                                                       bool admitFullscreen) const
 {
     QVector<KWin::EffectWindow*> resolved(windowIds.size(), nullptr);
     // A window an id names is claimed even when it is refused, so the
@@ -78,7 +79,7 @@ QVector<KWin::EffectWindow*> PlasmaZonesEffect::resolveDaemonWindowIds(const QSt
         // sibling, which then took its rect.
         if (KWin::EffectWindow* const w = findWindowByInstanceId(windowIds.at(i))) {
             claimed.insert(w);
-            if (shouldHandleWindow(w)) {
+            if (shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/admitFullscreen && w->isFullScreen())) {
                 resolved[i] = w;
             } else {
                 qCDebug(lcEffect) << "resolveDaemonWindowIds: skipping a window this effect does not handle"

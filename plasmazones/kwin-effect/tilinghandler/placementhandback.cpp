@@ -20,14 +20,15 @@
 
 namespace PlasmaZones {
 
-void TilingHandler::preparePlacement(KWin::EffectWindow* w, const QRect& rect, PlacementStatement::Purpose purpose)
+PlacementStatement::Verdict TilingHandler::preparePlacement(KWin::EffectWindow* w, const QRect& rect,
+                                                            PlacementStatement::Purpose purpose)
 {
     if (!w || w->isDeleted() || !rect.isValid()) {
-        return;
+        return {};
     }
     KWin::Window* kw = w->window();
     if (!kw) {
-        return;
+        return {};
     }
     const QString windowId = m_effect->getWindowId(w);
     PlacementStatement::Inputs in;
@@ -42,7 +43,29 @@ void TilingHandler::preparePlacement(KWin::EffectWindow* w, const QRect& rect, P
     // write would snap the window out from under the pointer, so nothing is
     // written and the deferred replay prepares again once the gesture ends.
     in.gestureLive = w->isUserMove() || w->isUserResize();
+    // KWin outputs, never screen ids (F577): two virtual screens of one
+    // monitor are one output, and a re-statement between them keeps state.
+    in.sameOutput = KWin::effects->screenAt(rect.center()) == m_effect->windowOutput(w);
     const PlacementStatement::Verdict verdict = PlacementStatement::decide(in);
+
+    if (!verdict.apply) {
+        // A re-statement of a maximized or fullscreen window keeps that state
+        // and does not move it; the placement becomes the rect it returns to.
+        qCInfo(lcEffect) << "Placement of" << windowId << "into" << rect << "keeps its"
+                         << (verdict.seatMaximizeRestore ? "maximize" : "fullscreen")
+                         << "and seats the placement as its restore rect";
+        if (verdict.seatMaximizeRestore) {
+            kw->setGeometryRestore(KWin::RectF(rect));
+        }
+        if (verdict.seatFullScreenRestore) {
+            kw->setFullscreenGeometryRestore(KWin::RectF(rect));
+        }
+        // Still this window's latest geometry command, like an apply that
+        // bails: an older pending apply or replay must not land over it, and
+        // nothing is coming to reposition a window held back from compositing.
+        m_effect->beginGeometryCommand(w);
+        m_effect->endRestoreSuppression(w);
+    }
 
     if (verdict.shedWindowedFullscreen || verdict.endFullScreen || verdict.shedEngineMaximize || verdict.endMaximize) {
         qCInfo(lcEffect) << "Placement of" << windowId << "into" << rect << "hands back"
@@ -107,6 +130,7 @@ void TilingHandler::preparePlacement(KWin::EffectWindow* w, const QRect& rect, P
     if (!in.gestureLive && !windowId.isEmpty() && m_notifiedWindows.contains(windowId)) {
         cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::SnapPlacement);
     }
+    return verdict;
 }
 
 } // namespace PlasmaZones

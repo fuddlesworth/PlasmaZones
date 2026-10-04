@@ -883,13 +883,13 @@ private:
      */
     QVector<KWin::EffectWindow*> findAllWindowsById(const QString& windowId) const;
 
-    /// Resolve a daemon batch's window ids to live windows, index-aligned with
-    /// @p windowIds. An id naming a live window (exactly, or by instance) gets
-    /// that window, or nullptr when shouldHandleWindow refuses it: it is never
-    /// handed to a sibling. Only an id naming no live window falls back to its
-    /// app, and only when exactly one unclaimed handled window of that app
-    /// exists.
-    QVector<KWin::EffectWindow*> resolveDaemonWindowIds(const QStringList& windowIds) const;
+    /// Resolve a daemon batch's window ids to live windows, index-aligned with @p windowIds. An id
+    /// naming a live window (exactly, or by instance) gets that window, or nullptr when
+    /// shouldHandleWindow refuses it (a fullscreen one passes with @p admitFullscreen, for a
+    /// re-statement that keeps it): never a sibling. Only an id naming no live window falls back
+    /// to its app, and only when exactly one unclaimed handled window of that app exists.
+    QVector<KWin::EffectWindow*> resolveDaemonWindowIds(const QStringList& windowIds,
+                                                        bool admitFullscreen = false) const;
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
@@ -1160,17 +1160,17 @@ private:
     // never visible. Do NOT use this to end an animation somewhere on screen —
     // the window would visibly snap at the end.
     //
-    // statementOnDeferredReplay: the caller's preparePlacement writes nothing under a live
-    // gesture, which is also when this function DEFERS; the replay prepares again with this
-    // purpose before its moveResize, and a dropped replay drops it. Deferral path only.
+    // statementOnDeferredReplay: preparePlacement writes nothing under a live gesture, which is when
+    // this DEFERS; the replay prepares again with this purpose before its moveResize (deferral only).
     void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
                              bool skipAnimation = false,
                              const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF(),
                              std::optional<PlacementStatement::Purpose> statementOnDeferredReplay = std::nullopt);
-    /// Whether applyWindowGeometry skips @p window as fullscreen (PlacementStatement::fullscreenBails);
-    /// shared by the apply, its deferred replay and the tile path.
+    /// applyWindowGeometry's fullscreen bail (PlacementStatement::fullscreenBails), also its replay's and the tiles'.
     bool fullscreenBailsApply(KWin::EffectWindow* window) const;
+    /// Make the next command @p window's latest (bump its stamp, drop a pending replay); returns the stamp.
+    quint64 beginGeometryCommand(KWin::EffectWindow* window);
     /// The rect applyWindowGeometry will REQUEST of KWin for a tile request:
     /// X11/XWayland frames are constrained to the client's WM_SIZE_HINTS and
     /// centred in the zone; everything else passes through unchanged. The

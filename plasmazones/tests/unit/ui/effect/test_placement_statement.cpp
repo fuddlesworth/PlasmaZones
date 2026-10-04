@@ -116,17 +116,77 @@ private Q_SLOTS:
         QVERIFY(decide(in).endMaximize);
     }
 
-    // A re-statement ends a maximize but never a fullscreen, and leaves a
-    // maximized fullscreen window alone.
-    void restatementNeverEndsFullscreen()
+    // A re-statement on the same output keeps a maximize: no apply, the zone
+    // seated as the restore rect (F490, F509, F547). The old demote ended it
+    // and moved the window.
+    void restatementKeepsTheMaximizeAndSeatsTheZone()
     {
         Inputs in = inputs(Purpose::Restatement);
         in.maximized = true;
-        QVERIFY(decide(in).endMaximize);
+        const Verdict v = decide(in);
+        QVERIFY(!v.apply);
+        QVERIFY(v.seatMaximizeRestore);
+        QVERIFY(!v.endMaximize);
+        QVERIFY(!v.seatFullScreenRestore);
+    }
+
+    // ...and a fullscreen: no apply, the zone seated as the fullscreen restore
+    // rect (F505(b)). The old apply bailed and seated nothing.
+    void restatementKeepsFullscreenAndSeatsTheZone()
+    {
+        Inputs in = inputs(Purpose::Restatement);
         in.requestedFullScreen = true;
         const Verdict v = decide(in);
+        QVERIFY(!v.apply);
+        QVERIFY(v.seatFullScreenRestore);
         QVERIFY(!v.endFullScreen);
-        QVERIFY(!v.endMaximize);
+    }
+
+    // Maximized, then fullscreen on top: only the maximize restore is seated,
+    // KWin keeps its own fullscreen restore (F524(b)).
+    void restatementOfMaximizedThenFullscreenSeatsOnlyTheMaximizeRestore()
+    {
+        Inputs in = inputs(Purpose::Restatement);
+        in.maximized = true;
+        in.requestedFullScreen = true;
+        const Verdict v = decide(in);
+        QVERIFY(!v.apply);
+        QVERIFY(v.seatMaximizeRestore);
+        QVERIFY(!v.seatFullScreenRestore);
+    }
+
+    // A re-statement onto another output leaves the state and moves, like a
+    // user verb (F576, F561).
+    void crossOutputRestatementLeavesAndMoves()
+    {
+        Inputs in = inputs(Purpose::Restatement);
+        in.maximized = true;
+        in.requestedFullScreen = true;
+        in.sameOutput = false;
+        const Verdict v = decide(in);
+        QVERIFY(v.apply);
+        QVERIFY(v.endFullScreen);
+        QVERIFY(v.endMaximize);
+        QVERIFY(!v.seatMaximizeRestore && !v.seatFullScreenRestore);
+    }
+
+    // An engine claim shed by a re-statement leaves nothing to keep: it applies.
+    void restatementShedsAClaimAndApplies()
+    {
+        Inputs in = inputs(Purpose::Restatement);
+        in.maximized = true;
+        in.engineMaximizeClaim = true;
+        const Verdict v = decide(in);
+        QVERIFY(v.shedEngineMaximize);
+        QVERIFY(v.apply);
+    }
+
+    // A plain window re-stated: nothing to keep or hand back.
+    void plainRestatementApplies()
+    {
+        const Verdict v = decide(inputs(Purpose::Restatement));
+        QVERIFY(v.apply);
+        QVERIFY(!v.seatMaximizeRestore && !v.seatFullScreenRestore && !v.endMaximize && !v.endFullScreen);
     }
 
     // A live gesture the placement does not own: nothing is written, the

@@ -58,88 +58,89 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
     }
     QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(interface, method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation, onComplete,
-             onError](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
-                QDBusPendingReply<int, int, int, int, bool> reply = *w;
-                if (reply.isError()) {
-                    qCDebug(lcEffect) << method << "error:" << reply.error().message();
-                    if (onError)
-                        onError();
-                    else if (fallback)
-                        fallback();
-                    if (onComplete)
-                        onComplete();
-                    return;
-                }
-                if (reply.argumentAt<4>() && (!window || window->isDeleted())) {
-                    // The daemon DID resolve/commit — the window just died in
-                    // flight. This is not a restore miss: onMiss/fallback
-                    // would drop restart-candidate state a same-app reopen
-                    // may still need. Nothing to apply; just complete.
-                    if (onComplete)
-                        onComplete();
-                    return;
-                }
-                if (reply.argumentAt<4>() && window && !window->isDeleted()) {
-                    QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(),
-                              reply.argumentAt<3>());
-                    qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
-                    // The placement statement before the apply. The pre-snap
-                    // capture ran before the call, so its
-                    // freeGeometryForCapture already read the maximize state
-                    // the hand-back consumes. Ungated on isManagedScreen,
-                    // unlike the daemon_apply sites (their slots also carry
-                    // float restores): this funnel always commits a zone
-                    // placement and applies the rect unconditionally below.
-                    //
-                    // The purpose follows storePreSnap, which only a user
-                    // verb sets (the auto-fill on drop); a restore reply
-                    // re-states a placement the window had.
-                    const PlacementStatement::Purpose purpose =
-                        storePreSnap ? PlacementStatement::Purpose::UserVerb : PlacementStatement::Purpose::Restatement;
-                    m_tilingHandler->preparePlacement(window, geo, purpose);
-                    applyWindowGeometry(window, geo, false, skipAnimation,
-                                        PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(), purpose);
-                    // Async snap (keyboard / empty-zone / last-zone / auto-fill)
-                    // committed — record in snapping's border set, but only for
-                    // a resolved snap-mode screen (autotile windows are tracked
-                    // by TilingHandler; an empty screen is left untracked,
-                    // mirroring the batch path's discriminator).
-                    if (const QString asyncScr = getWindowScreenId(window);
-                        !asyncScr.isEmpty() && !m_tilingHandler->isManagedScreen(asyncScr)) {
-                        // Defensive stale-float clear — see the drag-drop
-                        // commit path; idempotent vs the daemon broadcast.
-                        m_navigationHandler->setWindowFloating(windowId, false);
-                        m_snapHandler->markWindowSnapped(windowId, asyncScr);
-                        // Floating → snapped changes the Mode / IsSnapped rule
-                        // match fields. Invalidate the per-window match cache so a
-                        // placement-scoped border / opacity rule re-resolves now,
-                        // rather than waiting for the daemon's windowStateChanged
-                        // broadcast (self-contained, mirrors the autotile path).
-                        invalidateRuleCacheForStateChange(windowId);
-                    } else {
-                        // Same discriminator epilogue as the other commit
-                        // paths: drop stale snap tracking instead of skipping.
-                        m_snapHandler->clearWindowSnapped(windowId);
-                        // Symmetric with the snap-tracked branch: re-resolve rules.
-                        invalidateRuleCacheForStateChange(windowId);
-                    }
-                    // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
-                    if (onSnapSuccess && args.size() >= 2) {
-                        onSnapSuccess(windowId, args[1].toString());
-                    }
-                    if (onComplete)
-                        onComplete();
-                    return;
-                }
-                if (fallback)
+    connect(
+        watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation, onComplete,
+         onError](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            QDBusPendingReply<int, int, int, int, bool> reply = *w;
+            if (reply.isError()) {
+                qCDebug(lcEffect) << method << "error:" << reply.error().message();
+                if (onError)
+                    onError();
+                else if (fallback)
                     fallback();
                 if (onComplete)
                     onComplete();
                 return;
-            });
+            }
+            if (reply.argumentAt<4>() && (!window || window->isDeleted())) {
+                // The daemon DID resolve/commit — the window just died in
+                // flight. This is not a restore miss: onMiss/fallback
+                // would drop restart-candidate state a same-app reopen
+                // may still need. Nothing to apply; just complete.
+                if (onComplete)
+                    onComplete();
+                return;
+            }
+            if (reply.argumentAt<4>() && window && !window->isDeleted()) {
+                QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(), reply.argumentAt<3>());
+                qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
+                // The placement statement before the apply. The pre-snap
+                // capture ran before the call, so its
+                // freeGeometryForCapture already read the maximize state
+                // the hand-back consumes. Ungated on isManagedScreen,
+                // unlike the daemon_apply sites (their slots also carry
+                // float restores): this funnel always commits a zone
+                // placement and applies the rect unconditionally below.
+                //
+                // The purpose follows storePreSnap, which only a user
+                // verb sets (the auto-fill on drop); a restore reply
+                // re-states a placement the window had.
+                const PlacementStatement::Purpose purpose =
+                    storePreSnap ? PlacementStatement::Purpose::UserVerb : PlacementStatement::Purpose::Restatement;
+                if (m_tilingHandler->preparePlacement(window, geo, purpose).apply) {
+                    applyWindowGeometry(window, geo, false, skipAnimation,
+                                        PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(), purpose);
+                }
+                // Async snap (keyboard / empty-zone / last-zone / auto-fill)
+                // committed — record in snapping's border set, but only for
+                // a resolved snap-mode screen (autotile windows are tracked
+                // by TilingHandler; an empty screen is left untracked,
+                // mirroring the batch path's discriminator).
+                if (const QString asyncScr = getWindowScreenId(window);
+                    !asyncScr.isEmpty() && !m_tilingHandler->isManagedScreen(asyncScr)) {
+                    // Defensive stale-float clear — see the drag-drop
+                    // commit path; idempotent vs the daemon broadcast.
+                    m_navigationHandler->setWindowFloating(windowId, false);
+                    m_snapHandler->markWindowSnapped(windowId, asyncScr);
+                    // Floating → snapped changes the Mode / IsSnapped rule
+                    // match fields. Invalidate the per-window match cache so a
+                    // placement-scoped border / opacity rule re-resolves now,
+                    // rather than waiting for the daemon's windowStateChanged
+                    // broadcast (self-contained, mirrors the autotile path).
+                    invalidateRuleCacheForStateChange(windowId);
+                } else {
+                    // Same discriminator epilogue as the other commit
+                    // paths: drop stale snap tracking instead of skipping.
+                    m_snapHandler->clearWindowSnapped(windowId);
+                    // Symmetric with the snap-tracked branch: re-resolve rules.
+                    invalidateRuleCacheForStateChange(windowId);
+                }
+                // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
+                if (onSnapSuccess && args.size() >= 2) {
+                    onSnapSuccess(windowId, args[1].toString());
+                }
+                if (onComplete)
+                    onComplete();
+                return;
+            }
+            if (fallback)
+                fallback();
+            if (onComplete)
+                onComplete();
+            return;
+        });
 }
 
 void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int width, int height)

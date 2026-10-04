@@ -45,26 +45,37 @@ struct Inputs
     bool windowedFsMember = false; ///< a scrolling windowed-fullscreen claim
     bool engineMaximizeClaim = false; ///< a monocle or maximize-to-edges claim
     bool gestureLive = false; ///< a user move or resize the placement does not own
+    /// The placement lands on the KWin output the window is on (outputs, never
+    /// screen ids: two virtual screens of one monitor are one output).
+    bool sameOutput = true;
 };
 
-/// What the placement does to that state before its apply. Every hand-back is
-/// anchored at the placement rect (its restore rect is seated there first), and
-/// fullscreen goes before the maximize: KWin drops a maximize(Restore) issued
-/// while fullscreen is requested.
+/// What the placement does to that state. Every hand-back is anchored at the
+/// placement rect (its restore rect is seated there first), and fullscreen goes
+/// before the maximize: KWin drops a maximize(Restore) issued while fullscreen
+/// is requested. A kept state is not moved at all: the placement rect becomes
+/// the rect the window returns to when the user leaves that state.
 struct Verdict
 {
     bool shedWindowedFullscreen = false; ///< drop the claim and end its fullscreen
     bool endFullScreen = false; ///< end a fullscreen the window holds itself
     bool shedEngineMaximize = false; ///< drop the claim and end its maximize
     bool endMaximize = false; ///< end a KWin maximize the window holds itself
+    bool seatFullScreenRestore = false; ///< keep the fullscreen, its restore rect becomes the placement
+    bool seatMaximizeRestore = false; ///< keep the maximize, its restore rect becomes the placement
+    bool apply = true; ///< move the window to the placement rect now
 };
 
 /// A tiling engine's claim is shed for any purpose: the window is leaving the
-/// strip or stack that owns it (F342, F529). A user verb ends the window's own
-/// fullscreen and maximize, so the window lands where the verb put it (F505,
-/// F524, F582). A re-statement hands back a maximize only, and never on a
-/// fullscreen window. A live gesture the placement does not own writes nothing;
-/// the deferred replay decides again once it ends.
+/// strip or stack that owns it (F342, F529). A user verb, and any placement on
+/// another output, ends the window's own fullscreen and then its maximize, so
+/// the window lands where it is put (F505, F524, F576, F582). A re-statement on
+/// the same output keeps both and seats the placement as the rect to return to:
+/// a maximized window's restore rect (also when it is fullscreen on top, whose
+/// own restore rect KWin keeps), else a fullscreen window's (F490, F509, F524,
+/// F547, F560). An axis maximize takes the same rule as a full one. A live
+/// gesture the placement does not own writes nothing; the deferred replay
+/// decides again once it ends.
 constexpr Verdict decide(const Inputs& in)
 {
     Verdict verdict;
@@ -75,11 +86,15 @@ constexpr Verdict decide(const Inputs& in)
     verdict.shedEngineMaximize = in.engineMaximizeClaim;
     const bool ownFullScreen = in.requestedFullScreen && !in.windowedFsMember;
     const bool ownMaximize = in.maximized && !in.engineMaximizeClaim;
-    if (in.purpose == Purpose::UserVerb) {
+    if (in.purpose == Purpose::UserVerb || !in.sameOutput) {
         verdict.endFullScreen = ownFullScreen;
         verdict.endMaximize = ownMaximize;
-    } else {
-        verdict.endMaximize = ownMaximize && !ownFullScreen;
+    } else if (ownMaximize) {
+        verdict.seatMaximizeRestore = true;
+        verdict.apply = false;
+    } else if (ownFullScreen) {
+        verdict.seatFullScreenRestore = true;
+        verdict.apply = false;
     }
     return verdict;
 }
