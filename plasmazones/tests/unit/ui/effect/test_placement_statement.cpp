@@ -58,6 +58,17 @@ private Q_SLOTS:
         QVERIFY(!fullscreenBails(false, false, true, false));
     }
 
+    // A fullscreen window the user activates is reported on a scrolling and a
+    // snapping screen, so a key acts on it (F522); autotile keeps leaving it
+    // out.
+    void fullscreenActivationIsReportedOnSnappingScreens()
+    {
+        using PlasmaZones::PlacementStatement::reportsFullscreenActivation;
+        QVERIFY(reportsFullscreenActivation(/*scrolling=*/false, /*managed=*/false));
+        QVERIFY(reportsFullscreenActivation(true, true));
+        QVERIFY(!reportsFullscreenActivation(false, true));
+    }
+
     // A user verb on a fullscreen window ends the fullscreen, so its apply
     // lands instead of bailing (F505, F524). The old demote returned for a
     // window that was not maximized and never touched fullscreen.

@@ -548,19 +548,18 @@ public:
         return m_suppressMaximizeChanged > 0;
     }
 
-    /// The placement statement, run before a placement on a SNAPPING screen
-    /// applies @p rect (placementhandback.cpp, PlacementStatement::decide). A maximized or fullscreen window's state
-    /// survives a bare moveResize and its restore rect can sit on another monitor, so the next maximize press restores
-    /// it cross-screen, read by the daemon as a move off its zone (the #1028-family Brave trace). So: a tiling engine's
-    /// claim is shed for any
-    /// @p purpose; a user verb or a move to another output ends the window's
-    /// own fullscreen, then its maximize, anchored at @p rect; a re-statement
-    /// on the same output keeps both and seats @p rect as their restore rect,
-    /// and the verdict says apply false. A window the tiling handler still
-    /// tracks is untracked here. Nothing is written under a live gesture (the
-    /// deferred replay calls again). Here because the OWNERSHIP LEDGERS are.
+    /// The placement statement before a placement on a SNAPPING screen applies @p rect (placementhandback.cpp,
+    /// PlacementStatement::decide). A maximized or fullscreen window's restore rect can sit on another monitor, so a
+    /// bare moveResize leaves the next maximize press restoring it cross-screen (the #1028-family Brave trace). A
+    /// tiling engine's claim is shed for any @p purpose; a user verb or a move to another output ends the window's own
+    /// fullscreen, then its maximize, anchored at @p rect; a re-statement on the same output keeps both, seats @p rect
+    /// as their restore rect and says apply false. A window the tiling handler still tracks is untracked here. Nothing
+    /// is written under a live gesture (the replay calls again). Here because the OWNERSHIP LEDGERS are.
     PlacementStatement::Verdict preparePlacement(KWin::EffectWindow* w, const QRect& rect,
                                                  PlacementStatement::Purpose purpose);
+    /// A self-fullscreened tile arriving on @p screenId by a keyboard crossing leaves its fullscreen at @p tile.
+    void endFullscreenOfArrivingTile(const QString& windowId, KWin::EffectWindow* w, const QString& screenId,
+                                     const QRect& tile);
 
     /// Arm the clear-in-flight marker and dispatch Scrolling.
     /// clearWindowedFullscreen reply-gated: the error arm drops the marker

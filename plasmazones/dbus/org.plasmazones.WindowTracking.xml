@@ -329,6 +329,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="PlacementPurpose. 0 places the window a user action is about, so its maximize and fullscreen end. 1 re-states a placement it already has, so a maximized or fullscreen window keeps that state. Unknown values are read as 0."/>
             </arg>
         </signal>
+        <signal name="fullscreenHandBackRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="A user action on the window that places no geometry for it (a float with no remembered spot, a move to a tiling monitor). The compositor ends the window's own fullscreen where it stands."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window whose fullscreen ends."/>
+            </arg>
+        </signal>
         <signal name="activateWindowRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to activate (focus) a window. Used by daemon-driven focus/cycle navigation."/>
             <arg name="windowId" type="s">

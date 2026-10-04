@@ -53,6 +53,23 @@ void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& acti
                                                    {success, action, reason, sourceZoneId, targetZoneId, screenId});
 }
 
+void PlasmaZonesEffect::slotFullscreenHandBackRequested(const QString& windowId)
+{
+    // A user verb the daemon placed no geometry for (a float with no
+    // float-back, a move to a tiling engine whose tile batch would bail on a
+    // fullscreen surface): the window leaves its own fullscreen where KWin's
+    // restore rect has it (F546, F526, F551). A windowed-fullscreen member's
+    // fullscreen is the strip's, and a minimized window has nothing to show.
+    KWin::EffectWindow* w = findWindowByIdExact(windowId);
+    KWin::Window* kw = w && !w->isDeleted() ? w->window() : nullptr;
+    if (!kw || !kw->isRequestedFullScreen() || w->isMinimized() || m_windowedFullscreenWindows.contains(windowId)) {
+        return;
+    }
+    qCInfo(lcEffect) << "Ending the fullscreen of" << windowId << "for a user verb with no placement";
+    const auto applyGuard = geometryApplyScope();
+    m_tilingHandler->applyFullScreenSuppressed(kw, false);
+}
+
 void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
 {
     // Showing-desktop guard: this activation is daemon-relayed (snap engine

@@ -68,6 +68,8 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
                                          windowId, x, y, width, height, zoneId, screenId, sizeOnly,
                                          static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
                                  }));
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::fullscreenHandBackRequested, adaptor,
+                                 &WindowTrackingAdaptor::fullscreenHandBackRequested));
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::restatementGeometryRequested, adaptor,
                                  [adaptor](const QString& windowId, int x, int y, int width, int height,
                                            const QString& zoneId, const QString& screenId) {

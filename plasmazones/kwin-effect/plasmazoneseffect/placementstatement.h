@@ -26,6 +26,16 @@ constexpr bool fullscreenBails(bool hasKWinWindow, bool committedFullScreen, boo
     return !windowedFsMember && (hasKWinWindow ? requestedFullScreen : committedFullScreen);
 }
 
+/// Whether activating a fullscreen window is reported to the daemon as its
+/// active window. On a scrolling screen the strip keeps tiling it through the
+/// fullscreen, and on a snapping screen a snap key must act on it, not on the
+/// window that was active before (F522). Only autotile's stack leaves a
+/// fullscreen window out, as it always has.
+constexpr bool reportsFullscreenActivation(bool scrollingScreen, bool managedScreen)
+{
+    return scrollingScreen || !managedScreen;
+}
+
 /// Why a window is placed on a snapping screen: a user verb about this window
 /// (a snap key, a drop, a Snap Assist pick, Meta+F, a routed open), or a
 /// re-statement of a placement it already has (PhosphorProtocol::PlacementPurpose

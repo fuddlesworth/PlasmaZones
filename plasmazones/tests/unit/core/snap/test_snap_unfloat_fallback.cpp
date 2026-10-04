@@ -864,6 +864,35 @@ private Q_SLOTS:
         QVERIFY(!engine.snapState()->isFloating(w));
     }
 
+    // A float with no float-back on record moves nothing, so the window's own
+    // fullscreen would stay covering the monitor: the effect is asked to end
+    // it (F546). A float with a float-back carries it in its apply instead.
+    void testFloatWithNoFloatBackAsksForTheFullscreenHandBack()
+    {
+        SnapEngine& engine = *m_engine;
+        auto* layout = installLayout(2);
+        const QString zone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|handback");
+        QSignalSpy handBack(&engine, &SnapEngine::fullscreenHandBackRequested);
+
+        engine.commitSnap(w, zone, QStringLiteral("DP-1"));
+        m_wts->clearFreeGeometry(w);
+        engine.setWindowFloat(w, true, QStringLiteral("DP-1"));
+        QVERIFY(engine.isFloating(w));
+        QCOMPARE(handBack.count(), 1);
+        QCOMPARE(handBack.first().at(0).toString(), w);
+
+        // A window with a float-back (recorded while it was free, before its
+        // snap) floats to it, and the apply ends its fullscreen.
+        const QString withFloatBack = QStringLiteral("app|handback-free");
+        m_wts->recordFreeGeometry(withFloatBack, QStringLiteral("DP-1"), QRect(300, 200, 640, 480), true);
+        engine.commitSnap(withFloatBack, zone, QStringLiteral("DP-1"));
+        handBack.clear();
+        engine.setWindowFloat(withFloatBack, true, QStringLiteral("DP-1"));
+        QVERIFY(engine.isFloating(withFloatBack));
+        QCOMPARE(handBack.count(), 0);
+    }
+
     // A suspension's return re-states the zone the window was snapped in, so a
     // window maximized before it was minimized stays maximized (F560); the same
     // unfloat by the user is the user verb's apply.

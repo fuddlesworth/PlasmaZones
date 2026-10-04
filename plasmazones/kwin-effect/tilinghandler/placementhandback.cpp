@@ -133,4 +133,23 @@ PlacementStatement::Verdict TilingHandler::preparePlacement(KWin::EffectWindow* 
     return verdict;
 }
 
+void TilingHandler::endFullscreenOfArrivingTile(const QString& windowId, KWin::EffectWindow* w, const QString& screenId,
+                                                const QRect& tile)
+{
+    // A keyboard crossing of a self-fullscreened tile into this screen's
+    // strip or stack (the daemon armed its output move here) is a user verb:
+    // the window leaves its fullscreen anchored at the tile, so the tile
+    // apply lands instead of bailing (F526). A windowed-fullscreen member's
+    // fullscreen is the strip's own.
+    const auto marker = m_expectedOutputMove.constFind(windowId);
+    if (!w || marker == m_expectedOutputMove.constEnd() || marker->targetScreenId != screenId
+        || m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+        return;
+    }
+    if (KWin::Window* kw = w->window(); kw && kw->isRequestedFullScreen()) {
+        kw->setFullscreenGeometryRestore(KWin::RectF(tile));
+        applyFullScreenSuppressed(kw, false);
+    }
+}
+
 } // namespace PlasmaZones

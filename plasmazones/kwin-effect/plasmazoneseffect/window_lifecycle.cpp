@@ -806,8 +806,10 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // transient_for set but isPopupWindow false) leaked through an older
     // hand-maintained copy of this list — the shared predicate makes that
     // drift impossible.
-    // Fullscreen-on-a-scrolling-screen exception, mirroring the eligibility
-    // exemption: the strip keeps tiling a window through real fullscreen, so
+    // Fullscreen exception on a scrolling or a snapping screen
+    // (PlacementStatement::reportsFullscreenActivation): a snap key must act on
+    // the fullscreen window the user switched to (F522). On a scrolling screen,
+    // mirroring the eligibility exemption, the strip keeps tiling a window through real fullscreen, so
     // the daemon must keep hearing its focus — otherwise the scrolling verbs
     // (windowed fullscreen's own toggle first among them) act on whatever
     // window was reported active BEFORE the game went fullscreen. Seen
@@ -821,9 +823,11 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // a fullscreen dialog/splash/popup still cannot pin the daemon's focus
     // tracking. The residual accepted leak class is "fullscreen, no
     // explicit type, has a transient parent" — the intended target.
-    const bool fullscreenOnScrollingScreen =
-        w->isFullScreen() && m_tilingHandler->isScrollingScreen(getWindowScreenId(w));
-    if (isStructurallyUnmanageableWindowType(w, nullptr, /*exemptFullscreen=*/fullscreenOnScrollingScreen)) {
+    const QString activatedScreen = getWindowScreenId(w);
+    const bool fullscreenReported = w->isFullScreen()
+        && PlacementStatement::reportsFullscreenActivation(m_tilingHandler->isScrollingScreen(activatedScreen),
+                                                           m_tilingHandler->isManagedScreen(activatedScreen));
+    if (isStructurallyUnmanageableWindowType(w, nullptr, /*exemptFullscreen=*/fullscreenReported)) {
         return false;
     }
 

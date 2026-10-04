@@ -1055,12 +1055,12 @@ Q_SIGNALS:
     /// Request KWin effect to collect unsnapped windows and snap them all
     void snapAllWindowsRequested(const QString& screenId);
 
-    /// Window-geometry updates the effect applies in one go. The engine emits only action="rotate"; SnapAdaptor
-    /// attaches "resnap" / "vs_reconfigure" to its own batches ("snap_all" batches stay effect-local).
+    /// Window geometries the effect applies in one go; the engine itself emits only action="rotate".
     void applyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
     /// Re-states a placement the window already has (relayed as PlacementPurpose::Restatement).
     void restatementGeometryRequested(const QString& windowId, int x, int y, int width, int height,
                                       const QString& zoneId, const QString& screenId);
+    void fullscreenHandBackRequested(const QString& windowId); ///< a user verb with no apply: end its fullscreen
 
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;

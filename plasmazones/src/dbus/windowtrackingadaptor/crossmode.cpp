@@ -139,6 +139,13 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
     //     toDesktop too (places into that desktop's strip) — the reactive
     //     deferral is autotile-only.
     const bool reactiveAutotileDesktopArrival = targetIsAutotile && targetDesktop > 0;
+    // A window moved to a tiling engine leaves its own fullscreen first: the
+    // tile batch that places it would bail on a fullscreen surface, and the
+    // reactive desktop arrival places nothing at all (F526, F551). A snap
+    // target ends it in its own placement.
+    if (!qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine)) {
+        Q_EMIT fullscreenHandBackRequested(windowId);
+    }
     bool placedOnTarget = false;
     if (!reactiveAutotileDesktopArrival) {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
@@ -426,6 +433,14 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     // it) from a plain refusal (receiveVerified already re-homed it).
     bool focusedAdopted = false;
     bool partnerAdopted = false;
+    // Each window bound for a tiling engine leaves its own fullscreen first,
+    // as on a move (F526); a snap side ends it in its own placement.
+    if (!qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine)) {
+        Q_EMIT fullscreenHandBackRequested(windowId);
+    }
+    if (!qobject_cast<PhosphorSnapEngine::SnapEngine*>(sourceEngine)) {
+        Q_EMIT fullscreenHandBackRequested(partner);
+    }
     // (Both placements: an autotile receiver's handoffReceive also announces
     // the arrival's tiled state on the passive float-sync channel —
     // intended; the relay's last-broadcast gate dedups an agreeing bit.)

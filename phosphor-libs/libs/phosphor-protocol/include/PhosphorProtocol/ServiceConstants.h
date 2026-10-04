@@ -610,7 +610,11 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       already has, which decides whether its maximize and fullscreen end. A
 //       receiver whose slot takes the old eight arguments still gets the signal
 //       (QtDBus delivers a longer signal to a shorter slot) and keeps the
-//       user-verb behaviour it always had.
+//       user-verb behaviour it always had. WindowTracking also gains
+//       fullscreenHandBackRequested (s): a user verb the daemon places no
+//       geometry for (a float with nothing to restore, a move to a tiling
+//       engine), on which the effect ends the window's own fullscreen. An old
+//       effect never connects it, and the window stays fullscreen as before.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

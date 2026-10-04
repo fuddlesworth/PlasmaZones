@@ -328,6 +328,7 @@ private Q_SLOTS:
     void slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
                                     const QString& screenId, bool sizeOnly, int purpose);
     void slotActivateWindowRequested(const QString& windowId);
+    void slotFullscreenHandBackRequested(const QString& windowId);
     void slotWindowDesktopMoveRequested(const QString& windowId, int desktop);
     void slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
                                       const QString& sourceScreenId);
@@ -1167,10 +1168,9 @@ private:
                              const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF(),
                              std::optional<PlacementStatement::Purpose> statementOnDeferredReplay = std::nullopt);
-    /// applyWindowGeometry's fullscreen bail (PlacementStatement::fullscreenBails), also its replay's and the tiles'.
-    bool fullscreenBailsApply(KWin::EffectWindow* window) const;
-    /// Make the next command @p window's latest (bump its stamp, drop a pending replay); returns the stamp.
-    quint64 beginGeometryCommand(KWin::EffectWindow* window);
+    bool fullscreenBailsApply(KWin::EffectWindow* window) const; ///< applyWindowGeometry's (fullscreenBails)
+    quint64 beginGeometryCommand(KWin::EffectWindow* window); ///< bump its command stamp, drop a pending replay
+    void notifyActiveWindowRawFirst(); ///< KWin's raw active window, else the stacking walk's (F523)
     /// The rect applyWindowGeometry will REQUEST of KWin for a tile request:
     /// X11/XWayland frames are constrained to the client's WM_SIZE_HINTS and
     /// centred in the zone; everything else passes through unchanged. The

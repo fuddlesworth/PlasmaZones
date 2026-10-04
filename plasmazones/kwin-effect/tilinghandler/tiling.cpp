@@ -1308,16 +1308,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             const auto guard = qScopeGuard([this, prevInApply] {
                 m_effect->m_daemonGate.inGeometryApply = prevInApply;
             });
+            endFullscreenOfArrivingTile(snap.windowId, snap.window, snap.screenId, snap.geometry); // F526
             // Pre-seed the effect's tracked screen (mirrors daemon_apply's
             // pre-seed): the outputChanged handler early-returns while
-            // inGeometryApply is set, so without this a cross-output tile
-            // apply leaves the map naming the OLD screen and the next
-            // genuine user move diffs against stale state. The handler's
-            // OWN notified-screen map must move too — for scroll-managed
-            // windows getWindowScreenId answers FROM this map, so a
-            // scroll→scroll handoff that skipped it would pin every
-            // id-keyed consumer (close records, minimize routing, rule
-            // Mode stamp, drag drop) to the old monitor forever.
+            // inGeometryApply is set, so a cross-output tile apply left the
+            // map naming the OLD screen. The notified-screen map moves too:
+            // getWindowScreenId answers from it for a strip tile, so a
+            // scroll→scroll handoff that skipped it pinned every id-keyed
+            // consumer (close records, minimize routing, rule Mode stamp,
+            // drag drop) to the old monitor.
             m_effect->m_trackedScreenPerWindow[snap.window] = snap.screenId;
             // A tile move of the daemon's focused window between virtual
             // screens fires no outputChanged, so report it here, with the

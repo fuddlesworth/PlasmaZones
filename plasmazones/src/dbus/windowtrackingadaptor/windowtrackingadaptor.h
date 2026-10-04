@@ -1417,11 +1417,10 @@ Q_SIGNALS:
      */
     void applyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
 
-    /**
-     * @brief Daemon requests KWin to raise windows in order (z-order restoration)
-     * @param windowIds Ordered list of window IDs (bottom-to-top)
-     */
+    /// Daemon requests KWin to raise @p windowIds in order, bottom to top (z-order restoration).
     void raiseWindowsRequested(const QStringList& windowIds);
+    /// A user verb on @p windowId the daemon places no geometry for: KWin ends its own fullscreen in place.
+    void fullscreenHandBackRequested(const QString& windowId);
 
     // toggleFloatForWindow moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
 

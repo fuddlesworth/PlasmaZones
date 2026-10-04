@@ -354,8 +354,19 @@ private Q_SLOTS:
         snapOnTwoDesktops(w, m_screenId);
 
         QSignalSpy markerSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
+        // The window leaves its own fullscreen BEFORE the tiling engine
+        // receives it: its tile batch would bail on a fullscreen surface (F526).
+        int receivedAtHandBack = -1;
+        const QMetaObject::Connection handBack =
+            connect(m_wta, &WindowTrackingAdaptor::fullscreenHandBackRequested, this, [&](const QString& id) {
+                if (id == w) {
+                    receivedAtHandBack = scroll.received.size();
+                }
+            });
         Q_EMIT m_snapEngine->crossModeMoveRequested(w, dest, 0, QStringLiteral("right"));
+        disconnect(handBack);
 
+        QCOMPARE(receivedAtHandBack, 0);
         QCOMPARE(scroll.received.size(), 1);
         QCOMPARE(markerSpy.count(), 1);
         QVERIFY2(!m_snapEngine->isWindowTracked(w), "the other desktop's zone on the monitor left must go too");

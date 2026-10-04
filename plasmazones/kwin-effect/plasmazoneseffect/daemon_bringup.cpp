@@ -296,14 +296,7 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // the eligibility terms here but is rejected inside still falls back to
     // the stacking walk, so bring-up seeds lastActiveScreenName whenever any
     // reportable window exists.
-    KWin::EffectWindow* activeWindow = KWin::effects ? KWin::effects->activeWindow() : nullptr;
-    const bool rawEligible = activeWindow && !activeWindow->isDeleted() && !activeWindow->isMinimized()
-        && activeWindow->isOnCurrentDesktop() && activeWindow->isOnCurrentActivity();
-    if (!rawEligible || !notifyWindowActivated(activeWindow)) {
-        if (KWin::EffectWindow* fallback = getActiveWindow(); fallback && fallback != activeWindow) {
-            notifyWindowActivated(fallback);
-        }
-    }
+    notifyActiveWindowRawFirst();
 
     // Fetch virtual screen definitions from daemon — needed before any screen ID
     // resolution so that getWindowScreenId() and cursor tracking return virtual
@@ -414,10 +407,9 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     // the fetch, so on a subdivided setup it resolved a PHYSICAL screen id.
     // getWindowScreenId resolves through the (now populated) definitions, so
     // this second notify carries the virtual id the daemon keys its shortcut
-    // routing on. Idempotent: notifyWindowActivated re-states the same window.
-    if (KWin::EffectWindow* activeWindow = getActiveWindow()) {
-        notifyWindowActivated(activeWindow);
-    }
+    // routing on. Raw-first like the first one: getActiveWindow's stacking
+    // walk drops a fullscreen window the raw read keeps (F523).
+    notifyActiveWindowRawFirst();
 
     // Delegate autotile re-initialization to handler.
     // Snapshot the active window so the autotile raise loop can re-activate it
@@ -760,6 +752,18 @@ bool PlasmaZonesEffect::shouldForwardDragTicks()
 // "only send dragStarted when zones activate" path because the daemon
 // always knows about the drag from the moment it begins.
 
+void PlasmaZonesEffect::notifyActiveWindowRawFirst()
+{
+    KWin::EffectWindow* activeWindow = KWin::effects ? KWin::effects->activeWindow() : nullptr;
+    const bool rawEligible = activeWindow && !activeWindow->isDeleted() && !activeWindow->isMinimized()
+        && activeWindow->isOnCurrentDesktop() && activeWindow->isOnCurrentActivity();
+    if (!rawEligible || !notifyWindowActivated(activeWindow)) {
+        if (KWin::EffectWindow* fallback = getActiveWindow(); fallback && fallback != activeWindow) {
+            notifyWindowActivated(fallback);
+        }
+    }
+}
+
 void PlasmaZonesEffect::connectNavigationSignals()
 {
     // Daemon-driven navigation: daemon computes geometry and emits applyGeometryRequested directly
@@ -767,6 +771,10 @@ void PlasmaZonesEffect::connectNavigationSignals()
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("applyGeometryRequested"), this,
         SLOT(slotApplyGeometryRequested(QString, int, int, int, int, QString, QString, bool, int)));
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("fullscreenHandBackRequested"), this,
+                                          SLOT(slotFullscreenHandBackRequested(QString)));
 
     // Daemon-driven focus/cycle: daemon resolves target window and emits activateWindowRequested
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,

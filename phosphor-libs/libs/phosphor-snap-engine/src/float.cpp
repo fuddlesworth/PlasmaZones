@@ -347,6 +347,9 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
     }
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "applyGeometryForFloat:" << windowId << "no free geometry on record — leaving in place";
+    // Nothing moves the window, so a fullscreen one would stay covering the
+    // monitor as a float: the effect ends its fullscreen in place (F546).
+    Q_EMIT fullscreenHandBackRequested(windowId);
     return false;
 }
 
