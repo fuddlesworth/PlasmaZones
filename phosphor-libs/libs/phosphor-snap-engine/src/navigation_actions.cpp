@@ -783,20 +783,9 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
         return;
     }
 
-    // Pre-tile capture semantics (from the historical WTA::toggleWindowFloat
-    // implementation): when the window is CURRENTLY floating, its live frame
-    // geometry is a valid free-float position and we capture it so the next
-    // un-float restores to the user's most recent floated location. When the
-    // window is snapped/tiled, the live shadow holds the zone rect — storing
-    // it would poison the pre-tile entry with tile coordinates, so we leave
-    // whatever's already stored untouched.
-    if (m_navState && isFloating(windowId)) {
-        QRect geo = m_navState->frameGeometry(windowId);
-        if (geo.isValid() && m_windowTracker) {
-            // Single float-back store: the unified record's shared free geometry.
-            m_windowTracker->recordFreeGeometry(windowId, screenId, geo, /*overwrite=*/true);
-        }
-    }
+    // The free frame an unfloat leaves, so the next float returns to it. A
+    // window in a zone is refused at the write point (its frame is the zone).
+    recordFreeFrameBeforeUserSnap(windowId, screenId);
 
     // Dispatch to the IPlacementEngine toggle path (SnapEngine::toggleWindowFloat
     // lives in src/float.cpp). No need to route through WTA —

@@ -831,16 +831,15 @@ public:
 
     void uncommitSnap(const QString& windowId);
 
-    /// Record a floating window's live frame as its float-back on @p screenId,
-    /// ahead of a user snap the DAEMON drives (the move, span, snap-to-zone and
-    /// push keys, the D-Bus moveWindowToZone). Those commit before the effect's
-    /// pre-snap capture arrives, and recordFreeGeometry refuses a capture for a
-    /// window that already occupies a zone, so the window was left with no
-    /// float-back. The capture toggleFocusedFloat already takes, for the same
-    /// reason. No-op for a window in a zone (its frame is the zone rect), a
-    /// maximized or fullscreen one (its frame is the output), and a frame that
-    /// does not lie on @p screenId. Not for handoffs: a window arriving from a
-    /// tiling engine is sitting on its tile rect.
+    /// Record a window's live frame as its float-back on @p screenId, ahead of a
+    /// user snap the DAEMON drives (the move, span, snap-to-zone and push keys,
+    /// snap-all, the float toggle, the D-Bus moveWindowToZone). Those commit
+    /// before the effect's pre-snap capture arrives, and recordFreeGeometry
+    /// refuses a capture for a window that already occupies a zone, so this is
+    /// the free frame's last chance. Samples the frame shadow: refuses a
+    /// minimized, suspension-floated, maximized or fullscreen window and a frame
+    /// off @p screenId, and leaves a window in a zone, on a tile or on a frame it
+    /// settled at under management to recordFreeGeometry's refusals.
     void recordFreeFrameBeforeUserSnap(const QString& windowId, const QString& screenId);
 
     /// The ABI-stable signature exported before the confinement parameter.

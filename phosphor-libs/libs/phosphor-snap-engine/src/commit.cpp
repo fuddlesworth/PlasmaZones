@@ -161,12 +161,11 @@ void SnapEngine::recordFreeFrameBeforeUserSnap(const QString& windowId, const QS
     if (!m_windowTracker || !m_navState || windowId.isEmpty() || screenId.isEmpty()) {
         return;
     }
-    // Floating is snap's own bit: a free window on a snapping screen is
-    // tracked floating from open, and a window in a zone is not, so this is
-    // exactly "the frame is a free position".
-    if (!isFloating(windowId)) {
-        return;
-    }
+    // No floating gate: a free window snap does not hold floating (one a
+    // screen change unsnapped, one snap never tracked) has a free frame too.
+    // A window in a zone or on a tile is refused at the write point, by the
+    // zone, tile and managed-frame refusals of recordFreeGeometry.
+    //
     // The frame is a sample, so the window-state refusals live here: a
     // minimized window's frame is the hidden rect, a minimize-suspended float
     // still stands on the zone it is suspended from (F156), and a maximized

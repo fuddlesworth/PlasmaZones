@@ -163,10 +163,18 @@ PhosphorProtocol::SnapAllResultList SnapAdaptor::calculateSnapAllWindows(const Q
                                                                          const QString& screenId)
 {
     qCDebug(lcDbusWindow) << "calculateSnapAllWindows: count=" << windowIds.size() << "screen=" << screenId;
-    if (m_engine) {
-        return m_engine->calculateSnapAllWindows(windowIds, screenId);
+    if (!m_engine) {
+        return {};
     }
-    return {};
+    const PhosphorProtocol::SnapAllResultList results = m_engine->calculateSnapAllWindows(windowIds, screenId);
+    // Each candidate's free frame, while the shadow still holds it: the effect
+    // applies the zone geometry only after this reply, and its own pre-snap
+    // capture then meets a window already in a zone.
+    for (const PhosphorProtocol::SnapAllResultEntry& r : results) {
+        const QString windowScreen = m_engine->screenForTrackedWindow(r.windowId);
+        m_engine->recordFreeFrameBeforeUserSnap(r.windowId, windowScreen.isEmpty() ? screenId : windowScreen);
+    }
+    return results;
 }
 
 void SnapAdaptor::snapAllWindows(const QString& screenId)

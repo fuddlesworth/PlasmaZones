@@ -81,6 +81,8 @@ void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationLi
             }
         } else {
             windowSnapped(entry.windowId, entry.zoneId, entry.screenId);
+            // The snap-all confirmation, a user snap like any shortcut's.
+            recordSnapIntent(entry.windowId, true);
         }
     }
 }
@@ -135,9 +137,10 @@ void SnapAdaptor::moveWindowToZoneOnScreen(const QString& windowId, const QStrin
         return;
     }
 
-    // The float-back of a free window, recorded before the commit that would
-    // make the effect's own pre-snap capture refused (see the helper). Filed
-    // under the screen the window is on, which a cross-screen snap is leaving.
+    // The float-back of a window that is not in a zone, recorded before the
+    // commit that would make the effect's own pre-snap capture refused (see
+    // the helper). Filed under the screen the window is on, which a
+    // cross-screen snap is leaving.
     const QString windowScreen = m_engine->screenForTrackedWindow(windowId);
     m_engine->recordFreeFrameBeforeUserSnap(windowId, windowScreen.isEmpty() ? screenId : windowScreen);
 
@@ -197,6 +200,8 @@ void SnapAdaptor::swapWindowsById(const QString& windowId1, const QString& windo
     // Update bookkeeping: window1 goes to zone2, window2 goes to zone1
     m_engine->commitSnap(windowId1, zoneId2, screen2);
     m_engine->commitSnap(windowId2, zoneId1, screen1);
+    recordSnapIntent(windowId1, true);
+    recordSnapIntent(windowId2, true);
 
     // Emit geometry requests for both
     Q_EMIT m_adaptor->applyGeometryRequested(windowId1, geo1.x(), geo1.y(), geo1.width(), geo1.height(), zoneId2,

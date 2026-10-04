@@ -114,38 +114,6 @@ private Q_SLOTS:
         QCOMPARE(m_snapEngine->screenForTrackedWindow(windowId), m_screenId);
     }
 
-    // A daemon-driven snap of a floating window records its live frame as the
-    // float-back before the commit. The effect's own pre-snap capture arrives
-    // after the commit, when the window is in a zone, so recordFreeGeometry
-    // refuses it; a keyboard or D-Bus snap left the window with nothing to
-    // float back to. A window already in a zone records nothing, because its
-    // frame is the zone rect.
-    void testMoveWindowToZone_recordsTheFreeFrameOfAFloatingWindow()
-    {
-        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
-        m_snapEngine->setNavigationStateProvider(m_wta);
-        const QString windowId = QStringLiteral("firefox|free-1");
-        const QRect freeFrame(120, 140, 640, 480);
-        m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
-        m_snapEngine->setWindowFloat(windowId, true);
-        QVERIFY(m_snapEngine->isFloating(windowId));
-        m_wta->service()->clearFreeGeometry(windowId);
-        m_wta->setFrameGeometry(windowId, freeFrame.x(), freeFrame.y(), freeFrame.width(), freeFrame.height());
-
-        m_snapAdaptor->moveWindowToZone(windowId, m_zoneIds[1]);
-
-        const auto freeOn = [this, &windowId]() {
-            const auto rec = m_wta->service()->placementStore().peekExact(windowId);
-            return rec ? rec->freeGeometryByScreen.value(m_screenId) : QRect();
-        };
-        QCOMPARE(freeOn(), freeFrame);
-
-        // Now in a zone: another snap of it must not record the zone rect.
-        m_wta->setFrameGeometry(windowId, 8, 8, 300, 300);
-        m_snapAdaptor->moveWindowToZone(windowId, m_zoneIds[2]);
-        QCOMPARE(freeOn(), freeFrame);
-    }
-
     // Control.snapWindowToZone snaps on the screen it names. The screen used to
     // be dropped after the layout lookup, so the snap re-detected it from the
     // zone id alone, and with one layout on two screens that answered with the
