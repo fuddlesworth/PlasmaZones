@@ -489,8 +489,7 @@ void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     // them to a surviving one. Every membership on the output is released
     // where it lives, each desktop's zone with it (F108), and not through the
     // tracking service's unassign: that clears the window's PRIMARY store,
-    // which may be on a surviving output, and its windowZoneChanged makes
-    // autotile untile a window it holds elsewhere (F254). A window left with
+    // which may be on a surviving output (F254). A window left with
     // no zone anywhere is announced once as moved off its screen, the entry
     // the effect drops its snapped mark on (F427); one still snapped on a
     // surviving output keeps its zone and hears nothing. A FLOATING window is

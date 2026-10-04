@@ -1102,13 +1102,12 @@ private:
     bool clearGlobalLastUsedIfRemoved(const QStringList& removedZones,
                                       const PhosphorSnapEngine::SnapState* owningStore);
 
-    /// Unassign every window in @p windowsToRemove and drop its auxiliary
-    /// per-window state (free geometry, pre-float zone, sticky flag), then
-    /// emit windowZoneChanged for each window that actually held a zone, so
-    /// zone-state consumers hear about the prune exactly as they do for the
-    /// interactive unassign path. The emit is per-window and comes AFTER that
-    /// window's clears, because AutotileEngine handles it synchronously and
-    /// relayouts. Shared by the two VS-migration prune loops
+    /// Unassign every window in @p windowsToRemove (live windows whose zones
+    /// did not survive the change) and drop its pre-float zone, keeping its
+    /// free geometry and sticky flag, then emit windowZoneChanged for each
+    /// window that actually held a zone, as the interactive unassign path
+    /// does. The emit is per-window and comes after that window's clears.
+    /// Shared by the two VS-migration prune loops
     /// (migrateScreenAssignmentsToVirtual / ...FromVirtual). Marks
     /// DirtyLastUsedZone when any last-used cleared; returns true when given a
     /// non-empty list (the callers only build it from zone-assigned windows,

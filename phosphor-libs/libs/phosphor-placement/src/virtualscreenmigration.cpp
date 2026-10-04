@@ -532,26 +532,17 @@ bool WindowTrackingService::pruneMigratedWindows(const QStringList& windowsToRem
             // linger as the global last-used.
             lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, store);
         }
-        clearFreeGeometry(wId); // drop the record's shared free geometry
+        // The window is LIVE: only its zones did not survive the virtual
+        // screen change. Its free geometry (the float-back on every monitor)
+        // and its sticky flag stay, so it can float back and the sticky
+        // exclusion still holds (F441). The pre-float zone named a zone that
+        // is gone.
         clearPreFloatZone(wId);
-        // Canonical key, as windowClosed does: the sticky map is keyed on the
-        // first-seen composite (issue #628), so a window that renamed itself
-        // (Electron/CEF) would leak its entry if removed under the raw id.
-        m_windowStickyStates.remove(canonicalizeForLookup(wId));
         // Notify zone-state consumers, as the interactive unassign path does
-        // (WindowTrackingService::unassignWindow) — a prune that lands in
-        // storage but never reaches listeners leaves them tracking a window
-        // this service no longer considers snapped.
-        //
-        // Emitted LAST, after this window's three clears, not from inside the
-        // store branch above. AutotileEngine::onWindowZoneChanged runs
-        // SYNCHRONOUSLY on an empty zoneId and calls onWindowRemoved, which
-        // relayouts; emitting mid-teardown would drive that relayout against a
-        // window whose free geometry and pre-float zone are still present but
-        // about to vanish. Gated on wasAssigned for the same reason the
-        // interactive path is: it is the store's own answer to "did this
+        // (WindowTrackingService::unassignWindow), after this window's
+        // clears. Gated on wasAssigned, the store's own answer to "did this
         // window actually hold a zone", so a window already unassigned raises
-        // no spurious removal.
+        // no spurious notice.
         if (wasAssigned) {
             Q_EMIT windowZoneChanged(wId, QString());
         }

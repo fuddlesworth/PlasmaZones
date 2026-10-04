@@ -183,50 +183,14 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 // Signal connections
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::onWindowZoneChanged(const QString& rawWindowId, const QString& zoneId)
-{
-    if (m_retiling)
-        return;
-    // Canonicalize at the event boundary like windowClosed()/windowFocused():
-    // a mutated-appId alias would otherwise miss the isFloating() check below
-    // and hand onWindowRemoved() an id no state tracks.
-    const QString windowId = canonicalizeWindowId(rawWindowId);
-    if (zoneId.isEmpty()) {
-        // Guard on the OWNING state's float bit, keyed through the reverse
-        // map — onWindowRemoved below acts on that same stored key, which can
-        // belong to another desktop/activity context. A current-context-only
-        // scan missed an off-context floating window, so a stray zone-clear
-        // untracked it.
-        const TilingStateKey key = m_states.keyForWindow(windowId);
-        if (!key.screenId.isEmpty()) {
-            const PhosphorTiles::TilingState* owner = m_states.stateForKey(key);
-            if (owner && owner->isFloating(windowId)) {
-                return;
-            }
-        }
-        onWindowRemoved(windowId);
-    }
-}
-
 void AutotileEngine::connectSignals()
 {
-    // Window tracking signals
-    // Primary window events (open/close/focus) are received via public methods:
-    // windowOpened(), windowClosed(), windowFocused() - connected by Daemon to
-    // WindowTrackingAdaptor signals. This connection also handles zone changes:
-    if (m_windowTracker) {
-        // String-based connect is required: m_windowTracker is IWindowTrackingService*
-        // (non-QObject ABC), so PMF syntax is unavailable. The asQObject() escape
-        // hatch is the standard Qt pattern for interface-based signal routing.
-        // Verify the connection succeeds so signal/slot renames are caught at startup.
-        bool ok = connect(m_windowTracker->asQObject(), SIGNAL(windowZoneChanged(QString, QString)), this,
-                          SLOT(onWindowZoneChanged(QString, QString)));
-        Q_ASSERT(ok);
-        if (Q_UNLIKELY(!ok)) {
-            qCCritical(PhosphorTileEngine::lcTileEngine)
-                << "Failed to connect windowZoneChanged — autotile will not react to zone changes";
-        }
-    }
+    // Window events (open/close/focus) arrive through the public methods
+    // windowOpened(), windowClosed() and windowFocused(), which the daemon
+    // calls. Snap's zone changes are not one of them: a snap unassign says
+    // nothing about a window this engine holds, and reading it as a removal
+    // untiled a window tiled on another screen or context whenever snap
+    // dropped the zone it remembered for it (F138).
 
     // Screen geometry changes
     if (m_screenManager) {

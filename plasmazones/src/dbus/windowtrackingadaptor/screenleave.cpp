@@ -129,8 +129,9 @@ void WindowTrackingAdaptor::releaseLeftScreens(const QString& windowId, const QS
             engine->releaseWindowOffScreen(windowId, keepScreenId);
         }
     }
-    // Every snap membership off the kept screen goes, silently: no zone-clear
-    // relay, which autotile would read as an untile.
+    // Every snap membership off the kept screen goes, silently: a zone the
+    // window holds on a screen it left is memory, not a placement anything
+    // shows, so there is no zone change to announce.
     if (snap) {
         snap->releaseWindowOffScreen(windowId, keepScreenId);
     }

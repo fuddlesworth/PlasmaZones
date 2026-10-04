@@ -177,9 +177,9 @@ private Q_SLOTS:
     }
 
     // Every snap membership on the monitor left goes, on every desktop, with
-    // the record's snap slot, and silently: a zone-clear relay would read as
-    // an untile to autotile. The other tiling engine is asked to let go off
-    // the kept screen; the arriving one is not.
+    // the record's snap slot, and silently: no zone change is announced for
+    // memory on a screen the window left. The other tiling engine is asked to
+    // let go off the kept screen; the arriving one is not.
     void releaseLeftScreens_dropsOffMonitorSnapMembershipsSilently()
     {
         StubPlacementEngine arriving;

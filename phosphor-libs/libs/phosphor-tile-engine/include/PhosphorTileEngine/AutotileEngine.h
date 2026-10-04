@@ -1407,7 +1407,6 @@ public:
     QRect lastManagedRect(const QString& rawWindowId) const override;
 
 private Q_SLOTS:
-    void onWindowZoneChanged(const QString& windowId, const QString& zoneId);
     void onWindowAdded(const QString& windowId);
     void onWindowRemoved(const QString& windowId);
     void onWindowFocused(const QString& windowId);

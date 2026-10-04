@@ -161,11 +161,7 @@ public:
  * isWindowSticky(), which is otherwise unreachable in a headless test (the
  * engine is normally built with a null tracker). Everything else returns the
  * "nothing known about this window" default, which is what the engine's own
- * null-tracker path already assumes.
- *
- * It is a QObject carrying windowZoneChanged because AutotileEngine::
- * connectSignals() connects that signal on any non-null tracker and Q_ASSERTs
- * the connection — asQObject() returning nullptr aborts a debug build.
+ * null-tracker path already assumes. asQObject() answers this QObject.
  */
 class FakeStickyWindowTracking : public QObject, public PhosphorEngine::IWindowTrackingService
 {
@@ -205,9 +201,6 @@ public:
     {
         return this;
     }
-
-Q_SIGNALS:
-    void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
 public:
     // ── Unused by these tests — "nothing known" stubs ──
