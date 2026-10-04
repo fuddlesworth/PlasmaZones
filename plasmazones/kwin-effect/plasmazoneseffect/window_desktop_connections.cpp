@@ -12,6 +12,7 @@
 #include <window.h>
 
 #include <QLoggingCategory>
+#include <QPointer>
 
 namespace PlasmaZones {
 
@@ -35,20 +36,36 @@ WindowContextEdge::IdSet desktopIdsOf(const KWin::EffectWindow* window)
     }
     return ids;
 }
+
+// The window's activity ids, in the stamp's form: EMPTY is "on all
+// activities".
+WindowContextEdge::IdSet activityIdsOf(const KWin::EffectWindow* window)
+{
+    WindowContextEdge::IdSet ids;
+    if (window) {
+        const QStringList activities = window->activities();
+        for (const QString& activity : activities) {
+            ids.insert(activity);
+        }
+    }
+    return ids;
+}
 } // namespace
 
-// Everything that reacts to a window's desktop set changing. KWin reports a
-// move, a set that grew or shrank, a stick and an un-stick through one
-// signal; each is classified against the window's stamp
+// Everything that reacts to a window's desktop or activity set changing.
+// KWin reports a move, a set that grew or shrank, a stick and an un-stick
+// through one signal per axis; each is classified against the window's stamp
 // (WindowContextEdge::classify) and handed to applyWindowContextEdit, whose
-// arms depend only on that edge and on the window's tracking state. Its own
-// translation unit because window_connections.cpp is over the file-size
-// ceiling.
+// arms depend only on that edge and on the window's tracking state, so both
+// axes share them. Its own translation unit because window_connections.cpp is
+// over the file-size ceiling.
 void PlasmaZonesEffect::wireContextChangeHandlers(KWin::EffectWindow* w)
 {
     // Seed the stamp so the window's very first edit is classifiable. The
     // windowDeleted cleanup erases it alongside m_trackedScreenPerWindow.
-    m_contextStampPerWindow[w].desktops = desktopIdsOf(w);
+    WindowContextEdge::Stamp& seed = m_contextStampPerWindow[w];
+    seed.desktops = desktopIdsOf(w);
+    seed.activities = activityIdsOf(w);
 
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
         // Corpse gate FIRST, ahead of everything. getWindowId on a deleted
@@ -85,11 +102,38 @@ void PlasmaZonesEffect::wireContextChangeHandlers(KWin::EffectWindow* w)
                                                            shown ? shown->id() : QString(),
                                                            window->isOnCurrentActivity()));
     });
+
+    // The activity axis, through the same arms: a move to another activity
+    // leaves the old layout and joins the one in view (F549), and a stick
+    // into "every activity" settles a snap park (F295). KWin's EffectWindow
+    // relays no activity signal, so this hangs off the KWin::Window, ahead of
+    // the rule invalidation window_metadata_connections.cpp queues for it.
+    if (KWin::Window* const kw = w->window()) {
+        const QPointer<KWin::EffectWindow> safeW = w;
+        connect(kw, &KWin::Window::activitiesChanged, this, [this, safeW]() {
+            KWin::EffectWindow* const window = safeW.data();
+            if (!window || window->isDeleted()) {
+                return;
+            }
+            pushWindowMetadata(window);
+            evictExclusionVerdicts(getWindowId(window));
+            const auto stampIt = m_contextStampPerWindow.find(window);
+            const bool hadPrevious = stampIt != m_contextStampPerWindow.end();
+            WindowContextEdge::Stamp& stamp = hadPrevious ? *stampIt : m_contextStampPerWindow[window];
+            const WindowContextEdge::IdSet previous = stamp.activities;
+            stamp.activities = activityIdsOf(window);
+            applyWindowContextEdit(
+                window,
+                WindowContextEdge::classify(previous, hadPrevious, stamp.activities,
+                                            KWin::effects ? KWin::effects->currentActivity() : QString(),
+                                            isOnOwnOutputCurrentDesktop(window)));
+        });
+    }
 }
 
 // The arms. "tracked" is the effect's own tiling bookkeeping for the window,
-// "parked" a window a desktop switch demoted (still held in its desktop's
-// state), and "managed" whether the screen in view tiles. By the time this
+// "parked" a window a desktop or activity switch demoted (still held in its
+// context's state), and "managed" whether the screen in view tiles. By the time this
 // runs the daemon has released and adopted per key off the metadata the
 // handler pushed first, so every arm only settles the effect's side, and the
 // one release it relays is a genuine departure's.
@@ -143,7 +187,7 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
             // Title-bar state is rule-driven: KWin's off-desktop noBorder reset
             // is corrected on return by updateAllDecorations.
             removeWindowDecoration(windowId);
-            qCInfo(lcEffect) << "Window left the desktop in view, untracked:" << windowId;
+            qCInfo(lcEffect) << "Window left the context in view, untracked:" << windowId;
         } else if (managed) {
             removeWindowDecoration(windowId);
         }
@@ -180,7 +224,7 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
         if (isExcludedBySnappingRule(window)) {
             tiling->releaseWindowTracking(windowId, screenId);
             reconcileDecorationOnPlacementFlip(windowId);
-            qCInfo(lcEffect) << "Window moved onto the desktop in view is excluded there, released:" << windowId;
+            qCInfo(lcEffect) << "Window moved into the context in view is excluded there, released:" << windowId;
             return;
         }
         // An arrival the user is taken to: a move onto the desktop in view, or
@@ -205,9 +249,9 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
         tiling->cleanupAutotileTracking(windowId);
         tiling->restorePreTileForDesktopMove(windowId, screenId);
         if (tiling->notifyWindowAdded(window, /*knownFreeFloating=*/false, focusArrival)) {
-            qCInfo(lcEffect) << "Window moved onto the desktop in view, added to autotile:" << windowId;
+            qCInfo(lcEffect) << "Window moved into the context in view, added to autotile:" << windowId;
         } else {
-            qCDebug(lcEffect) << "Window moved onto the desktop in view, not tiled:" << windowId;
+            qCDebug(lcEffect) << "Window moved into the context in view, not tiled:" << windowId;
         }
         return;
     }

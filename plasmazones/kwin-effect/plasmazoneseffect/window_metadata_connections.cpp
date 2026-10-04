@@ -149,13 +149,12 @@ void PlasmaZonesEffect::wireMetadataHandlers(KWin::EffectWindow* w)
         connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
         connect(kw, &KWin::Window::desktopFileNameChanged, this, invalidateRuleCache);
         connect(kw, &KWin::Window::captionChanged, this, pushCaptionOnly);
-        // Activity and role changes also refresh the registry. The record-only
-        // contract above holds for class, desktop file and role. A desktop or
-        // activity change does drive the daemon's membership reconcile (#1076),
-        // and the desktop push is the first step of the desktop handler
-        // (window_desktop_connections.cpp) so it reaches the daemon before
-        // that handler's own notices.
-        connect(kw, &KWin::Window::activitiesChanged, this, pushLatest);
+        // Role changes also refresh the registry. The record-only contract
+        // above holds for class, desktop file and role. A desktop or activity
+        // change does drive the daemon's membership reconcile (#1076), and its
+        // push is the first step of that axis's handler
+        // (window_desktop_connections.cpp), so it reaches the daemon before the
+        // handler's own notices.
         connect(kw, &KWin::Window::windowRoleChanged, this, pushLatest);
         // VirtualDesktop and Activity are matchable rule fields stamped live
         // into the per-window query, but the verdict caches key on

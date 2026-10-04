@@ -408,8 +408,8 @@ public:
 private:
     // Window management
     void setupWindowConnections(KWin::EffectWindow* w);
-    /// Wire the window's desktop-set handling (the m_contextStampPerWindow
-    /// stamp and applyWindowContextEdit) and seed the stamp. Called once per
+    /// Wire the window's desktop and activity set handling (the
+    /// m_contextStampPerWindow stamp and applyWindowContextEdit) and seed it. Called once per
     /// window from setupWindowConnections, inside its idempotency guard;
     /// defined in window_desktop_connections.cpp.
     void wireContextChangeHandlers(KWin::EffectWindow* w);

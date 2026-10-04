@@ -89,8 +89,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         m_dragTracker->noteWiredWindowMoveState(w);
     }
 
-    // Desktop-set changes (the classified edit and the stamp it is diffed
-    // against) live in window_desktop_connections.cpp.
+    // Desktop and activity set changes (the classified edit and the stamp it
+    // is diffed against) live in window_desktop_connections.cpp.
     wireContextChangeHandlers(w);
 
     // Cross-output and virtual-screen moves with the flags-settle eviction

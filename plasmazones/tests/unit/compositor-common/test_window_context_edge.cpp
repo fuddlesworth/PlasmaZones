@@ -19,6 +19,8 @@ namespace {
 const QString d1 = QStringLiteral("d1");
 const QString d2 = QStringLiteral("d2");
 const QString d3 = QStringLiteral("d3");
+const QString actX = QStringLiteral("act-x");
+const QString actY = QStringLiteral("act-y");
 
 /// Classify @p previous → @p current with d1 in view on both axes.
 Edge edit(const IdSet& previous, const IdSet& current, bool otherAxisInView = true)
@@ -129,6 +131,47 @@ private Q_SLOTS:
     {
         const Edge edge = edit({d2}, {d1}, /*otherAxisInView=*/false);
         QCOMPARE(edge.kind, Kind::StayedHidden);
+    }
+
+    // The activity axis runs the same classifier with activity ids and the
+    // desktop as the other axis (F549).
+    void activityMoveOffViewIsAGenuineDeparture()
+    {
+        const Edge edge = classify({actX}, true, {actY}, actX, true);
+        QCOMPARE(edge.kind, Kind::Departed);
+        QVERIFY(edge.genuineMove);
+    }
+
+    // A window on two activities keeps its place on the one it still has.
+    void multiActivityDropOfTheOneInViewIsNotAMove()
+    {
+        const Edge edge = classify({actX, actY}, true, {actY}, actX, true);
+        QCOMPARE(edge.kind, Kind::Departed);
+        QVERIFY(!edge.genuineMove);
+    }
+
+    void allActivitiesToOneHiddenIsNotAMove()
+    {
+        const Edge edge = classify({}, true, {actY}, actX, true);
+        QCOMPARE(edge.kind, Kind::Departed);
+        QVERIFY(!edge.genuineMove);
+        QVERIFY(edge.leftEverywhere);
+    }
+
+    void allActivitiesFromAHiddenActivityIsAnArrival()
+    {
+        const Edge edge = classify({actY}, true, {}, actX, true);
+        QCOMPARE(edge.kind, Kind::Arrived);
+        QVERIFY(edge.becameEverywhere);
+    }
+
+    // On another desktop, a window moved onto the activity in view is still
+    // not in view.
+    void activityArrivalNeedsTheDesktopInView()
+    {
+        const Edge edge = classify({actY}, true, {actX}, actX, /*otherAxisInView=*/false);
+        QCOMPARE(edge.kind, Kind::StayedHidden);
+        QVERIFY(edge.genuineMove);
     }
 
     void unseededOrNoViewIsUnclassifiable()
