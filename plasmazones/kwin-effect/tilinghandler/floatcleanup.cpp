@@ -390,7 +390,7 @@ QSet<QString> TilingHandler::completeDeferredWindowRoutes()
                         if (!safeWindow || safeWindow->isDeleted()) {
                             return;
                         }
-                        if (!m_managedScreens.contains(m_effect->getWindowScreenId(safeWindow.data()))) {
+                        if (!m_managedScreens.contains(m_effect->pendingWindowScreenId(safeWindow.data()))) {
                             m_pendingFreshWindows.remove(windowId);
                             // A RouteToScreen move onto a snap screen has
                             // its configure still in flight (this callback

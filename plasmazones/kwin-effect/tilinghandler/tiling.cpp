@@ -332,14 +332,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
                                                   PhosphorAnimation::ProfilePaths::WindowPlaceOut);
-                    // Re-seed the tracked screen: the comment above names
-                    // the exact precondition (the restored rect may lie in
-                    // a different virtual screen than the tiled rect), the
-                    // bracket suppressed the detectors' tracker write, and
-                    // applyWindowGeometry does not self-seed — without this
-                    // the next genuine geometry change reads the stale
-                    // pre-apply screen and fires a spurious VS transfer.
-                    m_effect->m_trackedScreenPerWindow[floatWin] = m_effect->getWindowScreenId(floatWin);
+                    // Re-seed the tracked screen from the restored rect, which
+                    // may lie in another virtual screen: the bracket held the
+                    // detectors' write and the apply has not landed, so the
+                    // frame still reads the tile (F152), and a stale screen
+                    // fires a spurious VS transfer on the next change.
+                    const QPoint restoredCentre = savedGeo.toRect().center();
+                    m_effect->m_trackedScreenPerWindow[floatWin] =
+                        m_effect->resolveEffectiveScreenId(restoredCentre, KWin::effects->screenAt(restoredCentre));
                     qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << floatWindowId
                                      << savedGeo.toRect();
                 }

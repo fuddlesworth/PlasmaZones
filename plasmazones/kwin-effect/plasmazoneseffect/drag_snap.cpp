@@ -99,7 +99,20 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                 // re-states a placement the window had.
                 const PlacementStatement::Purpose purpose =
                     storePreSnap ? PlacementStatement::Purpose::UserVerb : PlacementStatement::Purpose::Restatement;
+                // The screen the reply places the window on, read from the
+                // rect, not from the window: an apply that changes its size
+                // or output has not landed yet (F117). The tracked screen is
+                // pre-seeded with it and the apply bracketed, the pair every
+                // other daemon-driven apply carries (F294).
+                const QPoint centre = geo.center();
+                const QString asyncScr = resolveEffectiveScreenId(centre, KWin::effects->screenAt(centre));
+                if (!asyncScr.isEmpty()) {
+                    m_trackedScreenPerWindow[window] = asyncScr;
+                    m_tilingHandler->updateNotifiedScreen(windowId, asyncScr);
+                    reportActiveWindowScreen(window, asyncScr);
+                }
                 if (m_tilingHandler->preparePlacement(window, geo, purpose).apply) {
+                    const auto applyGuard = geometryApplyScope();
                     applyWindowGeometry(window, geo, false, skipAnimation,
                                         PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(), purpose);
                 }
@@ -108,8 +121,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                 // a resolved snap-mode screen (autotile windows are tracked
                 // by TilingHandler; an empty screen is left untracked,
                 // mirroring the batch path's discriminator).
-                if (const QString asyncScr = getWindowScreenId(window);
-                    !asyncScr.isEmpty() && !m_tilingHandler->isManagedScreen(asyncScr)) {
+                if (!asyncScr.isEmpty() && !m_tilingHandler->isManagedScreen(asyncScr)) {
                     // Defensive stale-float clear — see the drag-drop
                     // commit path; idempotent vs the daemon broadcast.
                     m_navigationHandler->setWindowFloating(windowId, false);

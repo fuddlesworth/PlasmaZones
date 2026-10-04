@@ -258,6 +258,7 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
         QPointer<KWin::EffectWindow> window;
         QRect geometry;
         quint64 commandStamp = 0; ///< see WindowCommandStamps
+        QString screenId; ///< the daemon's answer for the zone's screen
     };
     QVector<ApplyEntry> toApply;
 
@@ -306,7 +307,7 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
                 // Bumped only for an entry this pass will actually apply: a
                 // skipped window keeps whatever command it already has pending.
                 toApply.append({QPointer<KWin::EffectWindow>(window), newGeometry,
-                                m_effect->m_daemonGate.commandStamps.bump(window)});
+                                m_effect->m_daemonGate.commandStamps.bump(window), entry.screenId});
             }
         }
     }
@@ -315,7 +316,10 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
         const ApplyEntry& e = toApply[i];
         // A newer command for the window since this pass scheduled it (a daemon
         // batch, a keyboard move, a float) wins over this resnap.
-        if (e.window && !e.window->isDeleted() && m_effect->shouldHandleWindow(e.window)
+        // A fullscreen window was admitted at build time for the re-statement
+        // that keeps it, so it is admitted here too.
+        if (e.window && !e.window->isDeleted()
+            && m_effect->shouldHandleWindow(e.window, nullptr, /*exemptFullscreen=*/e.window->isFullScreen())
             && m_effect->m_daemonGate.commandStamps.isCurrent(e.window.data(), e.commandStamp)) {
             // Re-check at apply time (mirrors the build-time guard above): the
             // window's screen can flip to autotile during the stagger interval,
@@ -333,6 +337,13 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
                      .apply) {
                 return; // a maximized or fullscreen window keeps it, the zone seated (F509)
             }
+            // Pre-seed and bracket, the pair every daemon-driven apply carries:
+            // the configure's frame change is asynchronous (F294).
+            if (!e.screenId.isEmpty()) {
+                m_effect->m_trackedScreenPerWindow[e.window] = e.screenId;
+                m_effect->m_tilingHandler->updateNotifiedScreen(m_effect->getWindowId(e.window), e.screenId);
+            }
+            const auto applyGuard = m_effect->geometryApplyScope();
             // Resolution-change resnap: the effect-local twin of the daemon's
             // "resnap" action, which daemon_apply.cpp routes to WindowLayoutSwitch.
             m_effect->applyWindowGeometry(e.window, e.geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
