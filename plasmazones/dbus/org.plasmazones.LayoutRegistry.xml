@@ -267,7 +267,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setAllScreenAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch set all base screen assignments (saves once). Clears existing assignments of this family first: a key absent from the map is DELETED, so a partial map silently drops every assignment it omits."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all base screen assignments (saves once). Clears existing assignments of this family first: a key absent from the map is DELETED, so a partial map silently drops every assignment it omits. Like the assignments, the primary screen's layout becomes the global active layout at the closing applyAssignmentChanges."/>
             <arg name="assignments" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of screenId to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel; the reserved words &quot;none&quot; and &quot;autotile:none&quot; are accepted and store the explicit opt-out, so the values the matching getter emits round-trip). Only that string is read here. The matching getter, getAllScreenAssignments, answers a wider and differently keyed shape (a JSON string of connector-keyed per-screen objects), so the two are not a round-trip pair. The scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>

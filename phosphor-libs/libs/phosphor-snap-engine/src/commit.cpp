@@ -96,17 +96,7 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     // replay) would write it into the in-view desktop's store (F409). A
     // user's first snap of an auto-restored window counts like any other
     // (F209).
-    if (userSnap
-        && assignmentDesktop == currentVirtualDesktopForScreen(screenId)
-        // "zoneselector-" marks a synthetic selector-overlay id rather than a
-        // real zone UUID, so it is excluded from persistence and occupancy.
-        // Spelled differently from phosphor-placement's kZoneSelectorIdPrefix
-        // ("zone-selector:", placementutils.h). Nothing in the tree PRODUCES
-        // either string, so which spelling a real selector id carries cannot be
-        // settled from here. Do not fold the two together without finding the
-        // producer first, because guessing wrong makes this guard stop matching
-        // and start persisting selector ids as the last used zone.
-        && !primaryZoneId.startsWith(QStringLiteral("zoneselector-"))) {
+    if (userSnap && assignmentDesktop == currentVirtualDesktopForScreen(screenId)) {
         const QString windowClass = m_windowTracker->currentAppIdFor(windowId);
         m_windowTracker->updateLastUsedZone(primaryZoneId, screenId, windowClass, assignmentDesktop);
     }

@@ -62,9 +62,6 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
                 return;
             }
             for (const QString& zoneId : zoneIds) {
-                if (zoneId.startsWith(kZoneSelectorIdPrefix)) {
-                    continue;
-                }
                 auto uuid = parseUuid(zoneId);
                 if (uuid) {
                     occupiedZoneIds.insert(*uuid);

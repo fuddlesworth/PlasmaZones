@@ -55,9 +55,7 @@ public:
             Q_EMIT windowZoneChanged(windowId, zoneId);
         }
 
-        if (!zoneId.startsWith(QStringLiteral("zoneselector-"))) {
-            m_lastUsedZoneId = zoneId;
-        }
+        m_lastUsedZoneId = zoneId;
     }
 
     void windowUnsnapped(const QString& windowId)

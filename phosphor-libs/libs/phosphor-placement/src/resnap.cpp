@@ -47,10 +47,9 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // is the one whose zone IDs match the window's zone assignments.
     // We look up each zone ID in ALL loaded layouts to find the position.
 
-    // Build a global zoneId → position map merged across all layouts.
-    // Shared with `WindowTrackingService::onLayoutChanged` (lifecycle.cpp);
-    // see `PhosphorZones::LayoutUtils::buildGlobalZonePositionMap` for
-    // why the merge is unambiguous (zone UUIDs are unique across layouts).
+    // Build a global zoneId → position map merged across all layouts; see
+    // `PhosphorZones::LayoutUtils::buildGlobalZonePositionMap` for why the
+    // merge is unambiguous (zone UUIDs are unique across layouts).
     const QHash<QString, int> globalZoneIdToPosition =
         PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts());
 
@@ -187,10 +186,11 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         addCandidate(rec.windowId, snapZonesOnDesktopInView(snapSlot, rec.screenId), rec.screenId, desktop);
     }
 
-    if (!newBuffer.isEmpty()) {
-        m_resnapBuffer = std::move(newBuffer);
-        qCInfo(lcPlacement) << "Resnap buffer (all screens):" << m_resnapBuffer.size() << "windows";
-    }
+    // Replaced even when empty: a row kept from an earlier populate belongs
+    // to a switch that already ran, and replaying it would move that window
+    // again (F34).
+    m_resnapBuffer = std::move(newBuffer);
+    qCDebug(lcPlacement) << "Resnap buffer (all screens):" << m_resnapBuffer.size() << "windows";
 }
 
 QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& screenId) const

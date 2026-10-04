@@ -682,8 +682,8 @@ public:
      * loaded layouts. This avoids relying on the global activeLayout/previousLayout
      * which only tracks one layout at a time.
      *
-     * Used by the KCM save path where multiple screens can have different
-     * layout assignments changed simultaneously.
+     * Every layout switch builds its buffer here, and the result replaces
+     * the buffer even when it is empty.
      *
      * @param excludeScreens Screens to skip (e.g. autotile screens handled separately)
      * @param includeScreens When non-empty, only process windows on these screens.

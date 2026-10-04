@@ -267,28 +267,6 @@ private Q_SLOTS:
         QVERIFY2(!m_service->isWindowSnapped(snappingWindow), "a snapping screen's stale assignment must be pruned");
     }
 
-    void testOnLayoutChanged_resnapBufferPopulated()
-    {
-        QString window1 = QStringLiteral("app1|11111");
-        QString window2 = QStringLiteral("app2|22222");
-
-        m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 0);
-        m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
-
-        PhosphorZones::Layout* newLayout = createTestLayout(3, m_layoutManager);
-        m_layoutManager->addLayout(newLayout);
-        m_layoutManager->setActiveLayout(newLayout);
-        m_service->onLayoutChanged();
-
-        QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
-        // Two windows were assigned above, so the resnap buffer should contain
-        // entries for both (mapped to the new layout's zones by relative position).
-        // In headless mode zone geometry resolution may differ, but the buffer
-        // must still be populated with the window IDs that were snapped.
-        QVERIFY2(!resnap.isEmpty(), "Resnap buffer must contain entries for the previously-snapped windows");
-        QCOMPARE(resnap.size(), 2);
-    }
-
     void testResnapFromAutotileOrder_preClaimedZoneSkippedByPositionalFallback()
     {
         // window A has a recorded zone (zone[0]); window B has none, so it goes
@@ -854,21 +832,21 @@ private Q_SLOTS:
         QCOMPARE(b.targetZoneId, m_zoneIds[2]);
     }
 
-    void testOnLayoutChanged_floatingWindowsExcludedFromResnap()
+    void testLayoutSwitch_floatingWindowsExcludedFromResnap()
     {
         const QString floatedId = QStringLiteral("app|12345");
         // Non-floating CONTROL window: proves the resnap actually produced
         // entries, so the exclusion loop below cannot pass vacuously on an
         // empty list.
         const QString snappedId = QStringLiteral("app|control");
-        m_service->assignWindowToZone(floatedId, m_zoneIds[0], QString(), 0);
-        m_service->assignWindowToZone(snappedId, m_zoneIds[1], QString(), 0);
+        m_service->assignWindowToZone(floatedId, m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        m_service->assignWindowToZone(snappedId, m_zoneIds[1], QStringLiteral("DP-1"), 0);
         m_service->setWindowFloating(floatedId, true);
 
         PhosphorZones::Layout* newLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->setActiveLayout(newLayout);
-        m_service->onLayoutChanged();
+        m_service->populateResnapBufferForAllScreens();
 
         QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
         QCOMPARE(resnap.size(), 1);

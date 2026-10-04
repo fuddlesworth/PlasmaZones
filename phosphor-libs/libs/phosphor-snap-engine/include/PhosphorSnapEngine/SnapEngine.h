@@ -750,8 +750,8 @@ public:
     /// via IPlacementEngine. Forwards to rotateWindowsInLayout().
     void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;
 
-    /// Re-apply the current layout to all managed windows. Forwards to
-    /// resnapToNewLayout().
+    /// Re-apply the zones the windows on ctx.screenId hold in the context in
+    /// view. Never replays a pending layout-switch buffer.
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Re-emit the zone geometry of every non-floating window snapped in view

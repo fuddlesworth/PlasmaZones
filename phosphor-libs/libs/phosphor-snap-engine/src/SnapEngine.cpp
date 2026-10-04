@@ -888,9 +888,27 @@ void SnapEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
     rotateWindowsInLayout(clockwise, ctx.screenId);
 }
 
-void SnapEngine::reapplyLayout(const NavigationContext& /*ctx*/)
+void SnapEngine::reapplyLayout(const NavigationContext& ctx)
 {
-    resnapToNewLayout();
+    // The windows holding a zone in the context the screen shows. Replaying
+    // the layout-switch buffer moved a window by a switch that had already
+    // run, or by nothing (F398), and the current-assignments pass on its own
+    // keeps a hidden single-membership window (F430).
+    QSet<QString> inView;
+    if (const SnapState* state = m_states.stateForKey(currentKeyForScreen(ctx.screenId))) {
+        for (auto it = state->zoneAssignments().cbegin(); it != state->zoneAssignments().cend(); ++it) {
+            if (!it.value().isEmpty()) {
+                inView.insert(it.key());
+            }
+        }
+    }
+    if (inView.isEmpty()) {
+        // An empty set means every window to resnapCurrentAssignments.
+        Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"), QString(),
+                                  QString(), ctx.screenId);
+        return;
+    }
+    resnapCurrentAssignments(ctx.screenId, inView);
 }
 
 void SnapEngine::reapplyManagedWindowAppearance()

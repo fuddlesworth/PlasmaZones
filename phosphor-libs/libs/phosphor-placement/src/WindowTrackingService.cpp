@@ -55,9 +55,9 @@ WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layo
     // scheduleSaveState). The service only tracks the dirty mask (markDirty)
     // and emits stateChanged.
     //
-    // PhosphorZones::Layout change handling: WindowTrackingAdaptor connects to activeLayoutChanged and calls
-    // onLayoutChanged(). Do NOT connect here - duplicate invocation would clear m_resnapBuffer
-    // on the second run (after assignments were already removed), causing no_windows_to_resnap.
+    // Layout change handling: WindowTrackingAdaptor connects activeLayoutChanged
+    // to onLayoutChanged(). The adaptor owns the triggers, so none is
+    // connected here.
 }
 
 WindowTrackingService::~WindowTrackingService()

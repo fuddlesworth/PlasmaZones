@@ -155,13 +155,14 @@ private Q_SLOTS:
 
     void testResnapFromPreviousLayout_zonePositionMapping()
     {
+        const QString screen = QStringLiteral("DP-1");
         QString window1 = QStringLiteral("app1|111");
         QString window2 = QStringLiteral("app2|222");
         QString window3 = QStringLiteral("app3|333");
 
-        m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 0);
-        m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
-        m_service->assignWindowToZone(window3, m_zoneIds[2], QString(), 0);
+        m_service->assignWindowToZone(window1, m_zoneIds[0], screen, 0);
+        m_service->assignWindowToZone(window2, m_zoneIds[1], screen, 0);
+        m_service->assignWindowToZone(window3, m_zoneIds[2], screen, 0);
 
         PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
@@ -174,7 +175,7 @@ private Q_SLOTS:
         m_layoutManager->setDefaultLayoutIdProvider([newLayoutId]() {
             return newLayoutId;
         });
-        m_service->onLayoutChanged();
+        m_service->populateResnapBufferForAllScreens({}, {screen});
 
         // Old zone positions map 1:1 into the new layout by zone number
         // (1 -> 1, 2 -> 2). window3's old position 3 exceeds the new 2-zone
@@ -401,12 +402,12 @@ private Q_SLOTS:
     void testCalculateResnap_preservesRecordedDesktop()
     {
         const QString win = QStringLiteral("app1|111");
-        m_service->assignWindowToZone(win, m_zoneIds[0], QString(), 2);
+        m_service->assignWindowToZone(win, m_zoneIds[0], QStringLiteral("DP-1"), 2);
 
         PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->setActiveLayout(newLayout);
-        m_service->onLayoutChanged();
+        m_service->populateResnapBufferForAllScreens();
 
         const QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
         QVERIFY(!resnap.isEmpty());
@@ -435,13 +436,37 @@ private Q_SLOTS:
         m_layoutManager->setDefaultLayoutIdProvider([newLayoutId]() {
             return newLayoutId;
         });
-        m_service->onLayoutChanged();
+        m_service->populateResnapBufferForAllScreens({}, {screen});
 
         const QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
         QVERIFY(!resnap.isEmpty());
         for (const ZoneAssignmentEntry& e : resnap) {
             QCOMPARE(e.targetScreenId, screen);
         }
+    }
+
+    // A layout change captures nothing for a resnap: the switch callers
+    // populate their own buffer before it lands, and a row captured here
+    // was replayed by a later resnap or Reapply that had nothing to do with
+    // this change (D1, F34).
+    void onLayoutChangedBuffersNothing()
+    {
+        m_service->assignWindowToZone(QStringLiteral("app1|111"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(newLayout);
+        m_layoutManager->setActiveLayout(newLayout);
+        m_service->onLayoutChanged();
+        QVERIFY(m_service->takeResnapBuffer().isEmpty());
+    }
+
+    // A populate that finds nothing replaces the buffer. Keeping the earlier
+    // rows moved those windows again on the next resnap (F34).
+    void populateReplacesTheBufferWhenItFindsNothing()
+    {
+        m_service->assignWindowToZone(QStringLiteral("app1|111"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-2")});
+        QVERIFY(m_service->takeResnapBuffer().isEmpty());
     }
 
     // Same stamp assertion for the current-assignments producer (gap reflow,

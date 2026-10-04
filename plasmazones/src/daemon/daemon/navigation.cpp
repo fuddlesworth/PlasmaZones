@@ -561,12 +561,9 @@ void Daemon::resnapIfManualMode()
             return;
         }
     }
-    // Populate the resnap buffer before resnapping. UnifiedLayoutController::applyEntry()
-    // blocks activeLayoutChanged (QSignalBlocker) to prevent whole-screen recalculation,
-    // which also prevents onLayoutChanged() from populating the resnap buffer.
-    // Additionally, when the global active layout is already the target (e.g. second
-    // screen cycling to the same layout), setActiveLayout is a no-op and no signal fires.
-    // Explicitly populating here mirrors the KCM's assignmentChangesApplied path.
+    // Populate the resnap buffer before resnapping: a layout change builds
+    // none, so every switch caller captures its own windows, as the KCM's
+    // assignmentChangesApplied path does.
     if (m_windowTrackingAdaptor) {
         // Exclude EVERY engine-managed screen, not just autotile: the
         // resnap's only mode gate is this exclude set, and resnapping a

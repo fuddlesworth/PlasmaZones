@@ -13,8 +13,6 @@
 
 namespace PhosphorPlacement {
 
-inline constexpr QLatin1String kZoneSelectorIdPrefix{"zone-selector:"};
-
 /// The KWin desktop-filter rule shared by every desktop-scoped placement query:
 /// a filter of 0 (or negative) disables filtering entirely, and a window desktop
 /// of 0 means "on all desktops" (sticky) and passes every filter; otherwise the

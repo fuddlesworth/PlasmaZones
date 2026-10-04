@@ -44,7 +44,9 @@
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
 #include "core/utils/utils.h"
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -583,6 +585,51 @@ private Q_SLOTS:
         m_engine->setWindowFloat(b, false, screen);
         QCOMPARE(m_engine->zoneForWindow(b), m_zoneIds[1]);
         QCOMPARE(lastUsed(), m_zoneIds[0]); // an unminimize (F484)
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // Reapply re-applies the zones the focused screen's windows hold in the
+    // context in view (F398). It replayed the layout-switch buffer, which is
+    // empty outside a switch, so the verb answered no_windows_to_resnap. A
+    // window held only on a desktop not in view stays where it is (F430).
+    void reapplyLayoutReappliesTheZonesInView()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        const QString shown = QStringLiteral("app|reapply-shown");
+        const QString hidden = QStringLiteral("app|reapply-hidden");
+        m_engine->setCurrentDesktopForScreen(screen, 2);
+        m_service->assignWindowToZone(hidden, m_zoneIds[0], screen, 2);
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+        m_service->assignWindowToZone(shown, m_zoneIds[1], screen, 1);
+
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        m_engine->reapplyLayout(PhosphorEngine::NavigationContext{QString(), screen});
+        QCOMPARE(resnapSpy.count(), 1);
+        const QVector<PhosphorEngine::ZoneAssignmentEntry> entries =
+            PhosphorEngine::GeometryUtils::deserializeZoneAssignments(resnapSpy.first().at(0).toString(), nullptr);
+        QCOMPARE(entries.size(), 1);
+        QCOMPARE(entries.first().windowId, shown);
+        QCOMPARE(entries.first().targetZoneId, m_zoneIds[1]);
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // Nothing held in view: the verb reports it and emits no batch, because an
+    // empty window set means every window downstream.
+    void reapplyLayoutWithNothingInViewReportsIt()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        m_engine->setCurrentDesktopForScreen(screen, 2);
+        m_service->assignWindowToZone(QStringLiteral("app|reapply-hidden"), m_zoneIds[0], screen, 2);
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        QSignalSpy feedbackSpy(m_engine, &SnapEngine::navigationFeedback);
+        m_engine->reapplyLayout(PhosphorEngine::NavigationContext{QString(), screen});
+        QCOMPARE(resnapSpy.count(), 0);
+        QCOMPARE(feedbackSpy.count(), 1);
+        QCOMPARE(feedbackSpy.first().at(2).toString(), QStringLiteral("no_windows_to_resnap"));
         m_service->setSnapState(m_engine->snapState());
     }
 
