@@ -446,6 +446,24 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     dispatchOpenToClaimingEngine(routedEntry, /*allowPark=*/true, /*allowCrossScreenClaim=*/!ruleRouted);
 }
 
+void TilingAdaptor::setWindowTrackingAdaptor(WindowTrackingAdaptor* wta)
+{
+    // The old adaptor is left alone: the shutdown clear can run after it is
+    // gone, and the dispatcher below checks this adaptor's own lifetime.
+    m_windowTrackingAdaptor = wta;
+    if (!wta) {
+        return;
+    }
+    // A rule routing a window from a snapping screen onto a tiling one: the
+    // target's engine takes it as an open. No park and no cross-screen claim,
+    // since the rule owns where the window goes.
+    wta->setRoutedOpenDispatcher([self = QPointer<TilingAdaptor>(this)](const PhosphorProtocol::WindowOpenedEntry& e) {
+        if (self) {
+            self->dispatchOpenToClaimingEngine(e, /*allowPark=*/false, /*allowCrossScreenClaim=*/false);
+        }
+    });
+}
+
 void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
                                                  bool allowCrossScreenClaim)
 {

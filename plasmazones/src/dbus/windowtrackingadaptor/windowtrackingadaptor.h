@@ -1187,26 +1187,18 @@ public:
     /// wired.
     QString shadowWindowId(const QString& windowId) const;
 
-    /// Engine-neutral RouteToScreen: if a matched rule pins @p windowId to a
-    /// different monitor, move the window there free. The route is honoured
-    /// whether or not the same rule also carries SnapToZone — a route + snap
-    /// normally places on the target through the snap placement directive and
-    /// never reaches here, but calculateSnapToPlacementRule declines whenever the
-    /// routed target is not in Snapping mode or resolves no layout, ordinal or
-    /// geometry, and those declines land here with nothing placed.
-    /// Translates the window's current frame geometry onto the target screen's
-    /// available area (preserving its relative position, clamped to fit) and emits
-    /// applyGeometryRequested with an empty zone id (a free placement, no snap
-    /// chrome) plus the windowOutputMoveExpected marker. Called from the snap
-    /// open-path facade only when nothing snapped the window, so a SnapToZone
-    /// restore or a remembered snap takes precedence and the explicit route wins
-    /// over a remembered float position. No-ops when the target is unset, the spawn
-    /// screen, or not currently connected, or when the window has pushed no geometry
-    /// yet. A target in autotile mode is moved (not tiled) — cross-engine tiling
-    /// insertion stays with the autotile spawn path (applyOpenRoutingForTiling).
-    /// Returns true when a RouteToScreen (or placement) directive MATCHED,
-    /// whether or not a move was physically possible.
-    bool applyOpenScreenRouting(const QString& windowId, const QString& screenId);
+    /// RouteToScreen on the snap open path, reached when nothing snapped the
+    /// window: move it to the rule's monitor at the same relative spot, free.
+    /// On a snapping target its open float goes with it; on a tiling target the
+    /// target's engine gets it as an open (a genuine one only for @p reason
+    /// Open), unless the rule also sent it to a desktop not in view there.
+    /// No-ops when the target is unset, the spawn screen, or not connected, or
+    /// when the window has pushed no geometry yet. Returns true when a
+    /// RouteToScreen (or placement) directive MATCHED, moved or not.
+    bool applyOpenScreenRouting(const QString& windowId, const QString& screenId,
+                                PhosphorEngine::RestoreReason reason = PhosphorEngine::RestoreReason::Open);
+    /// How a routed open reaches a tiling target's engine (TilingAdaptor wires it).
+    void setRoutedOpenDispatcher(std::function<void(const PhosphorProtocol::WindowOpenedEntry&)> dispatcher);
 
     /// Shared by the two open-routing entry points: if @p resolved carries a
     /// RouteToDesktop action, emit windowDesktopMoveRequested for @p windowId.
@@ -1778,6 +1770,7 @@ private:
     /// and the blob the last loadState() read for the daemon to hand to the
     /// engine once it exists.
     std::function<QJsonObject()> m_scrollStripStateProvider;
+    std::function<void(const PhosphorProtocol::WindowOpenedEntry&)> m_routedOpenDispatcher;
     QJsonObject m_loadedScrollStripState;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     PhosphorWorkspaces::ActivityManager* m_activityManager;

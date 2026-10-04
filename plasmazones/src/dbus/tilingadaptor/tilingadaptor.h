@@ -79,11 +79,9 @@ public:
 
     /// Wire the WindowTrackingAdaptor (post-construction, to break the
     /// construction-order cycle) so the tiling open path can resolve
-    /// RouteToScreen / RouteToDesktop rules. Pass nullptr on shutdown.
-    void setWindowTrackingAdaptor(WindowTrackingAdaptor* wta)
-    {
-        m_windowTrackingAdaptor = wta;
-    }
+    /// RouteToScreen / RouteToDesktop rules, and a window the snap open path
+    /// routes onto a tiling screen reaches its engine. Pass nullptr on shutdown.
+    void setWindowTrackingAdaptor(WindowTrackingAdaptor* wta);
 
     /// Set the ordered list of engines sharing this interface's lifecycle
     /// pipeline (primary first — it is the fallback when no engine claims a

@@ -311,7 +311,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // screen here: under the reopen contract no engine reclaims a window
         // whose record lives on another monitor.
         if (firstPlacement || reason == PhosphorEngine::RestoreReason::DesktopArrival) {
-            m_adaptor->applyOpenScreenRouting(windowId, screenId);
+            m_adaptor->applyOpenScreenRouting(windowId, screenId, reason);
         }
         return;
     }

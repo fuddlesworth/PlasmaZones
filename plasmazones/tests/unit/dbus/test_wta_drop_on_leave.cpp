@@ -15,13 +15,116 @@
 #include "helpers/StubPlacementEngine.h"
 #include "helpers/WindowPlacementBuilders.h"
 
+#include <PhosphorRules/Rule.h>
 #include <QScopeGuard>
+
+/// Two outputs side by side, a local adaptor on a real ScreenManager, a snap
+/// engine with per-screen stores, and a bare RouteToScreen rule sending
+/// "routeapp" to DP-2 (with a RouteToDesktop when asked). The shared fixture
+/// has no ScreenManager, which the route needs.
+class RoutedOpenEnv
+{
+public:
+    RoutedOpenEnv(PhosphorZones::LayoutRegistry* layouts, StubZoneDetectorConvenience* detector,
+                  StubSettingsConvenience* settings, PhosphorEngine::PlacementEngineBase* tiling, int routeDesktop)
+    {
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080), QStringLiteral("DP-2"));
+        screenMgr = std::make_unique<PhosphorScreens::ScreenManager>(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr->start();
+        wta = new WindowTrackingAdaptor(layouts, detector, screenMgr.get(), settings, nullptr, nullptr, &parent);
+        snap = std::make_unique<SnapEngine>(layouts, wta->service(), detector, nullptr, nullptr);
+        snap->setEngineSettings(settings);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
+        resolver.forWindow = [e = snap.get()](const QString& id) {
+            return e->stateForWindow(id);
+        };
+        resolver.forWindowOnScreen = [e = snap.get()](const QString& id, const QString& s, int desktop) {
+            return e->stateForWindowOnScreen(id, s, desktop);
+        };
+        resolver.forScreen = [e = snap.get()](const QString& s) {
+            return static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(s));
+        };
+        resolver.globals = [e = snap.get()]() {
+            return e->globalState();
+        };
+        resolver.allStates = [e = snap.get()]() {
+            return e->allSnapStates();
+        };
+        resolver.forgetWindow = [e = snap.get()](const QString& id) {
+            e->forgetWindow(id);
+        };
+        resolver.holdsWindow = [e = snap.get()](const QString& id, const PhosphorSnapEngine::SnapState* state) {
+            return e->holdsWindowInState(id, state);
+        };
+        wta->service()->setSnapStateResolver(resolver);
+        wta->setEngines(snap.get(), tiling, nullptr);
+        wta->setRoutedOpenDispatcher([this](const PhosphorProtocol::WindowOpenedEntry& entry) {
+            dispatched.append(entry);
+        });
+        registry = new PhosphorEngine::WindowRegistry(&parent);
+        wta->setWindowRegistry(registry);
+        wta->setWindowMetadata(QStringLiteral("inst1"), QStringLiteral("routeapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, QVariantMap());
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("routeapp"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
+        rule.actions = {route};
+        if (routeDesktop >= 1) {
+            RuleAction desktop;
+            desktop.type = QString(ActionType::RouteToDesktop);
+            desktop.params.insert(QString(ActionParam::TargetDesktop), routeDesktop);
+            rule.actions.append(desktop);
+        }
+        store = std::make_unique<RuleStore>(ConfigDefaults::rulesFilePath(), &parent);
+        store->addRule(rule);
+        wta->setRuleStore(store.get());
+        wta->setFrameGeometry(window, 100, 100, 800, 600);
+    }
+    ~RoutedOpenEnv()
+    {
+        wta->setRuleStore(nullptr);
+        wta->setWindowRegistry(nullptr);
+        wta->setEngines(nullptr, nullptr, nullptr);
+        wta->service()->setSnapEngine(nullptr);
+        wta->service()->setSnapState(nullptr);
+    }
+
+    const QString window = QStringLiteral("routeapp|inst1");
+    PhosphorScreens::FakePhysicalScreenSource fake;
+    std::unique_ptr<PhosphorScreens::ScreenManager> screenMgr;
+    QObject parent;
+    WindowTrackingAdaptor* wta = nullptr;
+    std::unique_ptr<SnapEngine> snap;
+    PhosphorEngine::WindowRegistry* registry = nullptr;
+    std::unique_ptr<PhosphorRules::RuleStore> store;
+    QList<PhosphorProtocol::WindowOpenedEntry> dispatched;
+};
 
 class TestWtaDropOnLeave : public QObject, protected WtaConvenienceFixture
 {
     Q_OBJECT
 
 private:
+    /// The open float terminal's state: floating in snap on DP-1, no zone.
+    void floatOnSpawnScreen(RoutedOpenEnv& env)
+    {
+        env.snap->setCurrentDesktopForScreen(QStringLiteral("DP-1"), 1);
+        env.snap->setCurrentDesktopForScreen(QStringLiteral("DP-2"), 1);
+        env.wta->service()->assignWindowToZone(env.window, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        env.snap->setWindowFloat(env.window, true, QStringLiteral("DP-1"));
+        QVERIFY(env.snap->isFloating(env.window));
+        QCOMPARE(env.snap->screenForTrackedWindow(env.window), QStringLiteral("DP-1"));
+    }
+
     /// Snap @p windowId into a zone on desktops 1 and 2 of m_screenId, and
     /// record its placement.
     void snapOnTwoDesktops(const QString& windowId, const QString& screenId)
@@ -219,6 +322,69 @@ private Q_SLOTS:
         QVERIFY2(!m_snapEngine->isWindowTracked(w), "the other desktop's zone on the monitor left must go too");
         QCOMPARE(snapSlotState(w), QString(PhosphorEngine::WindowPlacement::stateReleased()));
         QVERIFY2(scroll.releasedOffScreen.isEmpty(), "the arriving engine must not be released");
+    }
+
+    // A rule routing a window onto a snapping monitor takes its open float
+    // with it: Meta+F and the next snap key act there, not on the monitor it
+    // opened on (F411, F245).
+    void routeToSnappingTarget_rehomesTheOpenFloat()
+    {
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, nullptr, 0);
+        floatOnSpawnScreen(env);
+
+        QVERIFY(env.wta->applyOpenScreenRouting(env.window, QStringLiteral("DP-1")));
+
+        QVERIFY(env.snap->isFloating(env.window));
+        QCOMPARE(env.snap->screenForTrackedWindow(env.window), QStringLiteral("DP-2"));
+        QVERIFY2(env.wta->service()->preFloatZones(env.window).isEmpty(), "the home on DP-1 must be forgotten");
+        QVERIFY(env.dispatched.isEmpty());
+    }
+
+    // Onto a tiling monitor the snap float on the spawn monitor goes and the
+    // target's engine gets the window as a genuine open (F448, F472).
+    void routeToTilingTarget_dropsTheSnapFloatAndDispatchesAFocusableOpen()
+    {
+        StubPlacementEngine autotile;
+        autotile.activeScreens.insert(QStringLiteral("DP-2"));
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, &autotile, 0);
+        floatOnSpawnScreen(env);
+        QSignalSpy markerSpy(env.wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
+
+        QVERIFY(env.wta->applyOpenScreenRouting(env.window, QStringLiteral("DP-1")));
+
+        QVERIFY2(!env.snap->isWindowTracked(env.window), "no snap float may stay on the monitor it opened on");
+        QCOMPARE(markerSpy.count(), 1);
+        QCOMPARE(env.dispatched.size(), 1);
+        QCOMPARE(env.dispatched.first().windowId, env.window);
+        QCOMPARE(env.dispatched.first().screenId, QStringLiteral("DP-2"));
+        QVERIFY(env.dispatched.first().focusEligible);
+    }
+
+    // A sweep re-places a window that was already open: no focus (F510).
+    void routeToTilingTarget_sweepDispatchesWithoutFocus()
+    {
+        StubPlacementEngine autotile;
+        autotile.activeScreens.insert(QStringLiteral("DP-2"));
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, &autotile, 0);
+
+        env.wta->applyOpenScreenRouting(env.window, QStringLiteral("DP-1"),
+                                        PhosphorEngine::RestoreReason::PendingSweep);
+
+        QCOMPARE(env.dispatched.size(), 1);
+        QVERIFY(!env.dispatched.first().focusEligible);
+    }
+
+    // The same rule also sent the window to a desktop not in view on the
+    // target: its arrival places it there, so nothing is dispatched now.
+    void routeToTilingTarget_offViewDesktopRouteDoesNotDispatch()
+    {
+        StubPlacementEngine autotile;
+        autotile.activeScreens.insert(QStringLiteral("DP-2"));
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, &autotile, 2);
+
+        QVERIFY(env.wta->applyOpenScreenRouting(env.window, QStringLiteral("DP-1")));
+
+        QVERIFY(env.dispatched.isEmpty());
     }
 };
 

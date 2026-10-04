@@ -285,7 +285,7 @@ bool WindowTrackingAdaptor::readoptEvacuee(const QString& windowId, const QStrin
         m_evacuees->entries.remove(canonical);
     }
     if (seated) {
-        captureWindowPlacement(windowId, onScreen, /*fromStateChange=*/true);
+        captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
         qCInfo(lcDbusWindow) << "readoptEvacuee:" << windowId << "re-seated on" << onScreen;
     }
     return seated;

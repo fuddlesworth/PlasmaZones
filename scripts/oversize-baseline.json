@@ -46,7 +46,7 @@
     "plasmazones/src/daemon/overlayservice.cpp": 1232,
     "plasmazones/src/daemon/overlayservice.h": 1673,
     "plasmazones/src/dbus/layoutadaptor/assignment.cpp": 1155,
-    "plasmazones/src/dbus/windowtrackingadaptor/windowtrackingadaptor.h": 1910,
+    "plasmazones/src/dbus/windowtrackingadaptor/windowtrackingadaptor.h": 1903,
     "plasmazones/src/editor/controller/layout.cpp": 1180,
     "plasmazones/src/settings/controller/settingscontroller.h": 1369,
     "plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml": 1177,

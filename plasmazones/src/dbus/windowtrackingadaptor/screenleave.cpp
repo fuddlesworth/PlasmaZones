@@ -244,7 +244,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
             // dropped: an unfloat before the next save would otherwise
             // re-derive it from the record. The float relay dedups on the
             // float bit alone, so the move itself is announced here.
-            captureWindowPlacement(windowId, resolved, /*fromStateChange=*/true);
+            captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
             Q_EMIT windowStateChanged(windowId,
                                       PhosphorProtocol::WindowStateEntry{windowId, QString(), resolved, true,
                                                                          QStringLiteral("screen_changed"),
