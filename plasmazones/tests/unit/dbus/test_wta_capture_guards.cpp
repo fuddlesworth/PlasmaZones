@@ -42,6 +42,7 @@
 
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/StubPlacementEngine.h"
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
 
@@ -49,100 +50,9 @@ using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
-// =========================================================================
-// Stub autotile-side engine: only lastManagedRect() matters — it stands in
-// for AutotileEngine's last-applied tile rect memory in the capture guard
-// tests below. Everything else is a no-op.
-// =========================================================================
-
-class StubTileRectEngine : public PhosphorEngine::PlacementEngineBase
-{
-    Q_OBJECT
-public:
-    explicit StubTileRectEngine(QObject* parent = nullptr)
-        : PhosphorEngine::PlacementEngineBase(parent)
-    {
-    }
-
-    QRect managedRect; // returned for every window
-    QList<QPair<QString, QString>> releasedOffScreen; // (windowId, keepScreenId) per call
-
-    QRect lastManagedRect(const QString&) const override
-    {
-        return managedRect;
-    }
-    void releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId) override
-    {
-        releasedOffScreen.append({windowId, keepScreenId});
-    }
-
-    bool isActiveOnScreen(const QString&) const override
-    {
-        return false;
-    }
-    void windowOpened(const QString&, const QString&, int, int) override
-    {
-    }
-    void windowClosed(const QString&) override
-    {
-    }
-    void windowFocused(const QString&, const QString&) override
-    {
-    }
-    void toggleWindowFloat(const QString&, const QString&) override
-    {
-    }
-    void setWindowFloat(const QString&, bool, const QString&) override
-    {
-    }
-    void focusInDirection(const QString&, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void moveFocusedInDirection(const QString&, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void swapFocusedInDirection(const QString&, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void moveFocusedToPosition(int, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void rotateWindows(bool, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void reapplyLayout(const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void snapAllWindows(const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void cycleFocus(bool, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void pushToEmptyZone(const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void restoreFocusedWindow(const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void toggleFocusedFloat(const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void saveState() override
-    {
-    }
-    void loadState() override
-    {
-    }
-    PhosphorEngine::IPlacementState* stateForScreen(const QString&) override
-    {
-        return nullptr;
-    }
-    const PhosphorEngine::IPlacementState* stateForScreen(const QString&) const override
-    {
-        return nullptr;
-    }
-};
+// The autotile-side stand-in: only lastManagedRect() matters here, standing in
+// for AutotileEngine's last-applied tile rect memory in the capture guards.
+using StubTileRectEngine = StubPlacementEngine;
 
 class TestWtaCaptureGuards : public QObject
 {

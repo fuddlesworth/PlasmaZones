@@ -194,7 +194,7 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
         // swallows the window's next genuine outputChanged.
         if (placedOnTarget && !sourceScreen.isEmpty()
             && !PhosphorScreens::ScreenIdentity::screensMatch(targetScreenId, sourceScreen)) {
-            Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, sourceScreen);
+            announceOutputMove(windowId, targetScreenId, sourceScreen, targetEngine);
         }
     } else {
         // Reactive autotile desktop arrival: no receive here (the effect
@@ -538,7 +538,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
             // and tear down the placement just made. Tracked-success only;
             // the refused branch above arms nothing.
             if (!PhosphorScreens::ScreenIdentity::screensMatch(sourceScreen, targetScreenId)) {
-                Q_EMIT windowOutputMoveExpected(windowId, sourceScreen, targetScreenId);
+                announceOutputMove(windowId, sourceScreen, targetScreenId, sourceEngine);
             }
             if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
                 sourceEngine->retile(sourceScreen);
@@ -560,7 +560,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     //    documents — a spurious inequality here arms a move that never happens.
     if (!PhosphorScreens::ScreenIdentity::screensMatch(targetScreenId, sourceScreen)) {
         if (focusedStillOnTarget) {
-            Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, sourceScreen);
+            announceOutputMove(windowId, targetScreenId, sourceScreen, targetEngine);
         }
         // The isWindowTracked term is the partner-side twin of the one
         // deliberate focusedStillOnTarget re-read above, with the same
@@ -569,7 +569,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         // today's non-evicting receivers it always agrees with
         // partnerAdopted; it stands for the same future-receiver reason.
         if (partnerAdopted && sourceEngine->isWindowTracked(partner)) {
-            Q_EMIT windowOutputMoveExpected(partner, sourceScreen, targetScreenId);
+            announceOutputMove(partner, sourceScreen, targetScreenId, sourceEngine);
         }
     }
 }

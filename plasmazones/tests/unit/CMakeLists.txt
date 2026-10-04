@@ -1419,6 +1419,17 @@ target_link_libraries(test_wta_screen_changed PRIVATE Qt6::Test Qt6::Core Qt6::D
                       PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_screen_changed COMMAND test_wta_screen_changed)
 
+# releaseLeftScreens, the drop-on-leave primitive every cross-screen move runs,
+# and the daemon-driven move sites that call it. Same fixture and links.
+add_executable(test_wta_drop_on_leave dbus/test_wta_drop_on_leave.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_drop_on_leave PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_drop_on_leave PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_drop_on_leave COMMAND test_wta_drop_on_leave)
+
 # The evacuee ledger: reportOutputSettle's verdicts for a window KWin moved off
 # an output that went away and back. Same shared fixture as the two above.
 add_executable(test_wta_evacuees dbus/test_wta_evacuees.cpp

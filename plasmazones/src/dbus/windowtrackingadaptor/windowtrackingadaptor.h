@@ -318,13 +318,9 @@ public Q_SLOTS:
     // windowSnapped, windowSnappedMultiZone, windowUnsnapped, windowsSnappedBatch,
     // recordSnapIntent moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
 
-    /**
-     * Notify that a snapped window was dragged without the activation trigger.
-     * If the window was tracked as snapped, treat it as a drag-out unsnap:
-     * save pre-float zone, mark floating, and clear zone assignment so the
-     * window doesn't auto-restore to the zone on close/reopen.
-     * @param windowId Window ID from the effect
-     */
+    /// A snapped window was dragged without the activation trigger: unsnap it
+    /// as a drag-out (pre-float zone saved, floating, zone cleared so a reopen
+    /// does not restore it there).
     void notifyDragOutUnsnap(const QString& windowId);
 
     /**
@@ -768,11 +764,9 @@ public:
      */
     QStringList knownWindowIds() const;
 
-    /**
-     * @brief Find the first empty zone in the current layout
-     * @return PhosphorZones::Zone ID of first empty zone, or empty string if all occupied
-     */
-    QString findEmptyZone();
+    /// Drop what every engine holds of @p windowId off @p keepScreenId (screenleave.cpp).
+    void releaseLeftScreens(const QString& windowId, const QString& keepScreenId,
+                            const PhosphorEngine::IPlacementEngine* arrival);
 
     /// Internal: returns QRect directly (avoids JSON round-trip for daemon-internal callers)
     QRect zoneGeometryRect(const QString& zoneId, const QString& screenId);
@@ -1908,6 +1902,9 @@ private:
     void floatEvacuee(const PhosphorProtocol::OutputSettleRow& row);
     QString reassertEvacuee(const PhosphorProtocol::OutputSettleRow& row, QSet<QString>& reassertedScreens);
     std::unique_ptr<EvacueeLedger> m_evacuees;
+    /// releaseLeftScreens, then the windowOutputMoveExpected marker (screenleave.cpp).
+    void announceOutputMove(const QString& windowId, const QString& targetScreenId, const QString& sourceScreenId,
+                            const PhosphorEngine::IPlacementEngine* arrival);
 };
 
 } // namespace PlasmaZones

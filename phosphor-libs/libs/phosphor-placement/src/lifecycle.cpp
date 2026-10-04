@@ -814,6 +814,11 @@ QVector<WindowTrackingService::ResnapEntry> WindowTrackingService::takeResnapBuf
     return std::exchange(m_resnapBuffer, {});
 }
 
+void WindowTrackingService::markLastUsedZoneDirty()
+{
+    markDirty(DirtyLastUsedZone);
+}
+
 void WindowTrackingService::setFloatingWindows(const QSet<QString>& windows)
 {
     m_floatingWindows = windows;

@@ -1003,6 +1003,9 @@ private Q_SLOTS:
         QVERIFY2(m_snapEngine->isWindowTracked(w), "a refused crossing must re-home the window into the source");
         QCOMPARE(m_snapEngine->screenForTrackedWindow(w), m_screenId);
         QVERIFY2(markerSpy.isEmpty(), "no output-move marker may be armed for a refused crossing");
+        // Nothing left the source monitor, so the screen-leave release never
+        // ran: the re-homed window keeps its zone there.
+        QCOMPARE(m_snapEngine->zoneForWindow(w), m_zoneIds[0]);
 
         m_wta->setEngines(m_snapEngine, nullptr, nullptr);
     }

@@ -132,6 +132,16 @@ private Q_SLOTS:
                      | PhosphorPlacement::WindowTrackingService::DirtyPreTileGeometries));
     }
 
+    // An engine that cleared a last-used zone in its own store marks only the
+    // last-used state for the next save.
+    void testMarkLastUsedZoneDirty_setsOnlyThatBit()
+    {
+        m_service->markLastUsedZoneDirty();
+        QCOMPARE(m_service->peekDirty(),
+                 static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
+                     PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone));
+    }
+
     void testTakeDirty_returnsAndResets()
     {
         m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone);

@@ -395,7 +395,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_autotileEngine) {
         connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this,
                 [this](const QString& windowId, const QString& targetScreenId) {
-                    Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, QString());
+                    announceOutputMove(windowId, targetScreenId, QString(), m_autotileEngine.data());
                 });
     }
 
@@ -511,7 +511,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // Empty source screen, same reasoning as the autotile relay above.
         connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this,
                 [this](const QString& windowId, const QString& targetScreenId) {
-                    Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, QString());
+                    announceOutputMove(windowId, targetScreenId, QString(), m_scrollEngine.data());
                 });
         connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);

@@ -152,12 +152,6 @@ QString WindowTrackingAdaptor::getLastUsedZoneId()
 // PhosphorZones::Zone Geometry Queries - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QString WindowTrackingAdaptor::findEmptyZone()
-{
-    // Use cursor screen for per-screen layout resolution
-    return m_service->findEmptyZone(m_lastCursorScreenId);
-}
-
 PhosphorProtocol::ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
 {
     // The D-Bus contract for this overload is "primary screen". Resolve that

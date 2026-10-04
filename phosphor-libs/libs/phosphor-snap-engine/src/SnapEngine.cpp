@@ -221,6 +221,7 @@ bool SnapEngine::migrateWindowToKey(const QString& windowId, const PhosphorEngin
     const bool hadResidence = !oldState->screenForWindow(canonical).isEmpty();
     const bool onAllDesktops = hadResidence && oldState->desktopForWindow(canonical) == 0;
     QStringList removed;
+    bool lastUsedCleared = false;
     if (crossScreen) {
         // The zone stays behind, unassigned: it names a zone of the old
         // screen's layout, and carrying it let a read on the new screen answer
@@ -228,7 +229,7 @@ bool SnapEngine::migrateWindowToKey(const QString& windowId, const PhosphorEngin
         // clears inside the unassign; the global representative follows below.
         if (oldState->isWindowSnapped(canonical)) {
             removed += oldState->zonesForWindow(canonical);
-            oldState->unassignWindow(canonical);
+            lastUsedCleared |= oldState->unassignWindow(canonical).lastUsedZoneCleared;
         }
         if (m_windowTracker && oldKey.desktop >= 1) {
             m_windowTracker->forgetDesktopZones(canonical, engineId(), oldKey.desktop);
@@ -263,9 +264,12 @@ bool SnapEngine::migrateWindowToKey(const QString& windowId, const PhosphorEngin
         if (key == newKey || key.screenId != oldKey.screenId) {
             continue;
         }
-        releaseMembership(windowId, key, removed);
+        lastUsedCleared |= releaseMembership(windowId, key, removed);
     }
-    clearGlobalLastUsedIfRemoved(removed);
+    lastUsedCleared |= clearGlobalLastUsedIfRemoved(removed);
+    if (lastUsedCleared && m_windowTracker) {
+        m_windowTracker->markLastUsedZoneDirty();
+    }
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "SnapEngine::migrateWindowToScreen:" << canonical << "from" << oldKey.screenId << "to" << newKey.screenId
         << "desktop" << newKey.desktop;
@@ -391,24 +395,6 @@ QString SnapEngine::zoneForWindow(const QString& windowId) const
     // reads an empty zone out of the global holder, which is what the old null
     // branch returned anyway.
     return stateForWindow(windowId)->zoneForWindow(windowId);
-}
-
-void SnapEngine::syncGlobalLastUsedForRemovedZones(const QStringList& removedZones)
-{
-    if (removedZones.isEmpty()) {
-        return;
-    }
-    // Last-used is per-key: sweep every store (per-screen + the global holder) so a
-    // removed zone clears whichever context recorded it as last-used.
-    for (SnapState* state : m_states.states()) {
-        if (!state) {
-            continue;
-        }
-        const QString lastUsed = state->lastUsedZoneId();
-        if (!lastUsed.isEmpty() && removedZones.contains(lastUsed)) {
-            state->restoreLastUsedZone({}, {}, {}, 0);
-        }
-    }
 }
 
 QSet<int> SnapEngine::desktopsWithActiveState() const

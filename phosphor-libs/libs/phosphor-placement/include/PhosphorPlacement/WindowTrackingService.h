@@ -874,10 +874,9 @@ public:
     using ResnapEntry = PhosphorEngine::ResnapEntry;
 
     QVector<ResnapEntry> takeResnapBuffer() override;
+    void markLastUsedZoneDirty() override;
 
-    /**
-     * @brief Get user-snapped classes
-     */
+    /// The user-snapped classes.
     const QSet<QString>& userSnappedClasses() const;
 
     /**

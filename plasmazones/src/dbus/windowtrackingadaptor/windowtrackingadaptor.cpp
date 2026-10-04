@@ -55,7 +55,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // m_persistenceWorker, m_saveTimer, and m_sessionBackend null while
     // many public slots (setWindowSticky, windowClosed, cursorScreenChanged,
     // windowActivated, pruneStaleWindows, getEmptyZones, getLastUsedZoneId,
-    // findEmptyZone, zoneGeometryRect) plus the saveStateOnShutdown path
+    // zoneGeometryRect) plus the saveStateOnShutdown path
     // dereference m_service unguarded — so the early-return just deferred
     // the crash to the first D-Bus call. qFatal aborts unambiguously in both
     // debug and release builds, supersedes Q_ASSERT (debug-only) entirely,

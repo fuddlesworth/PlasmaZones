@@ -423,6 +423,34 @@ private Q_SLOTS:
         QCOMPARE(m_engine->allSnapStates().size(), before - 1);
     }
 
+    // A handoff release clears the last-used zone of the store it unassigns
+    // from, and only that one: another screen's store running the same layout
+    // keeps its own last-used of the same zone id. The clear is persisted
+    // (F167): it used to sweep every store and leave the save unmarked.
+    void handoffReleaseClearsOnlyItsOwnStoresLastUsed()
+    {
+        installFullResolver();
+        const QString screenA = QStringLiteral("DP-1");
+        const QString screenB = QStringLiteral("DP-2");
+        const QString w = QStringLiteral("app|handoff-lastused");
+        m_engine->setCurrentDesktopForScreen(screenA, 1);
+        m_engine->setCurrentDesktopForScreen(screenB, 1);
+        m_service->assignWindowToZone(w, m_zoneIds[0], screenA, 1);
+        auto* onA = static_cast<SnapState*>(m_engine->stateForScreen(screenA));
+        onA->restoreLastUsedZone(m_zoneIds[0], screenA, QString(), 1);
+        SnapState* onB = m_engine->stateForWindowOnScreen(QStringLiteral("app|on-b"), screenB);
+        QVERIFY(onB && onB != onA);
+        onB->restoreLastUsedZone(m_zoneIds[0], screenB, QString(), 1);
+        (void)m_service->takeDirty();
+
+        m_engine->handoffRelease(w);
+
+        QVERIFY(onA->lastUsedZoneId().isEmpty());
+        QCOMPARE(onB->lastUsedZoneId(), m_zoneIds[0]);
+        QVERIFY(m_service->peekDirty() & PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone);
+        m_service->setSnapState(m_engine->snapState());
+    }
+
 private:
     /// Install the FULL per-key resolver so the WTS facade and the engine agree on
     /// the same per-(screen,desktop,activity) stores (the default single-store

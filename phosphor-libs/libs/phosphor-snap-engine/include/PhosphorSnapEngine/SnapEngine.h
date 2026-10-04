@@ -1121,12 +1121,6 @@ private:
                                                                   const PhosphorEngine::PlacementStateKey& currentKey,
                                                                   const QList<PendingMembership>& pending);
 
-    /// Clear the last-used zone on every store (per-screen + the global holder)
-    /// that currently points at one of @p removedZones. Last-used is per-key now, so
-    /// a per-screen unassign has to sweep all stores in case another context pointed
-    /// at the same zone. Call with the window's zones captured BEFORE the unassign.
-    void syncGlobalLastUsedForRemovedZones(const QStringList& removedZones);
-
     /// migrateWindowToScreen onto an explicit key: a pinned commit or a
     /// cross-desktop handoff lands in exactly the context it names.
     bool migrateWindowToKey(const QString& windowId, const PhosphorEngine::PlacementStateKey& newKey);
@@ -1134,9 +1128,12 @@ private:
     /// while it still names the same zones. For a window leaving the screen.
     void dropPreFloatHome(SnapState* state, const QString& windowId);
     /// Release one membership the way releaseWindowOffScreen does; @p removed
-    /// collects its zones for clearGlobalLastUsedIfRemoved.
-    void releaseMembership(const QString& windowId, const PhosphorEngine::PlacementStateKey& key, QStringList& removed);
-    void clearGlobalLastUsedIfRemoved(const QStringList& removed);
+    /// collects its zones for clearGlobalLastUsedIfRemoved. True when the
+    /// store's own last-used named the zone and was cleared.
+    bool releaseMembership(const QString& windowId, const PhosphorEngine::PlacementStateKey& key, QStringList& removed);
+    /// Clear the global representative when it names one of @p removed; true
+    /// when it did. A store's own last-used clears in its unassign.
+    bool clearGlobalLastUsedIfRemoved(const QStringList& removed);
 
     /// The store whose last-used zone should drive a placement on @p screenId: the
     /// screen's own per-key store when it has a recorded last-used, else the global

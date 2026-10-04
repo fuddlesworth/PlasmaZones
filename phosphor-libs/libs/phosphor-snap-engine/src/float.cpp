@@ -757,11 +757,16 @@ void SnapEngine::handoffRelease(const QString& windowId)
     // it cannot tell a cross-monitor handoff from a same-monitor mode flip;
     // the receiving side forgets a home on another monitor (the daemon's
     // float relays clear it, and every unfloat refuses one).
-    const auto releaseFrom = [this, &windowId](SnapState* state) {
+    //
+    // Each store's unassign clears its own last-used naming the zone; only the
+    // global representative is swept after, so another screen's store keeps
+    // its last-used of the same zone id in a shared layout (F167).
+    QStringList removed;
+    bool lastUsedCleared = false;
+    const auto releaseFrom = [&windowId, &removed, &lastUsedCleared](SnapState* state) {
         if (state->isWindowSnapped(windowId)) {
-            const QStringList removedZones = state->zonesForWindow(windowId);
-            state->unassignWindow(windowId);
-            syncGlobalLastUsedForRemovedZones(removedZones);
+            removed += state->zonesForWindow(windowId);
+            lastUsedCleared |= state->unassignWindow(windowId).lastUsedZoneCleared;
         }
         if (state->isFloating(windowId)) {
             state->setFloating(windowId, false);
@@ -797,6 +802,10 @@ void SnapEngine::handoffRelease(const QString& windowId)
     // The global holder carries the screenless float bookkeeping no
     // membership names (and is the store an untracked window resolves to).
     releaseFrom(m_globals);
+    lastUsedCleared |= clearGlobalLastUsedIfRemoved(removed);
+    if (lastUsedCleared && m_windowTracker) {
+        m_windowTracker->markLastUsedZoneDirty();
+    }
     if (kept.isEmpty()) {
         // Nothing of the window is snapping's any more: drop the reverse-map
         // record so this engine no longer claims it.

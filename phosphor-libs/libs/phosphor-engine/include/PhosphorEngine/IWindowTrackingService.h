@@ -290,6 +290,11 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual QVector<ResnapEntry> takeResnapBuffer() = 0;
+
+    /// An engine cleared a last-used zone in one of its stores: persist it.
+    virtual void markLastUsedZoneDirty()
+    {
+    }
 };
 
 } // namespace PhosphorEngine
