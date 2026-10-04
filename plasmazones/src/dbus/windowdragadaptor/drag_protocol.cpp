@@ -373,6 +373,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
             m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
         }
         m_originalGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
+        m_originalFrameFillsOutput = windowFillsOutput(windowId);
         m_snapCancelled = false;
         m_wasSnapped = false;
         m_dragReorderActive = false;

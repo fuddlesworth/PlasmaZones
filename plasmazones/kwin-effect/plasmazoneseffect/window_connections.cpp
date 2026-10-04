@@ -58,6 +58,28 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     }
     m_wiredWindows.insert(w);
 
+    // A maximize-on or fullscreen-on edge: KWin's restore rect is the frame the
+    // window left, a free spot the daemon keeps as its float-back (F215). The
+    // daemon refuses it for a window in a zone or on a tile. Nothing is sent
+    // when there is no restore rect (it equals the frame, or the window is a
+    // windowed-fullscreen or parked strip tile, which freeGeometryForCapture
+    // answers with an invalid rect).
+    const auto pushRestoreRect = [this](KWin::EffectWindow* window) {
+        if (!shouldHandleWindow(window)) {
+            return;
+        }
+        const QString windowId = getWindowId(window);
+        const QRect geom = freeGeometryForCapture(window, QRectF(window->frameGeometry())).toRect();
+        if (windowId.isEmpty() || !geom.isValid() || geom == window->frameGeometry().toRect()) {
+            return;
+        }
+        PhosphorProtocol::ClientHelpers::fireAndForget(
+            this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+            {windowId, geom.x(), geom.y(), geom.width(), geom.height(), getWindowScreenId(window),
+             /*overwrite=*/true},
+            QStringLiteral("storePreTileGeometry - maximize restore rect"));
+    };
+
     // Recover the compositor's move state for a window already being dragged
     // when we wired it. The start signal we connect below has come and gone for
     // such a window (effect reload or compositor restart mid-gesture), so
@@ -157,7 +179,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             &PlasmaZonesEffect::refreshSurfaceShadowMargins);
     connect(
         w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
-        [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
+        [this, pushRestoreRect](KWin::EffectWindow* window, bool horizontal, bool vertical) {
             // isDeleted() as well as null. Every body below is meaningless
             // for a corpse, and one is actively harmful: the rule-cache
             // invalidation calls getWindowId, which re-populates the id
@@ -201,6 +223,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // kept the open-time value and recorded an output-sized frame
             // over a good float-back (F33).
             pushWindowMetadata(window);
+            if (fullyMaximized) {
+                pushRestoreRect(window);
+            }
             // MAXIMIZE INTERCEPTION. On a scroll-managed tile the request
             // belongs to the scrolling engine's maximize-to-edges verb, not
             // to KWin: the strip owns the column's width, so letting both
@@ -337,12 +362,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // capture reads it through fillsOutputState: the edge refreshes the
     // window's rule verdicts and pushes its metadata, as the full-maximize
     // edge does (F33, F73).
-    connect(w, &KWin::EffectWindow::windowFullScreenChanged, this, [this](KWin::EffectWindow* window) {
+    connect(w, &KWin::EffectWindow::windowFullScreenChanged, this, [this, pushRestoreRect](KWin::EffectWindow* window) {
         if (!window || window->isDeleted()) {
             return;
         }
         invalidateRuleCacheForStateChange(getWindowId(window));
         pushWindowMetadata(window);
+        if (window->isFullScreen()) {
+            pushRestoreRect(window);
+        }
     });
 
     // The same gate's OTHER edges. A fullscreen window keeps isFullScreen()

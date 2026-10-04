@@ -301,7 +301,7 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
 }
 
 void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
-                                              const QRectF& preCapturedGeometry)
+                                              const QRectF& preCapturedGeometry, bool overwrite)
 {
     if (!w || windowId.isEmpty()) {
         return;
@@ -343,19 +343,17 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
     // the ID used by later lookups.
     const QString screenId = m_effect->getWindowScreenId(w);
 
-    // Post the store directly with overwrite=false. The daemon's storePreTileGeometry
-    // enforces per-windowId idempotency — a second capture for the same runtime
-    // instance is a no-op. We deliberately skip the prior async hasPreTileGeometry
-    // pre-check: that path matched on appId too, so a stale cross-session entry from
-    // a prior window instance (keyed by appId) would block the fresh per-instance
-    // capture and freeze float-restore at ancient coordinates.
-    // qRound, not truncation: fractional-scale outputs leave sub-pixel
-    // residue in frameGeometry() (same convention as the toRect() geometry
-    // paths — see window_lifecycle.cpp).
-    PhosphorProtocol::ClientHelpers::fireAndForget(
-        m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-        {windowId, qRound(geom.x()), qRound(geom.y()), qRound(geom.width()), qRound(geom.height()), screenId, false},
-        QStringLiteral("storePreTileGeometry"));
+    // Post the store directly. Without @p overwrite the daemon keeps the first
+    // capture per runtime instance. No async hasPreTileGeometry pre-check: it
+    // matched on appId too, so a stale entry from a prior instance blocked the
+    // fresh capture and froze float-restore at ancient coordinates.
+    // qRound, not truncation: fractional-scale outputs leave sub-pixel residue
+    // in frameGeometry() (the toRect() convention, see window_lifecycle.cpp).
+    PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("storePreTileGeometry"),
+                                                   {windowId, qRound(geom.x()), qRound(geom.y()), qRound(geom.width()),
+                                                    qRound(geom.height()), screenId, overwrite},
+                                                   QStringLiteral("storePreTileGeometry"));
     qCInfo(lcEffect) << "Stored pre-tile geometry for window" << windowId << "geom=" << geom;
 }
 

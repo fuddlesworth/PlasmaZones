@@ -48,10 +48,18 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                                          bool skipAnimation, std::function<void()> onComplete,
                                          std::function<void()> onError)
 {
+    // The free frame, captured BEFORE the call: the daemon commits the snap
+    // while answering it, and a capture after the reply meets a window already
+    // in a zone, which the daemon refuses. Overwrite, because this frame is the
+    // most recent free spot.
+    if (storePreSnap && window && !window->isDeleted()) {
+        m_snapHandler->ensurePreSnapGeometryStored(window, windowId, QRectF(window->frameGeometry()),
+                                                   /*overwrite=*/true);
+    }
     QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(interface, method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation, onComplete,
+            [this, window, windowId, method, fallback, onSnapSuccess, args, skipAnimation, onComplete,
              onError](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 QDBusPendingReply<int, int, int, int, bool> reply = *w;
@@ -78,16 +86,11 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                     QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(),
                               reply.argumentAt<3>());
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
-                    if (storePreSnap)
-                        // `window` is non-null inside this branch (guarded by
-                        // the `reply.argumentAt<4>() && window` check above),
-                        // so frameGeometry() needs no null-guard here.
-                        m_snapHandler->ensurePreSnapGeometryStored(window, windowId, QRectF(window->frameGeometry()));
                     // A surviving KWin maximize fights the zone rect and arms
-                    // a cross-screen restore — drop it before the apply. Runs
-                    // AFTER the pre-snap capture, whose freeGeometryForCapture
-                    // reads the maximize state to substitute the true free
-                    // rect; demoting first would consume it.
+                    // a cross-screen restore — drop it before the apply. The
+                    // pre-snap capture ran before the call, so its
+                    // freeGeometryForCapture already read the maximize state
+                    // this demote consumes.
                     //
                     // Deliberately UNGATED on isManagedScreen, unlike the
                     // daemon_apply sites: their slots also carry float

@@ -72,6 +72,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // (shortcuts_wiring.cpp).
     m_draggedWindowId = windowId;
     m_originalGeometry = QRect(qRound(x), qRound(y), qRound(width), qRound(height));
+    m_originalFrameFillsOutput = windowFillsOutput(windowId);
     m_currentZoneId.clear();
     m_currentZoneScreenId.clear();
     m_currentZoneGeometry = QRect();

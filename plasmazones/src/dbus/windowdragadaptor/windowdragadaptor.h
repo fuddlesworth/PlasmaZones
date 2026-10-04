@@ -690,6 +690,9 @@ private:
     // structural compare, so new fields are picked up automatically.
     PhosphorProtocol::DragPolicy m_currentDragPolicy;
     QRect m_originalGeometry;
+    /// Whether the window filled its output (maximized or fullscreen) when the
+    /// drag began: its original frame is then the output, never a float-back.
+    bool m_originalFrameFillsOutput = false;
 
     // Pending snap-path drag awaiting first activation. Populated by
     // beginDrag on the snap path instead of immediately running the full
@@ -1030,7 +1033,9 @@ private:
     // captured pre-snap geometry to prevent race conditions in
     // dragStopped() — the in-flight value may have already been
     // overwritten by the snap commit by the time this runs.
-    void tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry);
+    void tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry, bool fillsOutput);
+    /// The registry's fills-output verdict for @p windowId, false when unknown.
+    bool windowFillsOutput(const QString& windowId) const;
 
 private Q_SLOTS:
     /**

@@ -170,7 +170,7 @@ public:
     /// Store a window's pre-snap (free-float) geometry with the daemon before a
     /// snap commit, so a later float toggle restores the original position.
     void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
-                                     const QRectF& preCapturedGeometry = QRectF());
+                                     const QRectF& preCapturedGeometry = QRectF(), bool overwrite = false);
     /// Send the one-way cancelSnap D-Bus call (drag cancelled by Escape or an
     /// external event). The daemon discards the in-flight snap.
     void callCancelSnap();

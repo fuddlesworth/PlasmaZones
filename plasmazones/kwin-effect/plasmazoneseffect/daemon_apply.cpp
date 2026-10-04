@@ -388,27 +388,10 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "(live:" << liveWindowId << ") geo:" << geometry
                      << "zoneId:" << zoneId << "screen:" << screenId << "floating:" << isWindowFloating(liveWindowId)
                      << "currentFrame:" << w->frameGeometry();
-    // Store pre-snap geometry before first snap (idempotent — skips if already stored).
-    // The daemon handles windowSnapped/recordSnapIntent internally, but only the effect
-    // knows the window's current frame geometry for pre-tile storage.
-    //
-    // ONLY when the window is actually MOVING into the zone: a window already at
-    // the target geometry has no meaningful pre-snap rect to capture (its current
-    // frame IS the zone). Without this guard, a re-apply of the zone geometry for
-    // an already-snapped window — e.g. reapplyWindowAppearance() re-emitting each
-    // snapped window's geometry on daemon reconnect — would store the ZONE rect as
-    // the pre-tile geometry, clobbering the real pre-snap position the window
-    // floats back to (Meta+F then teleports it to the zone instead of its float
-    // spot). The idempotent daemon-side check normally protects this, but on a
-    // daemon restart the reapply can race ahead of the disk-persisted pre-tile
-    // load; the move-check makes it robust regardless of ordering.
-    if (!skipGeometry && !zoneId.isEmpty() && w->frameGeometry().toRect() != geometry) {
-        // Capture frame geometry synchronously BEFORE applyWindowGeometry moves the window.
-        // ensurePreSnapGeometryStored is async (D-Bus hasPreTileGeometry check) — without
-        // pre-capturing, the callback would read the post-move geometry instead of the
-        // original free-floating position.
-        m_snapHandler->ensurePreSnapGeometryStored(w, liveWindowId, w->frameGeometry());
-    }
+    // No pre-snap capture here: every daemon zone apply follows its commit, so
+    // the window is already in a zone and the daemon refuses its frame. The
+    // daemon records the free frame itself before the commit
+    // (SnapEngine::recordFreeFrameBeforeUserSnap).
 
     // Empty zoneId = float-restore (daemon placing the window back at its pre-snap geometry, e.g.
     // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The

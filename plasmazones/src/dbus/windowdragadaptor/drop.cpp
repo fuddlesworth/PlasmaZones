@@ -85,6 +85,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const QVector<QUuid> capturedAdjacentZoneIds = m_currentAdjacentZoneIds;
     const bool capturedWasSnapped = m_wasSnapped;
     const QRect capturedOriginalGeometry = m_originalGeometry;
+    const bool capturedOriginalFillsOutput = m_originalFrameFillsOutput;
     const bool capturedSnapCancelled = m_snapCancelled;
     const bool capturedExternallyCancelled = m_dragExternallyCancelled;
     const bool capturedZoneSelectorShown = m_zoneSelectorShown;
@@ -332,7 +333,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 shouldApplyGeometry = true;
                 usedZoneSelector = true;
 
-                tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);
+                tryStorePreSnapGeometry(windowId, capturedOriginalGeometry, capturedOriginalFillsOutput);
 
                 int selectedZoneIndex = m_overlayService->selectedZoneIndex();
                 if (m_windowTracking && m_layoutManager) {
@@ -477,7 +478,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             // branch above. capturedZoneId is the primary zone of the
             // multi-zone snap as resolved by dragMoved.
             resolvedZoneIdOut = capturedZoneId;
-            tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);
+            tryStorePreSnapGeometry(windowId, capturedOriginalGeometry, capturedOriginalFillsOutput);
             if (m_windowTracking) {
                 auto* snapMulti = m_windowTracking->snapEngine();
                 if (snapMulti)
@@ -498,7 +499,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             snapHeight = frame.height();
             shouldApplyGeometry = true;
             resolvedZoneIdOut = capturedZoneId;
-            tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);
+            tryStorePreSnapGeometry(windowId, capturedOriginalGeometry, capturedOriginalFillsOutput);
             if (m_windowTracking) {
                 auto* snapSingle = m_windowTracking->snapEngine();
                 if (snapSingle)

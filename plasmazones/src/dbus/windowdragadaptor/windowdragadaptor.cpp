@@ -985,6 +985,7 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     stopGraceExpiry();
     m_draggedWindowId.clear();
     m_originalGeometry = QRect();
+    m_originalFrameFillsOutput = false;
     m_currentZoneId.clear();
     m_currentZoneScreenId.clear();
     m_currentZoneGeometry = QRect();
@@ -1023,10 +1024,23 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // computeAndEmitSnapAssist consumes-and-clears the IDs after reading.
 }
 
-void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry)
+bool WindowDragAdaptor::windowFillsOutput(const QString& windowId) const
+{
+    const auto* registry =
+        m_windowTracking && m_windowTracking->service() ? m_windowTracking->service()->windowRegistry() : nullptr;
+    return registry && registry->fillsOutputState(windowId).value_or(false);
+}
+
+void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry,
+                                                bool fillsOutput)
 {
     // Store pre-snap geometry for restore on unsnap/float (first-only: overwrite=false).
     // Single float-back store: the unified placement record's shared free geometry.
+    // A drag that began maximized or fullscreen started from the output rect,
+    // not a free spot; the maximize edge already pushed the restore rect.
+    if (fillsOutput) {
+        return;
+    }
     if (m_windowTracking && m_windowTracking->service() && originalGeometry.isValid()) {
         QString screenId = effectiveScreenIdAt(originalGeometry.center().x(), originalGeometry.center().y());
         if (screenId.isEmpty()) {
