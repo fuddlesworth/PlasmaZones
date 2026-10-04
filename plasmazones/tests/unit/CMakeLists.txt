@@ -2566,6 +2566,7 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench" TIMEOUT 900)
 #   test_strip_view_animator: StripViewAnimator per-output view-spring behaviour
 #   test_strip_motion_sampler: StripMotionSampler distance/speed sampling
 #   test_window_context_edge: the desktop handler's edit classification
+#   test_desktop_move_stash: the free geometry a desktop move carries
 #   test_exact_trigger_match: trigger-set exact-match resolution
 #   test_scroll_behaviour_parse: scrolling behaviour token parsing
 #   test_scroll_tab_layout: tab-indicator layout geometry (declared ~300
@@ -2635,6 +2636,11 @@ add_executable(test_window_context_edge compositor-common/test_window_context_ed
 target_include_directories(test_window_context_edge PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 target_link_libraries(test_window_context_edge PRIVATE Qt6::Test)
 add_test(NAME test_window_context_edge COMMAND test_window_context_edge)
+
+add_executable(test_desktop_move_stash compositor-common/test_desktop_move_stash.cpp)
+target_include_directories(test_desktop_move_stash PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+target_link_libraries(test_desktop_move_stash PRIVATE Qt6::Test PhosphorIdentity::PhosphorIdentity)
+add_test(NAME test_desktop_move_stash COMMAND test_desktop_move_stash)
 
 # The pure half of the screen-level passes' helpers (transitionpasspure.h):
 # the on-screen format to alpha-capable capture format table the strip pass

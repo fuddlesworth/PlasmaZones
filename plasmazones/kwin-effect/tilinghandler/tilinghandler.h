@@ -21,6 +21,7 @@
 
 #include "compositor/deferredwindowcommits.h"
 #include "compositor/scrolltabindicatorpainter.h"
+#include "desktopmovestash.h"
 #include "minimizefloatmarks.h"
 // ClaimScope is part of releaseAllClaims' signature; the header is pure and
 // header-only, so this costs nothing beyond the enum.
@@ -243,13 +244,10 @@ public:
     {
         return m_unfloatInFlight.contains(windowId);
     }
-    /// Drop a destroyed window's desktop-move geometry stash. Separate from
-    /// onWindowClosed because the desktop-MOVE path calls onWindowClosed
-    /// right after creating the stash (the window must look "closed" to this
-    /// desktop's tiling) — only genuine destruction may clear it.
+    /// Drop a destroyed window's desktop-move stash (only destruction may).
     void clearDesktopMoveStash(const QString& windowId)
     {
-        m_savedPreTileForDesktopMove.remove(windowId);
+        m_desktopMoveStash.forget(windowId);
     }
     void deferWindowRouting(KWin::EffectWindow* window);
     /// An announce is in flight (see SnapHandler::hasOpenResolveInFlight).
@@ -349,6 +347,11 @@ public:
     /// notifyWindowAdded. Declines a rect stashed under another screen (its
     /// rects are in the SOURCE monitor's coordinates). Consumes the entry.
     void restorePreTileForDesktopMove(const QString& windowId, const QString& screenId);
+    /// Pay @p w the free placement it is owed after leaving a tiling desktop
+    /// for one that does not tile (DesktopMoveStash), now that it is in view
+    /// on @p screenId; payOwedFreePlacementsInView does it for a switch.
+    void payOwedFreePlacement(KWin::EffectWindow* w, const QString& windowId, const QString& screenId);
+    void payOwedFreePlacementsInView(const QList<KWin::EffectWindow*>& windows);
     /// The tiling side of a crossing. True when it is the window's own (not a daemon
     /// move's echo nor a strip column's hop), for ScreenChangeHandler::reportCrossing.
     bool handleWindowOutputChanged(KWin::EffectWindow* w);
@@ -1800,13 +1803,7 @@ private:
     };
     QHash<QString, ExpectedOutputMove> m_expectedOutputMove;
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
-    /// Pre-autotile geometry preserved when a window is moved to another
-    /// desktop. Keyed by windowId; value holds (sourceScreenId, frameRect)
-    /// so a cross-desktop + cross-screen move can detect the screen change
-    /// at restore time and skip the saved geometry (the rect is in the
-    /// source screen's coordinate space and would land off-target on a
-    /// different monitor).
-    QHash<QString, QPair<QString, QRectF>> m_savedPreTileForDesktopMove;
+    DesktopMoveStash m_desktopMoveStash; ///< free geometry of windows that left a desktop (desktopmovestash.h)
     /// Re-entrancy guard for handleWindowOutputChanged, PER WINDOW.
     ///
     /// A single global bool refused every nested call, including one for a

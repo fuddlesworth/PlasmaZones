@@ -208,6 +208,11 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
                 tiling->savePreTileForDesktopMove(windowId);
                 tiling->releaseWindowTracking(windowId, screenId);
                 reconcileDecorationOnPlacementFlip(windowId);
+                // A move from a tiling desktop is owed its free placement,
+                // paid before the drain, whose park the pay skips (F364, F414).
+                if (edge.genuineMove) {
+                    tiling->payOwedFreePlacement(window, windowId, screenId);
+                }
                 if (m_snapHandler) {
                     m_snapHandler->drainDesktopArrivalFor(windowId, window);
                 }

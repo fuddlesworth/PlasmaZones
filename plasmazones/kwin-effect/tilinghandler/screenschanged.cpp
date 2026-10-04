@@ -1009,6 +1009,9 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     m_savedNotifiedForDesktopReturn.remove(windowId);
                 }
             }
+            // A window that left a tiling desktop for this one, which does not
+            // tile, gets its free placement the first time it is seen here (F364).
+            payOwedFreePlacementsInView(windows);
 
             // Refresh active border for the focused window on the returned-to
             // desktop. This also re-asserts borderless state: KWin silently

@@ -323,6 +323,10 @@ public:
     {
         m_desktopArrivalParks.cancel(windowId);
     }
+    bool holdsDesktopArrivalPark(const QString& windowId) const
+    {
+        return m_desktopArrivalParks.contains(windowId);
+    }
 
     /// Whether a first-placement resolve (an open, a pending sweep, a desktop
     /// arrival) is out for @p windowId: a desktop move asked for inside it is

@@ -832,9 +832,8 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
     m_effect->m_shaderManager.dropMonocleEcho(liveWindow); // no echo to absorb once released
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
-    // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared
-    // here — the desktop-move path stashes it immediately before close (consume
-    // site / clearDesktopMoveStash cover it). Also drop the unconsumed output-move
+    // KWin-specific cleanup. The desktop-move stash outlives the release on
+    // purpose; close and bring-up clear it. Also drop the unconsumed output-move
     // marker and the pending cross-screen-restore connection (a stale one could
     // fire a spurious applyWindowGeometry).
     m_savedNotifiedForDesktopReturn.remove(windowId);
@@ -1161,7 +1160,7 @@ void TilingHandler::clearPerSessionDaemonState()
     m_notifiedWindowScreens.clear();
     m_scrollClipLossReported.clear();
     m_savedNotifiedForDesktopReturn.clear();
-    m_savedPreTileForDesktopMove.clear();
+    m_desktopMoveStash.clear();
     // The per-session scroll maps the serviceUnregistered teardown
     // clears, repeated here so bring-up is authoritative on its own rather
     // than on what that edge left behind. A stale commanded rect
