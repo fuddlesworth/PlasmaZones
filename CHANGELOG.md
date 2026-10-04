@@ -1796,6 +1796,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.15.14] - 2026-03-09
 
+### Changed
+
+- **Shortcut key grabs at login run in parallel**: the one-at-a-time key grabs from 1.15.13 were replaced with asynchronous D-Bus calls that grab every key at once without blocking the event loop.
+
 ### Fixed
 
 - **Nix build failure after systemd service template change**: Removed stale `postInstall` `substituteInPlace` that tried to replace `/usr/bin/plasmazonesd` in the systemd service file. Since the service now uses `configure_file(@ONLY)` with `@KDE_INSTALL_FULL_BINDIR@`, the path resolves correctly at build time and no post-install patching is needed.
@@ -1804,7 +1808,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Login freeze with many shortcuts** (fixes [#200](https://github.com/fuddlesworth/PlasmaZones/discussions/200)): Replaced blocking `KGlobalAccel::setGlobalShortcut()` with a two-step approach where `setDefaultShortcut()` registers all shortcuts without key grabs, then async D-Bus calls activate key grabs in parallel without blocking the event loop. Eliminates 20-40s hangs during login when kglobalacceld is under contention.
+- **Login freeze with many shortcuts** (fixes [#200](https://github.com/fuddlesworth/PlasmaZones/discussions/200)): Shortcuts are now registered in two steps. `setDefaultShortcut()` first stores every default without grabbing keys, and the key grabs then run one at a time with the event loop running between them. A grab can still wait on kglobalacceld at login, but the desktop stays responsive instead of freezing for 20 to 40 seconds.
 
 ## [1.15.12] - 2026-03-08
 
