@@ -17,6 +17,7 @@
 #include "core/platform/logging.h"
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
 namespace PlasmaZones {
 
@@ -70,8 +71,10 @@ void WindowTrackingAdaptor::moveWindowToDesktop(const QString& windowId, int des
 {
     // Desktops are 1-based on this interface (screenDesktopChanged and the
     // metadata push agree); 0 means "all / unknown" there and is not a
-    // destination. Anything past the compositor's last desktop is its call.
-    if (desktop < 1 || !isRegistryTracked(windowId)) {
+    // destination. Nor is a desktop past the last one: the effect answers an
+    // out-of-range move by re-placing the window where it is.
+    const int desktopCount = m_virtualDesktopManager ? m_virtualDesktopManager->desktopCount() : 0;
+    if (desktop < 1 || (desktopCount > 0 && desktop > desktopCount) || !isRegistryTracked(windowId)) {
         qCDebug(lcDbusWindow) << "moveWindowToDesktop: ignoring" << windowId << "desktop" << desktop;
         return;
     }

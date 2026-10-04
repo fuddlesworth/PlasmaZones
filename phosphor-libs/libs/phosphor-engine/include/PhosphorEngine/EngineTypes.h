@@ -122,6 +122,9 @@ enum class RestoreReason : int {
     PendingSweep = 2, ///< the pending-restores sweep, once the daemon is ready
     DesktopArrival = 3, ///< re-drive after the daemon moved the window to another desktop
     DaemonRestartSweep = 4, ///< the bring-up stacking-restore sweep
+    /// re-apply the zone a window already holds in the context it arrived in;
+    /// places nothing new
+    DesktopReapply = 5,
 };
 
 /// Clamp an integer wire value to a valid RestoreReason. Mirrors
@@ -145,6 +148,8 @@ inline RestoreReason clampRestoreReasonFromWire(int wire)
         return RestoreReason::DesktopArrival;
     case static_cast<int>(RestoreReason::DaemonRestartSweep):
         return RestoreReason::DaemonRestartSweep;
+    case static_cast<int>(RestoreReason::DesktopReapply):
+        return RestoreReason::DesktopReapply;
     default:
         return RestoreReason::Open;
     }

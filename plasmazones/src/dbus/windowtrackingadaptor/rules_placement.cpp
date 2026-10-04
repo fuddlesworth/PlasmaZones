@@ -272,6 +272,13 @@ bool WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
         m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query)), windowId);
 }
 
+void WindowTrackingAdaptor::evictRuleVerdicts(const QString& windowId)
+{
+    if (m_ruleEvaluator) {
+        m_ruleEvaluator->evictCached(windowId);
+    }
+}
+
 void WindowTrackingAdaptor::setRoutedOpenDispatcher(
     std::function<void(const PhosphorProtocol::WindowOpenedEntry&)> dispatcher)
 {

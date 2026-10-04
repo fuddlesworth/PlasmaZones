@@ -27,6 +27,7 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowTypeEnum.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -230,6 +231,27 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), windowId());
         QCOMPARE(spy.at(0).at(1).toInt(), 3);
+    }
+
+    // A desktop past the last one is refused too: the effect answered the
+    // out-of-range move by re-placing the window where it was.
+    void moveWindowToDesktop_refusesADesktopPastTheLast()
+    {
+        PhosphorWorkspaces::VirtualDesktopManager vdm(nullptr); // one desktop
+        QObject parent;
+        auto* wta =
+            new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, &vdm, nullptr, &parent);
+        wta->setWindowRegistry(m_registry);
+        wta->setWindowMetadata(QLatin1String(Instance), QLatin1String(App), QStringLiteral("org.kde.dolphin.desktop"),
+                               QStringLiteral("Home"), QString(), 1234, 1, QString(),
+                               static_cast<int>(PhosphorProtocol::WindowType::Normal), snapshot(false));
+        QSignalSpy spy(wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+
+        wta->moveWindowToDesktop(windowId(), vdm.desktopCount() + 1);
+        QCOMPARE(spy.count(), 0);
+        wta->moveWindowToDesktop(windowId(), vdm.desktopCount());
+        QCOMPARE(spy.count(), 1);
+        wta->setWindowRegistry(nullptr);
     }
 
     void urgency_emitsOncePerEdgeAndClearsOnClose()

@@ -124,8 +124,15 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // it is actually on (returning at the engine's already-placed guards
     // when the residence is already right). The concrete case: a user who
     // removed a virtual desktop has rules naming one that no longer exists.
-    const auto placeWhereItIs = [this, w]() {
-        m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+    // An open's own continuation (a RouteToDesktop rule, asked for inside the
+    // open's resolve) still owes the window its first placement; any other
+    // move only re-applies the zone it holds where it lands (F415).
+    const auto parkCause = [this, w]() {
+        return m_snapHandler->openResolveInFlight(getWindowId(w)) ? DesktopArrivalParks::Cause::OpenContinuation
+                                                                  : DesktopArrivalParks::Cause::ReapplyOnly;
+    };
+    const auto placeWhereItIs = [this, w, parkCause]() {
+        m_snapHandler->armDesktopArrivalRestore(getWindowId(w), parkCause());
         m_snapHandler->slotDesktopChangedRestoreArrivals();
     };
 
@@ -151,21 +158,11 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // The window has just left the desktop on screen, so nothing will place it
     // until the user goes to where it went. On a tiling or scrolling screen that
     // handler's desktop-return catch-scan re-announces it; snapping has no such
-    // sweep, so park it for SnapHandler to re-drive on arrival.
-    //
-    // Keyed on the target not being in view rather than on WHY the move
-    // happened: a RouteToDesktop rule on the open path and a cross-mode handoff
-    // both land here, and the rule case leaves the window unplaced. Parking is a
-    // no-op for a window that turns out to need nothing (the resolve answers
-    // no-snap), so covering both is cheaper than distinguishing them.
-    //
-    // That breadth is safe for the move-to-next/prev-desktop shortcut too, which
-    // is the other producer of this signal. Its re-snap branch emits
-    // applyGeometryRequested with a zone immediately after this move, and that
-    // slot calls markWindowSnapped, which cancels the park — signals on one
-    // D-Bus connection keep their order, so the cancel always follows this arm.
-    // Its no-equivalent-zone fallback branch emits no geometry and leaves the
-    // window genuinely unplaced, which is precisely the case the park is for.
+    // sweep, so park it for SnapHandler to re-drive on arrival. The cause decides
+    // what the arrival may do: an open's continuation runs the open's restore
+    // chain, every other producer (the desktop shortcut, a cross-mode handoff,
+    // the shell's move) only re-applies the zone the window holds there, so a
+    // window the shortcut left unsnapped is not auto-snapped on arrival (F415).
     //
     // Measured against the window's OWN output, not the global current desktop.
     // Under per-output virtual desktops (Plasma 6.7) those differ, and the
@@ -178,7 +175,7 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         KWin::VirtualDesktop* const shownHere =
             out ? KWin::effects->currentDesktop(out) : KWin::effects->currentDesktop();
         if (shownHere != target) {
-            m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+            m_snapHandler->armDesktopArrivalRestore(getWindowId(w), parkCause());
         }
     }
 }

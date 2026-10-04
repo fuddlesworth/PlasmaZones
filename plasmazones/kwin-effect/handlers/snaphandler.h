@@ -4,6 +4,7 @@
 #pragma once
 
 #include "compositor/deferredwindowcommits.h"
+#include "handlers/desktoparrivalparks.h"
 #include "handlers/instantrestoredecisions.h"
 
 #include <PhosphorCompositor/TilingState.h>
@@ -311,16 +312,24 @@ public Q_SLOTS:
 
 public:
     /// Park @p windowId for a snap restore once the desktop it was just moved to
-    /// comes into view. Called from PlasmaZonesEffect::slotWindowDesktopMoveRequested
-    /// after the move, and ONLY when the target desktop is not the one on screen —
-    /// a window moved onto the visible desktop needs no deferral.
-    void armDesktopArrivalRestore(const QString& windowId);
+    /// comes into view, for @p cause (see DesktopArrivalParks). Called from
+    /// PlasmaZonesEffect::slotWindowDesktopMoveRequested when the target desktop
+    /// is not the one on screen.
+    void armDesktopArrivalRestore(const QString& windowId, DesktopArrivalParks::Cause cause);
 
     /// Drop @p windowId from the desktop-arrival park (window closed, or the
     /// daemon placed it by another route).
     void cancelDesktopArrivalRestore(const QString& windowId)
     {
-        m_awaitingDesktopArrivalRestore.remove(windowId);
+        m_desktopArrivalParks.cancel(windowId);
+    }
+
+    /// Whether a first-placement resolve (an open, a pending sweep, a desktop
+    /// arrival) is out for @p windowId: a desktop move asked for inside it is
+    /// the open's own continuation.
+    bool openResolveInFlight(const QString& windowId) const
+    {
+        return m_openResolveInFlight.contains(windowId);
     }
 
     /// Drain ONE window's desktop-arrival park, if it has one and has arrived.
@@ -405,7 +414,7 @@ private:
     // fires every time the user changes desktop it would re-drive the float
     // restore continually and drag each floated window back to its recorded
     // position, undoing any move the user had made since.
-    QSet<QString> m_awaitingDesktopArrivalRestore;
+    DesktopArrivalParks m_desktopArrivalParks;
     // Windows whose first-placement resolve has been dispatched and not yet
     // answered (see hasOpenResolveInFlight). Decremented by every reply arm,
     // erased on close and on daemon loss.

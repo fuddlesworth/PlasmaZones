@@ -23,7 +23,7 @@
     "phosphor-libs/libs/phosphor-zones/include/PhosphorZones/LayoutRegistry.h": 1515,
     "phosphor-shell-libs/libs/phosphor-shell/src/shellengine.cpp": 1215,
     "plasmazones/data/overlays/nixos-drift/effect.frag": 1357,
-    "plasmazones/kwin-effect/handlers/snaphandler.cpp": 1412,
+    "plasmazones/kwin-effect/handlers/snaphandler.cpp": 1410,
     "plasmazones/kwin-effect/plasmazoneseffect/paint_pipeline.cpp": 2140,
     "plasmazones/kwin-effect/plasmazoneseffect/plasmazoneseffect.h": 3933,
     "plasmazones/kwin-effect/plasmazoneseffect/shader_config_dbus.cpp": 1397,

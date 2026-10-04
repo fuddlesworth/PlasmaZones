@@ -475,6 +475,7 @@ private Q_SLOTS:
                  RestoreReason::DesktopArrival);
         QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::DaemonRestartSweep)),
                  RestoreReason::DaemonRestartSweep);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(5), RestoreReason::DesktopReapply);
 
         QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(9999), RestoreReason::Open);
         QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(-1), RestoreReason::Open);

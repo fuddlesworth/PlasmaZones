@@ -196,6 +196,54 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     const bool isOpen = reason == PhosphorEngine::RestoreReason::Open;
     auto* const svc = m_adaptor->service(); // non-null: guarded above
 
+    // A window arriving on a desktop it is already snapped on answers with its
+    // zone's rect: its client was suspended there, so the resize that came with
+    // the move was never acked and the compositor will not re-send it. The
+    // assignment already exists, so the out-params are written here rather than
+    // through applySnapResult, which would re-run the whole snap orchestration;
+    // snapPermittedForContext asks its two user-facing refusals by hand. Snap
+    // screens only (layoutForScreen also answers for a tiling context). The zone
+    // is read from the ARRIVAL CONTEXT'S OWN store, not SnapEngine::zoneForWindow,
+    // whose primary membership can name another desktop's zone: that is the
+    // ghost of discussion #1104 by a new route. A floated window keeps its zone
+    // as the memory a float toggle resnaps into, so it is left floating.
+    const auto answerHeldZone = [&]() {
+        if (!m_engine->isSnapModeScreen(screenId)
+            || !snapPermittedForContext(windowId, screenId, /*virtualDesktop=*/0)) {
+            return false;
+        }
+        const auto* const contextState =
+            static_cast<const PhosphorSnapEngine::SnapState*>(std::as_const(*m_engine).stateForScreen(screenId));
+        const QString heldZone =
+            (contextState && !contextState->isFloating(windowId)) ? contextState->zoneForWindow(windowId) : QString();
+        const QRect heldGeometry = heldZone.isEmpty() ? QRect() : svc->zoneGeometry(heldZone, screenId);
+        if (!heldGeometry.isValid()) {
+            return false;
+        }
+        snapX = heldGeometry.x();
+        snapY = heldGeometry.y();
+        snapWidth = heldGeometry.width();
+        snapHeight = heldGeometry.height();
+        shouldSnap = true;
+        qCInfo(lcDbusWindow) << "resolveWindowRestore: desktop arrival re-applies" << windowId << "to zone" << heldZone
+                             << heldGeometry;
+        return true;
+    };
+    // A move that was not an open's continuation (the desktop shortcut, a
+    // cross-mode handoff, the shell) re-applies the zone the window holds where
+    // it landed and nothing else: no claim, no routing, no auto-assign, last
+    // zone or float default (F415).
+    if (reason == PhosphorEngine::RestoreReason::DesktopReapply) {
+        answerHeldZone();
+        return;
+    }
+    // An open's continuation resolves its rules against the screen it arrived
+    // on: the verdict cached at the spawn screen answered for the wrong one
+    // (F332).
+    if (reason == PhosphorEngine::RestoreReason::DesktopArrival) {
+        m_adaptor->evictRuleVerdicts(windowId);
+    }
+
     // Claim this instance's placement record BEFORE anything reads one. At
     // login every uuid is fresh, so every selector over this appId bucket falls
     // to the same pool of records. Claiming once pins WHICH record belongs to
@@ -241,61 +289,11 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind, reason);
 
     if (!result.shouldSnap) {
-        // A desktop-arrival re-drive for a window the engine already holds in a
-        // zone on the desktop it landed on answers with that zone's rect rather
-        // than with nothing. The engine's "already assigned" no-op is right
-        // about the ASSIGNMENT and wrong about the window: a client on a desktop
-        // nobody is looking at is suspended, so the resize that came with the
-        // move was never acked and the compositor does not re-send it when the
-        // desktop comes back. This is the moment it can land. Re-applying a rect
-        // the window is already at costs nothing — the effect skips a geometry
-        // apply that matches.
-        //
-        // This writes the out-params itself rather than going through
-        // applySnapResult, because the assignment already exists and
-        // re-committing it here would re-run the whole snap orchestration
-        // (float clear, focus-new-windows) for a window that only needs its
-        // rect back. It therefore has to ask applySnapResult's two user-facing
-        // refusals by hand — hence snapPermittedForContext — and it is scoped
-        // to a SNAP-mode screen, since layoutForScreen answers for a tiling
-        // context too and the zone would otherwise be resolved over a desktop
-        // another engine owns.
-        //
-        // The zone is read from the ARRIVAL CONTEXT'S OWN store, not from
-        // SnapEngine::zoneForWindow. That one answers from the window's PRIMARY
-        // membership, which PerScreenStates::primaryOf documents will fall back
-        // to any membership when none is in context — so for a window snapped
-        // on another desktop it names THAT desktop's zone, and zoneGeometry
-        // resolves a zone id against whichever layout holds it. The pair hands
-        // back a valid rect of a layout this desktop does not run, which is the
-        // ghost of discussion #1104 arriving by a new route. The CONST
-        // stateForScreen overload is keyed on the screen's current desktop and
-        // creates nothing (its mutable twin does, which is why this goes
-        // through as_const), and the cast is the one the daemon's snap-state
-        // resolver makes in init_engines.cpp. A context that holds no store for
-        // this window therefore says nothing at all.
-        //
-        // Floating is read off that same store: a floated window keeps its zone
-        // assignment as the memory a float toggle resnaps into, and putting it
-        // back in the zone here would undo the float.
-        if (reason == PhosphorEngine::RestoreReason::DesktopArrival && m_engine->isSnapModeScreen(screenId)
-            && snapPermittedForContext(windowId, screenId, /*virtualDesktop=*/0)) {
-            const auto* const contextState =
-                static_cast<const PhosphorSnapEngine::SnapState*>(std::as_const(*m_engine).stateForScreen(screenId));
-            const QString heldZone = (contextState && !contextState->isFloating(windowId))
-                ? contextState->zoneForWindow(windowId)
-                : QString();
-            const QRect heldGeometry = heldZone.isEmpty() ? QRect() : svc->zoneGeometry(heldZone, screenId);
-            if (heldGeometry.isValid()) {
-                snapX = heldGeometry.x();
-                snapY = heldGeometry.y();
-                snapWidth = heldGeometry.width();
-                snapHeight = heldGeometry.height();
-                shouldSnap = true;
-                qCInfo(lcDbusWindow) << "resolveWindowRestore: desktop arrival re-applies" << windowId << "to zone"
-                                     << heldZone << heldGeometry;
-                return;
-            }
+        // A window the engine already holds in a zone on the desktop it landed
+        // on: the engine's "already assigned" no-op is right about the
+        // assignment, and the rect is what the arrival needs (see above).
+        if (reason == PhosphorEngine::RestoreReason::DesktopArrival && answerHeldZone()) {
+            return;
         }
         // Nothing snapped this window. A bare RouteToScreen rule (move-to-monitor
         // with no SnapToZone) takes effect here, deliberately AFTER the snap/float

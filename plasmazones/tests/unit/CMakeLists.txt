@@ -1514,6 +1514,17 @@ target_link_libraries(test_wta_layout_switch PRIVATE Qt6::Test Qt6::Core Qt6::DB
                       PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_layout_switch COMMAND test_wta_layout_switch)
 
+# The desktop-arrival restore: the held-zone arm (F493), the re-apply reason
+# that places nothing new (F415), the arrival screen's own rules (F332).
+add_executable(test_wta_desktop_arrival dbus/test_wta_desktop_arrival.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_desktop_arrival PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_desktop_arrival PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_desktop_arrival COMMAND test_wta_desktop_arrival)
+
 # releaseLeftScreens, the drop-on-leave primitive every cross-screen move runs,
 # and the daemon-driven move sites that call it. Same fixture and links.
 add_executable(test_wta_drop_on_leave dbus/test_wta_drop_on_leave.cpp
@@ -1544,7 +1555,8 @@ add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)
 # activateWindow / getWindowMetadata / moveWindowToDesktop / getUrgentWindows
 # and the windowMetadataChanged / windowUrgencyChanged registry mirror.
 add_executable(test_wta_shell_surface dbus/test_wta_shell_surface.cpp)
-target_link_libraries(test_wta_shell_surface PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+target_link_libraries(test_wta_shell_surface PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_shell_surface COMMAND test_wta_shell_surface)
 
 # The per-desktop reads of the same surface (shellsurface_desktop.cpp):
@@ -2607,6 +2619,12 @@ add_test(NAME test_scroll_behaviour_parse COMMAND test_scroll_behaviour_parse)
 # StripMotionSampler is header-only plain numbers (no KWin types at all), so
 # the suite includes it straight from the effect tree and drives it with a
 # hand-rolled clock — the same shape as test_strip_view_animator above.
+# The desktop-arrival park's cause bookkeeping (desktoparrivalparks.h, F415).
+add_executable(test_desktop_arrival_parks compositor-common/test_desktop_arrival_parks.cpp)
+target_include_directories(test_desktop_arrival_parks PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+target_link_libraries(test_desktop_arrival_parks PRIVATE Qt6::Test)
+add_test(NAME test_desktop_arrival_parks COMMAND test_desktop_arrival_parks)
+
 add_executable(test_strip_motion_sampler compositor-common/test_strip_motion_sampler.cpp)
 target_include_directories(test_strip_motion_sampler PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 target_link_libraries(test_strip_motion_sampler PRIVATE Qt6::Test)

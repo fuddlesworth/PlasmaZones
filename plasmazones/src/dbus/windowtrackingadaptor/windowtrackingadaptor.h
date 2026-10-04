@@ -640,8 +640,7 @@ public Q_SLOTS:
      *
      * Emits windowDesktopMoveRequested, which the effect already consumes
      * for the cross-desktop directional move (windowToDesktops). Silent for
-     * an unknown window or a desktop below 1; the compositor ignores a
-     * desktop past its last one.
+     * an unknown window or a desktop outside 1..desktopCount.
      */
     void moveWindowToDesktop(const QString& windowId, int desktop);
 
@@ -1149,13 +1148,14 @@ public:
     /// `RouteScreen` slots — mirrors shouldFloatByRule.
     PhosphorSnapEngine::PlacementDirective placementZonesByRule(const QString& windowId, const QString& screenId);
 
-    /// Engine-neutral RouteToDesktop: if a matched rule pins @p windowId to
-    /// a virtual desktop, emit windowDesktopMoveRequested so the compositor moves
-    /// it there on open. Independent of snapping/tiling, called from the snap
-    /// open-path facade for first placements only, pinning @p screenId so a
-    /// ScreenId-scoped rule resolves.
-    /// Returns whether a RouteToDesktop rule MATCHED, true even when its target
-    /// failed the 1-based guard and no move was emitted (the routing tests assert it).
+    /// Drop @p windowId's cached rule verdict: the next resolve reads it fresh.
+    void evictRuleVerdicts(const QString& windowId);
+
+    /// Engine-neutral RouteToDesktop: if a matched rule pins @p windowId to a
+    /// desktop, emit windowDesktopMoveRequested so the compositor moves it there
+    /// on open. Called from the snap open path for first placements only, with
+    /// @p screenId pinned so a ScreenId-scoped rule resolves. Returns whether a
+    /// rule MATCHED, true even when its target failed the 1-based guard.
     bool applyOpenDesktopRouting(const QString& windowId, const QString& screenId);
 
     /// Tiling-family open-path routing. Emits RouteToDesktop (as
@@ -1374,8 +1374,8 @@ Q_SIGNALS:
      */
     void activateWindowRequested(const QString& windowId);
 
-    /// Cross-desktop directional move: KWin should move @p windowId to virtual
-    /// desktop @p desktop (1-based). The effect calls windowToDesktops.
+    /// KWin should move @p windowId to desktop @p desktop (1-based); a target
+    /// not in view parks it for its placement on arrival.
     void windowDesktopMoveRequested(const QString& windowId, int desktop);
 
     /// A tracked window's app id or title changed (or the window was just

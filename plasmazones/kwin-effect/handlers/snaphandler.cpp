@@ -169,7 +169,7 @@ void SnapHandler::clearSnapTracking()
     // drive a restore against state that no longer matches. The bringup
     // stacking sweep re-announces every window anyway, which is the correct
     // retry for a window still waiting.
-    m_awaitingDesktopArrivalRestore.clear();
+    m_desktopArrivalParks.clear();
     m_openResolveInFlight.clear();
     ++m_openResolveEpoch; // strand the replies still out against the old daemon
     m_border.tiledWindowsByScreen.clear();
@@ -1304,7 +1304,7 @@ void SnapHandler::slotPendingRestoresAvailable()
     });
 }
 
-void SnapHandler::armDesktopArrivalRestore(const QString& windowId)
+void SnapHandler::armDesktopArrivalRestore(const QString& windowId, DesktopArrivalParks::Cause cause)
 {
     if (windowId.isEmpty()) {
         // The daemon has already moved this window off the visible desktop, so
@@ -1314,13 +1314,14 @@ void SnapHandler::armDesktopArrivalRestore(const QString& windowId)
         qCDebug(lcEffect) << "Desktop-arrival park skipped: empty window id";
         return;
     }
-    m_awaitingDesktopArrivalRestore.insert(windowId);
-    qCDebug(lcEffect) << "Parked for snap restore on desktop arrival:" << windowId;
+    m_desktopArrivalParks.arm(windowId, cause);
+    qCDebug(lcEffect) << "Parked for snap restore on desktop arrival:" << windowId
+                      << (cause == DesktopArrivalParks::Cause::OpenContinuation ? "(open)" : "(re-apply)");
 }
 
 void SnapHandler::slotDesktopChangedRestoreArrivals()
 {
-    if (m_awaitingDesktopArrivalRestore.isEmpty()) {
+    if (m_desktopArrivalParks.isEmpty()) {
         return;
     }
     if (!m_effect->isDaemonReady("desktop-arrival snap restore")) {
@@ -1340,17 +1341,16 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
             continue;
         }
         const QString id = m_effect->getWindowId(w);
-        if (m_awaitingDesktopArrivalRestore.contains(id)) {
+        if (m_desktopArrivalParks.contains(id)) {
             live.insert(id, w);
         }
     }
 
-    for (const QString& windowId : QSet<QString>(m_awaitingDesktopArrivalRestore)) {
+    for (const QString& windowId : m_desktopArrivalParks.ids()) {
         KWin::EffectWindow* window = live.value(windowId);
         if (!window) {
-            // Closed while parked, or its id changed under it. Either way no
-            // restore is possible and the entry is spent.
-            m_awaitingDesktopArrivalRestore.remove(windowId);
+            // Closed while parked, or its id changed under it: spent.
+            m_desktopArrivalParks.cancel(windowId);
             continue;
         }
         drainDesktopArrivalFor(windowId, window);
@@ -1359,7 +1359,7 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
 
 bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWindow* window)
 {
-    if (!window || !m_awaitingDesktopArrivalRestore.contains(windowId)) {
+    if (!window || !m_desktopArrivalParks.contains(windowId)) {
         return false;
     }
     // Measured against the window's OWN output, matching the arm in
@@ -1380,7 +1380,7 @@ bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWi
     if (!m_effect->shouldHandleWindow(window)) {
         // Never going to be placed by this handler, so the park is spent
         // rather than carried for a restore that cannot happen.
-        m_awaitingDesktopArrivalRestore.remove(windowId);
+        m_desktopArrivalParks.cancel(windowId);
         return false;
     }
     // Snap-mode screens only. A window that landed on a tiling or scrolling
@@ -1390,22 +1390,20 @@ bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWi
     // engine is about to adopt. Spent, because that handler now owns it.
     const QString screenId = m_effect->getWindowScreenId(window);
     if (m_effect->tilingHandler()->isManagedScreen(screenId)) {
-        m_awaitingDesktopArrivalRestore.remove(windowId);
+        m_desktopArrivalParks.cancel(windowId);
         return false;
     }
 
-    // Spend the park BEFORE dispatching: the restore is a one-shot, and an
-    // entry left behind would re-drive on every later desktop switch — the
-    // repeated-float-restore failure the member's comment describes, just
-    // reached by a different route.
-    m_awaitingDesktopArrivalRestore.remove(windowId);
-
-    // DesktopArrival: not an open of its own, so it never borrows a sibling's
-    // record, but it still runs the screen routing the parked open owes,
-    // which is the distinction the old bool could not make.
-    qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId;
+    // Spent BEFORE dispatching: an entry left behind would re-drive on every
+    // later desktop switch. An open's continuation runs the restore chain the
+    // open owes; any other move only re-applies the zone the window already
+    // holds there and places nothing new (F415).
+    const bool openContinuation = m_desktopArrivalParks.take(windowId) == DesktopArrivalParks::Cause::OpenContinuation;
+    qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId
+                     << (openContinuation ? "(open)" : "(re-apply)");
     callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true,
-                             PhosphorEngine::RestoreReason::DesktopArrival);
+                             openContinuation ? PhosphorEngine::RestoreReason::DesktopArrival
+                                              : PhosphorEngine::RestoreReason::DesktopReapply);
     return true;
 }
 
