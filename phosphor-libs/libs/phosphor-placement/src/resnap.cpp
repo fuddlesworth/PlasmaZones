@@ -356,17 +356,40 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
         return result;
     }
 
+    // One answer per window: the membership of the context in view, else the
+    // primary's, so a window held only on hidden desktops still gets one. The
+    // walk visits every member store, and the last one visited used to win,
+    // which could be another desktop's or activity's zone (F128, F544).
+    struct Pick
+    {
+        QStringList zones;
+        QString screenId;
+        bool inView = false;
+    };
+    QHash<QString, Pick> picks;
+    const QString currentActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
     forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                                  int /*desktop*/, const QString& /*activity*/, PhosphorSnapEngine::SnapState*) {
+                                  int desktop, const QString& activity, PhosphorSnapEngine::SnapState* store) {
         if (zoneIds.isEmpty()) {
             return;
         }
-        QRect geo = resolveZoneGeometry(zoneIds, screenId);
-        if (geo.isValid()) {
-            result[windowId] = geo;
+        const int shown = m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(screenId) : 0;
+        const bool inView =
+            (desktop == 0 || shown <= 0 || desktop == shown) && activityInView(activity, currentActivity);
+        Pick& pick = picks[windowId];
+        if (pick.inView) {
+            return;
+        }
+        if (inView || pick.zones.isEmpty() || store == snapForWindow(windowId)) {
+            pick = {zoneIds, screenId, inView};
         }
     });
-
+    for (auto it = picks.constBegin(); it != picks.constEnd(); ++it) {
+        const QRect geo = resolveZoneGeometry(it->zones, it->screenId);
+        if (geo.isValid()) {
+            result.insert(it.key(), geo);
+        }
+    }
     return result;
 }
 

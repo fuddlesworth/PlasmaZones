@@ -571,11 +571,10 @@ public Q_SLOTS:
     // (org.plasmazones.Snap D-Bus interface).
 
     /**
-     * Get updated geometries for all tracked windows (for resolution change handling)
-     * @return Typed PhosphorProtocol::WindowGeometryList — entries carry
-     *         (windowId, x, y, width, height, screenId), the same wire shape
-     *         as applyGeometriesBatch
-     * @note Returns empty if keepWindowsInZonesOnResolutionChange is disabled
+     * The zone rect each snapped window holds in the context in view, for the
+     * re-apply after a work-area settle, a resolution or virtual-screen change.
+     * Entries are (windowId, x, y, width, height, screenId), applyGeometriesBatch's
+     * shape. Empty while keepWindowsInZonesOnResolutionChange or snapping is off.
      */
     PhosphorProtocol::WindowGeometryList getUpdatedWindowGeometries();
 
@@ -1320,7 +1319,7 @@ Q_SIGNALS:
     /**
      * @brief Request that the KWin effect re-apply window geometries from zone positions
      *
-     * Emitted after panel geometry has settled (e.g. after closing the KDE panel editor)
+     * Emitted after every work-area settle, resolution or virtual-screen change
      * so the effect fetches getUpdatedWindowGeometries and moves snapped windows to
      * match the current zone rects. Fixes windows that were shifted by Plasma or by
      * an earlier wrong geometry update.

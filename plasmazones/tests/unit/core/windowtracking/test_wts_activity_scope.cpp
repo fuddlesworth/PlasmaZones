@@ -25,6 +25,7 @@
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -203,7 +204,68 @@ private Q_SLOTS:
         QVERIFY(seed.indexOf(inZone1) < seed.indexOf(inZone2));
     }
 
+    // The work-area re-apply answers a window held on two desktops with the
+    // zone of the desktop in view. The walk visits both stores and the last
+    // one visited won, which could be the hidden desktop's zone (F128).
+    void updatedGeometryUsesTheContextInView()
+    {
+        followTheManagersDesktop();
+        holdOnDesktopsOneAndTwo();
+        showDesktop(2);
+        QCOMPARE(m_service->updatedWindowGeometries().value(kWindow),
+                 m_service->resolveZoneGeometry({m_zoneIds[1]}, kScreen));
+        showDesktop(1);
+        QCOMPARE(m_service->updatedWindowGeometries().value(kWindow),
+                 m_service->resolveZoneGeometry({m_zoneIds[0]}, kScreen));
+    }
+
+    // A window held only on a hidden desktop still gets its one entry (F544).
+    void updatedGeometryKeepsAHiddenWindow()
+    {
+        followTheManagersDesktop();
+        showDesktop(2);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[2], kScreen, 2);
+        showDesktop(1);
+        const QHash<QString, QRect> geometries = m_service->updatedWindowGeometries();
+        QCOMPARE(geometries.size(), 1);
+        QCOMPARE(geometries.value(kWindow), m_service->resolveZoneGeometry({m_zoneIds[2]}, kScreen));
+    }
+
 private:
+    /// The registry reads each screen's desktop from the same manager.
+    void followTheManagersDesktop()
+    {
+        m_layoutManager->setCurrentVirtualDesktopProvider([this](const QString& screenId) -> std::optional<int> {
+            const int d = m_vdm->currentDesktopForScreen(screenId);
+            return d >= 1 ? std::optional<int>(d) : std::nullopt;
+        });
+    }
+
+    void showDesktop(int desktop)
+    {
+        m_vdm->updateScreenDesktop(kScreen, desktop);
+        m_engine->setCurrentDesktopForScreen(kScreen, desktop);
+    }
+
+    /// kWindow on every desktop, in zone 1 on desktop 1 and zone 2 on 2.
+    void holdOnDesktopsOneAndTwo()
+    {
+        showDesktop(1);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[0], kScreen, 1);
+        showDesktop(2);
+        m_engine->reconcileDesktopMemberships(kScreen, [](const QString& windowId) {
+            PhosphorEngine::DesktopSpan span;
+            span.known = true;
+            if (windowId == kWindow) {
+                span.sticky = true;
+            } else {
+                span.desktops = {1};
+            }
+            return span;
+        });
+        m_service->assignWindowToZone(kWindow, m_zoneIds[1], kScreen, 2);
+    }
+
     /// kWindow snapped in zone 1 while activity X is current, kControl in zone
     /// 2 while Y is, and Y left current.
     void snapBoth()

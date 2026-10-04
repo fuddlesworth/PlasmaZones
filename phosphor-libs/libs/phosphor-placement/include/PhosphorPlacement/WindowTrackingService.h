@@ -770,8 +770,8 @@ public:
     // Resolution Change Handling
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// windowId -> its zone rect now, for the work-area settle's re-apply.
-    /// Empty while keepWindowsInZonesOnResolutionChange is off.
+    /// windowId -> its zone rect in the context in view (else its primary's), for
+    /// the work-area re-apply. Empty while keepWindowsInZonesOnResolutionChange is off.
     QHash<QString, QRect> updatedWindowGeometries() const;
 
     /// A pre-computed snap restore target for the effect's instant-restore
