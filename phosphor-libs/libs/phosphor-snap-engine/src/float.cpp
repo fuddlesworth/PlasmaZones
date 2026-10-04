@@ -271,20 +271,23 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId,
     // future mode transition restores it snapped, not floating (single source of
     // truth).
 
-    // Commit the snap via the unified orchestration. User-initiated because
-    // the user just toggled float off — they want this snap to update the
-    // last-used-zone tracking. commitSnap handles clearing floating state
-    // (and emits windowFloatingClearedForSnap which WTA relays as
+    // Commit the snap via the unified orchestration. A user toggle is
+    // user-initiated: the user just snapped the window back, so it records
+    // the last-used zone. A SUSPENSION unfloat (an unminimize) only puts the
+    // window back where it was, so it commits as a replacement and writes no
+    // user-snap bookkeeping (F484). commitSnap handles clearing floating
+    // state (and emits windowFloatingClearedForSnap which WTA relays as
     // windowFloatingChanged), plus the zone assignment.
     // Desktop deliberately left at 0 (= the restore screen's CURRENT desktop).
     // The rule tier above forwards a routed desktop because RouteToDesktop
     // also MOVES the window there; an unfloat has no such move, so stamping a
     // placement record's remembered desktop would record occupancy on a
     // desktop the window is not actually on after a desktop switch.
+    const SnapIntent unfloatIntent = suspension ? SnapIntent::AutoReplaced : SnapIntent::UserInitiated;
     if (unfloat.zoneIds.size() > 1) {
-        commitMultiZoneSnap(windowId, unfloat.zoneIds, unfloat.screenId, SnapIntent::UserInitiated);
+        commitMultiZoneSnap(windowId, unfloat.zoneIds, unfloat.screenId, unfloatIntent);
     } else {
-        commitSnap(windowId, unfloat.zoneIds.first(), unfloat.screenId, SnapIntent::UserInitiated);
+        commitSnap(windowId, unfloat.zoneIds.first(), unfloat.screenId, unfloatIntent);
     }
 
     // Carry the (representative) zone id, NOT an empty string. The KWin effect's

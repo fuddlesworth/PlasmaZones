@@ -81,9 +81,10 @@ void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
     if (windowId.isEmpty()) {
         return;
     }
-    // Prefer the window's owning store; a not-yet-placed window (marked before its
-    // commit registers it) has none, so park the flag on the global holder. The
-    // is/clear paths scan every store, so it is found wherever it landed.
+    // Prefer the window's owning store; a window with none parks the flag on the
+    // global holder. The is/clear paths scan every store, so it is found wherever
+    // it landed. A caller marking a window it is about to commit marks AFTER the
+    // commit: the first placement evicts the global holder's copy.
     PhosphorSnapEngine::SnapState* store = snapForWindow(windowId);
     if (!store) {
         store = snapGlobals();

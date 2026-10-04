@@ -419,17 +419,18 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     snapHeight = result.geometry.height();
     shouldSnap = true;
 
-    // Mark auto-snapped first so the flag persists through commitSnap
-    // (neither automatic intent clears it). commitSnap runs the full
-    // orchestration — clears any pre-existing floating state (emits
-    // windowFloatingClearedForSnap which the adaptor relays as
-    // windowFloatingChanged), assigns to zone(s), emits state change.
-    m_adaptor->service()->markAsAutoSnapped(windowId);
+    // commitSnap runs the full orchestration: clears any pre-existing
+    // floating state (emits windowFloatingClearedForSnap which the adaptor
+    // relays as windowFloatingChanged), assigns to zone(s), emits state
+    // change. The auto-snapped mark comes AFTER it, into the store the commit
+    // placed the window in: marked first, it parked on the global holder,
+    // and the commit's first placement evicted it from there (F385).
     if (zoneIds.size() > 1) {
         m_engine->commitMultiZoneSnap(windowId, zoneIds, result.screenId, intent, result.virtualDesktop);
     } else {
         m_engine->commitSnap(windowId, zoneIds.first(), result.screenId, intent, result.virtualDesktop);
     }
+    m_adaptor->service()->markAsAutoSnapped(windowId);
     // Focus-new-windows is decided inside SnapEngine::commitSnapImpl from the
     // intent: AutoRestored may focus, AutoReplaced never does.
     return true;

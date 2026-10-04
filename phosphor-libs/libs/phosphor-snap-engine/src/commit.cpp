@@ -58,11 +58,6 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
         Q_EMIT windowFloatingClearedForSnap(windowId, screenId);
     }
 
-    bool wasAutoSnapped = false;
-    if (intent == SnapIntent::UserInitiated) {
-        wasAutoSnapped = m_windowTracker->clearAutoSnapped(windowId);
-    }
-
     // A pinned desktop (virtualDesktop >= 1) is preserved as-is: RouteToDesktop
     // placements pin their destination desktop, and resnap batch entries pin each
     // window's recorded desktop (ZoneAssignmentEntry::virtualDesktop) so a
@@ -74,14 +69,35 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     // behaviour. Tracking the right desktop keeps zone occupancy, snap-assist,
     // and empty-zone detection correct on both the source and destination desktops.
     const int assignmentDesktop = virtualDesktop >= 1 ? virtualDesktop : currentVirtualDesktopForScreen(screenId);
+
+    // A RE-STATEMENT of the zones the window already holds in that context
+    // (a membership reapply, a virtual-screen resnap: system resnap batches
+    // commit UserInitiated) is not the user snapping it, so it neither clears
+    // the auto-snapped flag nor records a last-used zone (F456).
+    // The store the assignment below lands in: the pinned key, or the
+    // screen's current one when no desktop is known.
+    const SnapState* target = m_states.stateForKey(
+        assignmentDesktop >= 1 ? PhosphorEngine::PlacementStateKey{screenId, assignmentDesktop, currentActivity()}
+                               : currentKeyForScreen(screenId));
+    const bool restatement = target && target->zonesForWindow(canonicalWindowId(windowId)) == zoneIds;
+    const bool userSnap = intent == SnapIntent::UserInitiated && !restatement;
+    if (userSnap) {
+        m_windowTracker->clearAutoSnapped(windowId);
+    }
+
     if (zoneIds.size() > 1) {
         m_windowTracker->assignWindowToZones(windowId, zoneIds, screenId, assignmentDesktop);
     } else {
         m_windowTracker->assignWindowToZone(windowId, primaryZoneId, screenId, assignmentDesktop);
     }
 
-    if (intent == SnapIntent::UserInitiated
-        && !wasAutoSnapped
+    // The last-used zone belongs to the desktop the screen shows: a commit
+    // pinned to a desktop not in view (a membership carry, a background
+    // replay) would write it into the in-view desktop's store (F409). A
+    // user's first snap of an auto-restored window counts like any other
+    // (F209).
+    if (userSnap
+        && assignmentDesktop == currentVirtualDesktopForScreen(screenId)
         // "zoneselector-" marks a synthetic selector-overlay id rather than a
         // real zone UUID, so it is excluded from persistence and occupancy.
         // Spelled differently from phosphor-placement's kZoneSelectorIdPrefix

@@ -584,6 +584,32 @@ private Q_SLOTS:
         QCOMPARE(onA->lastUsedZoneId(), m_zoneIds[0]);
     }
 
+    // A window the restore facade snaps into the last-used zone stays marked
+    // auto-snapped, so focusing it does not count as the user using that
+    // zone. The mark used to be parked on the global holder before the
+    // commit, whose first placement evicted it (F385).
+    void testFacadeRestoreKeepsTheAutoSnappedMark()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        m_settings->setMoveNewWindowsToLastZone(true);
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, m_layoutManager->currentVirtualDesktop());
+        m_snapEngine->commitSnap(QStringLiteral("app|placed-by-user"), m_zoneIds[1], m_screenId);
+        m_wta->service()->setUserSnappedClasses({QStringLiteral("app")});
+        const QString w = QStringLiteral("app|restored-last-zone");
+
+        int x = 0, y = 0, width = 0, height = 0;
+        bool shouldSnap = false;
+        m_snapAdaptor->snapToLastZone(w, m_screenId, false, x, y, width, height, shouldSnap);
+
+        QVERIFY(shouldSnap);
+        QCOMPARE(m_snapEngine->zoneForWindow(w), m_zoneIds[1]);
+        QVERIFY2(m_wta->service()->isAutoSnapped(w), "a facade restore must stay marked auto-snapped");
+    }
+
     // The focused window's screen report repoints snap's focused screen
     // too, the one its float verb falls back on (F28).
     void testActiveWindowScreenChanged_repointsSnapsFocusedScreen()

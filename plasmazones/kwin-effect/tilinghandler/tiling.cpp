@@ -40,6 +40,7 @@
 #include <QtMath>
 
 #include <algorithm>
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -1259,11 +1260,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
 
             if (!m_pendingAutotileFocusWindowId.isEmpty()) {
-                // Exact for the same sibling-raise reason as the saved-order
-                // loop above.
+                // Exact for the same sibling-raise reason as the saved-order loop
+                // above. Raised only while still active (F247).
                 KWin::EffectWindow* focusWin = m_effect->findWindowByIdExact(m_pendingAutotileFocusWindowId);
                 m_pendingAutotileFocusWindowId.clear();
-                if (focusWin) {
+                if (focusWin && KWin::effects && focusWin == KWin::effects->activeWindow()) {
                     KWin::Window* kw = focusWin->window();
                     if (kw) {
                         ws->raiseWindow(kw);
@@ -1309,17 +1310,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
         }
 
-        // After daemon restart, the raise loop above puts all tiled windows on
-        // top, burying non-tiled windows (e.g. System Settings KCM) that had
-        // focus. Re-activate the previously focused window to restore stacking.
-        if (m_pendingReactivateWindow && !m_pendingReactivateWindow->isDeleted()) {
-            // Skip (and drop) the reactivation during show-desktop/peek:
-            // activateWindow() would synchronously cancel the peek. The
-            // stacking restore is cosmetic, so losing it beats breaking peek.
-            if (KWin::effects && !PlasmaZonesEffect::isShowingDesktop()) {
-                KWin::effects->activateWindow(m_pendingReactivateWindow);
-            }
-            m_pendingReactivateWindow = nullptr;
+        // After daemon restart, the raise loop above buries the non-tiled window
+        // that had focus (e.g. System Settings KCM); re-activate it, consumed by
+        // this batch either way, and only while it is still active: hours later
+        // it is a stale focus steal (F230). Skipped during show-desktop/peek,
+        // which activateWindow() would cancel; the restore is only cosmetic.
+        if (const QPointer<KWin::EffectWindow> reactivate = std::exchange(m_pendingReactivateWindow, nullptr);
+            reactivate && !reactivate->isDeleted() && KWin::effects && reactivate == KWin::effects->activeWindow()
+            && !PlasmaZonesEffect::isShowingDesktop()) {
+            KWin::effects->activateWindow(reactivate);
         }
 
         // Wayland centering is handled reactively by slotWindowFrameGeometryChanged

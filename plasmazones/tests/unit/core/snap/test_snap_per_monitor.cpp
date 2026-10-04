@@ -539,6 +539,50 @@ private Q_SLOTS:
         m_service->setSnapState(m_engine->snapState());
     }
 
+    // The last-used zone records what the user snapped, on the desktop in
+    // view. A re-statement of a zone the window already holds is not a user
+    // snap (F456); a user's first snap of an auto-restored window is (F209);
+    // a commit pinned to a desktop the screen does not show writes nothing
+    // into the shown desktop's store (F409); an unminimize puts a window back
+    // without counting as a snap (F484).
+    void lastUsedZoneRecordsOnlyUserSnapsInView()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+        const auto lastUsed = [this, &screen]() {
+            return static_cast<SnapState*>(m_engine->stateForScreen(screen))->lastUsedZoneId();
+        };
+        const QString a = QStringLiteral("app|last-a");
+        const QString b = QStringLiteral("app|last-b");
+
+        m_engine->commitSnap(a, m_zoneIds[0], screen);
+        QCOMPARE(lastUsed(), m_zoneIds[0]);
+        m_engine->commitSnap(b, m_zoneIds[1], screen);
+        QCOMPARE(lastUsed(), m_zoneIds[1]);
+        QCOMPARE(static_cast<SnapState*>(m_engine->stateForScreen(screen))->zonesForWindow(a),
+                 QStringList{m_zoneIds[0]});
+        m_engine->commitSnap(a, m_zoneIds[0], screen);
+        QCOMPARE(lastUsed(), m_zoneIds[1]); // a re-statement (F456)
+
+        const QString restored = QStringLiteral("app|last-restored");
+        m_engine->commitSnap(restored, m_zoneIds[2], screen, PhosphorEngine::SnapIntent::AutoRestored);
+        m_service->markAsAutoSnapped(restored);
+        m_engine->commitSnap(restored, m_zoneIds[0], screen);
+        QCOMPARE(lastUsed(), m_zoneIds[0]); // the user's first snap of it (F209)
+
+        m_engine->commitSnap(QStringLiteral("app|last-pinned"), m_zoneIds[2], screen,
+                             PhosphorEngine::SnapIntent::UserInitiated, 2);
+        QCOMPARE(lastUsed(), m_zoneIds[0]); // pinned to desktop 2 (F409)
+
+        m_service->markSuspensionFloat(b);
+        m_engine->setWindowFloat(b, true, screen);
+        m_engine->setWindowFloat(b, false, screen);
+        QCOMPARE(m_engine->zoneForWindow(b), m_zoneIds[1]);
+        QCOMPARE(lastUsed(), m_zoneIds[0]); // an unminimize (F484)
+        m_service->setSnapState(m_engine->snapState());
+    }
+
 private:
     /// Install the FULL per-key resolver so the WTS facade and the engine agree on
     /// the same per-(screen,desktop,activity) stores (the default single-store

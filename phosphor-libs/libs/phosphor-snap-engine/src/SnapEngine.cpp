@@ -178,7 +178,9 @@ SnapState* SnapEngine::stateForWindowOnScreen(const QString& windowId, const QSt
     // window present on several desktops holds a membership in each, and the zone
     // it occupies there is real data the user chose — evicting it would be the
     // very overwrite that made a sticky window share one zone across every
-    // desktop. A store the window is NOT a member of can only hold a leftover.
+    // desktop. A store the window is NOT a member of can only hold a leftover,
+    // a flag parked on the global holder for a window with no store yet
+    // included, so a mark meant to outlive a commit follows it.
     // removeWindowData is a no-op where absent, so the common single-membership
     // case still costs only a handful of empty hash lookups.
     if (owner) {
