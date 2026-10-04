@@ -1159,19 +1159,18 @@ private:
     // never visible. Do NOT use this to end an animation somewhere on screen —
     // the window would visibly snap at the end.
     //
-    // demoteMaximizeOnDeferredReplay: the snap-commit callers demote KWin's
-    // maximize (TilingHandler::demoteMaximizeForSnapPlacement) before calling
-    // here, but that demote bails while a user gesture is live — the same
-    // condition that makes this function DEFER the apply. Passing true makes
-    // the deferred replay re-run the demote before its moveResize, paying the
-    // claim the mid-gesture bail skipped; a superseded or dropped replay
-    // drops the demote with it. Read only on the deferral path — the
-    // immediate path assumes the caller already demoted.
+    // demoteMaximizeOnDeferredReplay: the caller's maximize demote bails while
+    // a user gesture is live, which is also when this function DEFERS. True
+    // makes the deferred replay re-run the demote before its moveResize; a
+    // dropped replay drops it. Read only on the deferral path.
     void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
                              bool skipAnimation = false,
                              const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF(),
                              bool demoteMaximizeOnDeferredReplay = false);
+    /// Whether applyWindowGeometry skips @p window as fullscreen (PlacementStatement::fullscreenBails);
+    /// shared by the apply, its deferred replay and the tile path.
+    bool fullscreenBailsApply(KWin::EffectWindow* window) const;
     /// The rect applyWindowGeometry will REQUEST of KWin for a tile request:
     /// X11/XWayland frames are constrained to the client's WM_SIZE_HINTS and
     /// centred in the zone; everything else passes through unchanged. The

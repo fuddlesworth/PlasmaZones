@@ -1647,7 +1647,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // strip position. The gate keeps the steady state (same visual
             // pos every batch) at zero repaint cost.
             //
-            // The fullscreen-bail term makes the write take the REMOVE arm for
+            // The fullscreen-bail term (the apply's own predicate,
+            // fullscreenBailsApply) makes the write take the REMOVE arm for
             // a self-fullscreened non-member: the apply below commits nothing
             // for it, so an inserted relocation would be removed again by the
             // next batch (insert-repaint-remove-repaint churn the change gate
@@ -1658,9 +1659,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // relocation). Also read by the commanded-rect disarm, the restore
             // seat below and the centring-target record.
             KWin::Window* kwcForBail = snap.window->window();
-            const bool fullscreenBailSkippedCommit = snap.window->isFullScreen()
-                && (!kwcForBail || kwcForBail->isRequestedFullScreen())
-                && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
+            const bool fullscreenBailSkippedCommit = m_effect->fullscreenBailsApply(snap.window);
             // Seat the tile this hold's exit must land on. KWin captured the
             // restore rect when fullscreen began and the bailed apply moves
             // nothing, so the exit returned the window to its PRE-hold tile

@@ -1300,6 +1300,12 @@ target_link_libraries(test_instant_restore_decisions PRIVATE Qt6::Test Qt6::Core
 target_include_directories(test_instant_restore_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_instant_restore_decisions COMMAND test_instant_restore_decisions)
 
+# The effect's pure placement-statement decisions (placementstatement.h).
+add_executable(test_placement_statement ui/effect/test_placement_statement.cpp)
+target_link_libraries(test_placement_statement PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_placement_statement PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_placement_statement COMMAND test_placement_statement)
+
 # Pure-logic test for the minimize-float qualifiers
 # (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
 # can still be the tile it is about to get. Same header-only reach.

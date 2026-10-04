@@ -8,6 +8,7 @@
 // policy transitions and the async snap call.
 
 #include "plasmazoneseffect.h"
+#include "placementstatement.h"
 
 #include "tilinghandler/tilinghandler.h"
 #include "compositor/windowanimator.h"
@@ -195,6 +196,24 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
     return geo;
 }
 
+bool PlasmaZonesEffect::fullscreenBailsApply(KWin::EffectWindow* window) const
+{
+    if (!window) {
+        return false;
+    }
+    KWin::Window* kw = window->window();
+    const bool requested = kw && kw->isRequestedFullScreen();
+    if (!(kw ? requested : window->isFullScreen())) {
+        return false;
+    }
+    // isEmpty() fast path for sessions that never use the feature, and the
+    // isDeleted() term: getWindowId on a corpse would re-insert the
+    // reverse-map entry buildWindowMap deliberately skips.
+    const bool windowedFsMember = !m_windowedFullscreenWindows.isEmpty() && !window->isDeleted()
+        && m_windowedFullscreenWindows.contains(getWindowId(window));
+    return PlacementStatement::fullscreenBails(kw != nullptr, window->isFullScreen(), requested, windowedFsMember);
+}
+
 void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
                                             bool skipAnimation, const QString& profilePath,
                                             const QRectF& originOverride, const QRectF& visualTargetOverride,
@@ -239,34 +258,14 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // Don't call moveResize() on fullscreen windows, it can crash KWin.
     // See KDE bugs #429752, #301529, #489546 (X11-era; moveResize on a
     // fullscreen window is spike-verified safe on KWin >= 6.7).
-    //
-    // Two narrow exemptions, both keyed on KWin's REQUESTED state (the
-    // committed isFullScreen() lags a client round-trip):
-    //   - a window in scrolling WINDOWED FULLSCREEN holds fullscreen state
-    //     at its column rect on purpose — geometry applies ARE the feature,
-    //     and every re-apply path (screen change, daemon retile) must keep
-    //     working or KWin's ensureSpecialStateGeometry clobber wins;
-    //   - a window whose fullscreen was just requested OFF (the windowed-
-    //     fullscreen exit) would otherwise have its restoring batch rect
-    //     swallowed while the committed state drains.
-    if (window->isFullScreen()) {
-        KWin::Window* kwFs = window->window();
-        const bool requestedFullScreen = !kwFs || kwFs->isRequestedFullScreen();
-        // isEmpty() fast path for sessions that never use the feature, and
-        // the isDeleted() term, both the structural predicate's gate style:
-        // getWindowId on a corpse would re-insert the reverse-map entry
-        // buildWindowMap deliberately skips.
-        const bool windowedFsMember = !m_windowedFullscreenWindows.isEmpty() && !window->isDeleted()
-            && m_windowedFullscreenWindows.contains(getWindowId(window));
-        if (requestedFullScreen && !windowedFsMember) {
-            qCDebug(lcEffect) << "applyGeometry: window is fullscreen, skipping";
-            // Release the hold-suppression on this bail like the no-op skip
-            // below does: no reposition is coming at all, so a suppressed
-            // window would be withheld from compositing until the hard
-            // 250 ms deadline for nothing.
-            endRestoreSuppression(window);
-            return;
-        }
+    if (fullscreenBailsApply(window)) {
+        qCDebug(lcEffect) << "applyGeometry: window is fullscreen, skipping";
+        // Release the hold-suppression on this bail like the no-op skip
+        // below does: no reposition is coming at all, so a suppressed
+        // window would be withheld from compositing until the hard
+        // 250 ms deadline for nothing.
+        endRestoreSuppression(window);
+        return;
     }
 
     // This apply is now the window's latest command, so a tile the reactive
@@ -371,22 +370,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                                 return;
                             }
                             // Same predicate as the top-of-function fullscreen
-                            // bail, exemptions included: a deferred apply for a
-                            // windowed-fullscreen member must not be silently
-                            // dropped by a plain isFullScreen() test the entry
-                            // bail was deliberately opened for.
-                            if (safeWindow->isFullScreen()) {
-                                KWin::Window* kwFs = safeWindow->window();
-                                const bool requestedFullScreen = !kwFs || kwFs->isRequestedFullScreen();
-                                const bool windowedFsMember = !m_windowedFullscreenWindows.isEmpty()
-                                    && m_windowedFullscreenWindows.contains(getWindowId(safeWindow.data()));
-                                if (requestedFullScreen && !windowedFsMember) {
-                                    // Same release the synchronous fullscreen bail
-                                    // does: this replay is the reposition, and it
-                                    // is not happening.
-                                    endRestoreSuppression(safeWindow.data());
-                                    return;
-                                }
+                            // bail, exemptions included, and the same release:
+                            // this replay is the reposition, and it is not
+                            // happening.
+                            if (fullscreenBailsApply(safeWindow.data())) {
+                                endRestoreSuppression(safeWindow.data());
+                                return;
                             }
                             const QString nowScreen = getWindowScreenId(safeWindow.data());
                             if (nowScreen != deferScreen
