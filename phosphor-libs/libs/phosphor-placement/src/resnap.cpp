@@ -183,10 +183,23 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         // A multi-desktop record answers for the desktop its screen shows,
         // stamped with that desktop so the filter above keeps it.
         int desktop = rec.virtualDesktop;
-        if (!snapSlot.zonesByDesktop.isEmpty() && m_virtualDesktopManager) {
-            const int shown = m_virtualDesktopManager->currentDesktopForScreen(rec.screenId);
-            if (shown > 0)
+        const int shown = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(rec.screenId) : 0;
+        if (!snapSlot.zonesByDesktop.isEmpty() && shown > 0)
+            desktop = shown;
+        // Where the window IS answers over where the record says it was: a
+        // window moved to another desktop or activity since the record was
+        // written (a move into a tiling desktop leaves the snap slot behind)
+        // is not on the screen's shown context, and admitting it would snap
+        // a window that is not there (F516).
+        if (const auto context = m_windowRegistry ? m_windowRegistry->desktopContext(rec.windowId) : std::nullopt) {
+            if (!context->activity.isEmpty() && m_layoutManager
+                && context->activity != m_layoutManager->currentActivity())
+                continue;
+            if (const auto desktops = context->desktopSet(); desktops && shown > 0) {
+                if (!desktops->contains(shown))
+                    continue;
                 desktop = shown;
+            }
         }
         addCandidate(rec.windowId, snapZonesOnDesktopInView(snapSlot, rec.screenId), rec.screenId, desktop);
     }

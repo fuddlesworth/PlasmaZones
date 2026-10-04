@@ -237,6 +237,66 @@ private Q_SLOTS:
         QVERIFY2(found, "durable-recorded snap window must enter the resnap buffer when the live map is cold");
     }
 
+    // The durable arm reads where a live window IS, not the record: a window
+    // KWin moved to another desktop or activity since its snapped record was
+    // written is not on the screen's shown context and is not resnapped
+    // there (F516). Rows: a single-desktop record, a multi-desktop record,
+    // an activity, and the window on the shown desktop as the control.
+    void testResnapBuffer_durableArmReadsTheWindowsLiveDesktops()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        PhosphorWorkspaces::VirtualDesktopManager vdm;
+        vdm.updateScreenDesktop(screen, 1);
+        SnapState state(QString(), nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, &vdm);
+        service.setSnapState(&state);
+        service.setWindowRegistry(&registry);
+        m_layoutManager->setCurrentActivity(QStringLiteral("act-a"));
+
+        const auto addWindow = [&](const QString& instance, int recordDesktop, QHash<int, QStringList> byDesktop,
+                                   int liveDesktop, QList<int> liveDesktops, const QString& liveActivity) {
+            PhosphorEngine::WindowMetadata meta;
+            meta.appId = QStringLiteral("app");
+            meta.virtualDesktop = liveDesktop;
+            meta.virtualDesktops = liveDesktops;
+            meta.activity = liveActivity;
+            registry.upsert(instance, meta);
+            PhosphorEngine::WindowPlacement rec;
+            rec.windowId = QStringLiteral("app|") + instance;
+            rec.appId = QStringLiteral("app");
+            rec.screenId = screen;
+            rec.virtualDesktop = recordDesktop;
+            PhosphorEngine::EngineSlot slot;
+            slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+            slot.zoneIds = QStringList{m_zoneIds[0]};
+            slot.zonesByDesktop = byDesktop;
+            rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+            service.placementStore().record(rec);
+            return rec.windowId;
+        };
+        const QString movedOff = addWindow(QStringLiteral("moved-off"), 1, {}, 2, {}, QString());
+        const QString spanMoved =
+            addWindow(QStringLiteral("span-moved"), 1, {{1, {m_zoneIds[0]}}, {3, {m_zoneIds[1]}}}, 2, {}, QString());
+        const QString otherActivity =
+            addWindow(QStringLiteral("other-activity"), 1, {}, 1, {}, QStringLiteral("act-b"));
+        const QString inView = addWindow(QStringLiteral("in-view"), 1, {}, 1, {}, QStringLiteral("act-a"));
+
+        service.populateResnapBufferForAllScreens({}, {screen}, 1);
+
+        QSet<QString> ids;
+        for (const PhosphorEngine::ResnapEntry& e : service.takeResnapBuffer()) {
+            ids.insert(e.windowId);
+        }
+        QVERIFY2(!ids.contains(movedOff), "a window now on desktop 2 must not be resnapped on desktop 1");
+        QVERIFY2(!ids.contains(spanMoved), "a window that left desktops 1 and 3 for 2 must not be resnapped on 1");
+        QVERIFY2(!ids.contains(otherActivity), "a window on another activity must not be resnapped here");
+        QVERIFY(ids.contains(inView));
+
+        m_layoutManager->setCurrentActivity(QString());
+        service.setSnapState(nullptr);
+    }
+
     // Regression (#layout-leak): a per-desktop layout change must resnap only
     // the windows on that desktop. Without the desktop filter, assigning a
     // layout to desktop 2 pulled desktop 1's windows into desktop 2's zones —

@@ -850,6 +850,37 @@ private Q_SLOTS:
 
         QVERIFY(reg.isNull());
     }
+
+    // The desktops a window is on, as the restore and resnap readers take
+    // them: the span when it covers several, else its one desktop, and no
+    // answer for a window on all desktops or one never reported.
+    void desktopSet_answersTheWindowsDesktops()
+    {
+        PhosphorEngine::WindowDesktopContext one;
+        one.virtualDesktop = 2;
+        QCOMPARE(one.desktopSet(), std::optional<QSet<int>>(QSet<int>{2}));
+
+        PhosphorEngine::WindowDesktopContext span;
+        span.virtualDesktop = 1;
+        span.virtualDesktops = {1, 3};
+        QCOMPARE(span.desktopSet(), std::optional<QSet<int>>(QSet<int>{1, 3}));
+
+        PhosphorEngine::WindowDesktopContext sticky;
+        sticky.virtualDesktop = 2;
+        sticky.sticky = true;
+        QVERIFY(!sticky.desktopSet().has_value());
+
+        PhosphorEngine::WindowDesktopContext unknown;
+        QVERIFY(!unknown.desktopSet().has_value());
+
+        WindowRegistry reg;
+        WindowMetadata meta = make(QStringLiteral("kate"));
+        meta.virtualDesktop = 3;
+        reg.upsert(QStringLiteral("on-three"), meta);
+        const auto context = reg.desktopContext(QStringLiteral("kate|on-three"));
+        QVERIFY(context.has_value());
+        QCOMPARE(context->desktopSet(), std::optional<QSet<int>>(QSet<int>{3}));
+    }
 };
 
 QTEST_MAIN(TestWindowRegistry)

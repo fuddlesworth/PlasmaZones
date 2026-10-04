@@ -412,27 +412,8 @@ QSet<int> SnapEngine::desktopsWithActiveState() const
     return out;
 }
 
-void SnapEngine::pruneStatesForDesktop(int removedDesktop)
-{
-    // removedDesktop is a real (>= 1) destroyed desktop; the global holder has an
-    // empty screenId, so the !screenId.isEmpty() guard excludes it regardless of its
-    // key's desktop. Drop every per-key store on the desktop, its reverse-map
-    // entries, and the per-output desktop-map entries naming it.
-    const auto matches = [removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
-        return !key.screenId.isEmpty() && key.desktop == removedDesktop;
-    };
-    m_states.removeStatesIf(
-        [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {
-            return matches(key);
-        },
-        [](const PhosphorEngine::PlacementStateKey&, SnapState* state) {
-            state->deleteLater();
-        });
-    m_states.removeWindowsIf([&](const QString&, const PhosphorEngine::PlacementStateKey& key) {
-        return matches(key);
-    });
-    m_context.pruneDesktop(removedDesktop);
-}
+// pruneStatesForDesktop and pruneStatesForActivities are implemented in
+// src/leave.cpp, with what a window leaving those contexts releases.
 
 void SnapEngine::renumberDesktopsAfterRemoval(int removedDesktop)
 {
@@ -490,25 +471,6 @@ void SnapEngine::renumberDesktopsAfterRemoval(int removedDesktop)
     if (m_windowTracker) {
         m_windowTracker->renumberDesktopZones(removedDesktop);
     }
-}
-
-void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
-{
-    const QSet<QString> valid(validActivities.begin(), validActivities.end());
-    // The global holder has an empty activity, so !activity.isEmpty() excludes it.
-    const auto matches = [&valid](const PhosphorEngine::PlacementStateKey& key) {
-        return !key.activity.isEmpty() && !valid.contains(key.activity);
-    };
-    m_states.removeStatesIf(
-        [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {
-            return matches(key);
-        },
-        [](const PhosphorEngine::PlacementStateKey&, SnapState* state) {
-            state->deleteLater();
-        });
-    m_states.removeWindowsIf([&](const QString&, const PhosphorEngine::PlacementStateKey& key) {
-        return matches(key);
-    });
 }
 
 void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)

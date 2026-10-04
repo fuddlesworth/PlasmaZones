@@ -359,10 +359,10 @@ public:
     /// carrying the stale slot is not necessarily the one QHash order
     /// reaches first.
     ///
-    /// Callers: the tiling engines' handoffRelease, through
-    /// WindowTrackingService::releaseEngineSlot (which marks the store
-    /// dirty). NOT called on ordinary close — a window that CLOSED tiled
-    /// keeps its slot; that persistence is exactly what login restore reads.
+    /// Callers go through WindowTrackingService::releaseEngineSlot (which marks
+    /// the store dirty): a handoffRelease, and a window leaving the screen,
+    /// desktop or activity an engine held it on. NOT called on ordinary close:
+    /// a window that CLOSED placed keeps its slot, which login restore reads.
     bool releaseEngineSlot(const QString& windowId, const QString& engineId);
 
     /// Drop one desktop's entry from an engine slot's zonesByDesktop map.

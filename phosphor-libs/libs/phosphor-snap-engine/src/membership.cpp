@@ -375,6 +375,21 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: released" << entry.windowId << "from desktop"
                                  << stale.desktop << "of" << stale.screenId << "— its span no longer covers it";
         }
+        // Carried nowhere, not adopted here, and left with no snap membership
+        // on this screen: the window moved to a desktop snap does not hold it
+        // on, so the record's snap slot goes too. A single-desktop window's
+        // zone lives in the flat slot, which the per-desktop forget above
+        // never touches, and a later snapping pass on the desktop it moved to
+        // would read it back as that desktop's zone (F624).
+        if (!assign && !entry.adopt && !entry.stale.isEmpty() && m_windowTracker) {
+            const QString screen = entry.stale.first().screenId;
+            const QList<PlacementStateKey> left = m_states.membershipsForWindow(entry.windowId);
+            if (std::none_of(left.cbegin(), left.cend(), [&screen](const PlacementStateKey& key) {
+                    return key.screenId == screen;
+                })) {
+                m_windowTracker->releaseEngineSlot(entry.windowId, engineId());
+            }
+        }
         if (entry.adopt) {
             // Membership, plus the zone the durable record remembers for this
             // desktop, if any. An unsnapped window on this desktop stays

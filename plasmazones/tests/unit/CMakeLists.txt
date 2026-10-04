@@ -192,6 +192,13 @@ add_executable(test_snap_desktop_membership core/snap/test_snap_desktop_membersh
 target_link_libraries(test_snap_desktop_membership PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_desktop_membership COMMAND test_snap_desktop_membership)
 
+# What a window leaving a desktop or activity takes with it: the record's
+# snap slot on a move to a desktop snap does not run, and the desktop and
+# activity prunes of a window still open there.
+add_executable(test_snap_desktop_leave core/snap/test_snap_desktop_leave.cpp)
+target_link_libraries(test_snap_desktop_leave PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_desktop_leave COMMAND test_snap_desktop_leave)
+
 # The snap evacuee park: parkOutput, the prune's float announcements, readoptParked.
 add_executable(test_snap_evacuee_park core/snap/test_snap_evacuee_park.cpp)
 target_link_libraries(test_snap_evacuee_park PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)

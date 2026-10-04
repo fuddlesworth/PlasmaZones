@@ -200,8 +200,14 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
         // Reactive autotile desktop arrival: no receive here (the effect
         // catch-scan tiles it on the target desktop), so just release. The
         // desktop move below must still fire — the catch-scan only runs
-        // once the window actually lands on the target desktop.
+        // once the window actually lands on the target desktop. A snap source
+        // releases its record slot too: the window leaves the desktop it was
+        // snapped on, and a slot left snapped would read back as a zone on
+        // the desktop it moved to (F516).
         sourceEngine->handoffRelease(windowId);
+        if (sourceEngine == m_snapEngine.data()) {
+            m_service->releaseEngineSlot(windowId, PhosphorEngine::WindowPlacement::snapEngineId());
+        }
         placedOnTarget = true;
     }
     if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
