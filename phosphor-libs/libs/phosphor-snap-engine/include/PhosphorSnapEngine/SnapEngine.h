@@ -949,10 +949,10 @@ public:
         m_loadFn = std::move(loadFn);
     }
 
-    /// Last screen the engine saw via windowFocused. Used for OSD fallback
-    /// when a navigation failure needs to cite a screen and the live cursor
-    /// hasn't landed on one yet. Exposed as a const getter so tests can
-    /// verify the focus-tracking contract without dummy signal stubs.
+    /// Last screen the engine saw via windowFocused (each activation and each
+    /// focused-screen report). Two readers: the resnap OSD feedback's screen,
+    /// and the float verb's last screen fallback (float.cpp). A const getter
+    /// so tests can verify the focus-tracking contract without signal stubs.
     QString lastActiveScreenId() const
     {
         return m_lastActiveScreenId;

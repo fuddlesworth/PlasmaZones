@@ -86,6 +86,13 @@ void WindowTrackingAdaptor::activeWindowScreenChanged(const QString& windowId, c
     qCDebug(lcDbusWindow) << "activeWindowScreenChanged:" << windowId << "from" << m_lastActiveScreenId << "to"
                           << resolvedScreen;
     m_lastActiveScreenId = resolvedScreen;
+    // Snap's own record of the focused screen follows, the one its float
+    // verb resolves a screen from (F28, F143). No migrate here: this report
+    // fires at every crossing of a drag, and the move itself is settled by
+    // the drag's end or the effect's crossing notice (F732).
+    if (PhosphorSnapEngine::SnapEngine* snap = snapEngine()) {
+        snap->windowFocused(windowId, resolvedScreen);
+    }
 }
 
 void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int desktop)
@@ -128,20 +135,20 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         m_lastActiveScreenId = resolvedScreen;
     }
 
-    // Cross-monitor re-home backstop (the analogue of autotile's windowFocused
-    // migration): if the snap engine tracks this window but its owning per-key
-    // store names a DIFFERENT monitor than the one it activated on, migrate its
-    // snap state onto the activation screen so screenForTrackedWindow and the
-    // unfloat fallback-screen resolution report the real monitor (#724). Guarded
-    // by screensMatch so a mere virtual/physical id-form difference on the same
-    // monitor never churns the stores. windowScreenChanged handles the primary
-    // drift path; this catches activations that arrive without a screen-change report.
-    // A SNAPPED window is left alone: a migrate leaves the zone behind, and an
-    // activation report racing a snap commit would silently unsnap it.
+    // Cross-monitor re-home backstop for a snap FLOAT (#724): snap tracks the
+    // window floating on another monitor than the one it activated on, which
+    // a move that sent no screen report leaves behind; re-key it there so
+    // the float verbs and the unfloat fallback read the monitor it is on.
+    // screensMatch keeps an id-form difference on one monitor from churning
+    // the stores. A window holding a zone in ANY store is left alone (a
+    // migrate leaves the zone behind, and an activation racing a snap commit
+    // would unsnap it, F259/F77/F125), and so is an activation on a screen
+    // snap does not run: a tiling destination owns the window there (F679).
     if (PhosphorSnapEngine::SnapEngine* snap = snapEngine(); snap && !resolvedScreen.isEmpty()) {
         const QString owning = snap->screenForTrackedWindow(windowId);
         if (!owning.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(owning, resolvedScreen)
-            && snap->zoneForWindow(windowId).isEmpty()) {
+            && WindowTrackingInternal::snapZoneScreen(snap, windowId, QString()).isEmpty()
+            && snap->isActiveOnScreen(resolvedScreen)) {
             snap->migrateWindowToScreen(windowId, resolvedScreen);
         }
         // Snap's layer-focus memories (the switch verb's "return to the
@@ -161,11 +168,16 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
 
     qCDebug(lcDbusWindow) << "Window activated:" << windowId << "on screen" << screenId;
 
-    // Update last-used zone when focusing a snapped window
-    // Skip auto-snapped windows - only user-focused windows should update the tracking
+    // Update last-used zone when focusing a snapped window, only where snap
+    // runs the screen and holds the window on it: a zone remembered for
+    // another monitor, or under a tiling screen, is not the last zone used
+    // here (F222). Auto-snapped windows are skipped: only the user's focus counts.
     QString zoneId = m_service->zoneForWindow(windowId);
-    if (!zoneId.isEmpty() && m_settings && m_settings->moveNewWindowsToLastZone()
-        && !m_service->isAutoSnapped(windowId)) {
+    PhosphorSnapEngine::SnapEngine* snapForLastUsed = snapEngine();
+    if (!zoneId.isEmpty() && m_settings && m_settings->moveNewWindowsToLastZone() && !m_service->isAutoSnapped(windowId)
+        && snapForLastUsed && snapForLastUsed->isActiveOnScreen(resolvedScreen)
+        && PhosphorScreens::ScreenIdentity::screensMatch(snapForLastUsed->screenForTrackedWindow(windowId),
+                                                         resolvedScreen)) {
         QString windowClass = m_service->currentAppIdFor(windowId);
         m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktopForScreen(resolvedScreen));
     }

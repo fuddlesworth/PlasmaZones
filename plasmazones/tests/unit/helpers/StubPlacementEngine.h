@@ -39,6 +39,7 @@ public:
     QRect managedRect; ///< answered by lastManagedRect for every window
     QHash<QString, QString> heldScreen; ///< windowId -> the screen it is held on (current context)
     QSet<QString> trackedElsewhere; ///< tracked only in another (desktop, activity) context
+    QHash<QString, QString> elsewhereScreen; ///< windowId -> screen its tracking in another context names
     QString captureState; ///< when set, capturePlacement answers a slot in this state for a tracked window
     QSet<QString> activeScreens; ///< screens this engine runs
     QList<QPair<QString, QString>> releasedOffScreen; ///< (windowId, keepScreenId) per call
@@ -74,7 +75,7 @@ public:
     }
     QString screenForTrackedWindow(const QString& windowId) const override
     {
-        return heldScreen.value(windowId);
+        return heldScreen.contains(windowId) ? heldScreen.value(windowId) : elsewhereScreen.value(windowId);
     }
     QString heldScreenForWindow(const QString& windowId) const override
     {

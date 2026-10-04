@@ -7,7 +7,9 @@
  *        stored-screen comparison that decides between keeping the snap and
  *        unsnapping, the empty-screen bail, the "screen_changed"
  *        windowStateChanged emission, and, with per-screen stores, what an
- *        output move releases on the output left.
+ *        output move releases on the output left. Also the activation-side
+ *        reads of a window's screen: the snap re-home backstop, the last-used
+ *        update, and the focused screen the shortcuts act on.
  *
  * Why this surface earns a suite of its own: it is the arm a compositor-side
  * defect fires straight into. The effect's endDrag ApplySnap branch calls
@@ -454,6 +456,162 @@ private Q_SLOTS:
         QVERIFY(rec.has_value());
         QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
                  QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+    }
+
+    // ── Activation and the focused screen ────────────────────────────────
+
+    // A snap float activated on another monitor is re-homed there: the
+    // backstop for a move that sent no screen report.
+    void testActivation_rehomesAFloatOntoTheActivationMonitor()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString w = QStringLiteral("app|float-rehome");
+        const QString other = QStringLiteral("DP-2");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(other, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        m_snapEngine->setWindowFloat(w, true, m_screenId);
+
+        m_wta->windowActivated(w, other);
+
+        QVERIFY(m_snapEngine->isFloating(w));
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(w), other);
+    }
+
+    // A zone held on a background desktop of the window's monitor keeps the
+    // backstop off: the migrate would leave that zone behind (F259).
+    void testActivation_backgroundDesktopZoneBlocksTheRehome()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString w = QStringLiteral("app|activate-background-zone");
+        const QString other = QStringLiteral("DP-2");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 2);
+        PhosphorSnapEngine::SnapState* onTwo = m_snapEngine->stateForWindowOnScreen(w, m_screenId, 2);
+        QVERIFY(onTwo); // adopted there, no zone
+        onTwo->recordResidence(w, m_screenId, 2); // living there free
+        m_snapEngine->setCurrentDesktopForScreen(other, 1);
+        QVERIFY(m_snapEngine->zoneForWindow(w).isEmpty()); // nothing in view
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(w), m_screenId);
+
+        m_wta->windowActivated(w, other);
+
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        auto* onOne = static_cast<PhosphorSnapEngine::SnapState*>(m_snapEngine->stateForScreen(m_screenId));
+        QCOMPARE(onOne->zonesForWindow(w), QStringList{m_zoneIds[0]});
+    }
+
+    // An activation on a screen snap does not run leaves snap's float where
+    // it is: a tiling engine owns the window there (F679).
+    void testActivation_onATilingScreenDoesNotRehome()
+    {
+        installPerScreenResolver();
+        const QString other = QStringLiteral("DP-2");
+        m_snapEngine->setLiveModeResolver([other](const QString& screenId) {
+            return screenId == other ? PhosphorZones::AssignmentEntry::Mode::Autotile
+                                     : PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
+        const auto restore = qScopeGuard([this] {
+            m_snapEngine->setLiveModeResolver({});
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString w = QStringLiteral("app|activate-tiling");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(other, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        m_snapEngine->setWindowFloat(w, true, m_screenId);
+
+        m_wta->windowActivated(w, other);
+
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(w), m_screenId);
+    }
+
+    // Focusing a snapped window records its zone as the last used on the
+    // screen it is snapped on, and on no other screen it is activated on
+    // (F222).
+    void testActivation_lastUsedZoneOnlyWhereTheWindowIsSnapped()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        m_settings->setMoveNewWindowsToLastZone(true);
+        const QString w = QStringLiteral("app|activate-lastused");
+        const QString other = QStringLiteral("DP-2");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(other, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        PhosphorSnapEngine::SnapState* onB = m_snapEngine->stateForWindowOnScreen(QStringLiteral("app|on-b"), other);
+        auto* onA = static_cast<PhosphorSnapEngine::SnapState*>(m_snapEngine->stateForScreen(m_screenId));
+        QVERIFY(onB && onB != onA);
+
+        m_wta->windowActivated(w, other);
+        QVERIFY2(onB->lastUsedZoneId().isEmpty(), "a zone snapped on another monitor is not the last used here");
+
+        m_wta->windowActivated(w, m_screenId);
+        QCOMPARE(onA->lastUsedZoneId(), m_zoneIds[0]);
+    }
+
+    // The focused window's screen report repoints snap's focused screen
+    // too, the one its float verb falls back on (F28).
+    void testActiveWindowScreenChanged_repointsSnapsFocusedScreen()
+    {
+        const QString w = QStringLiteral("app|focus-follow");
+        m_wta->windowActivated(w, m_screenId);
+        QCOMPARE(m_snapEngine->lastActiveScreenId(), m_screenId);
+
+        m_wta->activeWindowScreenChanged(w, QStringLiteral("DP-2"));
+
+        QCOMPARE(m_snapEngine->lastActiveScreenId(), QStringLiteral("DP-2"));
+    }
+
+    // Snap's memory of a window on a screen snap no longer runs does not
+    // answer where the focused window is (F29).
+    void testLastActiveScreen_ignoresSnapMemoryOnAScreenSnapDoesNotRun()
+    {
+        const QString w = QStringLiteral("app|memory-elsewhere");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        m_wta->windowActivated(w, m_screenId);
+        m_wta->activeWindowScreenChanged(w, QStringLiteral("DP-2"));
+        QCOMPARE(m_wta->lastActiveScreenName(), m_screenId); // snap still runs it
+
+        m_snapEngine->setLiveModeResolver([this](const QString& screenId) {
+            return screenId == m_screenId ? PhosphorZones::AssignmentEntry::Mode::Autotile
+                                          : PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
+        const auto restore = qScopeGuard([this] {
+            m_snapEngine->setLiveModeResolver({});
+        });
+
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-2"));
+    }
+
+    // A tiling engine's tracking in another desktop's context does not
+    // answer where the focused window is, only its hold in view (F216).
+    void testLastActiveScreen_readsTheTilingHoldInView()
+    {
+        StubPlacementEngine autotile;
+        m_wta->setEngines(m_snapEngine, &autotile, nullptr);
+        const auto restore = qScopeGuard([this] {
+            m_wta->setEngines(m_snapEngine, nullptr, nullptr);
+        });
+        const QString w = QStringLiteral("app|tile-elsewhere");
+        autotile.trackedElsewhere.insert(w);
+        autotile.elsewhereScreen.insert(w, QStringLiteral("DP-3"));
+        m_wta->windowActivated(w, QStringLiteral("DP-2"));
+
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-2"));
+
+        autotile.heldScreen.insert(w, QStringLiteral("DP-3"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-3"));
     }
 };
 

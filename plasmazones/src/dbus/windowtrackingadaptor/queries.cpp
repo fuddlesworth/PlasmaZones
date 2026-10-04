@@ -57,41 +57,37 @@ QStringList WindowTrackingAdaptor::knownWindowIds() const
 
 QString WindowTrackingAdaptor::lastActiveScreenName() const
 {
-    // Prefer the active window's live screen tracking from any of the three
-    // engines over the cached m_lastActiveScreenId. KWin only fires windowActivated
-    // on focus changes, so a window dragged/snapped/tiled to a different
-    // VS without losing focus leaves the cache pointing at the source
-    // screen — and the shortcut router would then dispatch (float,
-    // navigate, etc.) to the wrong engine.
+    // Prefer where an engine holds the focused window now over the cached
+    // m_lastActiveScreenId: KWin fires windowActivated only on focus changes,
+    // so a window dragged, snapped or tiled elsewhere without losing focus
+    // leaves the cache on the screen it left, and the shortcut router would
+    // dispatch to the wrong engine.
     //
     // Lookup order:
-    //   1. snap-side screenForTrackedWindow (covers snap-mode windows
-    //      including snap-floated ones whose screen we now preserve through
-    //      float, and floating windows received via cross-engine handoff)
-    //   2. autotile-side screenForTrackedWindow (covers windows that
-    //      crossed engines via drag-insert handoff — snap released its
-    //      tracking, autotile took ownership)
-    //   3. scroll-side screenForTrackedWindow (same handoff story for the
-    //      scrolling engine, which owns placement on its own screens)
-    //   4. cached m_lastActiveScreenId (windows no engine tracks —
-    //      brand-new windows pre-tile, dialogs, etc.)
+    //   1. snap's tracked screen, only where snap runs that screen: memory
+    //      kept for a screen another engine took over is not where the
+    //      window is (F29);
+    //   2. autotile's hold in the context in view;
+    //   3. scroll's hold in the context in view (a background desktop's
+    //      tile or column says nothing about where the window is, F216);
+    //   4. the cache, for windows no engine holds (new windows, dialogs).
     if (!m_lastActiveWindowId.isEmpty()) {
         if (m_snapEngine) {
             const QString tracked = m_snapEngine->screenForTrackedWindow(m_lastActiveWindowId);
-            if (!tracked.isEmpty()) {
+            if (!tracked.isEmpty() && m_snapEngine->isActiveOnScreen(tracked)) {
                 return tracked;
             }
         }
         if (m_autotileEngine) {
-            const QString tracked = m_autotileEngine->screenForTrackedWindow(m_lastActiveWindowId);
-            if (!tracked.isEmpty()) {
-                return tracked;
+            const QString held = m_autotileEngine->heldScreenForWindow(m_lastActiveWindowId);
+            if (!held.isEmpty()) {
+                return held;
             }
         }
         if (m_scrollEngine) {
-            const QString tracked = m_scrollEngine->screenForTrackedWindow(m_lastActiveWindowId);
-            if (!tracked.isEmpty()) {
-                return tracked;
+            const QString held = m_scrollEngine->heldScreenForWindow(m_lastActiveWindowId);
+            if (!held.isEmpty()) {
+                return held;
             }
         }
     }
