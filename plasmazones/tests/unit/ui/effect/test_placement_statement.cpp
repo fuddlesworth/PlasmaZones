@@ -192,6 +192,45 @@ private Q_SLOTS:
         QVERIFY(v.apply);
     }
 
+    // An axis maximize re-stated keeps its maximized axis and takes the
+    // placement on the free one, the zone seated as the restore rect (F562).
+    // The full-maximize rule applied nothing and left the free axis behind.
+    void restatementOfAnAxisMaximizeAppliesTheFreeAxis()
+    {
+        Inputs in = inputs(Purpose::Restatement);
+        in.maximized = true;
+        in.axisMaximized = true;
+        const Verdict v = decide(in);
+        QVERIFY(v.apply);
+        QVERIFY(v.freeAxisOnly);
+        QVERIFY(v.seatMaximizeRestore);
+        QVERIFY(!v.endMaximize);
+    }
+
+    // ...unless it is fullscreen on top: nothing moves under a fullscreen.
+    void axisMaximizeUnderFullscreenMovesNothing()
+    {
+        Inputs in = inputs(Purpose::Restatement);
+        in.maximized = true;
+        in.axisMaximized = true;
+        in.requestedFullScreen = true;
+        const Verdict v = decide(in);
+        QVERIFY(!v.apply);
+        QVERIFY(!v.freeAxisOnly);
+        QVERIFY(v.seatMaximizeRestore);
+    }
+
+    // The free-axis rect: the placement on the free axis, the frame on the
+    // maximized one.
+    void freeAxisRectKeepsTheMaximizedAxis()
+    {
+        using PlasmaZones::PlacementStatement::freeAxisRect;
+        const QRect zone(800, 8, 792, 884);
+        const QRect frame(100, 0, 600, 900);
+        QCOMPARE(freeAxisRect(zone, frame, /*verticallyMaximized=*/true), QRect(800, 0, 792, 900));
+        QCOMPARE(freeAxisRect(zone, frame, /*verticallyMaximized=*/false), QRect(100, 8, 600, 884));
+    }
+
     // A plain window re-stated: nothing to keep or hand back.
     void plainRestatementApplies()
     {

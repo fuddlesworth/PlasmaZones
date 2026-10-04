@@ -156,10 +156,12 @@ bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QStri
         // restoring session state) keeps that state: the zone is seated as the
         // rect it returns to, nothing moves, and the resolve that follows
         // re-states the same zone (F560).
-        if (!m_tilingHandler->preparePlacement(w, cached->geometry, PlacementStatement::Purpose::Restatement).apply) {
+        const PlacementStatement::Verdict verdict =
+            m_tilingHandler->preparePlacement(w, cached->geometry, PlacementStatement::Purpose::Restatement);
+        if (!verdict.apply) {
             return false;
         }
-        applyWindowGeometry(w, cached->geometry, false, /*skipAnimation=*/true,
+        applyWindowGeometry(w, verdict.applyRect, false, /*skipAnimation=*/true,
                             PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
                             PlacementStatement::Purpose::Restatement);
         return true;

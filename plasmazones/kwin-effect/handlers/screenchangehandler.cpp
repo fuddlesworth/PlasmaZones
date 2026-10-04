@@ -332,9 +332,9 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             // A monitor reconnect can hand back a window the session left
             // KWin-maximized; placing its zone rect without the placement
             // statement re-arms the cross-screen restore it exists for.
-            if (!m_effect->m_tilingHandler
-                     ->preparePlacement(e.window, e.geometry, PlacementStatement::Purpose::Restatement)
-                     .apply) {
+            const PlacementStatement::Verdict verdict = m_effect->m_tilingHandler->preparePlacement(
+                e.window, e.geometry, PlacementStatement::Purpose::Restatement);
+            if (!verdict.apply) {
                 return; // a maximized or fullscreen window keeps it, the zone seated (F509)
             }
             // Pre-seed and bracket, the pair every daemon-driven apply carries:
@@ -346,9 +346,9 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             const auto applyGuard = m_effect->geometryApplyScope();
             // Resolution-change resnap: the effect-local twin of the daemon's
             // "resnap" action, which daemon_apply.cpp routes to WindowLayoutSwitch.
-            m_effect->applyWindowGeometry(e.window, e.geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                          PhosphorAnimation::ProfilePaths::WindowLayoutSwitch, QRectF(), QRectF(),
-                                          PlacementStatement::Purpose::Restatement);
+            m_effect->applyWindowGeometry(e.window, verdict.applyRect, /*allowDuringDrag=*/false,
+                                          /*skipAnimation=*/false, PhosphorAnimation::ProfilePaths::WindowLayoutSwitch,
+                                          QRectF(), QRectF(), PlacementStatement::Purpose::Restatement);
         }
     });
 }

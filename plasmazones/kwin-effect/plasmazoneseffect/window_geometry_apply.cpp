@@ -360,68 +360,72 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // The previous replay, if any, was retired at the top of this function.
         const QString deferScreen = getWindowScreenId(window);
         auto conn = std::make_shared<QMetaObject::Connection>();
-        *conn = connect(
-            window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
-            [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, commandStamp, originOverride,
-             visualTargetOverride, statementOnDeferredReplay](KWin::EffectWindow*) {
-                disconnect(*conn);
-                // Drop the handle on every exit, not just the applying
-                // one: a stale entry would make the next defer for this
-                // window disconnect an already-dead connection and, once
-                // the pointer is recycled, retire a live replay that
-                // belongs to a different window.
-                if (safeWindow) {
-                    m_deferredGeometryReplay.remove(safeWindow.data());
-                }
-                if (!safeWindow || safeWindow->isDeleted()) {
-                    return;
-                }
-                // Same predicate as the top-of-function fullscreen
-                // bail, exemptions included, and the same release:
-                // this replay is the reposition, and it is not
-                // happening.
-                if (fullscreenBailsApply(safeWindow.data())) {
-                    endRestoreSuppression(safeWindow.data());
-                    return;
-                }
-                const QString nowScreen = getWindowScreenId(safeWindow.data());
-                if (nowScreen != deferScreen
-                    || !m_daemonGate.commandStamps.isCurrent(safeWindow.data(), commandStamp)) {
-                    qCDebug(lcEffect) << "Deferred geometry superseded (screen or newer command), dropping:"
-                                      << getWindowId(safeWindow.data());
-                    endRestoreSuppression(safeWindow.data());
-                    return;
-                }
-                // Pay the placement statement the caller's mid-gesture
-                // preparePlacement skipped (see the header doc): the
-                // gesture is over now, and the hand-back must run before
-                // the moveResize below for the same reason it runs before
-                // the immediate apply.
-                if (statementOnDeferredReplay
-                    && !m_tilingHandler->preparePlacement(safeWindow.data(), geo, *statementOnDeferredReplay).apply) {
-                    return; // the state was kept: nothing moves
-                }
-                // Re-assert the self-caused-frame-change guard the
-                // original (batch) apply held — without it the
-                // synchronous frame change from this moveResize
-                // reads as an external move and can report a
-                // phantom cross-VS unsnap.
-                // Save/restore, not set/clear (nesting-safe).
-                const bool prevInApply = m_daemonGate.inGeometryApply;
-                m_daemonGate.inGeometryApply = true;
-                const auto guard = qScopeGuard([this, prevInApply] {
-                    m_daemonGate.inGeometryApply = prevInApply;
-                });
-                // Forward BOTH scroll overrides: dropping them replayed a
-                // leaving column as a direct animate-to-park, sweeping it
-                // backwards across the screen — the exact artifact the
-                // override split exists to prevent. They are frame-relative
-                // snapshots from defer time, valid because the stamp guard above
-                // dropped the replay if any newer command for this window landed
-                // since (another window moving does not invalidate them).
-                applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath, originOverride,
-                                    visualTargetOverride, statementOnDeferredReplay);
-            });
+        *conn = connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
+                        [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, commandStamp,
+                         originOverride, visualTargetOverride, statementOnDeferredReplay](KWin::EffectWindow*) {
+                            disconnect(*conn);
+                            // Drop the handle on every exit, not just the applying
+                            // one: a stale entry would make the next defer for this
+                            // window disconnect an already-dead connection and, once
+                            // the pointer is recycled, retire a live replay that
+                            // belongs to a different window.
+                            if (safeWindow) {
+                                m_deferredGeometryReplay.remove(safeWindow.data());
+                            }
+                            if (!safeWindow || safeWindow->isDeleted()) {
+                                return;
+                            }
+                            // Same predicate as the top-of-function fullscreen
+                            // bail, exemptions included, and the same release:
+                            // this replay is the reposition, and it is not
+                            // happening.
+                            if (fullscreenBailsApply(safeWindow.data())) {
+                                endRestoreSuppression(safeWindow.data());
+                                return;
+                            }
+                            const QString nowScreen = getWindowScreenId(safeWindow.data());
+                            if (nowScreen != deferScreen
+                                || !m_daemonGate.commandStamps.isCurrent(safeWindow.data(), commandStamp)) {
+                                qCDebug(lcEffect) << "Deferred geometry superseded (screen or newer command), dropping:"
+                                                  << getWindowId(safeWindow.data());
+                                endRestoreSuppression(safeWindow.data());
+                                return;
+                            }
+                            // Pay the placement statement the caller's mid-gesture
+                            // preparePlacement skipped (see the header doc): the
+                            // gesture is over now, and the hand-back must run before
+                            // the moveResize below for the same reason it runs before
+                            // the immediate apply.
+                            QRect replayRect = geo;
+                            if (statementOnDeferredReplay) {
+                                const PlacementStatement::Verdict verdict = m_tilingHandler->preparePlacement(
+                                    safeWindow.data(), geo, *statementOnDeferredReplay);
+                                if (!verdict.apply) {
+                                    return; // the state was kept: nothing moves
+                                }
+                                replayRect = verdict.applyRect;
+                            }
+                            // Re-assert the self-caused-frame-change guard the
+                            // original (batch) apply held — without it the
+                            // synchronous frame change from this moveResize
+                            // reads as an external move and can report a
+                            // phantom cross-VS unsnap.
+                            // Save/restore, not set/clear (nesting-safe).
+                            const bool prevInApply = m_daemonGate.inGeometryApply;
+                            m_daemonGate.inGeometryApply = true;
+                            const auto guard = qScopeGuard([this, prevInApply] {
+                                m_daemonGate.inGeometryApply = prevInApply;
+                            });
+                            // Forward BOTH scroll overrides: dropping them replayed a
+                            // leaving column as a direct animate-to-park, sweeping it
+                            // backwards across the screen — the exact artifact the
+                            // override split exists to prevent. They are frame-relative
+                            // snapshots from defer time, valid because the stamp guard above
+                            // dropped the replay if any newer command for this window landed
+                            // since (another window moving does not invalidate them).
+                            applyWindowGeometry(safeWindow, replayRect, false, skipAnimation, profilePath,
+                                                originOverride, visualTargetOverride, statementOnDeferredReplay);
+                        });
         m_deferredGeometryReplay.insert(window, *conn);
         return;
     }

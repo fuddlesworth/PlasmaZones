@@ -345,6 +345,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         // before the bracketed apply.
         std::optional<PlacementStatement::Purpose> statement;
         bool keptState = false;
+        QRect applyRect = geometry;
         if (!screenId.isEmpty() && !m_tilingHandler->isManagedScreen(screenId)
             && (!zoneId.isEmpty() || purpose == PhosphorProtocol::PlacementPurpose::UserVerb)) {
             statement = purpose == PhosphorProtocol::PlacementPurpose::Restatement
@@ -352,7 +353,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
                 : PlacementStatement::Purpose::UserVerb;
             // A re-statement keeps a maximize or fullscreen and moves nothing:
             // the zone is now the rect it returns to (F490, F547, F560).
-            keptState = !m_tilingHandler->preparePlacement(w, geometry, *statement).apply;
+            const PlacementStatement::Verdict verdict = m_tilingHandler->preparePlacement(w, geometry, *statement);
+            keptState = !verdict.apply;
+            applyRect = verdict.applyRect;
         }
         const auto applyGuard = geometryApplyScope();
         // A float-position restore on a fresh open teleports like the
@@ -361,7 +364,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         // exists to hide. A zone commit keeps its morph (not an open-path
         // producer on this slot).
         if (!keptState) {
-            applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false,
+            applyWindowGeometry(w, applyRect, /*allowDuringDrag=*/false,
                                 /*skipAnimation=*/zoneId.isEmpty() && freshOpen,
                                 zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
                                                  : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
@@ -564,12 +567,16 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                     : p.screenId;
                 std::optional<PlacementStatement::Purpose> statement;
                 bool keptState = false;
+                QRect applyRect = p.geometry;
                 if (!target.isEmpty() && !m_tilingHandler->isManagedScreen(target)) {
                     statement = PlacementStatement::Purpose::Restatement;
-                    keptState = !m_tilingHandler->preparePlacement(p.window, p.geometry, *statement).apply;
+                    const PlacementStatement::Verdict verdict =
+                        m_tilingHandler->preparePlacement(p.window, p.geometry, *statement);
+                    keptState = !verdict.apply;
+                    applyRect = verdict.applyRect;
                 }
                 if (!keptState) {
-                    applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
+                    applyWindowGeometry(p.window, applyRect, /*allowDuringDrag=*/false,
                                         /*skipAnimation=*/false, batchProfilePath, QRectF(), QRectF(), statement);
                 }
             }

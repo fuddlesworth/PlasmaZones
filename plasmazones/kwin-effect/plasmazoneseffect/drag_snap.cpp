@@ -111,9 +111,10 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                     m_tilingHandler->updateNotifiedScreen(windowId, asyncScr);
                     reportActiveWindowScreen(window, asyncScr);
                 }
-                if (m_tilingHandler->preparePlacement(window, geo, purpose).apply) {
+                if (const PlacementStatement::Verdict verdict = m_tilingHandler->preparePlacement(window, geo, purpose);
+                    verdict.apply) {
                     const auto applyGuard = geometryApplyScope();
-                    applyWindowGeometry(window, geo, false, skipAnimation,
+                    applyWindowGeometry(window, verdict.applyRect, false, skipAnimation,
                                         PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(), purpose);
                 }
                 // Async snap (keyboard / empty-zone / last-zone / auto-fill)

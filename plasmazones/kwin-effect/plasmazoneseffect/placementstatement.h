@@ -10,6 +10,8 @@
  *        tested; the effect gathers the inputs from the live window.
  */
 
+#include <QRect>
+
 namespace PlasmaZones::PlacementStatement {
 
 /// Whether a geometry apply skips a fullscreen window. With a KWin window at
@@ -51,6 +53,7 @@ struct Inputs
 {
     Purpose purpose = Purpose::UserVerb;
     bool maximized = false; ///< any maximize mode other than Restore
+    bool axisMaximized = false; ///< maximized on one axis only (vertical or horizontal)
     bool requestedFullScreen = false;
     bool windowedFsMember = false; ///< a scrolling windowed-fullscreen claim
     bool engineMaximizeClaim = false; ///< a monocle or maximize-to-edges claim
@@ -73,8 +76,22 @@ struct Verdict
     bool endMaximize = false; ///< end a KWin maximize the window holds itself
     bool seatFullScreenRestore = false; ///< keep the fullscreen, its restore rect becomes the placement
     bool seatMaximizeRestore = false; ///< keep the maximize, its restore rect becomes the placement
-    bool apply = true; ///< move the window to the placement rect now
+    bool apply = true; ///< move the window now
+    /// Apply only the placement's free axis: the window keeps its maximized
+    /// axis (KWin keeps an axis maximize across a moveResize of the other).
+    bool freeAxisOnly = false;
+    /// The rect the caller applies when apply is true: the placement, or its
+    /// free-axis form (freeAxisRect). Filled by the effect, not by decide.
+    QRect applyRect;
 };
+
+/// The rect a re-statement applies to a window maximized on one axis: the
+/// placement's extent on the free axis, the window's own on the maximized one.
+inline QRect freeAxisRect(const QRect& placement, const QRect& frame, bool verticallyMaximized)
+{
+    return verticallyMaximized ? QRect(placement.x(), frame.y(), placement.width(), frame.height())
+                               : QRect(frame.x(), placement.y(), frame.width(), placement.height());
+}
 
 /// A tiling engine's claim is shed for any purpose: the window is leaving the
 /// strip or stack that owns it (F342, F529). A user verb, and any placement on
@@ -83,9 +100,9 @@ struct Verdict
 /// the same output keeps both and seats the placement as the rect to return to:
 /// a maximized window's restore rect (also when it is fullscreen on top, whose
 /// own restore rect KWin keeps), else a fullscreen window's (F490, F509, F524,
-/// F547, F560). An axis maximize takes the same rule as a full one. A live
-/// gesture the placement does not own writes nothing; the deferred replay
-/// decides again once it ends.
+/// F547, F560). An axis maximize is kept the same way, but the window still
+/// takes the placement on its free axis (F562). A live gesture the placement
+/// does not own writes nothing; the deferred replay decides again once it ends.
 constexpr Verdict decide(const Inputs& in)
 {
     Verdict verdict;
@@ -101,7 +118,8 @@ constexpr Verdict decide(const Inputs& in)
         verdict.endMaximize = ownMaximize;
     } else if (ownMaximize) {
         verdict.seatMaximizeRestore = true;
-        verdict.apply = false;
+        verdict.freeAxisOnly = in.axisMaximized && !ownFullScreen;
+        verdict.apply = verdict.freeAxisOnly;
     } else if (ownFullScreen) {
         verdict.seatFullScreenRestore = true;
         verdict.apply = false;

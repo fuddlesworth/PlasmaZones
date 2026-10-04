@@ -23,17 +23,21 @@ namespace PlasmaZones {
 PlacementStatement::Verdict TilingHandler::preparePlacement(KWin::EffectWindow* w, const QRect& rect,
                                                             PlacementStatement::Purpose purpose)
 {
+    PlacementStatement::Verdict untouched;
+    untouched.applyRect = rect;
     if (!w || w->isDeleted() || !rect.isValid()) {
-        return {};
+        return untouched;
     }
     KWin::Window* kw = w->window();
     if (!kw) {
-        return {};
+        return untouched;
     }
     const QString windowId = m_effect->getWindowId(w);
     PlacementStatement::Inputs in;
     in.purpose = purpose;
-    in.maximized = kw->requestedMaximizeMode() != KWin::MaximizeRestore;
+    const KWin::MaximizeMode maximizeMode = kw->requestedMaximizeMode();
+    in.maximized = maximizeMode != KWin::MaximizeRestore;
+    in.axisMaximized = maximizeMode == KWin::MaximizeVertical || maximizeMode == KWin::MaximizeHorizontal;
     in.requestedFullScreen = kw->isRequestedFullScreen();
     in.windowedFsMember = !windowId.isEmpty() && m_effect->m_windowedFullscreenWindows.contains(windowId);
     in.engineMaximizeClaim = !windowId.isEmpty()
@@ -46,8 +50,16 @@ PlacementStatement::Verdict TilingHandler::preparePlacement(KWin::EffectWindow* 
     // KWin outputs, never screen ids (F577): two virtual screens of one
     // monitor are one output, and a re-statement between them keeps state.
     in.sameOutput = KWin::effects->screenAt(rect.center()) == m_effect->windowOutput(w);
-    const PlacementStatement::Verdict verdict = PlacementStatement::decide(in);
+    PlacementStatement::Verdict verdict = PlacementStatement::decide(in);
+    // An axis-maximized window re-stated keeps its maximized axis and takes
+    // the placement on the free one (F562).
+    verdict.applyRect = verdict.freeAxisOnly
+        ? PlacementStatement::freeAxisRect(rect, w->frameGeometry().toRect(), maximizeMode == KWin::MaximizeVertical)
+        : rect;
 
+    if (verdict.freeAxisOnly) {
+        kw->setGeometryRestore(KWin::RectF(rect));
+    }
     if (!verdict.apply) {
         // A re-statement of a maximized or fullscreen window keeps that state
         // and does not move it; the placement becomes the rect it returns to.
