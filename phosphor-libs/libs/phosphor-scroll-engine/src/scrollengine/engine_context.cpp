@@ -53,8 +53,8 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     }
     // The remembered park edge is written only while a window sits parked and
     // consumed when it scrolls back on screen. windowClosed drops the entry
-    // (with the fs memory above) at close, and every path that drops
-    // m_lastAppliedRect for a still-alive window (float, handoff,
+    // (with the fs memory above) at close, and every path that takes a
+    // still-alive window off the strip (float, handoff,
     // cross-screen move, drag commit/cancel, the context sweeps) drops the
     // edge beside it — so this sweep, which fires exactly ONCE per session
     // at bring-up, is a belt for ids that died while this engine was not

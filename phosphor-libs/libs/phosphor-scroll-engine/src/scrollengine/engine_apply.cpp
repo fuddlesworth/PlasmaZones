@@ -469,9 +469,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // the outgoing tab and the effect cross-fades one into the other.
         //
         // Derived from m_lastAppliedRect rather than a remembered hidden-set:
-        // that map is already swept by every path that drops a window
-        // (close, float, handoff, drag), so this cannot strand a pairing
-        // against a window that is no longer a tile.
+        // it is read only for this batch's tiles, and every path that makes a
+        // window a tile again (unfloat, handoff, drag) drops its entry, so this
+        // cannot pair against a rect from before the window left the strip.
         //
         // The pairing needs BOTH halves to be genuine, which is what keeps it
         // to real switches: a tile that is hidden now but was on screen last

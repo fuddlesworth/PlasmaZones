@@ -5,7 +5,8 @@
 // behaviour suite pins: the lineage gate, the oversized and migration
 // refusals, the move-or-size exclusivity of the own-record restore, the
 // screen-containment gate on the move, the emit order the effect's float
-// handler depends on, and the cross-screen claim declining a float.
+// handler depends on, the cross-screen claim declining a float, and the
+// column rect a float keeps as the float-back guard.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
@@ -19,6 +20,7 @@
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
@@ -247,6 +249,38 @@ private Q_SLOTS:
         // later reopen to trip over.
         QVERIFY(!rig.tracker->placementStore().contains(QStringLiteral("app|old")));
         QVERIFY(rig.tracker->placementStore().contains(QStringLiteral("app|new")));
+    }
+
+    // A floated strip tile keeps its column rect as lastManagedRect: the
+    // daemon samples the float-back after the float, and a frame still on
+    // the column rect must read as managed, not as a free spot (F580). The
+    // unfloat drops it, so the returning tile's first batch is not gated
+    // away by a rect equal to the one the strip resolves again.
+    void floatKeepsTheColumnRectUntilReadoption()
+    {
+        Rig rig;
+        build(rig);
+        const QString w = QStringLiteral("app|w");
+        rig.engine->windowOpened(w, kS1, 0, 0);
+        const QRect columnRect = rig.engine->lastManagedRect(w);
+        QVERIFY(columnRect.isValid());
+
+        rig.engine->toggleWindowFloat(w, kS1);
+        QVERIFY(stateOn(rig.engine, kS1)->isFloating(w));
+        QCOMPARE(rig.engine->lastManagedRect(w), columnRect);
+
+        QSignalSpy tiled(rig.engine, &ScrollEngine::windowsTiled);
+        rig.engine->toggleWindowFloat(w, kS1);
+        QVERIFY(stateOn(rig.engine, kS1)->strip().containsWindow(w));
+        bool carried = false;
+        for (const QList<QVariant>& args : std::as_const(tiled)) {
+            const QJsonArray batch = QJsonDocument::fromJson(args.at(0).toString().toUtf8()).array();
+            for (const QJsonValue& entry : batch) {
+                carried = carried || entry.toObject().value(QLatin1String("windowId")).toString() == w;
+            }
+        }
+        QVERIFY2(carried, "the returning tile must be in a windowsTiled batch");
+        QCOMPARE(rig.engine->lastManagedRect(w), columnRect);
     }
 
     // The size (or move) emit precedes the float sync: the effect's float

@@ -1629,8 +1629,8 @@ private:
     /// openColumnPlacement rule and remembered positions outrank it).
     ScrollInsertPosition m_insertPosition = ScrollInsertPosition::RightOfActive;
 
-    /// The rect the compositor is currently believed to show per window while
-    /// strip-managed: the exact rect applyLayout last APPLIED, or, between an
+    /// The rect the compositor is believed to show per window while strip-managed
+    /// (kept through a float until re-adoption): the rect applyLayout last APPLIED, or, between an
     /// accepted user resize and the next relayout, the frame the user
     /// settled on (onWindowResized's accepted arm rewrites the entry to
     /// newFrame, since the window sits there now and the emit-on-change gate
