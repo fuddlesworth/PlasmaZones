@@ -212,6 +212,49 @@ QList<PhosphorSnapEngine::SnapState*> WindowTrackingService::snapAllStates() con
     return m_snapResolver.allStates ? m_snapResolver.allStates() : QList<PhosphorSnapEngine::SnapState*>{};
 }
 
+void WindowTrackingService::setManagedFramePredicate(ManagedFramePredicate predicate)
+{
+    m_managedFramePredicate = std::move(predicate);
+}
+
+bool WindowTrackingService::isManagedFrame(const QString& windowId, const QRect& frame) const
+{
+    if (windowId.isEmpty() || !frame.isValid()) {
+        return false;
+    }
+    // Every store the window is a member of: a window on several desktops sits
+    // on the zone it holds on another as much as on the one in view, and a
+    // floated window is still on the zone it floated from until it moves.
+    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        if (!state || !snapHoldsWindow(windowId, state)) {
+            continue;
+        }
+        const QString screen = state->screenId().isEmpty() ? state->screenForWindow(windowId) : state->screenId();
+        for (const QStringList& zones : {state->zonesForWindow(windowId), state->preFloatZones(windowId)}) {
+            if (!zones.isEmpty() && resolveZoneGeometry(zones, screen) == frame) {
+                return true;
+            }
+        }
+    }
+    return m_managedFramePredicate && m_managedFramePredicate(windowId, frame);
+}
+
+bool WindowTrackingService::occupiesZoneInView(const QString& windowId) const
+{
+    // The LIVE form (F487): a zone remembered for a context another engine now
+    // tiles, or for a desktop not shown, is memory, and the window's frame there
+    // can be a genuine free one.
+    const PhosphorSnapEngine::SnapState* owner = snapForWindow(windowId);
+    if (!owner || !owner->isWindowSnapped(windowId) || owner->isFloating(windowId)) {
+        return false;
+    }
+    const QString screen = owner->screenForWindow(windowId);
+    if (screen.isEmpty() || snapForScreen(screen) != owner) {
+        return false;
+    }
+    return !m_snapEngine || m_snapEngine->isActiveOnScreen(screen);
+}
+
 bool WindowTrackingService::hasSnapState() const
 {
     // Resolve, don't just check the arm is installed. The globals lambda

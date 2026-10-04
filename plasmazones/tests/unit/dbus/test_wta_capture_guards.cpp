@@ -4,7 +4,7 @@
 /**
  * @file test_wta_capture_guards.cpp
  * @brief Capture-orchestrator guards in WindowTrackingAdaptor::captureWindowPlacement:
- *        the stillOnTileRect float-back poison guard and the untracked-window
+ *        the managed-frame float-back refusal and the untracked-window
  *        no-engine contract (frozen per-mode snap slot preserved).
  *
  * Unlike test_wta_convenience's shared fixture, these tests wire a REAL
@@ -95,12 +95,11 @@ private Q_SLOTS:
     // its own tile — permanently overwriting the genuine float-back.
     void testScrollArmRefusesStillTiledFrameAsFloatBack()
     {
-        // isFrameStillOnTileRect has TWO arms, one per tiling engine, and its
-        // own comment says "Scroll-managed windows carry the same float-toggle
-        // capture edge: the strip rect must never be adopted as float-back
-        // geometry." Every other test in this file wires the stub into the
-        // AUTOTILE slot and passes nullptr for scroll, so deleting the scroll
-        // arm failed nothing. This is the same scenario as
+        // The managed-frame refusal reads BOTH tiling engines' last managed
+        // rect: a strip rect must never be adopted as float-back geometry
+        // either. Every other test in this file wires the stub into the
+        // AUTOTILE slot and passes nullptr for scroll, so dropping the scroll
+        // arm would fail nothing else. This is the same scenario as
         // testRefusesStillTiledFrameAsFloatBack with the stub in the scroll slot.
         PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));

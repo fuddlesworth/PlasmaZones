@@ -87,7 +87,7 @@ public:
      * hidden windows into tiling layouts and persists minimize-suspension
      * floats. CAPTURE-side consumers may deliberately require engaged-true
      * (`.value_or(false)`) when their traffic is causally ordered after the
-     * minimize edge's metadata push (recordFreeGeometry / recordFloatingClose
+     * minimize edge's metadata push (the snap pre-snap capture / recordFloatingClose
      * document this per site) — refusing a capture on unknown would lose
      * genuine free positions, the opposite failure.
      *

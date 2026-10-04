@@ -167,7 +167,16 @@ void SnapEngine::recordFreeFrameBeforeUserSnap(const QString& windowId, const QS
     if (!isFloating(windowId)) {
         return;
     }
-    if (m_windowRegistry && m_windowRegistry->fillsOutputState(windowId).value_or(false)) {
+    // The frame is a sample, so the window-state refusals live here: a
+    // minimized window's frame is the hidden rect, a minimize-suspended float
+    // still stands on the zone it is suspended from (F156), and a maximized
+    // or fullscreen window fills the output.
+    if (m_windowRegistry
+        && (m_windowRegistry->minimizedState(windowId).value_or(false)
+            || m_windowRegistry->fillsOutputState(windowId).value_or(false))) {
+        return;
+    }
+    if (m_windowTracker->isSuspensionFloat(windowId)) {
         return;
     }
     const QRect frame = m_navState->frameGeometry(windowId);

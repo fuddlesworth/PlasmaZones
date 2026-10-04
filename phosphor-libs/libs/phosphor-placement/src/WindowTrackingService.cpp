@@ -520,49 +520,27 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
                                << "— the geometry does not lie on that screen";
         return;
     }
-    // INVARIANT (WindowPlacement::freeGeometryByScreen): this map holds ONLY a
-    // genuine free/floating frame and is FROZEN while the window occupies a ZONE
-    // (snapped) — a snapped window's live frame IS the zone rect, so recording it
-    // here would overwrite the float-back with the snapped geometry (the per-mode
-    // geometry leak the unified record exists to prevent). This is the SINGLE write
-    // point into the shared free geometry, so the guard lives here, not at each
-    // caller. `isWindowSnapped` stays true for a floating-with-preserved-zone
-    // window, so AND with `!isWindowFloating` — "snapped AND not floating" = actually
-    // occupying the zone. (A MODE-based autotile gate cannot live here: a window on
-    // an autotile screen but not yet tiled — a fresh spawn — legitimately has a free
-    // frame, and "autotile mode + not floating" cannot tell that apart from a tiled
-    // window. The LIVE engine-tiled predicate a few lines below is what gates the
-    // actually-tiled case.)
-    // The float bit here must be the SNAP ENGINE'S OWN, not the mode-routed
-    // isWindowFloating(): the resolver answers via the screen's CURRENT mode,
-    // so on an autotile-mode screen a still-snapped window would read its
-    // float bit from the autotile engine (true when untracked), the AND would
-    // fail, and the zone rect would be written as the float-back — the guard
-    // failing open on exactly the mode-swap path it protects.
-    const PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
-    const bool snapFloating = snapState && snapState->isFloating(windowId);
-    if (isWindowSnapped(windowId) && !snapFloating) {
-        qCDebug(lcPlacement) << "recordFreeGeometry: refusing snapped frame for" << windowId
-                             << "— float-back stays frozen while it occupies a zone";
+    // The float-back holds ONLY a genuine free frame (the refusal model is on
+    // the header's float-back docs; the other writers are recordFloatingClose
+    // and the adaptor's capture). (O): a window in a zone in view, or tiled in
+    // view, stands on its managed rect, so nothing is recorded while it does;
+    // the engine-backed checks survive an effect reload, which the effect's own
+    // capture guard does not. (M): a rect equal to a managed frame is refused
+    // even for a free window, the one that just left its zone or tile. No
+    // window-state refusal here: an explicit rect (a maximized window's restore
+    // rect) is recorded whatever the window's state; callers that sample a
+    // frame refuse a minimized or output-filling one. No size-only test either.
+    if (occupiesZoneInView(windowId)) {
+        qCDebug(lcPlacement) << "recordFreeGeometry: refusing the frame of" << windowId << "— it is in a zone";
         return;
     }
-    // A minimized window's frame is never a genuine free position: it is
-    // whatever rect the window held when it was hidden (typically a zone or
-    // tile rect on managed screens). Engaged-true only — the minimize edge
-    // pushes fresh metadata before any capture traffic it triggers.
-    if (m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
-        qCDebug(lcPlacement) << "recordFreeGeometry: refusing minimized frame for" << windowId;
-        return;
-    }
-    // Same invariant for the tiled case: an actively-tiled window's frame IS
-    // the tile rect. The effect's saveAndRecordPreTileGeometry guards its
-    // own capture paths, but cannot help when the effect reloads (kwin
-    // restart with the daemon alive) — its border tracking starts empty and
-    // the re-announce batch would push every tiled window's zone rect here
-    // with overwrite=true. The engine-backed predicate survives that reload.
     if (isWindowEngineTiled(windowId)) {
-        qCDebug(lcPlacement) << "recordFreeGeometry: refusing tiled frame for" << windowId
-                             << "— float-back stays frozen while a tiling-family engine tiles it";
+        qCDebug(lcPlacement) << "recordFreeGeometry: refusing the frame of" << windowId << "— it is tiled";
+        return;
+    }
+    if (isManagedFrame(windowId, geometry)) {
+        qCDebug(lcPlacement) << "recordFreeGeometry: refusing" << geometry << "for" << windowId
+                             << "— it is a managed frame";
         return;
     }
     const QString appId = currentAppIdFor(windowId);
@@ -642,7 +620,7 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     // the guard refuse the one capture (screen adoption + sibling prune)
     // nothing else performs.
     // The minimized guard DOES apply: a minimized close's frame is the
-    // hidden rect, not a free position, and that read is never stale.
+    // hidden rect, not a free position, and that read is never stale (S).
     if (m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
         qCDebug(lcPlacement) << "recordFloatingClose: refusing minimized frame for" << windowId;
         return;
@@ -655,12 +633,11 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     p.windowId = windowId;
     p.appId = appId;
     p.screenId = screenId;
-    // Same key/geometry agreement guard recordFreeGeometry runs, because this
-    // is the OTHER live writer into the shared free-geometry map — the comment
-    // over there calling itself the "single write point" is not true of this
-    // tree. The caller pairs the effect's close-time screen with the
-    // last-reported frame shadow, i.e. two sources sampled at two moments,
-    // which is exactly the mis-key shape.
+    // The insert takes the pair check (P), as recordFreeGeometry does: the
+    // caller pairs the effect's close-time screen with the last frame shadow,
+    // two samples from two moments. It takes (M) and the output-filling half of
+    // (S) too: the frame of a maximized or fullscreen window, or one still on
+    // its zone or tile, is not a free position (F157).
     //
     // It gates ONLY the geometry insert, never the whole function: the screen
     // adoption, the owning-engine slot synthesis and the pure-float sibling
@@ -668,11 +645,12 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     // forfeit all three to fix a field none of them reads. geometryOverlapsScreen
     // fails OPEN with no ScreenManager, so an embedder without one keeps
     // today's behaviour instead of silently losing every close capture.
-    if (geometryOverlapsScreen(geometry, screenId)) {
-        p.freeGeometryByScreen.insert(screenId, geometry);
-    } else {
+    const bool fillsOutput = m_windowRegistry && m_windowRegistry->fillsOutputState(windowId).value_or(false);
+    if (!geometryOverlapsScreen(geometry, screenId)) {
         qCWarning(lcPlacement) << "recordFloatingClose: refusing" << geometry << "for" << windowId << "under"
                                << screenId << "— the geometry does not lie on that screen; recording the rest";
+    } else if (!fillsOutput && !isManagedFrame(windowId, geometry)) {
+        p.freeGeometryByScreen.insert(screenId, geometry);
     }
     // Preserve the existing record's per-engine slots and context. Carrying a
     // non-empty engine map is what makes the store merge adopt the new screenId

@@ -211,12 +211,12 @@ public:
     /// resolved, so an embedder with no screen manager keeps its behaviour.
     virtual bool geometryBelongsToScreen(const QRect& geometry, const QString& screenId) const = 0;
 
-    /// Record a window's SHARED free/float geometry (the single float-back store —
-    /// the placement record's freeGeometryByScreen). This is the ONE writer all
-    /// float-back captures route through (effect pre-tile/pre-snap capture, drag
-    /// store, float-toggle capture), so snap and autotile read the same value and
-    /// never drift. @p overwrite=false leaves an existing entry for @p screenId
-    /// untouched (first-capture-wins). No-op on an invalid geometry.
+    /// Record a window's SHARED free/float geometry (the placement record's
+    /// freeGeometryByScreen), so snap and autotile read the same value. Refuses a
+    /// rect off @p screenId, a managed frame and the frame of a window in a zone
+    /// or tile in view; a caller that SAMPLES a frame refuses a minimized or
+    /// output-filling window's itself. @p overwrite=false leaves an existing entry
+    /// for @p screenId untouched (first-capture-wins). No-op on an invalid geometry.
     virtual void recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,
                                     bool overwrite) = 0;
 

@@ -165,31 +165,17 @@ public:
     using AutotileModePredicate = std::function<bool(const QString& windowId)>;
     void setAutotileModePredicate(AutotileModePredicate predicate);
 
-    /**
-     * @brief True if the window's CURRENT screen mode is autotile.
-     * The single owning-engine signal — the same predicate that routes the float
-     * resolver, the float writer, and validatedUnmanagedGeometry. Exposed so the
-     * capture funnel (WindowTrackingAdaptor::captureWindowPlacement) picks the
-     * owning engine the SAME way, instead of a divergent isWindowTracked() check
-     * that disagrees mid-mode-flip. Returns false when the predicate is unwired
-     * (snap-only tests / early init).
-     */
+    /// True if the window's CURRENT screen mode is autotile: the predicate the float
+    /// resolver, the float writer, validatedUnmanagedGeometry and the capture funnel
+    /// share. False when unwired (snap-only tests / early init).
     bool isWindowInAutotileMode(const QString& windowId) const;
 
     /**
-     * @brief Predicate: is the window ACTIVELY TILED by a tiling-family
-     * engine (autotile / scrolling) right now (engine-owned, non-floating)?
-     *
-     * Injected by the daemon (same LGPL-boundary pattern as
-     * AutotileModePredicate); the production wiring ORs both engines'
-     * isWindowTiled, each only where the engine holds the window in the
-     * context in view (a background desktop's tile does not count).
-     * Distinct from the MODE predicate: a fresh spawn on an
-     * engine-managed screen is in that mode but not yet tiled — its frame
-     * is a genuine free geometry — while a tiled window's frame IS the
-     * engine's rect and must never be recorded as a float-back.
-     * recordFreeGeometry refuses tiled frames with it, which the effect-side
-     * capture guard cannot do after an effect reload.
+     * @brief Predicate: is the window ACTIVELY TILED by a tiling-family engine
+     * (autotile / scrolling) in the context in view? Injected by the daemon; the
+     * wiring ORs both engines' isWindowTiled where each holds the window in view.
+     * Distinct from the MODE predicate: a fresh spawn on a tiling screen is in
+     * that mode but not tiled, and its frame is a genuine free geometry.
      */
     using EngineTiledPredicate = std::function<bool(const QString& windowId)>;
     void setEngineTiledPredicate(EngineTiledPredicate predicate);
@@ -390,21 +376,28 @@ public:
         return geometryOverlapsScreen(geometry, screenId);
     }
 
-    /// Write the window's shared free/float geometry into the unified record (the
-    /// single float-back store). See IWindowTrackingService::recordFreeGeometry.
+    /// Float-back writes. Three writers fill WindowPlacement::freeGeometryByScreen:
+    /// recordFreeGeometry, recordFloatingClose and the adaptor's
+    /// captureWindowPlacement. Each refuses (P) a rect off its screen key and (M) a
+    /// managed frame (isManagedFrame); recordFreeGeometry and the capture also
+    /// refuse (O) a window in a zone in view or tiled in view. (S) A minimized or
+    /// output-filling window's frame is refused where a frame is SAMPLED (the
+    /// capture, the close, the snap pre-snap capture), never for an explicit rect.
     void recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,
                             bool overwrite) override;
-
-    /// Authoritative float-back capture for a window closing on @p screenId.
-    /// Unlike recordFreeGeometry (a geometry-only partial that deliberately leaves
-    /// the managed-context screen untouched), this records the float geometry AND
-    /// updates the record's managed `screenId` to @p screenId — carrying an engine
-    /// slot so the store merge adopts the new screen. Used by the close-capture
-    /// fallback when a cross-screen move has orphaned the window from every engine,
-    /// so the only authoritative source of its final screen is KWin (passed down
-    /// from the effect). The existing record's per-engine slots and desktop/activity
-    /// are preserved; only the screen and this screen's free geometry change.
+    /// The close-time capture of an engine-orphaned window: records the float
+    /// geometry AND adopts @p screenId as the record's managed screen (KWin's word
+    /// on where it closed), keeping the record's other slots and context.
     void recordFloatingClose(const QString& windowId, const QString& screenId, const QRect& geometry);
+    /// (M): @p frame equals a rect a snap membership of the window resolves to (its
+    /// zones and pre-float zones, each on its store's screen) or one the injected
+    /// predicate names (the adaptor's settled frame, the tiling engines' last
+    /// managed rect). Exact compare, never size-only.
+    using ManagedFramePredicate = std::function<bool(const QString& windowId, const QRect& frame)>;
+    void setManagedFramePredicate(ManagedFramePredicate predicate);
+    bool isManagedFrame(const QString& windowId, const QRect& frame) const;
+    /// (O): the window is snapped, not floating, in the store its screen shows, on a screen snap runs.
+    bool occupiesZoneInView(const QString& windowId) const;
 
     /// Clear a window's shared free/float geometry from the record. See
     /// IWindowTrackingService::clearFreeGeometry.
@@ -1196,6 +1189,9 @@ private:
     // save after daemon startup to serialize every field. Cleared by
     // loadState() once in-memory state mirrors the disk file.
     DirtyMask m_dirtyMask = DirtyAll;
+
+    // Appended last (installed class).
+    ManagedFramePredicate m_managedFramePredicate{};
 
     // Note: No save timer - persistence is the WindowTrackingAdaptor's debounced
     // JSON save. Service emits stateChanged() signal when state needs saving

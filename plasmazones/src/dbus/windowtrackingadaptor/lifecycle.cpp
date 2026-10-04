@@ -203,9 +203,9 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         std::optional<PhosphorEngine::WindowPlacement> p = e->capturePlacement(windowId);
         if (p) {
             // The engine's capturePlacement fills ONLY its own slot (state + zone IDs
-            // / tile order) — never a rectangle. Here is the SINGLE point that writes
-            // the shared free/float geometry, and it does so ONLY when the window is
-            // floated in this engine. For a snapped/tiled window
+            // / tile order) — never a rectangle. This is one of the three float-back
+            // writers (WindowTrackingService's float-back docs name the model), and
+            // it writes ONLY when the window is floated in this engine. For a snapped/tiled window
             // the live frame IS the zone/tile rect, so writing it would poison the
             // float-back — exactly the per-mode geometry leak this model removes. By
             // gating the write on the slot state (not a fragile frame-vs-zone compare),
@@ -254,43 +254,18 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
                         screenKey = Utils::effectiveScreenIdAt(m_service->screenManager(), frame.center());
                     }
                     if (!screenKey.isEmpty()) {
-                        // Float-back poison guard. A window floated FROM a snap (its slot
-                        // carries the pre-float zones) that has NOT yet moved is still
-                        // sitting on its snap rect — recording that as the free/float
-                        // geometry would make a later float return to the zone, not a
-                        // genuine free position. This bites windows that opened directly
-                        // snapped (e.g. a SnapToZone rule) and were then floated without
-                        // ever being moved: the live frame is still the zone rect. Skip
-                        // until the frame differs from the pre-float zones' geometry — the
-                        // user's next move while floating captures the real free spot.
-                        // Every desktop's zones count, not only the flat
-                        // zoneIds: a window present on several desktops and
-                        // unsnapped on the one in view is still physically on
-                        // the zone it holds on another, and a capture there
-                        // carries an empty zoneIds beside a per-desktop map
-                        // that names that zone.
-                        bool stillOnSnapRect =
-                            !slot.zoneIds.isEmpty() && m_service->resolveZoneGeometry(slot.zoneIds, screenKey) == frame;
-                        for (auto d = slot.zonesByDesktop.constBegin();
-                             !stillOnSnapRect && d != slot.zonesByDesktop.constEnd(); ++d) {
-                            stillOnSnapRect =
-                                !d.value().isEmpty() && m_service->resolveZoneGeometry(d.value(), screenKey) == frame;
-                        }
-                        // Tiled analogue of the same poison guard (see the
-                        // helper doc). The isWindowEngineTiled gate above
-                        // cannot catch the float-toggle edge:
-                        // AutotileEngine::performToggleFloat clears the tiled
-                        // bit BEFORE the daemon's sync slot reaches this
-                        // capture, while the live frame is still the tile rect
-                        // (KWin has not applied the float-back yet —
-                        // applyGeometryForFloat runs AFTER this capture and
-                        // reads what it writes). Recording that frame
-                        // overwrote the genuine float-back with the tile rect,
-                        // so every float "restored" the window onto its own
-                        // tile. Skip until the frame moves off it — the next
-                        // move while floating captures the real free spot,
-                        // exactly like the snap case.
-                        if (!stillOnSnapRect && !isFrameStillOnTileRect(windowId, frame)) {
+                        // The frame is a sample, so it takes the whole model: (P) it
+                        // must lie on the screen it is filed under (a re-homed window's
+                        // shadow can still be on the old screen, F365); (S) a maximized
+                        // or fullscreen frame fills the output (F157); (M) a window
+                        // floated off a zone or tile that has not moved yet is still on
+                        // its managed frame (the float toggle clears the tiled bit
+                        // before KWin applies the float-back). The next move while
+                        // floating captures the real free spot.
+                        const bool fillsOutput =
+                            m_windowRegistry && m_windowRegistry->fillsOutputState(windowId).value_or(false);
+                        if (!fillsOutput && m_service->geometryBelongsToScreen(frame, screenKey)
+                            && !m_service->isManagedFrame(windowId, frame)) {
                             p->screenId = screenKey;
                             p->freeGeometryByScreen.insert(screenKey, frame);
                         }
@@ -359,8 +334,8 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // already established it.
     if (!authoritativeScreen.isEmpty() && !m_service->isWindowEngineTiled(windowId)) {
         const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
-        // Same tile-rect poison guard as the primary capture path (see the
-        // helper doc): a window tiled by autotile, handed off, and closed
+        // The managed-frame refusal, as in the primary capture path: a window tiled
+        // by autotile, handed off, and closed
         // before ever being repositioned still sits on its tile rect —
         // recording that as the reopen float-back would restore it onto the
         // tile, not a free spot. The same holds for a tiled close on the
@@ -375,20 +350,10 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         // screen and geometry, which is strictly better than adopting a
         // poisoned one — recordFloatingClose has no geometry-less mode, and
         // a genuine free frame at the next close records normally.
-        if (frame.isValid() && !isFrameStillOnTileRect(windowId, frame)) {
+        if (frame.isValid() && !m_service->isManagedFrame(windowId, frame)) {
             m_service->recordFloatingClose(windowId, authoritativeScreen, frame);
         }
     }
-}
-
-bool WindowTrackingAdaptor::isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const
-{
-    if (m_autotileEngine && m_autotileEngine->lastManagedRect(windowId) == frame) {
-        return true;
-    }
-    // Scroll-managed windows carry the same float-toggle capture edge: the
-    // strip rect must never be adopted as float-back geometry.
-    return m_scrollEngine && m_scrollEngine->lastManagedRect(windowId) == frame;
 }
 
 QString WindowTrackingAdaptor::shadowWindowId(const QString& windowId) const

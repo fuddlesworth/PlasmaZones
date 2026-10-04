@@ -1412,6 +1412,15 @@ target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::D
                                                       PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_wta_capture_guards COMMAND test_wta_capture_guards)
 
+# The float-back refusal model at its three writers (recordFreeGeometry,
+# recordFloatingClose, captureWindowPlacement). Same FakePhysicalScreenSource
+# compile-in as the capture guards.
+add_executable(test_wta_float_back_model dbus/test_wta_float_back_model.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_float_back_model PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_float_back_model PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_float_back_model COMMAND test_wta_float_back_model)
+
 # The reopen contract through TilingAdaptor's open dispatch: a window is placed
 # where it announces, never pulled back to its own record's screen. Same
 # FakePhysicalScreenSource compile-in and scroll-engine link as the capture

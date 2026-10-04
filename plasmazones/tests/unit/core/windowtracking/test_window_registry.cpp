@@ -135,6 +135,16 @@ private Q_SLOTS:
         reg.upsert(QStringLiteral("u1"), meta);
         // A composite id resolves to the same instance record.
         QCOMPARE(reg.fillsOutputState(QStringLiteral("firefox|u1")), std::optional<bool>(true));
+
+        // Either state known on is an answer whatever the other one is (F47).
+        PhosphorEngine::WindowMetadata fullscreenOnly = make(QStringLiteral("firefox"));
+        fullscreenOnly.isFullscreen = true;
+        reg.upsert(QStringLiteral("u2"), fullscreenOnly);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u2")), std::optional<bool>(true));
+        PhosphorEngine::WindowMetadata maximizedOnly = make(QStringLiteral("firefox"));
+        maximizedOnly.isMaximized = true;
+        reg.upsert(QStringLiteral("u3"), maximizedOnly);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u3")), std::optional<bool>(true));
     }
 
     void upsert_rejectsEmptyInstanceId()

@@ -158,6 +158,17 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     m_cachedAutotileEngine = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine);
     m_cachedScrollEngine = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(scrollEngine);
 
+    // The float-back refusal's (M) arm for frames the tiling engines manage:
+    // the rect each last emitted for the window, which they keep past a float,
+    // a handoff and their own close. The service is this adaptor's child, so
+    // the capture cannot outlive it.
+    if (m_service) {
+        m_service->setManagedFramePredicate([this](const QString& windowId, const QRect& frame) {
+            return (m_autotileEngine && m_autotileEngine->lastManagedRect(windowId) == frame)
+                || (m_scrollEngine && m_scrollEngine->lastManagedRect(windowId) == frame);
+        });
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine references — SnapEngine needs AutotileEngine for
     // isActiveOnScreen() routing and ZoneDetectionAdaptor for adjacency queries.
