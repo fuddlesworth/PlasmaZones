@@ -717,6 +717,17 @@ target_include_directories(test_autotile_seed_filter PRIVATE ${CMAKE_SOURCE_DIR}
 target_link_libraries(test_autotile_seed_filter PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_autotile_seed_filter COMMAND test_autotile_seed_filter)
 
+# Which engine owns a window (EngineRouting::windowEngineMode), the resolution
+# the float reader / writer, the autotile-mode predicate and the synthesized
+# slot id share. Compiles the daemon source directly, like the seed filter.
+add_executable(test_engine_routing
+    daemon/test_engine_routing.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/daemon/enginerouting.cpp
+)
+target_include_directories(test_engine_routing PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_engine_routing PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_engine_routing COMMAND test_engine_routing)
+
 # Cheatsheet family compression: compiles the daemon source directly because
 # ShortcutManager lives in the plasmazonesd executable, not plasmazones_core.
 # The test drives only the static compressCheatsheetFamilies helper, so no

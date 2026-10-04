@@ -568,6 +568,8 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/engine_release.cpp
     daemon/daemon/seedorderfilter.cpp
     daemon/daemon/seedorderfilter.h
+    daemon/daemon/enginerouting.cpp
+    daemon/daemon/enginerouting.h
     daemon/daemon/osd.cpp
     daemon/daemon/cheatsheet.cpp
     daemon/daemon/stripzones.h
