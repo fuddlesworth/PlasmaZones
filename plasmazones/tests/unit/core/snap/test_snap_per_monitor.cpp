@@ -451,6 +451,41 @@ private Q_SLOTS:
         m_service->setSnapState(m_engine->snapState());
     }
 
+    // An unplugged output's zones are released store by store, every desktop's
+    // with the record's per-desktop map (F108), with no windowZoneChanged for
+    // autotile to untile a window on (F254), and the window is announced once
+    // as moved off the screen (F427).
+    void pruneRemovedScreenReleasesEveryDesktopAndAnnouncesOnce()
+    {
+        installFullResolver();
+        const QString w = QStringLiteral("app|unplugged-snapped");
+        const QString gone = QStringLiteral("DP-1");
+        m_engine->setCurrentDesktopForScreen(gone, 1);
+        m_service->assignWindowToZone(w, m_zoneIds[0], gone, 1);
+        m_engine->setCurrentDesktopForScreen(gone, 2);
+        m_engine->stateForWindowOnScreen(w, gone, 2)->assignWindowToZone(w, m_zoneIds[1], gone, 2);
+        m_service->placementStore().record(*m_engine->capturePlacement(w));
+        const auto before = m_service->placementStore().peekExact(w);
+        QVERIFY(before.has_value());
+        QCOMPARE(before->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).zonesByDesktop.size(), 2);
+
+        QSignalSpy zoneSpy(m_service, &PhosphorPlacement::WindowTrackingService::windowZoneChanged);
+        QSignalSpy stateSpy(m_engine, &SnapEngine::windowSnapStateChanged);
+        m_engine->pruneStatesForRemovedScreen(gone);
+
+        QCOMPARE(zoneSpy.count(), 0);
+        QCOMPARE(stateSpy.count(), 1);
+        const auto entry = stateSpy.first().at(1).value<PhosphorProtocol::WindowStateEntry>();
+        QCOMPARE(entry.windowId, w);
+        QCOMPARE(entry.changeType, QStringLiteral("screen_changed"));
+        QCOMPARE(entry.screenId, gone);
+        QVERIFY(entry.zoneId.isEmpty());
+        const auto after = m_service->placementStore().peekExact(w);
+        QVERIFY(after.has_value());
+        QVERIFY(after->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).zonesByDesktop.isEmpty());
+        m_service->setSnapState(m_engine->snapState());
+    }
+
 private:
     /// Install the FULL per-key resolver so the WTS facade and the engine agree on
     /// the same per-(screen,desktop,activity) stores (the default single-store
