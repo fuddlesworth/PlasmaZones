@@ -603,6 +603,14 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       window across screens where a tiling engine runs, so the daemon drops
 //       what it held of the window on the screen left. An old daemon answers
 //       with an error, which the fire-and-forget call ignores.
+//
+//       Also in v10, WindowTracking.applyGeometryRequested gains a trailing
+//       purpose (siiiissb -> siiiissbi, PlacementPurpose): whether the
+//       placement is a user verb on the window or a re-statement of one it
+//       already has, which decides whether its maximize and fullscreen end. A
+//       receiver whose slot takes the old eight arguments still gets the signal
+//       (QtDBus delivers a longer signal to a shorter slot) and keeps the
+//       user-verb behaviour it always had.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

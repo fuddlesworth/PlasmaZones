@@ -611,8 +611,9 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
         }
         commitSnap(result.windowId2, result.zoneId2, screen2);
         m_windowTracker->recordSnapIntent(result.windowId2, true);
-        Q_EMIT applyGeometryRequested(result.windowId2, result.x2, result.y2, result.w2, result.h2, result.zoneId2,
-                                      screen2, false);
+        // The partner is not the subject of the swap: a re-statement.
+        Q_EMIT restatementGeometryRequested(result.windowId2, result.x2, result.y2, result.w2, result.h2,
+                                            result.zoneId2, screen2);
     }
 }
 

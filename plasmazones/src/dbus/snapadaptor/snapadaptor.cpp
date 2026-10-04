@@ -60,9 +60,21 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::windowFloatingChanged, adaptor,
                                  &WindowTrackingAdaptor::relayWindowFloatingChanged));
 
-    // Daemon-driven geometry application (used by autotile float restore via SnapEngine)
+    // Daemon-driven geometry application, each with its placement purpose.
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::applyGeometryRequested, adaptor,
-                                 &WindowTrackingAdaptor::applyGeometryRequested));
+                                 [adaptor](const QString& windowId, int x, int y, int width, int height,
+                                           const QString& zoneId, const QString& screenId, bool sizeOnly) {
+                                     Q_EMIT adaptor->applyGeometryRequested(
+                                         windowId, x, y, width, height, zoneId, screenId, sizeOnly,
+                                         static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+                                 }));
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::restatementGeometryRequested, adaptor,
+                                 [adaptor](const QString& windowId, int x, int y, int width, int height,
+                                           const QString& zoneId, const QString& screenId) {
+                                     Q_EMIT adaptor->applyGeometryRequested(
+                                         windowId, x, y, width, height, zoneId, screenId, false,
+                                         static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
+                                 }));
 
     // Snap-all-windows (effect collects candidates, daemon calculates)
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::snapAllWindowsRequested, adaptor,

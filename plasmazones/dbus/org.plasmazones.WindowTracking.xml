@@ -325,6 +325,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="sizeOnly" type="b">
                 <annotation name="org.gtk.GDBus.DocString" value="True to resize the window where it stands, keeping the position the compositor chooses (the drag-out unsnap keeps the top-left, a free-size restore at open keeps the centre)."/>
             </arg>
+            <arg name="purpose" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="PlacementPurpose. 0 places the window a user action is about, so its maximize and fullscreen end. 1 re-states a placement it already has, so a maximized or fullscreen window keeps that state. Unknown values are read as 0."/>
+            </arg>
         </signal>
         <signal name="activateWindowRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to activate (focus) a window. Used by daemon-driven focus/cycle navigation."/>

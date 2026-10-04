@@ -106,7 +106,8 @@ private Q_SLOTS:
 
     // The basic return: a window snapped on the output that went away comes
     // back into its zone when KWin returns it untouched, as a re-statement:
-    // it does not become the screen's last-used zone the way a user snap does.
+    // it does not become the screen's last-used zone the way a user snap does,
+    // and its apply is a re-statement, so a maximize it kept stays (F509).
     void parkedZoneComesBackWithoutTouchingLastUsed()
     {
         const QString w = QStringLiteral("app|parked-zone");
@@ -119,7 +120,11 @@ private Q_SLOTS:
         QVERIFY(m_engine->hasParked(w, kScreen));
 
         m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        QSignalSpy restatement(m_engine, &SnapEngine::restatementGeometryRequested);
+        QSignalSpy userVerb(m_engine, &SnapEngine::applyGeometryRequested);
         QVERIFY(m_engine->readoptParked(w, kScreen, kScreen));
+        QCOMPARE(restatement.count(), 1);
+        QCOMPARE(userVerb.count(), 0);
         QCOMPARE(m_service->zoneForWindow(w), m_zoneIds[0]);
         QVERIFY(storeInView()->lastUsedZoneId().isEmpty());
         QVERIFY(!m_engine->hasParked(w, kScreen));

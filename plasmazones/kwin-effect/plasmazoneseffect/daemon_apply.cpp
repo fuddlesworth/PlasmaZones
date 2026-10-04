@@ -274,8 +274,10 @@ void PlasmaZonesEffect::applySizeOnlyRestore(KWin::EffectWindow* w, const QStrin
 // applyGeometryRequested directly. See SnapAdaptor::toggleFloatForWindow.
 
 void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height,
-                                                   const QString& zoneId, const QString& screenId, bool sizeOnly)
+                                                   const QString& zoneId, const QString& screenId, bool sizeOnly,
+                                                   int purposeWire)
 {
+    const PhosphorProtocol::PlacementPurpose purpose = PhosphorProtocol::clampPlacementPurposeFromWire(purposeWire);
     // Magnitude bound BEFORE either QRect construction below. QRect's
     // x/y/w/h constructor computes `x + w - 1`, which is signed overflow and
     // undefined for a garbled payload — and it happens inside the constructor,
@@ -387,7 +389,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     }
     qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "(live:" << liveWindowId << ") geo:" << geometry
                      << "zoneId:" << zoneId << "screen:" << screenId << "floating:" << isWindowFloating(liveWindowId)
-                     << "currentFrame:" << w->frameGeometry();
+                     << "currentFrame:" << w->frameGeometry()
+                     << "restatement:" << (purpose == PhosphorProtocol::PlacementPurpose::Restatement);
     // No pre-snap capture here: every daemon zone apply follows its commit, so
     // the window is already in a zone and the daemon refuses its frame. The
     // daemon records the free frame itself before the commit

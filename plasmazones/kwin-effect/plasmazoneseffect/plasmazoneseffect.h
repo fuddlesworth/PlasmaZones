@@ -325,7 +325,7 @@ private Q_SLOTS:
     // Keyboard Navigation handlers
     // Daemon-driven navigation: daemon computes geometry/target and emits these signals
     void slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
-                                    const QString& screenId, bool sizeOnly);
+                                    const QString& screenId, bool sizeOnly, int purpose);
     void slotActivateWindowRequested(const QString& windowId);
     void slotWindowDesktopMoveRequested(const QString& windowId, int desktop);
     void slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,

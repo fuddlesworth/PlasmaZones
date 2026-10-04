@@ -133,6 +133,8 @@ private Q_SLOTS:
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(6).toString(), otherScreen);
+        QCOMPARE(spy.at(0).at(8).toInt(),
+                 static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb)); // a user verb (index 8: purpose)
         QCOMPARE(m_wta->service()->screenForWindow(windowId), otherScreen);
     }
 
@@ -205,6 +207,9 @@ private Q_SLOTS:
         QSet<QString> emittedZones;
         for (const auto& args : spy) {
             QVERIFY(!args.at(5).toString().isEmpty()); // non-empty zoneId = snap commit
+            QCOMPARE(
+                args.at(8).toInt(),
+                static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement)); // the re-apply re-states (F490)
             emittedWindows.insert(args.at(0).toString());
             emittedZones.insert(args.at(5).toString());
         }
@@ -311,6 +316,9 @@ private Q_SLOTS:
         QCOMPARE(spy.at(0).at(0).toString(), w2);
         // Empty zoneId (index 5) = float/unmanaged discriminator (no snap border).
         QCOMPARE(spy.at(0).at(5).toString(), QString());
+        QCOMPARE(spy.at(0).at(8).toInt(),
+                 static_cast<int>(
+                     PhosphorProtocol::PlacementPurpose::Restatement)); // a remembered float spot re-states (F575)
         QCOMPARE(
             QRect(spy.at(0).at(1).toInt(), spy.at(0).at(2).toInt(), spy.at(0).at(3).toInt(), spy.at(0).at(4).toInt()),
             floatedGeo);
@@ -606,11 +614,14 @@ private Q_SLOTS:
 
         QCOMPARE(spy.count(), 2);
 
-        // Window1 should move to zone2, window2 to zone1
+        // Window1 should move to zone2, window2 to zone1; the second window is
+        // not the subject of the swap, so its apply re-states (F547).
         QCOMPARE(spy.at(0).at(0).toString(), window1);
         QCOMPARE(spy.at(0).at(5).toString(), m_zoneIds[1]);
+        QCOMPARE(spy.at(0).at(8).toInt(), static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
         QCOMPARE(spy.at(1).at(0).toString(), window2);
         QCOMPARE(spy.at(1).at(5).toString(), m_zoneIds[0]);
+        QCOMPARE(spy.at(1).at(8).toInt(), static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
     }
 
     void testSwapWindowsById_oneNotSnapped_noSignal()

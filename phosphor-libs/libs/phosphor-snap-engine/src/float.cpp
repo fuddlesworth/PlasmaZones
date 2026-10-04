@@ -297,8 +297,15 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId,
     // (→ markWindowSnapped, which re-applies it). Unfloat-to-zone IS a snap
     // commit, so an empty zoneId here would leave the re-snapped window wearing
     // its floating chrome (no hidden title bar, no snap border).
-    Q_EMIT applyGeometryRequested(windowId, unfloat.geometry.x(), unfloat.geometry.y(), unfloat.geometry.width(),
-                                  unfloat.geometry.height(), unfloat.zoneIds.first(), unfloat.screenId, false);
+    // A suspension's return re-states the zone the window was snapped in.
+    if (suspension) {
+        Q_EMIT restatementGeometryRequested(windowId, unfloat.geometry.x(), unfloat.geometry.y(),
+                                            unfloat.geometry.width(), unfloat.geometry.height(),
+                                            unfloat.zoneIds.first(), unfloat.screenId);
+    } else {
+        Q_EMIT applyGeometryRequested(windowId, unfloat.geometry.x(), unfloat.geometry.y(), unfloat.geometry.width(),
+                                      unfloat.geometry.height(), unfloat.zoneIds.first(), unfloat.screenId, false);
+    }
     return true;
 }
 

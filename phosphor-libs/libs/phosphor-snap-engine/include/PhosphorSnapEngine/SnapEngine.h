@@ -1037,9 +1037,7 @@ public:
     bool isWindowExcluded(const QString& windowId, const QString& screenHint = QString()) const;
 
 Q_SIGNALS:
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Signals (relayed via SnapAdaptor -> WTA -> D-Bus -> effect)
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ── Signals (relayed via SnapAdaptor -> WTA -> D-Bus -> effect) ──
 
     /// Snap state changed (commit / uncommit). WTA relays to D-Bus windowStateChanged.
     void windowSnapStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& entry);
@@ -1047,7 +1045,7 @@ Q_SIGNALS:
     /// Floating state cleared as part of a commit. WTA relays as windowFloatingChanged(id, false, screen).
     void windowFloatingClearedForSnap(const QString& windowId, const QString& screenId);
 
-    /// Daemon-driven geometry application (used by autotile float restore)
+    /// Places the window a user verb is about (relayed as PlacementPurpose::UserVerb).
     void applyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
                                 const QString& screenId, bool sizeOnly);
 
@@ -1057,12 +1055,12 @@ Q_SIGNALS:
     /// Request KWin effect to collect unsnapped windows and snap them all
     void snapAllWindowsRequested(const QString& screenId);
 
-    /// Batch of window-geometry updates, applied by the KWin effect in a
-    /// single operation. The engine itself only ever emits action="rotate";
-    /// the SnapAdaptor layer attaches "resnap" / "vs_reconfigure" when it
-    /// relays its own batches over the same WTA D-Bus signal ("snap_all"
-    /// batches never cross the wire — the effect builds those locally).
+    /// Window-geometry updates the effect applies in one go. The engine emits only action="rotate"; SnapAdaptor
+    /// attaches "resnap" / "vs_reconfigure" to its own batches ("snap_all" batches stay effect-local).
     void applyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
+    /// Re-states a placement the window already has (relayed as PlacementPurpose::Restatement).
+    void restatementGeometryRequested(const QString& windowId, int x, int y, int width, int height,
+                                      const QString& zoneId, const QString& screenId);
 
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;

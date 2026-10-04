@@ -59,7 +59,7 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     // size" and is dropped effect-side — don't claim success for it.
     if (preSnapGeo && preSnapGeo->width() > 0 && preSnapGeo->height() > 0) {
         Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapGeo->width(), preSnapGeo->height(), QString(), screenId,
-                                      true);
+                                      true, static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
         // Consume-once, per screen: only this screen's float-back was used;
         // other monitors' remembered positions stay intact.
         m_service->clearFreeGeometry(windowId, screenId);
@@ -210,7 +210,7 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
         qCInfo(lcDbusWindow) << "applyGeometryForFloat: windowId=" << windowId << "geo=" << *geo
                              << "screen=" << screenId;
         Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
-                                      false);
+                                      false, static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
         return true;
     }
 

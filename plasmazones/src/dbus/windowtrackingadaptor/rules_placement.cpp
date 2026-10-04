@@ -445,7 +445,8 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
         // an open: nothing else would tile it when the move's echo arrives
         // inside the apply (F472). A genuine open only for an Open (F510).
         announceOutputMove(windowId, landed, screenId, tiling);
-        Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), landed, false);
+        Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), landed, false,
+                                      static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
         int routedDesktop = 0;
         if (const auto desktopRoute = resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop))) {
             routedDesktop = desktopRoute->params.value(QString(PhosphorRules::ActionParam::TargetDesktop)).toInt(0);
@@ -468,7 +469,8 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
         snap->migrateWindowToScreen(windowId, landed);
     }
     announceOutputMove(windowId, landed, screenId, snapTarget ? snap : nullptr);
-    Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), landed, false);
+    Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), landed, false,
+                                  static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
     if (snapTarget) {
         captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
     }

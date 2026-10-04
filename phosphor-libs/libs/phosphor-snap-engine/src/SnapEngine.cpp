@@ -932,8 +932,8 @@ void SnapEngine::reapplyManagedWindowAppearance()
             if (!geo.isValid()) {
                 continue;
             }
-            Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneIds.first(),
-                                          screenId, false);
+            Q_EMIT restatementGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneIds.first(),
+                                                screenId);
         }
     }
 }

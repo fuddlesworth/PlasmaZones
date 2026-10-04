@@ -157,8 +157,8 @@ bool SnapEngine::readoptParked(const QString& windowId, const QString& parkedPhy
                 }
                 const QRect geo = m_windowTracker ? m_windowTracker->resolveZoneGeometry(ctx.zoneIds, screen) : QRect();
                 if (geo.isValid()) {
-                    Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(),
-                                                  ctx.zoneIds.first(), screen, false);
+                    Q_EMIT restatementGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(),
+                                                        ctx.zoneIds.first(), screen);
                 }
             } else {
                 // Out of view: the assignment straight into that desktop's

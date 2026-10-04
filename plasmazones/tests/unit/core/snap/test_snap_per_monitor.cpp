@@ -488,7 +488,8 @@ private Q_SLOTS:
 
     // The chrome re-apply on an effect reload re-states only zones snap
     // places in view: a zone held for a desktop not shown would pull its
-    // window into a zone it is not in (F104).
+    // window into a zone it is not in (F104). It is a re-statement, never a
+    // user verb's apply, so a maximized window keeps its maximize (F490).
     void reapplyAppearanceSkipsABackgroundDesktop()
     {
         installFullResolver();
@@ -502,11 +503,13 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(screen, 2);
         m_service->assignWindowToZone(shown, m_zoneIds[1], screen, 2);
 
-        QSignalSpy spy(m_engine, &SnapEngine::applyGeometryRequested);
+        QSignalSpy spy(m_engine, &SnapEngine::restatementGeometryRequested);
+        QSignalSpy userVerbSpy(m_engine, &SnapEngine::applyGeometryRequested);
         m_engine->reapplyManagedWindowAppearance();
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.first().at(0).toString(), shown);
+        QCOMPARE(userVerbSpy.count(), 0);
         m_service->setSnapState(m_engine->snapState());
     }
 
@@ -530,7 +533,7 @@ private Q_SLOTS:
                                       : PhosphorZones::AssignmentEntry::Mode::Snapping;
         });
 
-        QSignalSpy spy(m_engine, &SnapEngine::applyGeometryRequested);
+        QSignalSpy spy(m_engine, &SnapEngine::restatementGeometryRequested);
         m_engine->reapplyManagedWindowAppearance();
 
         QCOMPARE(spy.count(), 1);

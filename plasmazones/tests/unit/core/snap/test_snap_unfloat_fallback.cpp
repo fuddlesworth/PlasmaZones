@@ -864,6 +864,37 @@ private Q_SLOTS:
         QVERIFY(!engine.snapState()->isFloating(w));
     }
 
+    // A suspension's return re-states the zone the window was snapped in, so a
+    // window maximized before it was minimized stays maximized (F560); the same
+    // unfloat by the user is the user verb's apply.
+    void testSetWindowFloat_suspensionReturnIsARestatement()
+    {
+        SnapEngine& engine = *m_engine;
+        auto* layout = installLayout(2);
+        const QString zone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|suspension-return");
+        QSignalSpy restatement(&engine, &SnapEngine::restatementGeometryRequested);
+        QSignalSpy userVerb(&engine, &SnapEngine::applyGeometryRequested);
+
+        engine.commitSnap(w, zone, QStringLiteral("DP-1"));
+        m_wts->markSuspensionFloat(w);
+        engine.setWindowFloat(w, true, QStringLiteral("DP-1"));
+        userVerb.clear();
+        engine.setWindowFloat(w, false, QStringLiteral("DP-1"));
+        QCOMPARE(engine.snapState()->zoneForWindow(w), zone);
+        QCOMPARE(restatement.count(), 1);
+        QCOMPARE(userVerb.count(), 0);
+        m_wts->clearSuspensionFloat(w);
+
+        restatement.clear();
+        engine.setWindowFloat(w, true, QStringLiteral("DP-1"));
+        userVerb.clear();
+        engine.setWindowFloat(w, false, QStringLiteral("DP-1"));
+        QCOMPARE(engine.snapState()->zoneForWindow(w), zone);
+        QCOMPARE(userVerb.count(), 1);
+        QCOMPARE(restatement.count(), 0);
+    }
+
     // The refusal through the public entry point: a remembered home on another
     // monitor is refused by a suspension unfloat, and by a USER unfloat too
     // (with the fallback setting off, the window stays floating). Nothing

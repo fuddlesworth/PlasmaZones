@@ -475,7 +475,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // rect there for the next placement capture to persist.
         m_pendingOpenGeometry.insert(shadowWindowId(windowId), geometry);
         Q_EMIT applyGeometryRequested(windowId, geometry.x(), geometry.y(), geometry.width(), geometry.height(),
-                                      QString(), screenId, false);
+                                      QString(), screenId, false,
+                                      static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
     };
     // Gated on the MEMBERS, like every sibling connect in this method: they were
     // assigned from these same parameters above, and being QPointers they also
@@ -497,7 +498,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // fresh open), so only the size is remembered, and the shadow itself
         // stays what the effect last reported.
         m_pendingOpenSize.insert(shadowWindowId(windowId), size);
-        Q_EMIT applyGeometryRequested(windowId, 0, 0, size.width(), size.height(), QString(), screenId, true);
+        Q_EMIT applyGeometryRequested(windowId, 0, 0, size.width(), size.height(), QString(), screenId, true,
+                                      static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
     };
     if (m_snapEngine) {
         connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);

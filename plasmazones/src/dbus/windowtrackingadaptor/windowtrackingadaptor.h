@@ -1360,16 +1360,14 @@ Q_SIGNALS:
     /**
      * @brief Daemon requests KWin to apply geometry (daemon-driven flow)
      * @param windowId Window to apply geometry to
-     * @param x Left edge of target geometry
-     * @param y Top edge of target geometry
-     * @param width Width of target geometry
-     * @param height Height of target geometry
+     * @param x, y, width, height Target frame
      * @param zoneId PhosphorZones::Zone to snap to (empty for float restore - do not call windowSnapped)
      * @param screenId Screen for OSD placement
      * @param sizeOnly When true, only width/height are meaningful (x/y ignored, window stays at current position)
+     * @param purpose PhosphorProtocol::PlacementPurpose: a user verb, or a re-statement that keeps maximize
      */
     void applyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
-                                const QString& screenId, bool sizeOnly);
+                                const QString& screenId, bool sizeOnly, int purpose);
 
     /**
      * @brief Daemon requests KWin to activate (focus) a window

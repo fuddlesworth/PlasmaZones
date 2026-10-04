@@ -766,7 +766,7 @@ void PlasmaZonesEffect::connectNavigationSignals()
     QDBusConnection::sessionBus().connect(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("applyGeometryRequested"), this,
-        SLOT(slotApplyGeometryRequested(QString, int, int, int, int, QString, QString, bool)));
+        SLOT(slotApplyGeometryRequested(QString, int, int, int, int, QString, QString, bool, int)));
 
     // Daemon-driven focus/cycle: daemon resolves target window and emits activateWindowRequested
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,

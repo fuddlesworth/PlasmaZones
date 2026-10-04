@@ -270,7 +270,8 @@ bool WindowTrackingAdaptor::dragEndedOnScreen(const QString& windowId, const QSt
     }
     if (preSnapGeo && preSnapGeo->width() > 0 && preSnapGeo->height() > 0) {
         Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapGeo->width(), preSnapGeo->height(), QString(),
-                                      releaseScreenId, true);
+                                      releaseScreenId, true,
+                                      static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
         m_service->clearFreeGeometry(windowId, sourceScreen);
     }
     return true;

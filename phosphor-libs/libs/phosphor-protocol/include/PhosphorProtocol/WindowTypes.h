@@ -270,6 +270,25 @@ struct OutputSettleVerdict
 
 using OutputSettleVerdictList = QList<OutputSettleVerdict>;
 
+/// Why the daemon asks the compositor to place a window, carried by
+/// WindowTracking.applyGeometryRequested. A UserVerb places the window a user
+/// action is about (a snap key, a drop, Meta+F, a routed open): its maximize and
+/// fullscreen end. A Restatement re-states a placement the window already has
+/// (a zone re-applied, a swap partner, a minimize return, a remembered float
+/// spot): a maximized or fullscreen window keeps that state.
+enum class PlacementPurpose : int {
+    UserVerb = 0,
+    Restatement = 1,
+};
+
+/// Clamp an integer wire value to a PlacementPurpose. An unknown value is a
+/// UserVerb, the arm every placement took before the purpose existed.
+inline PlacementPurpose clampPlacementPurposeFromWire(int wire)
+{
+    return wire == static_cast<int>(PlacementPurpose::Restatement) ? PlacementPurpose::Restatement
+                                                                   : PlacementPurpose::UserVerb;
+}
+
 } // namespace PhosphorProtocol
 
 Q_DECLARE_METATYPE(PhosphorProtocol::OutputSettleRow)

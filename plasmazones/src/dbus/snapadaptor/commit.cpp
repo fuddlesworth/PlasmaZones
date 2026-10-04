@@ -150,7 +150,7 @@ void SnapAdaptor::moveWindowToZoneOnScreen(const QString& windowId, const QStrin
 
     // Request compositor to apply geometry
     Q_EMIT m_adaptor->applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneId, screenId,
-                                             false);
+                                             false, static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
 
     qCInfo(lcDbusWindow) << "moveWindowToZone:" << windowId << "-> zone" << zoneId << "on screen" << screenId;
 }
@@ -205,9 +205,11 @@ void SnapAdaptor::swapWindowsById(const QString& windowId1, const QString& windo
 
     // Emit geometry requests for both
     Q_EMIT m_adaptor->applyGeometryRequested(windowId1, geo1.x(), geo1.y(), geo1.width(), geo1.height(), zoneId2,
-                                             screen2, false);
+                                             screen2, false,
+                                             static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
     Q_EMIT m_adaptor->applyGeometryRequested(windowId2, geo2.x(), geo2.y(), geo2.width(), geo2.height(), zoneId1,
-                                             screen1, false);
+                                             screen1, false,
+                                             static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
 
     qCInfo(lcDbusWindow) << "swapWindowsById:" << windowId1 << "<->" << windowId2 << "zones:" << zoneId1 << "<->"
                          << zoneId2;

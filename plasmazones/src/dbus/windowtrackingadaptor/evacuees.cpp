@@ -333,7 +333,8 @@ QString WindowTrackingAdaptor::reassertEvacuee(const OutputSettleRow& row, QSet<
         const QRect geo = m_service->resolveZoneGeometry(zones, screen);
         if (geo.isValid()) {
             Q_EMIT applyGeometryRequested(row.windowId, geo.x(), geo.y(), geo.width(), geo.height(), zones.first(),
-                                          screen, false);
+                                          screen, false,
+                                          static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
             return screen;
         }
     }
@@ -363,7 +364,7 @@ QString WindowTrackingAdaptor::reassertEvacuee(const OutputSettleRow& row, QSet<
     if (m_evacuees->placedAfterEvacuation.contains(windowId) && row.baseline().isValid()) {
         const QString screen = row.sourceScreenId;
         Q_EMIT applyGeometryRequested(row.windowId, row.baseX, row.baseY, row.baseWidth, row.baseHeight, QString(),
-                                      screen, false);
+                                      screen, false, static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
         return screen;
     }
     return QString();
