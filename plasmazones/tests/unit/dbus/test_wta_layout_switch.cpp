@@ -171,6 +171,21 @@ private Q_SLOTS:
         QVERIFY(service()->zoneForWindow(hidden).isEmpty());
     }
 
+    // The settings reflow (a gap change, the tiling master switch going off)
+    // re-applies nothing with snapping switched off (F469).
+    void reapplySnapZonesPlacesNothingWithSnappingOff()
+    {
+        service()->assignWindowToZone(QStringLiteral("app|reflow"), m_zoneIds[0], m_screenId, m_desktop);
+        QSignalSpy batch(m_wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+        m_settings->setSnappingEnabled(false);
+        m_snapAdaptor->reapplySnapZones();
+        QCOMPARE(batch.count(), 0);
+        QVERIFY(m_wta->getUpdatedWindowGeometries().isEmpty());
+
+        m_settings->setSnappingEnabled(true);
+        QVERIFY2(!m_wta->getUpdatedWindowGeometries().isEmpty(), "control: snapping on, the zone is re-applied");
+    }
+
 private:
     PhosphorZones::Layout* addThreeZoneLayout()
     {

@@ -165,15 +165,11 @@ public:
      * itself has no notion of disabled contexts. The daemon closure passes
      * the current activity.
      *
-     * Applied inside `resolveWindowRestore` so BOTH the engine's own
-     * `windowOpened` path AND the D-Bus `SnapAdaptor::resolveWindowRestore`
-     * path (used by the KWin effect for per-window restores) hit the same
-     * gate. A placement record saved before the user disabled the context
-     * can no longer drag a freshly opened window into a zone the user told
-     * us to stay out of (discussion #461 item 7). The
-     * `isPersistedContextDisabled` filter on disk load only fires on
-     * startup, so without this gate a record saved during the running
-     * session would leak through.
+     * Applied by `resolveWindowRestore` (both the engine's own open path and
+     * the effect's D-Bus restore), the desktop carry, the membership
+     * re-apply and the layout-switch resnap, so a record saved before the
+     * user disabled the context cannot place a window there (discussion #461
+     * item 7, F445).
      *
      * When unset (default), the engine behaves as if every context is
      * active — the historical default that unit tests rely on.
@@ -1099,9 +1095,12 @@ private:
         const std::function<void(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                  int desktop, int storeDesktop, const QString& storeActivity)>& fn) const;
 
-    /// The desktop a restored window is being placed onto: the registry's
-    /// answer for the window, else the record's own desktop when the record
-    /// still names a zone there, else the screen's current desktop.
+    /// Snapping's master switch is off (settings wired and saying so).
+    bool snappingSwitchedOff() const;
+    /// Snapping is on and not disabled in @p key's (screen, desktop) context.
+    bool snapsInContext(const PhosphorEngine::PlacementStateKey& key) const;
+    /// The desktop a restored window lands on: the registry's answer, else the
+    /// record's when it still names a zone there, else the screen's current.
     int restoreDesktopFor(const QString& windowId, const PhosphorEngine::WindowPlacement& rec,
                           const QString& restoreScreen) const;
 

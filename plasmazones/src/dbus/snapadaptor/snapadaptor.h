@@ -79,10 +79,11 @@ public:
      */
     void clearEngine();
 
-    /// Re-apply every window's current zone as a re-statement batch (action
-    /// "restate": no Snap Assist, no OSD), for a gap or work-area reflow. Not a
-    /// D-Bus slot.
-    void restateCurrentAssignments();
+    /// Re-apply the zones the windows hold on the screens snapping runs on in
+    /// an enabled context (only @p screens when not empty), for a settings
+    /// reflow. A re-statement batch ("restate": no Snap Assist) by default;
+    /// never an OSD. Not a D-Bus slot.
+    void reapplySnapZones(const QStringList& screens = {}, bool restatement = true);
 
     /**
      * @brief Set the frozen-snapshot resolver used by snaprestore's disable

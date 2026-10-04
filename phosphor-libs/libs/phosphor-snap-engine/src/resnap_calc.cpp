@@ -63,9 +63,15 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
         }
     };
 
-    // Group resnap entries by screen so each screen uses its own layout
+    // Group resnap entries by screen so each screen uses its own layout. A
+    // layout switch places nothing with snapping switched off, in a context
+    // the user disabled, or for a window snapping leaves alone (F445).
     QHash<QString, QVector<const ResnapEntry*>> entriesByScreen;
     for (const ResnapEntry& entry : resnapBuffer) {
+        if (snappingSwitchedOff() || isWindowExcluded(entry.windowId, entry.screenId)
+            || (m_shouldRestorePredicate && !m_shouldRestorePredicate(entry.screenId, entry.virtualDesktop))) {
+            continue;
+        }
         entriesByScreen[entry.screenId].append(&entry);
     }
 
@@ -192,6 +198,10 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             return;
         }
         if (!onlyWindows.isEmpty() && !onlyWindows.contains(windowId)) {
+            return;
+        }
+        // A window snapping now leaves alone is not put back (F445).
+        if (isWindowExcluded(windowId, screenId)) {
             return;
         }
         // Skip windows floating in SNAPPING mode, read from this engine's
@@ -589,8 +599,9 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
         if (zoneIdList.isEmpty()) {
             return;
         }
-        // Rotation acts on the activity in view too.
-        if (!storeActivity.isEmpty() && storeActivity != activityInView) {
+        // Rotation acts on the activity in view too, and never on a window
+        // snapping leaves alone (F445).
+        if ((!storeActivity.isEmpty() && storeActivity != activityInView) || isWindowExcluded(windowId, screenId)) {
             return;
         }
 

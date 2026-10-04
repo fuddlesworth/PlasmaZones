@@ -228,6 +228,11 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         if (!m_layoutManager || !m_windowTracker) {
             return std::nullopt;
         }
+        // Snapping switched off, or a window snapping leaves alone, carries
+        // nothing: the carry is a placement like any other (F445).
+        if (snappingSwitchedOff() || isWindowExcluded(entry.windowId, screenId)) {
+            return std::nullopt;
+        }
         // A FLOATED window carries nothing. It keeps its own free geometry, so
         // there is no ghost rect to correct, and its zone assignment is only
         // the memory a float-toggle would resnap into.
@@ -280,6 +285,12 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             if (m_layoutManager->modeForScreen(screenId, desktop, currentActivity())
                 != PhosphorZones::AssignmentEntry::Mode::Snapping) {
                 continue; // tiling or scrolling owns the arrival on that desktop
+            }
+            // A desktop the user disabled snapping on, or one running no
+            // layout, takes nothing, like a desktop another mode owns (F445).
+            if ((m_shouldRestorePredicate && !m_shouldRestorePredicate(screenId, desktop))
+                || !m_layoutManager->layoutForScreen(screenId, desktop, currentActivity())) {
+                continue;
             }
             snappingDestination = true;
             // A shared layout yields the same zone id and the window does not
@@ -404,7 +415,7 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             // below rather than waiting for the user to snap it again.
             SnapState* state = ensureStateForKey(currentKey);
             m_states.addMembership(entry.windowId, currentKey);
-            if (state && m_windowTracker && !carriedIntoCurrentContext
+            if (state && m_windowTracker && !carriedIntoCurrentContext && snapsInContext(currentKey)
                 && state->zonesForWindow(entry.windowId).isEmpty()) {
                 if (const auto rec = m_windowTracker->placementStore().peekExact(entry.windowId)) {
                     const QStringList remembered = rec->slotFor(engineId()).zonesByDesktop.value(currentKey.desktop);
@@ -509,11 +520,18 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
     // snapping, and re-committing them here would fight the tiling engine's
     // own placement on every desktop switch (seen live: the window bounced
     // between its tile and its old zone).
+    // Not with snapping switched off or disabled in this context (F445), and
+    // only zones the layout this context runs now holds: a hidden desktop's
+    // layout may have changed since the window was snapped there (F982).
     QSet<QString> reapply;
-    if (const SnapState* currentState = isActiveOnScreen(screenId) ? m_states.stateForKey(currentKey) : nullptr) {
+    if (const SnapState* currentState =
+            isActiveOnScreen(screenId) && snapsInContext(currentKey) ? m_states.stateForKey(currentKey) : nullptr) {
         for (const QString& windowId : m_states.trackedWindowIds()) {
+            const QStringList zones = currentState->zonesForWindow(windowId);
             if (m_states.hasMembership(windowId, currentKey) && m_states.membershipsForWindow(windowId).size() > 1
-                && !currentState->zonesForWindow(windowId).isEmpty()) {
+                && !zones.isEmpty()
+                && PhosphorZones::LayoutUtils::contextLayoutHoldsZones(
+                    m_layoutManager, currentKey.screenId, currentKey.desktop, currentKey.activity, zones)) {
                 reapply.insert(windowId);
             }
         }

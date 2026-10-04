@@ -9,6 +9,7 @@
 #include <PhosphorZones/Zone.h>
 #include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
+#include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include <QScreen>
@@ -166,15 +167,24 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
 
 PhosphorProtocol::WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeometries()
 {
+    // A geometry re-apply is a placement: none with snapping switched off,
+    // none in a context the user disabled (F445).
+    if (m_settings && !m_settings->snappingEnabled()) {
+        return {};
+    }
     QHash<QString, QRect> geometries = m_service->updatedWindowGeometries();
     PhosphorProtocol::WindowGeometryList result;
     result.reserve(geometries.size());
+    const QString activity = m_layoutManager->currentActivity();
     for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
+        const QString screenId = m_service->screenForWindow(it.key());
+        if (isPersistedContextDisabled(screenId, currentDesktopForScreen(screenId), activity)) {
+            continue;
+        }
         // The screen the zone is on, so the effect re-applies only a window
         // that is on that output (F616): a window KWin moved off it is the
         // settle's to classify, not this pass's to pull back.
-        result.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value(),
-                                                                      m_service->screenForWindow(it.key())));
+        result.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value(), screenId));
     }
     qCDebug(lcDbusWindow) << "Returning updated geometries for" << result.size() << "windows";
     return result;

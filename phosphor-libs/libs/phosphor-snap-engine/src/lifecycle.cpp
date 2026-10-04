@@ -856,6 +856,19 @@ bool SnapEngine::isSnapModeScreen(const QString& screenId) const
         == PhosphorZones::AssignmentEntry::Mode::Snapping;
 }
 
+bool SnapEngine::snappingSwitchedOff() const
+{
+    // Unwired settings (unit tests) leave snapping on, as isEnabled's other
+    // gates do.
+    const auto* s = snapSettings();
+    return s && !s->snappingEnabled();
+}
+
+bool SnapEngine::snapsInContext(const PhosphorEngine::PlacementStateKey& key) const
+{
+    return !snappingSwitchedOff() && (!m_shouldRestorePredicate || m_shouldRestorePredicate(key.screenId, key.desktop));
+}
+
 bool SnapEngine::isEnabled() const noexcept
 {
     // Snapping's global master toggle is the engine's enabled state — there is

@@ -407,6 +407,16 @@ void Daemon::initLayoutAndSettingsWiring()
         }
         m_previewNotifyTimer.start();
 
+        // The screens a tiling engine runs on before the switch, so the
+        // re-apply below reaches only the ones that went back to snapping: a
+        // screen still tiled keeps its snap zones as frozen memory (F469).
+        QSet<QString> tiledBefore;
+        if (m_screenModeRouter && m_screenManager) {
+            const auto parts = m_screenModeRouter->partitionByMode(m_screenManager->effectiveScreenIds());
+            tiledBefore = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
+            tiledBefore.unite(QSet<QString>(parts.scrolling.begin(), parts.scrolling.end()));
+        }
+
         // Capture autotile window order BEFORE any mode switch destroys PhosphorTiles::TilingState.
         // Saved for deterministic re-seeding when autotile is re-enabled.
         // MERGE (not replace): the map is shared with the scrolling engine
@@ -452,11 +462,8 @@ void Daemon::initLayoutAndSettingsWiring()
         // same recompute above.
         if (((autotileToggled && !autotileNow) || (scrollingToggled && !scrollingNow)) && m_windowTrackingAdaptor
             && m_snapAdaptor && m_snapEngine) {
-            // Silent: a settings change that leaves nothing to put back is not
-            // a failed user resnap.
-            if (auto* snap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-                snap->resnapCurrentAssignments(QString(), {}, PhosphorSnapEngine::SnapEngine::ResnapFeedback::Silent);
-            }
+            // Silent, and only the screens that went from tiling to snapping.
+            m_snapAdaptor->reapplySnapZones(QStringList(tiledBefore.begin(), tiledBefore.end()), false);
             // Batched float-restore: one resnap signal per autotile-disabled
             // toggle instead of per-window D-Bus chatter. Downcast mirrors
             // signals.cpp's resnap-batching path; a non-snap concrete engine
@@ -532,9 +539,11 @@ void Daemon::initLayoutAndSettingsWiring()
     // instead of requiring a manual re-snap of each window (discussion #661).
     // The signals below are re-emitted by Settings::load() only when the value
     // actually changed, so this never fires on unrelated saves (colours,
-    // shortcuts). Autotile windows are already retiled by the settingsChanged
-    // handler above; this covers manually-snapped windows. Debounced so a batch
-    // of per-side gap edits in one save collapses into a single resnap pass.
+    // shortcuts). It reaches only the screens snapping runs on, in contexts not
+    // disabled (F469): a tiled screen's frozen snap zones are memory for its
+    // return to snapping, and the tiling engines retile on their own gap
+    // signals. Debounced so a batch of per-side gap edits in one save
+    // collapses into a single pass.
     m_gapResnapTimer.setSingleShot(true);
     m_gapResnapTimer.setInterval(100);
     m_layoutSettingsWiringConnections.append(connect(&m_gapResnapTimer, &QTimer::timeout, this, [this]() {
@@ -543,7 +552,7 @@ void Daemon::initLayoutAndSettingsWiring()
         }
         // Settings-driven reflow, not user navigation: a re-statement batch,
         // which raises no OSD and no Snap Assist.
-        m_snapAdaptor->restateCurrentAssignments();
+        m_snapAdaptor->reapplySnapZones();
     }));
     const auto scheduleGapResnap = [this]() {
         m_gapResnapTimer.start();

@@ -122,16 +122,22 @@ void SnapAdaptor::resnapCurrentAssignments(const QString& screenFilter)
     }
 }
 
-void SnapAdaptor::restateCurrentAssignments()
+void SnapAdaptor::reapplySnapZones(const QStringList& screens, bool restatement)
 {
     if (!m_engine) {
         return;
     }
-    QVector<ZoneAssignmentEntry> entries = m_engine->calculateResnapFromCurrentAssignments();
-    for (ZoneAssignmentEntry& entry : entries) {
-        entry.restatement = true;
+    QVector<ZoneAssignmentEntry> entries;
+    for (const QString& screenId : resolveSnapModeScreensForResnap(QString())) {
+        if (screens.isEmpty() || screens.contains(screenId)) {
+            entries.append(m_engine->calculateResnapFromCurrentAssignments(screenId));
+        }
     }
-    processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("restate"));
+    for (ZoneAssignmentEntry& entry : entries) {
+        entry.restatement = restatement;
+    }
+    processBatchEntries(m_adaptor, m_engine, entries,
+                        restatement ? QStringLiteral("restate") : QStringLiteral("resnap"));
 }
 
 void SnapAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId)

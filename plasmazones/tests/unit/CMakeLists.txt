@@ -200,6 +200,13 @@ add_executable(test_snap_desktop_membership core/snap/test_snap_desktop_membersh
 target_link_libraries(test_snap_desktop_membership PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_desktop_membership COMMAND test_snap_desktop_membership)
 
+# The engine's system placements obey what the user switched off (F445) and
+# the re-apply puts back only zones the layout in view holds (F982).
+add_executable(test_snap_carry_gates core/snap/test_snap_carry_gates.cpp)
+target_link_libraries(test_snap_carry_gates PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorRules::PhosphorRules)
+add_test(NAME test_snap_carry_gates COMMAND test_snap_carry_gates)
+
 # What a window leaving a desktop or activity takes with it: the record's
 # snap slot on a move to a desktop snap does not run, and the desktop and
 # activity prunes of a window still open there.
