@@ -3,10 +3,11 @@
 
 /**
  * @file test_wta_screen_changed.cpp
- * @brief WindowTrackingAdaptor::windowScreenChanged coverage for SNAPPED
- *        windows: the stored-screen comparison that decides between keeping
- *        the snap and unsnapping, the empty-screen bail, and the
- *        "screen_changed" windowStateChanged emission.
+ * @brief WindowTrackingAdaptor::windowScreenChanged coverage: the
+ *        stored-screen comparison that decides between keeping the snap and
+ *        unsnapping, the empty-screen bail, the "screen_changed"
+ *        windowStateChanged emission, and, with per-screen stores, what an
+ *        output move releases on the output left.
  *
  * Why this surface earns a suite of its own: it is the arm a compositor-side
  * defect fires straight into. The effect's endDrag ApplySnap branch calls
@@ -29,6 +30,11 @@
  */
 
 #include "wta_convenience_fixture.h"
+#include "helpers/VirtualScreenTestHelpers.h"
+
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorScreens/VirtualScreen.h>
+#include <QScopeGuard>
 
 class TestWtaScreenChanged : public QObject, protected WtaConvenienceFixture
 {
@@ -171,6 +177,56 @@ private Q_SLOTS:
                  "a report from a different physical monitor must drop a virtual-screen assignment");
     }
 
+    // The same move with a real ScreenManager, which the shared fixture lacks.
+    // The physical report is resolved to a virtual screen through the window's
+    // FRAME. Resolving it through the zone instead measured the zone on the
+    // stored screen, landed back on the stored virtual screen, and kept the
+    // snap of a window that had changed monitors.
+    void testWindowScreenChanged_physicalReportResolvesTheVirtualScreenFromTheFrame()
+    {
+        const QString hdmi = QStringLiteral("HDMI-1");
+        const QString dp = QStringLiteral("DP-1");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(hdmi, QRect(0, 0, 1920, 1080), hdmi);
+        fake.addScreen(dp, QRect(1920, 0, 1920, 1080), dp);
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+        QVERIFY(screenMgr.setVirtualScreenConfig(hdmi, PlasmaZones::TestHelpers::makeSplitConfig(hdmi)));
+        QVERIFY(screenMgr.setVirtualScreenConfig(dp, PlasmaZones::TestHelpers::makeSplitConfig(dp)));
+        const QString hdmiLeft = PhosphorIdentity::VirtualScreenId::make(hdmi, 0);
+        const QString dpRight = PhosphorIdentity::VirtualScreenId::make(dp, 1);
+        QCOMPARE(screenMgr.effectiveScreenAt(QPoint(3300, 400)), dpRight);
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap->setEngineSettings(m_settings);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr, nullptr);
+        const auto teardown = qScopeGuard([wta, snap] {
+            wta->service()->setSnapEngine(nullptr);
+            wta->service()->setSnapState(nullptr);
+            delete snap;
+        });
+
+        const QString windowId = QStringLiteral("brave-browser|screen-frame");
+        snap->commitSnap(windowId, m_zoneIds[0], hdmiLeft);
+        QCOMPARE(wta->service()->screenForWindow(windowId), hdmiLeft);
+        wta->setFrameGeometry(windowId, 3100, 200, 400, 300); // in DP-1's right half
+
+        QSignalSpy stateSpy(wta, &WindowTrackingAdaptor::windowStateChanged);
+        wta->windowScreenChanged(windowId, dp);
+
+        QVERIFY2(wta->service()->zoneForWindow(windowId).isEmpty(), "a window that changed monitors must unsnap");
+        QCOMPARE(stateSpy.count(), 1);
+        const auto entry = stateSpy.first().at(1).value<PhosphorProtocol::WindowStateEntry>();
+        QCOMPARE(entry.changeType, QStringLiteral("screen_changed"));
+        QCOMPARE(entry.screenId, dpRight);
+    }
+
     // Repeated reports for the assigned screen stay inert. The effect can
     // legitimately emit more than one per apply (the synchronous frame change
     // and an async follow-up from an X11 size constraint), so idempotence
@@ -188,6 +244,167 @@ private Q_SLOTS:
                      "no repeat of an assigned-screen report may drop the snap");
         }
         QCOMPARE(m_wta->service()->screenForWindow(windowId), target);
+    }
+
+    // ── Output moves with per-screen stores ──────────────────────────────
+
+    // An output move of a window snapped on TWO desktops releases every
+    // membership it held on the old output, not only the desktop in view:
+    // the other desktop's zone would otherwise re-apply on the next switch
+    // and drag the window back across monitors (seen live on two outputs).
+    void testScreenChanged_releasesEveryMembershipOnTheOldOutput()
+    {
+        installPerScreenResolver();
+
+        const QString w = QStringLiteral("app|two-desktops");
+        const QString other = QStringLiteral("DP-2");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 2);
+        m_snapEngine->stateForWindowOnScreen(w, m_screenId, 2)->assignWindowToZone(w, m_zoneIds[1], m_screenId, 2);
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(other, 1);
+        m_wta->service()->placementStore().record(*m_snapEngine->capturePlacement(w));
+
+        m_wta->windowScreenChanged(w, other);
+
+        auto* onOne = static_cast<PhosphorSnapEngine::SnapState*>(m_snapEngine->stateForScreen(m_screenId));
+        QVERIFY(onOne->zonesForWindow(w).isEmpty());
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 2);
+        auto* onTwo = static_cast<PhosphorSnapEngine::SnapState*>(m_snapEngine->stateForScreen(m_screenId));
+        QVERIFY2(onTwo->zonesForWindow(w).isEmpty(), "the other desktop's zone on the old output must go");
+        QVERIFY(!m_snapEngine->holdsWindowInState(w, onTwo));
+        // The window ends free and untracked by snap: nothing on the new
+        // output either, until the user snaps it there.
+        auto* onOther = static_cast<PhosphorSnapEngine::SnapState*>(m_snapEngine->stateForScreen(other));
+        QVERIFY(!onOther || !m_snapEngine->holdsWindowInState(w, onOther));
+        QVERIFY(!m_snapEngine->isWindowTracked(w));
+        // The record's snap slot went with it (another monitor), so neither a
+        // restart nor a resnap brings the old output's zones back.
+        const auto rec = m_wta->service()->placementStore().peekExact(w);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
+        m_wta->service()->setSnapState(m_snapEngine->snapState());
+    }
+
+    // A zone the window holds on a BACKGROUND desktop of the output it left
+    // counts as snapped, though the desktop in view holds it with no zone.
+    // Reading the view alone took it for a free window and kept every
+    // membership on the old output: switching to that desktop re-applied the
+    // zone and dragged the window back across monitors.
+    void testScreenChanged_releasesAZoneHeldOnABackgroundDesktop()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString w = QStringLiteral("app|background-zone");
+        const QString other = QStringLiteral("DP-2");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 2);
+        QVERIFY(m_snapEngine->stateForWindowOnScreen(w, m_screenId, 2)); // adopted there, no zone
+        m_snapEngine->setCurrentDesktopForScreen(other, 1);
+        m_wta->service()->placementStore().record(*m_snapEngine->capturePlacement(w));
+        QVERIFY(m_wta->service()->zoneForWindow(w).isEmpty()); // nothing in view
+
+        m_wta->windowScreenChanged(w, other);
+
+        QVERIFY2(!m_snapEngine->isWindowTracked(w), "no membership may stay on the output the window left");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        auto* onOne = static_cast<PhosphorSnapEngine::SnapState*>(m_snapEngine->stateForScreen(m_screenId));
+        QVERIFY(onOne->zonesForWindow(w).isEmpty());
+        const auto rec = m_wta->service()->placementStore().peekExact(w);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
+    }
+
+    // A floating window KWin moves to another output ends floating there with
+    // no home on the output it left, and the move is announced: the float
+    // relay dedups on the float bit alone, so without the windowStateChanged
+    // entry no subscriber heard of it.
+    void testScreenChanged_floatingWindowForgetsItsHomeAndIsAnnounced()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString w = QStringLiteral("app|floated-move");
+        const QString other = QStringLiteral("DP-2");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(other, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        m_snapEngine->setWindowFloat(w, true, m_screenId);
+        QVERIFY(m_snapEngine->isFloating(w));
+        QCOMPARE(m_wta->service()->preFloatScreen(w), m_screenId);
+
+        QSignalSpy stateSpy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+        m_wta->windowScreenChanged(w, other);
+
+        QVERIFY(m_snapEngine->isFloating(w));
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(w), other);
+        QVERIFY2(m_wta->service()->preFloatZones(w).isEmpty(), "the home on the output left must be forgotten");
+        QCOMPARE(stateSpy.count(), 1);
+        const auto entry = stateSpy.first().at(1).value<PhosphorProtocol::WindowStateEntry>();
+        QCOMPARE(entry.changeType, QStringLiteral("screen_changed"));
+        QCOMPARE(entry.screenId, other);
+        QVERIFY(entry.isFloating);
+    }
+
+    // The unsnap clears the last-used zone of the screen the window left, and
+    // only that one: the zone was unassigned there. Another screen running the
+    // same layout remembers its own last-used zone, which this move did not
+    // touch.
+    void testScreenChanged_clearsTheLastUsedOfTheScreenLeftOnly()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString w = QStringLiteral("app|lastused-move");
+        const QString other = QStringLiteral("DP-2");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(other, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        auto* onA = static_cast<PhosphorSnapEngine::SnapState*>(m_snapEngine->stateForScreen(m_screenId));
+        onA->restoreLastUsedZone(m_zoneIds[0], m_screenId, QString(), 1);
+        PhosphorSnapEngine::SnapState* onB = m_snapEngine->stateForWindowOnScreen(QStringLiteral("app|on-b"), other);
+        QVERIFY(onB && onB != onA);
+        onB->restoreLastUsedZone(m_zoneIds[0], other, QString(), 1);
+
+        m_wta->windowScreenChanged(w, other);
+
+        QVERIFY(m_wta->service()->zoneForWindow(w).isEmpty());
+        QVERIFY(onA->lastUsedZoneId().isEmpty());
+        QCOMPARE(onB->lastUsedZoneId(), m_zoneIds[0]);
+    }
+
+    // A crossing between virtual screens of ONE monitor unsnaps like any
+    // move, but keeps the record's snap slot for now: only a change of
+    // monitor releases it.
+    void testScreenChanged_virtualScreenCrossingKeepsTheRecordSlot()
+    {
+        installPerScreenResolver();
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString w = QStringLiteral("app|vs-cross");
+        const QString vs0 = QStringLiteral("DP-1/vs:0");
+        const QString vs1 = QStringLiteral("DP-1/vs:1");
+        m_snapEngine->setCurrentDesktopForScreen(vs0, 1);
+        m_snapEngine->setCurrentDesktopForScreen(vs1, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], vs0, 1);
+        m_wta->service()->placementStore().record(*m_snapEngine->capturePlacement(w));
+
+        m_wta->windowScreenChanged(w, vs1);
+
+        QVERIFY(m_wta->service()->zoneForWindow(w).isEmpty());
+        const auto rec = m_wta->service()->placementStore().peekExact(w);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateSnapped()));
     }
 };
 

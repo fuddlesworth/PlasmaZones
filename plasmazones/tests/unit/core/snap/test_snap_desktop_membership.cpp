@@ -798,6 +798,45 @@ private Q_SLOTS:
         QCOMPARE(persistedZonesByDesktop(kWindow).size(), 3);
     }
 
+    // The leave primitive: every membership off the kept screen goes with
+    // everything it held (zone, the last-used naming it, float bit, pre-float
+    // home, persisted entry), while the kept screen's stay untouched. It is
+    // silent: the caller decides what to announce.
+    void releaseWindowOffScreenKeepsOnlyTheKeptScreen()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        SnapState* onOne = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
+        onOne->restoreLastUsedZone(m_zoneIds[0], kScreen, QString(), 1);
+        onOne->addPreFloatZone(kWindow, {m_zoneIds[2]});
+        onOne->addPreFloatScreen(kWindow, kScreen);
+        // A floating membership on the other screen.
+        m_engine->setCurrentDesktopForScreen(kScreen2, 1);
+        SnapState* onOther = m_engine->stateForWindowOnScreen(kWindow, kScreen2, 1);
+        onOther->setFloatingOnScreen(kWindow, kScreen2, 1);
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+
+        QSignalSpy zoneSpy(m_service, &PhosphorPlacement::WindowTrackingService::windowZoneChanged);
+        m_engine->releaseWindowOffScreen(kWindow, kScreen2);
+
+        QVERIFY(zonesOn(1, kWindow).isEmpty());
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
+        QVERIFY(onOne->lastUsedZoneId().isEmpty());
+        QVERIFY(onOne->preFloatZones(kWindow).isEmpty());
+        QVERIFY(!persistedZonesByDesktop(kWindow).contains(1));
+        QVERIFY(!persistedZonesByDesktop(kWindow).contains(2));
+        QVERIFY(m_engine->holdsWindowInState(kWindow, onOther));
+        QVERIFY(onOther->isFloating(kWindow));
+        QCOMPARE(zoneSpy.count(), 0);
+
+        // Keeping nothing releases the rest, and the window is untracked.
+        m_engine->releaseWindowOffScreen(kWindow, QString());
+        QVERIFY(!m_engine->isWindowTracked(kWindow));
+    }
+
     // Discussion #1124, mixed modes: a window snapped on a screen that then
     // went to tiling keeps its zone there as memory for the return to
     // snapping. Moved to another output while tiled, it is held there by the

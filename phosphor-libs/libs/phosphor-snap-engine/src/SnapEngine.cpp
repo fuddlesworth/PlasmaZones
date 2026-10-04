@@ -219,17 +219,15 @@ bool SnapEngine::migrateWindowToKey(const QString& windowId, const PhosphorEngin
     const bool crossScreen = oldKey.screenId != newKey.screenId;
     const bool hadResidence = !oldState->screenForWindow(canonical).isEmpty();
     const bool onAllDesktops = hadResidence && oldState->desktopForWindow(canonical) == 0;
+    QStringList removed;
     if (crossScreen) {
         // The zone stays behind, unassigned: it names a zone of the old
         // screen's layout, and carrying it let a read on the new screen answer
         // with a zone the window had left. The store's own last-used naming it
-        // clears inside the unassign; the global representative follows.
+        // clears inside the unassign; the global representative follows below.
         if (oldState->isWindowSnapped(canonical)) {
-            const QStringList removed = oldState->zonesForWindow(canonical);
+            removed += oldState->zonesForWindow(canonical);
             oldState->unassignWindow(canonical);
-            if (m_globals && m_globals != oldState && removed.contains(m_globals->lastUsedZoneId())) {
-                m_globals->restoreLastUsedZone({}, {}, {}, 0);
-            }
         }
         if (m_windowTracker && oldKey.desktop >= 1) {
             m_windowTracker->forgetDesktopZones(canonical, engineId(), oldKey.desktop);
@@ -264,39 +262,13 @@ bool SnapEngine::migrateWindowToKey(const QString& windowId, const PhosphorEngin
         if (key == newKey || key.screenId != oldKey.screenId) {
             continue;
         }
-        if (SnapState* state = m_states.stateForKey(key)) {
-            state->removeWindowData(canonical);
-        }
-        m_states.removeMembership(canonical, key);
-        if (m_windowTracker) {
-            m_windowTracker->forgetDesktopZones(canonical, engineId(), key.desktop);
-        }
+        releaseMembership(windowId, key, removed);
     }
+    clearGlobalLastUsedIfRemoved(removed);
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "SnapEngine::migrateWindowToScreen:" << canonical << "from" << oldKey.screenId << "to" << newKey.screenId
         << "desktop" << newKey.desktop;
     return true;
-}
-
-void SnapEngine::dropPreFloatHome(SnapState* state, const QString& windowId)
-{
-    if (!state) {
-        return;
-    }
-    const QString canonical = canonicalWindowId(windowId);
-    const QStringList home = state->preFloatZones(canonical);
-    state->clearPreFloatZone(canonical);
-    if (!m_windowTracker || home.isEmpty()) {
-        return;
-    }
-    // The appId alias the float wrote beside it (for a close and reopen)
-    // answers every pre-float lookup from any store, so it goes too, but
-    // only while it still names this window's home: a sibling of the same
-    // app may have written its own since.
-    const QString appId = m_windowTracker->currentAppIdFor(windowId);
-    if (!appId.isEmpty() && appId != canonical && state->preFloatZones(appId) == home) {
-        state->clearPreFloatZone(appId);
-    }
 }
 
 void SnapEngine::setCurrentDesktop(int desktop)

@@ -196,12 +196,27 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // that screen snaps again the window would count as an occupant of a zone
     // on a monitor it is not on. A window is on one screen, and the tiling
     // engine holding it elsewhere is the truth, so the snap engine forgets it.
+    // The forget drops the window's data store by store without the unassign,
+    // and the unassign is what clears a store's last-used naming the zone: a
+    // placement on that screen would otherwise still reach for the zone the
+    // window left.
+    bool lastUsedCleared = false;
     for (const QString& windowId : std::as_const(departed)) {
         qCInfo(lcPlacement) << "Resnap buffer: skipping" << windowId << "held by a tiling engine on"
                             << tilingHeldScreenForWindow(windowId) << "- forgetting its snap assignment";
+        for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+            if (state && state->isWindowSnapped(windowId)) {
+                const QStringList zones = state->zonesForWindow(windowId);
+                lastUsedCleared |= state->unassignWindow(windowId).lastUsedZoneCleared;
+                lastUsedCleared |= clearGlobalLastUsedIfRemoved(zones, state);
+            }
+        }
         if (m_snapResolver.forgetWindow) {
             m_snapResolver.forgetWindow(windowId);
         }
+    }
+    if (lastUsedCleared) {
+        markDirty(DirtyLastUsedZone);
     }
 
     if (!newBuffer.isEmpty()) {

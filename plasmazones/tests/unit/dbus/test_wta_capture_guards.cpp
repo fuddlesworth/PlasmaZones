@@ -18,6 +18,7 @@
 #include <QTest>
 #include <QCoreApplication>
 #include <QRect>
+#include <QScopeGuard>
 #include <QString>
 #include <QStringList>
 #include <QUuid>
@@ -64,10 +65,15 @@ public:
     }
 
     QRect managedRect; // returned for every window
+    QList<QPair<QString, QString>> releasedOffScreen; // (windowId, keepScreenId) per call
 
     QRect lastManagedRect(const QString&) const override
     {
         return managedRect;
+    }
+    void releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId) override
+    {
+        releasedOffScreen.append({windowId, keepScreenId});
     }
 
     bool isActiveOnScreen(const QString&) const override
@@ -887,6 +893,47 @@ private Q_SLOTS:
         wta->service()->setSnapEngine(nullptr);
         snap.reset();
         wta->setWindowRegistry(nullptr);
+    }
+
+    // A tiling hold the window keeps on the screen it left (a background
+    // desktop's tile of a multi-desktop window) is released on EVERY branch of
+    // windowScreenChanged. Only the free-window branch did it, so a snapped or
+    // floating window moved by KWin kept the hold, and returning to that
+    // desktop pulled it back across monitors.
+    void testScreenChangedReleasesTilingHoldsOnEveryBranch()
+    {
+        StubTileRectEngine tileEngine; // outlives the adaptor, see the tests above
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta =
+            new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr, &parent);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap->setEngineSettings(m_settings);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), &tileEngine, nullptr);
+        const auto teardown = qScopeGuard([wta, &snap] {
+            wta->setEngines(nullptr, nullptr, nullptr);
+            wta->service()->setSnapState(nullptr);
+            wta->service()->setSnapEngine(nullptr);
+            snap.reset();
+        });
+
+        const QString snapped = QStringLiteral("app|snapped-move");
+        const QString floating = QStringLiteral("app|floating-move");
+        const QString zoneId = QUuid::createUuid().toString();
+        snap->snapState()->assignWindowToZone(snapped, zoneId, QStringLiteral("DP-1"), 1);
+        snap->snapState()->setFloatingOnScreen(floating, QStringLiteral("DP-1"), 1);
+        QCOMPARE(wta->service()->zoneForWindow(snapped), zoneId);
+
+        wta->windowScreenChanged(snapped, QStringLiteral("DP-2"));
+        wta->windowScreenChanged(floating, QStringLiteral("DP-2"));
+
+        QVERIFY2(tileEngine.releasedOffScreen.contains(qMakePair(snapped, QStringLiteral("DP-2"))),
+                 "the snapped branch must release a tiling hold off the new screen");
+        QVERIFY2(tileEngine.releasedOffScreen.contains(qMakePair(floating, QStringLiteral("DP-2"))),
+                 "the floating branch must release a tiling hold off the new screen");
+        QVERIFY(wta->service()->zoneForWindow(snapped).isEmpty());
     }
 };
 

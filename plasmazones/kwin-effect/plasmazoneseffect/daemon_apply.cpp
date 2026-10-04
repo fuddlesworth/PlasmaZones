@@ -924,6 +924,12 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
     // path's invalidation when a float toggle emits both signals — see
     // flushPendingRuleInvalidations), so no separate invalidate call is needed.
     m_navigationHandler->setWindowZone(liveWindowId, state.zoneId);
+    // A window KWin moved to another screen is no longer snapped there: the
+    // daemon dropped its zone, and a snapped mark left behind keeps its snap
+    // decoration and has a later minimize floated as a snap suspension.
+    if (state.changeType == QLatin1String("screen_changed")) {
+        m_snapHandler->clearWindowSnapped(liveWindowId);
+    }
 }
 
 void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)

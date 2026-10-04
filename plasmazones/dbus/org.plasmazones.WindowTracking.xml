@@ -470,7 +470,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="windowScreenChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Record that a window moved to a different screen. The daemon compares the new screen against the window's stored snap assignment and unsnaps if they differ — heuristic for distinguishing a user-initiated cross-screen drag from a programmatic resnap (programmatic moves assign the zone first, so the stored screen matches and no unsnap occurs)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Record that a window moved to a different screen. The daemon releases the window's snap memory off the new screen. A snapped window loses its zone unless the daemon put it on that screen itself (a restore, resnap or snap assist assigns the zone first), and a floating window forgets the zone it floated from."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -530,7 +530,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <signal name="windowStateChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Unified window state change stream. Emitted on snap, unsnap, float, unfloat, and screen change events."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Unified window state change stream. Emitted on snap, unsnap, float, unfloat, and screen change events. A screen change carries isFloating true for a floating window and false for a snapped one, which has lost its zone."/>
             <arg name="windowId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Window whose state changed."/>
             </arg>

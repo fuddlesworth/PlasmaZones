@@ -86,6 +86,7 @@ add_library(PhosphorSnapEngine SHARED
     src/commit.cpp
     src/float.cpp
     src/free_size.cpp
+    src/leave.cpp
     src/lifecycle.cpp
     src/navigation.cpp
     src/navigation_actions.cpp

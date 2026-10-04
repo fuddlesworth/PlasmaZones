@@ -352,20 +352,19 @@ public:
     }
 
     /// A no-op: snap's close is WindowTrackingService-driven (WTS::windowClosed
-    /// clears the window's SnapState and its resolver entry), so snap keeps no
-    /// engine-side close state and the daemon's engine close loop, which walks
-    /// the tiling engines, does not include it.
+    /// clears the window's SnapState), so the daemon's engine close loop skips it.
     void windowClosed(const QString& windowId) override;
 
-    /// The (screen, desktop, activity) key of the store that genuinely holds
-    /// @p windowId, in ANY context. Membership-grade like isWindowTracked, and
-    /// deliberately NOT scoped to the screen's current desktop: this answers
-    /// the daemon's desktop-membership reconcile, which asks precisely because
-    /// the holding store is usually a BACKGROUND one by the time it asks.
-    ///
-    /// The globals holder is excluded — it has no desktop identity, so a
-    /// window living only there has no membership to reconcile.
+    /// The key of the store that genuinely holds @p windowId, in ANY context:
+    /// membership-grade, NOT scoped to the screen's current desktop, since the
+    /// desktop reconcile asks when the holding store is usually a background
+    /// one. The globals holder is excluded (it has no desktop identity).
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
+
+    /// Silently release every membership off @p keepScreenId (every one when it
+    /// is empty): zone with the last-used naming it, float bit, residence,
+    /// pre-float home and persisted per-desktop entry. Emits nothing.
+    void releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId) override;
 
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
@@ -591,13 +590,10 @@ public:
     bool holdsWindowInState(const QString& windowId, const SnapState* state) const;
 
     /// Re-home a tracked window onto the store for @p newScreenId's current
-    /// context. A zone never crosses screens: on a screen change the zone is
-    /// unassigned in the store it leaves (that store's last-used naming it goes
-    /// too), and the window's other memberships on the screen it left are
-    /// released with their persisted entries. The floating bit, auto-snap flag,
-    /// pre-float capture and residence move, the desktop re-stamped to the
-    /// destination key's. A same-screen move only re-keys. No-op when the window
-    /// is untracked here or the key is unchanged; true when it moved.
+    /// context. On a screen change every membership on the screen left is
+    /// released as releaseWindowOffScreen does; the float bit, auto-snap flag
+    /// and residence move, re-stamped to the destination key's desktop. A
+    /// same-screen move only re-keys. True when it moved.
     bool migrateWindowToScreen(const QString& windowId, const QString& newScreenId);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1128,6 +1124,10 @@ private:
     /// Forget @p windowId's pre-float home in @p state, with the appId alias
     /// while it still names the same zones. For a window leaving the screen.
     void dropPreFloatHome(SnapState* state, const QString& windowId);
+    /// Release one membership the way releaseWindowOffScreen does; @p removed
+    /// collects its zones for clearGlobalLastUsedIfRemoved.
+    void releaseMembership(const QString& windowId, const PhosphorEngine::PlacementStateKey& key, QStringList& removed);
+    void clearGlobalLastUsedIfRemoved(const QStringList& removed);
 
     /// The store whose last-used zone should drive a placement on @p screenId: the
     /// screen's own per-key store when it has a recorded last-used, else the global

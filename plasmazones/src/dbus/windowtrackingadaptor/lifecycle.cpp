@@ -444,6 +444,51 @@ void WindowTrackingAdaptor::pruneExcludedPlacements(const QStringList& patterns)
     }
 }
 
+namespace {
+
+/// The effective screen a report of @p reported names for a window whose
+/// stored screen is @p stored and whose frame is @p frame. KWin reports the
+/// physical output; on a subdivided output the screen to compare against is
+/// the virtual screen the window is in. A stored virtual screen on the
+/// reported output is still right; otherwise the frame says which virtual
+/// screen of the reported output the window landed in.
+QString resolveReportedScreen(PhosphorScreens::ScreenManager* mgr, const QString& reported, const QString& stored,
+                              const QRect& frame)
+{
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(reported)) {
+        return reported;
+    }
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(stored)
+        && PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(stored, reported)) {
+        return stored;
+    }
+    if (mgr && frame.isValid()) {
+        const QString vs = Utils::effectiveScreenIdAt(mgr, frame.center());
+        if (!vs.isEmpty() && PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(vs, reported)) {
+            return vs;
+        }
+    }
+    return reported;
+}
+
+/// The screen of a store that holds @p windowId as a member with a zone, on
+/// a screen other than @p excludeScreen; empty when there is none.
+QString snapZoneScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& excludeScreen)
+{
+    if (!snap) {
+        return {};
+    }
+    for (PhosphorSnapEngine::SnapState* state : snap->allSnapStates()) {
+        if (state && snap->holdsWindowInState(windowId, state) && state->isWindowSnapped(windowId)
+            && !PhosphorScreens::ScreenIdentity::screensMatch(state->screenId(), excludeScreen)) {
+            return state->screenId();
+        }
+    }
+    return {};
+}
+
+} // namespace
+
 void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const QString& newScreenId)
 {
     if (!m_service)
@@ -459,27 +504,29 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     if (newScreenId.isEmpty()) {
         return;
     }
+    // The effect reports this only when neither end is managed by a tiling
+    // engine, so snap memory decides what happens here and any tiling hold is
+    // a background context's.
+    const QString resolved =
+        resolveReportedScreen(m_service->screenManager(), newScreenId, m_service->screenForWindow(windowId),
+                              m_frameGeometry.value(shadowWindowId(windowId)));
 
-    // Floating window with a tracked screen: refresh the engine's
-    // screen-tracking via the cross-engine handoff contract so subsequent
-    // shortcut routing (lastActiveScreenName) finds the new screen instead of
-    // the stale one. Without this, a snap-floated window dragged to another
-    // screen leaves screenAssignments pointing at the source forever — the
-    // float toggle then unfloats it back to the source-screen zone.
-    QString currentZoneId = m_service->zoneForWindow(windowId);
-    if (currentZoneId.isEmpty()) {
-        if (!m_service->isWindowFloating(windowId)) {
-            // A free window moved to another screen. A tiling hold it keeps on
-            // the screen it left (a background-desktop tile or column of a
-            // multi-desktop window) is stale memory, and returning to that
-            // desktop would pull the window back across monitors.
-            for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.data(), m_scrollEngine.data()}) {
-                if (engine) {
-                    engine->releaseWindowOffScreen(windowId, newScreenId);
-                }
-            }
-            return;
+    // A tiling hold the window keeps on the screen it left (a background
+    // desktop's tile or column of a multi-desktop window) is stale memory, on
+    // every branch below: returning to that desktop would pull the window back
+    // across monitors.
+    for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.data(), m_scrollEngine.data()}) {
+        if (engine) {
+            engine->releaseWindowOffScreen(windowId, resolved);
         }
+    }
+    PhosphorSnapEngine::SnapEngine* snap = snapEngine();
+
+    // Floating: refresh the engine's screen tracking through the cross-engine
+    // handoff, so shortcut routing finds the new screen and the float toggle
+    // does not unfloat the window back on the screen it left. The receive
+    // re-homes the window and forgets its pre-float home there.
+    if (m_service->zoneForWindow(windowId).isEmpty() && m_service->isWindowFloating(windowId)) {
         const QString trackedSnap = m_snapEngine ? m_snapEngine->screenForTrackedWindow(windowId) : QString();
         const QString trackedAutotile =
             m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
@@ -487,16 +534,16 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         const QString trackedScreen = !trackedSnap.isEmpty() ? trackedSnap
             : !trackedAutotile.isEmpty()                     ? trackedAutotile
                                                              : trackedScroll;
-        if (trackedScreen.isEmpty() || PhosphorScreens::ScreenIdentity::screensMatch(trackedScreen, newScreenId)) {
+        if (trackedScreen.isEmpty() || PhosphorScreens::ScreenIdentity::screensMatch(trackedScreen, resolved)) {
             return;
         }
         PhosphorEngine::PlacementEngineBase* source = !trackedSnap.isEmpty() ? m_snapEngine.data()
             : !trackedAutotile.isEmpty()                                     ? m_autotileEngine.data()
                                                                              : m_scrollEngine.data();
         PhosphorEngine::PlacementEngineBase* dest = nullptr;
-        if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(newScreenId)) {
+        if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(resolved)) {
             dest = m_autotileEngine.data();
-        } else if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(newScreenId)) {
+        } else if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(resolved)) {
             dest = m_scrollEngine.data();
         } else if (m_snapEngine) {
             dest = m_snapEngine.data();
@@ -506,7 +553,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         }
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
-        ctx.toScreenId = newScreenId;
+        ctx.toScreenId = resolved;
         ctx.fromEngineId = source ? source->engineId() : QString();
         ctx.wasFloating = true;
         // Canonical-vs-canonical (windowActivated stores the shadow id): the
@@ -515,85 +562,69 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         ctx.heldFocus = m_lastActiveWindowId == shadowWindowId(windowId);
         ctx.sourceGeometry = m_frameGeometry.value(shadowWindowId(windowId));
         ctx.minSize = source ? source->windowMinimumSize(windowId) : QSize();
-        const bool adopted = WindowTrackingInternal::guardedHandoff(source, dest, ctx, trackedScreen);
-        if (adopted) {
-            // No windowStateChanged "screen_changed" entry here, unlike the
-            // snapped branch below: the receive path's windowFloatingChanged
-            // relay already carries the DESTINATION screen to subscribers, so a
-            // second push would be redundant; anything else about a floating
-            // window's screen is pull-resolved (screenForWindow) on demand.
+        if (WindowTrackingInternal::guardedHandoff(source, dest, ctx, trackedScreen)) {
             qCInfo(lcDbusWindow) << "windowScreenChanged: floating window" << windowId << "moved from" << trackedScreen
-                                 << "to" << newScreenId << "- handoff complete";
+                                 << "to" << resolved << "- handoff complete";
+            // The record is re-captured now, without the home the receive
+            // dropped: an unfloat before the next save would otherwise
+            // re-derive it from the record. The float relay dedups on the
+            // float bit alone, so the move itself is announced here.
+            captureWindowPlacement(windowId, resolved, /*fromStateChange=*/true);
+            Q_EMIT windowStateChanged(windowId,
+                                      PhosphorProtocol::WindowStateEntry{windowId, QString(), resolved, true,
+                                                                         QStringLiteral("screen_changed"),
+                                                                         QStringList{}, false});
         }
         return;
     }
 
-    // Compare the stored screen assignment with the new screen.
-    // If they match (format-agnostic), the window was moved programmatically
-    // to its assigned zone's screen (restore, resnap, snap assist) — keep snapped.
-    // If they differ, the user moved the window away — unsnap it.
-    QString storedScreen = m_service->screenForWindow(windowId);
-
-    // KWin reports physical screen names in outputChanged. When the stored screen
-    // is a virtual screen (e.g. "HDMI-1/vs:0"), comparing against the physical name
-    // ("HDMI-1") via screensMatch returns false → spurious unsnap.
-    //
-    // If the stored screen is virtual and its physical parent matches the reported
-    // physical screen, keep the stored virtual screen ID — it's already correct.
-    // Only re-resolve via geometry when the physical screens actually differ,
-    // which avoids the zone-center ambiguity when a zone straddles a VS boundary.
-    QString resolvedNewScreen = newScreenId;
-    if (!PhosphorIdentity::VirtualScreenId::isVirtual(newScreenId)
-        && PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
-        QString storedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-        if (PhosphorScreens::ScreenIdentity::screensMatch(storedPhysical, newScreenId)) {
-            // Physical parent matches — the window is still on the same monitor,
-            // so the stored virtual screen ID is still valid.
-            resolvedNewScreen = storedScreen;
-        } else {
-            // Different physical screen — resolve via zone geometry as fallback.
-            // NOTE: Ideally we'd use the window's actual position, but window
-            // geometry is not available in this context (KWin only reports the
-            // physical screen name). Using the zone center is imprecise when the
-            // zone straddles a virtual screen boundary; however, the resolved ID
-            // will still differ from storedScreen (different physical parent), so
-            // the window correctly unsnaps regardless.
-            QRect zoneGeo = m_service->zoneGeometry(currentZoneId, storedScreen);
-            if (zoneGeo.isValid()) {
-                QString vsId = Utils::effectiveScreenIdAt(m_service->screenManager(), zoneGeo.center());
-                if (!vsId.isEmpty()) {
-                    resolvedNewScreen = vsId;
-                }
-            }
-        }
-    }
-
-    if (PhosphorScreens::ScreenIdentity::screensMatch(storedScreen, resolvedNewScreen)) {
+    // Snapped in view on the screen it is on: the window was moved there by
+    // the daemon itself (restore, resnap, snap assist), so it keeps its snap.
+    const QString storedScreen = m_service->screenForWindow(windowId);
+    const bool snappedInView = !m_service->zoneForWindow(windowId).isEmpty();
+    if (snappedInView && PhosphorScreens::ScreenIdentity::screensMatch(storedScreen, resolved)) {
         qCDebug(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved to assigned screen, keeping snap";
         return;
     }
-
-    qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to"
-                         << resolvedNewScreen << "- unsnapping";
-    // A window is on one screen: the unassign clears its zone (and the
-    // relay subscribers see it go), then the migration re-homes the primary to
-    // the new screen and releases the old screen's OTHER desktop memberships
-    // (their zones dragged the window back on the next switch, seen live on
-    // two outputs).
-    m_service->unassignWindow(windowId);
-    if (PhosphorSnapEngine::SnapEngine* snap = snapEngine()) {
-        snap->migrateWindowToScreen(windowId, resolvedNewScreen);
+    // A zone in ANY membership counts, in view or not: a multi-desktop window
+    // snapped on a background desktop of the screen it left would be dragged
+    // back by that desktop's next membership pass.
+    const QString heldScreen = snappedInView ? storedScreen : snapZoneScreen(snap, windowId, resolved);
+    if (heldScreen.isEmpty()) {
+        // Free: only residue to release (an adopted membership with no zone,
+        // a floating one on another desktop, a pre-float home).
+        if (snap) {
+            snap->releaseWindowOffScreen(windowId, resolved);
+        }
+        return;
     }
 
-    // Emit unified state change for screen-change-triggered unsnap. Report the
-    // resolved (effective) screen — the same value the decision + log above use —
-    // not the raw newScreenId.
+    qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << heldScreen << "to" << resolved
+                         << "- unsnapping";
+    // The unassign first, in the store holding the zone in view, so the relay
+    // subscribers see it go and the last-used naming it clears; then every
+    // membership off the new screen goes silently.
+    if (snappedInView) {
+        m_service->unassignWindow(windowId);
+    }
+    if (snap) {
+        snap->releaseWindowOffScreen(windowId, resolved);
+    }
+    // The record's snap slot goes too when the window changed monitors, or
+    // the next restore or resnap reads A's zone from it and applies it on B.
+    // A virtual-screen crossing on one monitor keeps it for now.
+    if (!PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(
+            heldScreen, PhosphorIdentity::VirtualScreenId::extractPhysicalId(resolved))) {
+        m_service->releaseEngineSlot(windowId, PhosphorEngine::WindowPlacement::snapEngineId());
+    }
+
+    // Report the resolved (effective) screen, the same value the decision and
+    // log above use, not the raw newScreenId.
     Q_EMIT windowStateChanged(windowId,
-                              PhosphorProtocol::WindowStateEntry{windowId, QString(), resolvedNewScreen, false,
+                              PhosphorProtocol::WindowStateEntry{windowId, QString(), resolved, false,
                                                                  QStringLiteral("screen_changed"), QStringList{},
                                                                  false});
 }
-
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
 {
     if (windowId.isEmpty()) {
@@ -957,6 +988,12 @@ void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int old
 void WindowTrackingAdaptor::relayWindowReleasedFromContext(const QString& windowId, const QString& screenId)
 {
     if (windowId.isEmpty()) {
+        return;
+    }
+    // Still snapped in the context in view (a multi-desktop window released
+    // from another desktop): the effect's zone cache and the IsSnapped / Zone
+    // rule fields follow the view, and they are right as they are.
+    if (m_service && !m_service->zoneForWindow(windowId).isEmpty()) {
         return;
     }
     // "unsnapped", and an empty zoneId, which is what the effect's zone cache

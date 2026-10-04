@@ -327,10 +327,9 @@ public Q_SLOTS:
     void notifyDragOutUnsnap(const QString& windowId);
 
     /**
-     * Handle window screen change: unsnap only if the new screen differs
-     * from the stored assignment (user-initiated move). Programmatic moves
-     * (restore/resnap/snap assist) assign the zone first, so the stored
-     * screen matches and no unsnap occurs.
+     * Handle a window KWin moved to another screen: its snap memory off the
+     * new screen is released. A snapped window loses its zone unless the
+     * daemon put it there itself; a floating one forgets its pre-float home.
      */
     void windowScreenChanged(const QString& windowId, const QString& newScreenId);
     /**
@@ -1316,6 +1315,7 @@ Q_SIGNALS:
      * @param state PhosphorProtocol::WindowStateEntry with windowId, zoneId, screenId,
      *        isFloating, changeType, zoneIds (multi-zone spans), isSticky;
      *        changeType: "snapped", "unsnapped", "floated", "unfloated", "screen_changed".
+     *        "screen_changed" sets isFloating for a floating window, false for an unsnapped one.
      *        BEST-EFFORT fields: the float-toggle and screen-changed emitters
      *        deliberately send empty zoneIds and isSticky=false rather than
      *        re-querying — subscribers needing those must pull them
