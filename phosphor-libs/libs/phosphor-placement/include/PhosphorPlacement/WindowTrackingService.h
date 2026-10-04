@@ -682,8 +682,8 @@ public:
      * the buffer even when it is empty.
      *
      * @param excludeScreens Screens to skip (e.g. autotile screens handled separately)
-     * @param includeScreens When non-empty, only process windows on these screens.
-     *        Restricts resnap to screens whose layout actually changed.
+     * @param includeScreens When non-empty, only process windows on these
+     *        screens. Only memberships of the activity in view are taken.
      * @param desktopFilter When > 0, restrict the resnap to a single virtual
      *        desktop so per-desktop layout changes don't reposition windows on
      *        other desktops. Each window is compared against ITS screen's

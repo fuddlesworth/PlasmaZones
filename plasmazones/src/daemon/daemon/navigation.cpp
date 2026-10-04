@@ -545,6 +545,7 @@ void Daemon::resnapIfManualMode()
     // Only skip resnap when the current screen is engine-managed.
     // Per-desktop assignments mean some screens can be engine-managed while
     // others are manual — a global check would block manual resnaps.
+    QSet<QString> switchedScreens;
     if (m_unifiedLayoutController) {
         const QString screenId = m_unifiedLayoutController->currentScreenName();
         if (screenId.isEmpty()) {
@@ -555,15 +556,15 @@ void Daemon::resnapIfManualMode()
         }
         if (currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Scrolling) {
             // A template apply changes only the strip's preset vocabulary;
-            // no window placement moved, so buffering every OTHER snapping
-            // screen and running resnapToNewLayout would reposition windows
-            // for a no-op and burn an OSD-suppression count.
+            // no window placement moved, so there is nothing to resnap.
             return;
         }
+        // Only the switched screen: the other screens' layouts did not move,
+        // and resnapping them collapsed their spans (F474).
+        switchedScreens.insert(screenId);
     }
-    // Populate the resnap buffer before resnapping: a layout change builds
-    // none, so every switch caller captures its own windows, as the KCM's
-    // assignmentChangesApplied path does.
+    // One switch helper for every layout-switch caller: populate, resnap
+    // silently, prune and relay what the switch could not carry.
     if (m_windowTrackingAdaptor) {
         // Exclude EVERY engine-managed screen, not just autotile: the
         // resnap's only mode gate is this exclude set, and resnapping a
@@ -585,16 +586,7 @@ void Daemon::resnapIfManualMode()
         // osd.cpp) for the null-safe VDM read — the same pattern used
         // by every daemon-side site that needs the current desktop
         // (autotile.cpp, signals.cpp, osd.cpp, start.cpp).
-        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens, {},
-                                                                              currentDesktop());
-    }
-    // Co-locate the suppress pre-arm with the resnap call so a null
-    // m_snapAdaptor doesn't leave the counter armed for the next
-    // unrelated navigationFeedback. Mirrors the other armResnapOsdSuppression
-    // call sites (a line number into another TU rots on every file split).
-    if (m_snapAdaptor) {
-        armResnapOsdSuppression(1);
-        m_snapAdaptor->resnapToNewLayout();
+        m_windowTrackingAdaptor->resnapScreensToTheirLayouts(engineManagedScreens, switchedScreens, currentDesktop());
     }
     // Restore snap-float positions for windows the picker/cycle just released
     // from autotile — the resnap above (buffer-based) cannot cover floating
@@ -672,7 +664,6 @@ void Daemon::emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntrie
         return;
     }
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-        armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
         concreteSnap->emitBatchedResnap(floatEntries);
     } else {
         qCWarning(lcDaemon) << "emitPendingSnapFloatRestoresForResnapBuffer: dropping" << floatEntries.size()
@@ -724,7 +715,6 @@ void Daemon::flushPendingSnapZoneRestores()
     }
     qCInfo(lcDaemon) << "flushPendingSnapZoneRestores: restoring" << zoneEntries.size()
                      << "windows to their snap zones";
-    armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
     concreteSnap->emitBatchedResnap(zoneEntries);
 }
 

@@ -268,6 +268,21 @@ void WindowTrackingAdaptor::relayZonePrune(const PhosphorPlacement::WindowTracki
     }
 }
 
+void WindowTrackingAdaptor::resnapScreensToTheirLayouts(const QSet<QString>& excludeScreens,
+                                                        const QSet<QString>& screens, int desktop)
+{
+    if (!m_service || !m_cachedSnapEngine) {
+        return;
+    }
+    m_service->populateResnapBufferForAllScreens(excludeScreens, screens, desktop);
+    // Synchronous: the batch commits through the adaptor's direct connection,
+    // so the prune below sees the new zones and removes only what the switch
+    // could not carry, such as a window past the new layout's zone count
+    // with no float spot to go to (F475).
+    m_cachedSnapEngine->resnapToNewLayout(PhosphorSnapEngine::SnapEngine::ResnapFeedback::Silent);
+    relayZonePrune(m_service->pruneStaleZoneAssignments());
+}
+
 void WindowTrackingAdaptor::onPanelGeometryReady()
 {
     qCDebug(lcDbusWindow) << "Panel geometry: ready, checking if pending restores available";

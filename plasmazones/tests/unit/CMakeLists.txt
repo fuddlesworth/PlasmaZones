@@ -1495,6 +1495,18 @@ target_link_libraries(test_wta_zone_prune PRIVATE Qt6::Test Qt6::Core Qt6::DBus 
                       PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_zone_prune COMMAND test_wta_zone_prune)
 
+# The layout-switch helper every switch caller runs: populate the switched
+# screens, resnap silently, prune and relay what did not fit (F474, F475,
+# F489).
+add_executable(test_wta_layout_switch dbus/test_wta_layout_switch.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_layout_switch PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_layout_switch PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_layout_switch COMMAND test_wta_layout_switch)
+
 # releaseLeftScreens, the drop-on-leave primitive every cross-screen move runs,
 # and the daemon-driven move sites that call it. Same fixture and links.
 add_executable(test_wta_drop_on_leave dbus/test_wta_drop_on_leave.cpp

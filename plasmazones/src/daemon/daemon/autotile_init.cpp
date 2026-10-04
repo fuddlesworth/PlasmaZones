@@ -613,8 +613,8 @@ void Daemon::handleTilingModeToggle()
             // resolving a layout. A refused apply leaves the screen still
             // scrolling and an opt-out resolves no layout on purpose, so in
             // both cases there is nothing to resnap into: the call only
-            // populated a buffer, armed a suppression count and drew a "no
-            // layout for screen" warning per toggle. The sibling
+            // populated a buffer and drew a "no layout for screen" warning
+            // per toggle. The sibling
             // autotile→snapping arm already carries the same resolve gate.
             //
             // The gate sits HERE rather than on the branch above on purpose:
@@ -638,10 +638,7 @@ void Daemon::handleTilingModeToggle()
                 // screens at once and the parameter takes a single
                 // value; the per-window filter inside the service
                 // is what keeps that case correct.
-                m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens, {screenId},
-                                                                                      desktop);
-                armResnapOsdSuppression(1);
-                m_snapAdaptor->resnapToNewLayout();
+                m_windowTrackingAdaptor->resnapScreensToTheirLayouts(engineManagedScreens, {screenId}, desktop);
             }
             emitPendingSnapFloatRestoresForResnapBuffer();
         } else {
@@ -802,11 +799,8 @@ void Daemon::handleTilingModeToggle()
             buildAutotileRestoreEntries(resnappedWindows, desktop, activity, screenId);
         allResnapEntries.append(restoreEntries);
 
-        // Emit ONE batched signal (suppresses one OSD regardless of screen count)
+        // One batched signal; a batch emits no resnap feedback.
         concreteSnap->emitBatchedResnap(allResnapEntries);
-        // Empty ⇒ no feedback to suppress; a no-op arm must NOT zero a
-        // concurrent stream's outstanding count (the old `= 0` did).
-        armResnapOsdSuppression(allResnapEntries.isEmpty() ? 0 : 1);
     }
 }
 

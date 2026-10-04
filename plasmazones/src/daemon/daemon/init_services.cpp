@@ -452,10 +452,11 @@ void Daemon::initLayoutAndSettingsWiring()
         // same recompute above.
         if (((autotileToggled && !autotileNow) || (scrollingToggled && !scrollingNow)) && m_windowTrackingAdaptor
             && m_snapAdaptor && m_snapEngine) {
-            // Pre-arm OSD suppression for the resnap signal(s) about to fire (the
-            // feedback returns asynchronously, so arm before emitting).
-            armResnapOsdSuppression(1); // resnapCurrentAssignments()
-            m_snapAdaptor->resnapCurrentAssignments();
+            // Silent: a settings change that leaves nothing to put back is not
+            // a failed user resnap.
+            if (auto* snap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+                snap->resnapCurrentAssignments(QString(), {}, PhosphorSnapEngine::SnapEngine::ResnapFeedback::Silent);
+            }
             // Batched float-restore: one resnap signal per autotile-disabled
             // toggle instead of per-window D-Bus chatter. Downcast mirrors
             // signals.cpp's resnap-batching path; a non-snap concrete engine
@@ -485,10 +486,7 @@ void Daemon::initLayoutAndSettingsWiring()
                     buildAutotileRestoreEntries(restoredWindows, -1, currentActivity());
                 entries.append(m_pendingSnapFloatRestores);
                 m_pendingSnapFloatRestores.clear();
-                if (!entries.isEmpty()) {
-                    armResnapOsdSuppression(1); // the batched emit drives a second resnap feedback
-                    concreteSnap->emitBatchedResnap(entries);
-                }
+                concreteSnap->emitBatchedResnap(entries);
             }
         }
 
@@ -537,15 +535,6 @@ void Daemon::initLayoutAndSettingsWiring()
     // shortcuts). Autotile windows are already retiled by the settingsChanged
     // handler above; this covers manually-snapped windows. Debounced so a batch
     // of per-side gap edits in one save collapses into a single resnap pass.
-    // Watchdog that floors the resnap-OSD suppression counter if some primed
-    // feedback never arrives (a resnap that produced zero moves emits none).
-    // Re-armed by armResnapOsdSuppression on every arm.
-    m_suppressResnapOsdWatchdog.setSingleShot(true);
-    m_suppressResnapOsdWatchdog.setInterval(2000);
-    m_layoutSettingsWiringConnections.append(connect(&m_suppressResnapOsdWatchdog, &QTimer::timeout, this, [this]() {
-        m_suppressResnapOsd = 0;
-    }));
-
     m_gapResnapTimer.setSingleShot(true);
     m_gapResnapTimer.setInterval(100);
     m_layoutSettingsWiringConnections.append(connect(&m_gapResnapTimer, &QTimer::timeout, this, [this]() {

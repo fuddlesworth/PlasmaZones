@@ -227,19 +227,6 @@ void Daemon::clearHighlight()
     }
 }
 
-void Daemon::armResnapOsdSuppression(int count)
-{
-    if (count <= 0) {
-        return;
-    }
-    // ADD, never clobber: overlapping async resnap streams each pre-arm before
-    // emitting, and their feedbacks drain this counter one-by-one. Overwriting
-    // would drop a concurrent stream's outstanding count (one OSD wrongly shown,
-    // a later one wrongly suppressed). The watchdog floors a stuck count.
-    m_suppressResnapOsd += count;
-    m_suppressResnapOsdWatchdog.start();
-}
-
 bool Daemon::globalOsdSuppressed() const
 {
     if (m_shuttingDown) {

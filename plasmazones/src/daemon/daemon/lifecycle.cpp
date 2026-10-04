@@ -239,7 +239,6 @@ void Daemon::stop()
     // are severed here with the other timers rather than left to fire into
     // an unregistered adaptor.
     m_previewNotifyTimer.stop();
-    m_suppressResnapOsdWatchdog.stop();
 
     // Both wired in init (init_adaptors.cpp), so init-origin teardown that
     // belongs on this side of the m_running gate: the geometry-reapply
@@ -828,11 +827,9 @@ void Daemon::stop()
     // retireOutputPlacements: its windows are parked by the engines instead,
     // and a replayed order would tile windows that have moved on.
 
-    // Per-session OSD gates. A resnap armed just before the stop leaves its
-    // outstanding count behind, and the screen-removal cooldown deadline can
-    // still be in the future — either one carried into the next start()
-    // swallows the first OSD of the new session.
-    m_suppressResnapOsd = 0;
+    // Per-session OSD gate. The screen-removal cooldown deadline can still be
+    // in the future, and carried into the next start() it swallows the first
+    // OSD of the new session.
     m_screensSettlingUntil = {};
 
     // Release the shortcut grabs and the Portal session with the connections:

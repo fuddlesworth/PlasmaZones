@@ -853,20 +853,18 @@ public:
                                 bool fromStateChange = false);
 
     /// Announce that @p windowId no longer occupies a zone in the context it
-    /// was released from, as an "unsnapped" windowStateChanged entry.
-    ///
-    /// For releases that do NOT run through SnapEngine::uncommitSnap — today
-    /// that is TilingAdaptor::reconcileWindowMembership dropping a window from
-    /// a context it has left. Those come out of the engine's membership pass
-    /// (SnapEngine::applyMembershipWork), which deliberately emits no
-    /// windowSnapStateChanged: that signal also clears the tiling engines' float markers, and those
-    /// sets are per-window rather than per-context, so it would pull a window
-    /// legitimately floating on the desktop it moved TO back into the layout.
-    /// The two consumers that ARE right for a context release are driven
-    /// individually instead: captureWindowPlacement above, and this, which
-    /// clears the effect's per-window zone cache so the IsSnapped / Zone rule
-    /// fields stop matching against a zone the window has left.
+    /// was released from, as an "unsnapped" windowStateChanged entry. For the
+    /// releases that do not run through SnapEngine::uncommitSnap (the
+    /// membership pass, TilingAdaptor::reconcileWindowMembership): that pass
+    /// emits no windowSnapStateChanged, whose per-window tiling float-marker
+    /// clear would pull a window floating on its new desktop into the layout.
     void relayWindowReleasedFromContext(const QString& windowId, const QString& screenId);
+    /// Relay a prune: "unsnapped" per window left in no zone, spans re-stated.
+    void relayZonePrune(const PhosphorPlacement::WindowTrackingService::ZonePruneResult& result);
+    /// A layout switch on @p screens (all when empty) minus @p excludeScreens,
+    /// on @p desktop: populate, resnap silently, then prune and relay what the
+    /// switch could not carry (F474, F475).
+    void resnapScreensToTheirLayouts(const QSet<QString>& excludeScreens, const QSet<QString>& screens, int desktop);
 
     // ── Evacuee park (evacuees.cpp; see EvacueeLedger) ──────────────────────
     /// Park every engine's windows on @p physicalScreenId before the prunes,
@@ -1557,8 +1555,6 @@ private Q_SLOTS:
 
     /// Active layout changed: prune and relay, then look for records to restore.
     void onLayoutChanged();
-    /// Relay a prune: "unsnapped" per window left in no zone, spans re-stated.
-    void relayZonePrune(const PhosphorPlacement::WindowTrackingService::ZonePruneResult& result);
 
     /**
      * @brief Handle panel geometry becoming ready

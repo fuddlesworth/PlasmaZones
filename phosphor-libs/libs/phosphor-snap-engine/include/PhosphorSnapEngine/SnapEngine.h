@@ -403,25 +403,25 @@ public:
     /// decide whether a cross-engine handoff is needed.
     bool isWindowTracked(const QString& windowId) const override;
 
-    /// Resnap the windows of the buffer a layout switch populated into the
-    /// same-numbered zone of their screen's new layout.
+    /// Whether a resnap that finds nothing says so (no_windows_to_resnap): a
+    /// user verb does, a layout switch or a settings reflow does not.
+    enum class ResnapFeedback {
+        Report,
+        Silent
+    };
+
+    /// Resnap a switch's populated buffer by zone number into the new layouts.
     void resnapToNewLayout();
+    void resnapToNewLayout(ResnapFeedback feedback);
 
-    /**
-     * @brief Resnap windows to their current zone assignments (re-apply geometries)
-     * @param screenFilter Optional screen name filter (empty = all screens)
-     * @param onlyWindows When non-empty, only these windows are re-applied
-     *        (the membership pass re-applies the multi-desktop windows on the
-     *        desktop just entered without re-committing the whole screen)
-     */
+    /// Re-apply the zones windows hold, on @p screenFilter (all when empty),
+    /// only @p onlyWindows when it is not empty. Reports.
     void resnapCurrentAssignments(const QString& screenFilter = QString(), const QSet<QString>& onlyWindows = {});
+    void resnapCurrentAssignments(const QString& screenFilter, const QSet<QString>& onlyWindows,
+                                  ResnapFeedback feedback);
 
-    /**
-     * @brief Resnap windows using autotile window order as assignment source
-     * @param autotileWindowOrder Ordered list of window IDs from autotile engine
-     * @param screenId Screen to resnap on
-     * @note Falls back to resnapCurrentAssignments if no entries are calculated
-     */
+    /// Resnap @p screenId's windows in @p autotileWindowOrder, falling back to
+    /// their current zones when the order yields nothing.
     void resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId);
 
     /**

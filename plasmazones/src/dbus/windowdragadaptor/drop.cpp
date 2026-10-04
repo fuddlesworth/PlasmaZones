@@ -434,6 +434,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                             // split-snapshot race the resolver was added to remove.
                             m_layoutManager->assignLayout(selectorScreenId, selectorCtx.virtualDesktop,
                                                           selectorCtx.activity, selectedLayout);
+                            // The other windows on the screen move like a
+                            // quick-layout switch: each to the same-numbered
+                            // zone of the new layout, or its float spot past
+                            // its zone count. Before the active-layout write,
+                            // whose prune would drop their old zones first.
+                            m_windowTracking->resnapScreensToTheirLayouts({}, {selectorScreenId},
+                                                                          selectorCtx.virtualDesktop);
                             m_layoutManager->setActiveLayout(selectedLayout);
                         }
                     }
