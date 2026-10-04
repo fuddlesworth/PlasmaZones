@@ -48,6 +48,38 @@ bool holdsPlaceOn(ScrollEngine* engine, const QString& screenId, int desktop, co
     return held && held->screenId == screenId && held->desktop == desktop;
 }
 
+const QString kMover = QStringLiteral("app|mover");
+
+/// kMover on @p desktop alone, every other window on desktop 1.
+PhosphorEngine::DesktopSpanQuery moverOn(int desktop)
+{
+    return [desktop](const QString& windowId) {
+        PhosphorEngine::DesktopSpan span;
+        span.known = true;
+        span.desktops = {windowId == kMover ? desktop : 1};
+        return span;
+    };
+}
+
+ScrollEngine* moverEngine(QObject* owner)
+{
+    const GeometryFn geometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    return makeProviderEngine(owner, {kS1}, geometry, geometry);
+}
+
+/// Open kD1 and kMover on @p desktop, with kMover floated.
+void openFloatedMover(ScrollEngine* engine, int desktop)
+{
+    engine->setCurrentDesktopForScreen(kS1, desktop);
+    engine->windowOpened(kD1, kS1, 0, 0);
+    engine->windowOpened(kMover, kS1, 0, 0);
+    QCoreApplication::processEvents();
+    engine->setWindowFloat(kMover, true, kS1);
+    QCoreApplication::processEvents();
+}
+
 bool batchNames(const QSignalSpy& spy, const QString& windowId)
 {
     for (const auto& emission : spy) {
@@ -392,6 +424,30 @@ private Q_SLOTS:
         QVERIFY(!holdsPlaceOn(engine, kS1, 2, kSticky));
         engine->setCurrentDesktopForScreen(kS1, 1);
         QVERIFY(!engine->managedWindowOrder(kS1).contains(kSticky));
+    }
+
+    // A floating window moved onto the strip in view is adopted there as
+    // floating, and the daemon's float mirror is never told otherwise. The
+    // pass used to release the desktop it left first, which tiled it and
+    // withdrew the mirror (F1001).
+    void aFloatMovedOntoTheDesktopInViewStaysFloating()
+    {
+        QObject owner;
+        ScrollEngine* engine = moverEngine(&owner);
+        openFloatedMover(engine, 2);
+
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        QSignalSpy syncSpy(engine, &ScrollEngine::windowFloatingStateSynced);
+        engine->reconcileWindowMemberships(kMover, moverOn(1));
+        QCoreApplication::processEvents();
+        QVERIFY2(engine->isWindowFloatingInScroll(kMover), "the float crosses with the window");
+        QVERIFY2(!engine->managedWindowOrder(kS1).contains(kMover), "and takes no column");
+        QVERIFY(holdsPlaceOn(engine, kS1, 1, kMover));
+        QVERIFY(!holdsPlaceOn(engine, kS1, 2, kMover));
+        for (const auto& emission : syncSpy) {
+            QVERIFY2(!(emission.at(0).toString() == kMover && !emission.at(1).toBool()),
+                     "the float mirror is not withdrawn");
+        }
     }
 };
 

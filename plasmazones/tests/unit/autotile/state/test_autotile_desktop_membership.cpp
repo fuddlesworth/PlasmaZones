@@ -399,6 +399,24 @@ private Q_SLOTS:
             PhosphorEngine::StickyPinPhase::Release);
         QCOMPARE(f.engine.stickyPinnedDesktopForScreen(kScreen), 0);
     }
+
+    // A floating window moved onto the desktop in view is adopted there as
+    // floating. The pass used to release the desktop it left before adopting,
+    // and the adopt reads the float from the contexts still held (F1001).
+    void aFloatMovedOntoTheDesktopInViewStaysFloating()
+    {
+        Fixture f;
+        f.open(2, {kOther, kWindow});
+        f.engine.setWindowFloat(kWindow, true, kScreen);
+        QVERIFY(f.stateOn(2)->isFloating(kWindow));
+
+        f.engine.setCurrentDesktopForScreen(kScreen, 1);
+        f.engine.reconcileWindowMemberships(kWindow, spanOf(on({1})));
+        QCoreApplication::processEvents();
+        QVERIFY(f.stateOn(1)->containsWindow(kWindow));
+        QVERIFY2(f.stateOn(1)->isFloating(kWindow), "the float crosses with the window");
+        QVERIFY2(!f.stateOn(2)->containsWindow(kWindow), "the desktop it left gives it up");
+    }
 };
 
 QTEST_GUILESS_MAIN(TestAutotileDesktopMembership)
