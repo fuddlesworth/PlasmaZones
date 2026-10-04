@@ -60,6 +60,7 @@ namespace PhosphorSnapEngine {
 class INavigationStateProvider;
 class IZoneAdjacencyResolver;
 class SnapNavigationTargetResolver;
+struct SnapEvacueePark;
 
 /**
  * @brief Engine for manual zone-based window snapping
@@ -365,6 +366,14 @@ public:
     /// is empty): zone with the last-used naming it, float bit, residence,
     /// pre-float home and persisted per-desktop entry. Emits nothing.
     void releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId) override;
+
+    // Evacuee park (src/evacueepark.cpp; the contract is IPlacementEngine's).
+    QStringList parkOutput(const QString& physicalScreenId) override;
+    bool readoptParked(const QString& windowId, const QString& parkedPhysicalId,
+                       const QString& returnedPhysicalId) override;
+    void dropParked(const QString& windowId, const QString& physicalScreenId, int desktop,
+                    const QString& activity) override;
+    bool hasParked(const QString& windowId, const QString& physicalScreenId) const override;
 
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
@@ -1325,37 +1334,18 @@ private:
     // ShouldRestorePredicate doc above and discussion #461 item 7.)
     ShouldRestorePredicate m_shouldRestorePredicate{};
 
-    // Unsnapped-position-restore gate. Empty until the daemon wires it; while
-    // empty the engine marks floated windows floating but restores their position
-    // only on the reopening screen — the historical behaviour unit tests rely on.
-    // See RestorePositionPredicate doc above.
+    // The gates and resolvers below are empty until the daemon wires them,
+    // and each type's doc above says what an empty one means.
     RestorePositionPredicate m_restorePositionPredicate{};
-
-    // Managed (snapped-to-zone) restore gate. Empty until the daemon wires it;
-    // while empty the engine restores snapped records unconditionally — the
-    // historical behaviour unit tests rely on. See ManagedRestorePredicate.
     ManagedRestorePredicate m_managedRestorePredicate{};
-
-    // Live placement-mode resolver. Empty until the daemon wires it; while empty
-    // the engine falls back to the layout registry's cascade. See LiveModeResolver
-    // doc above.
     LiveModeResolver m_liveModeResolver{};
-    /// See setTilingEngineLiveResolver.
     TilingEngineLiveResolver m_tilingEngineLiveResolver{};
-
-    // Rule-driven open-floating gate. Empty until the daemon wires it; while
-    // empty no window is rule-floated. See FloatPredicate doc above.
     FloatPredicate m_floatPredicate{};
-
-    // Rule-driven unfloat-fallback gate. Empty until the daemon wires it;
-    // while empty the ISnapSettings bool decides alone. See
-    // UnfloatFallbackPredicate doc above.
     UnfloatFallbackPredicate m_unfloatFallbackPredicate{};
-
-    // Rule-driven open-placement resolver (SnapToZone). Empty until the daemon
-    // wires it; while empty no window is rule-snapped. See PlacementZonesResolver
-    // doc above.
     PlacementZonesResolver m_placementZonesResolver{};
+
+    // Appended last (installed header). Created by the first parkOutput.
+    std::unique_ptr<SnapEvacueePark> m_evacueePark;
 };
 
 } // namespace PhosphorSnapEngine

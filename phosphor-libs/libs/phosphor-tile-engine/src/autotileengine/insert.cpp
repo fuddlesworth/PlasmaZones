@@ -259,6 +259,17 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         }
     }
 
+    // An evacuee granted its parked place in this context while the context
+    // was out of view takes that place now, with its float bit.
+    if (!inserted) {
+        if (const auto place = takeGrantedParkedPlace(windowId, currentKeyForScreen(screenId), state)) {
+            inserted = state->addWindow(windowId, place->first);
+            if (inserted && place->second) {
+                state->setFloating(windowId, true);
+            }
+        }
+    }
+
     // Close/reopen restore takes precedence over the insert-position config: a
     // window closed while FLOATING reopens at its floated geometry, STILL
     // FLOATING — never inserted into the tile layout (marked floating in

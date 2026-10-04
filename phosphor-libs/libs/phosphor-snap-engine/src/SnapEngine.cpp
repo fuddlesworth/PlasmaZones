@@ -10,6 +10,7 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/AssignmentEntry.h>
+#include "evacueepark_p.h"
 #include "snapenginelogging.h"
 
 namespace PhosphorSnapEngine {
@@ -578,8 +579,15 @@ void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
             m_windowTracker->unassignWindow(windowId);
         }
     }
+    // A float parked for the evacuee adoption is not announced as ending: the
+    // daemon adopts the window floating where KWin put it.
     for (const auto& [windowId, stateScreenId] : std::as_const(floatedWindows)) {
-        Q_EMIT windowFloatingChanged(windowId, false, stateScreenId);
+        if (!m_evacueePark || !m_evacueePark->suppressFloatFalse.contains(windowId)) {
+            Q_EMIT windowFloatingChanged(windowId, false, stateScreenId);
+        }
+    }
+    if (m_evacueePark) {
+        m_evacueePark->suppressFloatFalse.clear();
     }
     m_states.removeStatesIf(
         [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {

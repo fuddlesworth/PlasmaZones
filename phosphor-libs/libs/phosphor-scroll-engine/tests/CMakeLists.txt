@@ -161,6 +161,9 @@ pse_add_test(test_scrollengine_stripcontext test_scrollengine_stripcontext.cpp)
 # window present on several desktops, the per-screen scoping and the float
 # carry.
 pse_add_test(test_scrollengine_membership test_scrollengine_membership.cpp)
+# The evacuee park: a strip parked across an output's disconnect, its save
+# exemption, and the exact-id re-seat on the output's return.
+pse_add_test(test_scrollengine_evacuee test_scrollengine_evacuee.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrollstubsettings.h)

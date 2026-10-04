@@ -48,6 +48,7 @@ class LayoutRegistry;
 namespace PhosphorTileEngine {
 
 class AutotileConfig;
+struct TileEvacueePark;
 
 class NavigationController;
 class PerScreenConfigResolver;
@@ -1095,19 +1096,9 @@ public:
     // Window event handlers (public API for external notification)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /**
-     * @brief Notify the engine that a new window was added
-     *
-     * Called by Daemon when KWin reports a new window. Triggers retiling
-     * if autotile is enabled and window is tileable. A no-op when
-     * @p screenId names a screen this engine does not own — the claiming
-     * engine (scrolling/snap) handles the open instead.
-     *
-     * @param windowId Window identifier from KWin
-     * @param screenId Screen where the window appeared
-     * @param minWidth Window minimum width in pixels (0 if unconstrained)
-     * @param minHeight Window minimum height in pixels (0 if unconstrained)
-     */
+    /// A window KWin reported (minimum size 0 when unconstrained): retiles
+    /// when autotile is on and the window is tileable. A no-op on a screen this
+    /// engine does not own; the claiming engine handles that open.
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
     /// The reopen claim (see IPlacementEngine for the contract): only a FIFO
@@ -1125,16 +1116,17 @@ public:
     QString heldScreenForWindow(const QString& windowId) const override;
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
 
-    /**
-     * @brief Update a window's minimum size at runtime
-     *
-     * Called when a window's minimum size changes after initial windowOpened.
-     * Triggers retiling if the new minimum differs from the stored value.
-     *
-     * @param windowId Window identifier from KWin
-     * @param minWidth New minimum width in pixels (0 if unconstrained)
-     * @param minHeight New minimum height in pixels (0 if unconstrained)
-     */
+    // Evacuee park (src/autotileengine/evacueepark.cpp; IPlacementEngine's contract). A context
+    // out of view is granted, and insertWindow seats the window there when it arrives.
+    QStringList parkOutput(const QString& physicalScreenId) override;
+    bool readoptParked(const QString& windowId, const QString& parkedPhysicalId,
+                       const QString& returnedPhysicalId) override;
+    void dropParked(const QString& windowId, const QString& physicalScreenId, int desktop,
+                    const QString& activity) override;
+    bool hasParked(const QString& windowId, const QString& physicalScreenId) const override;
+
+    /// A window's minimum size changed after windowOpened (0 when
+    /// unconstrained): retiles when it differs from the stored value.
     void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
     QSize windowMinimumSize(const QString& windowId) const override;
 
@@ -2087,6 +2079,14 @@ private:
      * since the last event loop pass.
      */
     void processPendingRetiles();
+
+    /// readoptParked's grant to @p windowId on @p key (window-order index, float bit), taken once.
+    std::optional<std::pair<int, bool>> takeGrantedParkedPlace(const QString& windowId,
+                                                               const PhosphorEngine::TilingStateKey& key,
+                                                               const PhosphorTiles::TilingState* state);
+
+    // Appended last (installed header). Created by the first parkOutput.
+    std::unique_ptr<TileEvacueePark> m_evacueePark;
 };
 
 } // namespace PhosphorTileEngine

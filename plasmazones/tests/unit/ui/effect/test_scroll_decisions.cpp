@@ -431,6 +431,11 @@ private Q_SLOTS:
         QTest::newRow("teardown/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::Teardown) << true;
         QTest::newRow("teardown/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::Teardown) << true;
         QTest::newRow("teardown/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::Teardown) << true;
+
+        // An evacuee keeps KWin's state: no claim releases (the ledgers are scrubbed bare).
+        QTest::newRow("evacuation/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::Evacuation) << false;
+        QTest::newRow("evacuation/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::Evacuation) << false;
+        QTest::newRow("evacuation/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::Evacuation) << false;
     }
 
     void claimReleaseTable()

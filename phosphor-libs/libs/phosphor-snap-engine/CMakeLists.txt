@@ -85,6 +85,8 @@ add_library(PhosphorSnapEngine SHARED
     src/calculate.cpp
     src/commit.cpp
     src/float.cpp
+    src/evacueepark.cpp
+    src/evacueepark_p.h
     src/free_size.cpp
     src/leave.cpp
     src/lifecycle.cpp

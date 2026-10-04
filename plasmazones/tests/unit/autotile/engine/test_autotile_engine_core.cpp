@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 
+#include <algorithm>
 #include <memory>
 
 #include <PhosphorEngine/WindowPlacement.h>
@@ -1065,6 +1066,47 @@ private Q_SLOTS:
         QVERIFY(!engine->isWindowTracked(QStringLiteral("win1")));
         QVERIFY(!engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("win1")));
         QVERIFY(engine->isWindowTracked(QStringLiteral("win2")));
+    }
+
+    // The evacuee park: a context of an output that disconnected comes back
+    // with its window order, its float bits and the user's tuning, each window
+    // in its old place however KWin interleaves the returns.
+    void testEvacueePark_readoptRestoresOrderFloatAndTuning()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(screen, 3));
+        PhosphorTiles::TilingState* state = engine->tilingStateForScreen(screen);
+        const QStringList order = state->windowOrder();
+        QCOMPARE(order.size(), 3);
+        state->setFloating(order.at(1), true);
+        state->setSplitRatio(0.7);
+        engine->noteSplitRatioUserTuned(screen);
+
+        QStringList parked = engine->parkOutput(screen);
+        std::sort(parked.begin(), parked.end());
+        QStringList sortedOrder = order;
+        std::sort(sortedOrder.begin(), sortedOrder.end());
+        QCOMPARE(parked, sortedOrder);
+        engine->pruneStatesForRemovedScreen(screen);
+        QVERIFY(!engine->isWindowTracked(order.at(0)));
+        QVERIFY(engine->hasParked(order.at(0), screen));
+
+        QVERIFY(engine->readoptParked(order.at(2), screen, screen));
+        QVERIFY(engine->readoptParked(order.at(0), screen, screen));
+        QVERIFY(engine->readoptParked(order.at(1), screen, screen));
+        state = engine->tilingStateForScreen(screen);
+        QCOMPARE(state->windowOrder(), order);
+        QVERIFY(state->isFloating(order.at(1)));
+        QVERIFY(!state->isFloating(order.at(0)));
+        QCOMPARE(state->splitRatio(), 0.7);
+        QVERIFY(!engine->hasParked(order.at(0), QString()));
+
+        // A window dropped from the park (touched while away) is not re-seated.
+        engine->parkOutput(screen);
+        engine->pruneStatesForRemovedScreen(screen);
+        engine->dropParked(order.at(0), QString(), 0, QString());
+        QVERIFY(!engine->readoptParked(order.at(0), screen, screen));
+        QVERIFY(engine->readoptParked(order.at(1), screen, screen));
     }
 
     void testWindowOpened_adoptsDespiteAnotherOutputsScrollingRecord()

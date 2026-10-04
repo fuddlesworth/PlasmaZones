@@ -316,6 +316,11 @@ enum class ClaimScope {
     /// Engine disable, daemon loss, daemon bring-up, effect unload. Every
     /// claim answers, and the ORDER matters (see claimReleaseOrder).
     Teardown,
+    /// KWin moved the window off an output that disconnected. Its claims are
+    /// scrubbed from the ledgers without touching KWin's state: a maximized or
+    /// fullscreen evacuee stays that way, so KWin can still return it as it
+    /// was when the output comes back.
+    Evacuation,
 };
 
 /// Whether @p claim releases on @p scope.
@@ -347,6 +352,10 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
         return claim != Claim::WindowedFullscreen;
     case ClaimScope::Teardown:
         return true;
+    case ClaimScope::Evacuation:
+        // No claim releases: a release restores KWin's state, and an evacuee
+        // keeps it. The caller scrubs the ledgers bare instead.
+        return false;
     }
     return false;
 }

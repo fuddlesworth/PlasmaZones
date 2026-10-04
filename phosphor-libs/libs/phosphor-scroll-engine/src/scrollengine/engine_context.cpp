@@ -961,8 +961,8 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     m_states.removeWindowsIf([&matches](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
     });
-    sweepStripStash([&matches](const PhosphorEngine::PlacementStateKey& key) {
-        return matches(key.screenId);
+    sweepStripStash([this, &matches](const PhosphorEngine::PlacementStateKey& key) {
+        return matches(key.screenId) && !isEvacueeParkedKey(key); // a parked strip outlives the output
     });
     // Standalone sweep for STATELESS sub-screens too: a virtual sub-screen
     // of the removed monitor can carry a seed or a rule override without

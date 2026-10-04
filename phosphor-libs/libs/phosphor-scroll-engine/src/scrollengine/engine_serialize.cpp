@@ -446,6 +446,11 @@ QJsonObject ScrollEngine::serializeStripState() const
     // stash columns are folded into the live entry instead.
     QHash<PhosphorEngine::PlacementStateKey, StashedStrip> prunedStashes;
     for (const PhosphorEngine::PlacementStateKey& key : std::as_const(stashKeys)) {
+        // A strip parked for an output's return is session memory: a restart
+        // loses the park, so the save must not carry its structure either.
+        if (isEvacueeParkedKey(key)) {
+            continue;
+        }
         StashedStrip pruned = m_stripStash.value(key);
         for (auto colIt = pruned.columns.begin(); colIt != pruned.columns.end();) {
             colIt->tiles.removeIf([&liveWindowIds, &writtenWindowIds](const StashedTile& tile) {

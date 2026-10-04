@@ -192,6 +192,11 @@ add_executable(test_snap_desktop_membership core/snap/test_snap_desktop_membersh
 target_link_libraries(test_snap_desktop_membership PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_desktop_membership COMMAND test_snap_desktop_membership)
 
+# The snap evacuee park: parkOutput, the prune's float announcements, readoptParked.
+add_executable(test_snap_evacuee_park core/snap/test_snap_evacuee_park.cpp)
+target_link_libraries(test_snap_evacuee_park PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_evacuee_park COMMAND test_snap_evacuee_park)
+
 # resolveFallbackUnfloatGeometry on-success coverage. QTEST_MAIN (not GUILESS) so a
 # QGuiApplication + offscreen primary screen exists and zoneGeometry() resolves —
 # the geometry-dependent path test_snap_engine.cpp (guiless) cannot reach.
