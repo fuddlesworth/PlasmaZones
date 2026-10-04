@@ -8,6 +8,7 @@
 #include "placementutils.h"
 
 #include <PhosphorZones/Layout.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -17,6 +18,7 @@
 #include <PhosphorScreens/Manager.h>
 #include "placementlogging.h"
 #include <QGuiApplication>
+#include <QPointer>
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
@@ -166,6 +168,40 @@ void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
     resolver.forgetWindow = [](const QString&) { };
     m_snapResolver = std::move(resolver);
     flushPendingUserSnappedClasses();
+}
+
+SnapStateResolver snapStateResolverFor(PhosphorSnapEngine::SnapEngine* engine)
+{
+    SnapStateResolver r;
+    r.forWindow = [e = QPointer(engine)](const QString& id) -> PhosphorSnapEngine::SnapState* {
+        return e ? e->stateForWindow(id) : nullptr;
+    };
+    r.forWindowOnScreen = [e = QPointer(engine)](const QString& id, const QString& screenId,
+                                                 int desktop) -> PhosphorSnapEngine::SnapState* {
+        return e ? e->stateForWindowOnScreen(id, screenId, desktop) : nullptr;
+    };
+    r.forScreen = [e = QPointer(engine)](const QString& screenId) -> PhosphorSnapEngine::SnapState* {
+        return e ? static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(screenId)) : nullptr;
+    };
+    r.globals = [e = QPointer(engine)]() -> PhosphorSnapEngine::SnapState* {
+        return e ? e->globalState() : nullptr;
+    };
+    r.allStates = [e = QPointer(engine)]() -> QList<PhosphorSnapEngine::SnapState*> {
+        return e ? e->allSnapStates() : QList<PhosphorSnapEngine::SnapState*>{};
+    };
+    r.forgetWindow = [e = QPointer(engine)](const QString& id) {
+        if (e) {
+            e->forgetWindow(id);
+        }
+    };
+    r.holdsWindow = [e = QPointer(engine)](const QString& id, const PhosphorSnapEngine::SnapState* state) {
+        return e ? e->holdsWindowInState(id, state) : false;
+    };
+    r.keyFor = [e = QPointer(engine)](
+                   const PhosphorSnapEngine::SnapState* state) -> std::optional<PhosphorEngine::PlacementStateKey> {
+        return e ? e->keyForState(state) : std::nullopt;
+    };
+    return r;
 }
 
 void WindowTrackingService::setSnapEngine(PhosphorEngine::PlacementEngineBase* engine)

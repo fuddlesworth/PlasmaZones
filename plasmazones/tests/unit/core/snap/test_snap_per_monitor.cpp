@@ -641,26 +641,7 @@ private:
     /// daemon injects and the one testLastUsedZoneIsPerScreen uses.
     void installFullResolver()
     {
-        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
-        resolver.forWindow = [e = m_engine](const QString& id) {
-            return e->stateForWindow(id);
-        };
-        resolver.forWindowOnScreen = [e = m_engine](const QString& id, const QString& s, int desktop) {
-            return e->stateForWindowOnScreen(id, s, desktop);
-        };
-        resolver.forScreen = [e = m_engine](const QString& s) {
-            return static_cast<SnapState*>(e->stateForScreen(s));
-        };
-        resolver.globals = [e = m_engine]() {
-            return e->globalState();
-        };
-        resolver.allStates = [e = m_engine]() {
-            return e->allSnapStates();
-        };
-        resolver.forgetWindow = [e = m_engine](const QString& id) {
-            e->forgetWindow(id);
-        };
-        m_service->setSnapStateResolver(resolver);
+        m_service->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(m_engine));
     }
 
     std::unique_ptr<IsolatedConfigGuard> m_guard;

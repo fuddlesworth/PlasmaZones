@@ -403,12 +403,8 @@ public:
     /// decide whether a cross-engine handoff is needed.
     bool isWindowTracked(const QString& windowId) const override;
 
-    /**
-     * @brief Resnap windows from previous layout to current layout after layout switch
-     *
-     * Maps windows by zone number (1->1, 2->2, etc.) with wrapping when new
-     * layout has fewer zones.
-     */
+    /// Resnap the windows of the buffer a layout switch populated into the
+    /// same-numbered zone of their screen's new layout.
     void resnapToNewLayout();
 
     /**
@@ -596,6 +592,9 @@ public:
     /// leftover from before a re-key. The WTS facade's aggregate walks use it
     /// through the resolver seam.
     bool holdsWindowInState(const QString& windowId, const SnapState* state) const;
+    /// The key @p state is filed under; nullopt for the global holder or a
+    /// store this engine does not own.
+    std::optional<PhosphorEngine::PlacementStateKey> keyForState(const SnapState* state) const;
 
     /// Re-home a tracked window onto the store for @p newScreenId's current
     /// context. On a screen change every membership on the screen left is
@@ -1091,16 +1090,14 @@ private:
     SnapState* ensureStateForKey(const PhosphorEngine::PlacementStateKey& key);
 
     /// Invoke @p fn once per (window, store) zone assignment across every snap
-    /// store, with the window's zones, screen, and recorded desktop read from
-    /// that store, plus the desktop the STORE is keyed under — the engine-side
-    /// sibling of WindowTrackingService::forEachZoneAssignedWindow, shared by
-    /// the resnap / rotation producers so their per-store walks stay in
-    /// lockstep. A window present on one desktop is visited once; a window
-    /// present on several holds an assignment in each member store and is
-    /// visited once per store. @p fn must not mutate the snap stores.
-    void
-    forEachSnapAssignment(const std::function<void(const QString& windowId, const QStringList& zoneIds,
-                                                   const QString& screenId, int desktop, int storeDesktop)>& fn) const;
+    /// store, with the window's zones, screen and recorded desktop read from
+    /// that store, plus the desktop and activity the STORE is keyed under. The
+    /// engine-side sibling of WindowTrackingService::forEachZoneAssignedWindow,
+    /// shared by the resnap and rotation producers. A window held on several
+    /// desktops is visited once per member store. @p fn must not mutate them.
+    void forEachSnapAssignment(
+        const std::function<void(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                 int desktop, int storeDesktop, const QString& storeActivity)>& fn) const;
 
     /// The desktop a restored window is being placed onto: the registry's
     /// answer for the window, else the record's own desktop when the record

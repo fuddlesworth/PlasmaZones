@@ -149,29 +149,7 @@ protected:
     /// single-store convenience. Undo with setSnapState(snapState()).
     void installPerScreenResolver()
     {
-        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
-        resolver.forWindow = [e = m_snapEngine](const QString& id) {
-            return e->stateForWindow(id);
-        };
-        resolver.forWindowOnScreen = [e = m_snapEngine](const QString& id, const QString& s, int desktop) {
-            return e->stateForWindowOnScreen(id, s, desktop);
-        };
-        resolver.forScreen = [e = m_snapEngine](const QString& s) {
-            return static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(s));
-        };
-        resolver.globals = [e = m_snapEngine]() {
-            return e->globalState();
-        };
-        resolver.allStates = [e = m_snapEngine]() {
-            return e->allSnapStates();
-        };
-        resolver.forgetWindow = [e = m_snapEngine](const QString& id) {
-            e->forgetWindow(id);
-        };
-        resolver.holdsWindow = [e = m_snapEngine](const QString& id, const PhosphorSnapEngine::SnapState* state) {
-            return e->holdsWindowInState(id, state);
-        };
-        m_wta->service()->setSnapStateResolver(resolver);
+        m_wta->service()->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(m_snapEngine));
     }
 
     std::unique_ptr<IsolatedConfigGuard> m_guard;

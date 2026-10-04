@@ -70,30 +70,7 @@ struct SnapAndAutotile
         snap->setEngineSettings(settings);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap.get());
-        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
-        PhosphorSnapEngine::SnapEngine* e = snap.get();
-        resolver.forWindow = [e](const QString& id) {
-            return e->stateForWindow(id);
-        };
-        resolver.forWindowOnScreen = [e](const QString& id, const QString& s, int desktop) {
-            return e->stateForWindowOnScreen(id, s, desktop);
-        };
-        resolver.forScreen = [e](const QString& s) {
-            return static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(s));
-        };
-        resolver.globals = [e]() {
-            return e->globalState();
-        };
-        resolver.allStates = [e]() {
-            return e->allSnapStates();
-        };
-        resolver.forgetWindow = [e](const QString& id) {
-            e->forgetWindow(id);
-        };
-        resolver.holdsWindow = [e](const QString& id, const PhosphorSnapEngine::SnapState* state) {
-            return e->holdsWindowInState(id, state);
-        };
-        wta->service()->setSnapStateResolver(resolver);
+        wta->service()->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(snap.get()));
         snap->setCurrentDesktopForScreen(QStringLiteral("DP-1"), 1);
 
         autotile = std::make_unique<PhosphorTileEngine::AutotileEngine>(layouts, wta->service(), nullptr,

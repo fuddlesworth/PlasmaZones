@@ -134,7 +134,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
 }
 
 void SnapEngine::forEachSnapAssignment(
-    const std::function<void(const QString&, const QStringList&, const QString&, int, int)>& fn) const
+    const std::function<void(const QString&, const QStringList&, const QString&, int, int, const QString&)>& fn) const
 {
     // Keyed walk, so the callback also learns the desktop the STORE sits
     // under: a window present on several desktops holds one assignment per
@@ -148,7 +148,8 @@ void SnapEngine::forEachSnapAssignment(
         const QHash<QString, QString>& stScreens = state->screenAssignments();
         const QHash<QString, int>& stDesktops = state->desktopAssignments();
         for (auto it = stZones.constBegin(); it != stZones.constEnd(); ++it) {
-            fn(it.key(), it.value(), stScreens.value(it.key()), stDesktops.value(it.key(), 0), st.key().desktop);
+            fn(it.key(), it.value(), stScreens.value(it.key()), stDesktops.value(it.key(), 0), st.key().desktop,
+               st.key().activity);
         }
     }
 }
@@ -178,10 +179,16 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
     // preserves every window's recorded desktop through the commit by
     // construction — see the matching stamp in calculateResnapFromPreviousLayout.
     int totalAssignments = 0;
+    const QString activityInView = currentActivity();
     forEachSnapAssignment([&](const QString& windowId, const QStringList& zoneIds, const QString& screenId, int desktop,
-                              int storeDesktop) {
+                              int storeDesktop, const QString& storeActivity) {
         ++totalAssignments;
         if (zoneIds.isEmpty()) {
+            return;
+        }
+        // Another activity's store is not in view: its zones belong to the
+        // layout that activity runs (F127, F128).
+        if (!storeActivity.isEmpty() && storeActivity != activityInView) {
             return;
         }
         if (!onlyWindows.isEmpty() && !onlyWindows.contains(windowId)) {
@@ -222,9 +229,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
         // The STORE's desktop, not the per-window recorded one: the store
         // is the context this assignment belongs to, and a pinned recorded
         // desktop (a RouteToDesktop placement) can name another.
-        if (m_states.membershipsForWindow(windowId).size() > 1
-            && storeDesktop != currentKeyForScreen(screenId).desktop) {
-            return;
+        if (m_states.membershipsForWindow(windowId).size() > 1) {
+            const PhosphorEngine::PlacementStateKey shown = currentKeyForScreen(screenId);
+            if (storeDesktop != shown.desktop || storeActivity != shown.activity) {
+                return;
+            }
         }
 
         QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, screenId);
@@ -255,16 +264,16 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
         << (screenFilter.isEmpty() ? QStringLiteral("(all screens)")
                                    : QStringLiteral("(screen: %1)").arg(screenFilter));
     if (result.isEmpty() && totalAssignments > 0 && PhosphorSnapEngine::lcSnapEngine().isDebugEnabled()) {
-        forEachSnapAssignment(
-            [&](const QString& windowId, const QStringList& zoneIds, const QString& screen, int /*desktop*/, int) {
-                // Same engine-own read as the skip predicate above, so the
-                // diagnostic explains the decision that was actually taken.
-                bool floating = isFloating(windowId);
-                QRect geo = zoneIds.isEmpty() ? QRect() : m_windowTracker->resolveZoneGeometry(zoneIds, screen);
-                qCDebug(PhosphorSnapEngine::lcSnapEngine)
-                    << "  skipped:" << windowId << "zones=" << zoneIds << "screen=" << screen << "floating=" << floating
-                    << "geoValid=" << geo.isValid() << "screenMatch=" << screenMatches(screen);
-            });
+        forEachSnapAssignment([&](const QString& windowId, const QStringList& zoneIds, const QString& screen,
+                                  int /*desktop*/, int, const QString&) {
+            // Same engine-own read as the skip predicate above, so the
+            // diagnostic explains the decision that was actually taken.
+            bool floating = isFloating(windowId);
+            QRect geo = zoneIds.isEmpty() ? QRect() : m_windowTracker->resolveZoneGeometry(zoneIds, screen);
+            qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                << "  skipped:" << windowId << "zones=" << zoneIds << "screen=" << screen << "floating=" << floating
+                << "geoValid=" << geo.isValid() << "screenMatch=" << screenMatches(screen);
+        });
     }
     return result;
 }
@@ -574,30 +583,35 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
     // per screen, not one per candidate (-1 = not yet cached, 0 is a valid
     // cached "unknown").
     QHash<QString, int> screenDesktopMemo;
-    forEachSnapAssignment(
-        [&](const QString& windowId, const QStringList& zoneIdList, const QString& screenId, int desktop, int) {
-            if (zoneIdList.isEmpty()) {
+    const QString activityInView = currentActivity();
+    forEachSnapAssignment([&](const QString& windowId, const QStringList& zoneIdList, const QString& screenId,
+                              int desktop, int, const QString& storeActivity) {
+        if (zoneIdList.isEmpty()) {
+            return;
+        }
+        // Rotation acts on the activity in view too.
+        if (!storeActivity.isEmpty() && storeActivity != activityInView) {
+            return;
+        }
+
+        // When a screen filter is set, only include windows on that screen
+        if (!screenFilter.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(screenId, screenFilter)) {
+            return;
+        }
+
+        if (desktop != 0) {
+            int screenDesktop = screenDesktopMemo.value(screenId, -1);
+            if (screenDesktop < 0) {
+                screenDesktop = currentVirtualDesktopForScreen(screenId);
+                screenDesktopMemo.insert(screenId, screenDesktop);
+            }
+            if (screenDesktop > 0 && desktop != screenDesktop) {
                 return;
             }
+        }
 
-            // When a screen filter is set, only include windows on that screen
-            if (!screenFilter.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(screenId, screenFilter)) {
-                return;
-            }
-
-            if (desktop != 0) {
-                int screenDesktop = screenDesktopMemo.value(screenId, -1);
-                if (screenDesktop < 0) {
-                    screenDesktop = currentVirtualDesktopForScreen(screenId);
-                    screenDesktopMemo.insert(screenId, screenDesktop);
-                }
-                if (screenDesktop > 0 && desktop != screenDesktop) {
-                    return;
-                }
-            }
-
-            windowsByScreen[screenId].append({windowId, zoneIdList.first(), desktop});
-        });
+        windowsByScreen[screenId].append({windowId, zoneIdList.first(), desktop});
+    });
 
     // Process each screen independently
     for (auto screenIt = windowsByScreen.constBegin(); screenIt != windowsByScreen.constEnd(); ++screenIt) {

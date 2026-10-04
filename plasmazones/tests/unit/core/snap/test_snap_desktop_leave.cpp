@@ -215,29 +215,7 @@ private Q_SLOTS:
 private:
     void installFullResolver()
     {
-        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
-        resolver.forWindow = [e = m_engine](const QString& id) {
-            return e->stateForWindow(id);
-        };
-        resolver.forWindowOnScreen = [e = m_engine](const QString& id, const QString& s, int desktop) {
-            return e->stateForWindowOnScreen(id, s, desktop);
-        };
-        resolver.forScreen = [e = m_engine](const QString& s) {
-            return static_cast<SnapState*>(e->stateForScreen(s));
-        };
-        resolver.globals = [e = m_engine]() {
-            return e->globalState();
-        };
-        resolver.allStates = [e = m_engine]() {
-            return e->allSnapStates();
-        };
-        resolver.forgetWindow = [e = m_engine](const QString& id) {
-            e->forgetWindow(id);
-        };
-        resolver.holdsWindow = [e = m_engine](const QString& id, const SnapState* state) {
-            return e->holdsWindowInState(id, state);
-        };
-        m_service->setSnapStateResolver(resolver);
+        m_service->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(m_engine));
     }
 
     /// Snap @p windowId into @p zoneId on @p desktop of kScreen through the

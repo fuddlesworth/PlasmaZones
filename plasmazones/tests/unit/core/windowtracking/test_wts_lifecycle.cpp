@@ -185,6 +185,30 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowSnapped(windowId));
     }
 
+    // A layout change on the desktop in view keeps the zone a window holds on
+    // another desktop, whose layout did not change (F829).
+    void otherDesktopKeepsItsZoneAcrossALayoutChange()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        const QString otherDesktop = QStringLiteral("app|other-desktop");
+        const QString inView = QStringLiteral("app|in-view");
+        QCOMPARE(m_layoutManager->currentVirtualDesktopForScreen(screen), 1);
+        m_service->assignWindowToZone(otherDesktop, m_zoneIds[0], screen, 2);
+        m_service->assignWindowToZone(inView, m_zoneIds[1], screen, 1);
+
+        PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(newLayout);
+        const QString newLayoutId = newLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([newLayoutId]() {
+            return newLayoutId;
+        });
+        m_layoutManager->setActiveLayout(newLayout);
+        m_service->onLayoutChanged();
+
+        QCOMPARE(m_service->zonesForWindow(otherDesktop), QStringList{m_zoneIds[0]});
+        QVERIFY(m_service->zonesForWindow(inView).isEmpty());
+    }
+
     void testOnLayoutChanged_nonSnappingScreenKeepsAssignments()
     {
         // onLayoutChanged prunes assignments whose zones no longer exist in the

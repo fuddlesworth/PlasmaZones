@@ -65,30 +65,7 @@ struct FloatBackFixture
         snap->setNavigationStateProvider(wta);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap.get());
-        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
-        PhosphorSnapEngine::SnapEngine* e = snap.get();
-        resolver.forWindow = [e](const QString& id) {
-            return e->stateForWindow(id);
-        };
-        resolver.forWindowOnScreen = [e](const QString& id, const QString& s, int desktop) {
-            return e->stateForWindowOnScreen(id, s, desktop);
-        };
-        resolver.forScreen = [e](const QString& s) {
-            return static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(s));
-        };
-        resolver.globals = [e]() {
-            return e->globalState();
-        };
-        resolver.allStates = [e]() {
-            return e->allSnapStates();
-        };
-        resolver.forgetWindow = [e](const QString& id) {
-            e->forgetWindow(id);
-        };
-        resolver.holdsWindow = [e](const QString& id, const PhosphorSnapEngine::SnapState* state) {
-            return e->holdsWindowInState(id, state);
-        };
-        wta->service()->setSnapStateResolver(resolver);
+        wta->service()->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(snap.get()));
         wta->setEngines(snap.get(), &tiling, nullptr);
         snap->setCurrentDesktopForScreen(kLeft, 1);
         snap->setCurrentDesktopForScreen(kRight, 1);

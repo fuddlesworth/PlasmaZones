@@ -130,10 +130,15 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // autotiled, which is why the non-restart autotile→snap swap finds them here).
     // Per-state visitation: each window's screen/desktop come from the store that
     // owns it, never from a cross-store flat-map join.
-    forEachZoneAssignedWindow(
-        [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId, int desktop) {
+    // Another activity's store is not in view: its zone ids belong to the
+    // layout that activity runs (F126, F127).
+    const QString currentActivity = m_layoutManager->currentActivity();
+    forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                  int desktop, const QString& activity, PhosphorSnapEngine::SnapState*) {
+        if (activityInView(activity, currentActivity)) {
             addCandidate(windowId, zoneIds, screenId, desktop);
-        });
+        }
+    });
 
     // 2. Restart-robustness: a window snapped in a PRIOR session and then autotiled
     // has its snap zones only in the durable WindowPlacement record — the live
@@ -217,16 +222,14 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     // Screen assignments may store connector names or EDID-based screen IDs
     // depending on the code path. Use screensMatch() for format-agnostic comparison.
 
-    // This list SEEDS the autotile state for (screenId, CURRENT virtual desktop).
-    // Snap assignments are screen-keyed but desktop-agnostic, so the same screen
-    // can hold windows snapped on a DIFFERENT desktop (e.g. screen S snaps on VD1
-    // and autotiles on VD2 via per-desktop rules). Those off-desktop windows must
-    // NOT be pulled into this desktop's autotile state — doing so eagerly inserts
-    // and tiles a window that lives on another desktop, overwriting its snap
-    // geometry there (switching to the autotile desktop would corrupt the snap
-    // desktop's window positions). Scope to the current desktop; desktop==0
-    // (sticky / unknown) stays desktop-agnostic and is kept. Mirrors the
-    // desktopFilter guard in populateResnapBufferForAllScreens (addCandidate).
+    // This list SEEDS the autotile state for (screenId, CURRENT virtual desktop,
+    // current activity). The screen also holds the snaps of its other desktops
+    // and activities (e.g. screen S snaps on VD1 and autotiles on VD2 via
+    // per-desktop rules), and pulling those into this context's autotile state
+    // tiles a window that lives elsewhere, overwriting its snap geometry there.
+    // Scope to the current desktop and activity (F139); desktop==0 (sticky /
+    // unknown) stays desktop-agnostic and is kept. Mirrors the filters in
+    // populateResnapBufferForAllScreens (addCandidate).
     const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 
     int insertionIdx = 0;
@@ -239,45 +242,49 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     // keys on canonicalizeForLookup: this pass has a single source, so the
     // raw id cannot spell the same window two ways.
     QSet<QString> seenWindowIds;
-    forEachZoneAssignedWindow(
-        [&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen, int windowDesktop) {
-            if (!PhosphorScreens::ScreenIdentity::screensMatch(windowScreen, screenId)) {
-                return;
-            }
-            if (!desktopMatchesFilter(windowDesktop, currentDesktop)) {
-                return;
-            }
-            if (seenWindowIds.contains(windowId)) {
-                return;
-            }
-            seenWindowIds.insert(windowId);
-            // Skip floating windows — the user's manual-mode float choice is
-            // preserved across the transition.
-            //
-            // SNAP's own bit, not the mode-routed read. This list is the
-            // snapping→tiling SEED source, and by the time it is built the
-            // screen's mode has already flipped to the DESTINATION engine, so
-            // the routed read would let the destination engine's own float bit
-            // decide what enters its own seed order — a transition-path read
-            // must be a SOURCE-mode read. The seed filter downstream applies
-            // the destination engine's per-engine rule separately.
-            const PhosphorSnapEngine::SnapState* snap = snapForWindow(windowId);
-            if (snap && snap->isFloating(windowId)) {
-                return;
-            }
-            if (zoneIds.isEmpty()) {
-                return;
-            }
+    const QString currentActivity = m_layoutManager->currentActivity();
+    forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen,
+                                  int windowDesktop, const QString& activity, PhosphorSnapEngine::SnapState*) {
+        if (!PhosphorScreens::ScreenIdentity::screensMatch(windowScreen, screenId)) {
+            return;
+        }
+        if (!activityInView(activity, currentActivity)) {
+            return;
+        }
+        if (!desktopMatchesFilter(windowDesktop, currentDesktop)) {
+            return;
+        }
+        if (seenWindowIds.contains(windowId)) {
+            return;
+        }
+        seenWindowIds.insert(windowId);
+        // Skip floating windows — the user's manual-mode float choice is
+        // preserved across the transition.
+        //
+        // SNAP's own bit, not the mode-routed read. This list is the
+        // snapping→tiling SEED source, and by the time it is built the
+        // screen's mode has already flipped to the DESTINATION engine, so
+        // the routed read would let the destination engine's own float bit
+        // decide what enters its own seed order — a transition-path read
+        // must be a SOURCE-mode read. The seed filter downstream applies
+        // the destination engine's per-engine rule separately.
+        const PhosphorSnapEngine::SnapState* snap = snapForWindow(windowId);
+        if (snap && snap->isFloating(windowId)) {
+            return;
+        }
+        if (zoneIds.isEmpty()) {
+            return;
+        }
 
-            // Use primary zone's zone number
-            auto numIt = zoneNumberMap.constFind(zoneIds.first());
-            if (numIt != zoneNumberMap.constEnd()) {
-                windowsByZone.append({numIt.value(), insertionIdx++, windowId});
-            } else {
-                qCWarning(lcPlacement) << "buildZoneOrderedWindowList: zone UUID" << zoneIds.first() << "for window"
-                                       << windowId << "not found in layout - skipping";
-            }
-        });
+        // Use primary zone's zone number
+        auto numIt = zoneNumberMap.constFind(zoneIds.first());
+        if (numIt != zoneNumberMap.constEnd()) {
+            windowsByZone.append({numIt.value(), insertionIdx++, windowId});
+        } else {
+            qCWarning(lcPlacement) << "buildZoneOrderedWindowList: zone UUID" << zoneIds.first() << "for window"
+                                   << windowId << "not found in layout - skipping";
+        }
+    });
 
     // Sort by zone number ascending, preserving iteration order as tie-breaker
     std::stable_sort(windowsByZone.begin(), windowsByZone.end(), [](const auto& a, const auto& b) {
@@ -310,16 +317,16 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
         return result;
     }
 
-    forEachZoneAssignedWindow(
-        [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId, int /*desktop*/) {
-            if (zoneIds.isEmpty()) {
-                return;
-            }
-            QRect geo = resolveZoneGeometry(zoneIds, screenId);
-            if (geo.isValid()) {
-                result[windowId] = geo;
-            }
-        });
+    forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                  int /*desktop*/, const QString& /*activity*/, PhosphorSnapEngine::SnapState*) {
+        if (zoneIds.isEmpty()) {
+            return;
+        }
+        QRect geo = resolveZoneGeometry(zoneIds, screenId);
+        if (geo.isValid()) {
+            result[windowId] = geo;
+        }
+    });
 
     return result;
 }

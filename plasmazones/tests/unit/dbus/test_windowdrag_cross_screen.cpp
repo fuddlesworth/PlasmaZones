@@ -71,29 +71,7 @@ private:
             snap->setEngineSettings(&settings);
             wta->service()->setSnapState(snap->snapState());
             wta->service()->setSnapEngine(snap.get());
-            PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
-            resolver.forWindow = [e = snap.get()](const QString& id) {
-                return e->stateForWindow(id);
-            };
-            resolver.forWindowOnScreen = [e = snap.get()](const QString& id, const QString& s, int desktop) {
-                return e->stateForWindowOnScreen(id, s, desktop);
-            };
-            resolver.forScreen = [e = snap.get()](const QString& s) {
-                return static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(s));
-            };
-            resolver.globals = [e = snap.get()]() {
-                return e->globalState();
-            };
-            resolver.allStates = [e = snap.get()]() {
-                return e->allSnapStates();
-            };
-            resolver.forgetWindow = [e = snap.get()](const QString& id) {
-                e->forgetWindow(id);
-            };
-            resolver.holdsWindow = [e = snap.get()](const QString& id, const PhosphorSnapEngine::SnapState* state) {
-                return e->holdsWindowInState(id, state);
-            };
-            wta->service()->setSnapStateResolver(resolver);
+            wta->service()->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(snap.get()));
             wta->setEngines(snap.get(), nullptr, nullptr);
             adaptor =
                 new WindowDragAdaptor(&overlay, &detector, layoutManager, screenMgr.get(), &settings, wta, &parent);

@@ -138,76 +138,81 @@ void WindowTrackingService::onLayoutChanged()
     // the unassign / re-assign below runs after the visitation completes. The
     // desktop is captured per window here so the rewrite pass needs no second
     // lookup against state that the removal pass may have already changed.
-    forEachZoneAssignedWindow(
-        [&](const QString& windowId, const QStringList& zoneIdList, const QString& windowScreen, int windowDesktop) {
-            if (zoneIdList.isEmpty()) {
-                toRemove.append(windowId);
-                return;
-            }
+    forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIdList, const QString& windowScreen,
+                                  int windowDesktop, const QString& windowActivity, PhosphorSnapEngine::SnapState*) {
+        if (zoneIdList.isEmpty()) {
+            toRemove.append(windowId);
+            return;
+        }
 
-            // Preserve zone assignments for windows on other desktops. Desktop 0
-            // means "all desktops" (pinned window) — always process those.
-            //
-            // Ordering note: this desktop gate is BEFORE the autotile-screen gate
-            // below. Both gates ultimately preserve the assignment (by returning),
-            // so order is observationally irrelevant — but the intent is "windows
-            // on other desktops are preserved categorically, autotile preservation
-            // is a separate axis that only matters for windows whose desktop is
-            // current." Don't reorder these without checking that the new ordering
-            // still preserves the union {other-desktop OR autotile-screen}.
-            //
-            // Per-output virtual desktops (#648): "other desktop" is relative to the
-            // window's OWN screen's current desktop, not the global current. NOT the
-            // shared desktopMatchesFilter helper: this gate must also preserve when
-            // the screen's current desktop is unknown (0), where the helper's
-            // filter-disabled semantics would process the window instead.
-            const int currentDesktop = m_layoutManager->currentVirtualDesktopForScreen(windowScreen);
-            if (windowDesktop != 0 && windowDesktop != currentDesktop) {
-                return;
-            }
+        // Preserve zone assignments for windows on other desktops. Desktop 0
+        // means "all desktops" (pinned window) — always process those.
+        //
+        // Ordering note: this desktop gate is BEFORE the autotile-screen gate
+        // below. Both gates ultimately preserve the assignment (by returning),
+        // so order is observationally irrelevant — but the intent is "windows
+        // on other desktops are preserved categorically, autotile preservation
+        // is a separate axis that only matters for windows whose desktop is
+        // current." Don't reorder these without checking that the new ordering
+        // still preserves the union {other-desktop OR autotile-screen}.
+        //
+        // Per-output virtual desktops (#648): "other desktop" is relative to the
+        // window's OWN screen's current desktop, not the global current. NOT the
+        // shared desktopMatchesFilter helper: this gate must also preserve when
+        // the screen's current desktop is unknown (0), where the helper's
+        // filter-disabled semantics would process the window instead.
+        const int currentDesktop = m_layoutManager->currentVirtualDesktopForScreen(windowScreen);
+        if (windowDesktop != 0 && windowDesktop != currentDesktop) {
+            return;
+        }
+        // Another activity's store is preserved like another desktop's
+        // (F127).
+        if (!activityInView(windowActivity, currentActivity)) {
+            return;
+        }
 
-            // If a non-snapping engine owns this screen, preserve the zone
-            // assignments for resnap. Scrolling counts alongside autotile: it has
-            // no layout entity either (its id is the bare "scrolling:" sentinel),
-            // so resolveLayoutForScreen below would resolve some unrelated
-            // cascade layout and prune every assignment the screen is holding for
-            // its eventual return to snapping.
-            auto cached = screenIsNonSnapping.constFind(windowScreen);
-            if (cached == screenIsNonSnapping.constEnd()) {
-                const QString assignmentId =
-                    m_layoutManager->assignmentIdForScreen(windowScreen, currentDesktop, currentActivity);
-                cached = screenIsNonSnapping.insert(windowScreen,
-                                                    PhosphorLayout::LayoutId::isAutotile(assignmentId)
-                                                        || PhosphorLayout::LayoutId::isScrolling(assignmentId));
-            }
-            if (*cached) {
-                return;
-            }
+        // If a non-snapping engine owns this screen, preserve the zone
+        // assignments for resnap. Scrolling counts alongside autotile: it has
+        // no layout entity either (its id is the bare "scrolling:" sentinel),
+        // so resolveLayoutForScreen below would resolve some unrelated
+        // cascade layout and prune every assignment the screen is holding for
+        // its eventual return to snapping.
+        auto cached = screenIsNonSnapping.constFind(windowScreen);
+        if (cached == screenIsNonSnapping.constEnd()) {
+            const QString assignmentId =
+                m_layoutManager->assignmentIdForScreen(windowScreen, currentDesktop, currentActivity);
+            cached = screenIsNonSnapping.insert(windowScreen,
+                                                PhosphorLayout::LayoutId::isAutotile(assignmentId)
+                                                    || PhosphorLayout::LayoutId::isScrolling(assignmentId));
+        }
+        if (*cached) {
+            return;
+        }
 
-            PhosphorZones::Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
-            if (!effectiveLayout) {
-                toRemove.append(windowId);
-                return;
+        PhosphorZones::Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
+        if (!effectiveLayout) {
+            toRemove.append(windowId);
+            return;
+        }
+        if (allZonesExistInLayout(zoneIdList, effectiveLayout)) {
+            return; // fully valid, nothing to do
+        }
+        // Partial or full invalidity: rebuild the surviving subset. Empty
+        // result means the whole window lost its zones → mark for unassign.
+        QStringList survivingZones;
+        survivingZones.reserve(zoneIdList.size());
+        for (const QString& zid : zoneIdList) {
+            const auto uuid = parseUuid(zid);
+            if (uuid && effectiveLayout->zoneById(*uuid)) {
+                survivingZones.append(zid);
             }
-            if (allZonesExistInLayout(zoneIdList, effectiveLayout)) {
-                return; // fully valid, nothing to do
-            }
-            // Partial or full invalidity: rebuild the surviving subset. Empty
-            // result means the whole window lost its zones → mark for unassign.
-            QStringList survivingZones;
-            survivingZones.reserve(zoneIdList.size());
-            for (const QString& zid : zoneIdList) {
-                const auto uuid = parseUuid(zid);
-                if (uuid && effectiveLayout->zoneById(*uuid)) {
-                    survivingZones.append(zid);
-                }
-            }
-            if (survivingZones.isEmpty()) {
-                toRemove.append(windowId);
-            } else {
-                toRewrite.insert(windowId, {survivingZones, windowScreen, windowDesktop});
-            }
-        });
+        }
+        if (survivingZones.isEmpty()) {
+            toRemove.append(windowId);
+        } else {
+            toRewrite.insert(windowId, {survivingZones, windowScreen, windowDesktop});
+        }
+    });
 
     for (const QString& windowId : toRemove) {
         unassignWindow(windowId);

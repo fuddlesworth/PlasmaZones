@@ -184,6 +184,14 @@ add_executable(test_snap_per_monitor core/snap/test_snap_per_monitor.cpp)
 target_link_libraries(test_snap_per_monitor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_per_monitor COMMAND test_snap_per_monitor)
 
+# The snap walks read the (screen, desktop, activity) each store is filed
+# under (F127): another activity's window is not resnapped, counted, seeded
+# or pruned in the activity in view.
+add_executable(test_wts_activity_scope core/windowtracking/test_wts_activity_scope.cpp)
+target_link_libraries(test_wts_activity_scope PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wts_activity_scope COMMAND test_wts_activity_scope)
+
 # The snap engine's per-desktop membership arm: adoption grants a store of
 # its own on the desktop in view, the persisted per-desktop zone map, and the
 # close / release / restore paths over every member store. Same fixture shape

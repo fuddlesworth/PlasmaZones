@@ -400,35 +400,7 @@ void Daemon::initEnginesAndWiring()
     // AutotileEngine/TilingState). Wire the WTS facade through the engine's resolver
     // seam so each windowId-keyed query reaches the store that owns the window and
     // each screen-carrying write reaches — and registers — the store for that screen.
-    {
-        PhosphorPlacement::WindowTrackingService::SnapStateResolver snapResolver;
-        snapResolver.forWindow = [e = QPointer(snapEngine)](const QString& id) -> PhosphorSnapEngine::SnapState* {
-            return e ? e->stateForWindow(id) : nullptr;
-        };
-        snapResolver.forWindowOnScreen = [e = QPointer(snapEngine)](const QString& id, const QString& screenId,
-                                                                    int desktop) -> PhosphorSnapEngine::SnapState* {
-            return e ? e->stateForWindowOnScreen(id, screenId, desktop) : nullptr;
-        };
-        snapResolver.forScreen = [e = QPointer(snapEngine)](const QString& screenId) -> PhosphorSnapEngine::SnapState* {
-            return e ? static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(screenId)) : nullptr;
-        };
-        snapResolver.globals = [e = QPointer(snapEngine)]() -> PhosphorSnapEngine::SnapState* {
-            return e ? e->globalState() : nullptr;
-        };
-        snapResolver.allStates = [e = QPointer(snapEngine)]() -> QList<PhosphorSnapEngine::SnapState*> {
-            return e ? e->allSnapStates() : QList<PhosphorSnapEngine::SnapState*>{};
-        };
-        snapResolver.forgetWindow = [e = QPointer(snapEngine)](const QString& id) {
-            if (e) {
-                e->forgetWindow(id);
-            }
-        };
-        snapResolver.holdsWindow = [e = QPointer(snapEngine)](const QString& id,
-                                                              const PhosphorSnapEngine::SnapState* state) {
-            return e ? e->holdsWindowInState(id, state) : false;
-        };
-        m_windowTrackingAdaptor->service()->setSnapStateResolver(std::move(snapResolver));
-    }
+    m_windowTrackingAdaptor->service()->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(snapEngine));
     m_windowTrackingAdaptor->service()->setSnapEngine(snapEngine);
     // Inject the shared window registry so each SnapState canonicalizes its
     // windowId-keyed stores to the stable first-seen composite (instanceId →

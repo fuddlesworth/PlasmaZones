@@ -325,6 +325,19 @@ bool SnapEngine::holdsWindowInState(const QString& windowId, const SnapState* st
     return false;
 }
 
+std::optional<PhosphorEngine::PlacementStateKey> SnapEngine::keyForState(const SnapState* state) const
+{
+    if (!state) {
+        return std::nullopt;
+    }
+    for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
+        if (it.value() == state && !it.key().screenId.isEmpty()) {
+            return it.key();
+        }
+    }
+    return std::nullopt;
+}
+
 QList<SnapState*> SnapEngine::allSnapStates() const
 {
     QList<SnapState*> out;

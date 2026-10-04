@@ -23,6 +23,13 @@ inline bool desktopMatchesFilter(int windowDesktop, int desktopFilter)
     return desktopFilter <= 0 || windowDesktop == 0 || windowDesktop == desktopFilter;
 }
 
+/// Whether a store keyed under @p keyActivity belongs to the activity in view.
+/// An empty key activity (no activities, a keyless walk) is every activity's.
+inline bool activityInView(const QString& keyActivity, const QString& currentActivity)
+{
+    return keyActivity.isEmpty() || keyActivity == currentActivity;
+}
+
 inline std::optional<QUuid> parseUuid(const QString& str)
 {
     if (str.isEmpty()) {

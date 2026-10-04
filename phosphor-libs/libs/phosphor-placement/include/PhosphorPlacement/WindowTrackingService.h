@@ -1045,11 +1045,9 @@ public:
     /// Uses PhosphorScreens::ScreenIdentity::screensMatch() for format-agnostic screen comparison.
     ///
     /// @param desktopFilter When > 0, only counts assignments whose window desktop
-    ///   matches (or is 0 = pinned/all-desktops). Pass the current virtual desktop
-    ///   for snap-assist / empty-zone queries so windows parked on other desktops
-    ///   do not make zones appear occupied — this mirrors the filtering done by
-    ///   SnapAssistHandler::buildCandidates() in the KWin effect, keeping the
-    ///   "occupied" and "candidate" definitions symmetric.
+    ///   matches (or is 0 = pinned/all-desktops), so windows parked on other
+    ///   desktops do not make zones appear occupied. A store of another
+    ///   activity never counts.
     QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString(), int desktopFilter = 0) const override;
 
     /**
@@ -1114,20 +1112,18 @@ private:
     /// `m_snapState != nullptr` guards.
     bool hasSnapState() const;
     /// Invoke @p fn once per (window, store) zone assignment the window is a
-    /// MEMBER of, with its zones, screen, and desktop read from that store.
-    /// The per-state replacement for the removed flat zoneAssignments()/
-    /// screenAssignments()/desktopAssignments() unions. A window present on
-    /// one desktop is visited once; a window present on several desktops
-    /// holds an assignment in each and is visited once per member store, each
-    /// with that store's own desktop, so a caller that wants one context
-    /// filters by desktop. A store the window is NOT a member of can only hold
-    /// a leftover and is skipped.
-    /// @p fn must not mutate the snap stores — collect first, mutate after.
-    /// Body kept in lockstep with the engine-side sibling
-    /// SnapEngine::forEachSnapAssignment (same contract; this one reaches the
-    /// stores via the injected resolver, the engine iterates its own states).
-    void forEachZoneAssignedWindow(const std::function<void(const QString& windowId, const QStringList& zoneIds,
-                                                            const QString& screenId, int desktop)>& fn) const;
+    /// MEMBER of (a leftover in another store is skipped), with its zones and
+    /// screen, the store's context and the store itself. @p desktop is 0 for a
+    /// sticky window, else the store key's desktop; @p activity is the key's.
+    /// Keyless (an unset keyFor, the single-store convenience) passes the
+    /// window's recorded desktop and an empty activity, which every filter
+    /// reads as current. @p fn must not mutate the stores: collect, then
+    /// mutate the visited @p store. Kept in lockstep with
+    /// SnapEngine::forEachSnapAssignment.
+    void forEachZoneAssignedWindow(
+        const std::function<void(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                 int desktop, const QString& activity, PhosphorSnapEngine::SnapState* store)>& fn)
+        const;
 
     /// Push a load that arrived before any SnapState was wired into the store
     /// once one exists. No-op when nothing is held. See setUserSnappedClasses.

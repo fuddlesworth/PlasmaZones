@@ -345,19 +345,19 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     // their float state must survive a VS reconfigure.
     if (m_layoutManager) {
         QStringList windowsToRemove;
-        forEachZoneAssignedWindow(
-            [&](const QString& windowId, const QStringList& zoneIds, const QString& winScreen, int /*desktop*/) {
-                if (!virtualScreenIds.contains(winScreen)) {
-                    return;
-                }
-                if (isWindowFloating(windowId)) {
-                    return;
-                }
-                PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(winScreen);
-                if (vsLayout && !allZonesExistInLayout(zoneIds, vsLayout)) {
-                    windowsToRemove.append(windowId);
-                }
-            });
+        forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIds, const QString& winScreen,
+                                      int /*desktop*/, const QString& /*activity*/, PhosphorSnapEngine::SnapState*) {
+            if (!virtualScreenIds.contains(winScreen)) {
+                return;
+            }
+            if (isWindowFloating(windowId)) {
+                return;
+            }
+            PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(winScreen);
+            if (vsLayout && !allZonesExistInLayout(zoneIds, vsLayout)) {
+                windowsToRemove.append(windowId);
+            }
+        });
         anyStateMigrated |= pruneMigratedWindows(windowsToRemove);
     }
 
@@ -492,21 +492,21 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         m_layoutManager ? m_layoutManager->resolveLayoutForScreen(physicalScreenId) : nullptr;
     if (physLayout) {
         QStringList windowsToRemove;
-        forEachZoneAssignedWindow(
-            [&](const QString& windowId, const QStringList& zoneIds, const QString& winScreen, int /*desktop*/) {
-                if (winScreen != physicalScreenId) {
-                    return;
-                }
-                // Preserve floating windows — clearing float state here would make
-                // previously floating windows eligible for auto-snap again, which is
-                // a user-visible behavior change.
-                if (isWindowFloating(windowId)) {
-                    return;
-                }
-                if (!allZonesExistInLayout(zoneIds, physLayout)) {
-                    windowsToRemove.append(windowId);
-                }
-            });
+        forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIds, const QString& winScreen,
+                                      int /*desktop*/, const QString& /*activity*/, PhosphorSnapEngine::SnapState*) {
+            if (winScreen != physicalScreenId) {
+                return;
+            }
+            // Preserve floating windows — clearing float state here would make
+            // previously floating windows eligible for auto-snap again, which is
+            // a user-visible behavior change.
+            if (isWindowFloating(windowId)) {
+                return;
+            }
+            if (!allZonesExistInLayout(zoneIds, physLayout)) {
+                windowsToRemove.append(windowId);
+            }
+        });
         anyStateMigrated |= pruneMigratedWindows(windowsToRemove);
     }
 

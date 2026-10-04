@@ -194,13 +194,19 @@ QStringList WindowTrackingService::snapZonesOnDesktopInView(const PhosphorEngine
 }
 
 void WindowTrackingService::forEachZoneAssignedWindow(
-    const std::function<void(const QString&, const QStringList&, const QString&, int)>& fn) const
+    const std::function<void(const QString&, const QStringList&, const QString&, int, const QString&,
+                             PhosphorSnapEngine::SnapState*)>& fn) const
 {
     Q_ASSERT(hasSnapState());
     if (!hasSnapState()) {
         return;
     }
-    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        // The store's context: a window held on several desktops or
+        // activities has one membership per store, and only the key says
+        // which context each is (F127, F565).
+        const std::optional<PhosphorEngine::PlacementStateKey> key =
+            m_snapResolver.keyFor ? m_snapResolver.keyFor(state) : std::nullopt;
         const QHash<QString, QStringList>& zones = state->zoneAssignments();
         const QHash<QString, QString>& screens = state->screenAssignments();
         const QHash<QString, int>& desktops = state->desktopAssignments();
@@ -228,7 +234,9 @@ void WindowTrackingService::forEachZoneAssignedWindow(
             if (owner && owner != state && !snapHoldsWindow(it.key(), state)) {
                 continue;
             }
-            fn(it.key(), it.value(), screens.value(it.key()), desktops.value(it.key(), 0));
+            const int recorded = desktops.value(it.key(), 0);
+            const int desktop = (recorded != 0 && key && key->desktop > 0) ? key->desktop : recorded;
+            fn(it.key(), it.value(), screens.value(it.key()), desktop, key ? key->activity : QString(), state);
         }
     }
 }
