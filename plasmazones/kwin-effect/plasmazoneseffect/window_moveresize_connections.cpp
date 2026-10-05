@@ -299,6 +299,11 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
             // re-validates membership before reflowing.
             notifyWindowResized(window, m_resizeStartGeometry);
         }
+        // The free geometry the effect remembers follows a hand placement, so a
+        // later desktop move or float-back returns to where the user left it.
+        if (window && !window->isDeleted() && shouldHandleWindow(window)) {
+            m_tilingHandler->noteFreeGeometryAfterGesture(window, wasResize);
+        }
         m_dragTracker->handleWindowFinishMoveResize(window);
         // Now that the COMPOSITOR's move is over (this signal, not forceEnd,
         // is when compositorMoveResizeActive() clears), re-drive the pill

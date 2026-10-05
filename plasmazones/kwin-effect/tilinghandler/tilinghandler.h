@@ -341,16 +341,15 @@ public:
     /// Consume the desktop-move stash for @p windowId, folding the preserved
     /// pre-autotile rect back into @p screenId's bucket so a float-restore
     /// after the move returns to the original free position rather than the
-    /// source desktop's tiled frame. MUST run after the re-add path's
-    /// releaseWindowTracking (which wipes the bucket) and before
-    /// notifyWindowAdded. Declines a rect stashed under another screen (its
-    /// rects are in the SOURCE monitor's coordinates). Consumes the entry.
+    /// source desktop's tiled frame. MUST run after the teardown that wipes the
+    /// bucket and before notifyWindowAdded. Declines another monitor's rect.
     void restorePreTileForDesktopMove(const QString& windowId, const QString& screenId);
-    /// Pay @p w the free placement it is owed after leaving a tiling desktop
-    /// for one that does not tile (DesktopMoveStash), now that it is in view
-    /// on @p screenId; payOwedFreePlacementsInView does it for a switch.
+    /// The free placement a window that left a tiling desktop is owed where it
+    /// is now in view (DesktopMoveStash); the second pays every one a switch shows.
     void payOwedFreePlacement(KWin::EffectWindow* w, const QString& windowId, const QString& screenId);
     void payOwedFreePlacementsInView(const QList<KWin::EffectWindow*>& windows);
+    /// A hand gesture ended: the stash follows a move or resize, the float bucket a resize.
+    void noteFreeGeometryAfterGesture(KWin::EffectWindow* w, bool resized);
     /// The tiling side of a crossing. True when it is the window's own (not a daemon
     /// move's echo nor a strip column's hop), for ScreenChangeHandler::reportCrossing.
     bool handleWindowOutputChanged(KWin::EffectWindow* w);

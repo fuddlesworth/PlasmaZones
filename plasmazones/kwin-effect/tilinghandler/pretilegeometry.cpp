@@ -547,6 +547,36 @@ void TilingHandler::payOwedFreePlacement(KWin::EffectWindow* w, const QString& w
     }
 }
 
+void TilingHandler::noteFreeGeometryAfterGesture(KWin::EffectWindow* w, bool resized)
+{
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    const QString screenId = m_effect->getWindowScreenId(w);
+    const QRectF free = m_effect->freeGeometryForCapture(w, QRectF(w->frameGeometry()));
+    if (windowId.isEmpty() || screenId.isEmpty() || !free.isValid()) {
+        return;
+    }
+    // A window that left a tiling desktop and was then placed by hand: its
+    // stash follows the hand, and no free placement is owed any more (F334).
+    if (!m_notifiedWindows.contains(windowId) && !m_effect->isWindowMarkedSnapped(windowId)) {
+        m_desktopMoveStash.noteHandPlacement(windowId, screenId, free);
+    }
+    // A floating tile resized by hand: the size it floats back to follows, as
+    // the daemon's record already does. A move rewrites neither (F369).
+    if (resized && m_notifiedWindows.contains(windowId) && m_effect->isWindowFloating(windowId)
+        && m_managedScreens.contains(screenId)) {
+        // One entry per window across all buckets, the same re-home
+        // saveAndRecordPreTileGeometry makes.
+        for (auto bucket = m_preTileGeometries.begin(); bucket != m_preTileGeometries.end();) {
+            bucket->remove(windowId);
+            bucket = bucket->isEmpty() ? m_preTileGeometries.erase(bucket) : std::next(bucket);
+        }
+        m_preTileGeometries[screenId][windowId] = free;
+    }
+}
+
 void TilingHandler::payOwedFreePlacementsInView(const QList<KWin::EffectWindow*>& windows)
 {
     for (KWin::EffectWindow* w : windows) {

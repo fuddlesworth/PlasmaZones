@@ -99,6 +99,18 @@ public:
         return it->rect;
     }
 
+    /// The user placed the window by hand at @p rect on @p screenId while it was
+    /// free: an existing entry follows it, and nothing is owed any more. A
+    /// window with no entry gets none, since it never left a tiling desktop.
+    void noteHandPlacement(const QString& windowId, const QString& screenId, const QRectF& rect)
+    {
+        m_owed.remove(windowId);
+        const auto it = m_entries.find(windowId);
+        if (it != m_entries.end() && rect.isValid()) {
+            *it = Entry{screenId, rect};
+        }
+    }
+
     /// The window was closed.
     void forget(const QString& windowId)
     {

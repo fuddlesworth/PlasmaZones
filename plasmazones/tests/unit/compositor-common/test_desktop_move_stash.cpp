@@ -104,6 +104,26 @@ private Q_SLOTS:
         QVERIFY(owed);
     }
 
+    void handPlacementRefreshesAnExistingEntry()
+    {
+        DesktopMoveStash stash;
+        stash.stash(kWin, QStringLiteral("DP-1"), kRect);
+        const QRectF placed(300, 200, 800, 600);
+        stash.noteHandPlacement(kWin, QStringLiteral("DP-1"), placed);
+        QCOMPARE(stash.consumeForManagedArrival(kWin, QStringLiteral("DP-1")), std::optional<QRectF>(placed));
+    }
+
+    // A window that never left a tiling desktop has nothing to refresh, and a
+    // hand placement settles any placement still owed.
+    void handPlacementCreatesNothingAndClearsOwed()
+    {
+        DesktopMoveStash stash;
+        stash.setOwed(kWin, true);
+        stash.noteHandPlacement(kWin, QStringLiteral("DP-1"), kRect);
+        QVERIFY(!stash.isOwed(kWin));
+        QCOMPARE(stash.consumeForManagedArrival(kWin, QStringLiteral("DP-1")), std::optional<QRectF>());
+    }
+
     // A managed arrival spends the owed placement with the entry.
     void managedArrivalClearsOwed()
     {
