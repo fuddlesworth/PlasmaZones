@@ -6,6 +6,7 @@
 // the engines keep drops the rest.
 
 #include "windowtrackingadaptor.h"
+#include "lifecyclerelay.h"
 #include "internal.h"
 #include "core/platform/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -55,6 +56,7 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     if (!m_lastActiveWindowId.isEmpty()
         && !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(m_lastActiveWindowId))) {
         m_lastActiveWindowId.clear();
+        m_lastActiveScreenId.clear(); // as windowClosed does (F291)
     }
     // Capture each dead window's final engine slot BEFORE ANY prune drops
     // state — pruneStaleAssignments wipes the SnapState the snap capture
@@ -154,10 +156,18 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
             // The evaluator's shared memo has no enumeration API, so it cannot
             // be swept by the alive-set predicate the local maps use. Evict by
-            // the dead key instead: this map holds an entry for every window
-            // the daemon tracked, so its dead keys are the dead windows.
+            // the dead window's ids instead, both of them as windowClosed does:
+            // this map's canonical key and the registry's current composite,
+            // which differ for a window whose class changed (F466). The
+            // registry still holds the dead instance here.
             if (m_ruleEvaluator) {
                 m_ruleEvaluator->evictCached(it.key());
+                const QString instance = PhosphorIdentity::WindowId::extractInstanceId(it.key());
+                const QString raw = PhosphorIdentity::WindowId::buildCompositeId(
+                    m_windowRegistry ? m_windowRegistry->appIdFor(instance) : QString(), instance);
+                if (!raw.isEmpty() && raw != it.key()) {
+                    m_ruleEvaluator->evictCached(raw);
+                }
             }
             it = m_frameGeometry.erase(it);
             ++frameGeoPruned;
@@ -165,12 +175,12 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
             ++it;
         }
     }
-    // Fan the prune out to sibling adaptors' per-window caches (see the
-    // signal doc). Consumers only erase from their OWN maps — nothing here
-    // depends on emit-vs-sweep ordering. The payload is the same instance-id
-    // view the local sweeps use, as a marshallable list: adaptor signals are
-    // auto-relayed onto the bus, and QSet has no D-Bus signature.
-    Q_EMIT stalePruned(QStringList(aliveInstances.cbegin(), aliveInstances.cend()));
+    // Fan the prune out, in the same instance-id key space the local sweeps
+    // use, to TilingAdaptor::pruneStaleFloatBroadcasts, which sweeps its
+    // float-broadcast dedup, m_unclaimedOpens, m_pendingOpens and
+    // m_moveReleasedInstances. It only erases from its own maps, so nothing
+    // here depends on emit-vs-sweep ordering.
+    Q_EMIT m_lifecycleRelay->stalePruned(QStringList(aliveInstances.cbegin(), aliveInstances.cend()));
     // Same defensive sweep for the last-broadcast floating shadow: an entry
     // would otherwise leak if the window died without a windowClosed signal.
     // Not persisted, so it does not feed the save-scheduling decision below.

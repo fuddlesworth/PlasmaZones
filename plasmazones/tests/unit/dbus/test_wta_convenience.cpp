@@ -12,10 +12,12 @@
 
 #include "wta_convenience_fixture.h"
 #include "dbus/controladaptor.h"
+#include "dbus/windowtrackingadaptor/lifecyclerelay.h"
 
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorProtocol/AutotileTypes.h>
 #include <QScopeGuard>
+#include <QSignalSpy>
 
 class TestWtaConvenience : public QObject, protected WtaConvenienceFixture
 {
@@ -90,6 +92,41 @@ private Q_SLOTS:
 
         m_wta->activeWindowScreenChanged(focused, QStringLiteral("DP-2"));
         QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-2"));
+    }
+
+    // A close drives the sibling adaptors' teardown exactly once, through the
+    // in-process relay rather than a bus-visible adaptor signal (F514, F851).
+    void testWindowClosed_notifiesTheRelayOnce()
+    {
+        QSignalSpy spy(m_wta->lifecycleRelay(), &WindowLifecycleRelay::windowClosed);
+        const QString windowId = QStringLiteral("firefox|closed-1");
+        m_wta->windowClosed(windowId, 0);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), windowId);
+    }
+
+    void testPruneStaleWindows_relaysTheAliveInstances()
+    {
+        QSignalSpy spy(m_wta->lifecycleRelay(), &WindowLifecycleRelay::stalePruned);
+        m_wta->pruneStaleWindows({QStringLiteral("app|1")});
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toStringList(), QStringList{QStringLiteral("1")});
+    }
+
+    // Closing the focused window forgets its screen too, so a shortcut falls
+    // back to the cursor's screen instead of a closed window's (F291), on the
+    // close path and on the prune path alike.
+    void testClosingTheFocusedWindow_forgetsItsScreen()
+    {
+        const QString focused = QStringLiteral("firefox|focused-1");
+        m_wta->windowActivated(focused, QStringLiteral("DP-1"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-1"));
+        m_wta->windowClosed(focused, 0);
+        QVERIFY(m_wta->lastActiveScreenName().isEmpty());
+
+        m_wta->windowActivated(focused, QStringLiteral("DP-1"));
+        m_wta->pruneStaleWindows({QStringLiteral("konsole|alive-1")}); // an empty set is refused
+        QVERIFY(m_wta->lastActiveScreenName().isEmpty());
     }
 
     // The activation backstop re-homes a window whose snap store names

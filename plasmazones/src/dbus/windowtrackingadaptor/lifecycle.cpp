@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "windowtrackingadaptor.h"
+#include "lifecyclerelay.h"
 #include "internal.h"
 #include "core/resolve/daemongeometryresolver.h"
 #include <PhosphorPlacement/PlacementConfig.h>
@@ -437,6 +438,9 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
     if (PhosphorIdentity::WindowId::extractInstanceId(m_lastActiveWindowId) == instanceId) {
         m_lastActiveWindowId.clear();
+        // Its screen goes with it, so a shortcut falls back to the cursor's
+        // screen rather than the closed window's (F291).
+        m_lastActiveScreenId.clear();
     }
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
@@ -517,11 +521,10 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
         m_windowRegistry->remove(instanceId);
     }
 
-    // Drive in-process sibling-adaptor cleanup (WindowDragAdaptor) without
-    // re-introducing a D-Bus surface that nothing outside the daemon was
-    // calling. Emitted after the canonical WTS teardown above so listeners
-    // see consistent post-close state.
-    Q_EMIT windowClosedNotification(windowId);
+    // WindowDragAdaptor's drag teardown and TilingAdaptor::onTrackedWindowDestroyed
+    // run off this in-process relay, after the teardown above so they see the
+    // post-close state. A relay, not an adaptor signal, so it stays off the bus.
+    Q_EMIT m_lifecycleRelay->windowClosed(windowId);
 
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
 }

@@ -178,6 +178,7 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/evacuees.cpp
     dbus/windowtrackingadaptor/screenleave.cpp
     dbus/windowtrackingadaptor/evacueeledger.h
+    dbus/windowtrackingadaptor/lifecyclerelay.h
     dbus/windowtrackingadaptor/queries.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
     dbus/windowtrackingadaptor/rules.cpp

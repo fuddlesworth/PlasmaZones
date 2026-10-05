@@ -693,7 +693,7 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         m_snapAssistPendingActivity.clear();
     }
 
-    // NOTE: This slot is now driven by WTA::windowClosedNotification (wired in
+    // NOTE: This slot is driven by WindowLifecycleRelay::windowClosed (wired in
     // daemon/signals.cpp), which is emitted at the END of WTA::windowClosed
     // after the canonical tracking-cleanup has already run. Re-invoking
     // m_windowTracking->windowClosed() here would re-enter WTA's slot, re-emit

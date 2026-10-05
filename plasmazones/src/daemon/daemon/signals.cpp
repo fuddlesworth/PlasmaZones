@@ -11,11 +11,12 @@
 #include "daemon/overlayservice.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
-// Complete type needed for the windowClosedNotification / stalePruned PMF
-// connects below (TilingAdaptor::onTrackedWindowDestroyed /
-// pruneStaleFloatBroadcasts) — daemon.h forward declares TilingAdaptor only.
+// Complete types needed for the WindowLifecycleRelay PMF connects below
+// (TilingAdaptor::onTrackedWindowDestroyed / pruneStaleFloatBroadcasts) —
+// daemon.h forward declares TilingAdaptor only.
 #include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
+#include "dbus/windowtrackingadaptor/lifecyclerelay.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorEngine/PlacementEngineBase.h>
@@ -502,7 +503,7 @@ void Daemon::connectOverlaySignals()
         // PMF slot, so Qt::UniqueConnection is available here (unlike the
         // lambda connections above) and keeps a restart from fanning each
         // close out twice.
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_windowDragAdaptor,
+        connect(m_windowTrackingAdaptor->lifecycleRelay(), &WindowLifecycleRelay::windowClosed, m_windowDragAdaptor,
                 &WindowDragAdaptor::handleWindowClosed, Qt::UniqueConnection);
     }
     if (m_tilingAdaptor) {
@@ -511,11 +512,11 @@ void Daemon::connectOverlaySignals()
         // being engine-managed, so this in-process hook is the unconditional
         // teardown for the dedup cache and any parked open. PMF +
         // UniqueConnection for the same restart-stacking reason as above.
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_tilingAdaptor,
+        connect(m_windowTrackingAdaptor->lifecycleRelay(), &WindowLifecycleRelay::windowClosed, m_tilingAdaptor,
                 &TilingAdaptor::onTrackedWindowDestroyed, Qt::UniqueConnection);
         // And the prune-path backstop for windows that die without any close
         // signal (instance-id key space; see the signal doc).
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::stalePruned, m_tilingAdaptor,
+        connect(m_windowTrackingAdaptor->lifecycleRelay(), &WindowLifecycleRelay::stalePruned, m_tilingAdaptor,
                 &TilingAdaptor::pruneStaleFloatBroadcasts, Qt::UniqueConnection);
     }
 }

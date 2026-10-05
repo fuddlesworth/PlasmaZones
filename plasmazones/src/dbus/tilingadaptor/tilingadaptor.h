@@ -865,7 +865,7 @@ public:
 
     /**
      * @brief Unconditional per-window teardown, driven by the in-process
-     * WindowTrackingAdaptor::windowClosedNotification signal.
+     * WindowLifecycleRelay::windowClosed notice.
      *
      * The D-Bus windowClosed relay is gated effect-side on the close screen
      * still being engine-managed, so a window floated on a managed screen
@@ -891,7 +891,7 @@ public:
      * Swept in the INSTANCE-id key space: the maps hold both raw and
      * canonical composites (see windowClosed's dual removal), and only the
      * instance component survives a class rename. Plain method, not a slot.
-     * List payload matching the stalePruned signal's marshallable shape.
+     * List payload matching WindowLifecycleRelay::stalePruned.
      */
     void pruneStaleFloatBroadcasts(const QStringList& aliveInstances);
 };

@@ -306,9 +306,8 @@ public Q_SLOTS:
 public:
     /**
      * Called when a window is closed during or after a drag operation.
-     * Connected to WindowTrackingAdaptor::windowClosedNotification — the
-     * canonical close path also tears down drag state when the closing
-     * window was in flight.
+     * Connected to WindowLifecycleRelay::windowClosed, so the canonical close
+     * path also tears down drag state when the closing window was in flight.
      *
      * Declared as a public plain member function (NOT under Q_SLOTS):
      * QDBusAbstractAdaptor's runtime introspection exposes every PUBLIC

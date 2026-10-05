@@ -83,6 +83,7 @@ class ScreenModeRouter;
 class PersistenceWorker;
 class ISettings;
 struct EvacueeLedger;
+class WindowLifecycleRelay;
 
 class ZoneDetectionAdaptor;
 
@@ -144,6 +145,12 @@ public:
     QString lastActiveWindowId() const override
     {
         return m_lastActiveWindowId;
+    }
+
+    /// The in-process close and prune notices for sibling adaptors.
+    WindowLifecycleRelay* lifecycleRelay() const
+    {
+        return m_lifecycleRelay;
     }
 
     /**
@@ -1243,33 +1250,8 @@ public:
 Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
-    /**
-     * @brief Qt signal emitted after the windowClosed() D-Bus method
-     * processes a close. Used to drive sibling-adaptor cleanup (e.g.
-     * WindowDragAdaptor's drag-state teardown when a window closes mid-drag)
-     * without re-introducing a D-Bus-visible WindowDrag.handleWindowClosed
-     * surface that no one outside the daemon was wiring up.
-     *
-     * Distinct name from the D-Bus method so MOC/QtDBus don't conflate the
-     * two; the method runs first, then we emit this for in-process listeners.
-     * NOTE: like all adaptor signals it IS auto-relayed onto the bus by
-     * QDBusAbstractAdaptor; it is simply not part of the documented wire
-     * contract (absent from the XML) and nothing external subscribes.
-     */
-    void windowClosedNotification(const QString& windowId);
     /// The daemon no longer keeps @p windowId parked for @p outputUuid (empty: any output).
     void parkDropped(const QString& windowId, const QString& outputUuid);
-
-    /**
-     * @brief Qt signal emitted during pruneStaleWindows with the INSTANCE-id
-     * view of the alive set, so sibling adaptors can sweep their own
-     * per-window caches in the same key space (TilingAdaptor's float-broadcast
-     * and tab-colour-relay dedup maps are the current consumers). Same
-     * in-process, not-part-of-the-wire-contract stance as windowClosedNotification —
-     * and like every adaptor signal it IS auto-relayed onto the bus, which
-     * is why the payload is a marshallable QStringList rather than QSet.
-     */
-    void stalePruned(const QStringList& aliveInstances);
 
     /**
      * @brief Emitted when a window's floating state changes
@@ -1856,6 +1838,7 @@ private:
     void floatEvacuee(const PhosphorProtocol::OutputSettleRow& row);
     QString reassertEvacuee(const PhosphorProtocol::OutputSettleRow& row, QSet<QString>& reassertedScreens);
     std::unique_ptr<EvacueeLedger> m_evacuees;
+    WindowLifecycleRelay* m_lifecycleRelay = nullptr; ///< child; see lifecycleRelay()
     /// releaseLeftScreens, then the windowOutputMoveExpected marker (screenleave.cpp).
     void announceOutputMove(const QString& windowId, const QString& targetScreenId, const QString& sourceScreenId,
                             const PhosphorEngine::IPlacementEngine* arrival);

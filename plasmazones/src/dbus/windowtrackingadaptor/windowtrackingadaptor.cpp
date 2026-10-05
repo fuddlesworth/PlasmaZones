@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
+#include "lifecyclerelay.h"
 #include "evacueeledger.h"
 #include "core/resolve/daemongeometryresolver.h"
 #include <PhosphorPlacement/PlacementConfig.h>
@@ -50,6 +51,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     , m_activityManager(activityManager)
     , m_sessionBackend(createSessionBackend())
     , m_evacuees(std::make_unique<EvacueeLedger>())
+    , m_lifecycleRelay(new WindowLifecycleRelay(this))
 {
     // Null dependencies are a daemon-wiring bug, not a recoverable runtime
     // condition: the earlier "refuse to wire" early-return left m_service,
