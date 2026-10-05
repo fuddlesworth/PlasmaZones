@@ -329,12 +329,16 @@ public:
     /// Resolve a resnap filter into the concrete list of snap-mode screens.
     QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
 
-    /// moveWindowToZone on a named screen, for an in-process caller that
-    /// resolved the zone on a specific screen (Control.snapWindowToZone). An
-    /// empty @p screenHint detects the screen from the zone, which is all the
-    /// D-Bus slot can do: with one layout on two screens that detection
-    /// answers with the first of them.
+    /// moveWindowToZone on a named screen. @p screenHint names the screen (a
+    /// split monitor's connector name resolves to the virtual screen the window
+    /// is in); empty means the window's own screen when its layout holds the
+    /// zone, else the screen whose layout does. Refused unless a keyboard snap
+    /// could make the same move (admitBusSnap).
     void moveWindowToZoneOnScreen(const QString& windowId, const QString& zoneId, const QString& screenHint);
+    /// The zone numbered @p zoneNumber in the layout of @p screenHint (empty: the
+    /// window's own screen), for Control.snapWindowToZone. A missing number is
+    /// reported as zone_not_found.
+    void moveWindowToZoneNumberOnScreen(const QString& windowId, int zoneNumber, const QString& screenHint);
 
 private:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -376,6 +380,30 @@ private:
      * that context is showing now".
      */
     bool snapPermittedForContext(const QString& windowId, const QString& screenId, int virtualDesktop) const;
+
+    /// Where a bus-requested snap of one window lands. desktop 0 = the one the
+    /// screen shows.
+    struct BusSnapTarget
+    {
+        QString screenId;
+        int desktop = 0;
+    };
+    /// The validity checks every bus snap passes (busgate.cpp): a live window
+    /// (F142); a screen the daemon knows, from @p screenHint, else the window's
+    /// own when its layout holds @p zoneIds (F21), else the zone's; the window on
+    /// the landing desktop and activity (F179); and that context's layout holding
+    /// every zone, so no unknown id, sentinel or ghost-layout zone commits.
+    std::optional<BusSnapTarget> validBusSnapTarget(const QString& windowId, const QStringList& zoneIds,
+                                                    const QString& screenHint, int pinnedDesktop = 0) const;
+    /// validBusSnapTarget plus what the keyboard twin applies to a user verb:
+    /// snapping runs the screen live, is switched on and not disabled in the
+    /// landing context, and the window is not excluded (F20). The one bus-verb gate.
+    std::optional<BusSnapTarget> admitBusSnap(const QString& windowId, const QStringList& zoneIds,
+                                              const QString& screenHint, int pinnedDesktop = 0) const;
+    /// The desktop @p windowId lands on for @p screenId: 0 when it is on the one
+    /// the screen shows or on all, its one desktop when on a single hidden one,
+    /// nullopt when on several hidden ones or not on @p pinnedDesktop.
+    std::optional<int> landingDesktop(const QString& windowId, const QString& screenId, int pinnedDesktop) const;
 
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;

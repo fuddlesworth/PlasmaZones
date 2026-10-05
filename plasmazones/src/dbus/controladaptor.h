@@ -78,9 +78,10 @@ public Q_SLOTS:
     /**
      * @brief Snap a window to a specific zone in a layout
      * @param windowId Window to snap
-     * @param zoneNumber PhosphorZones::Zone number (1-indexed)
-     * @param screenId Screen for geometry resolution (empty = primary)
-     * @note Resolves the zone from the screen's current layout
+     * @param zoneNumber Zone number (1-based; any number the layout has)
+     * @param screenId Screen to snap on, a screen id or connector name; empty
+     *        means the screen the window is on
+     * @note Refused unless a keyboard snap could make the same move
      */
     void snapWindowToZone(const QString& windowId, int zoneNumber, const QString& screenId);
 

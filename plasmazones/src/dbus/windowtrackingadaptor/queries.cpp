@@ -100,6 +100,25 @@ int WindowTrackingAdaptor::desktopCount() const
     return m_virtualDesktopManager ? m_virtualDesktopManager->desktopCount() : 0;
 }
 
+QString WindowTrackingAdaptor::liveScreenForWindow(const QString& windowId) const
+{
+    PhosphorScreens::ScreenManager* mgr = m_service ? m_service->screenManager() : nullptr;
+    const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
+    if (mgr && frame.isValid()) {
+        const QString onScreen = Utils::effectiveScreenIdAt(mgr, frame.center());
+        if (!onScreen.isEmpty()) {
+            return onScreen;
+        }
+    }
+    return resolveScreenForWindow(windowId);
+}
+
+std::optional<PhosphorEngine::WindowDesktopContext>
+WindowTrackingAdaptor::windowDesktopContext(const QString& windowId) const
+{
+    return m_windowRegistry ? m_windowRegistry->desktopContext(windowId) : std::nullopt;
+}
+
 QString WindowTrackingAdaptor::lastActiveScreenName() const
 {
     // Prefer where an engine holds the focused window now over the cached

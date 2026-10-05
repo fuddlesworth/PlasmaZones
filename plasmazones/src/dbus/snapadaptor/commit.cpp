@@ -101,8 +101,8 @@ void SnapAdaptor::recordSnapIntent(const QString& windowId, bool wasUserInitiate
 // ═══════════════════════════════════════════════════════════════════════════════
 // Snap-mode convenience D-Bus slots
 //
-// Moved from WindowTrackingAdaptor::convenience.cpp. These only call
-// SnapEngine and emit signals through the WTA relay (applyGeometryRequested).
+// They gate through admitBusSnap (busgate.cpp), record the free frame and the
+// intent, then commit and ask the effect for the geometry (applyGeometryRequested).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapAdaptor::moveWindowToZone(const QString& windowId, const QString& zoneId)
@@ -121,19 +121,17 @@ void SnapAdaptor::moveWindowToZoneOnScreen(const QString& windowId, const QStrin
         return;
     }
 
-    if (!m_adaptor || !m_adaptor->service() || !m_engine) {
+    // Lands only where a keyboard snap could: a live window, a screen the
+    // daemon knows whose layout holds the zone, on the window's desktop, with
+    // snapping running there and switched on (admitBusSnap).
+    const std::optional<BusSnapTarget> target = admitBusSnap(windowId, {zoneId}, screenHint);
+    if (!target) {
         return;
     }
-
-    // The caller's screen when it named one, else the screen the zone is on.
-    // Detection from the zone id alone cannot tell two screens apart when they
-    // run the same layout, so a caller that knows the screen must pass it.
-    QString screenId = resolveScreenForSnap(screenHint, zoneId);
-
-    // Get zone geometry
-    QRect geo = m_adaptor->service()->zoneGeometry(zoneId, screenId);
+    const QString screenId = target->screenId;
+    const QRect geo = m_adaptor->service()->zoneGeometry(zoneId, screenId);
     if (!geo.isValid()) {
-        qCWarning(lcDbusWindow) << "moveWindowToZone: invalid geometry for zone:" << zoneId;
+        qCWarning(lcDbusWindow) << "moveWindowToZone: invalid geometry for zone" << zoneId << "on" << screenId;
         return;
     }
 
@@ -144,8 +142,9 @@ void SnapAdaptor::moveWindowToZoneOnScreen(const QString& windowId, const QStrin
     const QString windowScreen = m_engine->screenForTrackedWindow(windowId);
     m_engine->recordFreeFrameBeforeUserSnap(windowId, windowScreen.isEmpty() ? screenId : windowScreen);
 
-    // Perform snap bookkeeping via SnapEngine
-    m_engine->commitSnap(windowId, zoneId, screenId);
+    // Committed on the desktop the window is on, which is not the one in view
+    // for a window on a hidden desktop (F179).
+    m_engine->commitSnap(windowId, zoneId, screenId, PhosphorEngine::SnapIntent::UserInitiated, target->desktop);
     m_adaptor->service()->recordSnapIntent(windowId, true);
 
     // Request compositor to apply geometry

@@ -14,10 +14,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
             </arg>
             <arg name="zoneNumber" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Zone number (1-indexed)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Zone number, 1-based; any number the layout has."/>
             </arg>
             <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen for layout resolution (empty = primary)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Screen to snap on, a screen id or connector name. Empty means the screen the window is on."/>
             </arg>
         </method>
         <method name="toggleAutotileForScreen">

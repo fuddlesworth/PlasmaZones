@@ -1531,15 +1531,9 @@ public:
     /// exposed publicly so SnapEngine's navigation methods can reuse it.
     QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
 
-    /**
-     * @brief Resolve screen name for a snap operation with 3-tier fallback
-     *
-     * 1. Caller-provided screenId (from KWin effect)
-     * 2. detectScreenForZone auto-detection
-     * 3. lastCursorScreenName or lastActiveScreenName
-     *
-     * Public so SnapAdaptor can reuse the zone-center screen detection.
-     */
+    /// The screen id for a snap: the caller's (the effect, or SnapAdaptor's gate),
+    /// else detectScreenForZone, else the cursor's then the focused window's last
+    /// reported screen (the raw members, not the engine-probing accessors).
     QString resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const;
     /// The effective screen a bus caller's @p reported names: a connector name
     /// maps to its id, a known effective id or another spelling of one maps to
@@ -1548,6 +1542,16 @@ public:
     /// screen the daemon does not know; @p reported as is without a ScreenManager.
     QString resolveBusScreen(const QString& reported, const QString& windowId = QString()) const;
     int desktopCount() const; ///< virtual desktops, 0 without a VirtualDesktopManager
+    /// The effective screen @p windowId's frame is on, else the one an engine tracks it on.
+    QString liveScreenForWindow(const QString& windowId) const;
+    /// The registry's desktop and activity for @p windowId; nullopt without one.
+    std::optional<PhosphorEngine::WindowDesktopContext> windowDesktopContext(const QString& windowId) const;
+    PhosphorZones::LayoutRegistry* layoutRegistry() const
+    {
+        return m_layoutManager;
+    }
+    /// True when the registry holds a record for @p windowId's instance.
+    bool isRegistryTracked(const QString& windowId) const;
 
     /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
     /// desktops, #648), falling back to the global currentDesktop().
@@ -1577,8 +1581,6 @@ private:
     bool validateWindowId(const QString& windowId, const QString& operation) const;
 
     // ── Shell-surface registry mirror (shellsurface.cpp) ──
-    /// True when the registry holds a record for @p windowId's instance.
-    bool isRegistryTracked(const QString& windowId) const;
     /// The id the shell surface speaks: the registry's canonical composite
     /// for @p instanceId, the same id the engines key their models on.
     QString shellWindowIdFor(const QString& instanceId) const;
@@ -1614,11 +1616,9 @@ private:
     QHash<QString, ShellWindowFacts> m_shellWindowFacts;
     quint64 m_shellWindowFactsSeq = 0;
 
-    /**
-     * @brief Detect which screen a zone is on by finding where its center falls
-     * @param zoneId PhosphorZones::Zone UUID string
-     * @return Screen name, or empty string if not determinable
-     */
+    /// The first screen whose layout for the desktop and activity it shows holds
+    /// @p zoneId, else the screen the zone's centre lands on under the active
+    /// layout. A screen id, or empty.
     QString detectScreenForZone(const QString& zoneId) const;
 
     // applySnapResult moved to SnapAdaptor.

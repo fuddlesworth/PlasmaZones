@@ -39,10 +39,14 @@ private Q_SLOTS:
 
     void testMoveWindowToZone_validZone_emitsApplyGeometry()
     {
-        QString windowId = QStringLiteral("firefox|12345");
+        installRegistry();
+        QString windowId = registerWindow(QStringLiteral("firefox|12345"));
 
-        // Assign a screen mapping so resolveScreenForSnap works
+        // Assign a screen mapping so resolveScreenForSnap works. With no screen
+        // manager here the zone's screen is not detectable, so the cursor's
+        // screen answers (a snap on no screen is refused).
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        m_wta->cursorScreenChanged(m_screenId);
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
@@ -58,7 +62,8 @@ private Q_SLOTS:
 
     void testMoveWindowToZone_invalidZone_noSignal()
     {
-        QString windowId = QStringLiteral("firefox|12345");
+        installRegistry(); // live, so the refusal is the zone's
+        QString windowId = registerWindow(QStringLiteral("firefox|12345"));
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
         m_snapAdaptor->moveWindowToZone(windowId, QStringLiteral("nonexistent-zone-id"));
@@ -158,7 +163,8 @@ private Q_SLOTS:
     // first of them: the window was snapped on a screen the caller did not name.
     void testControlSnapWindowToZone_snapsOnTheNamedScreen()
     {
-        const QString windowId = QStringLiteral("firefox|12345");
+        installRegistry();
+        const QString windowId = registerWindow(QStringLiteral("firefox|12345"));
         const QString otherScreen = QStringLiteral("DP-2");
         const int desktop = m_layoutManager->currentVirtualDesktop();
         m_layoutManager->assignLayout(m_screenId, desktop, QString(), m_testLayout);

@@ -1473,6 +1473,14 @@ target_include_directories(test_wta_bus_boundary PRIVATE ${CMAKE_SOURCE_DIR}/pho
 target_link_libraries(test_wta_bus_boundary PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_bus_boundary COMMAND test_wta_bus_boundary)
 
+# The bus snap gate: a D-Bus snap of one window lands only where a keyboard
+# snap could. Same fixture.
+add_executable(test_snap_adaptor_gates dbus/test_snap_adaptor_gates.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_snap_adaptor_gates PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_snap_adaptor_gates PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_adaptor_gates COMMAND test_snap_adaptor_gates)
+
 # The reopen contract through TilingAdaptor's open dispatch: a window is placed
 # where it announces, never pulled back to its own record's screen. Same
 # FakePhysicalScreenSource compile-in and scroll-engine link as the capture
