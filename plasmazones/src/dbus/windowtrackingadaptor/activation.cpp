@@ -18,55 +18,56 @@
 
 namespace PlasmaZones {
 
+void WindowTrackingAdaptor::holdScreenReport(const QString& key, const QString& screenId, std::function<void()> replay)
+{
+    qCDebug(lcDbusWindow) << "Holding a report naming the unknown screen" << screenId << "under" << key;
+    m_heldScreenReports.insert(key, HeldScreenReport{screenId, std::move(replay)});
+}
+
+void WindowTrackingAdaptor::replayHeldScreenReports()
+{
+    const QHash<QString, HeldScreenReport> held = m_heldScreenReports;
+    for (auto it = held.constBegin(); it != held.constEnd(); ++it) {
+        if (!resolveBusScreen(it->screenId).isEmpty() && m_heldScreenReports.contains(it.key())) {
+            m_heldScreenReports.remove(it.key());
+            it->replay();
+        }
+    }
+}
+
 void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
 {
+    m_heldScreenReports.remove(QStringLiteral("cursor")); // a later report supersedes a held one
     if (screenId.isEmpty()) {
         return;
     }
-
-    // The KWin effect may send a physical screen ID when virtual screen configs
-    // haven't loaded yet.  Resolve to the correct virtual screen using the
-    // focused window's daemon-tracked screen assignment as the best hint.
-    QString resolvedId = screenId;
-    if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-        auto* mgr = m_service->screenManager();
-        if (mgr && mgr->hasVirtualScreens(screenId)) {
-            // Use focused window's tracked screen as hint. No m_service
-            // guard: the deref above already relies on it (ctor-owned,
-            // never null).
-            if (!m_lastActiveWindowId.isEmpty()) {
-                const QString trackedScreen = m_service->screenForWindow(m_lastActiveWindowId);
-                if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
-                    && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen) == screenId) {
-                    resolvedId = trackedScreen;
-                }
-            }
-            // If no window hint, fall back to first virtual screen
-            if (!PhosphorIdentity::VirtualScreenId::isVirtual(resolvedId)) {
-                QStringList vsIds = mgr->virtualScreenIdsFor(screenId);
-                if (!vsIds.isEmpty()) {
-                    resolvedId = vsIds.first();
-                }
-            }
-        }
+    // The effect can send a physical id before the virtual-screen definitions
+    // load; resolveBusScreen maps it into the split monitor, and a screen the
+    // daemon does not know yet is held rather than stored (F81).
+    const QString resolvedId = resolveBusScreen(screenId, m_lastActiveWindowId);
+    if (resolvedId.isEmpty()) {
+        holdScreenReport(QStringLiteral("cursor"), screenId, [this, screenId] {
+            cursorScreenChanged(screenId);
+        });
+        return;
     }
-
     m_lastCursorScreenId = resolvedId;
     qCDebug(lcDbusWindow) << "Cursor screen changed to" << resolvedId;
 }
 
 QString WindowTrackingAdaptor::resolveFocusedWindowScreen(const QString& windowId, const QString& screenId) const
 {
-    if (screenId.isEmpty() || PhosphorIdentity::VirtualScreenId::isVirtual(screenId) || !m_service) {
+    if (screenId.isEmpty() || !m_service) {
         return screenId;
     }
     const QString trackedScreen = m_service->screenForWindow(windowId);
-    if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)
+        && PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
         && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen)
             == PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)) {
         return trackedScreen;
     }
-    return screenId;
+    return resolveBusScreen(screenId, windowId);
 }
 
 void WindowTrackingAdaptor::activeWindowScreenChanged(const QString& windowId, const QString& screenId)
@@ -79,7 +80,14 @@ void WindowTrackingAdaptor::activeWindowScreenChanged(const QString& windowId, c
     if (shadowWindowId(windowId) != m_lastActiveWindowId) {
         return;
     }
+    m_heldScreenReports.remove(QStringLiteral("active"));
     const QString resolvedScreen = resolveFocusedWindowScreen(windowId, screenId);
+    if (resolvedScreen.isEmpty()) {
+        holdScreenReport(QStringLiteral("active"), screenId, [this, windowId, screenId] {
+            activeWindowScreenChanged(windowId, screenId);
+        });
+        return;
+    }
     if (resolvedScreen == m_lastActiveScreenId) {
         return;
     }
@@ -100,6 +108,13 @@ void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int de
     if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager) {
         return;
     }
+    // A desktop past the last one is refused, as moveWindowToDesktop does.
+    // An unknown screen needs no hold: the map below is keyed by the physical
+    // id, and a screen that arrives later reads its entry (F81, F765).
+    if (const int count = desktopCount(); count > 0 && desktop > count) {
+        qCDebug(lcDbusWindow) << "screenDesktopChanged: desktop" << desktop << "past the last" << count;
+        return;
+    }
     // The effect reports the PHYSICAL screen id, and VirtualDesktopManager keys its
     // per-screen map on that physical id. The daemon asks with EFFECTIVE ids, which
     // on a subdivided output are the vs:N children and never the physical parent, so
@@ -111,7 +126,8 @@ void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int de
 
 void WindowTrackingAdaptor::seedScreenDesktop(const QString& screenId, int desktop)
 {
-    if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager) {
+    if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager
+        || (desktopCount() > 0 && desktop > desktopCount())) {
         return;
     }
     m_virtualDesktopManager->seedScreenDesktop(screenId, desktop);
@@ -125,12 +141,23 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
 
     // Track the active window for daemon-driven navigation (move/focus/swap/etc.)
     m_lastActiveWindowId = shadowWindowId(windowId);
+    m_heldScreenReports.remove(QStringLiteral("active"));
 
-    // Track the active window's screen as fallback for shortcut screen detection.
-    // The primary source is now cursorScreenChanged (from KWin effect's mouseChanged).
-    // Prefer the daemon-tracked screen assignment (set at snap time) over what the
-    // effect reports, since the effect may send a physical ID before VS configs load.
+    // The focused window's screen, which window shortcuts act on (the cursor's
+    // screen is their fallback when nothing has focus). A tracked virtual
+    // screen of the reported monitor wins, since the effect can send a
+    // physical id before the virtual-screen definitions load. A screen the
+    // daemon does not know yet is held, and the rest of the activation waits
+    // for it (F81, F302).
     const QString resolvedScreen = resolveFocusedWindowScreen(windowId, screenId);
+    if (resolvedScreen.isEmpty() && !screenId.isEmpty()) {
+        holdScreenReport(QStringLiteral("active"), screenId, [this, windowId, screenId] {
+            if (shadowWindowId(windowId) == m_lastActiveWindowId) {
+                windowActivated(windowId, screenId);
+            }
+        });
+        return;
+    }
     if (!resolvedScreen.isEmpty()) {
         m_lastActiveScreenId = resolvedScreen;
     }

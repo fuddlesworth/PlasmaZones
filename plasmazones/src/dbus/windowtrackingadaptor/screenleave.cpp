@@ -172,8 +172,18 @@ void WindowTrackingAdaptor::windowCrossedScreens(const QString& windowId, const 
     }
     const QString canonical = shadowWindowId(windowId);
     PhosphorScreens::ScreenManager* mgr = m_service->screenManager();
+    const QString crossedKey = QLatin1String("crossed:") + canonical;
+    m_heldScreenReports.remove(crossedKey);
     const QString resolved =
         resolveReportedScreen(mgr, toScreenId, m_service->screenForWindow(windowId), m_frameGeometry.value(canonical));
+    // A crossing onto a screen the daemon does not know yet releases nothing
+    // until it does (F81).
+    if (mgr && resolveBusScreen(resolved).isEmpty()) {
+        holdScreenReport(crossedKey, resolved, [this, windowId, fromScreenId, toScreenId] {
+            windowCrossedScreens(windowId, fromScreenId, toScreenId);
+        });
+        return;
+    }
     // The tiling engine that took the window there, when one did: the effect
     // adopted it on arrival or transferred it before this notice.
     PhosphorEngine::PlacementEngineBase* arrival = nullptr;
@@ -305,9 +315,20 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     // The effect reports this only when neither end is managed by a tiling
     // engine, so snap memory decides what happens here and any tiling hold is
     // a background context's.
+    const QString screenKey = QLatin1String("screen:") + shadowWindowId(windowId);
+    m_heldScreenReports.remove(screenKey);
     const QString resolved =
         resolveReportedScreen(m_service->screenManager(), newScreenId, m_service->screenForWindow(windowId),
                               m_frameGeometry.value(shadowWindowId(windowId)));
+    // A move onto a screen the daemon does not know yet changes nothing until
+    // it does: the snap leave and the tiling releases below would run against
+    // an id nothing can place on (F81).
+    if (m_service->screenManager() && resolveBusScreen(resolved).isEmpty()) {
+        holdScreenReport(screenKey, resolved, [this, windowId, newScreenId] {
+            windowScreenChanged(windowId, newScreenId);
+        });
+        return;
+    }
 
     // A tiling hold the window keeps on the screen it left (a background
     // desktop's tile or column of a multi-desktop window) is stale memory, on

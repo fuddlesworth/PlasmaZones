@@ -14,6 +14,7 @@
 #include "wta_convenience_fixture.h"
 #include "helpers/StubPlacementEngine.h"
 #include "helpers/WindowPlacementBuilders.h"
+#include "helpers/VirtualScreenTestHelpers.h"
 
 #include <PhosphorRules/Rule.h>
 #include <QScopeGuard>
@@ -479,6 +480,9 @@ private Q_SLOTS:
     void crossedScreens_virtualScreenCrossingKeepsTheRecord()
     {
         RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, nullptr, 0);
+        // The split the crossing names, so its ids are screens the daemon knows.
+        QVERIFY(env.screenMgr->setVirtualScreenConfig(QStringLiteral("DP-1"),
+                                                      TestHelpers::makeSplitConfig(QStringLiteral("DP-1"))));
         const QString vs0 = QStringLiteral("DP-1/vs:0");
         const QString vs1 = QStringLiteral("DP-1/vs:1");
         env.snap->setCurrentDesktopForScreen(vs0, 1);

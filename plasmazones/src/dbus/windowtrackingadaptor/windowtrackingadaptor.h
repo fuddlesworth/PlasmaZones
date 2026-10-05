@@ -108,32 +108,12 @@ public:
                                    QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override;
 
-    /**
-     * @brief Last screen reported by the KWin effect's windowActivated call
-     *
-     * The KWin effect has reliable screen info on both X11 and Wayland.
-     * Use this as a fallback when cursor screen is unavailable.
-     *
-     * Implementation: prefers the active window's current daemon-tracked
-     * screen assignment over the cached value, probing the snap, autotile
-     * and scrolling engines in that order. KWin only fires
-     * `windowActivated` on focus changes, so a window that gets dragged or
-     * snapped to a different VS without losing focus leaves
-     * `m_lastActiveScreenId` pointing at the OLD screen — which then
-     * misroutes shortcut handlers (e.g. the float shortcut going to the
-     * autotile engine for the source VS instead of the snap engine for the
-     * destination VS). Reading the live screenAssignment closes that gap
-     * without requiring a separate signal/cache invalidation path.
-     */
+    /// The focused window's screen, read from the engine that holds it (snap,
+    /// autotile, scroll), else the last activation or crossing report
+    /// (windowActivated, activeWindowScreenChanged). Window shortcuts act on it.
     QString lastActiveScreenName() const override;
 
-    /**
-     * @brief Last screen the cursor was on, reported by the KWin effect
-     *
-     * Updated whenever the cursor crosses to a different monitor.
-     * This is the primary source for shortcut screen detection on Wayland,
-     * since QCursor::pos() is unreliable for background daemons.
-     */
+    /// The cursor's screen, the fallback shortcuts use when no window has focus.
     QString lastCursorScreenName() const override
     {
         return m_lastCursorScreenId;
@@ -475,11 +455,9 @@ public Q_SLOTS:
     void notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth, int oldHeight, int newX,
                              int newY, int newWidth, int newHeight);
 
-    /**
-     * Update cursor screen when cursor crosses to a different monitor
-     * Called by the KWin effect's slotMouseChanged when screen changes.
-     * @param screenId Name of the screen the cursor is now on
-     */
+    /// The cursor's screen changed: across monitors, across the virtual screens
+    /// of one, or a re-send at daemon-ready. @p screenId is the effective id the
+    /// effect resolved; one the daemon does not know yet is held (F81).
     void cursorScreenChanged(const QString& screenId);
 
     /// The focused window changed output without a new activation (a user or
@@ -1563,6 +1541,13 @@ public:
      * Public so SnapAdaptor can reuse the zone-center screen detection.
      */
     QString resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const;
+    /// The effective screen a bus caller's @p reported names: a connector name
+    /// maps to its id, a known effective id or another spelling of one maps to
+    /// it, and a split monitor's physical id maps to the virtual screen
+    /// @p windowId's frame is in, else the cursor's, else its first. Empty for a
+    /// screen the daemon does not know; @p reported as is without a ScreenManager.
+    QString resolveBusScreen(const QString& reported, const QString& windowId = QString()) const;
+    int desktopCount() const; ///< virtual desktops, 0 without a VirtualDesktopManager
 
     /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
     /// desktops, #648), falling back to the global currentDesktop().
@@ -1671,6 +1656,17 @@ private:
     QString m_lastActiveWindowId; // From windowActivated (focused window's ID)
     QString m_lastActiveScreenId; // From windowActivated (focused window's screen)
     QString m_lastCursorScreenId; // From cursorScreenChanged (cursor's screen)
+    /// Effect reports naming a screen the daemon does not know yet (KWin's output
+    /// can reach the effect before the daemon's QScreen). The latest per key
+    /// replays once the screen resolves (F81).
+    struct HeldScreenReport
+    {
+        QString screenId;
+        std::function<void()> replay;
+    };
+    QHash<QString, HeldScreenReport> m_heldScreenReports;
+    void holdScreenReport(const QString& key, const QString& screenId, std::function<void()> replay);
+    void replayHeldScreenReports();
 
     // Frame-geometry shadow: populated via setFrameGeometry D-Bus pushes from
     // the compositor plugin, removed on windowClosed, read by daemon-local

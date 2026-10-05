@@ -490,18 +490,38 @@ private Q_SLOTS:
     }
 
     // The effect's seed for a returning output reaches the desktop manager as
-    // a seed, never as a switch, and invalid input is refused (F700).
+    // a seed, never as a switch, and invalid input is refused (F700), a desktop
+    // past the last one included (F81; this manager has one desktop).
     void testSeedScreenDesktop_forwardsAsSeed()
     {
         QSignalSpy switched(m_desktopManager, &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopChanged);
         QSignalSpy seeded(m_desktopManager, &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopSeeded);
-        m_wta->seedScreenDesktop(m_screenId, 2);
+        m_wta->seedScreenDesktop(m_screenId, 1);
         QCOMPARE(seeded.count(), 1);
         QCOMPARE(switched.count(), 0);
-        QCOMPARE(m_desktopManager->currentDesktopForScreen(m_screenId), 2);
-        m_wta->seedScreenDesktop(QString(), 2);
+        QCOMPARE(m_desktopManager->currentDesktopForScreen(m_screenId), 1);
+        m_wta->seedScreenDesktop(QString(), 1);
         m_wta->seedScreenDesktop(m_screenId, 0);
+        m_wta->seedScreenDesktop(m_screenId, 2);
         QCOMPARE(seeded.count(), 1);
+    }
+
+    // A screen switch to a desktop past the last one is refused, and a
+    // metadata push naming one reads as unknown (F81; one desktop here).
+    void testDesktopPastTheLastIsRefused()
+    {
+        QSignalSpy switched(m_desktopManager, &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopChanged);
+        m_wta->screenDesktopChanged(m_screenId, 2);
+        QCOMPARE(switched.count(), 0);
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setWindowRegistry(nullptr);
+        });
+        m_wta->setWindowMetadata(QStringLiteral("past-1"), QStringLiteral("app"), QString(), QString(), QString(), 0, 2,
+                                 QString(), 0, QVariantMap{{QStringLiteral("width"), 640}});
+        QCOMPARE(registry->metadata(QStringLiteral("past-1"))->virtualDesktop, 0);
     }
 
 private:

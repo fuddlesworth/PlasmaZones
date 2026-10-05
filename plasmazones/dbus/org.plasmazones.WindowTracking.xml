@@ -379,7 +379,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <method name="cursorScreenChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Report that the cursor has moved to a different screen. Called by KWin effect when cursor crosses monitor boundaries."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Report that the cursor has moved to a different screen: across monitors, across the virtual screens of one, or a re-send when the daemon starts. A screen the daemon does not know yet is held and applied when it appears. Shortcuts use this screen when no window has focus."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier the cursor is now on (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>

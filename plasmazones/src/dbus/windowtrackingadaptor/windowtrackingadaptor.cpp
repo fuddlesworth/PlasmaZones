@@ -229,6 +229,12 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         }
         connect(screenMgr, &PhosphorScreens::ScreenManager::panelGeometryReady, this,
                 &WindowTrackingAdaptor::onPanelGeometryReady);
+        // Effect reports held for a screen the daemon did not know yet replay
+        // once it does; queued so the manager has finished registering it.
+        connect(screenMgr, &PhosphorScreens::ScreenManager::screenAdded, this,
+                &WindowTrackingAdaptor::replayHeldScreenReports, Qt::QueuedConnection);
+        connect(screenMgr, &PhosphorScreens::ScreenManager::virtualScreensChanged, this,
+                &WindowTrackingAdaptor::replayHeldScreenReports, Qt::QueuedConnection);
         // If panel geometry is already ready, trigger the check now
         if ((m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady())) {
             onPanelGeometryReady();

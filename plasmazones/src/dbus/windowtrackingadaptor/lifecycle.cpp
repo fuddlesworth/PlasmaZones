@@ -442,6 +442,9 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
         // screen rather than the closed window's (F291).
         m_lastActiveScreenId.clear();
     }
+    // A screen report held for this window has nothing left to replay into.
+    m_heldScreenReports.remove(QLatin1String("screen:") + shadowWindowId(windowId));
+    m_heldScreenReports.remove(QLatin1String("crossed:") + shadowWindowId(windowId));
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
 
@@ -561,12 +564,15 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         qCDebug(lcDbusWindow) << "setWindowMetadata: negative pid" << pid << "for instance" << instanceId
                               << "— treating as 0 (unknown)";
     }
-    if (virtualDesktop < 0) {
-        qCWarning(lcDbusWindow) << "setWindowMetadata: negative virtualDesktop" << virtualDesktop << "for instance"
+    // A desktop past the last one is as malformed as a negative one (F81).
+    const int desktops = desktopCount();
+    const bool desktopOutOfRange = virtualDesktop < 0 || (desktops > 0 && virtualDesktop > desktops);
+    if (desktopOutOfRange) {
+        qCWarning(lcDbusWindow) << "setWindowMetadata: virtualDesktop" << virtualDesktop << "out of range for instance"
                                 << instanceId << "— treating as 0 (unknown)";
     }
     meta.pid = pid < 0 ? 0 : pid;
-    meta.virtualDesktop = virtualDesktop < 0 ? 0 : virtualDesktop;
+    meta.virtualDesktop = desktopOutOfRange ? 0 : virtualDesktop;
     meta.activity = activity;
     // windowType crossed D-Bus as a plain int — clamp out-of-range values
     // (version skew, a malformed caller) to Unknown rather than casting blind.
@@ -681,9 +687,15 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             } else if (k == Key::IsMaximizable) {
                 meta.isMaximizable = v.toBool();
             } else if (k == Key::Width) {
-                meta.width = v.toInt();
+                // A non-positive size is unknown, not a size the min-size
+                // exclusion gate may compare against.
+                if (v.toInt() > 0) {
+                    meta.width = v.toInt();
+                }
             } else if (k == Key::Height) {
-                meta.height = v.toInt();
+                if (v.toInt() > 0) {
+                    meta.height = v.toInt();
+                }
             } else if (k == Key::PositionX) {
                 meta.positionX = v.toInt();
             } else if (k == Key::PositionY) {
@@ -699,12 +711,18 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                 meta.virtualDesktops.reserve(list.size());
                 for (const QVariant& d : list) {
                     const int desktop = d.toInt();
-                    if (desktop > 0) {
+                    if (desktop > 0 && (desktops <= 0 || desktop <= desktops)) {
                         meta.virtualDesktops.append(desktop);
                     }
                 }
             }
         }
+    }
+    // WindowMetadata's invariant on both arms: a span lists two or more
+    // desktops and starts with the scalar one. Anything else (a span of one,
+    // or one whose first entry was refused above) is no span (F81).
+    if (meta.virtualDesktops.size() < 2 || meta.virtualDesktops.constFirst() != meta.virtualDesktop) {
+        meta.virtualDesktops.clear();
     }
 
     // Universal canonical seed. setWindowMetadata is the per-window choke point —

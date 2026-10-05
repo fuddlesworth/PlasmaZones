@@ -39,6 +39,7 @@
 #include <QJsonObject>
 #include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 namespace PlasmaZones {
 
@@ -53,6 +54,50 @@ QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
 QStringList WindowTrackingAdaptor::knownWindowIds() const
 {
     return m_frameGeometry.keys();
+}
+
+QString WindowTrackingAdaptor::resolveBusScreen(const QString& reported, const QString& windowId) const
+{
+    if (reported.isEmpty()) {
+        return {};
+    }
+    PhosphorScreens::ScreenManager* mgr = m_service ? m_service->screenManager() : nullptr;
+    if (!mgr) {
+        return reported;
+    }
+    const QString id = PhosphorScreens::ScreenIdentity::idForName(reported);
+    const QStringList known = mgr->effectiveScreenIds();
+    if (known.contains(id)) {
+        return id;
+    }
+    if (mgr->hasVirtualScreens(id)) {
+        const QRect frame = windowId.isEmpty() ? QRect() : m_frameGeometry.value(shadowWindowId(windowId));
+        if (frame.isValid()) {
+            const QString vs = Utils::effectiveScreenIdAt(mgr, frame.center());
+            if (!vs.isEmpty() && PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(vs, id)) {
+                return vs;
+            }
+        }
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(m_lastCursorScreenId)
+            && PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(m_lastCursorScreenId, id)) {
+            return m_lastCursorScreenId;
+        }
+        const QStringList children = mgr->virtualScreenIdsFor(id);
+        if (!children.isEmpty()) {
+            return children.first();
+        }
+    }
+    for (const QString& candidate : known) {
+        if (PhosphorScreens::ScreenIdentity::screensMatch(candidate, id)) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+int WindowTrackingAdaptor::desktopCount() const
+{
+    return m_virtualDesktopManager ? m_virtualDesktopManager->desktopCount() : 0;
 }
 
 QString WindowTrackingAdaptor::lastActiveScreenName() const

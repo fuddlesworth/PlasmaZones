@@ -58,6 +58,12 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
         m_lastActiveWindowId.clear();
         m_lastActiveScreenId.clear(); // as windowClosed does (F291)
     }
+    // A screen report held for a dead window has nothing to replay into.
+    m_heldScreenReports.removeIf([&aliveInstances](const auto& entry) {
+        const qsizetype colon = entry.key().indexOf(QLatin1Char(':'));
+        return colon > 0 && entry.key() != QLatin1String("active") && entry.key() != QLatin1String("cursor")
+            && !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(entry.key().mid(colon + 1)));
+    });
     // Capture each dead window's final engine slot BEFORE ANY prune drops
     // state — pruneStaleAssignments wipes the SnapState the snap capture
     // answers from, and the engine prunes below untrack the tiling engines,

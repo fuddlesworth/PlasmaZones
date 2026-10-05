@@ -73,8 +73,8 @@ void WindowTrackingAdaptor::moveWindowToDesktop(const QString& windowId, int des
     // metadata push agree); 0 means "all / unknown" there and is not a
     // destination. Nor is a desktop past the last one: the effect answers an
     // out-of-range move by re-placing the window where it is.
-    const int desktopCount = m_virtualDesktopManager ? m_virtualDesktopManager->desktopCount() : 0;
-    if (desktop < 1 || (desktopCount > 0 && desktop > desktopCount) || !isRegistryTracked(windowId)) {
+    const int count = desktopCount();
+    if (desktop < 1 || (count > 0 && desktop > count) || !isRegistryTracked(windowId)) {
         qCDebug(lcDbusWindow) << "moveWindowToDesktop: ignoring" << windowId << "desktop" << desktop;
         return;
     }
