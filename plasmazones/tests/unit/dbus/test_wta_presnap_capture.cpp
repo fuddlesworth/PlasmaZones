@@ -244,15 +244,35 @@ private Q_SLOTS:
         QVERIFY(!f.floatBack(w, kLeft).isValid());
     }
 
-    void helperRefusesAFrameOffTheScreen()
+    // The frame is filed under the screen it is on, whatever screen the caller
+    // passes (F23); a frame from another monitor is never filed under this one.
+    void helperFilesTheFrameUnderTheScreenItIsOn()
     {
         PresnapFixture f;
         const QString w = f.registerWindow(QStringLiteral("f45-off"));
-        f.floatingAt(w, kFree.translated(kRightRect.x(), 0));
+        const QRect onRight = kFree.translated(kRightRect.x(), 0);
+        f.floatingAt(w, onRight);
 
         f.snap->recordFreeFrameBeforeUserSnap(w, kLeft);
 
+        QCOMPARE(f.floatBack(w, kRight), onRight);
         QVERIFY(!f.floatBack(w, kLeft).isValid());
+    }
+
+    // A bus snap of a window that moved to another monitor with no screen
+    // report (snap still tracks it on the first) records the frame it leaves
+    // under the monitor it is on (F23).
+    void aCrossScreenBusSnapRecordsTheFrameItLeaves()
+    {
+        PresnapFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f23-cross"));
+        const QRect onRight = kFree.translated(kRightRect.x(), 0);
+        f.floatingAt(w, onRight);
+        QCOMPARE(f.snap->screenForTrackedWindow(w), kLeft);
+
+        f.adaptor->moveWindowToZoneOnScreen(w, f.zone(1), kLeft);
+
+        QCOMPARE(f.floatBack(w, kRight), onRight);
     }
 
     // Each keyboard snap records the free frame it leaves (F45).

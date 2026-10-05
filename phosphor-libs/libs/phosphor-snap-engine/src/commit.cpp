@@ -169,12 +169,18 @@ void SnapEngine::recordFreeFrameBeforeUserSnap(const QString& windowId, const QS
         return;
     }
     const QRect frame = m_navState->frameGeometry(windowId);
-    if (!frame.isValid() || !m_windowTracker->geometryBelongsToScreen(frame, screenId)) {
+    if (!frame.isValid()) {
         return;
     }
-    // Overwrite, like toggleFocusedFloat: the live frame is the most recent
-    // free position, the one a float-back should return to.
-    m_windowTracker->recordFreeGeometry(windowId, screenId, frame, /*overwrite=*/true);
+    // Filed under the screen the frame is on, which a cross-screen snap is
+    // leaving and the snap's tracked screen may not name; @p screenId only
+    // when no screen manager can place it (F23). A mismatch is
+    // recordFreeGeometry's to refuse, which it logs (F641). Overwrite, like
+    // toggleFocusedFloat: the live frame is the most recent free position.
+    PhosphorScreens::ScreenManager* const mgr = m_windowTracker->screenManager();
+    const QString frameScreen = mgr ? mgr->effectiveScreenAt(frame.center()) : QString();
+    m_windowTracker->recordFreeGeometry(windowId, frameScreen.isEmpty() ? screenId : frameScreen, frame,
+                                        /*overwrite=*/true);
 }
 
 void SnapEngine::uncommitSnap(const QString& windowId)

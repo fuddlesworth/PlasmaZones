@@ -136,11 +136,9 @@ void SnapAdaptor::moveWindowToZoneOnScreen(const QString& windowId, const QStrin
     }
 
     // The float-back of a window that is not in a zone, recorded before the
-    // commit that would make the effect's own pre-snap capture refused (see
-    // the helper). Filed under the screen the window is on, which a
-    // cross-screen snap is leaving.
-    const QString windowScreen = m_engine->screenForTrackedWindow(windowId);
-    m_engine->recordFreeFrameBeforeUserSnap(windowId, windowScreen.isEmpty() ? screenId : windowScreen);
+    // commit that would make the effect's own pre-snap capture refused. The
+    // helper files it under the screen the frame is on.
+    m_engine->recordFreeFrameBeforeUserSnap(windowId, screenId);
 
     // Committed on the desktop the window is on, which is not the one in view
     // for a window on a hidden desktop (F179).

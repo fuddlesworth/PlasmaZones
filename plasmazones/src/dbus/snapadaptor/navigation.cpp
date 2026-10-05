@@ -189,8 +189,7 @@ PhosphorProtocol::SnapAllResultList SnapAdaptor::calculateSnapAllWindows(const Q
     // applies the zone geometry only after this reply, and its own pre-snap
     // capture then meets a window already in a zone.
     for (const PhosphorProtocol::SnapAllResultEntry& r : results) {
-        const QString windowScreen = m_engine->screenForTrackedWindow(r.windowId);
-        m_engine->recordFreeFrameBeforeUserSnap(r.windowId, windowScreen.isEmpty() ? screenId : windowScreen);
+        m_engine->recordFreeFrameBeforeUserSnap(r.windowId, screenId);
     }
     return results;
 }
