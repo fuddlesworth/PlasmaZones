@@ -397,15 +397,21 @@ jobs:
   # Build RPM Package
   # ═══════════════════════════════════════════════════════════════════════════
   build-rpm:
-    name: Build .rpm (Fedora ${{ matrix.fedora }})
+    name: Build .rpm (Fedora ${{ matrix.fedora }}, ${{ matrix.arch }})
     needs: version
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         # Fedora 44 is the earliest release whose repos carry Plasma 6.7
         # (KF 6.26 / Qt 6.10 / KWin 6.7), the PlasmaZones build baseline.
-        fedora: [44]
+        include:
+          - fedora: 44
+            arch: x86_64
+            runner: ubuntu-latest
+          - fedora: 44
+            arch: aarch64
+            runner: ubuntu-24.04-arm
     container:
       image: fedora:${{ matrix.fedora }}
 
@@ -496,17 +502,19 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: rpm-fedora-${{ matrix.fedora }}
+          name: rpm-fedora-${{ matrix.fedora }}-${{ matrix.arch }}
           path: dist/*.rpm
           retention-days: 30
 
       # KWin baseline for kwin-rebuild-watch.yml — see the Debian job.
       - name: Record KWin build baseline
+        if: matrix.arch == 'x86_64'
         run: |
           set -euo pipefail
           mkdir -p baseline
           rpm -q --qf '%{VERSION}\n' kwin-devel | tee baseline/fedora-${{ matrix.fedora }}
       - name: Upload KWin build baseline
+        if: matrix.arch == 'x86_64'
         uses: actions/upload-artifact@v7
         with:
           name: kwin-baseline-fedora-${{ matrix.fedora }}
@@ -1206,7 +1214,7 @@ jobs:
     # Skip AUR publish for pre-releases. Single source of truth: the
     # version job's `is_prerelease` output — keeps this in sync with
     # the GH release's `--prerelease` flag automatically.
-    if: needs.version.outputs.is_prerelease != 'true'
+    if: github.repository == 'fuddlesworth/PlasmaZones' && needs.version.outputs.is_prerelease != 'true'
 
     steps:
       - name: Checkout
@@ -1463,7 +1471,7 @@ jobs:
     # Skip pre-releases — the home:fuddlesworth repo users add with
     # `zypper addrepo` is a stable channel. Single source of truth: the
     # version job's `is_prerelease` output, same as publish-aur.
-    if: needs.version.outputs.is_prerelease != 'true'
+    if: github.repository == 'fuddlesworth/PlasmaZones' && needs.version.outputs.is_prerelease != 'true'
 
     steps:
       - name: Checkout
