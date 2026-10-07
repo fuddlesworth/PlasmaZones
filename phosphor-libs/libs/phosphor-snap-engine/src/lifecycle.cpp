@@ -162,7 +162,7 @@ int SnapEngine::restoreDesktopFor(const QString& windowId, const PhosphorEngine:
 SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky,
                                             PhosphorEngine::WindowKind kind, PhosphorEngine::RestoreReason reason)
 {
-    Q_UNUSED(kind) // window kind no longer gates restore — the store record carries it
+    Q_UNUSED(kind) // wire compatibility only: no placement record is given a kind from a live window
     if (windowId.isEmpty() || screenId.isEmpty()) {
         return SnapResult::noSnap();
     }

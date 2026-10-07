@@ -59,12 +59,14 @@ public:
     /**
      * @brief Construct a SnapAdaptor
      *
-     * Connects all SnapEngine signals to the corresponding
-     * WindowTrackingAdaptor signals for D-Bus relay.
+     * Connects the SnapEngine signals listed in the class doc to the
+     * WindowTrackingAdaptor for D-Bus relay; windowSnapStateChanged and
+     * windowFloatingClearedForSnap are wired in the WTA's enginewiring.cpp.
      *
      * @param engine SnapEngine to relay signals from (not owned)
      * @param adaptor WindowTrackingAdaptor to relay signals to (not owned)
-     * @param settings ISettings for restore-on-login gate (not owned)
+     * @param settings ISettings for the snapping master switch (snappingEnabled)
+     *        the restore and bus gates read; not owned
      * @param parent Parent QObject (must be the D-Bus-registered daemon)
      */
     explicit SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingAdaptor* adaptor, ISettings* settings,
@@ -87,7 +89,9 @@ public:
 
     /**
      * @brief Set the frozen-snapshot resolver used by snaprestore's disable
-     *        gate. Late-bound: created post-construction by Daemon::init.
+     *        gate. Set right after construction by
+     *        Daemon::initEnginesAndWiring (the resolver already exists then);
+     *        a setter so stop() and clearEngine() can null it.
      *
      * @param resolver IContextResolver instance (not owned, must outlive adaptor)
      */
@@ -163,8 +167,8 @@ public Q_SLOTS:
      * @brief Run the full snap-restore resolution (WindowPlacementStore restore +
      *        placement-rule / empty-zone / last-zone fallback chain) in one call
      * @param windowKind Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient).
-     *                   Forwarded to SnapEngine for protocol compatibility; the unified
-     *                   placement record now carries the kind, so it no longer gates restore.
+     *                   Accepted for wire compatibility and ignored: nothing sets a
+     *                   placement record's kind from a live window, so none carries one.
      * @param restoreReason Why this resolve is running — see
      *                   PhosphorEngine::RestoreReason. Clamped from the wire, so an
      *                   unrecognised value reads as Open. Gates the open claim and

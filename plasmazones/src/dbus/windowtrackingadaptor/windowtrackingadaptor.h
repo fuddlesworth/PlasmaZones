@@ -175,8 +175,8 @@ public:
      * screens, SnapEngine for manual-zone screens. All must be set before
      * navigation/float D-Bus calls work.
      *
-     * Signal connections from SnapEngine to adaptor D-Bus signals are established here.
-     * The snap-specific signal (windowSnapStateChanged) is connected via qobject_cast.
+     * SnapAdaptor's ctor relays most snap engine signals; this wires
+     * windowSnapStateChanged and windowFloatingClearedForSnap.
      *
      * @param snapEngine PlacementEngineBase for snap mode (not owned, must outlive adaptor)
      * @param autotileEngine PlacementEngineBase for autotile mode (not owned, must outlive adaptor)
