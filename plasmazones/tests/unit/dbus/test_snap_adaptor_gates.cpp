@@ -116,7 +116,7 @@ struct GateFixture : FloatBackFixture
     }
     ControlAdaptor* control()
     {
-        return new ControlAdaptor(wta, adaptor, nullptr, layouts, nullptr, nullptr, nullptr, nullptr, nullptr, &parent);
+        return new ControlAdaptor(wta, adaptor, layouts, nullptr, nullptr, nullptr, nullptr, nullptr, &parent);
     }
 
     SnapAdaptor* adaptor = nullptr; // parent-owned
@@ -700,6 +700,36 @@ private Q_SLOTS:
         entry.targetScreenId = kLeft;
         f.snap->emitBatchedResnap({entry});
         QCOMPARE(f.snap->zoneForWindow(ghost), f.zone(0));
+    }
+
+    // Control.toggleAutotileForScreen hands the mode toggle a resolved screen:
+    // a split monitor's id names the virtual screen the cursor is in (F22, F27).
+    void controlToggleHandsTheResolvedScreenToTheHandler()
+    {
+        GateFixture f;
+        QVERIFY(f.screenMgr->setVirtualScreenConfig(kRight, TestHelpers::makeSplitConfig(kRight)));
+        const QString vs1 = QStringLiteral("DP-2/vs:1");
+        f.wta->cursorScreenChanged(vs1);
+        ControlAdaptor* control = f.control();
+        QStringList toggled;
+        control->setModeToggleHandler([&toggled](const QString& screenId) {
+            toggled.append(screenId);
+        });
+        control->toggleAutotileForScreen(kRight);
+        QCOMPARE(toggled, QStringList{vs1});
+    }
+
+    void controlToggleRefusesAnUnknownScreen()
+    {
+        GateFixture f;
+        ControlAdaptor* control = f.control();
+        QStringList toggled;
+        control->setModeToggleHandler([&toggled](const QString& screenId) {
+            toggled.append(screenId);
+        });
+        control->toggleAutotileForScreen(QStringLiteral("DP-9"));
+        control->toggleAutotileForScreen(QString());
+        QVERIFY(toggled.isEmpty());
     }
 
 private:

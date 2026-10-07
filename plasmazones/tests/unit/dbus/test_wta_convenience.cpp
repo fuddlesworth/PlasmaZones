@@ -169,8 +169,8 @@ private Q_SLOTS:
         const int desktop = m_layoutManager->currentVirtualDesktop();
         m_layoutManager->assignLayout(m_screenId, desktop, QString(), m_testLayout);
         m_layoutManager->assignLayout(otherScreen, desktop, QString(), m_testLayout);
-        auto* control = new ControlAdaptor(m_wta, m_snapAdaptor, nullptr, m_layoutManager, nullptr, nullptr, nullptr,
-                                           nullptr, nullptr, m_parent);
+        auto* control = new ControlAdaptor(m_wta, m_snapAdaptor, m_layoutManager, nullptr, nullptr, nullptr, nullptr,
+                                           nullptr, m_parent);
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
         control->snapWindowToZone(windowId, 1, otherScreen);

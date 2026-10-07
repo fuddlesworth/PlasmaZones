@@ -4,7 +4,6 @@
 #include "controladaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
-#include "dbus/layoutadaptor/layoutadaptor.h"
 #include "compositorbridgeadaptor.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -12,7 +11,6 @@
 #include "core/platform/logging.h"
 #include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/ScreenIdentity.h>
 #include "core/platform/supportreport.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -27,7 +25,7 @@
 
 namespace PlasmaZones {
 
-ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
+ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor,
                                PhosphorZones::LayoutRegistry* layoutManager,
                                PhosphorEngine::IPlacementEngine* autotileEngine,
                                PhosphorScreens::ScreenManager* screenManager, CompositorBridgeAdaptor* compositorBridge,
@@ -36,7 +34,6 @@ ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdap
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
     , m_snapAdaptor(snapAdaptor)
-    , m_layoutAdaptor(layoutAdaptor)
     , m_layoutManager(layoutManager)
     , m_autotileEngine(autotileEngine)
     , m_screenManager(screenManager)
@@ -69,71 +66,26 @@ void ControlAdaptor::toggleAutotileForScreen(const QString& screenId)
         qCWarning(lcDbusWindow) << "toggleAutotileForScreen: empty screenId";
         return;
     }
-
-    // Determine current mode and toggle
-    bool isAutotile = m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId);
-    int newMode = isAutotile ? 0 : 1; // 0=Snapping, 1=Autotile
-
-    // Use the LayoutAdaptor's assignment system to toggle mode
-    // This is a simplified toggle — uses current desktop/activity context
-    qCInfo(lcDbusWindow) << "toggleAutotileForScreen:" << screenId << "from" << (isAutotile ? "autotile" : "snapping")
-                         << "to" << (newMode == 1 ? "autotile" : "snapping");
-
-    if (m_layoutAdaptor) {
-        // The toggle writes at the granularity that governs the screen RIGHT
-        // NOW. A screen whose current desktop (or desktop + activity) carries
-        // its own assignment is toggled in that context; a screen-level write
-        // there would be outranked by the narrower entry (a broader write
-        // never shadows a narrower one) and the toggle would do nothing
-        // visible. A screen with only a screen-level assignment, or none,
-        // keeps the screen-level toggle, which flips every desktop of it.
-        const QString resolvedScreenId = PhosphorScreens::ScreenIdentity::idForName(screenId);
-        const int desktop = m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(resolvedScreenId) : 0;
-        const QString activity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
-        int targetDesktop = 0;
-        QString targetActivity;
-        if (m_layoutManager && desktop > 0 && !activity.isEmpty()
-            && m_layoutManager->hasExplicitAssignment(resolvedScreenId, desktop, activity)) {
-            targetDesktop = desktop;
-            targetActivity = activity;
-        } else if (m_layoutManager && desktop > 0
-                   && m_layoutManager->hasExplicitAssignment(resolvedScreenId, desktop, QString())) {
-            targetDesktop = desktop;
-        } else if (m_layoutManager && !activity.isEmpty()
-                   && m_layoutManager->hasExplicitAssignment(resolvedScreenId, 0, activity)) {
-            targetActivity = activity;
-        }
-        // setAssignmentEntry(screenId, desktop, activity, mode, layout, algorithm)
-        //
-        // A bare mode switch has no layout arguments of its own, so the
-        // context's STORED slots ride along: the snapping layout and tiling
-        // algorithm the entry already carries (exactContextEntry reads the
-        // exact tuple's rule, never a cascade default) are written back with
-        // the new mode, and a round trip lands on the same layout it left.
-        // Written empty, a per-desktop entry lost its layout to the global
-        // default on the way back (the cascade has no wider level carrying it,
-        // unlike a screen-level entry). An unassigned context stays empty and
-        // resolves through the cascade. The scrolling template survives on
-        // its own: setAssignmentEntry seeds it from the stored entry.
-        //
-        // The apply (resnap, snap-zone restores, OSD) is the write's own:
-        // outside a settings-app save batch every single-context assignment
-        // write applies itself for its screen at once (LayoutAdaptor::
-        // stageOrApply), so an explicit apply here would run the pass twice.
-        // Inside a batch the batch's closing apply carries the screen.
-        PhosphorZones::AssignmentEntry stored;
-        if (m_layoutManager
-            && m_layoutManager->hasExplicitAssignment(resolvedScreenId, targetDesktop, targetActivity)) {
-            stored = m_layoutManager->exactContextEntry(resolvedScreenId, targetDesktop, targetActivity);
-        }
-        qCInfo(lcDbusWindow) << "toggleAutotileForScreen: writing context desktop=" << targetDesktop
-                             << "activity=" << targetActivity << "snapping=" << stored.snappingLayout
-                             << "tiling=" << stored.tilingAlgorithm;
-        m_layoutAdaptor->setAssignmentEntry(screenId, targetDesktop, targetActivity, newMode, stored.snappingLayout,
-                                            stored.tilingAlgorithm);
-    } else {
-        qCWarning(lcDbusWindow) << "toggleAutotileForScreen: LayoutAdaptor not available";
+    // A connector name or a split monitor's id resolves to the virtual screen
+    // in question (F22), and the switch itself is the mode-toggle shortcut's
+    // own code on that screen: its context, its remembered layout or
+    // algorithm, its feature gate and disabled-context notice (L13 Q1).
+    const QString resolved = m_wta ? m_wta->resolveBusScreen(screenId) : QString();
+    if (resolved.isEmpty()) {
+        qCWarning(lcDbusWindow) << "toggleAutotileForScreen: unknown screen" << screenId;
+        return;
     }
+    if (!m_modeToggle) {
+        qCWarning(lcDbusWindow) << "toggleAutotileForScreen: no mode toggle wired";
+        return;
+    }
+    qCInfo(lcDbusWindow) << "toggleAutotileForScreen:" << screenId << "->" << resolved;
+    m_modeToggle(resolved);
+}
+
+void ControlAdaptor::setModeToggleHandler(std::function<void(const QString& screenId)> handler)
+{
+    m_modeToggle = std::move(handler);
 }
 
 QString ControlAdaptor::getFullState()
@@ -192,7 +144,6 @@ void ControlAdaptor::detach()
 {
     m_wta = nullptr;
     m_snapAdaptor = nullptr;
-    m_layoutAdaptor = nullptr;
     m_layoutManager = nullptr;
     m_autotileEngine = nullptr;
     m_screenManager = nullptr;
@@ -200,6 +151,7 @@ void ControlAdaptor::detach()
     m_scrollEngine = nullptr;
     m_modeRouter = nullptr;
     m_shortcutCatalog = nullptr;
+    m_modeToggle = nullptr;
 }
 
 QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessage& message)

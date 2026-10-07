@@ -511,11 +511,11 @@ private:
     void handleIncreaseMasterCount();
     void handleDecreaseMasterCount();
     void handleRetile();
-    /// The mode-toggle shortcut's handler (autotile_init.cpp): cycles the
-    /// cursor's screen Snapping → Tiling → Scrolling → Snapping, skipping
-    /// modes whose master switch is off, and carries the leaving mode's
-    /// window order and snap state across the flip.
+    /// The mode-toggle shortcut's handler (autotile_init.cpp): toggleScreenMode on the cursor's screen.
     void handleTilingModeToggle();
+    /// Cycles @p screenId Snapping → Tiling → Scrolling → Snapping (or flips snapping and autotile only for
+    /// @p snappingAutotilePair), skipping modes switched off, carrying window order and snap state across.
+    void toggleScreenMode(const QString& screenId, bool snappingAutotilePair);
     void handleSwapVirtualScreen(NavigationDirection direction);
     void handleRotateVirtualScreens(bool clockwise);
 

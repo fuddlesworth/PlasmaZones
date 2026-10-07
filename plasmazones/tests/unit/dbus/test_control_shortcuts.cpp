@@ -45,16 +45,16 @@ private Q_SLOTS:
     void emptyWithoutAProvider()
     {
         QObject parent;
-        auto* control = new ControlAdaptor(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                                           nullptr, &parent);
+        auto* control =
+            new ControlAdaptor(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &parent);
         QCOMPARE(control->getShortcutsJson(), QStringLiteral("[]"));
     }
 
     void serialisesTheProvidersRows()
     {
         QObject parent;
-        auto* control = new ControlAdaptor(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                                           nullptr, &parent);
+        auto* control =
+            new ControlAdaptor(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &parent);
         int reads = 0;
         control->setShortcutCatalogProvider([&reads]() -> QVariantList {
             ++reads;
@@ -95,8 +95,8 @@ private Q_SLOTS:
     void notifyRelaysTheSignal()
     {
         QObject parent;
-        auto* control = new ControlAdaptor(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                                           nullptr, &parent);
+        auto* control =
+            new ControlAdaptor(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &parent);
         QSignalSpy spy(control, &ControlAdaptor::shortcutsChanged);
         control->notifyShortcutsChanged();
         control->notifyShortcutsChanged();

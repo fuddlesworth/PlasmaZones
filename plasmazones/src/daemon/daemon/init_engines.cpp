@@ -1329,16 +1329,16 @@ void Daemon::initEnginesAndWiring()
                 });
     }
 
-    // Control adaptor - high-level convenience API for third-party integrations.
-    // Held as a member so stop() can detach() it before the unique_ptr members
-    // it borrows are destroyed.
-    m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_snapAdaptor, m_layoutAdaptor,
-                                          m_layoutManager.get(), autotileEngine, m_screenManager.get(),
-                                          m_compositorBridge, m_scrollEngine.get(), m_screenModeRouter.get(), this);
-    // The shortcut catalog behind Control.getShortcutsJson. ShortcutManager
-    // outlives every adaptor rebuild (constructed in the Daemon ctor), so the
-    // provider reads it through the member; the relay is scoped to the
-    // adaptor so a rebuilt one never receives a stale connection.
+    // Control adaptor (the convenience API for third-party integrations): a member
+    // so stop() can detach() it before the unique_ptr members it borrows are destroyed.
+    m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_snapAdaptor, m_layoutManager.get(), autotileEngine,
+                                          m_screenManager.get(), m_compositorBridge, m_scrollEngine.get(),
+                                          m_screenModeRouter.get(), this);
+    // Control.toggleAutotileForScreen runs the mode-toggle shortcut's switch.
+    m_controlAdaptor->setModeToggleHandler([this](const QString& screenId) {
+        toggleScreenMode(screenId, true);
+    });
+    // Control.getShortcutsJson's catalog, read through the member (it outlives adaptor rebuilds).
     m_controlAdaptor->setShortcutCatalogProvider([this]() -> QVariantList {
         return m_shortcutManager ? m_shortcutManager->shortcutCatalog() : QVariantList();
     });

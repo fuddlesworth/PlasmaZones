@@ -179,15 +179,6 @@ void Daemon::initializeAutotile()
 
 void Daemon::handleTilingModeToggle()
 {
-    if (!m_settings) {
-        return;
-    }
-    if (!m_unifiedLayoutController || !m_layoutManager) {
-        return;
-    }
-    // Feature gate happens below, after the current mode is known,
-    // so we can check the flag for the TARGET mode (not just autotile).
-
     // Mode toggle is screen-targeted, not window-targeted: route off the
     // cursor's screen, not the focused window's. Otherwise pressing the
     // toggle while looking at vs:0 with a focused window on vs:1 silently
@@ -198,6 +189,19 @@ void Daemon::handleTilingModeToggle()
         qCWarning(lcDaemon) << "Mode toggle: empty screenId from resolveCursorScreenId";
         return;
     }
+    toggleScreenMode(screenId, false);
+}
+
+void Daemon::toggleScreenMode(const QString& screenId, bool snappingAutotilePair)
+{
+    if (!m_settings) {
+        return;
+    }
+    if (!m_unifiedLayoutController || !m_layoutManager) {
+        return;
+    }
+    // Feature gate happens below, after the current mode is known,
+    // so we can check the flag for the TARGET mode (not just autotile).
     int desktop = currentDesktopForScreen(screenId);
     QString activity = currentActivity();
     qCInfo(lcDaemon) << "Mode toggle: screenId=" << screenId << "desktop=" << desktop << "activity=" << activity;
@@ -272,12 +276,16 @@ void Daemon::handleTilingModeToggle()
     // two cannot disagree about what "enabled" means). Disabled modes are
     // skipped, so with scrolling off the cycle degrades to the historical
     // two-state flip; with every other mode off the toggle is a no-op.
-    Mode target = nextInCycle(currentMode);
-    while (target != currentMode && !modeEnabled(target)) {
+    // The pair (Control.toggleAutotileForScreen) flips snapping and autotile
+    // only, scrolling going to autotile, and does nothing when the target's
+    // master switch is off.
+    Mode target = snappingAutotilePair ? (currentMode == Mode::Autotile ? Mode::Snapping : Mode::Autotile)
+                                       : nextInCycle(currentMode);
+    while (!snappingAutotilePair && target != currentMode && !modeEnabled(target)) {
         target = nextInCycle(target);
     }
-    if (target == currentMode) {
-        qCInfo(lcDaemon) << "Mode toggle: ignored — no other enabled mode to cycle into";
+    if (target == currentMode || !modeEnabled(target)) {
+        qCInfo(lcDaemon) << "Mode toggle: ignored — no other enabled mode to switch into";
         updateLayoutFilter();
         return;
     }
