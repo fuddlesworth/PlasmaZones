@@ -598,12 +598,6 @@ void Daemon::stop()
         // overlay service outlives this teardown.
         m_overlayService->setActiveDragWindowId({});
     }
-    // Same clear-before-teardown contract as the overlay block above: the
-    // picker's axis provider captures `this` and reads m_scrollEngine, which
-    // is reset below.
-    if (m_unifiedLayoutController) {
-        m_unifiedLayoutController->setStripAxisProvider({});
-    }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
     // Explicit symmetric clear across all three borrowers — SnapAdaptor's

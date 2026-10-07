@@ -700,9 +700,9 @@ void Daemon::publishScrollFocusScrollBlocks()
     m_scrollingAdaptor->setScrollFocusScrollBlockedWindows(scrollFocusScrollBlockedWindows());
 }
 
-/// Deliberately NOT liveness-gated, unlike the three providers wired in
-/// init_engines.cpp (the cards provider, the overlay axis provider and the
-/// UnifiedLayoutController one), which all guard on isActiveOnScreen.
+/// Deliberately NOT liveness-gated, unlike the two providers wired in
+/// init_engines.cpp (the cards provider and the overlay axis provider),
+/// which both guard on isActiveOnScreen.
 ///
 /// Those are PUBLIC entry points that any screen can be asked about, so a
 /// screen the engine does not own must answer "no vertical strip" rather than
