@@ -288,27 +288,6 @@ void Daemon::stop()
         m_windowDragAdaptor->setShortcutRegistrar(nullptr);
     }
 
-    // Drop the layout-manager provider lambdas FIRST, before the m_running
-    // gate. They capture `this` and dereference m_settings, which is declared
-    // after m_layoutManager and so is destroyed BEFORE it; a cascade query
-    // during ~LayoutRegistry that hit a still-installed lambda would
-    // dereference freed memory. The providers are installed in init(), which
-    // runs before m_running is set in start(), so clearing them must not be
-    // gated or the init-without-start paths (test fixtures, early-fail
-    // constructors, double-stop) keep the UAF. Clearing is idempotent.
-    if (m_layoutManager) {
-        m_layoutManager->setDefaultLayoutIdProvider({});
-        m_layoutManager->setDefaultAutotileAlgorithmProvider({});
-        m_layoutManager->setTiledWindowCountProvider({});
-        m_layoutManager->setScreenOrientationProvider({});
-        m_layoutManager->setColorSchemeProvider({});
-        m_layoutManager->setCurrentVirtualDesktopProvider({});
-        m_layoutManager->setSnappingPreferredProvider({});
-        m_layoutManager->setDefaultAssignmentSuppressedProvider({});
-        m_layoutManager->setDefaultScrollingTemplateProvider({});
-        m_layoutManager->setScrollingTemplateStore(nullptr);
-    }
-
     // Null the QML static registry / manager pointers BEFORE the m_running
     // gate. These three statics are published unconditionally from
     // `setupAnimationProfiles()` in the ctor — which runs before `init()`
@@ -316,7 +295,7 @@ void Daemon::stop()
     // early-fail init paths) still has them pinned to the about-to-die
     // members, so the clear must run on every teardown path, not just the
     // post-start one. Same "borrowed-pointer + late member destruction"
-    // window as the provider lambdas above. The setDefault*(nullptr)
+    // window as the provider lambdas below. The setDefault*(nullptr)
     // calls are unconditionally null-safe.
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
     PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
@@ -528,13 +507,36 @@ void Daemon::stop()
     // installed while member destruction frees what they deref. Each is a null-safe
     // idempotent clear, so running them on a never-inited daemon is a no-op.
 
-    // The shutdown save runs FIRST, while every borrow below is still wired:
-    // its re-capture reads the engines, predicates and context resolver, and
-    // with those severed it captured nothing. Running-path only; its guard
+    // The shutdown save runs before any borrow it reads is severed: its
+    // re-capture reads the engines, predicates and context resolver, and the
+    // zone rects it compares a frame with resolve context gaps through the
+    // layout-manager providers below (F343). Running-path only; its guard
     // blocks the later saves this teardown schedules, and nothing below
     // mutates placement.
     if (m_running && m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->saveStateOnShutdown();
+    }
+
+    // Drop the layout-manager provider lambdas right after that save, still
+    // above the m_running gate. They capture `this` and dereference
+    // m_settings, which is declared after m_layoutManager and so is destroyed
+    // BEFORE it; a cascade query during ~LayoutRegistry that hit a
+    // still-installed lambda would dereference freed memory. The providers
+    // are installed in init(), which runs before m_running is set in start(),
+    // so clearing them must not be gated or the init-without-start paths
+    // (test fixtures, early-fail constructors, double-stop) keep the UAF.
+    // Clearing is idempotent.
+    if (m_layoutManager) {
+        m_layoutManager->setDefaultLayoutIdProvider({});
+        m_layoutManager->setDefaultAutotileAlgorithmProvider({});
+        m_layoutManager->setTiledWindowCountProvider({});
+        m_layoutManager->setScreenOrientationProvider({});
+        m_layoutManager->setColorSchemeProvider({});
+        m_layoutManager->setCurrentVirtualDesktopProvider({});
+        m_layoutManager->setSnappingPreferredProvider({});
+        m_layoutManager->setDefaultAssignmentSuppressedProvider({});
+        m_layoutManager->setDefaultScrollingTemplateProvider({});
+        m_layoutManager->setScrollingTemplateStore(nullptr);
     }
 
     // Clear adaptor engine pointers BEFORE destroying the engines. Adaptors are Qt
@@ -708,11 +710,13 @@ void Daemon::stop()
     // detaches, the D-Bus unregister, the loader resets, the QML-static
     // null-outs, the shader-registry teardown, and the borrow-severing clears
     // just above — all of which either sever a BORROWED pointer a member
-    // destructor would otherwise deref, or are idempotent no-ops. Everything
-    // BELOW is start()-origin (the persistent sender reconnects, the state
-    // save, and the engine/resolver member RESETS established during a running
-    // session); running those without a prior start() could touch half-wired
-    // state. Hence the gate sits here.
+    // destructor would otherwise deref, or are idempotent no-ops (the
+    // window-tracking shutdown save above runs only when m_running, ahead of
+    // the provider clears it reads). Everything BELOW is start()-origin (the
+    // persistent sender reconnects, the layout and settings save, and the
+    // engine/resolver member RESETS established during a running session);
+    // running those without a prior start() could touch half-wired state.
+    // Hence the gate sits here.
     if (!m_running) {
         return;
     }
@@ -906,14 +910,14 @@ void Daemon::stop()
         m_overlayService->clearAllScrollDropIndicatorOverrides();
     }
 
-    // Save state. The window-tracking state was saved at the top of this
-    // function, before the engine borrows were severed.
+    // Save state. The window-tracking state was saved above the running gate,
+    // before the engine borrows and layout providers were severed.
     m_layoutManager->saveLayouts();
     m_layoutManager->saveAssignments();
     m_settings->save();
 
     // Autotile per-window restore state is included in WTA's saveStateOnShutdown()
-    // (run at the top of stop(), with the engines still wired). No separate save.
+    // (run above the running gate, with the engines still wired). No separate save.
     //
     // Do NOT call setAutotileScreens({}) here — it emits windowsReleased
     // which clears WTS floating state and restarts the save timer, potentially
@@ -958,8 +962,8 @@ void Daemon::stop()
     // severing above — and survives a future member-declaration reorder.
     m_crossSurfaceResolver.reset();
 
-    // Provider lambdas already cleared at the top of stop() (before the
-    // m_running gate) so this point requires no further teardown.
+    // Provider lambdas were already cleared after the shutdown save (above the
+    // m_running gate), so this point requires no further teardown.
 
     m_running = false;
 }
