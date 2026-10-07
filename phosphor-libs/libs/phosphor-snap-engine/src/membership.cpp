@@ -204,9 +204,11 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
     // that belongs to the layout it came from — the "ghost layout" of
     // discussion #1104, reached by KWin's own move-to-desktop shortcut and by
     // a drop in the desktop overview. PlasmaZones' own cross-desktop move
-    // (tryCrossDesktopMove) answers this by landing the window in the
-    // positionally-equivalent zone of the destination desktop's layout; this
-    // is the same answer for the moves it does not drive. Collected here and
+    // (tryCrossDesktopMove) answers this by keeping the zones the window holds
+    // on the destination desktop, else landing it in the positionally-
+    // equivalent zone of that desktop's layout; this is the same answer for
+    // the moves it does not drive (planCarry skips a destination that holds
+    // the window's own zone without applying it, F754). Collected here and
     // emitted as ONE batch after the loop, since the commit it goes through
     // mutates the very stores this loop walks.
     QVector<PhosphorEngine::ZoneAssignmentEntry> carried;

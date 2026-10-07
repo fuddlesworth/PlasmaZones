@@ -469,6 +469,14 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     if (targetDesktop <= 0) {
         return false;
     }
+    // A window on every desktop has no next desktop, and the compositor refuses
+    // to move it anyway (F289).
+    if (m_windowRegistry) {
+        if (const auto context = m_windowRegistry->desktopContext(windowId);
+            context && context->sticky.value_or(false)) {
+            return false;
+        }
+    }
     // Only snapped windows cross-desktop: this path is reached via the
     // no_adjacent_zone boundary, which requires a current zone. An unsnapped
     // window has nothing to carry — report no crossing so the caller emits the
@@ -521,72 +529,103 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         return true;
     }
 
-    // Land the window snapped in the EQUIVALENT zone on the target desktop's
-    // layout, not floating at its old geometry. Desktops occupy the same
-    // physical space, so the window keeps its slot: map by zone position
-    // (1-based, zones sorted by number) into the target desktop's layout — a
-    // shared layout yields the same zone id, a different layout the
-    // positionally-equivalent zone. Mirrors calculateResnapFromPreviousLayout.
-    const auto [targetZoneId, targetGeo] = resolveCrossDesktopZone(currentZoneId, screenId, targetDesktop);
+    const QString activity = currentActivity();
+    const PhosphorEngine::PlacementStateKey sourceKey = currentKeyForScreen(screenId);
+    const PhosphorEngine::PlacementStateKey targetKey{screenId, targetDesktop, activity};
+    const QString canonical = canonicalWindowId(windowId);
+    const SnapState* const source = m_states.stateForKey(sourceKey);
+    const SnapState* const there = m_states.stateForKey(targetKey);
+    const bool member = there && holdsWindowInState(canonical, there);
 
-    if (targetZoneId.isEmpty()) {
-        // No resolvable equivalent zone on the target desktop (no layout / no
-        // matching slot / invalid geometry): fall back to a bare desktop
-        // re-stamp + move. Once the compositor reports the move, the
-        // membership pass's carry finds no slot either and sends the window
-        // back to its pre-snap geometry when it has one, and the desktop
-        // arrival only re-applies a zone the window already holds there, so
-        // nothing snaps it into another zone (F415).
-        // stateForWindow never returns null (untracked windows resolve to
-        // the global holder); reassignDesktop fails there, which is the
-        // intended no-op for an untracked window.
-        if (!stateForWindow(windowId)->reassignDesktop(windowId, targetDesktop)) {
-            return false;
+    // Where it lands: a window already on that desktop keeps the zones it holds
+    // there (F611), or its float there. Otherwise its slot is carried over, the
+    // whole span on a shared layout and the first zone's position on another
+    // (F355).
+    const QStringList keptZones = member ? there->zonesForWindow(canonical) : QStringList{};
+    const bool keepsFloat = member && keptZones.isEmpty() && there->isFloating(canonical);
+    QStringList landing = keptZones;
+    QRect rect;
+    if (landing.isEmpty() && !keepsFloat) {
+        const QStringList sourceZones = source ? source->zonesForWindow(canonical) : QStringList{currentZoneId};
+        if (m_layoutManager && !sourceZones.isEmpty()
+            && m_layoutManager->layoutForScreen(screenId, sourceKey.desktop, activity)
+                == m_layoutManager->layoutForScreen(screenId, targetDesktop, activity)) {
+            landing = sourceZones;
+        } else if (const auto [zoneId, geometry] = resolveCrossDesktopZone(currentZoneId, screenId, targetDesktop);
+                   !zoneId.isEmpty()) {
+            landing = {zoneId};
+            rect = geometry;
         }
-        // Refresh the durable record too, exactly as the zone-resolved branch
-        // below does. Without it SnapState says targetDesktop while the record
-        // keeps the old one, and the next login restores the window to the
-        // desktop it was moved off.
-        if (m_windowTracker) {
-            if (auto placement = capturePlacement(windowId)) {
-                placement->virtualDesktop = targetDesktop;
-                m_windowTracker->placementStore().record(std::move(*placement));
-            } else {
-                qCDebug(PhosphorSnapEngine::lcSnapEngine)
-                    << "tryCrossDesktopMove: capturePlacement miss for" << windowId
-                    << "— placement-store desktop not updated to" << targetDesktop;
-            }
-        }
+    }
+    if (!landing.isEmpty() && !rect.isValid() && m_windowTracker) {
+        rect = m_windowTracker->resolveZoneGeometry(landing, screenId);
+    }
+    if (!keepsFloat && (landing.isEmpty() || !rect.isValid())) {
+        // No slot there: only the compositor moves it. The membership pass then
+        // decides its arrival as for KWin's own move, sending it back to its
+        // pre-snap geometry or releasing it. Re-stamping the store here made
+        // the zone it visibly holds read empty (F289).
         Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
         Q_EMIT navigationFeedback(true, QStringLiteral("move"), QStringLiteral("desktop:") + direction, QString(),
                                   QString(), screenId);
         return true;
     }
 
-    // Re-snap into the equivalent zone: update SnapState (zone + screen +
-    // desktop), refresh the placement-store record (desktop + snap slot), ask
-    // the compositor to relocate the real window, then apply the target zone's
-    // geometry. The target desktop is not in view, so its suspended client may
-    // not ack the apply; the effect parks it and re-applies the zone when the
-    // desktop is shown (F408, F491).
-    // Pinned to the TARGET desktop's store: the assignment belongs to the
-    // desktop the window is moving to, not the one in view.
-    stateForWindowOnScreen(windowId, screenId, targetDesktop)
-        ->assignWindowToZone(windowId, targetZoneId, screenId, targetDesktop);
+    // A kept float goes back to its float-back now, while the window is still
+    // visible: a free apply has no zone for the arrival to re-apply, and a
+    // suspended client on a hidden desktop may not ack it.
+    if (keepsFloat && m_windowTracker) {
+        if (const auto back = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
+            back && back->isValid()) {
+            Q_EMIT applyGeometryRequested(windowId, back->x(), back->y(), back->width(), back->height(), QString(),
+                                          screenId, false);
+        }
+    }
+    // Its snap where it leaves goes silently, before the commit, so the record
+    // and the effect's zone mirror name only the zones it lands in (F534, F458).
+    {
+        QStringList removed;
+        bool lastUsedCleared = releaseMembership(windowId, sourceKey, removed);
+        lastUsedCleared |= clearGlobalLastUsedIfRemoved(removed);
+        if (lastUsedCleared && m_windowTracker) {
+            m_windowTracker->markLastUsedZoneDirty();
+        }
+    }
+    if (keepsFloat) {
+        Q_EMIT windowSnapStateChanged(windowId,
+                                      PhosphorProtocol::WindowStateEntry{windowId, QString(), QString(), false,
+                                                                         QStringLiteral("unsnapped"), QStringList{},
+                                                                         false});
+        Q_EMIT windowFloatingChanged(windowId, true, screenId);
+    } else {
+        // The commit states it snapped there and tells the tracking service
+        // (F106, F534); a kept set is a re-statement.
+        if (landing.size() > 1) {
+            commitMultiZoneSnap(windowId, landing, screenId, PhosphorEngine::SnapIntent::UserInitiated, targetDesktop);
+        } else {
+            commitSnap(windowId, landing.first(), screenId, PhosphorEngine::SnapIntent::UserInitiated, targetDesktop);
+        }
+        if (m_windowTracker) {
+            m_windowTracker->recordSnapIntent(windowId, true);
+        }
+    }
     if (m_windowTracker) {
-        if (auto placement = capturePlacement(windowId)) {
+        if (auto placement = capturePlacementAtDesktop(windowId, targetDesktop)) {
             placement->virtualDesktop = targetDesktop;
             m_windowTracker->placementStore().record(std::move(*placement));
         } else {
-            // SnapState now says targetDesktop but the placement store keeps the
-            // old desktop — surface the divergence rather than letting it hide.
             qCDebug(PhosphorSnapEngine::lcSnapEngine) << "tryCrossDesktopMove: capturePlacement miss for" << windowId
                                                       << "— placement-store desktop not updated to" << targetDesktop;
         }
     }
     Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
-    Q_EMIT applyGeometryRequested(windowId, targetGeo.x(), targetGeo.y(), targetGeo.width(), targetGeo.height(),
-                                  targetZoneId, screenId, false);
+    // The target desktop is not in view, so its suspended client may not ack
+    // the apply; the effect parks it and re-applies the zone when the desktop
+    // is shown (F408, F491).
+    if (!keepsFloat) {
+        Q_EMIT applyGeometryRequested(windowId, rect.x(), rect.y(), rect.width(), rect.height(), landing.first(),
+                                      screenId, false);
+    }
     Q_EMIT navigationFeedback(true, QStringLiteral("move"), QStringLiteral("desktop:") + direction, QString(),
                               QString(), screenId);
     return true;

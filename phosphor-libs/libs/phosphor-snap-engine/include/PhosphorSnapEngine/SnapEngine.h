@@ -1205,16 +1205,11 @@ private:
     /// navigationFeedback(false, action, "engine_unavailable", ...).
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
 
-    /// Move @p windowId to the virtual desktop adjacent to the current one in
-    /// @p direction. Re-snaps the window into the EQUIVALENT zone on the target
-    /// desktop's layout (same zone id when the layout is shared, else the
-    /// positionally-equivalent zone), updating SnapState + the placement-store
-    /// record, asking the compositor to relocate the real window
-    /// (windowDesktopMoveRequested) and applying the target zone's geometry so it
-    /// lands snapped rather than floating. Falls back to a bare desktop re-stamp
-    /// when no equivalent zone is resolvable. Used when directional move reaches a
-    /// zone-layout boundary with no neighbour output. Returns false when there is
-    /// no neighbour desktop or the window is not snapped.
+    /// Move @p windowId to the next desktop in @p direction when a move reaches a layout edge with no
+    /// neighbour output. It keeps the zones or the float it already has there, else lands in its own
+    /// zones (a shared layout) or its first zone's position (another layout), committed there with its
+    /// snap on the desktop it leaves released; with no slot only the compositor moves it. Returns false
+    /// for a window on every desktop, no neighbour desktop, or a window that is not snapped.
     bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
 
     /// A tiling neighbour OUTPUT in @p direction takes the window through the daemon cross-mode handoff

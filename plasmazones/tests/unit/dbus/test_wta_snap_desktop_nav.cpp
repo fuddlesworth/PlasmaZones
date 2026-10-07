@@ -14,6 +14,8 @@
 #include <QSignalSpy>
 
 using PhosphorEngine::NavigationContext;
+using PhosphorSnapEngine::SnapEngine;
+using PhosphorSnapEngine::SnapState;
 
 class TestWtaSnapDesktopNav : public QObject
 {
@@ -150,7 +152,202 @@ private Q_SLOTS:
         QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_adjacent_zone"));
     }
 
+    // ── L14.10: the keyboard move to the next desktop ──
+
+    // The moved window is stated snapped in the zone it lands in, holds no
+    // zone on the desktop it left, and the record's snap slot names the new
+    // zone on the new desktop (F534, F106, F458).
+    void movedWindowIsStatedSnappedInItsNewZone()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        PhosphorZones::Layout* other = secondLayout(f);
+        const QString mapped = other->zones().at(2)->id().toString();
+        const QString w = f.live(QStringLiteral("mv-1"), QRect(1300, 100, 400, 300));
+        f.snapOn(w, {f.zone(2)}, kLeft, 1);
+        QStringList snapped;
+        QObject::connect(f.snap.get(), &SnapEngine::windowSnapStateChanged, f.snap.get(),
+                         [&](const QString&, const PhosphorProtocol::WindowStateEntry& entry) {
+                             snapped.append(entry.changeType + QLatin1Char(':') + entry.zoneId);
+                         });
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(snapped, (QStringList{QStringLiteral("snapped:") + mapped}));
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 2)->zonesForWindow(w), (QStringList{mapped}));
+        QVERIFY(!f.snap->heldKeyForWindow(w) || f.snap->heldKeyForWindow(w)->desktop == 2);
+        QVERIFY(f.wta->service()->windowsInZone(f.zone(2)).isEmpty());
+        const auto record = f.wta->service()->placementStore().peekExact(w);
+        QVERIFY(record.has_value());
+        QCOMPARE(record->virtualDesktop, 2);
+        QCOMPARE(record->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).zoneIds, (QStringList{mapped}));
+        QVERIFY(f.wta->service()->userSnappedClasses().contains(QStringLiteral("app")));
+    }
+
+    // A window on both desktops keeps the zone it already holds on the one it
+    // is moved to (F611).
+    void keepsTheZoneItAlreadyHasThere()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        const QString w = onBothDesktops(f, QStringLiteral("keep-1"));
+        f.snapOn(w, {f.zone(2)}, kLeft, 1);
+        f.snap->stateForWindowOnScreen(w, kLeft, 2)->assignWindowToZone(w, f.zone(0), kLeft, 2);
+        f.showDesktop(kLeft, 1);
+        QRect applied;
+        QObject::connect(f.snap.get(), &SnapEngine::applyGeometryRequested, f.snap.get(),
+                         [&](const QString&, int x, int y, int width, int height) {
+                             applied = QRect(x, y, width, height);
+                         });
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 2)->zonesForWindow(w), (QStringList{f.zone(0)}));
+        QCOMPARE(applied, f.zoneRect(0, kLeft));
+        const SnapState* left = f.snap->stateForWindowOnScreen(w, kLeft, 1);
+        QVERIFY(left->zonesForWindow(w).isEmpty());
+    }
+
+    // A window floating on the desktop it is moved to stays floating there,
+    // back at its float-back, applied before the desktop move (F619).
+    void keepsTheFloatItHasThere()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        const QString w = onBothDesktops(f, QStringLiteral("float-1"));
+        const QRect free(300, 200, 640, 480);
+        f.wta->service()->recordFreeGeometry(w, kLeft, free, true);
+        f.snapOn(w, {f.zone(2)}, kLeft, 1);
+        SnapState* there = f.snap->stateForWindowOnScreen(w, kLeft, 2);
+        there->setFloatingOnScreen(w, kLeft, 2);
+        there->setFloating(w, true);
+        f.showDesktop(kLeft, 1);
+        QStringList order;
+        QRect applied;
+        QObject::connect(f.snap.get(), &SnapEngine::applyGeometryRequested, f.snap.get(),
+                         [&](const QString&, int x, int y, int width, int height, const QString& zoneId) {
+                             applied = QRect(x, y, width, height);
+                             order.append(zoneId.isEmpty() ? QStringLiteral("free") : QStringLiteral("zone"));
+                         });
+        QObject::connect(f.snap.get(), &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, f.snap.get(),
+                         [&](const QString&, int desktop) {
+                             order.append(QStringLiteral("desktop:%1").arg(desktop));
+                         });
+        QStringList stated;
+        QObject::connect(f.snap.get(), &SnapEngine::windowSnapStateChanged, f.snap.get(),
+                         [&](const QString&, const PhosphorProtocol::WindowStateEntry& entry) {
+                             stated.append(entry.changeType);
+                         });
+        QSignalSpy floated(f.snap.get(), &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(order, (QStringList{QStringLiteral("free"), QStringLiteral("desktop:2")}));
+        QCOMPARE(applied, free);
+        QCOMPARE(stated, (QStringList{QStringLiteral("unsnapped")}));
+        QCOMPARE(floated.count(), 1);
+        QCOMPARE(floated.first().at(1).toBool(), true);
+        QVERIFY(there->isFloating(w));
+        QVERIFY(there->zonesForWindow(w).isEmpty());
+    }
+
+    // A window on every desktop is not moved (F289).
+    void stickyWindowIsNotMoved()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.isMinimized = false;
+        meta.isSticky = true;
+        f.registry.upsert(QStringLiteral("pin-1"), meta);
+        const QString w = f.registry.canonicalizeWindowId(QStringLiteral("app|pin-1"));
+        f.setFrame(w, QRect(1300, 100, 400, 300));
+        f.snapOn(w, {f.zone(2)}, kLeft, 1);
+        QSignalSpy moved(f.snap.get(), &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested);
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(moved.count(), 0);
+        QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_adjacent_zone"));
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 1)->zonesForWindow(w), (QStringList{f.zone(2)}));
+    }
+
+    // With no slot on the next desktop only the compositor moves the window,
+    // and the zone it holds here is left for the membership pass (F289).
+    void noSlotLeavesTheSourceStoreAlone()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        auto* single = PlasmaZones::createTestLayout(1, f.layouts);
+        f.layouts->addLayout(single);
+        f.layouts->assignLayout(kLeft, 2, QString(), single);
+        const QString w = f.live(QStringLiteral("slot-1"), QRect(1300, 100, 400, 300));
+        f.snapOn(w, {f.zone(2)}, kLeft, 1);
+        QSignalSpy moved(f.snap.get(), &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested);
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(moved.count(), 1);
+        QCOMPARE(feedback.last().at(0).toBool(), true);
+        const SnapState* source = f.snap->stateForWindowOnScreen(w, kLeft, 1);
+        QCOMPARE(source->desktopForWindow(w), 1);
+        QCOMPARE(source->zonesForWindow(w), (QStringList{f.zone(2)}));
+    }
+
+    // A span keeps its zones on a desktop with the same layout (Q3).
+    void spanKeepsItsZonesOnASharedLayout()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        const QString w = f.live(QStringLiteral("span-1"), QRect(700, 100, 1200, 300));
+        f.snapOn(w, {f.zone(1), f.zone(2)}, kLeft, 1);
+        QRect applied;
+        QObject::connect(f.snap.get(), &SnapEngine::applyGeometryRequested, f.snap.get(),
+                         [&](const QString&, int x, int y, int width, int height) {
+                             applied = QRect(x, y, width, height);
+                         });
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 2)->zonesForWindow(w), (QStringList{f.zone(1), f.zone(2)}));
+        QCOMPARE(applied, f.wta->service()->resolveZoneGeometry({f.zone(1), f.zone(2)}, kLeft));
+    }
+
+    // On another layout a span takes its first zone's position alone (Q3).
+    void spanTakesItsFirstZonesSlotOnAnotherLayout()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        PhosphorZones::Layout* other = secondLayout(f);
+        const QString w = f.live(QStringLiteral("span-2"), QRect(700, 100, 1200, 300));
+        f.snapOn(w, {f.zone(1), f.zone(2)}, kLeft, 1);
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 2)->zonesForWindow(w),
+                 (QStringList{other->zones().at(1)->id().toString()}));
+    }
+
 private:
+    /// A second three-zone layout, run by DP-1 on desktop 2.
+    static PhosphorZones::Layout* secondLayout(SnapNavFixture& f)
+    {
+        auto* other = PlasmaZones::createTestLayout(3, f.layouts);
+        f.layouts->addLayout(other);
+        f.layouts->assignLayout(kLeft, 2, QString(), other);
+        return other;
+    }
+
+    /// A live window (app "app") on desktops 1 and 2, its frame in zone 3.
+    static QString onBothDesktops(SnapNavFixture& f, const QString& instance)
+    {
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.isMinimized = false;
+        meta.virtualDesktop = 1;
+        meta.virtualDesktops = {1, 2};
+        f.registry.upsert(instance, meta);
+        const QString windowId = f.registry.canonicalizeWindowId(QStringLiteral("app|") + instance);
+        f.setFrame(windowId, QRect(1300, 100, 400, 300));
+        return windowId;
+    }
+
     /// DP-1 runs the fixture's layout on desktops 1 and 2, desktop 1 shown,
     /// with no neighbour output so focus at its edge steps desktops.
     static void twoDesktops(SnapNavFixture& f)
