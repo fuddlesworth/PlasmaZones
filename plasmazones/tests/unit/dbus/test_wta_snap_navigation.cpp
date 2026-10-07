@@ -422,7 +422,91 @@ private Q_SLOTS:
         f.snap->setExcludeRuleSet(nullptr);
     }
 
+    // ── L14.5: zone occupants are the windows of the context in view ──
+
+    // A window snapped in the next zone on a desktop not in view is not a
+    // focus target (F182).
+    void focusSkipsAWindowOnAnotherDesktop()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w1 = f.live(QStringLiteral("view-1"));
+        const QString w2 = f.live(QStringLiteral("hidden-1"));
+        f.snapOn(w1, {f.zone(0)}, kLeft, 1);
+        f.snapOn(w2, {f.zone(1)}, kLeft, 2);
+        f.showDesktop(kLeft, 1);
+        QSignalSpy activate(f.snap.get(), &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        f.snap->focusInDirection(QStringLiteral("right"), NavigationContext{w1, kLeft});
+        QCOMPARE(activate.count(), 0);
+        QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_window_in_zone"));
+    }
+
+    // A zone empty in view is a move into it; the window holding it on a
+    // hidden desktop stays there (F182).
+    void swapWithAnEmptyZoneInViewLeavesTheHiddenWindow()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w1 = f.live(QStringLiteral("view-2"));
+        const QString w2 = f.live(QStringLiteral("hidden-2"));
+        f.snapOn(w1, {f.zone(0)}, kLeft, 1);
+        f.snapOn(w2, {f.zone(1)}, kLeft, 2);
+        f.showDesktop(kLeft, 1);
+        QSignalSpy restated(f.snap.get(), &SnapEngine::restatementGeometryRequested);
+        f.snap->swapFocusedInDirection(QStringLiteral("right"), NavigationContext{w1, kLeft});
+        QCOMPARE(f.snap->zoneForWindow(w1), f.zone(1));
+        QCOMPARE(f.snap->zoneForWindow(w2), f.zone(1));
+        QCOMPARE(f.snap->heldKeyForWindow(w2).value_or(PhosphorEngine::PlacementStateKey{}).desktop, 2);
+        QCOMPARE(restated.count(), 0);
+    }
+
+    // The cross-mode swap's snap partner is in view too (F182).
+    void crossModeSwapPartnerIsInView()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w2 = f.live(QStringLiteral("hidden-3"));
+        f.snapOn(w2, {f.zone(1)}, kLeft, 2);
+        f.showDesktop(kLeft, 1);
+        QVERIFY(f.snap->windowInZoneOnScreen(f.zone(1), kLeft).isEmpty());
+    }
+
+    // A window on two desktops holds the zone in both stores and is listed
+    // once (F182).
+    void windowsInZoneListsEachWindowOnce()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w3 = f.live(QStringLiteral("both-1"));
+        snapOnTwoDesktops(f, w3);
+        QCOMPARE(f.wta->service()->windowsInZone(f.zone(0)).count(w3), 1);
+    }
+
+    void cycleRingHoldsAWindowOnEveryDesktopOnce()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w1 = f.live(QStringLiteral("ring-1"));
+        const QString w3 = f.live(QStringLiteral("both-2"));
+        f.snapOn(w1, {f.zone(0)}, kLeft, 1);
+        snapOnTwoDesktops(f, w3);
+        QSignalSpy activate(f.snap.get(), &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+        f.snap->cycleFocus(true, NavigationContext{w3, kLeft});
+        QCOMPARE(activate.count(), 1);
+        QCOMPARE(activate.first().at(0).toString(), w1);
+    }
+
 private:
+    /// @p windowId snapped in zone 0 on desktops 1 and 2 of DP-1.
+    void snapOnTwoDesktops(SnapNavFixture& f, const QString& windowId)
+    {
+        f.snapOn(windowId, {f.zone(0)}, kLeft, 1);
+        f.showDesktop(kLeft, 2);
+        f.snap->stateForWindowOnScreen(windowId, kLeft, 2)->assignWindowToZone(windowId, f.zone(0), kLeft, 2);
+        f.showDesktop(kLeft, 1);
+    }
+
     /// One Exclude rule matching @p match, installed on the snap engine.
     void excludeWhen(SnapNavFixture& f, const PhosphorRules::MatchExpression& match)
     {

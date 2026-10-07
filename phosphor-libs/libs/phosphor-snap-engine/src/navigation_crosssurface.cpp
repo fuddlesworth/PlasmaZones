@@ -29,6 +29,8 @@
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/Zone.h>
 
+#include <algorithm>
+
 namespace PhosphorSnapEngine {
 
 std::pair<QString, QRect> SnapEngine::resolveCrossDesktopZone(const QString& currentZoneId, const QString& screenId,
@@ -110,20 +112,39 @@ bool SnapEngine::tryCrossModeOutput(const QString& windowId, const QString& dire
 
 QString SnapEngine::windowInZoneOnScreen(const QString& zoneId, const QString& screenId) const
 {
-    if (!m_windowTracker || zoneId.isEmpty()) {
-        return QString();
+    return windowsInZoneInView(zoneId, screenId, QString()).value(0);
+}
+
+QStringList SnapEngine::windowsInZoneInView(const QString& zoneId, const QString& screenId,
+                                            const QString& excludeWindowId) const
+{
+    // The store the screen shows: a window snapped in the same zone on another
+    // desktop is not an occupant here, and the store lists each window once.
+    if (zoneId.isEmpty() || !m_windowTracker) {
+        return {};
     }
-    // windowsInZone is screen-agnostic (a zone UUID is shared by every output the
-    // layout drives), so pin to the daemon's stored screen assignment. The
-    // screenForWindow point accessor also canonicalizes the id (issue #628),
-    // which a raw flat-map .value() lookup never did.
-    const QStringList windows = m_windowTracker->windowsInZone(zoneId);
-    for (const QString& windowId : windows) {
-        if (m_windowTracker->screenForWindow(windowId) == screenId) {
-            return windowId;
+    const QString exclude = excludeWindowId.isEmpty() ? QString() : canonicalWindowId(excludeWindowId);
+    QStringList result;
+    if (const SnapState* state = m_states.stateForKey(currentKeyForScreen(screenId))) {
+        for (const QString& windowId : state->windowsInZone(zoneId)) {
+            if ((exclude.isEmpty() || windowId != exclude) && holdsWindowInState(windowId, state)
+                && !state->isFloating(windowId)) {
+                result.append(windowId);
+            }
         }
     }
-    return QString();
+    // A window in no per-context store (an engine on the shared store alone
+    // has no desktops to tell apart) is an occupant of its screen.
+    for (const QString& windowId : m_windowTracker->windowsInZone(zoneId)) {
+        const QString canonical = canonicalWindowId(windowId);
+        if ((exclude.isEmpty() || canonical != exclude) && m_states.membershipsForWindow(canonical).isEmpty()
+            && m_windowTracker->screenForWindow(windowId) == screenId) {
+            result.append(canonical);
+        }
+    }
+    std::sort(result.begin(), result.end());
+    result.removeDuplicates();
+    return result;
 }
 
 QString SnapEngine::entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const

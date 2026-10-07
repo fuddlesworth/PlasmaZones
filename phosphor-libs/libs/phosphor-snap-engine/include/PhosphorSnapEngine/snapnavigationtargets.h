@@ -170,6 +170,13 @@ public:
     using LandingRefusalFn = std::function<QString(const QString& windowId, const QString& screenId)>;
     void setLandingRefusalProvider(LandingRefusalFn fn);
 
+    /// The windows snapped in a zone on a screen in the context it shows, once
+    /// each, without @p excludeWindowId. Unset, the resolver falls back to the
+    /// screen-filtered windowsInZone, which spans every desktop.
+    using ZoneOccupantsFn =
+        std::function<QStringList(const QString& zoneId, const QString& screenId, const QString& excludeWindowId)>;
+    void setZoneOccupantsProvider(ZoneOccupantsFn fn);
+
     PhosphorProtocol::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
                                                               const QString& screenId);
 
@@ -259,6 +266,11 @@ private:
                                                              const QString& direction,
                                                              const QString& sourceScreenId) const;
 
+    /// @p windowId's stored screen when it is still connected, else @p screenId:
+    /// the daemon's assignment beats an effect-reported output that same-model
+    /// monitors can confuse, but not a dead output after standby.
+    QString storedScreenOr(const QString& windowId, const QString& screenId) const;
+
     /// Windows snapped to @p zoneId whose stored screen is @p screenName, in
     /// windowsInZone() iteration order.
     /// windowsInZone() is screen-agnostic — the same zone UUID is shared by
@@ -271,7 +283,10 @@ private:
     /// A window snapped to @p zoneId whose stored screen is @p screenName, or
     /// empty if none (first in windowsInZoneOnScreen() order — deterministic per
     /// process, not a visual ordering).
-    QString firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName) const;
+    QString firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName,
+                                      const QString& excludeWindowId) const;
+    /// The provider's occupants when set, else windowsInZoneOnScreen without @p excludeWindowId.
+    QStringList zoneOccupants(const QString& zoneId, const QString& screenName, const QString& excludeWindowId) const;
 
     PhosphorEngine::IWindowTrackingService* m_service = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
@@ -280,6 +295,7 @@ private:
     FeedbackFn m_feedback;
     NeighbourTilingFn m_neighbourIsTiling;
     LandingRefusalFn m_landingRefusal;
+    ZoneOccupantsFn m_zoneOccupants;
 };
 
 } // namespace PhosphorSnapEngine

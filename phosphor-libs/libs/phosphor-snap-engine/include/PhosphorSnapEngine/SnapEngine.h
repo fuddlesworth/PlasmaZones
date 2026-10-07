@@ -135,10 +135,9 @@ public:
     /// the daemon cross-mode handoff to place a window arriving on a snap monitor.
     QString entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const;
 
-    /// The window snapped to @p zoneId on @p screenId (the daemon's stored
-    /// assignment pins it to that output), or empty if the zone is unoccupied
-    /// there. Used by the cross-mode swap to find the snap partner when THIS
-    /// engine is the swap target.
+    /// The window snapped to @p zoneId on @p screenId in the context the screen
+    /// shows, or empty if the zone is unoccupied there. Used by the cross-mode
+    /// swap to find the snap partner when THIS engine is the swap target.
     QString windowInZoneOnScreen(const QString& zoneId, const QString& screenId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1171,11 +1170,7 @@ private:
     // QObject identity of m_navState — same stale-destroyed-guard rationale
     // as m_zoneAdjacencyResolverObj.
     QPointer<QObject> m_navStateObj;
-    // Snap-mode navigation target resolver. Owned by SnapEngine — moved
-    // here in Phase 5E from WindowTrackingAdaptor. Constructed lazily on
-    // first navigation call (so the construction order isn't constrained
-    // by the fact that SnapEngine has to exist before a resolver that
-    // takes WTS + PhosphorZones::LayoutRegistry can be built).
+    // Snap-mode navigation target resolver, built on the first navigation call.
     std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1257,6 +1252,10 @@ private:
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
     /// isWindowExcluded with the query's desktop set to @p desktop (>= 1), for a move not landed yet.
     bool isWindowExcludedAt(const QString& windowId, const QString& screenHint, int desktop) const;
+    /// The windows snapped in @p zoneId on @p screenId in the context it shows, sorted, once each, without
+    /// @p excludeWindowId (canonical compare) and without a float that still holds a zone (F182).
+    QStringList windowsInZoneInView(const QString& zoneId, const QString& screenId,
+                                    const QString& excludeWindowId) const;
 
     /// Shared tail of both exclusion entry points: bind the lazy evaluator to
     /// the current placement-exclusion rule set (empty/null set short-circuits) and resolve

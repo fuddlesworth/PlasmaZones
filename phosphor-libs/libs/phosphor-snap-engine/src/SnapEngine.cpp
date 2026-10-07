@@ -772,6 +772,11 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
         }
         return QString();
     });
+    // Zone occupants are the windows of the context in view (F182).
+    m_targetResolver->setZoneOccupantsProvider(
+        [this](const QString& zoneId, const QString& screenId, const QString& excludeWindowId) {
+            return windowsInZoneInView(zoneId, screenId, excludeWindowId);
+        });
     return m_targetResolver.get();
 }
 

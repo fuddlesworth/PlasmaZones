@@ -267,6 +267,8 @@ QStringList WindowTrackingService::windowsInZone(const QString& zoneId) const
     for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
         result += state->windowsInZone(zoneId);
     }
+    // A window on several desktops holds the zone in each store (F182).
+    result.removeDuplicates();
     return result;
 }
 

@@ -293,7 +293,7 @@ public:
     QString screenForWindow(const QString& windowId, const QString& defaultScreen) const override;
 
     /**
-     * @brief Get all windows in a specific zone
+     * @brief Every window holding a zone in any context, each once
      * @param zoneId PhosphorZones::Zone UUID string
      * @return List of window IDs
      */
