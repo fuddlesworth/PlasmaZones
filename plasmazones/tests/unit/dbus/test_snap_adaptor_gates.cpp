@@ -467,6 +467,72 @@ private Q_SLOTS:
         f.adaptor->swapWindowsById(a, a);
         QCOMPARE(applies.count(), 0);
     }
+
+    // The bus float toggle passes the keyboard gates (F404).
+    void floatToggleRefusesWithSnappingOff()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("foff-1"), 1);
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        f.settings.setSnappingEnabled(false);
+        f.adaptor->toggleFloatForWindow(w, kLeft);
+        QVERIFY(!f.snap->isFloating(w));
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+    }
+
+    void floatToggleRefusesADisabledContext()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("fdis-1"), 1);
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        f.resolver.m_disabled.insert(kLeft);
+        f.adaptor->toggleFloatForWindow(w, kLeft);
+        QVERIFY(!f.snap->isFloating(w));
+    }
+
+    // Frozen snap memory on a monitor that now tiles is not floated from.
+    void floatToggleRefusesATilingScreen()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("ftile-1"), 1, QRect(2400, 200, 400, 300));
+        f.snap->commitSnap(w, f.zone(0), kRight);
+        f.tile(kRight);
+        f.adaptor->toggleFloatForWindow(w, kRight);
+        QVERIFY(!f.snap->isFloating(w));
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+    }
+
+    void floatToggleRefusesAnUnknownScreen()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("funk-1"), 1);
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        f.adaptor->toggleFloatForWindow(w, QStringLiteral("DP-9"));
+        QVERIFY(!f.snap->isFloating(w));
+    }
+
+    // A window snapping does not track yet floats on the monitor its frame
+    // is on, not the one last focused (F28).
+    void setWindowFloatUsesTheWindowsScreen()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("fscreen-1"), 1);
+        f.snap->windowFocused(QStringLiteral("app|elsewhere"), kRight);
+        QSignalSpy floated(f.snap.get(), &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        f.adaptor->setWindowFloat(w, true);
+        QVERIFY(f.snap->isFloating(w));
+        QCOMPARE(floated.count(), 1);
+        QCOMPARE(floated.first().at(2).toString(), kLeft);
+    }
+
+    void floatToggleOnAnEmptyIdReportsInvalidWindow()
+    {
+        GateFixture f;
+        QSignalSpy feedback(f.wta, &WindowTrackingAdaptor::navigationFeedback);
+        f.adaptor->toggleFloatForWindow(QString(), kLeft);
+        QCOMPARE(feedback.count(), 1);
+        QCOMPARE(feedback.first().at(2).toString(), QStringLiteral("invalid_window"));
+    }
 };
 
 QTEST_MAIN(TestSnapAdaptorGates)

@@ -331,8 +331,8 @@ public Q_SLOTS:
      * @param zoneId Output: zone ID to snap to, or empty if none
      * @return true if the window had a zone before it was floated
      *
-     * No in-tree caller: the effect's unfloat flow moved to
-     * SnapAdaptor::calculateUnfloatRestore. Kept as external contract
+     * No in-tree caller: the effect unfloats through
+     * setWindowFloatingForScreen(false). Kept as external contract
      * surface (scripting/automation query into the pre-float state),
      * same policy as TilingAdaptor::retileAllScreens.
      */

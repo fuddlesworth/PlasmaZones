@@ -172,6 +172,32 @@ bool SnapAdaptor::focusedVerbPermitted(const QString& screenHint, bool placesWin
     return !placesWindow || snapPermittedForContext(windowId, screen, 0);
 }
 
+QString SnapAdaptor::admitBusFloat(const QString& windowId, const QString& screenHint) const
+{
+    if (!m_engine || !m_adaptor) {
+        return QString();
+    }
+    const auto refuse = [&windowId](const char* reason, const QString& screen) {
+        qCInfo(lcDbusWindow) << "Bus float of" << windowId << "refused:" << reason << screen;
+        return QString();
+    };
+    if (m_settings && !m_settings->snappingEnabled()) {
+        return refuse("snapping is switched off", QString());
+    }
+    if (!m_adaptor->isRegistryTracked(windowId)) {
+        return refuse("not a live window", QString());
+    }
+    const QString screen = screenHint.isEmpty() ? m_adaptor->liveScreenForWindow(windowId)
+                                                : m_adaptor->resolveBusScreen(screenHint, windowId);
+    if (screen.isEmpty()) {
+        return refuse("unknown screen", screenHint);
+    }
+    if (!m_engine->isActiveOnScreen(screen)) {
+        return refuse("snapping does not run", screen);
+    }
+    return snapPermittedForContext(windowId, screen, 0) ? screen : QString();
+}
+
 void SnapAdaptor::moveWindowToZoneNumberOnScreen(const QString& windowId, int zoneNumber, const QString& screenHint)
 {
     if (!m_adaptor || !m_adaptor->service() || windowId.isEmpty() || zoneNumber < 1) {

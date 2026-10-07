@@ -38,7 +38,7 @@ class ISettings;
  * resnap, calculateSnapAllWindows, windowsSnappedBatch, snap-mode navigation
  * (move/focus/swap/push/snap-by-number/rotate/cycle/restore),
  * snap-mode convenience (moveWindowToZone, swapWindowsById), and
- * snap-mode float (toggleFloat, setWindowFloat, calculateUnfloatRestore,
+ * snap-mode float (toggleFloatForWindow, setWindowFloat, calculateUnfloatRestore,
  * windowUnsnappedForFloat).
  *
  * Signal relay from SnapEngine to WindowTrackingAdaptor is also wired
@@ -136,13 +136,15 @@ public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Snap a new window to the last used zone
+     * @brief Snap a new window to the last used zone. No in-tree caller (the
+     *        effect restores through resolveWindowRestore); external contract surface.
      */
     void snapToLastZone(const QString& windowId, const QString& windowScreenId, bool sticky, int& snapX, int& snapY,
                         int& snapWidth, int& snapHeight, bool& shouldSnap);
 
     /**
-     * @brief Snap a window to its SnapToZone-rule-defined zone(s)
+     * @brief Snap a window to its SnapToZone-rule-defined zone(s). No in-tree
+     *        caller; external contract surface like snapToLastZone.
      */
     void snapToAppRule(const QString& windowId, const QString& windowScreenName, bool sticky, int& snapX, int& snapY,
                        int& snapWidth, int& snapHeight, bool& shouldSnap);
@@ -285,14 +287,18 @@ public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Daemon-driven float toggle for snap-mode screens
+     * @brief Float toggle for snap-mode screens: the shell placement map's,
+     *        gated as the keyboard toggle is (admitBusFloat)
      * @param windowId Window identifier
-     * @param screenId Screen where window is located
+     * @param screenId Screen where window is located (empty: its live screen)
      */
     void toggleFloatForWindow(const QString& windowId, const QString& screenId);
 
     /**
-     * @brief Set a window's floating state (snap-mode direct)
+     * @brief Set a window's floating state on its live screen (snap-mode
+     *        direct, gated as the toggle is). Like calculateUnfloatRestore and
+     *        windowUnsnappedForFloat it has no in-tree caller and stays as
+     *        external contract surface.
      * @param windowId Window identifier
      * @param floating true to float, false to unfloat
      */
@@ -307,7 +313,9 @@ public Q_SLOTS:
     PhosphorProtocol::UnfloatRestoreResult calculateUnfloatRestore(const QString& windowId, const QString& screenId);
 
     /**
-     * @brief Unsnap a window for floating: save its zone to restore on unfloat
+     * @brief First half of a two-call float: unsnap the window and keep its
+     *        zone as the pre-float home. It does not float the window, so
+     *        setWindowFloat(true) follows it.
      * @param windowId Window identifier
      */
     void windowUnsnappedForFloat(const QString& windowId);
@@ -410,6 +418,10 @@ private:
     /// named screen known, and the screen the verb acts on running snapping and,
     /// when it @p placesWindow, not disabled in the context in view.
     bool focusedVerbPermitted(const QString& screenHint, bool placesWindow) const;
+    /// The screen a bus float or unfloat of @p windowId acts on (@p screenHint
+    /// resolved, else the window's live screen), or empty when a keyboard
+    /// toggle could not act there.
+    QString admitBusFloat(const QString& windowId, const QString& screenHint) const;
 
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;

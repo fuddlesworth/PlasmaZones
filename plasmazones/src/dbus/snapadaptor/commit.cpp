@@ -246,10 +246,9 @@ void SnapAdaptor::swapWindowsById(const QString& windowId1, const QString& windo
 // ═══════════════════════════════════════════════════════════════════════════════
 // Snap-mode float D-Bus slots
 //
-// Moved from WindowTrackingAdaptor::float.cpp. These call SnapEngine
-// float methods (snap-mode only — cross-mode routing remains on WTA
-// via setWindowFloatingForScreen / toggleFloatForWindow which route
-// to EITHER autotile or snap engine).
+// Snap-mode only, gated through admitBusFloat (busgate.cpp). The effect floats
+// through WindowTrackingAdaptor::setWindowFloatingForScreen, which routes to
+// whichever engine owns the screen.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapAdaptor::toggleFloatForWindow(const QString& windowId, const QString& screenId)
@@ -264,8 +263,9 @@ void SnapAdaptor::toggleFloatForWindow(const QString& windowId, const QString& s
         return;
     }
 
-    if (m_engine) {
-        m_engine->toggleWindowFloat(windowId, screenId);
+    const QString screen = admitBusFloat(windowId, screenId);
+    if (!screen.isEmpty()) {
+        m_engine->toggleWindowFloat(windowId, screen);
     }
 }
 
@@ -275,8 +275,10 @@ void SnapAdaptor::setWindowFloat(const QString& windowId, bool floating)
         return;
     }
 
-    if (m_engine) {
-        m_engine->setWindowFloat(windowId, floating);
+    // The window's live screen, not the last focused one (F28).
+    const QString screen = admitBusFloat(windowId, QString());
+    if (!screen.isEmpty()) {
+        m_engine->setWindowFloat(windowId, floating, screen);
     }
 }
 
@@ -293,9 +295,9 @@ PhosphorProtocol::UnfloatRestoreResult SnapAdaptor::calculateUnfloatRestore(cons
 
     UnfloatResult unfloat = m_engine->resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
-        // Mirror the live unfloat path (SnapEngine::unfloatToZone): when the window
-        // has no pre-float zone, honour the unfloatFallbackToZone setting so this
-        // D-Bus query stays consistent with the in-engine toggle behaviour.
+        // The unfloatFallbackToZone setting, as SnapEngine::unfloatToZone
+        // honours it. Unlike the live toggle this skips the SnapToZone rule
+        // tier, which that path consults first.
         unfloat = m_engine->resolveFallbackUnfloatGeometry(windowId, screenId);
     }
     if (!unfloat.found) {

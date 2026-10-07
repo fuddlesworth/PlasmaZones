@@ -207,12 +207,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
              ═══════════════════════════════════════════════════════════════════════════ -->
 
         <method name="toggleFloatForWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven float toggle for snap-mode screens."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Toggle a window between floating and its zone on a snapping screen. Refused where the float shortcut could not act. An empty screen means the window's own."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
         </method>
         <method name="setWindowFloat">
-            <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state directly (snap mode)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Float or unfloat a window on the snapping screen it is on. Refused where the float shortcut could not act."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="floating" type="b" direction="in"/>
         </method>
@@ -226,7 +226,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="windowUnsnappedForFloat">
-            <annotation name="org.gtk.GDBus.DocString" value="Unsnap a window for floating: saves its zone so unfloat can restore it."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Unsnap a window and keep its zone as the pre-float home. It does not float the window, so call setWindowFloat(true) after it."/>
             <arg name="windowId" type="s" direction="in"/>
         </method>
     </interface>
