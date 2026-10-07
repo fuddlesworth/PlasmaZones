@@ -100,11 +100,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_snapEngine) {
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
-        // Focus is emitted by the scroll and autotile engines (snap has no
-        // directional window-focus vocabulary), so nothing here has a live
-        // connection to drop — but the sweep stays symmetric with the scroll
-        // block above so the day snap gains the emit (and the connect beside
-        // these two), the rewire cannot double-fire handleCrossModeFocus.
+        // All three engines emit cross-mode focus; dropped like the other two
+        // so a rewire cannot double-fire handleCrossModeFocus.
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this, nullptr);
     }
     if (m_autotileEngine) {
@@ -448,6 +445,11 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeFocus, Qt::DirectConnection);
     }
+    // Snap's focus toward a tiling monitor goes to that monitor's engine too (F422).
+    if (m_snapEngine) {
+        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeFocus, Qt::DirectConnection);
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Common float-restore geometry channel
@@ -531,11 +533,10 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
         connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
-        // Cross-MODE directional FOCUS: emitted by scroll (here) and autotile
-        // (above); each probes its own same-mode neighbour first and defers
-        // only for a different-mode one. Snap has no directional window-focus
-        // vocabulary. DirectConnection so the activation lands within the
-        // navigation call, like the move/swap.
+        // Cross-MODE directional FOCUS: emitted by scroll (here), autotile and
+        // snap (above); each probes its own same-mode neighbour first and
+        // defers only for a different-mode one. DirectConnection so the
+        // activation lands within the navigation call, like the move/swap.
         connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeFocus, Qt::DirectConnection);
         connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,

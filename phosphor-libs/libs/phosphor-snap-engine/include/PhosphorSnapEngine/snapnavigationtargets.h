@@ -151,15 +151,9 @@ public:
     /// Reports whether a neighbour OUTPUT is owned by a TILING engine — autotile
     /// or scrolling, i.e. anything that is not Snapping — evaluated in the
     /// engine's current (desktop, activity) context, which the resolver itself
-    /// lacks. When set, the MOVE and SWAP cross-output paths skip a tiling
-    /// neighbour (deferring to the engine's cross-mode handoff) instead of
-    /// snapping the window onto a tiled screen. May be empty, in which case no
-    /// gating happens and every neighbour is treated as snap-mode (the
-    /// pre-provider behaviour). The FOCUS cross-output path is never gated
-    /// here, but landing still requires a snap-tracked occupant in the
-    /// neighbour's entry zone (tiled windows are not in windowsInZone), so
-    /// focus toward a tiling output collapses to no_adjacent_zone instead of
-    /// crossing.
+    /// lacks. A tiling neighbour is never entered here: focus, move and swap
+    /// report no crossing and the engine hands them to that engine. Empty, no
+    /// gating happens and every neighbour is treated as snap-mode.
     using NeighbourTilingFn = std::function<bool(const QString& screenId)>;
     void setNeighbourTilingProvider(NeighbourTilingFn fn);
 
@@ -244,15 +238,14 @@ private:
     /// non-success MoveTargetResult when there's no neighbour output / entry
     /// zone. Shared by the move and focus paths; the caller emits feedback so
     /// the move/focus tag stays correct.
-    /// @param requireSnapNeighbour when true (move), a tiling-mode neighbour
-    /// output yields a non-success result so the caller defers to the cross-mode
-    /// handoff, and the landing refusal is asked for @p windowId: "disabled"
-    /// answers reason "landing_disabled" on the neighbour, silently, and
-    /// "excluded" reports itself and answers "excluded". When false (focus),
-    /// neither is asked.
+    /// A tiling neighbour is never entered here; the engine hands focus, move
+    /// and swap to that engine.
+    /// @param landsWindow true for a move: the landing refusal is asked for
+    /// @p windowId, "disabled" answering reason "landing_disabled" on the
+    /// neighbour, silently, and "excluded" reporting itself. False for focus.
     PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& windowId, const QString& currentZoneId,
                                                               const QString& direction, const QString& sourceScreenId,
-                                                              bool requireSnapNeighbour) const;
+                                                              bool landsWindow) const;
 
     /// Cross-output swap target on a no-adjacent-zone boundary: the focused
     /// window (@p windowId, in @p currentZoneId on @p sourceScreenId) crosses to

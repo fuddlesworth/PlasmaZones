@@ -1496,7 +1496,7 @@ private Q_SLOTS:
     /**
      * @brief Orchestrate a cross-MODE directional FOCUS crossing.
      *
-     * Wired to the scroll and autotile engines' crossModeFocusRequested (each
+     * Wired to every engine's crossModeFocusRequested (each
      * probes its own same-mode neighbour first and defers here only for a
      * different-mode one). Resolves the target
      * mode at the destination context, asks that engine for its entry-edge

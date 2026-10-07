@@ -71,26 +71,11 @@ bool SnapEngine::tryCrossModeOutput(const QString& windowId, const QString& dire
         return false;
     }
     // Reaching here means the resolver found no snap entry zone on the neighbour
-    // (the resolver returned no_adjacent_zone). Any TILING neighbour — autotile or
-    // scrolling — is a cross-mode handoff; a snap neighbour with no entry zone is a
-    // genuine boundary, so leave it. A move inserts the window into the neighbour's
-    // stack (or its strip); a swap trades it with the neighbour's entry-edge tile
-    // (or column). The daemon's handlers pick the target engine off the same mode
-    // read and already route Scrolling, so the emitted payloads are unchanged.
-    // Live resolver first, registry cascade as fallback — the same order
-    // ensureTargetResolver's neighbour-tiling provider uses. The live resolver
-    // carries the unclaimed-tiling downgrade to Snapping, so mid mode-toggle
-    // the two disagree: a neighbour the resolver already treats as snapping but
-    // the raw cascade still calls tiling turned this move into a silent
-    // boundary no-op instead of a handoff. (Safe HERE because the neighbour is
-    // read on its own current desktop; tryCrossDesktopMove must keep the
-    // cascade, since the live resolver is keyed on screenId alone and cannot
-    // answer for another desktop.)
-    const bool neighbourIsSnapping = m_liveModeResolver
-        ? m_liveModeResolver(neighbour) == PhosphorZones::AssignmentEntry::Snapping
-        : m_layoutManager->modeForScreen(neighbour, currentVirtualDesktopForScreen(neighbour), currentActivity())
-            == PhosphorZones::AssignmentEntry::Snapping;
-    if (neighbourIsSnapping) {
+    // (no_adjacent_zone). Any TILING neighbour is a cross-mode handoff; a snap
+    // neighbour with no entry zone falls through to the desktop axis, as
+    // autotile does (F339). A move inserts the window into the neighbour's stack
+    // (or strip); a swap trades it with the entry-edge tile (or column).
+    if (!isTilingOutput(neighbour)) {
         return false;
     }
     if (swap) {
@@ -113,6 +98,43 @@ bool SnapEngine::tryCrossModeOutput(const QString& windowId, const QString& dire
 QString SnapEngine::windowInZoneOnScreen(const QString& zoneId, const QString& screenId) const
 {
     return windowsInZoneInView(zoneId, screenId, QString()).value(0);
+}
+
+bool SnapEngine::isTilingOutput(const QString& screenId) const
+{
+    // Live resolver first, registry cascade as fallback. The live resolver
+    // carries the unclaimed-tiling downgrade to Snapping, so mid mode-toggle the
+    // two disagree and the live answer is the one the screen runs. Read on the
+    // screen's own current desktop; tryCrossDesktopMove keeps the cascade, since
+    // the live resolver is keyed on the screen alone and cannot answer for
+    // another desktop.
+    if (m_liveModeResolver) {
+        return m_liveModeResolver(screenId) != PhosphorZones::AssignmentEntry::Snapping;
+    }
+    return m_layoutManager
+        && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
+        != PhosphorZones::AssignmentEntry::Snapping;
+}
+
+bool SnapEngine::tryCrossModeFocus(const QString& direction, const QString& screenId)
+{
+    if (!m_crossSurfaceResolver) {
+        return false;
+    }
+    const QString neighbour = m_crossSurfaceResolver->neighborOutputInDirection(screenId, direction);
+    if (neighbour.isEmpty() || !isTilingOutput(neighbour)) {
+        return false;
+    }
+    // The tiling engine names its entry-edge window and the daemon activates
+    // it, as the tiling engines already do toward a snapping monitor (F422).
+    bool handled = false;
+    Q_EMIT crossModeFocusRequested(neighbour, direction, &handled);
+    if (!handled) {
+        return false;
+    }
+    Q_EMIT navigationFeedback(true, QStringLiteral("focus"), QStringLiteral("screen:") + direction, QString(),
+                              QString(), neighbour);
+    return true;
 }
 
 QStringList SnapEngine::windowsInZoneInView(const QString& zoneId, const QString& screenId,

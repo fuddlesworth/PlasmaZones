@@ -753,12 +753,7 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
     // screen no engine has claimed is correctly treated as snap); the registry
     // cascade is the fallback for the unwired case.
     m_targetResolver->setNeighbourTilingProvider([this](const QString& screenId) {
-        if (m_liveModeResolver) {
-            return m_liveModeResolver(screenId) != PhosphorZones::AssignmentEntry::Mode::Snapping;
-        }
-        return m_layoutManager
-            && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
-            != PhosphorZones::AssignmentEntry::Mode::Snapping;
+        return isTilingOutput(screenId);
     });
     // The context a move or swap lands in, asked about the window landing:
     // switched off there (the user's disabled list, the master switch) or an

@@ -1200,15 +1200,9 @@ private:
     /// unminimize restore lands where the window really was.
     void applyFloatGeometryUnlessMinimized(const QString& windowId, const QString& screenId);
 
-    /// Lazy-constructs m_targetResolver on first call. Returns nullptr if
-    /// the service or layout manager is missing (unit tests with stub
-    /// deps, or shutdown race where WTS/PhosphorZones::LayoutRegistry are already gone).
-    ///
-    /// When @p action is non-empty and the resolver can't be built, emits
-    /// navigationFeedback(false, action, "engine_unavailable", ...) so the
-    /// OSD shows a specific reason instead of a silent no-op. Pass an
-    /// empty @p action to skip the emit (for call sites that want to
-    /// handle the null case themselves).
+    /// Builds m_targetResolver on first call with its providers (neighbour tiling, landing refusal, zone
+    /// occupants); nullptr without the service or layout manager. A non-empty @p action then reports
+    /// navigationFeedback(false, action, "engine_unavailable", ...).
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
 
     /// Move @p windowId to the virtual desktop adjacent to the current one in
@@ -1223,15 +1217,14 @@ private:
     /// no neighbour desktop or the window is not snapped.
     bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
 
-    /// If the neighbour OUTPUT in @p direction is a DIFFERENT mode (autotile or
-    /// scrolling), defer to the daemon cross-mode handoff and return true: a move
-    /// (@p swap false) emits crossModeMoveRequested so the tiling engine inserts
-    /// the window into its stack or strip; a swap (@p swap true) emits
-    /// crossModeSwapRequested so it trades the window with the neighbour's
-    /// entry-edge tile or column. Returns false when there is no neighbour output
-    /// or it is also snap-mode (handled by the resolver's entry-zone /
-    /// cross-output-swap path).
+    /// A tiling neighbour OUTPUT in @p direction takes the window through the daemon cross-mode handoff
+    /// (crossModeMoveRequested, or crossModeSwapRequested for @p swap). False with no neighbour or a
+    /// snapping one, which falls through to the desktop axis.
     bool tryCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId, bool swap);
+    /// True when @p screenId runs a tiling mode (the live resolver, else the cascade on its desktop).
+    bool isTilingOutput(const QString& screenId) const;
+    /// Focus across into a tiling neighbour output: its engine names the entry-edge window (F422).
+    bool tryCrossModeFocus(const QString& direction, const QString& screenId);
     /// Move @p windowId out of snapping onto @p toScreen, or onto @p toDesktop of its own screen when >= 1, where
     /// snapping is off: its snap memory where it leaves goes, it is stated unsnapped and placed at its free geometry.
     void moveUnsnapped(const QString& windowId, const QString& fromScreen, const QString& toScreen, int toDesktop,

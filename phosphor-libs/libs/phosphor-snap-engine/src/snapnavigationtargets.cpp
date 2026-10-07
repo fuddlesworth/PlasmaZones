@@ -137,7 +137,7 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntr
                                                                                         const QString& currentZoneId,
                                                                                         const QString& direction,
                                                                                         const QString& sourceScreenId,
-                                                                                        bool requireSnapNeighbour) const
+                                                                                        bool landsWindow) const
 {
     const QString fail = QString();
     // hasDependencies() is the release pair for the ctor asserts on m_service
@@ -150,17 +150,16 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntr
     if (neighborScreen.isEmpty()) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
     }
-    // A MOVE/SWAP must not snap the window onto a tiling neighbour (autotile or
-    // scrolling): that screen has no snap zones to own the window even though its
-    // assigned layout still enumerates zones. Report no crossing so the engine's
-    // cross-mode handoff takes over. FOCUS (requireSnapNeighbour=false) is not gated.
-    if (requireSnapNeighbour && m_neighbourIsTiling && m_neighbourIsTiling(neighborScreen)) {
+    // A tiling neighbour (autotile or scrolling) is never entered here: it has
+    // no snap zones, though its assigned layout still enumerates some. The
+    // engine hands focus, move and swap to that engine (F422).
+    if (m_neighbourIsTiling && m_neighbourIsTiling(neighborScreen)) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
     }
     // A move asks where the window lands (F159, F208). A disabled neighbour
     // takes it unsnapped, which the engine does on this silent reason; an
     // exclusion there refuses the move.
-    if (requireSnapNeighbour && m_landingRefusal) {
+    if (landsWindow && m_landingRefusal) {
         const QString refusal = m_landingRefusal(windowId, neighborScreen);
         if (refusal == QLatin1String("disabled")) {
             return moveResult(false, QStringLiteral("landing_disabled"), QString(), QRect(), currentZoneId,
@@ -376,11 +375,10 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
     } else {
         targetZoneId = adjacentZoneFor(windowId, currentZoneId, direction, effectiveScreenId);
         if (targetZoneId.isEmpty()) {
-            // No adjacent zone on this output — cross into the adjacent output's
-            // entry zone before giving up. requireSnapNeighbour: a tiling-mode
-            // neighbour is handed off cross-mode by the engine, not snapped here.
-            const PhosphorProtocol::MoveTargetResult cross = crossOutputEntryTarget(
-                windowId, currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/true);
+            // No adjacent zone on this output: cross into the adjacent output's
+            // entry zone before giving up.
+            const PhosphorProtocol::MoveTargetResult cross =
+                crossOutputEntryTarget(windowId, currentZoneId, direction, effectiveScreenId, /*landsWindow=*/true);
             if (cross.success) {
                 emitFeedback(true, QStringLiteral("move"), QStringLiteral("screen:") + direction, currentZoneId,
                              cross.zoneId, cross.screenName);
@@ -799,13 +797,10 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
 
     QString targetZoneId = adjacentZoneFor(windowId, currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
-        // No adjacent zone on this output — try focusing into the adjacent
-        // output's entry zone. The neighbour's mode is not gated
-        // (requireSnapNeighbour=false), but the landing below still needs a
-        // snap-tracked occupant, so a tiling-mode neighbour dead-ends to
-        // no_adjacent_zone anyway.
-        const PhosphorProtocol::MoveTargetResult cross = crossOutputEntryTarget(
-            windowId, currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/false);
+        // No adjacent zone on this output: focus the snapping neighbour's
+        // entry-zone occupant. A tiling neighbour is the engine's to hand on.
+        const PhosphorProtocol::MoveTargetResult cross =
+            crossOutputEntryTarget(windowId, currentZoneId, direction, effectiveScreenId, /*landsWindow=*/false);
         if (cross.success) {
             // Pin the entry window to the neighbour output: windowsInZone is
             // screen-agnostic and the entry zone's UUID can also exist on the

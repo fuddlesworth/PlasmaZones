@@ -620,6 +620,54 @@ private Q_SLOTS:
         QCOMPARE(f.wta->service()->zonesForWindow(w2), (QStringList{f.zone(1), f.zone(2)}));
     }
 
+    // ── L14.8: focus crosses into a tiling monitor through its engine ──
+
+    void focusTowardATilingMonitorAsksItsEngine()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("tf-1"), QRect(1300, 100, 400, 300));
+        const QString w2 = f.live(QStringLiteral("tf-2"), QRect(2000, 100, 400, 300));
+        f.snapOn(w, {f.zone(2)}, kLeft);
+        f.snapOn(w2, {f.zone(0)}, kRight, 1); // frozen snap memory on a tiling monitor
+        f.setMode(kRight, 1, PhosphorZones::AssignmentEntry::Autotile);
+        f.cross.outputs.insert(kLeft + QStringLiteral("|right"), kRight);
+        QStringList requests;
+        QObject::connect(
+            f.snap.get(), &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, f.snap.get(),
+            [&requests](const QString& screen, const QString& direction, bool* handled) {
+                requests.append(screen + QLatin1Char('|') + direction);
+                *handled = true;
+            },
+            Qt::DirectConnection);
+        QSignalSpy activate(f.snap.get(), &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        f.snap->focusInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(requests, QStringList{kRight + QStringLiteral("|right")});
+        QCOMPARE(activate.count(), 0);
+        QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:right"));
+    }
+
+    void unhandledTilingFocusFallsToTheDesktop()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("tf-3"), QRect(1300, 100, 400, 300));
+        const QString w2 = f.live(QStringLiteral("tf-4"), QRect(2000, 100, 400, 300));
+        const QString w3 = f.live(QStringLiteral("tf-5"));
+        f.snapOn(w, {f.zone(2)}, kLeft, 1);
+        f.snapOn(w2, {f.zone(0)}, kRight, 1);
+        f.snapOn(w3, {f.zone(0)}, kLeft, 2);
+        f.showDesktop(kLeft, 1);
+        f.setMode(kRight, 1, PhosphorZones::AssignmentEntry::Autotile);
+        f.cross.outputs.insert(kLeft + QStringLiteral("|right"), kRight);
+        f.cross.desktopCount = 2;
+        QSignalSpy activate(f.snap.get(), &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+        f.snap->focusInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(activate.count(), 1);
+        QCOMPARE(activate.first().at(0).toString(), w3);
+    }
+
 private:
     /// @p windowId snapped in zone 0 on desktops 1 and 2 of DP-1.
     void snapOnTwoDesktops(SnapNavFixture& f, const QString& windowId)

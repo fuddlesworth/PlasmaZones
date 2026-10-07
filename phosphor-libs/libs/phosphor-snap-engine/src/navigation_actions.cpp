@@ -260,10 +260,11 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     PhosphorProtocol::FocusTargetResult result = resolver->getFocusTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
-        // At a zone-layout boundary with no neighbour output, the resolver
-        // deferred the decision to us — try focusing onto the adjacent desktop.
+        // With no reachable entry zone on a neighbour output, the resolver
+        // deferred the decision to us: a tiling neighbour's engine, then the
+        // adjacent desktop.
         if (result.reason == QLatin1String("no_adjacent_zone")) {
-            if (tryCrossDesktopFocus(windowId, direction, screenId)) {
+            if (tryCrossModeFocus(direction, screenId) || tryCrossDesktopFocus(windowId, direction, screenId)) {
                 return;
             }
             Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), QString(),
@@ -347,7 +348,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
         return;
     }
     if (!result.success) {
-        // At a zone-layout boundary with no neighbour output, the resolver
+        // With no reachable entry zone on a neighbour output, the resolver
         // deferred the decision to us — try crossing to the adjacent desktop.
         if (result.reason == QLatin1String("no_adjacent_zone")) {
             // A neighbour OUTPUT in a tiling mode → hand the window to that engine.
@@ -583,7 +584,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
     }
     PhosphorProtocol::SwapTargetResult result = resolver->getSwapTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
-        // At a zone-layout boundary with no SNAP neighbour, the resolver deferred
+        // With no reachable entry zone on a neighbour output, the resolver deferred
         // to us. A cross-MONITOR swap onto a tiling neighbour is a two-way
         // exchange (both surfaces are visible). Swap is NOT extended across
         // virtual desktops — exchanging with a window on a desktop you can't see
