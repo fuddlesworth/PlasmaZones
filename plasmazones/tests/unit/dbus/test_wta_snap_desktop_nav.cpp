@@ -495,6 +495,52 @@ private Q_SLOTS:
         QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 1)->zonesForWindow(w), (QStringList{f.zone(0)}));
     }
 
+    // ── L14.13: the pre-float zone is per window and per desktop ──
+
+    // A second window of an app that never was snapped does not unfloat into
+    // the zone the first one floated from (F306).
+    void unfloatNeverTakesASiblingsZone()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString k1 = f.live(QStringLiteral("k-1"));
+        const QString k2 = f.live(QStringLiteral("k-2"));
+        f.snapThenFloat(k1, kLeft);
+        QCOMPARE(f.wta->service()->preFloatZones(k1), (QStringList{f.zone(0)}));
+        f.snap->setWindowFloat(k2, true, kLeft);
+        QVERIFY(f.snap->isFloating(k2));
+        QVERIFY(f.wta->service()->preFloatZones(k2).isEmpty());
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        f.snap->toggleWindowFloat(k2, kLeft);
+        QVERIFY(f.snap->isFloating(k2));
+        QVERIFY(!feedback.isEmpty());
+        QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_pre_float_zone"));
+        QVERIFY(f.wta->service()->windowsInZone(f.zone(0)).isEmpty());
+    }
+
+    // A window on two desktops unfloats into the zone it floated from on the
+    // desktop in view: a snap on one does not wipe the other's (F312).
+    void eachDesktopKeepsItsOwnPreFloatZone()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        const QString w = onBothDesktops(f, QStringLiteral("pf-1"));
+        f.snapOn(w, {f.zone(0)}, kLeft, 1);
+        f.snap->stateForWindowOnScreen(w, kLeft, 2)->assignWindowToZone(w, f.zone(1), kLeft, 2);
+        f.showDesktop(kLeft, 1);
+        f.snap->toggleWindowFloat(w, kLeft);
+        QVERIFY(f.snap->isFloating(w));
+        f.showDesktop(kLeft, 2);
+        f.snap->toggleWindowFloat(w, kLeft);
+        QVERIFY(f.snap->isFloating(w));
+        f.snap->toggleWindowFloat(w, kLeft);
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 2)->zonesForWindow(w), (QStringList{f.zone(1)}));
+        f.showDesktop(kLeft, 1);
+        f.snap->toggleWindowFloat(w, kLeft);
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 1)->zonesForWindow(w), (QStringList{f.zone(0)}));
+    }
+
 private:
     /// A second three-zone layout, run by DP-1 on desktop 2.
     static PhosphorZones::Layout* secondLayout(SnapNavFixture& f)

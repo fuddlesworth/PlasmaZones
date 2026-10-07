@@ -868,28 +868,15 @@ template<typename Func>
 auto WindowTrackingService::preFloatLookup(const QString& windowId, Func&& getter) const
     -> decltype(getter(std::declval<PhosphorSnapEngine::SnapState*>(), windowId))
 {
-    // Pre-float entries can be keyed by the live windowId (written by unsnapForFloat
-    // in the window's owning store) OR by the appId alias (for the close/reopen
-    // cycle, where the windowId changes but the appId persists). The appId alias is
-    // not reverse-mapped, so scan every store for both keys — the union matches the
-    // former single store's windowId-then-appId fallback.
-    const QList<PhosphorSnapEngine::SnapState*> states = snapAllStates();
-    for (PhosphorSnapEngine::SnapState* state : states) {
-        auto result = getter(state, windowId);
-        if (!result.isEmpty()) {
-            return result;
-        }
+    // The window's own entry in its primary store (the membership in view
+    // when it has one there): another window of the app never answers, and
+    // a window on several desktops reads the desktop it is seen on (F306,
+    // F312).
+    PhosphorSnapEngine::SnapState* const state = snapForWindow(windowId);
+    if (!state) {
+        return {};
     }
-    const QString appId = currentAppIdFor(windowId);
-    if (appId != windowId) {
-        for (PhosphorSnapEngine::SnapState* state : states) {
-            auto result = getter(state, appId);
-            if (!result.isEmpty()) {
-                return result;
-            }
-        }
-    }
-    return {};
+    return getter(state, windowId);
 }
 
 QString WindowTrackingService::preFloatZone(const QString& windowId) const
@@ -918,15 +905,11 @@ void WindowTrackingService::clearPreFloatZone(const QString& windowId)
     if (windowId.isEmpty()) {
         return;
     }
-    const QString appId = currentAppIdFor(windowId);
-    // Remove by full window ID (runtime entries) and by app ID (session-restored
-    // entries) across every store — the alias may live in the window's owning store.
+    // Every store's entry for the window: a close, a virtual-screen migration
+    // and the float-sync arms forget it everywhere.
     bool removed = false;
     for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
         removed = state->clearPreFloatZone(windowId) || removed;
-        if (appId != windowId) {
-            removed = state->clearPreFloatZone(appId) || removed;
-        }
     }
     // Mark dirty on a real removal so the cleared zone does not resurrect
     // from disk on the next restart (the autotile float-sync clear path has
@@ -942,7 +925,12 @@ bool WindowTrackingService::clearFloatingForSnap(const QString& windowId)
         return false;
     }
     setWindowFloating(windowId, false);
-    clearPreFloatZone(windowId);
+    // Only the store it is snapped in: another desktop's pre-float zone is
+    // that desktop's to unfloat into (F312).
+    if (PhosphorSnapEngine::SnapState* const state = snapForWindow(windowId);
+        state && state->clearPreFloatZone(windowId)) {
+        markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
+    }
     return true;
 }
 

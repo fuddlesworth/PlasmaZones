@@ -131,13 +131,6 @@ void WindowTrackingAdaptor::saveState()
     // Clear any stale entry from older versions so restored sessions start clean.
     tracking->deleteKey(ConfigKeys::obsoleteFloatingWindowsKey());
 
-    // Disabled-context filter (discussion #461 item 2) for the pre-float maps:
-    // a window floated on a since-disabled monitor would otherwise restore
-    // there on unfloat. PreFloat has no desktop dimension (it's appId-keyed),
-    // so we pass desktop=0 — the helper short-circuits the desktop gate on
-    // 0 and the monitor-disabled list is the load-bearing check anyway.
-    // Build the set of dropped appIds from the screen map so the zone map
-    // can drop its paired entries without re-doing the screen lookup.
     // Pre-float zone/screen assignments are no longer persisted separately — a
     // floated window's pre-float zones live in its WindowPlacement record
     // (engineData.preFloatZones), restored into SnapState on reopen.

@@ -45,18 +45,6 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
         forgetDesktopZones(windowId, PhosphorEngine::WindowPlacement::snapEngineId(), floatedDesktop);
     }
 
-    // Also write an appId-keyed entry into the SAME store for session-restore
-    // fallback. SnapState::unsnapForFloat only writes the windowId key; the appId
-    // alias lets preFloatZone()/preFloatScreen() find the entry after a window
-    // close+reopen cycle where the windowId changes but the appId persists. It
-    // shares the window's owning store so the per-window preFloat lookup finds both.
-    QString appId = currentAppIdFor(windowId);
-    if (appId != windowId && !appId.isEmpty()) {
-        snapState->addPreFloatZone(appId, zoneIds);
-        if (!screenId.isEmpty()) {
-            snapState->addPreFloatScreen(appId, screenId);
-        }
-    }
     qCInfo(lcPlacement) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
 
     // Last-used-zone coupling: unsnapForFloat already cleared this store's own

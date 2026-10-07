@@ -356,9 +356,8 @@ private:
     /// stable instance id, WITHOUT seeding — the daemon seeds once per window in
     /// WindowTrackingAdaptor::setWindowMetadata, so every snap accessor here only
     /// looks up. Returns the input verbatim when the instance has no canonical
-    /// entry (or no registry is attached, e.g. unit tests), which also makes the
-    /// bare-appId alias writes (addPreFloat*/clearPreFloatZone) safe. See the
-    /// .cpp header comment.
+    /// entry (or no registry is attached, e.g. unit tests). See the .cpp
+    /// header comment.
     QString canonicalizeForLookup(const QString& rawWindowId) const;
 
     /// Shared body of unassignWindow / unsnapForFloat. Removes the window's

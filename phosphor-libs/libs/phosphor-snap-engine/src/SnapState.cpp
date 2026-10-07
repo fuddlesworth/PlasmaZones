@@ -29,11 +29,8 @@ SnapState::~SnapState() = default;
 // SnapState only ever LOOKS UP (never seeds): the daemon seeds the canonical
 // mapping once per window in WindowTrackingAdaptor::setWindowMetadata (the
 // universal window-open choke point), so by the time any snap accessor runs the
-// window already has a canonical entry. Looking up (rather than seeding) here is
-// also what keeps the appId-alias writes safe — the pre-float session-restore
-// fallback passes a BARE appId (no instance id) to addPreFloat*/clearPreFloatZone,
-// and a no-seed lookup returns it verbatim instead of polluting the registry's
-// instance map with an appId-keyed entry that would never be released.
+// window already has a canonical entry. A lookup also never mints a registry
+// entry for an id that is not a window's, which a seeding call would.
 
 QString SnapState::canonicalizeForLookup(const QString& rawWindowId) const
 {

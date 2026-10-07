@@ -99,7 +99,7 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     const bool ownFloating = isFloating(windowId);
     const bool routedCleared = m_windowTracker->clearFloatingForSnap(windowId);
     if (ownFloating && !routedCleared) {
-        m_windowTracker->clearPreFloatZone(windowId);
+        stateForWindow(windowId)->clearPreFloatZone(canonicalWindowId(windowId));
     }
     if (ownFloating || routedCleared) {
         Q_EMIT windowFloatingClearedForSnap(windowId, screenId);

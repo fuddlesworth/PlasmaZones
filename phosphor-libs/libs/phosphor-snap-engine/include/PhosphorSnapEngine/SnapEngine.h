@@ -1098,8 +1098,7 @@ private:
     /// migrateWindowToScreen onto an explicit key: a pinned commit or a
     /// cross-desktop handoff lands in exactly the context it names.
     bool migrateWindowToKey(const QString& windowId, const PhosphorEngine::PlacementStateKey& newKey);
-    /// Forget @p windowId's pre-float home in @p state, with the appId alias
-    /// while it still names the same zones. For a window leaving the screen.
+    /// Forget @p windowId's pre-float home in @p state. For a window leaving the screen.
     void dropPreFloatHome(SnapState* state, const QString& windowId);
     /// Release one membership the way releaseWindowOffScreen does; @p removed
     /// collects its zones for clearGlobalLastUsedIfRemoved. True when the

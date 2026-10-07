@@ -216,20 +216,7 @@ void SnapEngine::dropPreFloatHome(SnapState* state, const QString& windowId)
     if (!state) {
         return;
     }
-    const QString canonical = canonicalWindowId(windowId);
-    const QStringList home = state->preFloatZones(canonical);
-    state->clearPreFloatZone(canonical);
-    if (!m_windowTracker || home.isEmpty()) {
-        return;
-    }
-    // The appId alias the float wrote beside it (for a close and reopen)
-    // answers every pre-float lookup from any store, so it goes too, but
-    // only while it still names this window's home: a sibling of the same
-    // app may have written its own since.
-    const QString appId = m_windowTracker->currentAppIdFor(windowId);
-    if (!appId.isEmpty() && appId != canonical && state->preFloatZones(appId) == home) {
-        state->clearPreFloatZone(appId);
-    }
+    state->clearPreFloatZone(canonicalWindowId(windowId));
 }
 
 } // namespace PhosphorSnapEngine

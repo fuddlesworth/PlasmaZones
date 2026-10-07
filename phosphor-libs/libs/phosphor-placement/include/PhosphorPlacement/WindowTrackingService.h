@@ -496,36 +496,30 @@ public:
     void unsnapForFloat(const QString& windowId) override;
 
     /**
-     * @brief Get primary zone to restore to when unfloating
+     * @brief Get primary zone to restore to when unfloating, from the window's
+     *        own entry in its primary snap store
      * @param windowId Full window ID
      * @return PhosphorZones::Zone ID or empty string if none
      */
     QString preFloatZone(const QString& windowId) const;
 
     /**
-     * @brief Get all zones to restore to when unfloating (multi-zone support)
+     * @brief Get all zones to restore to when unfloating (multi-zone support),
+     *        from the window's primary snap store
      * @param windowId Full window ID
      * @return List of zone IDs (empty if none)
      */
     QStringList preFloatZones(const QString& windowId) const override;
 
     /**
-     * @brief Get the screen name where the window was snapped before floating
+     * @brief Get the screen name where the window was snapped before floating,
+     *        from the window's primary snap store
      * @param windowId Full window ID
      * @return Screen name or empty string if unknown
      */
     QString preFloatScreen(const QString& windowId) const override;
 
-    /**
-     * @brief Clear pre-float zone after restore (both windowId and appId keys)
-     *
-     * Always clears the appId alias alongside the windowId key: the pre-float
-     * readers fall back to the alias, so a windowId-only clear (the former
-     * clearPreFloatZoneForWindow) still resolved the stale zone for the very
-     * window it targeted. The alias is a single last-writer slot per app, so
-     * "protecting sibling data" by keeping it only preserved whichever
-     * instance unsnapped last.
-     */
+    /// Clear the window's pre-float zone in every snap store.
     void clearPreFloatZone(const QString& windowId) override;
 
     /**
@@ -989,8 +983,7 @@ private:
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     PhosphorZones::Zone* findZoneById(const QString& zoneId) const;
 
-    /// windowId-then-appId fallback lookup across every snap store. The getter
-    /// takes (store, id) so the lookup can scan each per-screen store for both keys.
+    /// The window's own pre-float entry in its primary snap store; the getter takes (store, id).
     template<typename Func>
     auto preFloatLookup(const QString& windowId, Func&& getter) const
         -> decltype(getter(std::declval<PhosphorSnapEngine::SnapState*>(), windowId));
@@ -1160,10 +1153,6 @@ private:
     EngineFloatResolver m_engineFloatResolver{};
     EngineFloatWriter m_engineFloatWriter{};
     EngineFloatLister m_engineFloatLister{};
-
-    // Pre-float zone and screen state is owned by SnapState (authoritative store).
-    // WTS preFloat getter methods add appId-fallback queries for session-restored
-    // entries keyed by appId. SnapState itself uses windowId-only keys.
 
     // Sticky window states
     QHash<QString, bool> m_windowStickyStates;

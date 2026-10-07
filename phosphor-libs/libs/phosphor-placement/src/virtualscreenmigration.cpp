@@ -185,8 +185,8 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
     // Also migrate pre-float screen assignments (owned by SnapState). Rewritten
     // per store, in place, like the live-screen map above — the former
-    // union-then-redistribute round-trip re-homed appId-alias entries with no
-    // live window onto the global holder as a side effect; the per-state rewrite
+    // union-then-redistribute round-trip re-homed entries with no live window
+    // onto the global holder as a side effect; the per-state rewrite
     // leaves every entry in the store it lives in. The pre-float zone lookup
     // reads the same store: the zone and screen halves of a pre-float entry are
     // written together into the window's owning store.

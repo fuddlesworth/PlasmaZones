@@ -4,7 +4,7 @@
   "files": {
     "phosphor-libs/libs/phosphor-animation/tests/test_surface_animator.cpp": 1295,
     "phosphor-libs/libs/phosphor-engine/include/PhosphorEngine/IPlacementEngine.h": 1322,
-    "phosphor-libs/libs/phosphor-placement/include/PhosphorPlacement/WindowTrackingService.h": 1185,
+    "phosphor-libs/libs/phosphor-placement/include/PhosphorPlacement/WindowTrackingService.h": 1174,
     "phosphor-libs/libs/phosphor-rendering/include/PhosphorRendering/ShaderNodeRhi.h": 1164,
     "phosphor-libs/libs/phosphor-rendering/src/shadernoderhipipeline.cpp": 1176,
     "phosphor-libs/libs/phosphor-scroll-engine/include/PhosphorScrollEngine/ScrollEngine.h": 2000,
@@ -17,7 +17,7 @@
     "phosphor-libs/libs/phosphor-scroll-engine/tests/test_scrollengine_template.cpp": 1162,
     "phosphor-libs/libs/phosphor-scroll-engine/tests/test_scrollengine_verbs.cpp": 1172,
     "phosphor-libs/libs/phosphor-scroll-engine/tests/test_scrollstrip_ops.cpp": 1735,
-    "phosphor-libs/libs/phosphor-snap-engine/include/PhosphorSnapEngine/SnapEngine.h": 1306,
+    "phosphor-libs/libs/phosphor-snap-engine/include/PhosphorSnapEngine/SnapEngine.h": 1305,
     "phosphor-libs/libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h": 2091,
     "phosphor-libs/libs/phosphor-tiles/src/pluau/pluau.luau": 1189,
     "phosphor-libs/libs/phosphor-zones/include/PhosphorZones/LayoutRegistry.h": 1515,

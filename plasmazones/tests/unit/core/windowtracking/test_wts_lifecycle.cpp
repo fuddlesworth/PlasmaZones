@@ -145,8 +145,9 @@ private Q_SLOTS:
 
         m_service->windowClosed(windowId);
 
-        // Float state and pre-float zones should be fully cleared on close —
-        // BOTH keys: the windowId-keyed runtime entry and the appId alias.
+        // Float state and pre-float zones should be fully cleared on close.
+        // The float set clears an appId entry too; the pre-float zone has
+        // only the windowId entry, since no alias is written.
         QVERIFY(!m_service->isWindowFloating(windowId));
         QVERIFY(!m_service->isWindowFloating(appId));
         QVERIFY(m_service->preFloatZone(windowId).isEmpty());
