@@ -287,9 +287,24 @@ void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString
     if (!store) {
         store = snapGlobals();
     }
-    if (store) {
-        store->restoreLastUsedZone(zoneId, screenId, zoneClass, desktop);
+    if (!store) {
+        // No snap store is wired yet (the adaptor's constructor load runs
+        // before the daemon wires the resolver): hold it until one is, as
+        // setUserSnappedClasses does, instead of dropping it (F236).
+        m_pendingLastUsedZone = PendingLastUsedZone{zoneId, screenId, zoneClass, desktop};
+        return;
     }
+    m_pendingLastUsedZone.reset();
+    store->restoreLastUsedZone(zoneId, screenId, zoneClass, desktop);
+}
+
+void WindowTrackingService::flushPendingLastUsedZone()
+{
+    if (!m_pendingLastUsedZone || !snapGlobals()) {
+        return;
+    }
+    const PendingLastUsedZone pending = *std::exchange(m_pendingLastUsedZone, std::nullopt);
+    setLastUsedZone(pending.zoneId, pending.screenId, pending.zoneClass, pending.desktop);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

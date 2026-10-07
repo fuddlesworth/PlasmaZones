@@ -853,12 +853,10 @@ void Daemon::initEnginesAndWiring()
     // because navigation handlers don't run before init() returns anyway.
     m_virtualScreenSwapper = std::make_unique<PhosphorScreens::VirtualScreenSwapper>(m_virtualScreenStore.get());
 
-    // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
-    // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking
-    // state, not just autotile). This is heavier than a targeted save but ensures consistency
-    // — the autotile window orders are embedded in WTA's save cycle via the serialization
-    // delegates below. The engine-level delegates exist to satisfy the IPlacementEngine interface.
-    // QPointer guards against late calls during shutdown if WTA is destroyed first.
+    // Autotile persistence through WTA's layer, as for snap: engine->saveState() runs a full
+    // WTA save. Nothing in the daemon calls an engine's loadState (the adaptor's constructor
+    // loads the session once, F479); the load delegates exist for the IPlacementEngine
+    // interface. QPointer guards against late calls during shutdown if WTA is destroyed first.
     autotileEngine->setPersistenceDelegate(
         [wta = QPointer(m_windowTrackingAdaptor)]() {
             if (wta)

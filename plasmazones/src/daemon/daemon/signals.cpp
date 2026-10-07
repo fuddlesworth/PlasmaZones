@@ -22,7 +22,6 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
-#include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -222,8 +221,8 @@ void Daemon::connectLayoutSignals()
                     m_overlayService->hideSnapAssist();
                 }
                 // Suppress during startup. Mirrors the algorithmChanged gate above.
-                // `loadState()` from finalizeStartup() synchronously emits
-                // `layoutApplied` per screen as layouts get assigned, and
+                // A `layoutApplied` emitted while startup assigns layouts would
+                // otherwise show alongside the startup OSD, and
                 // finalizeStartup() is the authoritative startup-OSD path
                 // (it calls `showOsdForAllScreens`). Letting this handler also
                 // fire double-queues a show on every screen: the first OSD
@@ -294,9 +293,9 @@ void Daemon::connectLayoutSignals()
                     m_overlayService->hideSnapAssist();
                 }
                 // Suppress during startup. Mirrors the algorithmChanged and
-                // layoutApplied gates above. `loadState()` from finalizeStartup()
-                // synchronously emits `autotileApplied` per screen as layouts get
-                // assigned for autotile-mode entries, and finalizeStartup() is the
+                // layoutApplied gates above. An `autotileApplied` emitted while
+                // startup assigns autotile-mode entries would otherwise show
+                // alongside the startup OSD, and finalizeStartup() is the
                 // authoritative startup-OSD path (it calls `showOsdForAllScreens`).
                 // Without this gate, autotile users would hit the same first-OSD
                 // double-queue that the layoutApplied gate fixes for snap-mode
@@ -523,25 +522,13 @@ void Daemon::connectOverlaySignals()
 
 void Daemon::finalizeStartup()
 {
-    // Restore autotile state from previous session (window order, algorithm, split ratio)
-    // Defers actual retiling until windows are announced by KWin effect
-    if (m_autotileEngine) {
-        m_autotileEngine->loadState();
-    }
-
-    // Now that AutotileEngine::loadState has restored autotile placement records,
-    // re-run the exclusion-rule prune so any loaded WindowPlacement records for apps
-    // an Exclude or ExcludePlacement rule covers are dropped from the unified
-    // store. The init-prologue priming call (init_engines.cpp's
-    // setExcludeRuleSet/setRules/prune sequence, run
-    // synchronously before the rulesChanged subscription wires) already pruned what
-    // was loaded then; this re-run covers records that landed during the later
-    // autotile load. Patterns derive from the unified Rule store via
-    // PhosphorRules::ExclusionRules; the WTA prune removeIf's the placement store.
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->pruneExcludedPlacements(
-            PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
-    }
+    // No second load here. The adaptor's constructor loaded the session, and
+    // the engines keep no state of their own to load: the autotile engine's
+    // loadState only re-ran that whole load, which replaced the placement
+    // store and set the active layout back to the previous session's after
+    // start() had synced it to the focused screen (F479). The last-used zone
+    // and user-snapped classes it used to recover are held until the snap
+    // store is wired (F236).
 
     // Signal that daemon is fully initialized and ready for queries
     if (m_layoutAdaptor) {

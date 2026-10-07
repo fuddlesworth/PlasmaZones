@@ -132,11 +132,14 @@ void WindowTrackingService::setSnapStateResolver(SnapStateResolver resolver)
         // is wired next. The two detach paths are documented as equivalent, so
         // they must actually behave that way.
         m_pendingUserSnappedClasses.reset();
+        m_pendingLastUsedZone.reset();
         return;
     }
-    // A load that arrived before the resolver was wired parked its classes;
-    // now that a store exists they can land. See setUserSnappedClasses.
+    // A load that arrived before the resolver was wired parked its classes
+    // and last-used zone; now that a store exists they can land. See
+    // setUserSnappedClasses and setLastUsedZone.
     flushPendingUserSnappedClasses();
+    flushPendingLastUsedZone();
 }
 
 void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
@@ -147,6 +150,7 @@ void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
         // for the store that just went away into whatever store is wired
         // next — visible in tests that reuse one service across cases.
         m_pendingUserSnappedClasses.reset();
+        m_pendingLastUsedZone.reset();
         return;
     }
     SnapStateResolver resolver;
@@ -168,6 +172,7 @@ void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
     resolver.forgetWindow = [](const QString&) { };
     m_snapResolver = std::move(resolver);
     flushPendingUserSnappedClasses();
+    flushPendingLastUsedZone();
 }
 
 SnapStateResolver snapStateResolverFor(PhosphorSnapEngine::SnapEngine* engine)

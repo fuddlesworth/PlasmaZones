@@ -1013,6 +1013,11 @@ PhosphorSnapEngine::SnapState* WindowTrackingService::snapRepresentativeLastUsed
 
 QString WindowTrackingService::lastUsedZoneId() const
 {
+    // The hold answers while engaged, so a save before any store is wired
+    // writes the loaded id back rather than an empty one.
+    if (m_pendingLastUsedZone) {
+        return m_pendingLastUsedZone->zoneId;
+    }
     const PhosphorSnapEngine::SnapState* rep = snapRepresentativeLastUsed();
     return rep ? rep->lastUsedZoneId() : QString();
 }

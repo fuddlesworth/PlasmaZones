@@ -29,6 +29,7 @@
 #include <QTest>
 #include <QSignalSpy>
 #include <QRect>
+#include <QUuid>
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -92,6 +93,26 @@ private Q_SLOTS:
         m_layout = nullptr;
         m_service = nullptr;
         m_guard.reset();
+    }
+
+    void testLastUsedZone_heldUntilASnapStateIsWired()
+    {
+        // The adaptor's constructor loads the session before any SnapState is
+        // wired: the restored last-used zone is held (and answered, so a save
+        // in that window writes it back) until one is, then lands (F236).
+        m_service->setSnapState(nullptr);
+        m_service->setLastUsedZone(m_zone1Id, QString(), QString(), 0);
+        QCOMPARE(m_service->lastUsedZoneId(), m_zone1Id);
+        m_service->setSnapState(m_snapState);
+        QCOMPARE(m_snapState->lastUsedZoneId(), m_zone1Id);
+
+        // A detach discards a hold rather than carrying it to the next store.
+        const QString other = QUuid::createUuid().toString();
+        m_service->setSnapState(nullptr);
+        m_service->setLastUsedZone(other, QString(), QString(), 0);
+        m_service->setSnapState(nullptr);
+        m_service->setSnapState(m_snapState);
+        QCOMPARE(m_snapState->lastUsedZoneId(), m_zone1Id);
     }
 
     void testInitialMaskIsAll()

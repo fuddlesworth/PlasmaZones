@@ -1110,27 +1110,21 @@ private:
                                  int desktop, const QString& activity, PhosphorSnapEngine::SnapState* store)>& fn)
         const;
 
-    /// Push a load that arrived before any SnapState was wired into the store
-    /// once one exists. No-op when nothing is held. See setUserSnappedClasses.
-    /// A detach (`setSnapState(nullptr)`) DISCARDS the hold rather than
-    /// carrying it to the next store.
+    /// Push a load that arrived before any SnapState was wired into the store once one exists (no-op when
+    /// nothing is held; see setUserSnappedClasses). A detach DISCARDS the hold instead of carrying it on.
     void flushPendingUserSnappedClasses();
 
     // Dependencies
     PhosphorZones::LayoutRegistry* m_layoutManager;
     SnapStateResolver m_snapResolver;
-    /// User-snapped classes loaded before a SnapState existed, awaiting the
-    /// flush above. Engaged only across that startup window.
+    /// User-snapped classes loaded before a SnapState existed, awaiting the flush above.
     std::optional<QSet<QString>> m_pendingUserSnappedClasses;
     PhosphorEngine::WindowPlacementStore m_placementStore;
     IGeometryResolver* m_geometryResolver;
     PlacementConfig m_config;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
-    // Shared registry for current-class queries and canonical key translation.
-    // Not owned. Null in unit tests. QPointer (not raw): both are Daemon
-    // children whose destruction order relative to this service is not
-    // contractual — a raw borrow dangled during Daemon child teardown, while
-    // the QPointer auto-nulls and every use site already null-guards.
+    // Shared registry for current-class queries and canonical key translation; not owned, null in unit
+    // tests. QPointer: these are Daemon children with no contractual destruction order, so it auto-nulls.
     QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
     QPointer<PhosphorScreens::ScreenManager> m_screenManager;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
@@ -1142,9 +1136,8 @@ private:
     // resolver/writer is wired (unit tests, early init).
     QSet<QString> m_floatingWindows;
 
-    // Suspension-float classification — see isSuspensionFloat(). Canonical-
-    // keyed. Session-transient (never persisted): a restart's restored floats
-    // are re-classified when their windows re-report minimize state.
+    // Suspension-float classification (see isSuspensionFloat), canonical-keyed and never persisted:
+    // a restart's restored floats are re-classified when their windows re-report minimize state.
     QSet<QString> m_suspensionFloats;
 
     // Daemon-injected per-engine float reader/writer/lister. See setEngineFloatResolver.
@@ -1157,16 +1150,21 @@ private:
 
     QVector<ResnapEntry> m_resnapBuffer;
 
-    // Delta-persistence dirty mask. Initial value DirtyAll forces the first
-    // save after daemon startup to serialize every field. Cleared by
-    // loadState() once in-memory state mirrors the disk file.
+    // Delta-persistence dirty mask: DirtyAll makes the first save after startup write every field;
+    // loadState() clears it once in-memory state mirrors the disk file.
     DirtyMask m_dirtyMask = DirtyAll;
 
     // Appended last (installed class).
     ManagedFramePredicate m_managedFramePredicate{};
-
-    // Note: No save timer - persistence is the WindowTrackingAdaptor's debounced
-    // JSON save. Service emits stateChanged() signal when state needs saving
+    /// A last-used zone restored before any SnapState was wired, held and flushed like the classes (F236).
+    struct PendingLastUsedZone
+    {
+        QString zoneId, screenId, zoneClass;
+        int desktop = 0;
+    };
+    std::optional<PendingLastUsedZone> m_pendingLastUsedZone{};
+    void flushPendingLastUsedZone();
+    // No save timer: persistence is the WindowTrackingAdaptor's debounced save, driven by stateChanged().
 };
 
 } // namespace PhosphorPlacement

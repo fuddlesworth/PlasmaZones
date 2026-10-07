@@ -198,17 +198,17 @@ void Daemon::start()
 
     finalizeStartup();
 
-    // Migrate window screen assignments from physical to virtual IDs.
-    // Must run AFTER finalizeStartup() which loads WTA state — otherwise
-    // the migration finds no windows to migrate.
+    // Migrate window screen assignments from physical to virtual IDs, over the
+    // placements the adaptor's constructor loaded. Nothing reloads the store
+    // after this, so the migration is not discarded (F479).
     migrateStartupScreenAssignments();
 
     // Intentionally last: the algorithmChanged handler (signals.cpp) and showDesktopSwitchOsd
-    // (osd.cpp) both gate on !m_running to suppress OSD/feedback during startup. finalizeStartup()
-    // calls m_autotileEngine->loadState() which synchronously emits algorithmChanged, and
-    // KWin/Plasma can deliver desktop/activity-change signals during the same window. Setting
-    // m_running before finalizeStartup() returns would let those handlers fire and double-queue
-    // (or leak past) the startup OSD that finalizeStartup() is responsible for.
+    // (osd.cpp) both gate on !m_running to suppress OSD/feedback during startup, while layouts
+    // and algorithms are being assigned, and KWin/Plasma can deliver
+    // desktop/activity-change signals during the same window. Setting m_running before
+    // finalizeStartup() returns would let those handlers fire and double-queue (or leak past)
+    // the startup OSD that finalizeStartup() is responsible for.
     m_running = true;
     // NOTE: daemonReady() is emitted by finalizeStartup() — do NOT emit again here.
 
