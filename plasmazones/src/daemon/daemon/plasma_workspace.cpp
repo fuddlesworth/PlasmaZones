@@ -86,15 +86,24 @@ void Daemon::queryPlasmaWorkspaceState()
 
 void Daemon::fetchPlasmaWorkspaceActiveState()
 {
+    // The unit path the request is for, captured now. A reply landing after a
+    // stop() cleared the member, or after a later start() resolved another
+    // path, is not this query's: subscribing with an empty path would match
+    // PropertiesChanged from every systemd unit, and the next stop's keyed
+    // disconnect would never remove it (F320).
+    const QString path = m_plasmaWorkspaceTargetPath;
+    if (path.isEmpty()) {
+        return;
+    }
     QDBusConnection sessionBus = QDBusConnection::sessionBus();
     QDBusMessage msg =
-        QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
+        QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.systemd1"), path,
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     msg << QStringLiteral("org.freedesktop.systemd1.Unit") << QStringLiteral("ActiveState");
     auto* watcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(msg), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, path](QDBusPendingCallWatcher* w) {
         w->deleteLater();
-        if (m_shuttingDown) {
+        if (m_shuttingDown || path != m_plasmaWorkspaceTargetPath) {
             return;
         }
         QDBusPendingReply<QVariant> reply = *w;
@@ -105,24 +114,23 @@ void Daemon::fetchPlasmaWorkspaceActiveState()
         const QString state = reply.value().toString();
         m_plasmaWorkspaceActive = (state == QLatin1String("active"));
         qCInfo(lcDaemon) << "plasma-workspace.target ActiveState at startup:" << state
-                         << "plasmaWorkspaceActive=" << m_plasmaWorkspaceActive
-                         << "path=" << m_plasmaWorkspaceTargetPath;
+                         << "plasmaWorkspaceActive=" << m_plasmaWorkspaceActive << "path=" << path;
 
         QDBusConnection bus = QDBusConnection::sessionBus();
         // Disconnect first: a stop() -> start() cycle re-runs this whole query,
         // and QDBusConnectionPrivate appends identical signal hooks without
         // deduping, so without this the slot would fire once per registration
         // per signal. Harmless (the handler is idempotent) but wasteful.
-        bus.disconnect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
+        bus.disconnect(QStringLiteral("org.freedesktop.systemd1"), path,
                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
                        SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));
         const bool ok =
-            bus.connect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
+            bus.connect(QStringLiteral("org.freedesktop.systemd1"), path,
                         QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
                         SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));
         if (!ok) {
             qCWarning(lcDaemon) << "queryPlasmaWorkspaceState: failed to subscribe to Unit PropertiesChanged on"
-                                << m_plasmaWorkspaceTargetPath;
+                                << path;
         }
     });
 }
