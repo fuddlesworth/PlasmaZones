@@ -1230,13 +1230,10 @@ private:
     void moveUnsnapped(const QString& windowId, const QString& fromScreen, const QString& toScreen, int toDesktop,
                        const QString& direction);
 
-    /// Focus a window on the virtual desktop adjacent to the current one in
-    /// @p direction (the entry window on @p screenId there), switching KWin to
-    /// it. Used when directional focus reaches a zone-layout boundary with no
-    /// neighbour output. Returns false when there is no neighbour desktop or no
-    /// window on it. @p focusedWindowId is excluded from the target desktop's
-    /// occupants so an on-all-desktops (sticky) source window can't be picked as
-    /// its own cross-desktop focus target.
+    /// Focus the entry window of the next snapping desktop in @p direction on @p screenId, switching KWin
+    /// to it: that desktop's own store in the current activity, ordered by zone number (first stepping
+    /// forward, last stepping back), floats only when no snapped window is there. Minimized windows,
+    /// windows already visible here and @p focusedWindowId itself are skipped. False when none.
     bool tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId);
 
     /// True, after navigationFeedback(false, action, "excluded", ...) on @p screenId, when an Exclude /

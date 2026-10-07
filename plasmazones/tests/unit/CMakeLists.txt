@@ -1476,6 +1476,15 @@ target_link_libraries(test_wta_snap_navigation PRIVATE Qt6::Test Qt6::Core Qt6::
                       PhosphorRules::PhosphorRules)
 add_test(NAME test_wta_snap_navigation COMMAND test_wta_snap_navigation)
 
+# Snap focus stepping onto the next desktop at a layout edge. Same fixture.
+add_executable(test_wta_snap_desktop_nav dbus/test_wta_snap_desktop_nav.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_snap_desktop_nav PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_snap_desktop_nav PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorEngine::PhosphorEngine
+                      PhosphorZones::PhosphorZones PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_snap_desktop_nav COMMAND test_wta_snap_desktop_nav)
+
 # The bus boundary of the effect's reports: unknown screens held until they
 # arrive, split monitors resolved, metadata normalised. Same fixture.
 add_executable(test_wta_bus_boundary dbus/test_wta_bus_boundary.cpp

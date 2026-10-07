@@ -37,6 +37,7 @@
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorRules/WindowQuery.h>
@@ -47,6 +48,7 @@
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 
 #include <algorithm>
+#include <limits>
 
 namespace PhosphorSnapEngine {
 
@@ -279,8 +281,7 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
 
 bool SnapEngine::tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId)
 {
-    // m_globals is a ctor invariant (never null); only the late-bound
-    // cross-surface resolver is genuinely optional here.
+    // Only the late-bound cross-surface resolver is optional here.
     if (!m_crossSurfaceResolver) {
         return false;
     }
@@ -289,24 +290,74 @@ bool SnapEngine::tryCrossDesktopFocus(const QString& focusedWindowId, const QStr
     if (targetDesktop <= 0) {
         return false;
     }
-    QStringList candidates;
-    for (const SnapState* state : allSnapStates()) {
-        candidates += state->windowsOnScreenAndDesktop(screenId, targetDesktop);
-    }
-    candidates.sort();
-    // Exclude the source window so it can't be picked as its own cross-desktop
-    // focus target (a no-op "success" that swallows the boundary). It only appears
-    // here if it is itself assigned to the target desktop — windowsOnScreenAndDesktop
-    // filters by exact desktop, so this is a narrow guard, not the common path.
-    candidates.removeAll(focusedWindowId);
-    if (candidates.isEmpty()) {
+    // That desktop's own store in the current activity, on a snapping desktop
+    // only: a tiling desktop's windows are another engine's (F225).
+    const QString activity = currentActivity();
+    if (m_layoutManager
+        && m_layoutManager->modeForScreen(screenId, targetDesktop, activity)
+            != PhosphorZones::AssignmentEntry::Snapping) {
         return false;
     }
-    // Enter at the order extreme (first stepping forward, last stepping
-    // backward), mirroring autotile's cross-desktop entry. Activating a window
-    // on another desktop switches KWin to it.
+    const SnapState* target =
+        m_states.stateForKey(PhosphorEngine::PlacementStateKey{screenId, targetDesktop, activity});
+    if (!target) {
+        return false;
+    }
+    const QString self = canonicalWindowId(focusedWindowId); // F340
+    const int shown = currentVirtualDesktopForScreen(screenId);
+    // Already visible here: sticky, or also on the desktop in view (F146).
+    const auto alsoOnDesktop = [this, shown](const QString& windowId) {
+        const auto context = m_windowRegistry ? m_windowRegistry->desktopContext(windowId) : std::nullopt;
+        if (!context) {
+            return false;
+        }
+        if (context->sticky.value_or(false)) {
+            return true;
+        }
+        const std::optional<QSet<int>> set = context->desktopSet();
+        return set && set->contains(shown);
+    };
+    QHash<QString, int> numberOf; // zone id -> zone number in that desktop's layout
+    if (auto* layout =
+            m_layoutManager ? m_layoutManager->layoutForScreen(screenId, targetDesktop, activity) : nullptr) {
+        for (const PhosphorZones::Zone* zone : layout->zones()) {
+            numberOf.insert(zone->id().toString(), zone->zoneNumber());
+        }
+    }
+    QList<std::pair<int, QString>> snapped;
+    QStringList floats;
+    for (const QString& windowId : target->windowsOnScreenAndDesktop(screenId, targetDesktop)) {
+        if (windowId == self || !holdsWindowInState(windowId, target)) {
+            continue;
+        }
+        if ((m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false))
+            || alsoOnDesktop(windowId)) {
+            continue;
+        }
+        if (target->isWindowSnapped(windowId) && !target->isFloating(windowId)) {
+            snapped.append(
+                {numberOf.value(target->zoneForWindow(windowId), std::numeric_limits<int>::max()), windowId});
+        } else {
+            floats.append(windowId);
+        }
+    }
+    std::sort(snapped.begin(), snapped.end());
+    floats.sort();
+    QStringList pool;
+    for (const auto& entry : std::as_const(snapped)) {
+        pool.append(entry.second);
+    }
+    if (pool.isEmpty()) {
+        pool = floats; // floats only when no snapped window is there (F387)
+    }
+    if (pool.isEmpty()) {
+        return false;
+    }
+    // Enter at the first zone of that desktop's layout stepping forward and the
+    // last stepping back, like autotile's first and last tile. Activating a
+    // window on another desktop switches KWin to it.
     const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
-    Q_EMIT activateWindowRequested(forward ? candidates.first() : candidates.last());
+    Q_EMIT activateWindowRequested(forward ? pool.first() : pool.last());
     Q_EMIT navigationFeedback(true, QStringLiteral("focus"), QStringLiteral("desktop:") + direction, QString(),
                               QString(), screenId);
     return true;
@@ -409,8 +460,7 @@ void SnapEngine::spanFocusedInDirection(const QString& direction, const Navigati
 
 bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId)
 {
-    // Same ctor invariant as tryCrossDesktopFocus: only the resolver is
-    // late-bound and optional.
+    // As in tryCrossDesktopFocus, only the resolver is late-bound and optional.
     if (!m_crossSurfaceResolver) {
         return false;
     }

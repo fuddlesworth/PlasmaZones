@@ -166,16 +166,16 @@ void SnapAdaptor::swapWindowsById(const QString& windowId1, const QString& windo
     if (!validateWindowId(windowId2, QStringLiteral("swapWindowsById (window2)"))) {
         return;
     }
-    if (windowId1 == windowId2) {
-        qCWarning(lcDbusWindow) << "swapWindowsById: cannot swap window with itself:" << windowId1;
-        return;
-    }
-
     if (!m_adaptor || !m_adaptor->service() || !m_engine) {
         return;
     }
 
     auto* svc = m_adaptor->service();
+    // Compared canonically: a class-mutated id names the same window (F340).
+    if (svc->canonicalizeForLookup(windowId1) == svc->canonicalizeForLookup(windowId2)) {
+        qCWarning(lcDbusWindow) << "swapWindowsById: cannot swap window with itself:" << windowId1;
+        return;
+    }
 
     // Each window takes the other's whole span, in the context that span is
     // held in, through the gate a single bus snap passes (F79, F179). A span in

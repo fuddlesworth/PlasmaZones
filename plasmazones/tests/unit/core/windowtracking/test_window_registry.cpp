@@ -896,6 +896,34 @@ private Q_SLOTS:
         QVERIFY(context.has_value());
         QCOMPARE(context->desktopSet(), std::optional<QSet<int>>(QSet<int>{3}));
     }
+
+    // desktopContext hands over every desktop field of the record, and
+    // minimizedState answers only once a state was reported (F821).
+    void desktopContextCarriesEveryField()
+    {
+        WindowRegistry reg;
+        WindowMetadata meta = make(QStringLiteral("kate"));
+        meta.virtualDesktop = 2;
+        meta.virtualDesktops = {2, 3};
+        meta.isSticky = true;
+        meta.activity = QStringLiteral("a");
+        reg.upsert(QStringLiteral("every"), meta);
+        const auto context = reg.desktopContext(QStringLiteral("kate|every"));
+        QVERIFY(context.has_value());
+        QCOMPARE(context->virtualDesktop, 2);
+        QCOMPARE(context->virtualDesktops, (QList<int>{2, 3}));
+        QCOMPARE(context->sticky, std::optional<bool>(true));
+        QCOMPARE(context->activity, QStringLiteral("a"));
+        QVERIFY(!reg.desktopContext(QStringLiteral("kate|unknown")).has_value());
+
+        QVERIFY(!reg.minimizedState(QStringLiteral("kate|every")).has_value());
+        meta.isMinimized = true;
+        reg.upsert(QStringLiteral("every"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|every")), std::optional<bool>(true));
+        meta.isMinimized = false;
+        reg.upsert(QStringLiteral("every"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|every")), std::optional<bool>(false));
+    }
 };
 
 QTEST_MAIN(TestWindowRegistry)

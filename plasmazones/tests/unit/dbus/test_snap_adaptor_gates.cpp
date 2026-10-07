@@ -473,6 +473,23 @@ private Q_SLOTS:
         QCOMPARE(applies.count(), 0);
     }
 
+    // Two ids of one window, one carrying a class it has since changed, are
+    // still the window swapped with itself (F340).
+    void swapRefusesItsRenamedSelf()
+    {
+        GateFixture f;
+        const QString a = f.registerOn(QStringLiteral("self-r"), 1);
+        const QString b = f.registerOn(QStringLiteral("self-o"), 1);
+        f.snap->commitSnap(a, f.zone(0), kLeft);
+        f.snap->commitSnap(b, f.zone(1), kLeft);
+        const QString renamed = QStringLiteral("renamed|self-r");
+        QCOMPARE(f.registry.canonicalizeForLookup(renamed), a);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->swapWindowsById(a, renamed);
+        QCOMPARE(applies.count(), 0);
+        QCOMPARE(f.snap->stateForWindow(a)->zoneForWindow(a), f.zone(0));
+    }
+
     // The bus float toggle passes the keyboard gates (F404).
     void floatToggleRefusesWithSnappingOff()
     {
