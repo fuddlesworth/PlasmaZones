@@ -11,18 +11,18 @@
  * facade class. That violated "the adaptor is a thin facade" and made
  * the daemon branch on mode at every shortcut handler.
  *
- * Navigation is now SnapEngine's concern. Every entry point takes an
- * explicit NavigationContext {windowId, screenId} from the daemon's
- * shortcut handler, so the engine no longer reaches into the WTA shadow
- * store on every call. Compositor-layer fallbacks (last-active window,
- * last-cursor screen, frame geometry) are now accessed through the typed
- * INavigationStateProvider interface rather than opaque QObject* invoke.
+ * Navigation is now SnapEngine's concern. The entry points take a
+ * NavigationContext {windowId, screenId} from the daemon's shortcut handler,
+ * except switchFocusBetweenFloatingAndTiling(screenId) and
+ * rotateWindowsInLayout(clockwise, screenId). The compositor-layer fallbacks
+ * (the last-active window, the last-cursor then last-active screen, the frame
+ * shadow) come through the typed INavigationStateProvider interface.
  *
  * Signals emitted by these methods are SnapEngine signals. The feedback/state
- * signals are relayed by SnapAdaptor to WindowTrackingAdaptor for D-Bus; the
- * cross-mode handoff signals (crossModeMoveRequested / crossModeSwapRequested /
- * windowDesktopMoveRequested) are instead wired DIRECTLY from the engine base
- * class to WindowTrackingAdaptor's handlers in setEngines().
+ * signals are relayed by SnapAdaptor to WindowTrackingAdaptor for D-Bus;
+ * crossModeMoveRequested and crossModeSwapRequested go to
+ * WindowTrackingAdaptor's handlers, and windowDesktopMoveRequested is relayed
+ * unchanged to the effect over WindowTracking.
  */
 
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -106,7 +106,7 @@ namespace {
 
 /// Pick the effective window id: the explicit one from NavigationContext
 /// if set, otherwise the last-active window from INavigationStateProvider.
-/// Returns empty when neither is available — caller emits "no_window" feedback.
+/// Returns empty when neither is available; callers emit their own no-window feedback.
 QString effectiveWindowId(const NavigationContext& ctx, INavigationStateProvider* navState)
 {
     if (!ctx.windowId.isEmpty()) {
@@ -346,22 +346,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
         }
         return;
     }
-    const QRect geo = result.toRect();
-    if (!geo.isValid()) {
-        qCWarning(PhosphorSnapEngine::lcSnapEngine)
-            << "SnapEngine::moveFocusedInDirection: invalid geometry from nav result";
-        // Same success-OSD correction as spanFocusedInDirection: the
-        // resolver emitted "move" success at resolve time, so a bail here
-        // must tell the user the move did not land.
-        Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("geometry_error"), QString(), QString(),
-                                  result.screenName);
-        return;
-    }
-    recordFreeFrameBeforeUserSnap(windowId, screenId);
-    commitSnap(windowId, result.zoneId, result.screenName);
-    m_windowTracker->recordSnapIntent(windowId, true);
-    Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId,
-                                  result.screenName, false);
+    commitUserSnap(windowId, {result.zoneId}, result.screenName, result.toRect(), screenId);
 }
 
 void SnapEngine::spanFocusedInDirection(const QString& direction, const NavigationContext& ctx)
@@ -401,21 +386,7 @@ void SnapEngine::spanFocusedInDirection(const QString& direction, const Navigati
         // cross-desktop continuation. The resolver already emitted feedback.
         return;
     }
-    if (!result.geometry.isValid() || result.zoneIds.isEmpty()) {
-        qCWarning(PhosphorSnapEngine::lcSnapEngine)
-            << "SnapEngine::spanFocusedInDirection: invalid span result from resolver";
-        // The resolver already announced success on the OSD at resolve time;
-        // correct the record so the user isn't told a span happened that was
-        // never committed.
-        Q_EMIT navigationFeedback(false, QStringLiteral("span"), QStringLiteral("geometry_error"), QString(), QString(),
-                                  result.screenName);
-        return;
-    }
-    recordFreeFrameBeforeUserSnap(windowId, screenId);
-    commitMultiZoneSnap(windowId, result.zoneIds, result.screenName);
-    m_windowTracker->recordSnapIntent(windowId, true);
-    Q_EMIT applyGeometryRequested(windowId, result.geometry.x(), result.geometry.y(), result.geometry.width(),
-                                  result.geometry.height(), result.zoneIds.first(), result.screenName, false);
+    commitUserSnap(windowId, result.zoneIds, result.screenName, result.geometry, screenId);
 }
 
 bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId)
@@ -598,10 +569,9 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
         }
         return;
     }
-    commitSnap(result.windowId1, result.zoneId1, result.screenName);
-    m_windowTracker->recordSnapIntent(result.windowId1, true);
-    Q_EMIT applyGeometryRequested(result.windowId1, result.x1, result.y1, result.w1, result.h1, result.zoneId1,
-                                  result.screenName, false);
+    // No capture: the window is in a zone.
+    commitUserSnap(result.windowId1, {result.zoneId1}, result.screenName,
+                   QRect(result.x1, result.y1, result.w1, result.h1), QString());
 
     if (!result.windowId2.isEmpty()) {
         // A cross-output swap sends window2 to the SOURCE output (screenName2),
@@ -664,21 +634,7 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const NavigationContext& 
     if (!result.success) {
         return;
     }
-    const QRect geo = result.toRect();
-    if (!geo.isValid()) {
-        qCWarning(PhosphorSnapEngine::lcSnapEngine)
-            << "SnapEngine::moveFocusedToPosition: invalid geometry from nav result";
-        // Same success-OSD correction as moveFocusedInDirection: the
-        // resolver emitted "snap" success at resolve time.
-        Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("geometry_error"), QString(), QString(),
-                                  effectiveScreen);
-        return;
-    }
-    recordFreeFrameBeforeUserSnap(windowId, effectiveScreen);
-    commitSnap(windowId, result.zoneId, effectiveScreen);
-    m_windowTracker->recordSnapIntent(windowId, true);
-    Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId, effectiveScreen,
-                                  false);
+    commitUserSnap(windowId, {result.zoneId}, effectiveScreen, result.toRect(), effectiveScreen);
 }
 
 void SnapEngine::pushFocusedToEmptyZone(const NavigationContext& ctx)
@@ -710,21 +666,7 @@ void SnapEngine::pushFocusedToEmptyZone(const NavigationContext& ctx)
     if (!result.success) {
         return;
     }
-    const QRect geo = result.toRect();
-    if (!geo.isValid()) {
-        qCWarning(PhosphorSnapEngine::lcSnapEngine)
-            << "SnapEngine::pushFocusedToEmptyZone: invalid geometry from nav result";
-        // Same success-OSD correction as moveFocusedInDirection: the
-        // resolver emitted "push" success at resolve time.
-        Q_EMIT navigationFeedback(false, QStringLiteral("push"), QStringLiteral("geometry_error"), QString(), QString(),
-                                  effectiveScreen);
-        return;
-    }
-    recordFreeFrameBeforeUserSnap(windowId, effectiveScreen);
-    commitSnap(windowId, result.zoneId, effectiveScreen);
-    m_windowTracker->recordSnapIntent(windowId, true);
-    Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId, effectiveScreen,
-                                  false);
+    commitUserSnap(windowId, {result.zoneId}, effectiveScreen, result.toRect(), effectiveScreen);
 }
 
 void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
@@ -985,9 +927,9 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
                               entries.first().targetZoneId, screenId);
 }
 
-// Note: resnapToNewLayout() and resnapCurrentAssignments(const QString&)
-// live in src/navigation.cpp. They existed before this file and use
-// the emitBatchedResnap → resnapToNewLayoutRequested → WTA::handleBatchedResnap
-// pipeline, which remains the canonical batch-resnap path.
+// Note: resnapToNewLayout and the resnapCurrentAssignments overloads
+// (screenFilter, onlyWindows, ResnapFeedback) live in src/navigation.cpp, beside
+// emitBatchedResnap, the separate batch entry. All of them emit
+// resnapToNewLayoutRequested, which SnapAdaptor's applyEngineResnap commits.
 
 } // namespace PhosphorSnapEngine

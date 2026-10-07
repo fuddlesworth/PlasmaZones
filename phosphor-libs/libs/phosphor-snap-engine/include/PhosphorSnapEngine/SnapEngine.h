@@ -703,17 +703,9 @@ public:
      */
     void setNavigationStateProvider(INavigationStateProvider* provider);
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Navigation (moved out of WindowTrackingAdaptor)
-    //
-    // Every method takes a PhosphorEngine::NavigationContext populated by the daemon's
-    // shortcut handler. The engine uses ctx.windowId directly rather than
-    // re-reading it from the WTA shadow, which is a step toward retiring
-    // the SnapEngine -> WTA back-reference entirely. When ctx.windowId is
-    // empty, the engine may consult m_navState->lastActiveWindowId() as a
-    // best-effort fallback -- but in the normal path the daemon always
-    // provides a resolved target.
-    // ═══════════════════════════════════════════════════════════════════════════
+    // Navigation: every verb takes the daemon's NavigationContext except
+    // switchFocusBetweenFloatingAndTiling(screenId) and rotateWindowsInLayout(clockwise,
+    // screenId); an empty ctx.windowId falls back to m_navState's last-active window.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — navigation overrides
@@ -832,6 +824,12 @@ public:
     /// leaving; @p screenId when no screen manager can place it. Refuses a
     /// minimized, suspension-floated, maximized or fullscreen window.
     void recordFreeFrameBeforeUserSnap(const QString& windowId, const QString& screenId);
+    /// The tail of every user snap the daemon drives: record the free frame the window leaves
+    /// (on @p captureScreen; nothing when empty), commit @p zoneIds on @p screenId pinned to
+    /// @p virtualDesktop (0: the window's own), record the snap intent and apply @p geometry as
+    /// the user's verb. Refuses an invalid @p geometry or no zone; the resolvers validate first.
+    void commitUserSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                        const QRect& geometry, const QString& captureScreen, int virtualDesktop = 0);
 
     /// The ABI-stable signature exported before the confinement parameter.
     PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
@@ -1040,7 +1038,7 @@ Q_SIGNALS:
     void applyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
                                 const QString& screenId, bool sizeOnly);
 
-    /// Batched resnap data (routed through WTA::handleBatchedResnap for bookkeeping)
+    /// Batched resnap data, committed by SnapAdaptor's applyEngineResnap relay
     void resnapToNewLayoutRequested(const QString& resnapData);
 
     /// Request KWin effect to collect unsnapped windows and snap them all

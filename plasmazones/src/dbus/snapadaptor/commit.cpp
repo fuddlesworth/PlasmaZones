@@ -150,19 +150,10 @@ void SnapAdaptor::moveWindowToZoneOnScreen(const QString& windowId, const QStrin
         return;
     }
 
-    // The float-back of a window that is not in a zone, recorded before the
-    // commit that would make the effect's own pre-snap capture refused. The
-    // helper files it under the screen the frame is on.
-    m_engine->recordFreeFrameBeforeUserSnap(windowId, screenId);
-
-    // Committed on the desktop the window is on, which is not the one in view
-    // for a window on a hidden desktop (F179).
-    m_engine->commitSnap(windowId, zoneId, screenId, PhosphorEngine::SnapIntent::UserInitiated, target->desktop);
-    m_adaptor->service()->recordSnapIntent(windowId, true);
-
-    // Request compositor to apply geometry
-    Q_EMIT m_adaptor->applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneId, screenId,
-                                             false, static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+    // The keyboard snaps' tail: the free frame the window leaves, the commit on
+    // the desktop the window is on (not the one in view for a window on a
+    // hidden desktop, F179), the intent, and the apply as the user's verb.
+    m_engine->commitUserSnap(windowId, {zoneId}, screenId, geo, screenId, target->desktop);
 
     qCInfo(lcDbusWindow) << "moveWindowToZone:" << windowId << "-> zone" << zoneId << "on screen" << screenId;
 }

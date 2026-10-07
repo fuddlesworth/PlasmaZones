@@ -232,6 +232,27 @@ void SnapEngine::recordFreeFrameBeforeUserSnap(const QString& windowId, const QS
                                         /*overwrite=*/true);
 }
 
+void SnapEngine::commitUserSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                const QRect& geometry, const QString& captureScreen, int virtualDesktop)
+{
+    if (!m_windowTracker || windowId.isEmpty() || zoneIds.isEmpty() || !geometry.isValid()) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine)
+            << "commitUserSnap: refused for" << windowId << "zones=" << zoneIds << "geometry=" << geometry;
+        return;
+    }
+    if (!captureScreen.isEmpty()) {
+        recordFreeFrameBeforeUserSnap(windowId, captureScreen);
+    }
+    if (zoneIds.size() > 1) {
+        commitMultiZoneSnap(windowId, zoneIds, screenId, SnapIntent::UserInitiated, virtualDesktop);
+    } else {
+        commitSnap(windowId, zoneIds.first(), screenId, SnapIntent::UserInitiated, virtualDesktop);
+    }
+    m_windowTracker->recordSnapIntent(windowId, true);
+    Q_EMIT applyGeometryRequested(windowId, geometry.x(), geometry.y(), geometry.width(), geometry.height(),
+                                  zoneIds.first(), screenId, false);
+}
+
 void SnapEngine::uncommitSnap(const QString& windowId)
 {
     Q_ASSERT(m_globals);

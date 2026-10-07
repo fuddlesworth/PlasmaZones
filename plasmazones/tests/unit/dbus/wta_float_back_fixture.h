@@ -22,6 +22,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -46,7 +47,8 @@ inline const QRect kRightRect(1920, 0, 1920, 1080);
 
 struct FloatBackFixture
 {
-    FloatBackFixture()
+    /// @p vdm (optional, not owned) reaches the adaptor and the snap engine.
+    explicit FloatBackFixture(PhosphorWorkspaces::VirtualDesktopManager* vdm = nullptr)
     {
         fake.addScreen(kLeft, kLeftRect, kLeft);
         fake.addScreen(kRight, kRightRect, kRight);
@@ -57,9 +59,9 @@ struct FloatBackFixture
         layout = createTestLayout(3, layouts);
         layouts->addLayout(layout);
         layouts->setActiveLayout(layout);
-        wta = new WindowTrackingAdaptor(layouts, &detector, screenMgr.get(), &settings, nullptr, nullptr, &parent);
+        wta = new WindowTrackingAdaptor(layouts, &detector, screenMgr.get(), &settings, vdm, nullptr, &parent);
         wta->setWindowRegistry(&registry);
-        snap = std::make_unique<PhosphorSnapEngine::SnapEngine>(layouts, wta->service(), &detector, nullptr, nullptr);
+        snap = std::make_unique<PhosphorSnapEngine::SnapEngine>(layouts, wta->service(), &detector, vdm, nullptr);
         snap->setEngineSettings(&settings);
         snap->setWindowRegistry(&registry);
         snap->setNavigationStateProvider(wta);
