@@ -7,7 +7,8 @@
  *        window lands only where a keyboard snap could, on the window's own
  *        desktop, and Control.snapWindowToZone resolves its screen the same
  *        way (F20, F142, F179, F21, F22, F26, F85). The focused-window verbs
- *        and a swap pass the same gates (F362, F79).
+ *        and a swap pass the same gates (F362, F79), and the effect's
+ *        confirmations commit only real zones on real screens (F459).
  */
 
 #include "wta_float_back_fixture.h"
@@ -16,9 +17,12 @@
 #include "dbus/snapadaptor/snapadaptor.h"
 
 #include <PhosphorContext/IContextResolver.h>
+#include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorRules/WindowQuery.h>
 
 #include <QSignalSpy>
+#include <QUuid>
 
 namespace {
 
@@ -532,6 +536,106 @@ private Q_SLOTS:
         f.adaptor->toggleFloatForWindow(QString(), kLeft);
         QCOMPARE(feedback.count(), 1);
         QCOMPARE(feedback.first().at(2).toString(), QStringLiteral("invalid_window"));
+    }
+
+    // The confirmations commit only a live window, a known screen and a zone
+    // that screen's layout holds (F459).
+    void windowSnappedRefusesAnUnknownZone()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("conf-1"), 1);
+        f.adaptor->windowSnapped(w, QUuid::createUuid().toString(), kLeft);
+        QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+    }
+
+    void windowSnappedRefusesTheRestoreSentinel()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("conf-2"), 1);
+        f.adaptor->windowSnapped(w, PhosphorEngine::RestoreSentinel, kLeft);
+        QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+    }
+
+    void windowSnappedRefusesAnUnknownScreen()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("conf-3"), 1);
+        f.adaptor->windowSnapped(w, f.zone(0), QStringLiteral("DP-9"));
+        QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+    }
+
+    void windowSnappedRefusesAnUnregisteredWindow()
+    {
+        GateFixture f;
+        const QString ghost = QStringLiteral("app|conf-ghost");
+        f.adaptor->windowSnapped(ghost, f.zone(0), kLeft);
+        QVERIFY(!f.snap->isWindowTracked(ghost));
+    }
+
+    void windowSnappedMultiZoneRefusesAnEmptyMember()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("conf-4"), 1);
+        f.adaptor->windowSnappedMultiZone(w, {f.zone(0), QString()}, kLeft);
+        QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+    }
+
+    // Control: the snap-all confirmation still commits.
+    void snapAllConfirmationStillCommits()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("conf-5"), 1);
+        PhosphorProtocol::SnapConfirmationEntry entry;
+        entry.windowId = w;
+        entry.zoneId = f.zone(1);
+        entry.screenId = kLeft;
+        entry.isRestore = false;
+        f.adaptor->windowsSnappedBatch({entry});
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(1));
+    }
+
+    // A restore confirmation drops the float-back on its own screen only (F366).
+    void restoreConfirmationKeepsTheOtherScreensFloatBack()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("conf-6"), 1);
+        const QRect leftFree(100, 100, 400, 300);
+        const QRect rightFree(2100, 100, 400, 300);
+        f.wta->service()->recordFreeGeometry(w, kLeft, leftFree, true);
+        f.wta->service()->recordFreeGeometry(w, kRight, rightFree, true);
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        PhosphorProtocol::SnapConfirmationEntry entry;
+        entry.windowId = w;
+        entry.screenId = kLeft;
+        entry.isRestore = true;
+        f.adaptor->windowsSnappedBatch({entry});
+        QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+        QVERIFY(!f.floatBack(w, kLeft).isValid());
+        QCOMPARE(f.floatBack(w, kRight), rightFree);
+    }
+
+    // An unsnap leaves the window free, so the record's snap slot is
+    // released and a reopen does not restore the zone just left.
+    void windowUnsnappedReleasesTheSnapSlot()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("conf-7"), 1);
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = w;
+        rec.appId = QStringLiteral("app");
+        rec.screenId = kLeft;
+        rec.virtualDesktop = 1;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = {f.zone(0)};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        f.wta->service()->placementStore().record(rec);
+        f.adaptor->windowUnsnapped(w);
+        const auto after = f.wta->service()->placementStore().peekExact(w);
+        QVERIFY(after.has_value());
+        QCOMPARE(after->engines.value(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
     }
 };
 

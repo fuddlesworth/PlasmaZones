@@ -72,13 +72,8 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
     if (!validateWindowId(windowId, QStringLiteral("clear pre-tile geometry"))) {
         return;
     }
-    // Single float-back store: clear the record's shared free geometry.
-    // Deliberately the ALL-SCREENS form, unlike the consume-once restore
-    // paths: this method's one production caller is the layout-change unsnap
-    // (a zone the window occupied no longer exists), where the remembered
-    // pre-tile frame as a whole is obsolete — a per-screen clear would leave
-    // other monitors restoring a position captured under a layout that is
-    // gone.
+    // No in-tree caller; external contract surface. Clears every screen's
+    // float-back, unlike the consume-once restore paths.
     m_service->clearFreeGeometry(windowId);
 }
 

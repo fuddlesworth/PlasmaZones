@@ -331,6 +331,24 @@ private Q_SLOTS:
         QCOMPARE(parsed[0].virtualDesktop, 0);
     }
 
+    // A span is the primary followed by real zones, as the serializer writes
+    // it (F459).
+    void test_deserializeZoneAssignments_dropsAnEmptySpanMember()
+    {
+        const QString json = QStringLiteral(
+            "[{\"windowId\":\"w\",\"targetZoneId\":\"a\",\"targetZoneIds\":[\"a\",\"\"],"
+            "\"x\":0,\"y\":0,\"width\":1,\"height\":1}]");
+        QVERIFY(GeometryUtils::deserializeZoneAssignments(json, nullptr).isEmpty());
+    }
+
+    void test_deserializeZoneAssignments_dropsASpanThatDoesNotStartWithThePrimary()
+    {
+        const QString json = QStringLiteral(
+            "[{\"windowId\":\"w\",\"targetZoneId\":\"a\",\"targetZoneIds\":[\"b\",\"a\"],"
+            "\"x\":0,\"y\":0,\"width\":1,\"height\":1}]");
+        QVERIFY(GeometryUtils::deserializeZoneAssignments(json, nullptr).isEmpty());
+    }
+
     void test_deserializeZoneAssignments_malformedJson()
     {
         QString errorString;

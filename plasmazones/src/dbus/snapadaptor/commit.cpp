@@ -3,7 +3,9 @@
 
 #include "snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "core/platform/logging.h"
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -11,15 +13,11 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Snap-commit D-Bus slots — thin forwarders over SnapEngine.
-//
-// The full orchestration (clear floating, clear auto-snapped flag, assign to
-// zone, update last-used tracking, emit state-change signal) lives in SnapEngine::commitSnap / commitMultiZoneSnap /
-// uncommitSnap. These D-Bus entry points survive as the external contract,
-// but their bodies do only two things:
-//
-//   1. Validate and resolve the screen id
-//   2. Forward to the engine
+// Snap confirmations from the effect and external callers: each is checked by
+// validBusSnapTarget (busgate.cpp), then committed through the engine, which
+// owns the orchestration (clear floating and the auto-snapped flag, assign,
+// last-used tracking, the state-change signal). They confirm placements already
+// applied, so no policy gate.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId)
@@ -27,15 +25,13 @@ void SnapAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, 
     if (!validateWindowId(windowId, QStringLiteral("track window snap"))) {
         return;
     }
-    if (zoneId.isEmpty()) {
-        qCWarning(lcDbusWindow) << "Window snap: cannot track, empty zone ID";
+    // A live window, a known screen and a zone its layout holds (F459).
+    const std::optional<BusSnapTarget> target = validBusSnapTarget(windowId, {zoneId}, screenId);
+    if (!target) {
         return;
     }
-    if (!m_engine) {
-        return;
-    }
-    const QString resolvedScreen = resolveScreenForSnap(screenId, zoneId);
-    m_engine->commitSnap(windowId, zoneId, resolvedScreen);
+    m_engine->commitSnap(windowId, zoneId, target->screenId, PhosphorEngine::SnapIntent::UserInitiated,
+                         target->desktop);
 }
 
 void SnapAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenId)
@@ -43,15 +39,13 @@ void SnapAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringL
     if (!validateWindowId(windowId, QStringLiteral("track multi-zone window snap"))) {
         return;
     }
-    if (zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
-        qCWarning(lcDbusWindow) << "Multi-zone window snap: cannot track, empty zone IDs";
+    // Every member checked, not only the first (F459).
+    const std::optional<BusSnapTarget> target = validBusSnapTarget(windowId, zoneIds, screenId);
+    if (!target) {
         return;
     }
-    if (!m_engine) {
-        return;
-    }
-    const QString resolvedScreen = resolveScreenForSnap(screenId, zoneIds.first());
-    m_engine->commitMultiZoneSnap(windowId, zoneIds, resolvedScreen);
+    m_engine->commitMultiZoneSnap(windowId, zoneIds, target->screenId, PhosphorEngine::SnapIntent::UserInitiated,
+                                  target->desktop);
 }
 
 void SnapAdaptor::windowUnsnapped(const QString& windowId)
@@ -63,6 +57,17 @@ void SnapAdaptor::windowUnsnapped(const QString& windowId)
         return;
     }
     m_engine->uncommitSnap(windowId);
+    releaseSnapSlotIfFree(windowId);
+}
+
+void SnapAdaptor::releaseSnapSlotIfFree(const QString& windowId)
+{
+    // With no store holding a zone or the float bit for the window, the
+    // record's snap slot goes too, or a reopen would restore the zone just left.
+    if (m_adaptor && m_adaptor->service() && !m_engine->isFloating(windowId)
+        && WindowTrackingInternal::snapZoneScreen(m_engine, windowId, QString()).isEmpty()) {
+        m_adaptor->service()->releaseEngineSlot(windowId, PhosphorEngine::WindowPlacement::snapEngineId());
+    }
 }
 
 void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationList& entries)
@@ -75,11 +80,20 @@ void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationLi
         }
 
         if (entry.isRestore) {
-            // Window's zone exceeded the new layout — unsnap and clear pre-tile geometry
-            windowUnsnapped(entry.windowId);
-            if (m_adaptor) {
-                m_adaptor->clearPreTileGeometry(entry.windowId);
+            // Unsnap a live window and drop its float-back on that screen, as
+            // the engine's RestoreSentinel arm does; every screen's only when
+            // the screen cannot be resolved (F366).
+            if (!m_engine || !m_adaptor || !m_adaptor->service() || !m_adaptor->isRegistryTracked(entry.windowId)) {
+                continue;
             }
+            m_engine->uncommitSnap(entry.windowId);
+            const QString screen = m_adaptor->resolveBusScreen(entry.screenId, entry.windowId);
+            if (screen.isEmpty()) {
+                m_adaptor->service()->clearFreeGeometry(entry.windowId);
+            } else {
+                m_adaptor->service()->clearFreeGeometry(entry.windowId, screen);
+            }
+            releaseSnapSlotIfFree(entry.windowId);
         } else {
             windowSnapped(entry.windowId, entry.zoneId, entry.screenId);
             // The snap-all confirmation, a user snap like any shortcut's.
@@ -352,14 +366,6 @@ bool SnapAdaptor::validateWindowId(const QString& windowId, const QString& opera
         return false;
     }
     return true;
-}
-
-QString SnapAdaptor::resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const
-{
-    if (!m_adaptor) {
-        return callerScreen;
-    }
-    return m_adaptor->resolveScreenForSnap(callerScreen, zoneId);
 }
 
 } // namespace PlasmaZones

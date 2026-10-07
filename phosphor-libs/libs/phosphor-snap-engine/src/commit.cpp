@@ -12,10 +12,57 @@
 #include <QGuiApplication>
 #include <QScreen>
 
+#include <algorithm>
+
 namespace PhosphorSnapEngine {
 
 using PhosphorEngine::SnapIntent;
 using PhosphorEngine::ZoneAssignmentEntry;
+
+namespace {
+
+bool hasEmptyZone(const QStringList& zoneIds)
+{
+    return std::any_of(zoneIds.cbegin(), zoneIds.cend(), [](const QString& id) {
+        return id.isEmpty();
+    });
+}
+
+/// The screen whose geometry sits nearest @p point: @p mgr's effective screens,
+/// so a split monitor answers a virtual screen, else the QScreens. Empty when
+/// there is nothing to measure against.
+QString nearestScreenTo(PhosphorScreens::ScreenManager* mgr, const QPoint& point)
+{
+    QString nearest;
+    qint64 bestDistSq = -1;
+    const auto consider = [&](const QString& id, const QRect& g) {
+        if (id.isEmpty() || !g.isValid()) {
+            return;
+        }
+        // QRect::right() and bottom() are the last pixel inside, so the far
+        // edge proper is x + width; measuring to it keeps a point on the edge
+        // at distance 0 rather than 1.
+        const qint64 dx = qMax(0, qMax(g.left() - point.x(), point.x() - (g.x() + g.width())));
+        const qint64 dy = qMax(0, qMax(g.top() - point.y(), point.y() - (g.y() + g.height())));
+        const qint64 distSq = dx * dx + dy * dy;
+        if (bestDistSq < 0 || distSq < bestDistSq) {
+            bestDistSq = distSq;
+            nearest = id;
+        }
+    };
+    if (mgr) {
+        for (const QString& id : mgr->effectiveScreenIds()) {
+            consider(id, mgr->screenGeometry(id));
+        }
+    } else {
+        for (QScreen* screen : QGuiApplication::screens()) {
+            consider(PhosphorScreens::ScreenIdentity::identifierFor(screen), screen->geometry());
+        }
+    }
+    return nearest;
+}
+
+} // namespace
 
 void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                 SnapIntent intent, int virtualDesktop)
@@ -139,8 +186,10 @@ void SnapEngine::commitSnap(const QString& windowId, const QString& zoneId, cons
 void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                      SnapIntent intent, int virtualDesktop)
 {
-    if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
-        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitMultiZoneSnap: empty windowId or zoneIds";
+    // Every member, not only the primary: an empty one would be committed and
+    // broadcast as a zone id (F459).
+    if (windowId.isEmpty() || zoneIds.isEmpty() || hasEmptyZone(zoneIds)) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitMultiZoneSnap: empty windowId or zone id" << zoneIds;
         return;
     }
     commitSnapImpl(windowId, zoneIds, screenId, intent, virtualDesktop);
@@ -242,15 +291,12 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
 
     auto* mgr = m_windowTracker->screenManager();
 
-    // Resolve and remember per-entry screenId in a single pass so the geometry
-    // payload below can carry it to the compositor. Without this, the wire
-    // entry is built from entry.targetGeometry alone and the compositor must
-    // re-derive the screen via geometry.center() against its (possibly stale)
-    // m_virtualScreenDefs — which races with VS swap/rotate and produces
-    // spurious cross-VS unsnap events.
-    QVector<QString> resolvedScreens;
-    resolvedScreens.reserve(entries.size());
-
+    // Each geometry entry carries the screen its commit resolved, so the
+    // compositor never re-derives it from geometry.center() against its
+    // (possibly stale) m_virtualScreenDefs, which races with VS swap/rotate and
+    // produces spurious cross-VS unsnap events. An entry that commits nothing
+    // sends no geometry either (F459).
+    geometries.reserve(entries.size());
     for (const auto& entry : entries) {
         if (entry.targetZoneId == PhosphorEngine::RestoreSentinel) {
             // uncommitSnap already dereferences m_windowTracker unconditionally
@@ -267,7 +313,16 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
                 restoreScreen = mgr->effectiveScreenAt(entry.targetGeometry.center());
             }
             m_windowTracker->clearFreeGeometry(entry.windowId, restoreScreen);
-            resolvedScreens.append(QString());
+            // Applied with an empty screen: the window returns to free
+            // floating, so no tracked-screen seeding should override the
+            // compositor's geometry-based resolution for it.
+            geometries.append(
+                PhosphorProtocol::WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry, QString()));
+            continue;
+        }
+        if (entry.windowId.isEmpty() || entry.targetZoneId.isEmpty() || hasEmptyZone(entry.targetZoneIds)) {
+            qCWarning(PhosphorSnapEngine::lcSnapEngine)
+                << "applyBatchAssignments: skipping an entry with an empty zone for" << entry.windowId;
             continue;
         }
 
@@ -290,40 +345,18 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
         if (screenId.isEmpty()) {
             // Last resort: a real (non-restore) snap commit MUST carry a
             // non-empty screenId. The compositor treats an empty screenId on a
-            // batch entry as the float/restore marker (only the RestoreSentinel
-            // branch above legitimately emits empty), so a real commit that
-            // resolved to nothing here would be misclassified as a float and
-            // lose its snap border/title-bar tracking. Pick the screen whose
-            // geometry sits nearest the target center (the window's intended
-            // position) — a better heuristic than an arbitrary primary screen
-            // when the center lands on no known screen (off-screen, pre-attach)
-            // and no fallbackScreenResolver was supplied. Falls back to the
-            // primary screen only if there are no screens to measure against.
-            QScreen* nearest = nullptr;
-            qint64 bestDistSq = -1;
-            for (QScreen* screen : QGuiApplication::screens()) {
-                const QRect g = screen->geometry();
-                // Use the half-open far edges (x + width / y + height) rather than
-                // QRect::right()/bottom() (which return x + width - 1): the latter's
-                // off-by-one scores a point sitting exactly on a screen's far edge as
-                // 1px outside it.
-                const qint64 dx = qMax(0, qMax(g.left() - center.x(), center.x() - (g.x() + g.width())));
-                const qint64 dy = qMax(0, qMax(g.top() - center.y(), center.y() - (g.y() + g.height())));
-                const qint64 distSq = dx * dx + dy * dy;
-                if (bestDistSq < 0 || distSq < bestDistSq) {
-                    bestDistSq = distSq;
-                    nearest = screen;
-                }
-            }
-            if (!nearest) {
-                nearest = QGuiApplication::primaryScreen();
-            }
-            if (nearest) {
-                screenId = PhosphorScreens::ScreenIdentity::identifierFor(nearest);
-            }
+            // batch entry as the float/restore marker, so a real commit that
+            // resolved to nothing would be misclassified as a float and lose
+            // its snap border/title-bar tracking. The screen nearest the target
+            // center (off-screen, pre-attach) beats an arbitrary one; with no
+            // screen to measure against the entry is skipped (F899).
+            screenId = nearestScreenTo(mgr, center);
             qCWarning(PhosphorSnapEngine::lcSnapEngine)
                 << "applyBatchAssignments: last-resort nearest-screen heuristic fired for" << entry.windowId
                 << "center=" << center << "resolved screen=" << screenId;
+            if (screenId.isEmpty()) {
+                continue;
+            }
         }
 
         if (entry.targetZoneIds.size() > 1) {
@@ -331,18 +364,8 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
         } else {
             commitSnap(entry.windowId, entry.targetZoneId, screenId, intent, entry.virtualDesktop);
         }
-        resolvedScreens.append(screenId);
-    }
-
-    geometries.reserve(entries.size());
-    for (int i = 0; i < entries.size(); ++i) {
-        const auto& entry = entries[i];
-        // Restore sentinels carry their pre-tile geometry and get applied like
-        // any other entry — but with empty screenId, since the window is being
-        // returned to free-floating state and no tracked-screen seeding should
-        // override the compositor's geometry-based resolution for it.
-        geometries.append(PhosphorProtocol::WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry,
-                                                                          resolvedScreens.value(i)));
+        geometries.append(
+            PhosphorProtocol::WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry, screenId));
     }
     return geometries;
 }

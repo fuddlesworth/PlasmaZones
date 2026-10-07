@@ -25,7 +25,9 @@ PHOSPHORENGINE_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignm
 /// Parse the wire format serializeZoneAssignments produces back into entries —
 /// the two functions are the single serializer/deserializer pair for the batch
 /// resnap payload, sharing the same JsonKeys constants so the sides cannot
-/// drift. Entries missing a windowId or targetZoneId are dropped; a missing
+/// drift. Entries missing a windowId or targetZoneId are dropped, and so is one
+/// whose TargetZoneIds span holds an empty member or does not start with its
+/// targetZoneId; a missing
 /// VirtualDesktop key (or a negative wire value) yields 0, the current-desktop
 /// default. On malformed JSON returns an empty vector and, when @p errorString
 /// is non-null, stores a human-readable parse diagnostic there (empty on

@@ -107,22 +107,26 @@ public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Confirm a single-zone snap from the KWin effect
+     * @brief Confirm a single-zone snap from the KWin effect (snap assist).
+     *        Commits only a live window, a known screen and a zone that
+     *        screen's layout holds.
      */
     void windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId);
 
     /**
-     * @brief Confirm a multi-zone snap from the KWin effect
+     * @brief Confirm a multi-zone snap. No in-tree caller; external contract
+     *        surface, checked like windowSnapped.
      */
     void windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenId);
 
     /**
-     * @brief Confirm an unsnap from the KWin effect
+     * @brief Confirm an unsnap. No in-tree caller; external contract surface.
+     *        A window left with no zone and no float also loses its snap slot.
      */
     void windowUnsnapped(const QString& windowId);
 
     /**
-     * @brief Batch snap confirmations from the KWin effect
+     * @brief The effect's snap-all confirmation
      */
     void windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationList& entries);
 
@@ -356,7 +360,6 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
 
     bool validateWindowId(const QString& windowId, const QString& operation) const;
-    QString resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const;
 
     /**
      * @brief Apply a successful SnapResult: assign outputs, mark auto-snapped,
@@ -422,6 +425,9 @@ private:
     /// resolved, else the window's live screen), or empty when a keyboard
     /// toggle could not act there.
     QString admitBusFloat(const QString& windowId, const QString& screenHint) const;
+    /// Release the record's snap slot once no store holds a zone or the float
+    /// bit for @p windowId (an unsnap confirmation leaves it free).
+    void releaseSnapSlotIfFree(const QString& windowId);
 
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;

@@ -14,23 +14,23 @@ SPDX-License-Identifier: GPL-3.0-or-later
              ═══════════════════════════════════════════════════════════════════════════ -->
 
         <method name="windowSnapped">
-            <annotation name="org.gtk.GDBus.DocString" value="Confirm a single-zone snap from the compositor effect."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Confirm a single-zone snap. Refused for a window that is gone, an unknown screen, or a zone that screen's layout lacks."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="zoneId" type="s" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
         </method>
         <method name="windowSnappedMultiZone">
-            <annotation name="org.gtk.GDBus.DocString" value="Confirm a multi-zone (zone-span) snap from the compositor effect."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Confirm a multi-zone (zone-span) snap, checked like windowSnapped for every zone."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="zoneIds" type="as" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
         </method>
         <method name="windowUnsnapped">
-            <annotation name="org.gtk.GDBus.DocString" value="Confirm an unsnap from the compositor effect."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Confirm an unsnap. A window left with no zone and no float also forgets its snapped zone for the next time it opens."/>
             <arg name="windowId" type="s" direction="in"/>
         </method>
         <method name="windowsSnappedBatch">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch snap confirmations (rotate/resnap/snap-all completion)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Confirm the effect's snap-all placement. An isRestore entry unsnaps the window and drops its float-back on that screen."/>
             <arg name="entries" type="a(sssb)" direction="in">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::SnapConfirmationList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, zoneId, screenId, isRestore)."/>

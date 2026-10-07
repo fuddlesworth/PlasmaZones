@@ -9,6 +9,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <algorithm>
+
 namespace PhosphorEngine {
 namespace GeometryUtils {
 
@@ -89,7 +91,15 @@ QVector<ZoneAssignmentEntry> deserializeZoneAssignments(const QString& json, QSt
         // negative desktop ever reaches the commit path.
         entry.virtualDesktop = qMax(0, obj.value(JsonKeys::VirtualDesktop).toInt());
         entry.restatement = obj.value(JsonKeys::Restatement).toBool();
-        if (!entry.windowId.isEmpty() && !entry.targetZoneId.isEmpty()) {
+        // A span is the primary followed by the rest, as the serializer writes
+        // it. An empty member, or a span another zone leads, would commit a
+        // zone the entry does not name (F459).
+        const bool spanValid = entry.targetZoneIds.isEmpty()
+            || (entry.targetZoneIds.first() == entry.targetZoneId
+                && std::none_of(entry.targetZoneIds.cbegin(), entry.targetZoneIds.cend(), [](const QString& id) {
+                       return id.isEmpty();
+                   }));
+        if (!entry.windowId.isEmpty() && !entry.targetZoneId.isEmpty() && spanValid) {
             entries.append(entry);
         }
     }

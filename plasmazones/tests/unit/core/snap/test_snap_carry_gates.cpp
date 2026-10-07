@@ -8,7 +8,8 @@
  *        layout-switch resnap and the rotation place nothing with snapping
  *        off, in a context the user disabled, on a desktop running no layout,
  *        or for a window snapping leaves alone. And the re-apply puts back
- *        only zones the layout in view still holds (F982).
+ *        only zones the layout in view still holds (F982). A batch or span
+ *        with an empty zone commits nothing (F459).
  */
 
 #include <QSet>
@@ -223,6 +224,32 @@ private Q_SLOTS:
         for (const auto& entry : m_engine->calculateRotation(true, kScreen)) {
             QVERIFY2(entry.windowId != kWindow, "an excluded window is not rotated");
         }
+    }
+
+    // A batch entry whose span holds an empty member commits nothing and sends
+    // no geometry, so the effect is not handed a placement the daemon
+    // never recorded (F459).
+    void batchSendsNoGeometryForARefusedEntry()
+    {
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        PhosphorEngine::ZoneAssignmentEntry entry;
+        entry.windowId = kWindow;
+        entry.targetZoneId = m_zoneIds[0];
+        entry.targetZoneIds = {m_zoneIds[0], QString()};
+        entry.targetGeometry = QRect(0, 0, 100, 100);
+        entry.targetScreenId = kScreen;
+        const PhosphorProtocol::WindowGeometryList geometries = m_engine->applyBatchAssignments({entry});
+        QVERIFY(geometries.isEmpty());
+        QVERIFY(zonesOn(1).isEmpty());
+    }
+
+    void multiZoneCommitRefusesAnEmptyMember()
+    {
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        QSignalSpy changed(m_engine, &SnapEngine::windowSnapStateChanged);
+        m_engine->commitMultiZoneSnap(kWindow, {m_zoneIds[0], QString()}, kScreen);
+        QCOMPARE(changed.count(), 0);
+        QVERIFY(zonesOn(1).isEmpty());
     }
 
 private:
