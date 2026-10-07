@@ -809,7 +809,7 @@ public:
     void uncommitSnap(const QString& windowId);
 
     /// Record a window's live frame as its float-back, ahead of a user snap the
-    /// DAEMON drives (keys, snap-all, the float toggle, the D-Bus snap), the free
+    /// DAEMON drives (keys, snap-all, every user unfloat, the D-Bus snap), the free
     /// frame's last chance before the commit makes the effect's capture refused.
     /// Filed under the screen the frame is on, which a cross-screen snap is
     /// leaving; @p screenId when no screen manager can place it. Refuses a

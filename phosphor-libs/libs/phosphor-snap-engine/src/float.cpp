@@ -204,6 +204,12 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId,
     // the fallback-zone tier — a window that was not snapped at minimize time
     // must come back floating, not freshly snapped.
     const bool suspension = cause == UnfloatCause::Suspension;
+    // The frame a user unfloat leaves is the next float's float-back, from
+    // Meta+F and the D-Bus float calls alike (F52). A suspension's frame is
+    // the hidden rect, which the helper refuses anyway.
+    if (!suspension) {
+        recordFreeFrameBeforeUserSnap(windowId, screenId);
+    }
 
     // Highest-priority un-float target: a matched SnapToZone rule. Toggling a
     // window out of float lands it in the rule's zones, not a stale pre-float

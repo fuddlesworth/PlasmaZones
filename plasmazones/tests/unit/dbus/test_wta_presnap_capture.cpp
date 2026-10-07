@@ -128,6 +128,32 @@ private Q_SLOTS:
         QCOMPARE(f.floatBack(w, kLeft), kFree);
     }
 
+    // Every user unfloat records the frame it leaves, from the D-Bus float
+    // calls as much as from Meta+F, so the next float returns there (F52).
+    void dbusUnfloatsRecordTheFreeFrame_data()
+    {
+        QTest::addColumn<int>("call");
+        QTest::newRow("toggleFloatForWindow") << 0;
+        QTest::newRow("setWindowFloat") << 1;
+        QTest::newRow("setWindowFloatingForScreen") << 2;
+    }
+    void dbusUnfloatsRecordTheFreeFrame()
+    {
+        QFETCH(int, call);
+        PresnapFixture f;
+        const QString w = f.registerWindow(QStringLiteral("unfloat-1"));
+        f.floatingAt(w, kFree);
+        if (call == 0) {
+            f.adaptor->toggleFloatForWindow(w, kLeft);
+        } else if (call == 1) {
+            f.snap->setWindowFloat(w, false, kLeft);
+        } else {
+            f.wta->setWindowFloatingForScreen(w, kLeft, false);
+        }
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+        QCOMPARE(f.floatBack(w, kLeft), kFree);
+    }
+
     // A window in no zone that snap does not hold floating (a screen change
     // unsnapped it) stands on a free frame too (F78).
     void aFreeWindowThatIsNotFloatingRecordsItsFrame()

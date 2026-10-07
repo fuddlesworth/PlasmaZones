@@ -767,10 +767,6 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
         return;
     }
 
-    // The free frame an unfloat leaves, so the next float returns to it. A
-    // window in a zone is refused at the write point (its frame is the zone).
-    recordFreeFrameBeforeUserSnap(windowId, screenId);
-
     // Dispatch to the IPlacementEngine toggle path (SnapEngine::toggleWindowFloat
     // lives in src/float.cpp). No need to route through WTA —
     // the router already ensured this screen is snap-mode.
