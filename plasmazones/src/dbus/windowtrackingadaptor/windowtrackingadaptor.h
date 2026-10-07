@@ -1446,10 +1446,10 @@ private Q_SLOTS:
      * destination context, relinquishes the window from the source engine
      * (handoffRelease + source reflow for an autotile source), and hands it to
      * the target engine (handoffReceive): autotile inserts it per the
-     * insertion-order setting; snap snaps it into the entry zone (monitor
-     * crossing) or the equivalent zone (snap→snap desktop crossing). For a
-     * cross-desktop crossing it then asks the compositor to move the real window
-     * to @p targetDesktop.
+     * insertion-order setting; snap snaps it into the entry zone of the layout
+     * it lands on. A cross-desktop crossing then asks the compositor to move the
+     * real window to @p targetDesktop, where a tiling engine places it once
+     * that desktop is shown.
      */
     void handleCrossModeMove(const QString& windowId, const QString& targetScreenId, int targetDesktop,
                              const QString& direction);

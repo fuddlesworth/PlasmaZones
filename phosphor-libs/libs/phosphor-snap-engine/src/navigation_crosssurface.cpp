@@ -83,6 +83,14 @@ bool SnapEngine::tryCrossModeOutput(const QString& windowId, const QString& dire
     } else {
         Q_EMIT crossModeMoveRequested(windowId, neighbour, 0, direction);
     }
+    // A refused receive re-homes the window into this screen's store, snapped
+    // again, and the OSD says the move failed (F305).
+    const SnapState* const home = m_states.stateForKey(currentKeyForScreen(screenId));
+    if (home && home->isWindowSnapped(canonicalWindowId(windowId))) {
+        Q_EMIT navigationFeedback(false, swap ? QStringLiteral("swap") : QStringLiteral("move"),
+                                  QStringLiteral("swap_failed"), QString(), QString(), screenId);
+        return true;
+    }
     // Same success OSD as the cross-desktop autotile handoff in
     // tryCrossDesktopMove: the daemon's cross-mode handler relocates the
     // window but emits no feedback itself, so without this a successful
@@ -171,6 +179,11 @@ QStringList SnapEngine::windowsInZoneInView(const QString& zoneId, const QString
 
 QString SnapEngine::entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const
 {
+    return entryZoneForCrossing(direction, neighbourScreen, 0);
+}
+
+QString SnapEngine::entryZoneForCrossing(const QString& direction, const QString& neighbourScreen, int desktop) const
+{
     if (!m_zoneAdjacencyResolver) {
         return {};
     }
@@ -180,7 +193,7 @@ QString SnapEngine::entryZoneForCrossing(const QString& direction, const QString
     if (opposite.isEmpty()) {
         return {};
     }
-    return m_zoneAdjacencyResolver->getFirstZoneInDirection(opposite, neighbourScreen);
+    return m_zoneAdjacencyResolver->getFirstZoneInDirectionOnDesktop(opposite, neighbourScreen, desktop);
 }
 
 void SnapEngine::moveUnsnapped(const QString& windowId, const QString& fromScreen, const QString& toScreen,

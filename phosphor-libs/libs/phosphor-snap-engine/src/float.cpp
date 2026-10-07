@@ -633,6 +633,19 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     if (ctx.toDesktop > 0) {
         arrivalKey.desktop = ctx.toDesktop;
     }
+    // A window arriving on a desktop where it already holds zones keeps them
+    // (F611). Read before the migrate, which can move another context's data
+    // into the arrival key.
+    QStringList landing = ctx.sourceZoneIds;
+    if (ctx.toDesktop > 0) {
+        const QString canonical = canonicalWindowId(ctx.windowId);
+        const SnapState* const arrival = m_states.stateForKey(arrivalKey);
+        if (arrival && holdsWindowInState(canonical, arrival)) {
+            if (const QStringList kept = arrival->zonesForWindow(canonical); !kept.isEmpty()) {
+                landing = kept;
+            }
+        }
+    }
     migrateWindowToKey(ctx.windowId, arrivalKey);
     // The migrate only reaches a store the window is a member of. A home kept
     // where it is not (a tiling engine took it and the snap release kept the
@@ -645,75 +658,39 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
         }
     }
 
-    if (!ctx.sourceZoneIds.isEmpty()) {
-        QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);
+    if (!landing.isEmpty()) {
+        const QRect zoneGeo = m_windowTracker->resolveZoneGeometry(landing, ctx.toScreenId);
         if (zoneGeo.isValid()) {
+            // A desktop not in view is committed pinned to it, so the arrival
+            // is stated snapped to the effect like any other commit (F534's
+            // handoff sibling); a commit clears any float bit it carries.
             const int curDesktop = currentVirtualDesktopForScreen(ctx.toScreenId);
-            if (ctx.toDesktop > 0 && ctx.toDesktop != curDesktop) {
-                // Cross-DESKTOP handoff: the target desktop isn't the visible one,
-                // so assign the snap slot directly on SnapState for that desktop
-                // (commitSnap would stamp the current desktop) and refresh the
-                // placement-store record. This is the same path tryCrossDesktopMove
-                // uses, and it is safe to bypass commitSnap's WTS orchestration
-                // here: this SnapState is a store the WTS facade queries through the
-                // snap-state resolver (Daemon wires setSnapStateResolver()), so zoneForWindow et al.
-                // see this assignment; the snap chrome is applied below via the
-                // non-empty-zoneId applyGeometryRequested (→ markWindowSnapped); and
-                // persistence flows through the placement-store record. Every
-                // caller that sets toDesktop (the cross-desktop move paths)
-                // passes wasFloating==false, so there is no floating flag to
-                // clear in THIS branch; other handoffReceive callers land in
-                // the tail below.
-                // The cross-desktop callers' wasFloating==false invariant,
-                // enforced rather than comment-only: debug asserts, release
-                // clears the flag so a violating caller cannot leave a
-                // floating bit dangling behind the direct slot assignment.
-                Q_ASSERT(!ctx.wasFloating);
-                if (Q_UNLIKELY(ctx.wasFloating)) {
-                    qCWarning(PhosphorSnapEngine::lcSnapEngine)
-                        << "handoffReceive: cross-desktop handoff with wasFloating=true for" << ctx.windowId
-                        << "— clearing the float before the slot assignment";
-                    // Own store first, same ownership rule as every float
-                    // write in this file: the routed WTS clear can no-op or
-                    // misroute mid-transition.
-                    setFloating(ctx.windowId, false);
-                    m_windowTracker->setWindowFloating(ctx.windowId, false);
-                }
-                // Pinned to the destination desktop's store (see
-                // stateForWindowOnScreen): the handoff names it.
-                SnapState* targetState = stateForWindowOnScreen(ctx.windowId, ctx.toScreenId, ctx.toDesktop);
-                if (ctx.sourceZoneIds.size() > 1) {
-                    targetState->assignWindowToZones(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, ctx.toDesktop);
-                } else {
-                    targetState->assignWindowToZone(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId,
-                                                    ctx.toDesktop);
-                }
-                // Gate at the DESTINATION desktop: the daemon routed this
-                // handoff here because (screen, toDesktop) is snapping, but
-                // the screen's visible desktop may be a tiling one, and the
-                // plain capture's current-desktop gate then refused — so the
-                // durable record silently kept the OLD desktop and the next
-                // login restored the window there.
-                if (auto placement = capturePlacementAtDesktop(ctx.windowId, ctx.toDesktop)) {
-                    placement->virtualDesktop = ctx.toDesktop;
+            const int pinned = (ctx.toDesktop > 0 && ctx.toDesktop != curDesktop) ? ctx.toDesktop : 0;
+            if (landing.size() > 1) {
+                commitMultiZoneSnap(ctx.windowId, landing, ctx.toScreenId, SnapIntent::UserInitiated, pinned);
+            } else {
+                commitSnap(ctx.windowId, landing.first(), ctx.toScreenId, SnapIntent::UserInitiated, pinned);
+            }
+            // Gate at the DESTINATION desktop: the daemon routed this handoff
+            // here because (screen, toDesktop) is snapping, but the screen's
+            // visible desktop may be a tiling one, and the plain capture's
+            // current-desktop gate then refused, so the durable record kept
+            // the OLD desktop and the next login restored the window there.
+            if (pinned > 0) {
+                if (auto placement = capturePlacementAtDesktop(ctx.windowId, pinned)) {
+                    placement->virtualDesktop = pinned;
                     m_windowTracker->placementStore().record(std::move(*placement));
                 } else {
-                    // Mirror tryCrossDesktopMove: surface the SnapState↔placement
-                    // divergence rather than letting it hide.
                     qCDebug(PhosphorSnapEngine::lcSnapEngine)
                         << "handoffReceive: capturePlacement miss for" << ctx.windowId
-                        << "— placement-store desktop not updated to" << ctx.toDesktop;
+                        << "— placement-store desktop not updated to" << pinned;
                 }
-            } else if (ctx.sourceZoneIds.size() > 1) {
-                commitMultiZoneSnap(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, SnapIntent::UserInitiated);
-            } else {
-                commitSnap(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId, SnapIntent::UserInitiated);
             }
             // Non-empty zoneId so the effect routes this cross-engine snap to
             // markWindowSnapped (snap chrome), not clearWindowSnapped — see the
             // matching note in unfloatToZone().
             Q_EMIT applyGeometryRequested(ctx.windowId, zoneGeo.x(), zoneGeo.y(), zoneGeo.width(), zoneGeo.height(),
-                                          ctx.sourceZoneIds.first(), ctx.toScreenId, false);
+                                          landing.first(), ctx.toScreenId, false);
             return;
         }
     }

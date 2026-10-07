@@ -13,4 +13,11 @@ QString IZoneAdjacencyResolver::getAdjacentZoneOutside(const QStringList& zoneId
     return zoneIds.isEmpty() ? QString() : getAdjacentZone(zoneIds.first(), direction, screenId);
 }
 
+QString IZoneAdjacencyResolver::getFirstZoneInDirectionOnDesktop(const QString& direction, const QString& screenId,
+                                                                 int desktop) const
+{
+    Q_UNUSED(desktop)
+    return getFirstZoneInDirection(direction, screenId);
+}
+
 } // namespace PhosphorSnapEngine

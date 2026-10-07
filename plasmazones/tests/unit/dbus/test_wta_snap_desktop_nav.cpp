@@ -324,6 +324,106 @@ private Q_SLOTS:
                  (QStringList{other->zones().at(1)->id().toString()}));
     }
 
+    // ── L14.11: moves to a desktop running another mode ──
+
+    // A move onto a scrolling desktop is left to the scroll engine's arrival
+    // once that desktop is shown: no receive now, the desktop move, and snap
+    // lets the window go (F305).
+    void moveToAScrollingDesktopIsAReactiveArrival()
+    {
+        StubPlacementEngine scroll;
+        scroll.id = QStringLiteral("scrolling");
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        f.wta->setEngines(f.snap.get(), &f.tiling, &scroll);
+        f.setMode(kLeft, 2, PhosphorZones::AssignmentEntry::Scrolling);
+        const QString w = f.live(QStringLiteral("scr-1"), QRect(700, 100, 400, 300));
+        f.snapOn(w, {f.zone(1)}, kLeft, 1);
+        QSignalSpy moved(f.wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        Q_EMIT f.snap->crossModeMoveRequested(w, kLeft, 2, QStringLiteral("right"));
+        QVERIFY(scroll.received.isEmpty());
+        QCOMPARE(moved.count(), 1);
+        QCOMPARE(moved.first().at(1).toInt(), 2);
+        QVERIFY(!f.snap->isWindowTracked(w));
+        const auto record = f.wta->service()->placementStore().peekExact(w);
+        QVERIFY(!record || record->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).zoneIds.isEmpty());
+        f.wta->setEngines(f.snap.get(), &f.tiling, nullptr);
+    }
+
+    // A window moved from a tiling desktop onto a snapping one enters that
+    // desktop's own layout (F726).
+    void autotileToSnapDesktopEntersThatDesktopsLayout()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        PhosphorZones::Layout* other = secondLayout(f);
+        f.setMode(kLeft, 1, PhosphorZones::AssignmentEntry::Autotile);
+        const QString w = f.live(QStringLiteral("at-1"));
+        f.tiling.heldScreen.insert(w, kLeft);
+        Q_EMIT f.tiling.crossModeMoveRequested(w, kLeft, 2, QStringLiteral("right"));
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 2)->zonesForWindow(w),
+                 (QStringList{other->zones().at(0)->id().toString()}));
+    }
+
+    // Arriving on a desktop where it already holds a zone, it keeps that zone
+    // and is stated snapped there (F611).
+    void snapArrivalKeepsTheDestinationsOwnZone()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        PhosphorZones::Layout* other = secondLayout(f);
+        const QString kept = other->zones().at(2)->id().toString();
+        f.setMode(kLeft, 1, PhosphorZones::AssignmentEntry::Autotile);
+        const QString w = f.live(QStringLiteral("at-2"));
+        f.snap->stateForWindowOnScreen(w, kLeft, 2)->assignWindowToZone(w, kept, kLeft, 2);
+        f.tiling.heldScreen.insert(w, kLeft);
+        QStringList stated;
+        QObject::connect(f.snap.get(), &SnapEngine::windowSnapStateChanged, f.snap.get(),
+                         [&](const QString&, const PhosphorProtocol::WindowStateEntry& entry) {
+                             stated.append(entry.changeType + QLatin1Char(':') + entry.zoneId);
+                         });
+        Q_EMIT f.tiling.crossModeMoveRequested(w, kLeft, 2, QStringLiteral("right"));
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 2)->zonesForWindow(w), (QStringList{kept}));
+        QCOMPARE(stated, (QStringList{QStringLiteral("snapped:") + kept}));
+    }
+
+    // A tiling monitor that refuses the window leaves it in its zone, and the
+    // OSD says the move failed (F305).
+    void refusedMonitorHandoffSaysTheMoveFailed()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        f.setMode(kRight, 1, PhosphorZones::AssignmentEntry::Autotile);
+        f.tiling.refuseReceive = true;
+        f.cross.outputs.insert(kLeft + QStringLiteral("|right"), kRight);
+        const QString w = f.live(QStringLiteral("ref-1"), QRect(1300, 100, 400, 300));
+        f.snapOn(w, {f.zone(2)}, kLeft, 1);
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.tiling.received.size(), 1);
+        QVERIFY(!feedback.isEmpty());
+        QCOMPARE(feedback.last().at(0).toBool(), false);
+        QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("swap_failed"));
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 1)->zonesForWindow(w), (QStringList{f.zone(2)}));
+    }
+
+    // The adjacency resolver answers the edge zone of a named desktop's layout.
+    void firstZoneOnDesktopReadsThatDesktopsLayout()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        twoDesktops(f);
+        PhosphorZones::Layout* other = secondLayout(f);
+        QCOMPARE(f.zda->getFirstZoneInDirectionOnDesktop(QStringLiteral("left"), kLeft, 2),
+                 other->zones().at(0)->id().toString());
+        QCOMPARE(f.zda->getFirstZoneInDirectionOnDesktop(QStringLiteral("right"), kLeft, 2),
+                 other->zones().at(2)->id().toString());
+        QCOMPARE(f.zda->getFirstZoneInDirectionOnDesktop(QStringLiteral("left"), kLeft, 0), f.zone(0));
+    }
+
 private:
     /// A second three-zone layout, run by DP-1 on desktop 2.
     static PhosphorZones::Layout* secondLayout(SnapNavFixture& f)

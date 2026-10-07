@@ -74,7 +74,6 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
     const QString activity = m_layoutManager->currentActivity();
     const PhosphorZones::AssignmentEntry::Mode targetMode =
         m_layoutManager->modeForScreen(targetScreenId, effectiveDesktop, activity);
-    const bool targetIsAutotile = targetMode == PhosphorZones::AssignmentEntry::Autotile;
     PhosphorEngine::PlacementEngineBase* targetEngine = engineForMode(targetMode);
     if (!targetEngine || targetEngine == sourceEngine) {
         return; // target engine unavailable, or not actually cross-mode
@@ -91,27 +90,12 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
     const QString sourceScreen = sourceEngine->screenForTrackedWindow(windowId);
 
     // For a SNAP target, resolve the landing zone BEFORE relinquishing the
-    // source (snap→snap cross-desktop maps the source's slot; everything else
-    // enters the neighbour's edge zone). The branch also runs for a SCROLLING
-    // target — the SnapEngine cast fails there and the zone list stays empty,
-    // which is what a strip target needs (its landing is insertIndex, below).
+    // source: the edge zone facing the way the window came, on the layout of
+    // the desktop it lands on (the source is never snap here, F726). A tiling
+    // target needs no zone (a strip's landing is insertIndex, below).
     QStringList landingZoneIds;
-    if (!targetIsAutotile) {
-        auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine);
-        QString zoneId;
-        if (snapTarget) {
-            if (targetDesktop > 0) {
-                if (auto* snapSource = qobject_cast<PhosphorSnapEngine::SnapEngine*>(sourceEngine)) {
-                    const QString srcZone = snapSource->zoneForWindow(windowId);
-                    if (!srcZone.isEmpty()) {
-                        zoneId = snapTarget->resolveCrossDesktopZone(srcZone, targetScreenId, targetDesktop).first;
-                    }
-                }
-            }
-            if (zoneId.isEmpty()) {
-                zoneId = snapTarget->entryZoneForCrossing(direction, targetScreenId);
-            }
-        }
+    if (auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine)) {
+        const QString zoneId = snapTarget->entryZoneForCrossing(direction, targetScreenId, targetDesktop);
         if (!zoneId.isEmpty()) {
             landingZoneIds = QStringList{zoneId};
         }
@@ -127,18 +111,17 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
     // receiver seeds from ctx.minSize).
     const QSize windowMinSize = sourceEngine->windowMinimumSize(windowId);
 
-    // Place on the target. A cross-DESKTOP move onto an AUTOTILE desktop uses the
-    // existing reactive path: the window changes desktops below and the autotile
-    // effect catch-scan tiles it (honouring insertion-order) when that desktop
-    // becomes current — handoffReceive would mis-place it on the *current*
-    // desktop's state. Every other case places immediately:
+    // Place on the target. A cross-DESKTOP move onto a TILING desktop is a
+    // reactive arrival: the window changes desktops below and that engine's
+    // desktop-return catch-scan places it when the desktop is shown, as for
+    // KWin's own desktop move. A receive now would land it in the state of the
+    // desktop in view, and the scroll engine refuses a screen whose current
+    // desktop is not scrolling, so the move did nothing (F305). The edge-aware
+    // insertIndex does not apply to it. Every other case places immediately:
     //   - monitor crossing (current desktop): handoffReceive tiles / snaps it now;
     //   - cross-desktop onto a SNAP desktop: snap handoffReceive honours toDesktop
-    //     (assigns the zone on the target desktop + off-desktop geometry);
-    //   - cross-desktop onto a SCROLLING desktop: scroll handoffReceive honours
-    //     toDesktop too (places into that desktop's strip) — the reactive
-    //     deferral is autotile-only.
-    const bool reactiveAutotileDesktopArrival = targetIsAutotile && targetDesktop > 0;
+    //     (assigns the zone on the target desktop + off-desktop geometry).
+    const bool reactiveDesktopArrival = targetMode != PhosphorZones::AssignmentEntry::Snapping && targetDesktop > 0;
     // A window moved to a tiling engine leaves its own fullscreen first: the
     // tile batch that places it would bail on a fullscreen surface, and the
     // reactive desktop arrival places nothing at all (F526, F551). A snap
@@ -147,7 +130,7 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
         Q_EMIT fullscreenHandBackRequested(windowId);
     }
     bool placedOnTarget = false;
-    if (!reactiveAutotileDesktopArrival) {
+    if (!reactiveDesktopArrival) {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = targetScreenId;
@@ -204,8 +187,8 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
             announceOutputMove(windowId, targetScreenId, sourceScreen, targetEngine);
         }
     } else {
-        // Reactive autotile desktop arrival: no receive here (the effect
-        // catch-scan tiles it on the target desktop), so just release. The
+        // Reactive desktop arrival: no receive here (the target engine's
+        // catch-scan places it on the target desktop), so just release. The
         // desktop move below must still fire — the catch-scan only runs
         // once the window actually lands on the target desktop. A snap source
         // releases its record slot too: the window leaves the desktop it was

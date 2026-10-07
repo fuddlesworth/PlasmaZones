@@ -45,6 +45,7 @@ public:
     QList<QPair<QString, QString>> releasedOffScreen; ///< (windowId, keepScreenId) per call
     QStringList handoffReleased; ///< windowIds handed off
     QList<HandoffContext> received; ///< handoffReceive contexts, in order
+    bool refuseReceive = false; ///< handoffReceive records the context but adopts nothing
 
     QString engineId() const override
     {
@@ -93,7 +94,9 @@ public:
     void handoffReceive(const HandoffContext& ctx) override
     {
         received.append(ctx);
-        heldScreen.insert(ctx.windowId, ctx.toScreenId);
+        if (!refuseReceive) {
+            heldScreen.insert(ctx.windowId, ctx.toScreenId);
+        }
     }
 
     bool isActiveOnScreen(const QString& screenId) const override

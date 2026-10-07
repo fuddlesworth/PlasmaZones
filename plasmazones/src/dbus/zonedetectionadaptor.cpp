@@ -334,8 +334,31 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
     }
 
     // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
-    QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
-    PhosphorZones::Layout* layout = resolveActiveLayoutForScreen(resolvedId);
+    const QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
+    return firstZoneOfLayout(resolveActiveLayoutForScreen(resolvedId), direction, resolvedId);
+}
+
+QString ZoneDetectionAdaptor::getFirstZoneInDirectionOnDesktop(const QString& direction, const QString& screenId,
+                                                               int desktop) const
+{
+    if (desktop <= 0) {
+        return getFirstZoneInDirection(direction, screenId);
+    }
+    if (!ensureDeps("getFirstZoneInDirectionOnDesktop")
+        || !DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get first zone"))) {
+        return QString();
+    }
+    const QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
+    const QString activity = m_layoutManager->currentActivity();
+    if (m_layoutManager->isContextActiveLayoutSuppressed(resolvedId, desktop, activity)) {
+        return QString();
+    }
+    return firstZoneOfLayout(m_layoutManager->layoutForScreen(resolvedId, desktop, activity), direction, resolvedId);
+}
+
+QString ZoneDetectionAdaptor::firstZoneOfLayout(PhosphorZones::Layout* layout, const QString& direction,
+                                                const QString& resolvedId) const
+{
     if (!layout || layout->zones().isEmpty()) {
         return QString();
     }

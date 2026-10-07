@@ -65,6 +65,15 @@ public:
     virtual QString getAdjacentZoneOutside(const QStringList& zoneIds, const QString& direction,
                                            const QString& screenId) const;
 
+    /**
+     * @brief getFirstZoneInDirection on @p desktop's layout (<= 0: the desktop
+     *        the screen shows).
+     *
+     * Appended. The default ignores @p desktop.
+     */
+    virtual QString getFirstZoneInDirectionOnDesktop(const QString& direction, const QString& screenId,
+                                                     int desktop) const;
+
     IZoneAdjacencyResolver(const IZoneAdjacencyResolver&) = delete;
     IZoneAdjacencyResolver& operator=(const IZoneAdjacencyResolver&) = delete;
 };

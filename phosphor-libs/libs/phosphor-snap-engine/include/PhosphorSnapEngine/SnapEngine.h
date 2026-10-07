@@ -128,12 +128,11 @@ public:
     std::pair<QString, QRect> resolveCrossDesktopZone(const QString& currentZoneId, const QString& screenId,
                                                       int targetDesktop) const;
 
-    /// The zone a window ENTERS when it crosses onto @p neighbourScreen moving in
-    /// @p direction: the first zone on the edge facing back toward the source
-    /// (crossing "right" enters the neighbour's left-edge zone). Empty when no
-    /// zone-adjacency resolver is wired or the neighbour has no such zone. Used by
-    /// the daemon cross-mode handoff to place a window arriving on a snap monitor.
+    /// The zone a window ENTERS crossing onto @p neighbourScreen in @p direction: the edge zone facing back
+    /// toward the source (crossing "right" enters the left-edge zone), on @p desktop's layout (<= 0: the one
+    /// shown). Empty with no adjacency resolver or no such zone. The cross-mode handoff lands a window there.
     QString entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const;
+    QString entryZoneForCrossing(const QString& direction, const QString& neighbourScreen, int desktop) const;
 
     /// The window snapped to @p zoneId on @p screenId in the context the screen
     /// shows, or empty if the zone is unoccupied there. Used by the cross-mode
