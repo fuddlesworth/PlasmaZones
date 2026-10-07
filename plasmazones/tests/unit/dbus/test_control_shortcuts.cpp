@@ -3,14 +3,20 @@
 
 /**
  * @file test_control_shortcuts.cpp
- * @brief ControlAdaptor's shortcut catalog read (controladaptor_shortcuts.cpp).
+ * @brief ControlAdaptor's shortcut catalog read (controladaptor_shortcuts.cpp)
+ *        and its support report's shutdown answer.
  *
  *  1. getShortcutsJson answers "[]" without a provider, and after detach().
  *  2. With a provider it serialises every row's keys as a JSON array, the
  *     triggers as a string array, in the provider's order.
  *  3. notifyShortcutsChanged emits shortcutsChanged once per call.
+ *  4. generateSupportReport after detach() answers the Shutdown error over
+ *     the bus (F847).
  */
 
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -18,6 +24,8 @@
 #include <QTest>
 
 #include "dbus/controladaptor.h"
+
+#include <PhosphorProtocol/ServiceConstants.h>
 
 using namespace PlasmaZones;
 
@@ -101,6 +109,35 @@ private Q_SLOTS:
         control->notifyShortcutsChanged();
         control->notifyShortcutsChanged();
         QCOMPARE(spy.count(), 2);
+    }
+
+    // The caller of a report the daemon can no longer build gets a typed
+    // error, not a hang until its timeout.
+    void supportReportAfterDetachRepliesShutdown()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        QVERIFY(bus.isConnected());
+        QObject host;
+        auto* control =
+            new ControlAdaptor(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &host);
+        control->detach();
+        const QString path = QStringLiteral("/TestControlReport");
+        QVERIFY(bus.registerObject(path, &host));
+
+        QDBusConnection peer =
+            QDBusConnection::connectToBus(QDBusConnection::SessionBus, QStringLiteral("support-report-peer"));
+        QVERIFY(peer.isConnected());
+        QDBusMessage call =
+            QDBusMessage::createMethodCall(bus.baseService(), path, QStringLiteral("org.plasmazones.Control"),
+                                           QStringLiteral("generateSupportReport"));
+        call << 1;
+        QDBusPendingCall pending = peer.asyncCall(call, 5000);
+        QTRY_VERIFY(pending.isFinished());
+        QVERIFY(pending.isError());
+        QCOMPARE(pending.error().name(), QString(PhosphorProtocol::Service::Error::Shutdown));
+
+        bus.unregisterObject(path);
+        QDBusConnection::disconnectFromBus(QStringLiteral("support-report-peer"));
     }
 };
 

@@ -23,6 +23,8 @@
 #include <QJsonArray>
 #include <QtConcurrent>
 
+#include <memory>
+
 namespace PlasmaZones {
 
 ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor,
@@ -197,40 +199,36 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
         snapshot.bridgeCapabilities = m_compositorBridge->bridgeCapabilities();
     }
 
-    // Run blocking work (file I/O, journalctl) off the main thread.
-    // No parent — lifetime managed explicitly by the two signal handlers below.
-    // Parenting to `this` would cause Qt to auto-delete the watcher during ~QObject,
-    // racing with our destroyed handler's deleteLater.
+    // Run blocking work (file I/O, journalctl) off the main thread. No parent:
+    // the watcher has to outlive the adaptor while the thread runs, and then
+    // deletes itself.
     auto* watcher = new QFutureWatcher<QString>();
     m_reportWatcher = watcher;
-    // Use QPointer to detect adaptor destruction inside the finished handler,
-    // preventing writes to dangling `this` if the adaptor is destroyed while
-    // the future is still running but finishes after destruction starts.
-    QPointer<ControlAdaptor> guard(this);
-    connect(watcher, &QFutureWatcher<QString>::finished, this, [guard, message, watcher]() {
-        if (guard) {
-            QDBusConnection::sessionBus().send(message.createReply(watcher->result()));
-            guard->m_reportWatcher = nullptr;
-        }
+    // Set once the caller has its answer, so an adaptor destroyed between the
+    // reply and the watcher's deferred delete sends no second, Shutdown,
+    // reply (F181).
+    auto replied = std::make_shared<bool>(false);
+    // The context is `this`, so Qt drops this connection when the adaptor
+    // goes and the handler never runs against a dead adaptor.
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, message, watcher, replied]() {
+        QDBusConnection::sessionBus().send(message.createReply(watcher->result()));
+        *replied = true;
+        m_reportWatcher = nullptr;
         watcher->deleteLater();
     });
-    // If the adaptor is destroyed while the future is running, send an error reply
-    // so the D-Bus caller doesn't hang until timeout. Disconnect the finished signal
-    // first to prevent a double-reply race. Note: cancel() is a no-op on
-    // QtConcurrent::run futures but documents the intent.
-    // Use QPointer to guard the watcher — if the finished handler already ran and
-    // called deleteLater, the event loop may have destroyed the watcher before this
-    // destroyed handler fires, so we must check before touching it.
-    QPointer<QFutureWatcher<QString>> weakWatcher(watcher);
-    connect(this, &QObject::destroyed, watcher, [message, weakWatcher]() {
-        if (!weakWatcher)
-            return; // Already cleaned up by the finished handler
-        QObject::disconnect(weakWatcher, &QFutureWatcher<QString>::finished, nullptr, nullptr);
-        weakWatcher->cancel();
+    // The adaptor destroyed while the thread runs: answer Shutdown so the
+    // caller does not wait out its timeout. The context is the watcher, so a
+    // deleted watcher takes this connection with it. The disconnect stops a
+    // finished signal still queued from replying after the error.
+    connect(this, &QObject::destroyed, watcher, [message, watcher, replied]() {
+        if (*replied) {
+            return;
+        }
+        QObject::disconnect(watcher, &QFutureWatcher<QString>::finished, nullptr, nullptr);
         auto error = message.createErrorReply(QString(PhosphorProtocol::Service::Error::Shutdown),
                                               QStringLiteral("Daemon shutting down"));
         QDBusConnection::sessionBus().send(error);
-        weakWatcher->deleteLater();
+        watcher->deleteLater();
     });
     watcher->setFuture(QtConcurrent::run([snapshot = std::move(snapshot), sinceMinutes]() {
         return SupportReport::generateFromSnapshot(snapshot, sinceMinutes);
