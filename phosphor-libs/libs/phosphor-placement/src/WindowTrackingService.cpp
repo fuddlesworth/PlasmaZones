@@ -601,15 +601,34 @@ void WindowTrackingService::downgradeMismatchedManagedSlots(PhosphorEngine::Wind
             || it->state == PhosphorEngine::WindowPlacement::stateTiled()) {
             it->state = PhosphorEngine::WindowPlacement::stateFloating();
             it->zoneIds.clear();
-            // The per-desktop map names that other screen's zones too, and
-            // the store MERGES it on record, so a map left standing would
-            // survive every later capture and be seeded back into THIS
-            // screen's per-desktop stores on restore. Same reasoning as
-            // WindowPlacementStore::releaseEngineSlot.
+            // The per-desktop map names that other screen's zones too. This
+            // clears only the copy: record() merges the stored map back in, so
+            // the caller forgets mismatchedDesktopZones() after recording, or
+            // the map would be seeded into THIS screen's stores on restore.
             it->zonesByDesktop.clear();
             it->order = -1;
         }
     }
+}
+
+QList<QPair<QString, int>>
+WindowTrackingService::mismatchedDesktopZones(const PhosphorEngine::WindowPlacement& placement,
+                                              const QString& recordedScreenId, const QString& closeScreenId)
+{
+    QList<QPair<QString, int>> entries;
+    if (recordedScreenId.isEmpty() || PhosphorScreens::ScreenIdentity::screensMatch(recordedScreenId, closeScreenId)) {
+        return entries;
+    }
+    for (auto it = placement.engines.cbegin(); it != placement.engines.cend(); ++it) {
+        if (it->state != PhosphorEngine::WindowPlacement::stateSnapped()
+            && it->state != PhosphorEngine::WindowPlacement::stateTiled()) {
+            continue;
+        }
+        for (auto desktop = it->zonesByDesktop.cbegin(); desktop != it->zonesByDesktop.cend(); ++desktop) {
+            entries.append({it.key(), desktop.key()});
+        }
+    }
+    return entries;
 }
 
 void WindowTrackingService::recordFloatingClose(const QString& windowId, const QString& screenId, const QRect& geometry)
@@ -672,11 +691,13 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     // restores two windows into the sibling's zone and corrupts the per-app
     // FIFO distribution. A window with no record of its own takes the
     // synthesized-floating-slot branch below, which exists for exactly that.
+    QList<QPair<QString, int>> staleDesktopZones;
     if (const auto existing = m_placementStore.peekExact(windowId)) {
         p.virtualDesktop = existing->virtualDesktop;
         p.activity = existing->activity;
         p.kind = existing->kind;
         p.engines = existing->engines;
+        staleDesktopZones = mismatchedDesktopZones(p, existing->screenId, screenId);
         downgradeMismatchedManagedSlots(p, existing->screenId, screenId);
     }
     // Synthesize the OWNING engine's floating slot whenever the record lacks
@@ -696,6 +717,9 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     }
     if (m_placementStore.record(p)) {
         markDirty(DirtyWindowPlacements);
+    }
+    for (const auto& [engineId, desktop] : std::as_const(staleDesktopZones)) {
+        forgetDesktopZones(windowId, engineId, desktop);
     }
     // Close-capture convergence: this orphaned cross-screen close is the freshest
     // authority for the app's float-back, so drop stale pure-float duplicates on

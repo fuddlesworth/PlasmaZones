@@ -214,20 +214,18 @@ public:
     std::optional<PhosphorEngine::WindowPlacement>
     claimPlacementForOpen(const QString& windowId, const QString& openingScreenId, const QString& openingEngineId);
 
-    /**
-     * @brief Downgrade managed slots recorded against a different screen.
-     *
-     * When @p recordedScreenId names a screen that does not match
-     * @p closeScreenId, every snapped/tiled slot in @p placement is flipped to
-     * plain floating with its zone ids and order cleared: a managed slot
-     * references THAT screen's zones / tile order, and restoring it under the
-     * new screen would land the window in another screen's slots. Same-screen
-     * (or unscreened) records pass through untouched. Shared by
-     * recordFloatingClose and the adaptor's minimize preserve so the two
-     * close-shaped writers cannot drift.
-     */
+    /// Downgrade managed slots recorded against a different screen: when @p recordedScreenId does not match
+    /// @p closeScreenId, every snapped/tiled slot in @p placement becomes plain floating with its zone ids, order
+    /// and per-desktop zones cleared, since they name THAT screen's zones and tile order. Same-screen (or
+    /// unscreened) records pass through. Shared by recordFloatingClose and the adaptor's minimize preserve so
+    /// the two close-shaped writers cannot drift.
     static void downgradeMismatchedManagedSlots(PhosphorEngine::WindowPlacement& placement,
                                                 const QString& recordedScreenId, const QString& closeScreenId);
+    /// The (engine id, desktop) entries that downgrade clears from the per-desktop maps, read before it runs:
+    /// record() merges the stored map back in, so a caller forgets these after recording (F282).
+    static QList<QPair<QString, int>> mismatchedDesktopZones(const PhosphorEngine::WindowPlacement& placement,
+                                                             const QString& recordedScreenId,
+                                                             const QString& closeScreenId);
 
     /**
      * @brief Accessor for consumers that need direct access (effect, adaptor).

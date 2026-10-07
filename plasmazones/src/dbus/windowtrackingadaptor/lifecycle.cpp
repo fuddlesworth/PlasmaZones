@@ -116,6 +116,9 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         // re-filed verbatim under the close screen — the shared downgrade
         // (recordFloatingClose's rule) flips them to floating BEFORE the
         // screen stamp below erases the evidence of the mismatch.
+        const QList<QPair<QString, int>> staleDesktopZones =
+            PhosphorPlacement::WindowTrackingService::mismatchedDesktopZones(*preserved, preserved->screenId,
+                                                                             authoritativeScreen);
         PhosphorPlacement::WindowTrackingService::downgradeMismatchedManagedSlots(*preserved, preserved->screenId,
                                                                                   authoritativeScreen);
         preserved->screenId = authoritativeScreen;
@@ -155,6 +158,10 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
             return;
         }
         const bool recorded = m_service->placementStore().record(*preserved);
+        // The record merged the other screen's per-desktop zones back in (F282).
+        for (const auto& [engineId, desktop] : staleDesktopZones) {
+            m_service->forgetDesktopZones(preserved->windowId, engineId, desktop);
+        }
         // Close-path-only prune (this branch requires a non-empty
         // authoritativeScreen above, which only the close path supplies) —
         // live captures must never prune siblings.

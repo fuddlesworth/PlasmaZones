@@ -475,6 +475,55 @@ private Q_SLOTS:
         wta->setWindowRegistry(nullptr);
     }
 
+    void testMinimizedCloseOnAnotherScreenForgetsItsDesktopZones()
+    {
+        // The minimize preserve downgrades a slot recorded on DP-2 when the
+        // window closes on DP-1; the stored record keeps none of DP-2's
+        // per-desktop zones, which the store's merge used to put back (F282).
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        PhosphorEngine::WindowRegistry registry;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+
+        const QString instanceId = QStringLiteral("min-cross-instance");
+        const QString windowId = QStringLiteral("app|min-cross-instance");
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("app");
+        metadata.isMinimized = true;
+        registry.upsert(instanceId, metadata);
+
+        PhosphorEngine::WindowPlacement placement;
+        placement.windowId = windowId;
+        placement.appId = metadata.appId;
+        placement.screenId = QStringLiteral("DP-2");
+        placement.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(140, 100, 1000, 720));
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        slot.zoneIds = QStringList{QUuid::createUuid().toString()};
+        slot.zonesByDesktop.insert(1, slot.zoneIds);
+        slot.zonesByDesktop.insert(2, QStringList{QUuid::createUuid().toString()});
+        placement.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        QVERIFY(wta->service()->placementStore().record(placement));
+
+        wta->captureWindowPlacement(windowId, QStringLiteral("DP-1"));
+
+        const auto stored = wta->service()->placementStore().peekExact(windowId);
+        QVERIFY(stored.has_value());
+        QCOMPARE(stored->screenId, QStringLiteral("DP-1"));
+        const PhosphorEngine::EngineSlot snapSlot = stored->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        QCOMPARE(snapSlot.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QVERIFY(snapSlot.zonesByDesktop.isEmpty());
+
+        wta->setWindowRegistry(nullptr);
+    }
+
     void testMinimizedCloseRebindsChangedAppPrefixWithoutLosingPlacement()
     {
         // A minimized window closing under a MUTATED appId prefix must re-key its

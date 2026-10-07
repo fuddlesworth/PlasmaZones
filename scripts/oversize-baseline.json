@@ -4,7 +4,7 @@
   "files": {
     "phosphor-libs/libs/phosphor-animation/tests/test_surface_animator.cpp": 1295,
     "phosphor-libs/libs/phosphor-engine/include/PhosphorEngine/IPlacementEngine.h": 1322,
-    "phosphor-libs/libs/phosphor-placement/include/PhosphorPlacement/WindowTrackingService.h": 1174,
+    "phosphor-libs/libs/phosphor-placement/include/PhosphorPlacement/WindowTrackingService.h": 1172,
     "phosphor-libs/libs/phosphor-rendering/include/PhosphorRendering/ShaderNodeRhi.h": 1164,
     "phosphor-libs/libs/phosphor-rendering/src/shadernoderhipipeline.cpp": 1176,
     "phosphor-libs/libs/phosphor-scroll-engine/include/PhosphorScrollEngine/ScrollEngine.h": 2000,

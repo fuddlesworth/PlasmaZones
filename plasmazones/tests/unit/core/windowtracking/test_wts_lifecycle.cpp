@@ -709,6 +709,34 @@ private Q_SLOTS:
                  QString(PhosphorEngine::WindowPlacement::stateFloating()));
     }
 
+    void testRecordFloatingClose_crossScreenForgetsStoredDesktopZones()
+    {
+        // A window snapped on DP-2 that closes floating on DP-1: the stored
+        // record keeps none of DP-2's per-desktop zones, which a reopen on
+        // DP-1 would otherwise read back or seed as phantoms (F282).
+        const QString windowId = QStringLiteral("kate|cross-close");
+        PhosphorEngine::WindowPlacement existing;
+        existing.windowId = windowId;
+        existing.appId = QStringLiteral("kate");
+        existing.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot snap;
+        snap.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        snap.zoneIds = QStringList{m_zoneIds[0]};
+        snap.zonesByDesktop.insert(1, QStringList{m_zoneIds[0]});
+        snap.zonesByDesktop.insert(2, QStringList{m_zoneIds[1]});
+        existing.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        QVERIFY(m_service->placementStore().record(existing));
+
+        m_service->recordFloatingClose(windowId, QStringLiteral("DP-1"), QRect(30, 40, 600, 400));
+
+        const auto rec = m_service->placementStore().peekExact(windowId);
+        QVERIFY(rec.has_value());
+        const PhosphorEngine::EngineSlot stored = rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        QCOMPARE(stored.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QVERIFY(stored.zoneIds.isEmpty());
+        QVERIFY(stored.zonesByDesktop.isEmpty());
+    }
+
     void testRecordFloatingClose_prefixMutationKeepsOwnEngineSlots()
     {
         // Closing floating after an appId-prefix mutation must merge into the
