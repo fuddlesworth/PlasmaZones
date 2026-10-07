@@ -271,6 +271,11 @@ private:
     /// monitors can confuse, but not a dead output after standby.
     QString storedScreenOr(const QString& windowId, const QString& screenId) const;
 
+    /// The zone next to @p windowId in @p direction: past its whole span when it
+    /// holds several zones, never one of its own.
+    QString adjacentZoneFor(const QString& windowId, const QString& currentZoneId, const QString& direction,
+                            const QString& screenId) const;
+
     /// Windows snapped to @p zoneId whose stored screen is @p screenName, in
     /// windowsInZone() iteration order.
     /// windowsInZone() is screen-agnostic — the same zone UUID is shared by

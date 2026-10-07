@@ -497,6 +497,129 @@ private Q_SLOTS:
         QCOMPARE(activate.first().at(0).toString(), w1);
     }
 
+    // ── L14.6/L14.7: from a span, navigation looks past the whole span ──
+
+    void adjacentZoneOutsideASpanSkipsMembers()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        QCOMPARE(f.zda->getAdjacentZoneOutside({f.zone(0), f.zone(1)}, QStringLiteral("right"), kLeft), f.zone(2));
+        QVERIFY(f.zda->getAdjacentZoneOutside({f.zone(0), f.zone(1)}, QStringLiteral("left"), kLeft).isEmpty());
+    }
+
+    // A move from a span puts the window into the next zone on its own
+    // (F242, span_move).
+    void moveFromASpanLandsOutsideItAlone()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("span-m"));
+        f.snapOn(w, {f.zone(0), f.zone(1)}, kLeft);
+        QSignalSpy applies(f.snap.get(), &SnapEngine::applyGeometryRequested);
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.wta->service()->zonesForWindow(w), QStringList{f.zone(2)});
+        QCOMPARE(applies.count(), 1);
+        QCOMPARE(QRect(applies.first().at(1).toInt(), applies.first().at(2).toInt(), applies.first().at(3).toInt(),
+                       applies.first().at(4).toInt()),
+                 f.zoneRect(2, kLeft));
+    }
+
+    void focusFromASpanSkipsItsOwnZones()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("span-f"));
+        const QString w2 = f.live(QStringLiteral("past-f"));
+        f.snapOn(w, {f.zone(0), f.zone(1)}, kLeft);
+        f.snapOn(w2, {f.zone(2)}, kLeft);
+        QSignalSpy activate(f.snap.get(), &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+        f.snap->focusInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(activate.count(), 1);
+        QCOMPARE(activate.first().at(0).toString(), w2);
+    }
+
+    // A spanned window and the window past it trade places and sizes (F842 a,
+    // decision Q1).
+    void spannedWindowTakesASingleZonePartnersPlace()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("span-s"));
+        const QString w2 = f.live(QStringLiteral("past-s"));
+        f.snapOn(w, {f.zone(0), f.zone(1)}, kLeft);
+        f.snapOn(w2, {f.zone(2)}, kLeft);
+        QSignalSpy applies(f.snap.get(), &SnapEngine::applyGeometryRequested);
+        QSignalSpy restated(f.snap.get(), &SnapEngine::restatementGeometryRequested);
+        f.snap->swapFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.wta->service()->zonesForWindow(w), QStringList{f.zone(2)});
+        QCOMPARE(f.wta->service()->zonesForWindow(w2), (QStringList{f.zone(0), f.zone(1)}));
+        QCOMPARE(applies.count(), 1);
+        QCOMPARE(restated.count(), 1);
+        QCOMPARE(QRect(restated.first().at(1).toInt(), restated.first().at(2).toInt(), restated.first().at(3).toInt(),
+                       restated.first().at(4).toInt()),
+                 f.wta->service()->resolveZoneGeometry({f.zone(0), f.zone(1)}, kLeft));
+    }
+
+    void singleZoneWindowTakesASpannedPartnersSpan()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("single-t"));
+        const QString w2 = f.live(QStringLiteral("span-t"));
+        f.snapOn(w, {f.zone(0)}, kLeft);
+        f.snapOn(w2, {f.zone(1), f.zone(2)}, kLeft);
+        f.snap->swapFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.wta->service()->zonesForWindow(w), (QStringList{f.zone(1), f.zone(2)}));
+        QCOMPARE(f.wta->service()->zonesForWindow(w2), QStringList{f.zone(0)});
+    }
+
+    void swapExchangesWholeSpans()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        auto* four = createTestLayout(4, f.layouts);
+        f.layouts->addLayout(four);
+        f.layouts->assignLayout(kLeft, 1, QString(), four);
+        const auto z = [four](int i) {
+            return four->zones().at(i)->id().toString();
+        };
+        const QString w = f.live(QStringLiteral("span-x1"));
+        const QString w2 = f.live(QStringLiteral("span-x2"));
+        f.snapOn(w, {z(0), z(1)}, kLeft);
+        f.snapOn(w2, {z(2), z(3)}, kLeft);
+        f.snap->swapFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.wta->service()->zonesForWindow(w), (QStringList{z(2), z(3)}));
+        QCOMPARE(f.wta->service()->zonesForWindow(w2), (QStringList{z(0), z(1)}));
+    }
+
+    void swapIntoAnEmptyZoneIsASingleZoneMove()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("span-e"));
+        f.snapOn(w, {f.zone(0), f.zone(1)}, kLeft);
+        f.snap->swapFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.wta->service()->zonesForWindow(w), QStringList{f.zone(2)});
+    }
+
+    // Across outputs the partner returns to the source with the set it takes
+    // (F842 b, decision Q1).
+    void crossOutputSwapExchangesSets()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("cross-1"), QRect(1300, 100, 400, 300));
+        const QString w2 = f.live(QStringLiteral("cross-2"), QRect(2000, 100, 400, 300));
+        f.snapOn(w, {f.zone(1), f.zone(2)}, kLeft);
+        f.snapOn(w2, {f.zone(0), f.zone(1)}, kRight);
+        f.cross.outputs.insert(kLeft + QStringLiteral("|right"), kRight);
+        f.snap->swapFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.snap->screenForTrackedWindow(w), kRight);
+        QCOMPARE(f.wta->service()->zonesForWindow(w), (QStringList{f.zone(0), f.zone(1)}));
+        QCOMPARE(f.snap->screenForTrackedWindow(w2), kLeft);
+        QCOMPARE(f.wta->service()->zonesForWindow(w2), (QStringList{f.zone(1), f.zone(2)}));
+    }
+
 private:
     /// @p windowId snapped in zone 0 on desktops 1 and 2 of DP-1.
     void snapOnTwoDesktops(SnapNavFixture& f, const QString& windowId)

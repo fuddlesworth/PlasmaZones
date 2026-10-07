@@ -263,6 +263,20 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
     return r;
 }
 
+QString SnapNavigationTargetResolver::adjacentZoneFor(const QString& windowId, const QString& currentZoneId,
+                                                      const QString& direction, const QString& screenId) const
+{
+    // A span is measured from its whole union, and a fallback never lands on
+    // one of its own members (F242).
+    const QStringList zones = m_service->zonesForWindow(windowId);
+    QString target = zones.size() > 1 ? m_zoneAdjacency->getAdjacentZoneOutside(zones, direction, screenId)
+                                      : m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, screenId);
+    if (zones.contains(target)) {
+        target.clear();
+    }
+    return target;
+}
+
 QString SnapNavigationTargetResolver::storedScreenOr(const QString& windowId, const QString& screenId) const
 {
     const QString stored = m_service->screenForWindow(windowId);
@@ -346,19 +360,9 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
 
     QString currentZoneId = m_service->zoneForWindow(windowId);
 
-    // When the window is snapped, trust the daemon's stored screen assignment
-    // over the effect-reported screenId.  KWin's EffectWindow::screen() can
-    // return the wrong output for same-model multi-monitor setups (e.g. dual
-    // Samsung Odyssey G93SC with different serials).  The daemon's assignment
-    // is authoritative because it was set at snap time.
-    //
-    // When the window is NOT snapped (e.g. moved between monitors via KDE's
-    // Move-to-Screen shortcut — outputChanged fires and unsnaps it), we use
-    // the effect-provided screen since there's no stored assignment.
-    //
-    // Only use the stored screen if it's still connected — when a monitor
-    // enters standby, KWin rehomes windows but the stored assignment points
-    // at the dead output.
+    // A snapped window's stored screen beats the effect's report, which
+    // same-model monitors (dual Samsung Odyssey G93SC) can get wrong; see
+    // storedScreenOr. A window in no zone has no stored screen to trust.
     const QString effectiveScreenId = currentZoneId.isEmpty() ? screenId : storedScreenOr(windowId, screenId);
 
     QString targetZoneId;
@@ -370,7 +374,7 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
             return moveResult(false, QStringLiteral("no_zones"), QString(), QRect(), QString(), effectiveScreenId);
         }
     } else {
-        targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
+        targetZoneId = adjacentZoneFor(windowId, currentZoneId, direction, effectiveScreenId);
         if (targetZoneId.isEmpty()) {
             // No adjacent zone on this output — cross into the adjacent output's
             // entry zone before giving up. requireSnapNeighbour: a tiling-mode
@@ -793,7 +797,7 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
     // Trust stored screen for snapped windows — see getMoveTargetForWindow comment
     const QString effectiveScreenId = storedScreenOr(windowId, screenId);
 
-    QString targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
+    QString targetZoneId = adjacentZoneFor(windowId, currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
         // No adjacent zone on this output — try focusing into the adjacent
         // output's entry zone. The neighbour's mode is not gated
@@ -813,16 +817,9 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
                 return focusResult(true, QString(), entryWindow, currentZoneId, cross.zoneId, cross.screenName);
             }
         }
-        // Reaching here means either no cross-output entry zone was found OR one
-        // was found but is unoccupied on the neighbour (firstWindowInZoneOnScreen
-        // empty — you cannot focus an empty zone). Both collapse to the same
-        // "no_adjacent_zone" reason: from the caller's perspective there is no
-        // window to land on that way, so it should try the desktop axis next. The
-        // reason intentionally does not distinguish the empty-zone case.
-        // Defer the boundary decision AND its feedback to the caller —
-        // SnapEngine tries the cross-desktop axis and emits the boundary
-        // feedback itself when it fails, in every configuration (see the
-        // matching note in getMoveTargetForWindow).
+        // No entry zone, or an empty one (an empty zone cannot be focused): no
+        // window to land on that way. The caller tries the desktop axis and
+        // emits the boundary feedback itself (see getMoveTargetForWindow).
         return focusResult(false, QStringLiteral("no_adjacent_zone"), QString(), currentZoneId, QString(),
                            effectiveScreenId);
     }
@@ -991,7 +988,7 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
     // Trust stored screen for snapped windows — see getMoveTargetForWindow comment
     const QString effectiveScreenId = storedScreenOr(windowId, screenId);
 
-    QString targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
+    QString targetZoneId = adjacentZoneFor(windowId, currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
         // No adjacent zone on this output — treat monitors as one constructed
         // surface and cross into the neighbour output's entry zone, swapping with

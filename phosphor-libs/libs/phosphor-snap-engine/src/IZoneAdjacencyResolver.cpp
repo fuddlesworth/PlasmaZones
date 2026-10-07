@@ -7,4 +7,10 @@ namespace PhosphorSnapEngine {
 
 IZoneAdjacencyResolver::~IZoneAdjacencyResolver() = default;
 
+QString IZoneAdjacencyResolver::getAdjacentZoneOutside(const QStringList& zoneIds, const QString& direction,
+                                                       const QString& screenId) const
+{
+    return zoneIds.isEmpty() ? QString() : getAdjacentZone(zoneIds.first(), direction, screenId);
+}
+
 } // namespace PhosphorSnapEngine

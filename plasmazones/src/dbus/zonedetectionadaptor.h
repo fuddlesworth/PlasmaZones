@@ -44,6 +44,11 @@ public:
                                   QObject* parent = nullptr);
     ~ZoneDetectionAdaptor() override = default;
 
+    /// The zone next to the union of a span in @p direction, never a member.
+    /// Not a slot: the D-Bus contract stays as it is.
+    QString getAdjacentZoneOutside(const QStringList& zoneIds, const QString& direction,
+                                   const QString& screenId) const override;
+
 public Q_SLOTS:
     // PhosphorZones::Zone detection for cursor position
     QString detectZoneAtPosition(int x, int y);

@@ -598,11 +598,27 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
         }
         return;
     }
+    // A swap exchanges the two windows' whole zone sets (decision Q1): each
+    // takes the other's zones where the other stood, read before any commit.
+    // Into an empty zone it is a move, one zone. A store with no context for
+    // the screen answers nothing, and the resolver's single zones stand.
+    const auto zonesInView = [this](const QString& windowId, const QString& screen) {
+        const SnapState* state = m_states.stateForKey(currentKeyForScreen(screen));
+        return state ? state->zonesForWindow(canonicalWindowId(windowId)) : QStringList{};
+    };
+    QString partner = result.windowId2;
+    if (!partner.isEmpty() && canonicalWindowId(partner) == canonicalWindowId(result.windowId1)) {
+        partner.clear(); // never a swap with itself (F242)
+    }
+    const QStringList zones1Before = zonesInView(result.windowId1, screenId);
+    const QStringList partnerZones = partner.isEmpty() ? QStringList{} : zonesInView(partner, result.screenName);
+    const QStringList landing1 = partnerZones.isEmpty() ? QStringList{result.zoneId1} : partnerZones;
+    const QRect rect1 = landing1.size() > 1 ? m_windowTracker->resolveZoneGeometry(landing1, result.screenName)
+                                            : QRect(result.x1, result.y1, result.w1, result.h1);
     // No capture: the window is in a zone.
-    commitUserSnap(result.windowId1, {result.zoneId1}, result.screenName,
-                   QRect(result.x1, result.y1, result.w1, result.h1), QString());
+    commitUserSnap(result.windowId1, landing1, result.screenName, rect1, QString());
 
-    if (!result.windowId2.isEmpty()) {
+    if (!partner.isEmpty()) {
         // A cross-output swap sends window2 to the SOURCE output (screenName2),
         // not where it currently lives — its stored assignment is the neighbour
         // it's leaving. For an in-surface swap screenName2 is empty, so fall back
@@ -612,16 +628,23 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
             // stateForWindow never returns null (untracked windows resolve
             // to the global holder, whose lookup yields an empty screen and
             // falls through to the screenName fallback below).
-            screen2 = stateForWindow(result.windowId2)->screenForWindow(result.windowId2);
+            screen2 = stateForWindow(partner)->screenForWindow(partner);
         }
         if (screen2.isEmpty()) {
             screen2 = result.screenName;
         }
-        commitSnap(result.windowId2, result.zoneId2, screen2);
-        m_windowTracker->recordSnapIntent(result.windowId2, true);
+        const QStringList landing2 = zones1Before.isEmpty() ? QStringList{result.zoneId2} : zones1Before;
+        const QRect rect2 = landing2.size() > 1 ? m_windowTracker->resolveZoneGeometry(landing2, screen2)
+                                                : QRect(result.x2, result.y2, result.w2, result.h2);
+        if (landing2.size() > 1) {
+            commitMultiZoneSnap(partner, landing2, screen2);
+        } else {
+            commitSnap(partner, landing2.first(), screen2);
+        }
+        m_windowTracker->recordSnapIntent(partner, true);
         // The partner is not the subject of the swap: a re-statement.
-        Q_EMIT restatementGeometryRequested(result.windowId2, result.x2, result.y2, result.w2, result.h2,
-                                            result.zoneId2, screen2);
+        Q_EMIT restatementGeometryRequested(partner, rect2.x(), rect2.y(), rect2.width(), rect2.height(),
+                                            landing2.first(), screen2);
     }
 }
 
