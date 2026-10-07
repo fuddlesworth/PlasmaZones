@@ -123,7 +123,13 @@ void SnapNavigationTargetResolver::setNeighbourTilingProvider(NeighbourTilingFn 
     m_neighbourIsTiling = std::move(fn);
 }
 
-PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& currentZoneId,
+void SnapNavigationTargetResolver::setLandingRefusalProvider(LandingRefusalFn fn)
+{
+    m_landingRefusal = std::move(fn);
+}
+
+PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& windowId,
+                                                                                        const QString& currentZoneId,
                                                                                         const QString& direction,
                                                                                         const QString& sourceScreenId,
                                                                                         bool requireSnapNeighbour) const
@@ -145,6 +151,20 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntr
     // cross-mode handoff takes over. FOCUS (requireSnapNeighbour=false) is not gated.
     if (requireSnapNeighbour && m_neighbourIsTiling && m_neighbourIsTiling(neighborScreen)) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
+    }
+    // A move asks where the window lands (F159, F208). A disabled neighbour
+    // takes it unsnapped, which the engine does on this silent reason; an
+    // exclusion there refuses the move.
+    if (requireSnapNeighbour && m_landingRefusal) {
+        const QString refusal = m_landingRefusal(windowId, neighborScreen);
+        if (refusal == QLatin1String("disabled")) {
+            return moveResult(false, QStringLiteral("landing_disabled"), QString(), QRect(), currentZoneId,
+                              neighborScreen);
+        }
+        if (refusal == QLatin1String("excluded")) {
+            emitFeedback(false, QStringLiteral("move"), refusal, currentZoneId, QString(), neighborScreen);
+            return moveResult(false, refusal, QString(), QRect(), currentZoneId, neighborScreen);
+        }
     }
     // Enter the neighbour output from the edge facing back toward the source.
     const QString entryZone =
@@ -186,6 +206,16 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
     if (m_neighbourIsTiling && m_neighbourIsTiling(neighborScreen)) {
         return fail(QString());
     }
+    // A disabled neighbour has no zone set to exchange, so the swap reports
+    // the layout edge; an exclusion there refuses it (F159, F208).
+    const QString refusal = m_landingRefusal ? m_landingRefusal(windowId, neighborScreen) : QString();
+    if (refusal == QLatin1String("disabled")) {
+        return fail(QString());
+    }
+    if (refusal == QLatin1String("excluded")) {
+        emitFeedback(false, QStringLiteral("swap"), refusal, currentZoneId, QString(), neighborScreen);
+        return fail(refusal);
+    }
     // Enter the neighbour output from the edge facing back toward the source.
     const QString entryZone =
         m_zoneAdjacency->getFirstZoneInDirection(oppositeCrossingDirection(direction), neighborScreen);
@@ -213,6 +243,12 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
                           neighborScreen, currentZoneId, entryZone);
     }
     const QString partner = occupants.first();
+    // The partner lands on the source output.
+    if (m_landingRefusal && m_landingRefusal(partner, sourceScreenId) == QLatin1String("excluded")) {
+        emitFeedback(false, QStringLiteral("swap"), QStringLiteral("excluded"), currentZoneId, entryZone,
+                     sourceScreenId);
+        return fail(QStringLiteral("excluded"));
+    }
     PhosphorProtocol::SwapTargetResult r =
         swapResult(true, QString(), windowId, entryGeom.x(), entryGeom.y(), entryGeom.width(), entryGeom.height(),
                    entryZone, partner, sourceGeom.x(), sourceGeom.y(), sourceGeom.width(), sourceGeom.height(),
@@ -320,11 +356,15 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
             // No adjacent zone on this output — cross into the adjacent output's
             // entry zone before giving up. requireSnapNeighbour: a tiling-mode
             // neighbour is handed off cross-mode by the engine, not snapped here.
-            const PhosphorProtocol::MoveTargetResult cross =
-                crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/true);
+            const PhosphorProtocol::MoveTargetResult cross = crossOutputEntryTarget(
+                windowId, currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/true);
             if (cross.success) {
                 emitFeedback(true, QStringLiteral("move"), QStringLiteral("screen:") + direction, currentZoneId,
                              cross.zoneId, cross.screenName);
+                return cross;
+            }
+            // The landing context's verdict goes to the engine as it is.
+            if (cross.reason == QLatin1String("landing_disabled") || cross.reason == QLatin1String("excluded")) {
                 return cross;
             }
             // Defer the boundary decision AND its feedback to the caller:
@@ -753,8 +793,8 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
         // (requireSnapNeighbour=false), but the landing below still needs a
         // snap-tracked occupant, so a tiling-mode neighbour dead-ends to
         // no_adjacent_zone anyway.
-        const PhosphorProtocol::MoveTargetResult cross =
-            crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/false);
+        const PhosphorProtocol::MoveTargetResult cross = crossOutputEntryTarget(
+            windowId, currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/false);
         if (cross.success) {
             // Pin the entry window to the neighbour output: windowsInZone is
             // screen-agnostic and the entry zone's UUID can also exist on the
@@ -971,6 +1011,9 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
                          cross.targetZoneId, cross.screenName);
             return cross;
         }
+        if (cross.reason == QLatin1String("excluded")) {
+            return cross; // reported by the landing refusal
+        }
         // Defer the boundary decision AND its feedback to the caller —
         // SnapEngine tries the cross-mode axis and emits the boundary
         // feedback itself when it fails, in every configuration (see the
@@ -1005,6 +1048,14 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
     }
 
     const QString targetWindowId = windowsInTargetZone.first();
+    // The partner lands in the focused window's zone: a rule excluding it there
+    // refuses the swap (F159).
+    if (m_landingRefusal && m_landingRefusal(targetWindowId, effectiveScreenId) == QLatin1String("excluded")) {
+        emitFeedback(false, QStringLiteral("swap"), QStringLiteral("excluded"), currentZoneId, targetZoneId,
+                     effectiveScreenId);
+        return swapResult(false, QStringLiteral("excluded"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0, 0,
+                          QString(), effectiveScreenId, currentZoneId, targetZoneId);
+    }
     emitFeedback(true, QStringLiteral("swap"), direction, currentZoneId, targetZoneId, effectiveScreenId);
     return swapResult(true, QString(), windowId, targetGeom.x(), targetGeom.y(), targetGeom.width(),
                       targetGeom.height(), targetZoneId, targetWindowId, currentGeom.x(), currentGeom.y(),

@@ -18,6 +18,7 @@
 
 #include "core/interfaces/isettings.h"
 #include "core/platform/logging.h"
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
@@ -410,26 +411,15 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
         return true;
     }
 
-    // Map the window's position relative to its current screen's available area onto
-    // the target screen's, then clamp so the whole frame fits. Preserves "the same
-    // spot on the other monitor" across differing resolutions; an unknown /
-    // degenerate source area falls back to the target's top-left. The SIZE is
-    // carried over unchanged unless the target work area is smaller in that axis,
-    // in which case it shrinks to fit rather than overflowing the monitor.
-    const QRect srcAvail = screens->screenAvailableGeometry(screenId);
-    const int w = qMin(cur.width(), dstAvail.width());
-    const int h = qMin(cur.height(), dstAvail.height());
-    int x = dstAvail.x();
-    int y = dstAvail.y();
-    if (srcAvail.isValid() && srcAvail.width() > 0 && srcAvail.height() > 0) {
-        const double relX = static_cast<double>(cur.x() - srcAvail.x()) / srcAvail.width();
-        const double relY = static_cast<double>(cur.y() - srcAvail.y()) / srcAvail.height();
-        x = dstAvail.x() + qRound(relX * dstAvail.width());
-        y = dstAvail.y() + qRound(relY * dstAvail.height());
-    }
-    // Clamp the frame fully inside the target available area.
-    x = qBound(dstAvail.left(), x, dstAvail.right() - w + 1);
-    y = qBound(dstAvail.top(), y, dstAvail.bottom() - h + 1);
+    // "The same spot on the other monitor" across differing resolutions: the
+    // position kept relative to the available area, the size shrunk only where
+    // the target is smaller, the whole frame clamped inside.
+    const QRect routed =
+        PhosphorEngine::GeometryUtils::carryRectOntoArea(cur, screens->screenAvailableGeometry(screenId), dstAvail);
+    const int x = routed.x();
+    const int y = routed.y();
+    const int w = routed.width();
+    const int h = routed.height();
 
     qCInfo(lcDbusWindow) << "applyOpenScreenRouting: routing" << windowId << "to monitor" << target << "at"
                          << QRect(x, y, w, h);

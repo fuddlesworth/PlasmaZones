@@ -163,6 +163,13 @@ public:
     using NeighbourTilingFn = std::function<bool(const QString& screenId)>;
     void setNeighbourTilingProvider(NeighbourTilingFn fn);
 
+    /// Why the landing context refuses @p windowId: "excluded" (an exclusion
+    /// rule applies there), "disabled" (snapping is off there) or empty. Asked
+    /// by the cross-output move and swap legs, never by focus, so focus still
+    /// crosses into a disabled monitor. Unset refuses nothing.
+    using LandingRefusalFn = std::function<QString(const QString& windowId, const QString& screenId)>;
+    void setLandingRefusalProvider(LandingRefusalFn fn);
+
     PhosphorProtocol::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
                                                               const QString& screenId);
 
@@ -230,11 +237,14 @@ private:
     /// non-success MoveTargetResult when there's no neighbour output / entry
     /// zone. Shared by the move and focus paths; the caller emits feedback so
     /// the move/focus tag stays correct.
-    /// @param requireSnapNeighbour when true (move/swap), a tiling-mode neighbour
+    /// @param requireSnapNeighbour when true (move), a tiling-mode neighbour
     /// output yields a non-success result so the caller defers to the cross-mode
-    /// handoff; when false (focus), the neighbour's mode is not gated.
-    PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& currentZoneId, const QString& direction,
-                                                              const QString& sourceScreenId,
+    /// handoff, and the landing refusal is asked for @p windowId: "disabled"
+    /// answers reason "landing_disabled" on the neighbour, silently, and
+    /// "excluded" reports itself and answers "excluded". When false (focus),
+    /// neither is asked.
+    PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& windowId, const QString& currentZoneId,
+                                                              const QString& direction, const QString& sourceScreenId,
                                                               bool requireSnapNeighbour) const;
 
     /// Cross-output swap target on a no-adjacent-zone boundary: the focused
@@ -269,6 +279,7 @@ private:
     PhosphorEngine::ICrossSurfaceResolver* m_crossSurface = nullptr;
     FeedbackFn m_feedback;
     NeighbourTilingFn m_neighbourIsTiling;
+    LandingRefusalFn m_landingRefusal;
 };
 
 } // namespace PhosphorSnapEngine

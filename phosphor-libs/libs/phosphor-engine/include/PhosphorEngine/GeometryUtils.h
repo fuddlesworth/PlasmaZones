@@ -7,6 +7,7 @@
 #include <PhosphorGeometry/GeometryUtils.h>
 #include <phosphorengine_export.h>
 
+#include <QRect>
 #include <QString>
 #include <QVector>
 
@@ -35,6 +36,11 @@ PHOSPHORENGINE_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignm
 /// batch).
 PHOSPHORENGINE_EXPORT QVector<ZoneAssignmentEntry> deserializeZoneAssignments(const QString& json,
                                                                               QString* errorString = nullptr);
+
+/// @p rect carried from @p fromArea onto @p toArea: its position kept relative
+/// to the area, its size shrunk only where @p toArea is smaller, then clamped
+/// so the whole rect fits. An invalid @p fromArea starts at @p toArea's top-left.
+PHOSPHORENGINE_EXPORT QRect carryRectOntoArea(const QRect& rect, const QRect& fromArea, const QRect& toArea);
 
 } // namespace GeometryUtils
 } // namespace PhosphorEngine

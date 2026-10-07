@@ -25,6 +25,8 @@
 #include "core/utils/geometryutils.h"
 #include "core/types/types.h"
 
+#include <PhosphorEngine/GeometryUtils.h>
+
 using namespace PlasmaZones;
 
 class TestGeometryUtilsSerialization : public QObject
@@ -347,6 +349,32 @@ private Q_SLOTS:
             "[{\"windowId\":\"w\",\"targetZoneId\":\"a\",\"targetZoneIds\":[\"b\",\"a\"],"
             "\"x\":0,\"y\":0,\"width\":1,\"height\":1}]");
         QVERIFY(GeometryUtils::deserializeZoneAssignments(json, nullptr).isEmpty());
+    }
+
+    // carryRectOntoArea: the same spot and size on another area (L14.3).
+    void test_carryRectOntoArea_sameSizeAreasTranslate()
+    {
+        QCOMPARE(PhosphorEngine::GeometryUtils::carryRectOntoArea(QRect(300, 200, 640, 480), QRect(0, 0, 1920, 1080),
+                                                                  QRect(1920, 0, 1920, 1080)),
+                 QRect(2220, 200, 640, 480));
+    }
+
+    void test_carryRectOntoArea_smallerTargetShrinksAndClamps()
+    {
+        const QRect r = PhosphorEngine::GeometryUtils::carryRectOntoArea(
+            QRect(1500, 800, 800, 600), QRect(0, 0, 1920, 1080), QRect(0, 0, 1280, 720));
+        QCOMPARE(r.size(), QSize(800, 600));
+        QVERIFY(QRect(0, 0, 1280, 720).contains(r));
+        const QRect big = PhosphorEngine::GeometryUtils::carryRectOntoArea(
+            QRect(0, 0, 1900, 1000), QRect(0, 0, 1920, 1080), QRect(0, 0, 1280, 720));
+        QCOMPARE(big, QRect(0, 0, 1280, 720));
+    }
+
+    void test_carryRectOntoArea_invalidSourceStartsAtTheTopLeft()
+    {
+        QCOMPARE(PhosphorEngine::GeometryUtils::carryRectOntoArea(QRect(500, 500, 300, 200), QRect(),
+                                                                  QRect(1920, 0, 1920, 1080)),
+                 QRect(1920, 0, 300, 200));
     }
 
     void test_deserializeZoneAssignments_malformedJson()

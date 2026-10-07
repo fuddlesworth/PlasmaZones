@@ -106,5 +106,22 @@ QVector<ZoneAssignmentEntry> deserializeZoneAssignments(const QString& json, QSt
     return entries;
 }
 
+QRect carryRectOntoArea(const QRect& rect, const QRect& fromArea, const QRect& toArea)
+{
+    const int w = qMin(rect.width(), toArea.width());
+    const int h = qMin(rect.height(), toArea.height());
+    int x = toArea.x();
+    int y = toArea.y();
+    if (fromArea.isValid() && fromArea.width() > 0 && fromArea.height() > 0) {
+        const double relX = static_cast<double>(rect.x() - fromArea.x()) / fromArea.width();
+        const double relY = static_cast<double>(rect.y() - fromArea.y()) / fromArea.height();
+        x = toArea.x() + qRound(relX * toArea.width());
+        y = toArea.y() + qRound(relY * toArea.height());
+    }
+    x = qBound(toArea.left(), x, toArea.right() - w + 1);
+    y = qBound(toArea.top(), y, toArea.bottom() - h + 1);
+    return QRect(x, y, w, h);
+}
+
 } // namespace GeometryUtils
 } // namespace PhosphorEngine

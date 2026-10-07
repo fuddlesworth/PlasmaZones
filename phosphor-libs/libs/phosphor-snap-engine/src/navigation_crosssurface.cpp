@@ -14,8 +14,12 @@
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorSnapEngine/INavigationStateProvider.h>
+#include <PhosphorSnapEngine/SnapState.h>
 
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
@@ -134,6 +138,65 @@ QString SnapEngine::entryZoneForCrossing(const QString& direction, const QString
         return {};
     }
     return m_zoneAdjacencyResolver->getFirstZoneInDirection(opposite, neighbourScreen);
+}
+
+void SnapEngine::moveUnsnapped(const QString& windowId, const QString& fromScreen, const QString& toScreen,
+                               int toDesktop, const QString& direction)
+{
+    if (!m_windowTracker || windowId.isEmpty()) {
+        return;
+    }
+    const bool desktopMove = toDesktop >= 1;
+    // The landing rect, read before anything is released: the float-back on
+    // the destination, else (a monitor crossing only) the one on the source or
+    // the live frame, carried onto the destination's area. A desktop move with
+    // no float-back keeps the frame it has: desktops share the monitor.
+    QRect landing = m_windowTracker->validatedUnmanagedGeometry(windowId, toScreen).value_or(QRect());
+    if (!landing.isValid() && !desktopMove) {
+        QRect from = m_windowTracker->validatedUnmanagedGeometry(windowId, fromScreen).value_or(QRect());
+        if (!from.isValid() && m_navState) {
+            from = m_navState->frameGeometry(windowId);
+        }
+        PhosphorScreens::ScreenManager* const mgr = m_windowTracker->screenManager();
+        if (from.isValid() && mgr) {
+            landing = PhosphorEngine::GeometryUtils::carryRectOntoArea(from, mgr->screenAvailableGeometry(fromScreen),
+                                                                       mgr->screenAvailableGeometry(toScreen));
+        }
+    }
+
+    // Its snap memory where it leaves goes (memory_clears_on_move).
+    const QString canonical = canonicalWindowId(windowId);
+    if (desktopMove) {
+        QStringList removed;
+        bool lastUsedCleared = releaseMembership(windowId, currentKeyForScreen(fromScreen), removed);
+        lastUsedCleared |= clearGlobalLastUsedIfRemoved(removed);
+        if (lastUsedCleared) {
+            m_windowTracker->markLastUsedZoneDirty();
+        }
+    } else {
+        releaseWindowOffScreen(windowId, toScreen);
+    }
+    if (m_states.membershipsForWindow(canonical).isEmpty()) {
+        m_states.removeWindow(canonical);
+        m_windowTracker->releaseEngineSlot(windowId, engineId());
+    }
+
+    Q_EMIT windowSnapStateChanged(windowId,
+                                  PhosphorProtocol::WindowStateEntry{windowId, QString(), QString(), false,
+                                                                     QStringLiteral("unsnapped"), QStringList{},
+                                                                     false});
+    // Applied before the desktop move, while the window is still visible: a
+    // suspended client on a hidden desktop does not ack a larger configure.
+    if (landing.isValid()) {
+        Q_EMIT applyGeometryRequested(windowId, landing.x(), landing.y(), landing.width(), landing.height(), QString(),
+                                      toScreen, false);
+    }
+    if (desktopMove) {
+        Q_EMIT windowDesktopMoveRequested(windowId, toDesktop);
+    }
+    Q_EMIT navigationFeedback(true, QStringLiteral("move"),
+                              (desktopMove ? QStringLiteral("desktop:") : QStringLiteral("screen:")) + direction,
+                              QString(), QString(), toScreen);
 }
 
 } // namespace PhosphorSnapEngine

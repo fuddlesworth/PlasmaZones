@@ -159,20 +159,11 @@ public:
      * @brief Predicate consulted on the auto-snap entry path to suppress
      *        zone restores onto a context the user disabled.
      *
-     * Returns true if the screenId is currently active for snap mode, false
-     * if disabled. The engine library is intentionally settings-agnostic
-     * (LGPL boundary) so the daemon adaptor injects the predicate; SnapEngine
-     * itself has no notion of disabled contexts. The daemon closure passes
-     * the current activity.
-     *
-     * Applied by `resolveWindowRestore` (both the engine's own open path and
-     * the effect's D-Bus restore), the desktop carry, the membership
-     * re-apply and the layout-switch resnap, so a record saved before the
-     * user disabled the context cannot place a window there (discussion #461
-     * item 7, F445).
-     *
-     * When unset (default), the engine behaves as if every context is
-     * active — the historical default that unit tests rely on.
+     * True if the context is active for snap mode. The daemon injects it (the
+     * engine library is settings-agnostic) and passes the current activity.
+     * Applied by resolveWindowRestore, the desktop carry, the membership
+     * re-apply, the layout-switch resnap and the destination of a keyboard
+     * move (#461 item 7, F445, F208). Unset, every context is active.
      */
     /// Answers whether a stored snap may be re-applied on (@p screenId,
     /// @p desktop): the desktop the window is being restored ONTO, which
@@ -1246,6 +1237,10 @@ private:
     /// or it is also snap-mode (handled by the resolver's entry-zone /
     /// cross-output-swap path).
     bool tryCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId, bool swap);
+    /// Move @p windowId out of snapping onto @p toScreen, or onto @p toDesktop of its own screen when >= 1, where
+    /// snapping is off: its snap memory where it leaves goes, it is stated unsnapped and placed at its free geometry.
+    void moveUnsnapped(const QString& windowId, const QString& fromScreen, const QString& toScreen, int toDesktop,
+                       const QString& direction);
 
     /// Focus a window on the virtual desktop adjacent to the current one in
     /// @p direction (the entry window on @p screenId there), switching KWin to
@@ -1256,12 +1251,12 @@ private:
     /// its own cross-desktop focus target.
     bool tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId);
 
-    /// Check whether the window is excluded from the given navigation
-    /// action by an `Exclude` or `ExcludePlacement` action in the borrowed
-    /// placement-exclusion set. Emits navigationFeedback(false, action, "excluded", ...)
-    /// and returns true when excluded so callers can early-return. False
-    /// otherwise.
+    /// True, after navigationFeedback(false, action, "excluded", ...) on @p screenId, when an Exclude /
+    /// ExcludePlacement rule or the minimum-size thresholds exclude the window on @p screenId, the
+    /// screen the verb acts on (passed as the query's hint).
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
+    /// isWindowExcluded with the query's desktop set to @p desktop (>= 1), for a move not landed yet.
+    bool isWindowExcludedAt(const QString& windowId, const QString& screenHint, int desktop) const;
 
     /// Shared tail of both exclusion entry points: bind the lazy evaluator to
     /// the current placement-exclusion rule set (empty/null set short-circuits) and resolve

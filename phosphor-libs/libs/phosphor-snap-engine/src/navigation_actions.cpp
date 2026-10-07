@@ -171,6 +171,11 @@ bool SnapEngine::isAppIdExcluded(const QString& appId) const
 
 bool SnapEngine::isWindowExcluded(const QString& windowId, const QString& screenHint) const
 {
+    return isWindowExcludedAt(windowId, screenHint, 0);
+}
+
+bool SnapEngine::isWindowExcludedAt(const QString& windowId, const QString& screenHint, int desktop) const
+{
     // Build the richest query available: the daemon-supplied full attributes
     // (window class / title / frame size / flags) when the provider is wired,
     // else the appId-only query — the historical fallback unit tests rely on.
@@ -182,6 +187,10 @@ bool SnapEngine::isWindowExcluded(const QString& windowId, const QString& screen
         PhosphorRules::WindowQuery q;
         q.appId = m_windowTracker ? m_windowTracker->currentAppIdFor(windowId) : QString();
         query = std::move(q);
+    }
+    // The desktop a move lands on, asked before the window is there.
+    if (desktop >= 1) {
+        query->virtualDesktop = desktop;
     }
 
     // Minimum-window-size exclusion — only meaningful when the query carries the
@@ -205,12 +214,11 @@ bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QStrin
     if (!m_windowTracker) {
         return false;
     }
-    // No screen hint on purpose, even though @p screenId is in hand: exclusion asks
-    // where the window IS, and every caller here is a navigation action on an
-    // already-tracked window, so resolveScreenForWindow's engine fallbacks answer.
-    // @p screenId is the acting screen for the feedback below, which is not the
-    // same question once the two diverge.
-    if (isWindowExcluded(windowId)) {
+    // @p screenId is the screen the verb acts on: the stored screen for a
+    // window in a zone, the context screen otherwise, which is also where an
+    // untracked window is. The landing context is asked separately, by the
+    // resolver (cross-output) and tryCrossDesktopMove (cross-desktop).
+    if (isWindowExcluded(windowId, screenId)) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << action << ":" << windowId << "excluded by rule, appId:" << appId;
         // The appId stays in the log only: the fourth argument is the
@@ -326,14 +334,18 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
                                   effectiveScreenId(ctx, m_navState));
         return;
     }
-    // Resolved BEFORE the exclusion check so its feedback names the same
-    // screen every other emission in this function uses — the raw ctx
-    // screen targeted the wrong monitor's OSD on multi-head.
+    // The screen the verb acts on: the exclusion test and the boundary feedback
+    // both use it; geometry and landing feedback name the destination.
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     if (isWindowExcludedForAction(windowId, QStringLiteral("move"), screenId)) {
         return;
     }
     PhosphorProtocol::MoveTargetResult result = resolver->getMoveTargetForWindow(windowId, direction, screenId);
+    // A neighbour where snapping is off takes the window unsnapped (F208).
+    if (result.reason == QLatin1String("landing_disabled")) {
+        moveUnsnapped(windowId, screenId, result.screenName, 0, direction);
+        return;
+    }
     if (!result.success) {
         // At a zone-layout boundary with no neighbour output, the resolver
         // deferred the decision to us — try crossing to the adjacent desktop.
@@ -378,9 +390,8 @@ void SnapEngine::spanFocusedInDirection(const QString& direction, const Navigati
                                   effectiveScreenId(ctx, m_navState));
         return;
     }
-    // Resolved BEFORE the exclusion check so its feedback names the same
-    // screen every other emission in this function uses — the raw ctx
-    // screen targeted the wrong monitor's OSD on multi-head.
+    // The screen the verb acts on: the exclusion test and the boundary feedback
+    // both use it; geometry and landing feedback name the destination.
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     if (isWindowExcludedForAction(windowId, QStringLiteral("span"), screenId)) {
         return;
@@ -443,6 +454,19 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         // cross-mode handler relocates the window; it emits no feedback itself.
         Q_EMIT navigationFeedback(true, QStringLiteral("move"), QStringLiteral("desktop:") + direction, QString(),
                                   QString(), screenId);
+        return true;
+    }
+
+    // The desktop it lands on is asked (F159, F208): a rule excluding the
+    // window there refuses the move, and snapping switched off there takes the
+    // window there unsnapped.
+    if (isWindowExcludedAt(windowId, screenId, targetDesktop)) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("excluded"), QString(), QString(),
+                                  screenId);
+        return true;
+    }
+    if (!snapsInContext({screenId, targetDesktop, currentActivity()})) {
+        moveUnsnapped(windowId, screenId, screenId, targetDesktop, direction);
         return true;
     }
 
@@ -551,9 +575,8 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
                                   effectiveScreenId(ctx, m_navState));
         return;
     }
-    // Resolved BEFORE the exclusion check so its feedback names the same
-    // screen every other emission in this function uses — the raw ctx
-    // screen targeted the wrong monitor's OSD on multi-head.
+    // The screen the verb acts on: the exclusion test and the boundary feedback
+    // both use it; geometry and landing feedback name the destination.
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     if (isWindowExcludedForAction(windowId, QStringLiteral("swap"), screenId)) {
         return;
@@ -628,9 +651,8 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const NavigationContext& 
                                   effectiveScreenId(ctx, m_navState));
         return;
     }
-    // Resolved BEFORE the exclusion check so its feedback names the same
-    // screen every other emission in this function uses — the raw ctx
-    // screen targeted the wrong monitor's OSD on multi-head.
+    // The screen the verb acts on: the exclusion test and the boundary feedback
+    // both use it; geometry and landing feedback name the destination.
     const QString effectiveScreen = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     if (isWindowExcludedForAction(windowId, QStringLiteral("snap"), effectiveScreen)) {
         return;
@@ -661,9 +683,8 @@ void SnapEngine::pushFocusedToEmptyZone(const NavigationContext& ctx)
                                   effectiveScreenId(ctx, m_navState));
         return;
     }
-    // Resolved BEFORE the exclusion check so its feedback names the same
-    // screen every other emission in this function uses — the raw ctx
-    // screen targeted the wrong monitor's OSD on multi-head.
+    // The screen the verb acts on: the exclusion test and the boundary feedback
+    // both use it; geometry and landing feedback name the destination.
     const QString effectiveScreen = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     if (isWindowExcludedForAction(windowId, QStringLiteral("push"), effectiveScreen)) {
         return;
@@ -738,6 +759,11 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "toggleFocusedFloat: no active window in context";
         Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_active_window"), QString(),
                                   QString(), screenId);
+        return;
+    }
+    // An unfloat snaps the window back into a zone, which an exclusion rule
+    // refuses like every other snapping verb (F243).
+    if (isFloating(windowId) && isWindowExcludedForAction(windowId, QStringLiteral("float"), screenId)) {
         return;
     }
 

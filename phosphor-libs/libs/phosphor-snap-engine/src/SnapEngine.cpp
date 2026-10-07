@@ -760,6 +760,18 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
             && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping;
     });
+    // The context a move or swap lands in, asked about the window landing:
+    // switched off there (the user's disabled list, the master switch) or an
+    // exclusion rule there (F159, F208).
+    m_targetResolver->setLandingRefusalProvider([this](const QString& windowId, const QString& screenId) {
+        if (!snapsInContext(currentKeyForScreen(screenId))) {
+            return QStringLiteral("disabled");
+        }
+        if (isWindowExcluded(windowId, screenId)) {
+            return QStringLiteral("excluded");
+        }
+        return QString();
+    });
     return m_targetResolver.get();
 }
 
