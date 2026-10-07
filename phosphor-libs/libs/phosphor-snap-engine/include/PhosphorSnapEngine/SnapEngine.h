@@ -580,17 +580,17 @@ public:
     SnapState* stateForWindowOnScreen(const QString& windowId, const QString& screenId, int desktop = 0);
 
     /// Drop every membership @p windowId holds AND its data in each member
-    /// store (window closed / fully removed). A window present on several
-    /// desktops holds a zone assignment in each; clearing only the store in
-    /// view left the others listing a dead window as a zone occupant.
+    /// store (closed / removed): a window on several desktops holds a zone in
+    /// each, and clearing only the one in view left a dead zone occupant.
     void forgetWindow(const QString& windowId);
-    /// Whether @p state holds a MEMBERSHIP for @p windowId, as opposed to a
-    /// leftover from before a re-key. The WTS facade's aggregate walks use it
-    /// through the resolver seam.
+    /// Whether @p state holds a MEMBERSHIP for @p windowId, not a leftover from
+    /// before a re-key (the WTS facade's aggregate walks, via the resolver seam).
     bool holdsWindowInState(const QString& windowId, const SnapState* state) const;
-    /// The key @p state is filed under; nullopt for the global holder or a
-    /// store this engine does not own.
+    /// The key @p state is filed under; nullopt for the global holder or a foreign store.
     std::optional<PhosphorEngine::PlacementStateKey> keyForState(const SnapState* state) const;
+    /// The screen a navigation verb on @p windowId acts on: its stored screen when snapped,
+    /// else @p preferredScreen, else the cursor's, else the last active one.
+    QString navigationScreenFor(const QString& windowId, const QString& preferredScreen) const;
 
     /// Re-home a tracked window onto the store for @p newScreenId's current
     /// context. On a screen change every membership on the screen left is

@@ -301,6 +301,74 @@ private Q_SLOTS:
         QCOMPARE(applies.count(), 1);
         QCOMPARE(applies.first().at(5).toString(), ten->zoneByNumber(10)->id().toString());
     }
+
+    // The placement map names the monitor its cell is on: a zone number on
+    // another monitor moves the focused window there (F362).
+    void zoneNumberOnAnotherMonitorMovesThere()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("map-1"), 1);
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        f.wta->windowActivated(w, kLeft);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->snapToZoneByNumber(2, kRight);
+        QCOMPARE(applies.count(), 1);
+        QCOMPARE(applies.first().at(6).toString(), kRight);
+        QCOMPARE(applies.first().at(5).toString(), f.layout->zoneByNumber(2)->id().toString());
+    }
+
+    void zoneNumberTenOnANamedScreen()
+    {
+        GateFixture f;
+        auto* ten = createTestLayout(10, f.layouts);
+        f.layouts->addLayout(ten);
+        f.layouts->assignLayout(kRight, 1, QString(), ten);
+        const QString w = f.registerOn(QStringLiteral("map-10"), 1);
+        f.wta->windowActivated(w, kLeft);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->snapToZoneByNumber(10, kRight);
+        QCOMPARE(applies.count(), 1);
+        QCOMPARE(applies.first().at(5).toString(), ten->zoneByNumber(10)->id().toString());
+    }
+
+    void pushOnANamedScreenTakesItsFirstEmptyZone()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("push-1"), 1);
+        f.wta->windowActivated(w, kLeft);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->pushToEmptyZone(kRight);
+        QCOMPARE(applies.count(), 1);
+        QCOMPARE(applies.first().at(6).toString(), kRight);
+    }
+
+    // The focused-window verbs pass the keyboard gates: a snapped window on a
+    // monitor that now tiles is not re-snapped from its frozen memory.
+    void forwardersRefuseATilingScreen()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("frozen-1"), 1, QRect(2400, 200, 400, 300));
+        f.snap->commitSnap(w, f.zone(0), kRight);
+        f.wta->windowActivated(w, kRight);
+        f.tile(kRight);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->snapToZoneByNumber(2, QString());
+        f.adaptor->moveWindowToAdjacentZone(QStringLiteral("right"));
+        QCOMPARE(applies.count(), 0);
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+    }
+
+    void forwardersRespectTheMasterSwitch()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("switch-1"), 1);
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        f.wta->windowActivated(w, kLeft);
+        f.settings.setSnappingEnabled(false);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->snapToZoneByNumber(2, QString());
+        QCOMPARE(applies.count(), 0);
+    }
 };
 
 QTEST_MAIN(TestSnapAdaptorGates)

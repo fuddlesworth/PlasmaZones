@@ -143,6 +143,35 @@ std::optional<SnapAdaptor::BusSnapTarget> SnapAdaptor::admitBusSnap(const QStrin
     return target;
 }
 
+bool SnapAdaptor::focusedVerbPermitted(const QString& screenHint, bool placesWindow) const
+{
+    if (!m_engine || !m_adaptor) {
+        return false;
+    }
+    // Mirrors navigatorForShortcut and isFocusedContextGated: focus and cycle
+    // place nothing, so they skip the context gate as handleFocus and
+    // handleCycle do.
+    if (m_settings && !m_settings->snappingEnabled()) {
+        qCInfo(lcDbusWindow) << "Bus verb refused: snapping is switched off";
+        return false;
+    }
+    const QString resolvedHint = screenHint.isEmpty() ? QString() : m_adaptor->resolveBusScreen(screenHint);
+    if (!screenHint.isEmpty() && resolvedHint.isEmpty()) {
+        qCInfo(lcDbusWindow) << "Bus verb refused: unknown screen" << screenHint;
+        return false;
+    }
+    const QString windowId = m_adaptor->lastActiveWindowId();
+    const QString screen = m_engine->navigationScreenFor(windowId, resolvedHint);
+    if (screen.isEmpty()) {
+        return true; // the engine reports no_window itself
+    }
+    if (!m_engine->isActiveOnScreen(screen)) {
+        qCInfo(lcDbusWindow) << "Bus verb refused: snapping does not run" << screen;
+        return false;
+    }
+    return !placesWindow || snapPermittedForContext(windowId, screen, 0);
+}
+
 void SnapAdaptor::moveWindowToZoneNumberOnScreen(const QString& windowId, int zoneNumber, const QString& screenHint)
 {
     if (!m_adaptor || !m_adaptor->service() || windowId.isEmpty() || zoneNumber < 1) {

@@ -95,6 +95,15 @@ QString resolveNavScreen(INavigationStateProvider* navState, const QString& wind
     return screen;
 }
 
+} // namespace
+
+QString SnapEngine::navigationScreenFor(const QString& windowId, const QString& preferredScreen) const
+{
+    return resolveNavScreen(m_navState, windowId, m_windowTracker, preferredScreen);
+}
+
+namespace {
+
 /// Pick the effective window id: the explicit one from NavigationContext
 /// if set, otherwise the last-active window from INavigationStateProvider.
 /// Returns empty when neither is available — caller emits "no_window" feedback.

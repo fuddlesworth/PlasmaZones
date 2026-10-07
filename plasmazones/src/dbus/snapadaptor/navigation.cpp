@@ -11,53 +11,91 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Snap-mode navigation D-Bus slots — thin forwarders to SnapEngine.
-//
-// Moved from WindowTrackingAdaptor::navigation.cpp to complete the D-Bus
-// surface split. The bodies are identical: guard on m_engine, forward with
-// a default NavigationContext.
+// Snap-mode navigation D-Bus slots: the focused-window verbs, gated as the
+// keyboard twin gates them (focusedVerbPermitted), then forwarded to SnapEngine.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapAdaptor::moveWindowToAdjacentZone(const QString& direction)
 {
-    if (m_engine) {
+    if (focusedVerbPermitted(QString(), true)) {
         m_engine->moveFocusedInDirection(direction, NavigationContext{});
     }
 }
 
 void SnapAdaptor::focusAdjacentZone(const QString& direction)
 {
-    if (m_engine) {
+    if (focusedVerbPermitted(QString(), false)) {
         m_engine->focusInDirection(direction, NavigationContext{});
     }
 }
 
 void SnapAdaptor::pushToEmptyZone(const QString& screenId)
 {
-    if (m_engine) {
-        m_engine->pushFocusedToEmptyZone(NavigationContext{QString(), screenId});
+    if (screenId.isEmpty()) {
+        if (focusedVerbPermitted(QString(), true)) {
+            m_engine->pushFocusedToEmptyZone(NavigationContext{});
+        }
+        return;
     }
+    // A named screen is the target: its first empty zone, through the bus
+    // snap gate (F362).
+    if (!m_adaptor || !m_adaptor->service()) {
+        return;
+    }
+    const QString windowId = m_adaptor->lastActiveWindowId();
+    const QString screen = m_adaptor->resolveBusScreen(screenId, windowId);
+    if (windowId.isEmpty() || screen.isEmpty()) {
+        Q_EMIT m_adaptor->navigationFeedback(false, QStringLiteral("push"),
+                                             windowId.isEmpty() ? QStringLiteral("no_window")
+                                                                : QStringLiteral("unknown_screen"),
+                                             QString(), QString(), screenId);
+        return;
+    }
+    const QString emptyZone = m_adaptor->service()->findEmptyZone(screen);
+    if (emptyZone.isEmpty()) {
+        Q_EMIT m_adaptor->navigationFeedback(false, QStringLiteral("push"), QStringLiteral("no_empty_zone"), QString(),
+                                             QString(), screen);
+        return;
+    }
+    moveWindowToZoneOnScreen(windowId, emptyZone, screen);
 }
 
 void SnapAdaptor::restoreWindowSize()
 {
-    if (m_engine) {
+    if (focusedVerbPermitted(QString(), true)) {
         m_engine->restoreFocusedWindow(NavigationContext{});
     }
 }
 
 void SnapAdaptor::swapWindowWithAdjacentZone(const QString& direction)
 {
-    if (m_engine) {
+    if (focusedVerbPermitted(QString(), true)) {
         m_engine->swapFocusedInDirection(direction, NavigationContext{});
     }
 }
 
 void SnapAdaptor::snapToZoneByNumber(int zoneNumber, const QString& screenId)
 {
-    if (m_engine) {
-        m_engine->moveFocusedToPosition(zoneNumber, NavigationContext{QString(), screenId});
+    if (screenId.isEmpty()) {
+        // Like the shortcut: the focused window's own screen when it is
+        // snapped, else the cursor's, else the last active one.
+        if (focusedVerbPermitted(QString(), true)) {
+            m_engine->moveFocusedToPosition(zoneNumber, NavigationContext{});
+        }
+        return;
     }
+    // A named screen is the target, which the shell's placement map names
+    // (F362), and its layout may have more than nine zones (F85).
+    if (!m_adaptor) {
+        return;
+    }
+    const QString windowId = m_adaptor->lastActiveWindowId();
+    if (windowId.isEmpty()) {
+        Q_EMIT m_adaptor->navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_window"), QString(),
+                                             QString(), screenId);
+        return;
+    }
+    moveWindowToZoneNumberOnScreen(windowId, zoneNumber, screenId);
 }
 
 void SnapAdaptor::rotateWindowsInLayout(bool clockwise, const QString& screenId)
@@ -69,7 +107,7 @@ void SnapAdaptor::rotateWindowsInLayout(bool clockwise, const QString& screenId)
 
 void SnapAdaptor::cycleWindowsInZone(bool forward)
 {
-    if (m_engine) {
+    if (focusedVerbPermitted(QString(), false)) {
         m_engine->cycleFocus(forward, NavigationContext{});
     }
 }

@@ -156,7 +156,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="pushToEmptyZone">
             <annotation name="org.gtk.GDBus.DocString" value="Push the focused window to the first empty zone."/>
             <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen to resolve layout/geometry for (empty = active layout)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="A named screen is the target, using its layout for the desktop it shows. Empty acts like the shortcut: the focused window's own screen when it is snapped, else the cursor's, else the last active one."/>
             </arg>
         </method>
         <method name="restoreWindowSize">
@@ -169,9 +169,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="snapToZoneByNumber">
             <annotation name="org.gtk.GDBus.DocString" value="Snap the focused window to a zone by its number."/>
             <arg name="zoneNumber" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Zone number (1-9)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Zone number, 1-based; 1-9 when no screen is named."/>
             </arg>
-            <arg name="screenId" type="s" direction="in"/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="A named screen is the target, using its layout for the desktop it shows. Empty acts like the shortcut: the focused window's own screen when it is snapped, else the cursor's, else the last active one."/>
+            </arg>
         </method>
         <method name="rotateWindowsInLayout">
             <annotation name="org.gtk.GDBus.DocString" value="Rotate windows in the layout for a screen."/>

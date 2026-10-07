@@ -225,7 +225,8 @@ public Q_SLOTS:
 
     /**
      * @brief Push the focused window to the first empty zone (daemon-driven)
-     * @param screenId Screen to find layout/geometry for (empty = active layout)
+     * @param screenId A named screen is the target; empty acts like the shortcut
+     *        (the focused window's own screen when snapped, else the cursor's)
      */
     void pushToEmptyZone(const QString& screenId = QString());
 
@@ -242,8 +243,9 @@ public Q_SLOTS:
 
     /**
      * @brief Snap the focused window to a zone by its number (daemon-driven)
-     * @param zoneNumber Zone number (1-9)
-     * @param screenId Screen to resolve layout for (empty = active layout)
+     * @param zoneNumber Zone number, 1-based; 1-9 when no screen is named
+     * @param screenId A named screen is the target (its layout for the desktop it
+     *        shows); empty acts like the shortcut
      */
     void snapToZoneByNumber(int zoneNumber, const QString& screenId = QString());
 
@@ -404,6 +406,10 @@ private:
     /// the screen shows or on all, its one desktop when on a single hidden one,
     /// nullopt when on several hidden ones or not on @p pinnedDesktop.
     std::optional<int> landingDesktop(const QString& windowId, const QString& screenId, int pinnedDesktop) const;
+    /// The keyboard gates for a bus verb on the focused window: snapping on, a
+    /// named screen known, and the screen the verb acts on running snapping and,
+    /// when it @p placesWindow, not disabled in the context in view.
+    bool focusedVerbPermitted(const QString& screenHint, bool placesWindow) const;
 
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;
