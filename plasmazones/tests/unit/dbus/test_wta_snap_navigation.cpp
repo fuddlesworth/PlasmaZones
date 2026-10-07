@@ -9,7 +9,15 @@
 
 #include "wta_snap_nav_fixture.h"
 
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleSet.h>
+
 #include <QSignalSpy>
+#include <QUuid>
+
+#include <memory>
 
 using PhosphorEngine::NavigationContext;
 using PhosphorSnapEngine::SnapEngine;
@@ -57,6 +65,88 @@ private Q_SLOTS:
         QCOMPARE(crossMode.count(), 1);
         QCOMPARE(desktopMove.count(), 0);
     }
+
+    // The minimum-size threshold reads the live frame, not the size the
+    // window opened at (F226).
+    void minimumSizeReadsTheLiveFrame()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.isMinimized = false;
+        meta.width = 100;
+        meta.height = 100;
+        f.registry.upsert(QStringLiteral("grown-1"), meta);
+        const QString w = QStringLiteral("app|grown-1");
+        f.registry.canonicalizeWindowId(w);
+        f.setFrame(w, QRect(100, 100, 800, 600));
+        f.settings.setMinimumWindowWidth(200);
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        f.snap->moveFocusedToPosition(1, NavigationContext{w, kLeft});
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+        for (const QList<QVariant>& args : std::as_const(feedback)) {
+            QVERIFY(args.at(2).toString() != QLatin1String("excluded"));
+        }
+    }
+
+    // A rule naming the mode excludes on the keyboard path, which stamps it
+    // (F881).
+    void modeRuleExcludesOnTheKeyboardPath()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("moded-1"));
+        f.snapOn(w, {f.zone(0)}, kLeft);
+        excludeWhen(
+            f,
+            PhosphorRules::MatchExpression::makeAll(
+                {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId,
+                                                          PhosphorRules::Operator::AppIdMatches, QStringLiteral("app")),
+                 PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::Mode, PhosphorRules::Operator::Equals,
+                                                          QStringLiteral("snapping"))}));
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+        QVERIFY(!feedback.isEmpty());
+        QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("excluded"));
+        f.snap->setExcludeRuleSet(nullptr);
+    }
+
+    // A negated leaf on a field the query cannot answer does not exclude
+    // every window (F881).
+    void negatedUnanswerableLeafDoesNotExcludeEverything()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("negated-1"));
+        f.snapOn(w, {f.zone(0)}, kLeft);
+        excludeWhen(f,
+                    PhosphorRules::MatchExpression::makeNone({PhosphorRules::MatchExpression::makeLeaf(
+                        PhosphorRules::Field::IsSnapped, PhosphorRules::Operator::Equals, true)}));
+        f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(1));
+        f.snap->setExcludeRuleSet(nullptr);
+    }
+
+private:
+    /// One Exclude rule matching @p match, installed on the snap engine.
+    void excludeWhen(SnapNavFixture& f, const PhosphorRules::MatchExpression& match)
+    {
+        m_rules = std::make_unique<PhosphorRules::RuleSet>();
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("exclude");
+        rule.enabled = true;
+        rule.match = match;
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Exclude);
+        rule.actions.append(action);
+        QVERIFY(m_rules->addRule(rule));
+        f.snap->setExcludeRuleSet(m_rules.get());
+    }
+
+    std::unique_ptr<PhosphorRules::RuleSet> m_rules;
 };
 
 QTEST_MAIN(TestWtaSnapNavigation)

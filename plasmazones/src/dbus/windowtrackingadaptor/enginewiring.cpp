@@ -14,6 +14,7 @@
 // ScrollOpenKeys lives in internal.h; the open-params resolver below reads every
 // key through it, and unity batching must not be what supplies the declaration.
 #include "internal.h"
+#include "rules_admission.h"
 #include "core/interfaces/isettings.h"
 #include "core/platform/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -129,6 +130,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         m_cachedSnapEngine->setRestorePositionPredicate({});
         m_cachedSnapEngine->setManagedRestorePredicate({});
         m_cachedSnapEngine->setExclusionQueryProvider({});
+        m_cachedSnapEngine->setExclusionAdmission({});
         m_cachedSnapEngine->setFloatPredicate({});
         m_cachedSnapEngine->setUnfloatFallbackPredicate({});
         m_cachedSnapEngine->setPlacementZonesResolver({});
@@ -230,23 +232,19 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
 
         // Full-query exclusion provider. The snap engine owns the Exclude rule
         // set + evaluator but, without this, could only build an appId-only
-        // query — so Exclude rules keyed on window class / title / size, and the
-        // minimum-window-size thresholds, were silently ignored on snap (the
-        // autotile engine, which sees the live window in the effect, honoured
-        // them). Supplying the same full WindowQuery the float / restore
-        // predicates use brings snapping to parity.
-        //
-        // The engine passes a screen hint where it has one. resolveWindowRestore
-        // knows the screen the window is opening on and hands it over, which is
-        // the case the fallbacks cannot serve: the window is in no SnapState yet,
-        // so resolveScreenForWindow comes back empty and an Exclude rule keyed on
-        // ScreenId or ActiveLayout would not resolve. The navigation actions ask
-        // about already-tracked windows and pass an empty hint, where the engine
-        // fallbacks inside resolveScreenForWindow answer.
+        // query, so rules on window class / title / size and the minimum-size
+        // thresholds were silently ignored on snap. This is
+        // buildContextualRuleQuery's only caller: it stamps the screen trio,
+        // Mode and the live frame for the screen the engine passes (the open
+        // path's landing screen, the screen a navigation verb acts on), and the
+        // admission below skips rules on fields left unstamped (F881).
         snap->setExclusionQueryProvider(
             [this](const QString& windowId, const QString& screenHint) -> std::optional<PhosphorRules::WindowQuery> {
                 return buildContextualRuleQuery(windowId, screenHint);
             });
+        snap->setExclusionAdmission([](const PhosphorRules::WindowQuery& query) {
+            return RuleAdmission::admitWith(RuleAdmission::admissionForStamped(query), query);
+        });
 
         // Open-floating gate (snap). A matched "Float this app" rule opens the
         // window floating instead of auto-snapping it. Purely rule-driven (no

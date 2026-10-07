@@ -1472,7 +1472,8 @@ add_executable(test_wta_snap_navigation dbus/test_wta_snap_navigation.cpp
 target_include_directories(test_wta_snap_navigation PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_link_libraries(test_wta_snap_navigation PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                       PhosphorSnapEngine::PhosphorSnapEngine PhosphorEngine::PhosphorEngine
-                      PhosphorZones::PhosphorZones PhosphorWorkspaces::PhosphorWorkspaces)
+                      PhosphorZones::PhosphorZones PhosphorWorkspaces::PhosphorWorkspaces
+                      PhosphorRules::PhosphorRules)
 add_test(NAME test_wta_snap_navigation COMMAND test_wta_snap_navigation)
 
 # The bus boundary of the effect's reports: unknown screens held until they

@@ -970,25 +970,15 @@ public:
     /// translation unit redefine the function and the link fails.
     void setExcludeRuleSet(const PhosphorRules::RuleSet* ruleSet);
 
-    /// Provider that builds the full WindowQuery (window class / title / role /
-    /// frame size / flags) for a live windowId. Daemon-injected, keyed by the
-    /// live windowId — the daemon resolves it from its WindowRegistry (the same
-    /// `buildContextualRuleQuery` the float / restore predicates use, so the
-    /// query carries the screen-derived ScreenId / ActiveLayout context too).
-    /// When set, exclusion evaluates a window's FULL attributes (matching the
-    /// autotile engine) instead of appId alone, and the frame size carried in
-    /// the query is checked against the minimum-window-size thresholds. When
-    /// UNSET (default) the engine falls back to the appId-only query — the
-    /// historical behaviour unit tests rely on. A null/empty optional from the
-    /// provider (metadata not yet known) also falls back to appId-only.
-    ///
-    /// @p screenHint is the screen the caller knows the window belongs to, and
-    /// exists for the window-open path: a window being restored is not in any
-    /// SnapState yet, so the daemon's own screen resolution comes back empty and
-    /// the ScreenId / ActiveLayout leaves of an Exclude rule would not resolve.
-    /// Callers that ask about an already-tracked window (the navigation actions)
-    /// pass an empty hint and let the daemon resolve the screen from its
-    /// trackers.
+    /// Provider that builds the full WindowQuery for a live windowId. Its only
+    /// producer is the daemon's buildContextualRuleQuery, which stamps the
+    /// window's attributes, ScreenId / ActiveLayout / ScreenOrientation / Mode
+    /// for @p screenHint (or the screen the daemon tracks the window on) and the
+    /// live frame, which the minimum-window-size thresholds are checked against.
+    /// Every caller passes the screen it asks about: the open path the one the
+    /// window lands on, the navigation verbs the one they act on, the drag
+    /// selector the source screen or none. Unset, or an empty optional (no
+    /// metadata yet), falls back to the appId-only query unit tests rely on.
     using ExclusionQueryProvider =
         std::function<std::optional<PhosphorRules::WindowQuery>(const QString& windowId, const QString& screenHint)>;
 
@@ -998,6 +988,15 @@ public:
     void setExclusionQueryProvider(ExclusionQueryProvider provider)
     {
         m_exclusionQueryProvider = std::move(provider);
+    }
+    /// Builds the rule admission for an exclusion query: a rule naming a field
+    /// the query left unstamped is skipped, since a negated leaf on it would
+    /// match every window. Unset admits every rule.
+    using ExclusionAdmission =
+        std::function<std::function<bool(const PhosphorRules::Rule&)>(const PhosphorRules::WindowQuery&)>;
+    void setExclusionAdmission(ExclusionAdmission admission)
+    {
+        m_exclusionAdmission = std::move(admission);
     }
 
     /// True if @p appId matches an enabled rule in the borrowed
@@ -1019,10 +1018,9 @@ public:
     /// and applies the minimum-window-size thresholds to the query's frame
     /// size. Falls back to the appId-only path (@ref isAppIdExcluded's query
     /// shape) when no provider is set or window metadata is not yet known.
-    /// @p screenHint is forwarded to the provider — see ExclusionQueryProvider;
-    /// pass the screen the window is opening on where it is known, and leave it
-    /// empty for an already-tracked window.
-    /// Public so the unit-test layer can drive the wiring directly.
+    /// @p screenHint is forwarded to the provider (see ExclusionQueryProvider):
+    /// the screen the navigation verbs act on, the open path's landing screen,
+    /// or the drag selector's source screen.
     bool isWindowExcluded(const QString& windowId, const QString& screenHint = QString()) const;
 
 Q_SIGNALS:
@@ -1265,10 +1263,6 @@ private:
     /// otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
 
-    // `isAppIdExcluded` and `isWindowExcluded` are declared in the public
-    // section above (so the unit tests can drive the wiring directly); full
-    // docstrings live with those declarations.
-
     /// Shared tail of both exclusion entry points: bind the lazy evaluator to
     /// the current placement-exclusion rule set (empty/null set short-circuits) and resolve
     /// @p query. Keeps the rule-set/evaluator invariant in one place.
@@ -1328,6 +1322,7 @@ private:
 
     // Appended last (installed header). Created by the first parkOutput.
     std::unique_ptr<SnapEvacueePark> m_evacueePark;
+    ExclusionAdmission m_exclusionAdmission{};
 };
 
 } // namespace PhosphorSnapEngine

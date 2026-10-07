@@ -153,7 +153,13 @@ bool SnapEngine::evaluateExcludeRules(const PhosphorRules::WindowQuery& query) c
     if (!m_excludeEvaluator) {
         m_excludeEvaluator.emplace(*m_excludeRuleSet);
     }
-    return m_excludeEvaluator->resolve(query).isExcluded();
+    // A rule on a field the query left unstamped is skipped (F881): a negated
+    // leaf on it would otherwise exclude every window.
+    return m_excludeEvaluator
+        ->resolveFiltered(query,
+                          m_exclusionAdmission ? m_exclusionAdmission(query)
+                                               : std::function<bool(const PhosphorRules::Rule&)>{})
+        .isExcluded();
 }
 
 bool SnapEngine::isAppIdExcluded(const QString& appId) const

@@ -889,9 +889,9 @@ public:
      */
     void loadState();
 
-    /// Build the per-window rule query, with the screen-derived context fields
-    /// stamped on top of the WindowRegistry metadata. The registry records no
-    /// screen, so `ScreenId` and `ActiveLayout` can only be filled here: @p
+    /// Build the per-window rule query: the screen trio, Mode and the live frame
+    /// stamped on top of the WindowRegistry metadata, which holds no screen and
+    /// only the open-time size. @p
     /// screenIdHint names the screen the window is landing on (the open /
     /// routing paths know it before the service does), and an empty hint falls
     /// back to the service's live screen-for-window. `ActiveLayout` resolves to
@@ -1105,7 +1105,7 @@ public:
     /// live float resolver for the same window. ONLY for resolvers that skip
     /// the evaluator cache: the memo is keyed on window id and rule revision
     /// alone, so a stamped query is discarded on a hit.
-    void stampScreenAndMode(PhosphorRules::WindowQuery& query, const QString& windowId, const QString& screenId);
+    void stampScreenAndMode(PhosphorRules::WindowQuery& query, const QString& windowId, const QString& screenId) const;
 
     /// Stamp the screen-derived context trio onto @p query: ScreenId, the
     /// ActiveLayout resolved for that screen's CURRENT desktop and activity
