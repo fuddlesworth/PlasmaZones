@@ -650,6 +650,10 @@ void Daemon::connectDesktopActivity()
                 return;
             }
             const QStringList activities = m_activityManager->activities();
+            // Empty is the activity service going away: KDE always has one (F423).
+            if (activities.isEmpty()) {
+                return;
+            }
             const QSet<QString> validSet(activities.begin(), activities.end());
 
             // Prune both per-mode disabled-activity lists.

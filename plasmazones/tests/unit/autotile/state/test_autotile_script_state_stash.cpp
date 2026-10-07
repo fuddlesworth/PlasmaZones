@@ -627,6 +627,24 @@ private Q_SLOTS:
 
         QVERIFY(bagOn(engine, screen).isEmpty());
     }
+
+    /// An empty activity list is the activity service going away, not every
+    /// activity being removed: the context keeps its state (F423).
+    void testStashKeptWhenActivitiesAreUnavailable()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setCurrentActivity(QStringLiteral("activity-a"));
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        QVERIFY(seedBag(engine, screen, sampleBag()));
+
+        engine.setAutotileScreens({});
+        engine.pruneStatesForActivities({});
+        engine.setAutotileScreens({screen});
+
+        QVERIFY(!bagOn(engine, screen).isEmpty());
+    }
 };
 
 QTEST_MAIN(TestAutotileScriptStateStash)

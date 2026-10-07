@@ -867,6 +867,10 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
 
 void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
+    // Empty is the activity service going away, not every activity removed (F423).
+    if (validActivities.isEmpty()) {
+        return;
+    }
     const auto stale = [&validActivities](const QString& activity) {
         return !activity.isEmpty() && !validActivities.contains(activity);
     };
