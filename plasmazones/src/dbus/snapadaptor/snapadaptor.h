@@ -44,9 +44,9 @@ class ISettings;
  * Signal relay from SnapEngine to WindowTrackingAdaptor is also wired
  * here (navigationFeedback, windowFloatingChanged, applyGeometryRequested,
  * snapAllWindowsRequested, applyGeometriesBatch, activateWindowRequested).
- * SnapEngine::resnapToNewLayoutRequested routes to this adaptor's own
- * handleBatchedResnap slot (bookkeeping + applyGeometriesBatch emission),
- * not directly to WTA.
+ * SnapEngine::resnapToNewLayoutRequested routes to this adaptor's
+ * applyEngineResnap (bookkeeping + applyGeometriesBatch emission), not
+ * directly to WTA; the bus slot handleBatchedResnap checks external batches.
  *
  * @see SnapEngine, WindowTrackingAdaptor
  */
@@ -188,13 +188,16 @@ public Q_SLOTS:
     void resnapToNewLayout();
 
     /**
-     * @brief Resnap windows to their current zone assignments
+     * @brief Resnap windows to their current zone assignments, on screens
+     *        snapping runs and the user has not disabled
      * @param screenFilter When non-empty, only resnap windows on this screen
+     *        (a monitor's id covers all its virtual screens)
      */
     void resnapCurrentAssignments(const QString& screenFilter = QString());
 
     /**
-     * @brief Resnap windows from autotile to manual zones using explicit window order
+     * @brief Resnap windows from autotile to manual zones using explicit window
+     *        order, on a screen snapping runs, for live windows it does not exclude
      */
     void resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId);
 
@@ -209,7 +212,8 @@ public Q_SLOTS:
     void snapAllWindows(const QString& screenId);
 
     /**
-     * @brief Process a batch of resnap entries
+     * @brief Commit an external batch of resnap entries, each checked as a bus
+     *        snap is (admitBusSnap) and dropped when it fails
      */
     void handleBatchedResnap(const QString& resnapData);
 
@@ -258,7 +262,8 @@ public Q_SLOTS:
     /**
      * @brief Rotate windows in the layout for a specific screen (daemon-driven)
      * @param clockwise true for clockwise rotation, false for counterclockwise
-     * @param screenId Screen to rotate on (empty = all screens)
+     * @param screenId Screen to rotate on (empty = all screens); one snapping
+     *        does not run rotates nothing
      */
     void rotateWindowsInLayout(bool clockwise, const QString& screenId = QString());
 
@@ -428,6 +433,9 @@ private:
     /// Release the record's snap slot once no store holds a zone or the float
     /// bit for @p windowId (an unsnap confirmation leaves it free).
     void releaseSnapSlotIfFree(const QString& windowId);
+    /// The engine's own resnap batches (resnapToNewLayoutRequested), committed
+    /// as they are.
+    void applyEngineResnap(const QString& resnapData);
 
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;

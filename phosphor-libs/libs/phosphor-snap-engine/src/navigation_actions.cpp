@@ -936,6 +936,12 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
                                   QString(), screenId);
         return;
     }
+    // A named screen snapping does not run, or snapping switched off, rotates
+    // nothing; refused silently with a log, as the shortcut is (F367).
+    if (snappingSwitchedOff() || (!screenId.isEmpty() && !isActiveOnScreen(screenId))) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "rotateWindowsInLayout: snapping does not run on" << screenId;
+        return;
+    }
     QVector<ZoneAssignmentEntry> entries = calculateRotation(clockwise, screenId);
     if (entries.isEmpty()) {
         auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);

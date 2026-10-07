@@ -18,6 +18,7 @@
 
 #include <PhosphorContext/IContextResolver.h>
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorRules/WindowQuery.h>
 
@@ -636,6 +637,82 @@ private Q_SLOTS:
         QVERIFY(after.has_value());
         QCOMPARE(after->engines.value(PhosphorEngine::WindowPlacement::snapEngineId()).state,
                  QString(PhosphorEngine::WindowPlacement::stateReleased()));
+    }
+
+    // The bus resnap slots act only where snapping runs (F367's folds).
+    void busResnapSkipsATilingScreen()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("rs-1"), 1, QRect(2400, 200, 400, 300));
+        f.snap->commitSnap(w, f.zone(0), kRight);
+        f.tile(kRight);
+        QSignalSpy batches(f.wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+        f.adaptor->resnapCurrentAssignments(kRight);
+        QCOMPARE(batches.count(), 0);
+    }
+
+    void busBatchDropsAnUnregisteredWindow()
+    {
+        GateFixture f;
+        const QString ghost = QStringLiteral("app|batch-ghost");
+        f.adaptor->handleBatchedResnap(batchFor(f, ghost, f.zone(0), kLeft));
+        QVERIFY(!f.snap->isWindowTracked(ghost));
+    }
+
+    void busBatchDropsATilingScreen()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("batch-1"), 1, QRect(2400, 200, 400, 300));
+        f.tile(kRight);
+        f.adaptor->handleBatchedResnap(batchFor(f, w, f.zone(0), kRight));
+        QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+    }
+
+    void busBatchDropsADesktopPastTheLast()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("batch-2"), 1);
+        f.adaptor->handleBatchedResnap(batchFor(f, w, f.zone(0), kLeft, 7));
+        QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+    }
+
+    void busAutotileOrderOnATilingScreenDoesNothing()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("order-1"), 1, QRect(2400, 200, 400, 300));
+        f.tile(kRight);
+        QSignalSpy batches(f.wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+        f.adaptor->resnapFromAutotileOrder({w}, kRight);
+        QCOMPARE(batches.count(), 0);
+        QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+    }
+
+    // The engine's own batches are not external: the relay commits them as
+    // they are, registered or not.
+    void engineRelayStillCommitsItsBatch()
+    {
+        GateFixture f;
+        const QString ghost = QStringLiteral("app|relay-ghost");
+        PhosphorEngine::ZoneAssignmentEntry entry;
+        entry.windowId = ghost;
+        entry.targetZoneId = f.zone(0);
+        entry.targetGeometry = f.wta->service()->zoneGeometry(f.zone(0), kLeft);
+        entry.targetScreenId = kLeft;
+        f.snap->emitBatchedResnap({entry});
+        QCOMPARE(f.snap->zoneForWindow(ghost), f.zone(0));
+    }
+
+private:
+    static QString batchFor(GateFixture& f, const QString& windowId, const QString& zone, const QString& screen,
+                            int desktop = 0)
+    {
+        PhosphorEngine::ZoneAssignmentEntry entry;
+        entry.windowId = windowId;
+        entry.targetZoneId = zone;
+        entry.targetGeometry = f.wta->service()->zoneGeometry(zone, screen);
+        entry.targetScreenId = screen;
+        entry.virtualDesktop = desktop;
+        return PhosphorEngine::GeometryUtils::serializeZoneAssignments({entry});
     }
 };
 

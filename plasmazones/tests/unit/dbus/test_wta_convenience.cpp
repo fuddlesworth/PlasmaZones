@@ -196,14 +196,14 @@ private Q_SLOTS:
         entry.restatement = true;
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometriesBatch);
 
-        m_snapAdaptor->handleBatchedResnap(PhosphorEngine::GeometryUtils::serializeZoneAssignments({entry}));
+        m_snapEngine->emitBatchedResnap({entry});
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.last().at(1).toString(), QStringLiteral("restate"));
 
         entry.targetZoneId = m_zoneIds[1];
         entry.targetGeometry = m_wta->service()->zoneGeometry(m_zoneIds[1], m_screenId);
         entry.restatement = false;
-        m_snapAdaptor->handleBatchedResnap(PhosphorEngine::GeometryUtils::serializeZoneAssignments({entry}));
+        m_snapEngine->emitBatchedResnap({entry});
         QCOMPARE(spy.count(), 2);
         QCOMPARE(spy.last().at(1).toString(), QStringLiteral("resnap"));
     }

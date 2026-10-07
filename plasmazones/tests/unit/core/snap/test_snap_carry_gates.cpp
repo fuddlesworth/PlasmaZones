@@ -226,6 +226,83 @@ private Q_SLOTS:
         }
     }
 
+    // Rotation leaves a screen snapping does not run, a context the user
+    // disabled and everything with snapping off alone (F367).
+    void rotationSkipsATilingScreen()
+    {
+        snapTwo();
+        m_engine->setLiveModeResolver([](const QString&) {
+            return PhosphorZones::AssignmentEntry::Mode::Autotile;
+        });
+        QVERIFY(m_engine->calculateRotation(true, QString()).isEmpty());
+        m_engine->setLiveModeResolver({});
+    }
+
+    void rotationSkipsADisabledContext()
+    {
+        snapTwo();
+        m_engine->setShouldRestorePredicate([](const QString&, int) {
+            return false;
+        });
+        QVERIFY(m_engine->calculateRotation(true, QString()).isEmpty());
+        m_engine->setShouldRestorePredicate({});
+    }
+
+    void rotationWithSnappingOffIsEmpty()
+    {
+        snapTwo();
+        m_settings->setSnappingEnabled(false);
+        QVERIFY(m_engine->calculateRotation(true, QString()).isEmpty());
+    }
+
+    // What the rotate verb reports, and the batch it sends (F845).
+    void rotateReportsSingleZone()
+    {
+        PhosphorZones::Layout* one = createTestLayout(1, m_layoutManager);
+        m_layoutManager->addLayout(one);
+        m_layoutManager->assignLayout(kScreen, 1, QString(), one);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        QSignalSpy feedback(m_engine, &SnapEngine::navigationFeedback);
+        m_engine->rotateWindowsInLayout(true, kScreen);
+        QCOMPARE(feedback.count(), 1);
+        QCOMPARE(feedback.first().at(2).toString(), QStringLiteral("single_zone"));
+    }
+
+    void rotateReportsNoSnappedWindows()
+    {
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        QSignalSpy feedback(m_engine, &SnapEngine::navigationFeedback);
+        m_engine->rotateWindowsInLayout(true, kScreen);
+        QCOMPARE(feedback.count(), 1);
+        QCOMPARE(feedback.first().at(2).toString(), QStringLiteral("no_snapped_windows"));
+    }
+
+    void rotateSendsARotateBatch()
+    {
+        snapTwo();
+        QSignalSpy batches(m_engine, &SnapEngine::applyGeometriesBatch);
+        QSignalSpy feedback(m_engine, &SnapEngine::navigationFeedback);
+        m_engine->rotateWindowsInLayout(true, kScreen);
+        QCOMPARE(batches.count(), 1);
+        QCOMPARE(batches.first().at(1).toString(), QStringLiteral("rotate"));
+        QCOMPARE(feedback.count(), 1);
+        QCOMPARE(feedback.first().at(2).toString(), QStringLiteral("clockwise:2"));
+        QCOMPARE(zonesOn(1), QStringList{m_zoneIds[1]});
+    }
+
+    void rotateRefusesANamedTilingScreen()
+    {
+        snapTwo();
+        m_engine->setLiveModeResolver([](const QString&) {
+            return PhosphorZones::AssignmentEntry::Mode::Autotile;
+        });
+        QSignalSpy batches(m_engine, &SnapEngine::applyGeometriesBatch);
+        m_engine->rotateWindowsInLayout(true, kScreen);
+        QCOMPARE(batches.count(), 0);
+        m_engine->setLiveModeResolver({});
+        QCOMPARE(zonesOn(1), QStringList{m_zoneIds[0]});
+    }
+
     // A batch entry whose span holds an empty member commits nothing and sends
     // no geometry, so the effect is not handed a placement the daemon
     // never recorded (F459).
@@ -253,6 +330,14 @@ private Q_SLOTS:
     }
 
 private:
+    /// kWindow in zone 1 and a second window in zone 2, on desktop 1.
+    void snapTwo()
+    {
+        snapOn(1, m_zoneIds[0]);
+        m_service->assignWindowToZone(QStringLiteral("other|bbbbbbbb-0000-0000-0000-000000000002"), m_zoneIds[1],
+                                      kScreen, 1);
+    }
+
     void snapOn(int desktop, const QString& zoneId)
     {
         m_engine->setCurrentDesktopForScreen(kScreen, desktop);

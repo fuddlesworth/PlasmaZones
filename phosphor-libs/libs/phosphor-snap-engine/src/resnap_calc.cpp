@@ -569,6 +569,9 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "calculateRotation: no window tracker";
         return {};
     }
+    if (snappingSwitchedOff()) {
+        return {};
+    }
     QVector<ZoneAssignmentEntry> result;
 
     // Group snapped windows by screen so each screen rotates independently
@@ -593,6 +596,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
     // per screen, not one per candidate (-1 = not yet cached, 0 is a valid
     // cached "unknown").
     QHash<QString, int> screenDesktopMemo;
+    QHash<QString, bool> screenSnapsMemo; // one live-mode read per screen
     const QString activityInView = currentActivity();
     forEachSnapAssignment([&](const QString& windowId, const QStringList& zoneIdList, const QString& screenId,
                               int desktop, int, const QString& storeActivity) {
@@ -600,8 +604,17 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
             return;
         }
         // Rotation acts on the activity in view too, and never on a window
-        // snapping leaves alone (F445).
+        // snapping leaves alone or a screen it does not run (F445, F367):
+        // frozen memory on a monitor that now tiles, or in a context the
+        // user disabled, stays put.
         if ((!storeActivity.isEmpty() && storeActivity != activityInView) || isWindowExcluded(windowId, screenId)) {
+            return;
+        }
+        auto snaps = screenSnapsMemo.constFind(screenId);
+        if (snaps == screenSnapsMemo.constEnd()) {
+            snaps = screenSnapsMemo.insert(screenId, isActiveOnScreen(screenId));
+        }
+        if (!snaps.value() || !snapsInContext({screenId, desktop, storeActivity})) {
             return;
         }
 

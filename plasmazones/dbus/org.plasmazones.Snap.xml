@@ -111,13 +111,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Resnap all windows from the previous layout to the current layout."/>
         </method>
         <method name="resnapCurrentAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Resnap windows to their current zone assignments."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Resnap windows to their current zone assignments, only on screens that snap and that are not disabled."/>
             <arg name="screenFilter" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="When non-empty, only resnap windows on this screen."/>
             </arg>
         </method>
         <method name="resnapFromAutotileOrder">
-            <annotation name="org.gtk.GDBus.DocString" value="Resnap windows from autotile to manual zones using the explicit autotile window order."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Resnap windows from autotile to manual zones using the explicit autotile window order. Only on a screen that snaps and is not disabled, and only for live windows that are not excluded there."/>
             <arg name="autotileWindowOrder" type="as" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
         </method>
@@ -135,7 +135,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="screenId" type="s" direction="in"/>
         </method>
         <method name="handleBatchedResnap">
-            <annotation name="org.gtk.GDBus.DocString" value="Process a batch of resnap entries (JSON payload) and emit the resulting WindowTracking.applyGeometriesBatch."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Process a batch of resnap entries (JSON payload) and emit the resulting WindowTracking.applyGeometriesBatch. An entry a snap shortcut could not make is dropped."/>
             <arg name="resnapData" type="s" direction="in"/>
         </method>
 
@@ -176,7 +176,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="rotateWindowsInLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Rotate windows in the layout for a screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Rotate windows in the layout for a screen. Screens that tile or scroll, and disabled ones, are left alone."/>
             <arg name="clockwise" type="b" direction="in"/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to rotate on (empty = all screens)."/>

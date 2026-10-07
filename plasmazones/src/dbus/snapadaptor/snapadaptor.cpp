@@ -82,11 +82,12 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::snapAllWindowsRequested, adaptor,
                                  &WindowTrackingAdaptor::snapAllWindowsRequested));
 
-    // Batched resnap: emitBatchedResnap is called from the Daemon layer (autotile→snap
-    // transition) which bypasses WTA navigation methods. Route through handleBatchedResnap
-    // for proper bookkeeping (windowSnapped per entry) + applyGeometriesBatch emission.
+    // Batched resnap: the engine's own batches (emitBatchedResnap, the
+    // autotile→snap transition, the desktop carry) are committed by the relay
+    // as they are. The bus slot of the same shape, handleBatchedResnap, checks
+    // an external caller's entries first.
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::resnapToNewLayoutRequested, this,
-                                 &SnapAdaptor::handleBatchedResnap));
+                                 &SnapAdaptor::applyEngineResnap));
 
     // Batched geometry application: rotate / resnap / snap-all paths build
     // a PhosphorProtocol::WindowGeometryList and emit it here. WTA's applyGeometriesBatch
