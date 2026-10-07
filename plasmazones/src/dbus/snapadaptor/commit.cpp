@@ -6,6 +6,7 @@
 #include "core/platform/logging.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 namespace PlasmaZones {
 
@@ -171,45 +172,75 @@ void SnapAdaptor::swapWindowsById(const QString& windowId1, const QString& windo
 
     auto* svc = m_adaptor->service();
 
-    // Get each window's current zone
-    QString zoneId1 = svc->zoneForWindow(windowId1);
-    QString zoneId2 = svc->zoneForWindow(windowId2);
-
-    if (zoneId1.isEmpty() || zoneId2.isEmpty()) {
+    // Each window takes the other's whole span, in the context that span is
+    // held in, through the gate a single bus snap passes (F79, F179). A span in
+    // a store with no desktop identity lands on the window's own desktop.
+    const QStringList zones1 = svc->zonesForWindow(windowId1);
+    const QStringList zones2 = svc->zonesForWindow(windowId2);
+    if (zones1.isEmpty() || zones2.isEmpty()) {
         qCWarning(lcDbusWindow) << "swapWindowsById: one or both windows not snapped"
-                                << "w1:" << windowId1 << "zone:" << zoneId1 << "w2:" << windowId2 << "zone:" << zoneId2;
+                                << "w1:" << windowId1 << "zones:" << zones1 << "w2:" << windowId2 << "zones:" << zones2;
+        return;
+    }
+    PhosphorZones::LayoutRegistry* const layouts = m_adaptor->layoutRegistry();
+    const QString activity = layouts ? layouts->currentActivity() : QString();
+    const auto heldContext = [&](const QString& windowId) -> std::optional<PhosphorEngine::PlacementStateKey> {
+        const std::optional<PhosphorEngine::PlacementStateKey> key = m_engine->heldKeyForWindow(windowId);
+        if (!key) {
+            return PhosphorEngine::PlacementStateKey{svc->screenForWindow(windowId), 0, QString()};
+        }
+        // A commit pins the current activity's store, so a span held under
+        // another activity cannot be handed over.
+        if (!activity.isEmpty() && !key->activity.isEmpty() && key->activity != activity) {
+            qCInfo(lcDbusWindow) << "swapWindowsById refused:" << windowId << "is held on activity" << key->activity;
+            return std::nullopt;
+        }
+        return key;
+    };
+    const std::optional<PhosphorEngine::PlacementStateKey> held1 = heldContext(windowId1);
+    const std::optional<PhosphorEngine::PlacementStateKey> held2 = heldContext(windowId2);
+    if (!held1 || !held2 || held1->screenId.isEmpty() || held2->screenId.isEmpty()) {
+        return;
+    }
+    const std::optional<BusSnapTarget> target1 = admitBusSnap(windowId1, zones2, held2->screenId, held2->desktop);
+    const std::optional<BusSnapTarget> target2 = admitBusSnap(windowId2, zones1, held1->screenId, held1->desktop);
+    if (!target1 || !target2) {
         return;
     }
 
-    // Get screens for each window
-    QString screen1 = svc->screenForWindow(windowId1);
-    QString screen2 = svc->screenForWindow(windowId2);
-
-    // Get the OTHER window's zone geometry (for the swap)
-    QRect geo1 = svc->zoneGeometry(zoneId2, screen2); // window1 moves to zone2
-    QRect geo2 = svc->zoneGeometry(zoneId1, screen1); // window2 moves to zone1
-
+    const QRect geo1 = svc->resolveZoneGeometry(zones2, target1->screenId);
+    const QRect geo2 = svc->resolveZoneGeometry(zones1, target2->screenId);
     if (!geo1.isValid() || !geo2.isValid()) {
-        qCWarning(lcDbusWindow) << "swapWindowsById: invalid geometry for swap";
+        qCWarning(lcDbusWindow) << "swapWindowsById: invalid geometry:" << windowId1 << zones2 << "on"
+                                << target1->screenId << geo1 << "and" << windowId2 << zones1 << "on"
+                                << target2->screenId << geo2;
         return;
     }
 
-    // Update bookkeeping: window1 goes to zone2, window2 goes to zone1
-    m_engine->commitSnap(windowId1, zoneId2, screen2);
-    m_engine->commitSnap(windowId2, zoneId1, screen1);
+    const auto commit = [this](const QString& windowId, const QStringList& zones, const BusSnapTarget& target) {
+        if (zones.size() > 1) {
+            m_engine->commitMultiZoneSnap(windowId, zones, target.screenId, PhosphorEngine::SnapIntent::UserInitiated,
+                                          target.desktop);
+        } else {
+            m_engine->commitSnap(windowId, zones.first(), target.screenId, PhosphorEngine::SnapIntent::UserInitiated,
+                                 target.desktop);
+        }
+    };
+    commit(windowId1, zones2, *target1);
+    commit(windowId2, zones1, *target2);
     recordSnapIntent(windowId1, true);
     recordSnapIntent(windowId2, true);
 
     // Emit geometry requests for both
-    Q_EMIT m_adaptor->applyGeometryRequested(windowId1, geo1.x(), geo1.y(), geo1.width(), geo1.height(), zoneId2,
-                                             screen2, false,
+    Q_EMIT m_adaptor->applyGeometryRequested(windowId1, geo1.x(), geo1.y(), geo1.width(), geo1.height(), zones2.first(),
+                                             target1->screenId, false,
                                              static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
-    Q_EMIT m_adaptor->applyGeometryRequested(windowId2, geo2.x(), geo2.y(), geo2.width(), geo2.height(), zoneId1,
-                                             screen1, false,
+    Q_EMIT m_adaptor->applyGeometryRequested(windowId2, geo2.x(), geo2.y(), geo2.width(), geo2.height(), zones1.first(),
+                                             target2->screenId, false,
                                              static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
 
-    qCInfo(lcDbusWindow) << "swapWindowsById:" << windowId1 << "<->" << windowId2 << "zones:" << zoneId1 << "<->"
-                         << zoneId2;
+    qCInfo(lcDbusWindow) << "swapWindowsById:" << windowId1 << "<->" << windowId2 << "zones:" << zones1 << "<->"
+                         << zones2;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

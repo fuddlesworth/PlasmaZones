@@ -197,7 +197,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="zoneId" type="s" direction="in"/>
         </method>
         <method name="swapWindowsById">
-            <annotation name="org.gtk.GDBus.DocString" value="Swap two specific windows by ID."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Swap two snapped windows by ID. Each takes the other's whole span, in the context that span is held in, and the swap is refused where a snap shortcut could not make it."/>
             <arg name="windowId1" type="s" direction="in"/>
             <arg name="windowId2" type="s" direction="in"/>
         </method>

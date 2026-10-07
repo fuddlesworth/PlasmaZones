@@ -669,8 +669,9 @@ private Q_SLOTS:
 
     void testSwapWindowsById_twoSnappedWindows_emitsTwoApplyGeometry()
     {
-        QString window1 = QStringLiteral("app1|11111");
-        QString window2 = QStringLiteral("app2|22222");
+        installRegistry();
+        QString window1 = registerWindow(QStringLiteral("app1|11111"));
+        QString window2 = registerWindow(QStringLiteral("app2|22222"));
 
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
 
@@ -696,8 +697,9 @@ private Q_SLOTS:
 
     void testSwapWindowsById_oneNotSnapped_noSignal()
     {
-        QString window1 = QStringLiteral("app1|11111");
-        QString window2 = QStringLiteral("app2|22222");
+        installRegistry();
+        QString window1 = registerWindow(QStringLiteral("app1|11111"));
+        QString window2 = registerWindow(QStringLiteral("app2|22222"));
 
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
 

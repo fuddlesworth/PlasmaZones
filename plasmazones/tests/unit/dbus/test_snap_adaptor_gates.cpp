@@ -6,7 +6,8 @@
  * @brief The bus snap gate (SnapAdaptor::admitBusSnap): a D-Bus snap of one
  *        window lands only where a keyboard snap could, on the window's own
  *        desktop, and Control.snapWindowToZone resolves its screen the same
- *        way (F20, F142, F179, F21, F22, F26, F85).
+ *        way (F20, F142, F179, F21, F22, F26, F85). The focused-window verbs
+ *        and a swap pass the same gates (F362, F79).
  */
 
 #include "wta_float_back_fixture.h"
@@ -367,6 +368,103 @@ private Q_SLOTS:
         f.settings.setSnappingEnabled(false);
         QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
         f.adaptor->snapToZoneByNumber(2, QString());
+        QCOMPARE(applies.count(), 0);
+    }
+    // A bus swap commits both windows, each on the other's screen (F848).
+    void swapCommitsBothAndPairsTheScreens()
+    {
+        GateFixture f;
+        const QString a = f.registerOn(QStringLiteral("swap-a"), 1);
+        const QString b = f.registerOn(QStringLiteral("swap-b"), 1, QRect(2400, 200, 400, 300));
+        f.snap->commitSnap(a, f.zone(0), kLeft);
+        f.snap->commitSnap(b, f.zone(1), kRight);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->swapWindowsById(a, b);
+        QCOMPARE(applies.count(), 2);
+        QCOMPARE(f.snap->zoneForWindow(a), f.zone(1));
+        QCOMPARE(f.wta->service()->screenForWindow(a), kRight);
+        QCOMPARE(f.snap->zoneForWindow(b), f.zone(0));
+        QCOMPARE(f.wta->service()->screenForWindow(b), kLeft);
+        QCOMPARE(applies.at(0).at(8).toInt(), static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+        QCOMPARE(applies.at(1).at(8).toInt(), static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
+    }
+
+    // A window spanning two zones hands the whole span to its partner (F79).
+    void swapKeepsASpan()
+    {
+        GateFixture f;
+        const QString a = f.registerOn(QStringLiteral("span-a"), 1);
+        const QString b = f.registerOn(QStringLiteral("span-b"), 1);
+        const QStringList span{f.zone(0), f.zone(1)};
+        f.snap->commitMultiZoneSnap(a, span, kLeft);
+        f.snap->commitSnap(b, f.zone(2), kLeft);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->swapWindowsById(a, b);
+        QCOMPARE(applies.count(), 2);
+        QCOMPARE(f.wta->service()->zonesForWindow(b), span);
+        QCOMPARE(f.wta->service()->zonesForWindow(a), QStringList{f.zone(2)});
+        const QRect unionRect = f.wta->service()->multiZoneGeometry(span, kLeft);
+        QCOMPARE(QRect(applies.at(1).at(1).toInt(), applies.at(1).at(2).toInt(), applies.at(1).at(3).toInt(),
+                       applies.at(1).at(4).toInt()),
+                 unionRect);
+    }
+
+    void swapRefusesATilingScreen()
+    {
+        GateFixture f;
+        const QString a = f.registerOn(QStringLiteral("tswap-a"), 1);
+        const QString b = f.registerOn(QStringLiteral("tswap-b"), 1, QRect(2400, 200, 400, 300));
+        f.snap->commitSnap(a, f.zone(0), kLeft);
+        f.snap->commitSnap(b, f.zone(1), kRight);
+        f.tile(kRight);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->swapWindowsById(a, b);
+        QCOMPARE(applies.count(), 0);
+        QCOMPARE(f.snap->zoneForWindow(a), f.zone(0));
+        QCOMPARE(f.snap->zoneForWindow(b), f.zone(1));
+    }
+
+    void swapRefusesAnUnregisteredPartner()
+    {
+        GateFixture f;
+        const QString a = f.registerOn(QStringLiteral("live-a"), 1);
+        const QString ghost = QStringLiteral("app|swap-ghost");
+        f.snap->commitSnap(a, f.zone(0), kLeft);
+        f.snap->commitSnap(ghost, f.zone(1), kLeft);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->swapWindowsById(a, ghost);
+        QCOMPARE(applies.count(), 0);
+        QCOMPARE(f.snap->zoneForWindow(a), f.zone(0));
+    }
+
+    // Two windows snapped on a desktop not in view swap there and leave no
+    // membership on the desktop in view (F179).
+    void swapOnAHiddenDesktopStaysThere()
+    {
+        GateFixture f;
+        f.layouts->assignLayout(kLeft, 2, QString(), f.layout);
+        f.snap->setCurrentDesktopForScreen(kLeft, 1);
+        const QString a = f.registerOn(QStringLiteral("hswap-a"), 2);
+        const QString b = f.registerOn(QStringLiteral("hswap-b"), 2);
+        f.snap->commitSnap(a, f.zone(0), kLeft, PhosphorEngine::SnapIntent::UserInitiated, 2);
+        f.snap->commitSnap(b, f.zone(1), kLeft, PhosphorEngine::SnapIntent::UserInitiated, 2);
+        f.adaptor->swapWindowsById(a, b);
+        for (const QString& w : {a, b}) {
+            const PhosphorSnapEngine::SnapState* store = f.snap->stateForWindow(w);
+            QVERIFY(store);
+            QCOMPARE(f.snap->keyForState(store).value_or(PhosphorEngine::PlacementStateKey{}).desktop, 2);
+        }
+        QCOMPARE(f.snap->stateForWindow(a)->zoneForWindow(a), f.zone(1));
+        QCOMPARE(f.snap->stateForWindow(b)->zoneForWindow(b), f.zone(0));
+    }
+
+    void swapRefusesItself()
+    {
+        GateFixture f;
+        const QString a = f.registerOn(QStringLiteral("self-a"), 1);
+        f.snap->commitSnap(a, f.zone(0), kLeft);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->swapWindowsById(a, a);
         QCOMPARE(applies.count(), 0);
     }
 };
