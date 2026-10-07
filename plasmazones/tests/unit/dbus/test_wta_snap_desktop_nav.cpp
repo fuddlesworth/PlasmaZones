@@ -424,6 +424,77 @@ private Q_SLOTS:
         QCOMPARE(f.zda->getFirstZoneInDirectionOnDesktop(QStringLiteral("left"), kLeft, 0), f.zone(0));
     }
 
+    // ── L14.12: Restore acts on snapped windows only ──
+
+    // A floating window has no zone to restore out of: refused, not moved,
+    // and its float-back kept (F190).
+    void restoreRefusesAFloatingWindow()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("rf-1"));
+        f.snapThenFloat(w, kLeft);
+        QVERIFY(f.snap->isFloating(w));
+        const QRect free(300, 200, 640, 480);
+        f.wta->service()->recordFreeGeometry(w, kLeft, free, true);
+        QSignalSpy applies(f.snap.get(), &SnapEngine::applyGeometryRequested);
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        f.snap->restoreFocusedWindow(NavigationContext{w, kLeft});
+        QCOMPARE(applies.count(), 0);
+        QVERIFY(!feedback.isEmpty());
+        QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("not_snapped"));
+        QCOMPARE(f.floatBack(w, kLeft), free);
+    }
+
+    // A snapped window goes to its float-back on its own screen, floats, and
+    // the record says floating at once; another screen's float-back stays
+    // (F843, F353).
+    void restoreOfASnappedWindow()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("rs-1"));
+        const QRect left(300, 200, 640, 480);
+        const QRect right(2200, 200, 640, 480);
+        f.wta->service()->recordFreeGeometry(w, kLeft, left, true);
+        f.wta->service()->recordFreeGeometry(w, kRight, right, true);
+        f.snapOn(w, {f.zone(0)}, kLeft, 1);
+        QStringList applied;
+        QObject::connect(f.snap.get(), &SnapEngine::applyGeometryRequested, f.snap.get(),
+                         [&](const QString&, int x, int y, int width, int height, const QString& zoneId) {
+                             applied.append(
+                                 QStringLiteral("%1,%2 %3x%4 [%5]").arg(x).arg(y).arg(width).arg(height).arg(zoneId));
+                         });
+        QSignalSpy floated(f.snap.get(), &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        f.snap->restoreFocusedWindow(NavigationContext{w, kLeft});
+        QCOMPARE(applied, (QStringList{QStringLiteral("300,200 640x480 []")}));
+        QCOMPARE(floated.count(), 1);
+        QCOMPARE(floated.first().at(1).toBool(), true);
+        QCOMPARE(floated.first().at(2).toString(), kLeft);
+        QVERIFY(f.snap->isWindowTracked(w));
+        QCOMPARE(f.floatBack(w, kRight), right);
+        const auto record = f.wta->service()->placementStore().peekExact(w);
+        QVERIFY(record.has_value());
+        QCOMPARE(record->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateFloating()));
+    }
+
+    // With no float-back there is nothing to restore to (F843).
+    void restoreWithoutAFloatBackDoesNothing()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString w = f.live(QStringLiteral("rn-1"));
+        f.snapOn(w, {f.zone(0)}, kLeft, 1);
+        QSignalSpy applies(f.snap.get(), &SnapEngine::applyGeometryRequested);
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        f.snap->restoreFocusedWindow(NavigationContext{w, kLeft});
+        QCOMPARE(applies.count(), 0);
+        QVERIFY(!feedback.isEmpty());
+        QCOMPARE(feedback.last().at(0).toBool(), false);
+        QCOMPARE(f.snap->stateForWindowOnScreen(w, kLeft, 1)->zonesForWindow(w), (QStringList{f.zone(0)}));
+    }
+
 private:
     /// A second three-zone layout, run by DP-1 on desktop 2.
     static PhosphorZones::Layout* secondLayout(SnapNavFixture& f)

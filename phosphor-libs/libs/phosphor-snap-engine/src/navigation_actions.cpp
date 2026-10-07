@@ -828,6 +828,13 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
         return;
     }
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
+    // Restore takes a window out of its zone; a floating or free window has
+    // none to leave, and moving it to a float-back is not a restore (F190).
+    if (zoneForWindow(windowId).isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("restore"), QStringLiteral("not_snapped"), QString(), QString(),
+                                  screenId);
+        return;
+    }
     PhosphorProtocol::RestoreTargetResult result = resolver->getRestoreForWindow(windowId, screenId);
     if (!result.success) {
         return;
@@ -845,8 +852,12 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
     // which made capturePlacement return nullopt, which left the STALE SNAPPED
     // record intact under the capture orchestrator's no-engine contract — the
     // window re-snapped to the zone it was just restored out of on next login.
+    // The capture repeats here: uncommitSnap's ran while it was in neither (F353).
     stateForWindowOnScreen(windowId, screenId)
         ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
+    if (auto placement = capturePlacement(windowId)) {
+        m_windowTracker->placementStore().record(std::move(*placement));
+    }
     Q_EMIT windowFloatingChanged(windowId, true, screenId);
     Q_EMIT applyGeometryRequested(windowId, result.x, result.y, result.width, result.height, QString(), screenId,
                                   false);

@@ -761,7 +761,7 @@ public:
     /// Move the focused window to the first empty zone on ctx.screenId.
     void pushToEmptyZone(const PhosphorEngine::NavigationContext& ctx) override;
 
-    /// Restore the focused window to its captured pre-snap size and unsnap.
+    /// Restore the focused window in a zone to its float-back on its screen and float it; one in no zone is refused.
     void restoreFocusedWindow(const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Toggle the focused window between snapped and floating.
