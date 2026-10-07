@@ -986,14 +986,13 @@ private:
     auto preFloatLookup(const QString& windowId, Func&& getter) const
         -> decltype(getter(std::declval<PhosphorSnapEngine::SnapState*>(), windowId));
 
-    /// Clear the last-used zone on EVERY snap store that points at
-    /// @p targetScreen but whose zone no longer exists in that screen's layout
-    /// (last-used is per-key, so this sweeps all of them, not one member).
-    /// Marks DirtyLastUsedZone itself when it clears any, so a caller that
-    /// schedules no save of its own still persists the clear. A screen whose
-    /// layout does not resolve is left alone: without a layout nothing can
-    /// prove the zone is stale.
+    /// Clear the last-used zone on every snap store pointing at @p targetScreen whose zone is gone from
+    /// that store's own layout (lastUsedLayoutFor; a store with none is left alone, as nothing can prove
+    /// it stale). Marks DirtyLastUsedZone itself, so a caller that schedules no save still persists it.
     void validateLastUsedZone(const QString& targetScreen);
+    /// The layout @p state's last-used zone belongs to on @p screenId: the store's own desktop and
+    /// activity (F162). Null for a context that does not snap or has no layout.
+    PhosphorZones::Layout* lastUsedLayoutFor(const PhosphorSnapEngine::SnapState* state, const QString& screenId) const;
 
     /// Find the nearest virtual screen by index proximity.
     /// Used when a stored virtual screen ID no longer exists in the current configuration.

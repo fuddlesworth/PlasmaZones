@@ -199,6 +199,57 @@ private Q_SLOTS:
         QVERIFY(m_service->isWindowSticky(w));
     }
 
+    // A last-used zone recorded on desktop 2 is judged against desktop 2's
+    // layout, not the one the desktop in view runs, so a reconfigure keeps it
+    // (F162).
+    void testMigrateToVirtual_backgroundDesktopKeepsItsLastUsedZone()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
+        const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
+        const QString vs0 = virtualIds.first();
+        PhosphorZones::Layout* other = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(other);
+        m_layoutManager->assignLayout(vs0, 2, QString(), other);
+        const QString zone = other->zones().first()->id().toString();
+        m_snapState->restoreLastUsedZone(zone, vs0, QStringLiteral("konsole"), 2);
+
+        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, &mgr);
+
+        QCOMPARE(m_snapState->lastUsedZoneId(), zone);
+    }
+
+    // A desktop running autotile keeps its snap memory frozen: its last-used
+    // zone is not judged against the default layout the cascade answers there
+    // (F162).
+    void testMigrateToVirtual_tilingDesktopKeepsItsFrozenLastUsedZone()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
+        const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
+        const QString vs0 = virtualIds.first();
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        entry.tilingAlgorithm = QStringLiteral("bsp");
+        m_layoutManager->setAssignmentEntryDirect(vs0, 2, QString(), entry);
+        const QString frozen = QUuid::createUuid().toString();
+        m_snapState->restoreLastUsedZone(frozen, vs0, QStringLiteral("konsole"), 2);
+
+        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, &mgr);
+
+        QCOMPARE(m_snapState->lastUsedZoneId(), frozen);
+    }
+
     // Guard clause: a null manager refuses the migration. The virtual list is
     // deliberately NON-EMPTY so the null-manager conjunct is the only reason
     // the call can return early — with both falsy the test would pass under a

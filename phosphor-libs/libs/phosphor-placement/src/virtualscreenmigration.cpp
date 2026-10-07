@@ -246,7 +246,9 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         QString targetVs = virtualScreenIds.first(); // default
         if (!lastZoneId.isEmpty() && m_layoutManager) {
             for (const QString& vsId : virtualScreenIds) {
-                PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
+                // The store's own context's layout on that VS, not the
+                // desktop in view (F162).
+                PhosphorZones::Layout* vsLayout = lastUsedLayoutFor(state, vsId);
                 if (vsLayout) {
                     auto uuidOpt = parseUuid(lastZoneId);
                     if (uuidOpt && vsLayout->zoneById(*uuidOpt)) {
