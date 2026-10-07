@@ -668,6 +668,27 @@ private Q_SLOTS:
         QCOMPARE(activate.first().at(0).toString(), w3);
     }
 
+    // ── L14.14: the screen a verb acts on (F839) ──
+
+    // A window that is not snapped is acted on on the caller's screen, then
+    // the cursor's, then the last active one. The snapped tier (its own
+    // stored screen) cannot be reached here: the stored-screen check asks
+    // Qt's screen list, which the fake outputs are not on (F1006).
+    void navScreenTiers()
+    {
+        SnapNavFixture f;
+        QVERIFY(f.ready());
+        const QString active = f.live(QStringLiteral("tier-1"), QRect(2000, 100, 400, 300));
+        const QString free = f.live(QStringLiteral("tier-2"));
+        QCOMPARE(f.snap->navigationScreenFor(free, kLeft), kLeft);
+        QVERIFY(f.snap->navigationScreenFor(free, QString()).isEmpty());
+        f.focus(active, kRight);
+        QCOMPARE(f.snap->navigationScreenFor(free, QString()), kRight);
+        f.wta->cursorScreenChanged(kLeft);
+        QCOMPARE(f.snap->navigationScreenFor(free, QString()), kLeft);
+        QCOMPARE(f.snap->navigationScreenFor(free, kRight), kRight);
+    }
+
 private:
     /// @p windowId snapped in zone 0 on desktops 1 and 2 of DP-1.
     void snapOnTwoDesktops(SnapNavFixture& f, const QString& windowId)

@@ -10,6 +10,7 @@
 
 #include <PhosphorEngine/IWindowRegistry.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
 namespace {
 
@@ -265,6 +266,48 @@ private Q_SLOTS:
         const auto refusal = feedbackSpy.takeFirst();
         QCOMPARE(refusal.at(0).toBool(), false);
         QCOMPARE(refusal.at(2).toString(), QStringLiteral("no_target"));
+    }
+
+    void floatsOnAnotherDesktopAreSkipped()
+    {
+        // The pool is the screen's desktop in view: a float the store holds
+        // for desktop 2 is not a target while DP-1 shows desktop 1, though it
+        // sorts first (F844).
+        FakeNavState nav;
+        PhosphorWorkspaces::VirtualDesktopManager vdm{nullptr};
+        vdm.updateScreenDesktop(kScreen, 1);
+        SnapEngine engine(nullptr, m_wts, nullptr, &vdm, nullptr);
+        engine.setNavigationStateProvider(&nav);
+        SnapState* state = engine.stateForWindowOnScreen(kSnapped, kScreen);
+        state->assignWindowToZone(kSnapped, QStringLiteral("zone-1"), kScreen, 1);
+        engine.stateForWindowOnScreen(kFloat, kScreen)->setFloatingOnScreen(kFloat, kScreen, 1);
+        engine.stateForWindowOnScreen(kFloat0, kScreen)->setFloatingOnScreen(kFloat0, kScreen, 2);
+        engine.windowFocused(kSnapped, kScreen);
+        nav.m_activeWindow = kSnapped;
+
+        QSignalSpy activateSpy(&engine, &SnapEngine::activateWindowRequested);
+        engine.switchFocusBetweenFloatingAndTiling(kScreen);
+        QCOMPARE(activateSpy.count(), 1);
+        QCOMPARE(activateSpy.takeFirst().at(0).toString(), kFloat);
+    }
+
+    void emptyScreenActsOnTheLastActiveScreen()
+    {
+        // No screen named: the press acts on the screen the navigation state
+        // reports, not on nothing (F844).
+        FakeNavState nav;
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setNavigationStateProvider(&nav);
+        SnapState* state = engine.stateForWindowOnScreen(kSnapped, kScreen);
+        state->assignWindowToZone(kSnapped, QStringLiteral("zone-1"), kScreen, 1);
+        engine.stateForWindowOnScreen(kFloat, kScreen)->setFloatingOnScreen(kFloat, kScreen, 1);
+        engine.windowFocused(kSnapped, kScreen);
+        nav.m_activeWindow = kSnapped;
+
+        QSignalSpy activateSpy(&engine, &SnapEngine::activateWindowRequested);
+        engine.switchFocusBetweenFloatingAndTiling(QString());
+        QCOMPARE(activateSpy.count(), 1);
+        QCOMPARE(activateSpy.takeFirst().at(0).toString(), kFloat);
     }
 };
 
