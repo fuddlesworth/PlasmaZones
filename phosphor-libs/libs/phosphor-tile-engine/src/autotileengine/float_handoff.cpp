@@ -474,9 +474,8 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     const auto key = *primary;
     if (PhosphorTiles::TilingState* state = m_states.stateForKey(key)) {
         // Tracking-only release: drop from layout, drop from floating set.
-        // No retile of the rest is requested here — the orchestrator will
-        // call receiveWindow on the destination engine which (if also
-        // autotile) will retile its own state.
+        // The destination engine places the window; the tiles it leaves
+        // behind close up on the retile scheduled at the end (F1005).
         // Keep the memory algorithm's bookkeeping consistent (e.g.
         // dwindle-memory's split tree) — same lifecycle hook every other
         // removal path runs before removeWindow.
@@ -527,6 +526,15 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     // engine now owns must not replay on this screen's next applyTiling.
     purgeFromPendingOrders(canonical);
     purgePendingFocusForWindow(canonical);
+    // The screen the window left still tiles the rest, which keep the slots
+    // they had beside it until they are retiled: a window snapped onto
+    // another monitor left its old neighbours a quarter of theirs (F1005).
+    // Only the context in view, as the scroll twin does: a release out of
+    // another desktop's state retiles on the switch back. Not a screen
+    // leaving autotile, whose windows the new mode places.
+    if (key == currentKeyForScreen(key.screenId) && isAutotileScreen(key.screenId)) {
+        scheduleRetileForScreen(key.screenId);
+    }
 }
 
 void AutotileEngine::sweepPhantomTracking(const QString& windowId)

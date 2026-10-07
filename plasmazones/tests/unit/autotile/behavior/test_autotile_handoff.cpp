@@ -334,6 +334,30 @@ private Q_SLOTS:
         QVERIFY(!engine.isWindowTracked(windowId));
     }
 
+    // The windows a released one leaves behind are retiled, so they close up
+    // over its slot (F1005).
+    void testHandoffRelease_retilesTheScreenItLeaves()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win-stay"), screen);
+        engine.windowOpened(QStringLiteral("win-leave"), screen);
+        QCoreApplication::processEvents();
+
+        QSignalSpy tiled(&engine, &AutotileEngine::windowsTiled);
+        engine.handoffRelease(QStringLiteral("win-leave"));
+        // No screen geometry here: applyTiling reuses the last zones when the
+        // recalculation bails, so seed the one the remaining window takes
+        // before the deferred retile runs.
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(0, 0, 1920, 1080)});
+        QCoreApplication::processEvents();
+        QVERIFY(tiled.count() >= 1);
+        QVERIFY(tiled.last().at(0).toString().contains(QLatin1String("win-stay")));
+    }
+
     void testHandoffRelease_untrackedWindowIsNoop()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
