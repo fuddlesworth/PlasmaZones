@@ -453,9 +453,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
         QPointF frozen = scrollVisualTranslationFor(closingWindowId, closingFrame);
         const QString corpseScreen = m_tilingHandler->scrollTrackedScreenFor(closingWindowId);
         if (!corpseScreen.isEmpty()) {
-            if (KWin::LogicalOutput* corpseOutput = outputForScreenId(corpseScreen)) {
-                frozen += m_stripViewAnimator->offsetFor(corpseOutput);
-            }
+            frozen += m_stripViewAnimator->offsetFor(m_tilingHandler->stripKeyFor(corpseScreen));
             // A scroll-managed corpse renders ABOVE the strip for the whole
             // close leg (niri renders closing windows on top the same way).
             // The engine reflows the survivors immediately on a close, so the

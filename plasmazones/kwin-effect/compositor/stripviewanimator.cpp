@@ -37,10 +37,10 @@ void StripViewAnimator::setEnabled(bool enabled)
     }
 }
 
-bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaIn, PhosphorProtocol::ScrollAxis axis,
-                                        const PhosphorAnimation::Profile& profile)
+bool StripViewAnimator::applyBatchDelta(const QString& strip, KWin::LogicalOutput* output, int deltaIn,
+                                        PhosphorProtocol::ScrollAxis axis, const PhosphorAnimation::Profile& profile)
 {
-    if (!output || deltaIn == 0) {
+    if (!output || strip.isEmpty() || deltaIn == 0) {
         return false;
     }
     // Before every decline below (animations off, no clock): the strip IS
@@ -49,9 +49,12 @@ bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaIn
     ++m_viewMotionGeneration;
     const qreal delta = qBound(-kMaxViewDeltaPx, deltaIn, kMaxViewDeltaPx);
 
-    ViewMotion& motion = m_motions[output];
+    ViewMotion& motion = m_motions[strip];
+    // A physical id re-plugged onto another output keeps its strip; the clock
+    // re-resolves below and on every tick.
+    motion.output = output;
     if (motion.axis != axis) {
-        // Also taken by the FIRST batch for any vertical output, not only by a
+        // Also taken by the FIRST batch for any vertical strip, not only by a
         // genuine flip: ViewMotion default-constructs Horizontal, so a freshly
         // inserted entry for a vertical strip lands here. Harmless — there is
         // no leg to cancel and the accumulator is already zero — and it is what
@@ -138,16 +141,18 @@ bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaIn
     return true;
 }
 
-void StripViewAnimator::applyImmediateDelta(KWin::LogicalOutput* output, int deltaIn, PhosphorProtocol::ScrollAxis axis)
+void StripViewAnimator::applyImmediateDelta(const QString& strip, KWin::LogicalOutput* output, int deltaIn,
+                                            PhosphorProtocol::ScrollAxis axis)
 {
-    if (!output || deltaIn == 0) {
+    if (!output || strip.isEmpty() || deltaIn == 0) {
         return;
     }
     // This path never starts a leg at all, so it is the one that most needs
     // the counter — a whole drag edge auto-scroll is invisible to
     // hasActiveAnimations(). See viewMotionGeneration().
     ++m_viewMotionGeneration;
-    ViewMotion& motion = m_motions[output];
+    ViewMotion& motion = m_motions[strip];
+    motion.output = output;
     if (motion.axis != axis) {
         // Same axis-flip handling as applyBatchDelta, for the same reasons:
         // the accumulator is a coordinate ALONG an axis and a live leg
@@ -175,38 +180,29 @@ void StripViewAnimator::applyImmediateDelta(KWin::LogicalOutput* output, int del
     }
 }
 
-qreal StripViewAnimator::offsetAlongAxis(KWin::LogicalOutput* output) const
+qreal StripViewAnimator::offsetAlongAxis(const QString& strip) const
 {
-    if (!output) {
-        return 0.0;
-    }
-    const auto it = m_motions.find(output);
+    const auto it = m_motions.find(strip);
     if (it == m_motions.end() || !it->second.animation.isAnimating()) {
         return 0.0;
     }
     return it->second.committed - it->second.animation.value();
 }
 
-PhosphorProtocol::ScrollAxis StripViewAnimator::axisFor(KWin::LogicalOutput* output) const
+PhosphorProtocol::ScrollAxis StripViewAnimator::axisFor(const QString& strip) const
 {
-    if (!output) {
-        return PhosphorProtocol::ScrollAxis::Horizontal;
-    }
-    const auto it = m_motions.find(output);
+    const auto it = m_motions.find(strip);
     return it == m_motions.end() ? PhosphorProtocol::ScrollAxis::Horizontal : it->second.axis;
 }
 
-QPointF StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
+QPointF StripViewAnimator::offsetFor(const QString& strip) const
 {
-    if (!output) {
-        return {};
-    }
     // ONE map lookup for both halves, deliberately not offsetAlongAxis() +
     // axisFor(): those would find the same entry twice on every frame of a
     // live leg (this is a per-frame paint-path call), and the second would
     // restate axisFor's absent-entry default here, where a divergence between
     // the two copies would silently put the offset in the wrong component.
-    const auto it = m_motions.find(output);
+    const auto it = m_motions.find(strip);
     if (it == m_motions.end() || !it->second.animation.isAnimating()) {
         return {};
     }
@@ -222,7 +218,7 @@ QPointF StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
 
 bool StripViewAnimator::hasActiveAnimations() const
 {
-    for (const auto& [output, motion] : m_motions) {
+    for (const auto& [strip, motion] : m_motions) {
         if (motion.animation.isAnimating()) {
             return true;
         }
@@ -230,18 +226,35 @@ bool StripViewAnimator::hasActiveAnimations() const
     return false;
 }
 
-bool StripViewAnimator::isAnimatingOn(KWin::LogicalOutput* output) const
+bool StripViewAnimator::isAnimatingOn(const QString& strip) const
+{
+    const auto it = m_motions.find(strip);
+    return it != m_motions.end() && it->second.animation.isAnimating();
+}
+
+bool StripViewAnimator::isAnimatingOnOutput(KWin::LogicalOutput* output) const
 {
     if (!output) {
         return false;
     }
-    const auto it = m_motions.find(output);
-    return it != m_motions.end() && it->second.animation.isAnimating();
+    for (const auto& [strip, motion] : m_motions) {
+        if (motion.output == output && motion.animation.isAnimating()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void StripViewAnimator::forgetStrip(const QString& strip)
+{
+    m_motions.erase(strip);
 }
 
 void StripViewAnimator::forgetOutput(KWin::LogicalOutput* output)
 {
-    m_motions.erase(output);
+    std::erase_if(m_motions, [output](const auto& entry) {
+        return entry.second.output == output;
+    });
 }
 
 void StripViewAnimator::reset()
@@ -267,7 +280,7 @@ int StripViewAnimator::reapAnimationsForClock(const PhosphorAnimation::IMotionCl
             // means the output did, and the accumulated view describes a strip
             // that is no longer on any screen.
             if (m_repaintRequest) {
-                m_repaintRequest(it->first);
+                m_repaintRequest(it->second.output);
             }
             it = m_motions.erase(it);
             ++reaped;
@@ -280,14 +293,14 @@ int StripViewAnimator::reapAnimationsForClock(const PhosphorAnimation::IMotionCl
 
 void StripViewAnimator::advanceAnimations()
 {
-    for (auto& [output, motion] : m_motions) {
+    for (auto& [strip, motion] : m_motions) {
         if (!motion.animation.isAnimating()) {
             continue;
         }
         // Per-tick clock re-resolution, mirroring WindowAnimator: an output
         // whose clock was rebuilt (mode change, hotplug) must not keep
         // stepping against the old one.
-        if (PhosphorAnimation::IMotionClock* resolved = clockForOutput(output)) {
+        if (PhosphorAnimation::IMotionClock* resolved = clockForOutput(motion.output)) {
             PhosphorAnimation::IMotionClock* current = motion.animation.spec().clock;
             if (resolved != current && PhosphorAnimation::IMotionClock::epochCompatible(current, resolved)) {
                 motion.animation.rebindClock(resolved);
@@ -298,7 +311,7 @@ void StripViewAnimator::advanceAnimations()
             // Settling frame: the offset has just become zero, and the last
             // frame drawn still carries the old one.
             if (m_repaintRequest) {
-                m_repaintRequest(output);
+                m_repaintRequest(motion.output);
             }
         }
     }
@@ -309,9 +322,9 @@ void StripViewAnimator::scheduleRepaints() const
     if (!m_repaintRequest) {
         return;
     }
-    for (const auto& [output, motion] : m_motions) {
+    for (const auto& [strip, motion] : m_motions) {
         if (motion.animation.isAnimating()) {
-            m_repaintRequest(output);
+            m_repaintRequest(motion.output);
         }
     }
 }

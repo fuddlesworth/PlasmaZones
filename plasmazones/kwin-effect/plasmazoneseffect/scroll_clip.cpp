@@ -26,6 +26,17 @@ namespace PlasmaZones {
 
 KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindow* w) const
 {
+    return scrollManagedFor(w).output;
+}
+
+QPointF PlasmaZonesEffect::scrollViewOffsetFor(KWin::EffectWindow* w) const
+{
+    const ScrollManagedAnswer managed = scrollManagedFor(w);
+    return managed.output ? m_stripViewAnimator->offsetFor(managed.strip) : QPointF();
+}
+
+PlasmaZonesEffect::ScrollManagedAnswer PlasmaZonesEffect::scrollManagedFor(KWin::EffectWindow* w) const
+{
     // Same predicate as scrollClipGeometryFor, stopping one step earlier at the
     // output itself. The paint path wants the output (to compare by identity
     // against the pass being rendered); the input filter genuinely wants a
@@ -40,10 +51,10 @@ KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindo
     // runs long after construction. A guard here would be dead code that reads
     // as a live possibility.
     if (!m_tilingHandler->hasScrollingScreens()) {
-        return nullptr;
+        return {};
     }
     if (!w || w->isDeleted() || w->isUserMove() || w->isUserResize()) {
-        return nullptr;
+        return {};
     }
     // Memoised per pass, and ONLY within a pass: prePaintWindow and
     // paintWindow both ask, for every window, on every output pass, and one
@@ -65,11 +76,15 @@ KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindo
             return it.value();
         }
     }
-    KWin::LogicalOutput* managed = nullptr;
+    ScrollManagedAnswer managed;
     const QString windowId = getWindowId(w);
     const QString trackedScreen = m_tilingHandler->scrollTrackedScreenFor(windowId);
     if (!trackedScreen.isEmpty() && !m_navigationHandler->isWindowFloating(windowId)) {
-        managed = outputForScreenId(trackedScreen);
+        managed.output = outputForScreenId(trackedScreen);
+        if (managed.output) {
+            managed.strip = m_tilingHandler->stripKeyFor(trackedScreen);
+            managed.stripRect = m_tilingHandler->stripScreenRect(trackedScreen);
+        }
     }
     if (inPass) {
         m_scrollManagedCache.insert(w, managed);
@@ -186,8 +201,8 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
         }
         return false;
     }
-    KWin::LogicalOutput* const managed = scrollManagedOutputFor(w);
-    if (!managed) {
+    const ScrollManagedAnswer managed = scrollManagedFor(w);
+    if (!managed.output) {
         // Report and advance the gate. A window that HOLDS a relocation but
         // resolves no managed output is a real transition — a strip retire, or
         // a screen mid-change — and returning silently left the gate holding
@@ -260,14 +275,23 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // it is actually drawn. This one gates the park reap, the setTransformed
     // flag and the strip-capture anchor election, so getting it wrong either
     // culls a visible column or keeps a parked one painting forever.
-    const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed);
+    const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed.strip);
     visual.translate(viewOffset);
     if (const auto decoIt = m_windowDecorations.constFind(windowId); decoIt != m_windowDecorations.constEnd()) {
         const qreal pad = decoIt->outerPadding;
         visual.adjust(-pad, -pad, pad, pad);
     }
-    const KWin::Rect g = managed->geometry();
-    const bool parked = !visual.intersects(QRectF(g.x(), g.y(), g.width(), g.height()));
+    // Against the strip's own screen. On a virtual screen the BODY has to reach
+    // it: the sibling paints in the same output pass, so a column whose shadow
+    // alone touched the strip would draw its whole body over the sibling, where
+    // a whole output's pass trims it back to the shadow.
+    const QRectF stripRect(managed.stripRect);
+    bool parked = !visual.intersects(stripRect);
+    if (!parked && stripRect != QRectF(managed.output->geometry())) {
+        QRectF body = animated.isValid() ? animated : frame;
+        body.translate(QPointF(translation) + viewOffset);
+        parked = !body.intersects(stripRect);
+    }
 
     // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). This is the
     // one place both halves of a parked column's drawn position are in hand at

@@ -9,7 +9,9 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorProtocol/ScrollAxisEnum.h>
 
+#include <QHash>
 #include <QPointF>
+#include <QString>
 #include <QtGlobal>
 
 #include <functional>
@@ -22,12 +24,13 @@ class LogicalOutput;
 namespace PlasmaZones {
 
 /**
- * @brief Scrolling-strip view motion, one spring per output.
+ * @brief Scrolling-strip view motion, one spring per strip (a virtual screen is
+ *        a strip of its own; an unsplit output is one strip).
  *
  * A scroll moves every column on the strip by the same amount. Committing that
  * as N geometry changes makes WindowAnimator start N independent springs, each
  * beginning a moment apart and integrating separately, so the strip shears
- * instead of sliding. This class springs the VIEW once per output; the paint
+ * instead of sliding. This class springs the VIEW once per strip; the paint
  * path adds its offset to every carried window, and the strip moves as one
  * object.
  *
@@ -41,7 +44,7 @@ namespace PlasmaZones {
  * velocity-seeded start the library does not offer.
  *
  * The coordinate's ORIGIN is arbitrary — it is an accumulation of the deltas
- * the engine has sent for this output, and only differences are ever read. It
+ * the engine has sent for this strip, and only differences are ever read. It
  * deliberately does not try to mirror the engine's own `viewOffset`: the two would
  * have to be kept in step across every context switch, screen change and
  * restore, and nothing needs them to agree.
@@ -84,8 +87,9 @@ public:
     /// strip somewhere it takes seconds to spring back from.
     static constexpr int kMaxViewDeltaPx = 100000;
 
-    /// Fold one batch's view delta into @p output's spring. A no-op for a zero
-    /// delta, so callers need not pre-filter.
+    /// Fold one batch's view delta into @p strip's spring, on @p output (its
+    /// clock and repaint). A no-op for a zero delta, so callers need not
+    /// pre-filter.
     ///
     /// @p profile is resolved per batch by the caller rather than configured on
     /// this object, so the `scrolling.view` motion node reaches the strip the
@@ -116,10 +120,10 @@ public:
     /// An axis MISMATCH against a live leg cancels rather than retargets: the
     /// in-flight motion describes travel along an axis the strip no longer
     /// has, so there is nothing to preserve velocity through.
-    bool applyBatchDelta(KWin::LogicalOutput* output, int deltaIn, PhosphorProtocol::ScrollAxis axis,
-                         const PhosphorAnimation::Profile& profile);
+    bool applyBatchDelta(const QString& strip, KWin::LogicalOutput* output, int deltaIn,
+                         PhosphorProtocol::ScrollAxis axis, const PhosphorAnimation::Profile& profile);
 
-    /// Fold one batch's view delta into @p output's accumulator WITHOUT a leg
+    /// Fold one batch's view delta into @p strip's accumulator WITHOUT a leg
     /// — for user-driven continuous view motion (the drag edge auto-scroll
     /// heartbeat), where the ~60 Hz commits are the motion and a leg
     /// retargeted every tick never progresses on a stateless curve. Any leg
@@ -127,30 +131,28 @@ public:
     /// nothing else repaints it away), so the strip lands exactly on the
     /// committed geometry. The accumulator still moves so a later discrete
     /// scroll's leg starts from the true committed view.
-    void applyImmediateDelta(KWin::LogicalOutput* output, int deltaIn, PhosphorProtocol::ScrollAxis axis);
+    void applyImmediateDelta(const QString& strip, KWin::LogicalOutput* output, int deltaIn,
+                             PhosphorProtocol::ScrollAxis axis);
 
-    /// Paint translation for a window carried by @p output's view, in logical
-    /// pixels, already resolved onto that output's own strip axis so a caller
+    /// Paint translation for a window carried by @p strip's view, in logical
+    /// pixels, already resolved onto that strip's own axis so a caller
     /// cannot put it in the wrong component. A null point when nothing is in
     /// flight, which is the resting state and the common case.
-    QPointF offsetFor(KWin::LogicalOutput* output) const;
+    QPointF offsetFor(const QString& strip) const;
 
     /// The same value as a signed scalar along that axis, for the shader pass
     /// and the motion sampler, which stay one-dimensional by design.
-    qreal offsetAlongAxis(KWin::LogicalOutput* output) const;
+    qreal offsetAlongAxis(const QString& strip) const;
 
-    /// Which axis that scalar runs along. Horizontal for an output this class
+    /// Which axis that scalar runs along. Horizontal for a strip this class
     /// has never seen — the historical layout, and the only safe answer when
     /// no batch has named the axis yet.
-    ///
-    /// Exists so a consumer holding an OUTPUT (the shader pass) can ask
-    /// without first mapping back to a screen id: the effect's own map runs
-    /// screenId -> output, so the reverse lookup would be a second, weaker
-    /// source of the same fact.
-    PhosphorProtocol::ScrollAxis axisFor(KWin::LogicalOutput* output) const;
+    PhosphorProtocol::ScrollAxis axisFor(const QString& strip) const;
 
     bool hasActiveAnimations() const;
-    bool isAnimatingOn(KWin::LogicalOutput* output) const;
+    bool isAnimatingOn(const QString& strip) const;
+    /// Whether any strip on @p output has a live leg.
+    bool isAnimatingOnOutput(KWin::LogicalOutput* output) const;
 
     /// Monotonic counter of view deltas this class has been handed, bumped by
     /// BOTH apply entry points for every non-zero delta on a real output —
@@ -170,12 +172,15 @@ public:
         return m_viewMotionGeneration;
     }
 
-    /// Drop @p output's state entirely — for a disconnect, where the spring
-    /// and the accumulated view both stop describing anything real. The next
-    /// batch for a re-connected output starts a fresh accumulation.
+    /// Drop @p strip's state entirely (a strip-context change or a strip that
+    /// left scrolling). The next batch for it starts a fresh accumulation.
+    void forgetStrip(const QString& strip);
+    /// Drop every strip on @p output — for a disconnect or a desktop switch on
+    /// it, where the springs and the accumulated views stop describing
+    /// anything real.
     void forgetOutput(KWin::LogicalOutput* output);
 
-    /// Drop every output's accumulator and leg, WITHOUT touching the enable
+    /// Drop every strip's accumulator and leg, WITHOUT touching the enable
     /// flag (unlike setEnabled(false), which is the master-toggle path).
     /// For session-scoped teardown — daemon loss clears the scrolling set,
     /// so every spring belongs to a strip that no longer exists. Schedules
@@ -192,7 +197,7 @@ public:
     void advanceAnimations();
 
 private:
-    /// Damage every output with a live leg.
+    /// Damage every output with a live leg on one of its strips.
     ///
     /// Private, and deliberately not a per-frame driver the way the window
     /// animator's namesake is: an in-flight AnimatedValue calls
@@ -205,10 +210,13 @@ private:
 
     struct ViewMotion
     {
+        /// The output the strip is on: its clock drives the leg and its
+        /// repaint carries the offset.
+        KWin::LogicalOutput* output = nullptr;
         /// Where the strip's committed geometry currently sits, in this
-        /// output's accumulated view coordinate.
+        /// strip's accumulated view coordinate.
         qreal committed = 0.0;
-        /// Which axis that coordinate runs along. Held per output because a
+        /// Which axis that coordinate runs along. Held per strip because a
         /// portrait and a landscape monitor coexist, and because a leg has to
         /// be able to tell an axis FLIP from an ordinary retarget.
         PhosphorProtocol::ScrollAxis axis = PhosphorProtocol::ScrollAxis::Horizontal;
@@ -217,7 +225,7 @@ private:
 
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
 
-    std::unordered_map<KWin::LogicalOutput*, ViewMotion> m_motions;
+    std::unordered_map<QString, ViewMotion> m_motions;
     OutputClockResolver m_outputClockResolver;
     RepaintRequest m_repaintRequest;
     /// See viewMotionGeneration(). Never reset — it means "a delta was

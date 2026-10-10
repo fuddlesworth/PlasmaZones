@@ -957,10 +957,18 @@ private:
     /// deleted — a close-grabbed column counts as exempt for its whole close
     /// leg — or no screen is scrolling at all).
     /// The paint path compares this against the output currently being painted.
-    /// Answers are memoised per output pass (see m_scrollManagedCache) so the
-    /// prePaintWindow and paintWindow probes for one window cost one predicate
-    /// walk between them.
+    /// Memoised per output pass (m_scrollManagedCache).
     KWin::LogicalOutput* scrollManagedOutputFor(KWin::EffectWindow* w) const;
+    /// scrollManagedOutputFor's whole answer: the output, the strip key and the rect its edges are measured against.
+    struct ScrollManagedAnswer
+    {
+        KWin::LogicalOutput* output = nullptr;
+        QString strip;
+        QRect stripRect;
+    };
+    ScrollManagedAnswer scrollManagedFor(KWin::EffectWindow* w) const;
+    /// The live view offset of @p w's strip, null when @p w is not a strip column.
+    QPointF scrollViewOffsetFor(KWin::EffectWindow* w) const;
     /**
      * @brief The screen rect a scrolling-strip window's rendering AND input
      *        are confined to, or an invalid rect when no confinement applies.
@@ -976,11 +984,8 @@ private:
      * Answers an invalid rect immediately when no screen is scrolling, so the
      * common case costs one bool on the per-window-per-output-per-frame path.
      *
-     * SCOPE: the confinement is the PHYSICAL output's geometry, so a strip on a
-     * virtual sub-screen is not clipped at the sub-screen boundary. That is
-     * intended — the point is to keep a column off a NEIGHBOURING MONITOR, and
-     * both sub-screens render in the same output pass, so a same-monitor
-     * overhang is drawn and remains interactive either way.
+     * SCOPE: the physical output, on purpose, so a strip on a virtual screen may
+     * overhang its sibling; the point is to keep a column off another monitor.
      */
     QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
     /**
@@ -989,10 +994,10 @@ private:
      *
      * True only for a scroll-managed window with a strip relocation entry
      * (m_scrollVisualDelta) whose VISUAL rect — the padded band moved by that
-     * delta, plus the live view offset — intersects no part of its managed
-     * output. The visual rect is where a column is drawn AT REST, which is the
-     * one honest visibility test for a parked column; the committed rect is
-     * normally off every output (that is what parking IS) and answers nothing.
+     * delta, plus the live view offset — intersects no part of its strip's
+     * screen (a virtual screen's region on a split monitor). The visual rect is where a column is drawn AT REST, which
+     * is the one honest visibility test for a parked column; the committed rect is normally off every output (that is
+     * what parking IS) and answers nothing.
      *
      * The WindowAnimator's term IS folded in: a live per-window leg draws at
      * the animator's current rect rather than the committed frame, so testing
@@ -1278,7 +1283,7 @@ public:
      *                    item in one pass. For batches whose members must land
      *                    together because something else is already animating
      *                    them as a unit — a scrolling strip carried by the
-     *                    per-output view spring is the case this exists for.
+     *                    per-strip view spring is the case this exists for.
      *                    Staggering those would draw a column that has not
      *                    committed yet at its old rect PLUS the view offset,
      *                    i.e. one full delta the wrong way, until its own timer
@@ -2655,23 +2660,17 @@ private:
         }
         return ok;
     }
-    /// Per-pass memo for scrollManagedOutputFor: prePaintWindow and
-    /// paintWindow each probe the predicate for every window, and its chain
-    /// (id lookup, tiled-bucket scan, float check, output resolve) is not
-    /// free at per-window-per-output-per-frame rate. Cleared in
-    /// prePaintScreen when the pass begins, and consulted/populated ONLY
-    /// while a pass is executing — the input filter shares the predicate but
+    /// Per-pass memo for scrollManagedFor, whose chain is not free at
+    /// per-window-per-output-per-frame rate. Consulted and populated ONLY
+    /// while a pass is executing: the input filter shares the predicate but
     /// runs between passes, where a tile batch may just have moved a column,
-    /// so it always computes fresh. In default clamp mode the answer never
-    /// differs from the window's own output (committed geometry cannot
-    /// cross), so the cache also bounds what that mode pays for a cull that
-    /// cannot fire for it.
+    /// so it always computes fresh.
     ///
     /// Cleared at BOTH ends of the bracket (prePaintScreen before the first
-    /// read, postPaintScreen after the last), so an entry — both key and
-    /// value are raw pointers — never outlives the pass whose windows it
+    /// read, postPaintScreen after the last), so an entry, whose key and
+    /// output are raw pointers, never outlives the pass whose windows it
     /// names. Every read is additionally gated on being inside a pass.
-    mutable QHash<KWin::EffectWindow*, KWin::LogicalOutput*> m_scrollManagedCache;
+    mutable QHash<KWin::EffectWindow*, ScrollManagedAnswer> m_scrollManagedCache;
 
     /// Latched by StripTransitionManager around its capture's paintScreen:
     /// while set, paintWindow skips every window in the above-strip set
@@ -2729,7 +2728,7 @@ private:
     /// payload is bounded by the fetch cap, not by anything small.
     QByteArray m_motionProfileTreeDigest;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
-    /// Scrolling-strip view motion, one spring per output. Separate from
+    /// Scrolling-strip view motion, one spring per strip. Separate from
     /// m_windowAnimator by GRANULARITY, not by kind: a scroll moves the whole
     /// strip by one amount, and folding that into per-window targets would
     /// make N springs that desync into a shear. The two compose additively at

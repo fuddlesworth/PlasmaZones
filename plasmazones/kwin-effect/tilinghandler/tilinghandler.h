@@ -1079,6 +1079,12 @@ public:
         const QString source = sourceScreenId.isEmpty() ? m_notifiedWindowScreens.value(windowId) : sourceScreenId;
         m_expectedOutputMove.insert(windowId, ExpectedOutputMove{targetScreenId, source});
     }
+    /// The strip key for a scrolling screen id (StripKeys::stripKey over the output it resolves to).
+    QString stripKeyFor(const QString& screenId) const;
+    /// The rect a strip's edges are measured against (StripKeys::screenRect), invalid with no output.
+    QRect stripScreenRect(const QString& screenId) const;
+    /// Each strip's live view offset, the one its tab band is blitted at.
+    ScrollTabIndicatorPainter::ViewOffsetFor scrollTabViewOffsets() const;
 
 public Q_SLOTS:
     // Autotile D-Bus signal handlers
@@ -1148,10 +1154,9 @@ private:
     // Utility methods
     // ═══════════════════════════════════════════════════════════════════
 
-    /// NOT a slot, despite the signal that drives it: its only caller is a
-    /// plain call from slotStripContextChanged, and nothing connects to it.
-    /// It sits here with the other state.cpp helpers so the slots block does
-    /// not advertise as connectable something that is not.
+    /// Cancel @p screenId's strip spring and armed pass, damaging its output; false with no output.
+    bool dropStripMotion(const QString& screenId);
+    /// Not a slot: slotStripContextChanged calls it.
     /// Drop the state this process holds that belonged to the strip @p screenId
     /// was showing until now. Called when its strip epoch changes.
     ///
@@ -1529,22 +1534,17 @@ private:
     /// later re-tab re-queries instead of painting a verdict the daemon's
     /// strip-gated title relay could not have refreshed meanwhile.
     void dropScrollTabColorsForUnindexed(const QList<QString>& indexedBefore);
-    /// Damage @p bounds on @p out WHERE THE BAND IS ACTUALLY DRAWN, i.e.
-    /// shifted by the strip view spring's live offset for that output.
-    ///
-    /// The painter stores the band offset-free (the model does not move during
-    /// a scroll; the blit adds the offset), so damaging the raw bounds is only
-    /// correct at rest. Mid-leg it damages where the band WAS, and the pills
-    /// are drawn somewhere else — visible as a hover highlight that does not
-    /// appear until the leg ends, on any frame the spring's own full-output
-    /// repaint does not happen to cover. A no-op at rest, where offsetFor
-    /// returns a null point.
-    ///
-    /// Silently does nothing for an invalid @p bounds, so callers can hand it
-    /// a boundsFor() result straight from an output with no pills.
-    void damageScrollTabBand(KWin::LogicalOutput* out, const QRect& bounds) const;
+    /// Damage @p bounds of @p strip's band WHERE IT IS DRAWN, shifted by that
+    /// strip's live view offset. The painter stores the band offset-free (the
+    /// blit adds the offset), so the raw bounds are right only at rest: mid-leg
+    /// they miss the pills, and a hover highlight would not appear until the leg
+    /// ends on any frame the spring's own repaint does not cover. Does nothing
+    /// for an invalid @p bounds, so a boundsFor() of a strip with no pills is fine.
+    void damageScrollTabBand(const QString& strip, const QRect& bounds) const;
+    /// damageScrollTabBand for every band on @p out (a hover change can touch any of them).
+    void damageScrollTabOutput(KWin::LogicalOutput* out) const;
     /// The engine retracted @p screenId's strips ("[]"): drop the payload,
-    /// the index entries and the painter output, releasing a hover it held.
+    /// the index entries and the painter's band, re-evaluating the hover.
     void dropScrollTabScreen(const QString& screenId);
     /// Ask the daemon for @p windowId's tab-colour verdict (once per window
     /// in flight; dropped if a broadcast supersedes it).
@@ -1733,7 +1733,7 @@ private:
     /// because the axis outlives any one batch.
     ///
     /// NOT the copy the paint path reads. StripViewAnimator stamps the axis
-    /// per output when a batch lands, and offsetFor / axisFor answer from that
+    /// per strip when a batch lands, and offsetFor / axisFor answer from that
     /// stamp — which is why the teardown clear here needs no repaint bookend.
     /// This set is consulted only when a batch is in hand.
     QSet<QString> m_scrollVerticalAxisScreens;

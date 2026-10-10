@@ -1296,6 +1296,14 @@ target_link_libraries(test_scroll_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_scroll_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_scroll_decisions COMMAND test_scroll_decisions)
 
+# Pure-logic test for the scrolling strip keys (tilinghandler/stripkeys.h): a
+# virtual screen is a strip of its own, two spellings of one monitor share one,
+# and a strip's edges are its own screen's rect. Same header-only reach.
+add_executable(test_strip_keys ui/effect/test_strip_keys.cpp)
+target_link_libraries(test_strip_keys PRIVATE Qt6::Test Qt6::Core PhosphorIdentity::PhosphorIdentity)
+target_include_directories(test_strip_keys PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_strip_keys COMMAND test_strip_keys)
+
 # Pure-logic test for the desktop-switch pre-autotile restore decision
 # (tilinghandler/pretiledecisions.h) — the truth table over
 # (local rect, rect's bucket screen, tracked-ness, windowed fullscreen),

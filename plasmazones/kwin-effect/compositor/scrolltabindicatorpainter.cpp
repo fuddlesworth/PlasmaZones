@@ -29,27 +29,28 @@
 
 // State, hit-testing and the GPU blit for the scrolling strip's tab
 // indicators. The layout maths and the QPainter rasterisation live in
-// scrolltabindicatorpainter_raster.cpp; this file owns the per-output model,
-// the dirty tracking and the one texture per output.
+// scrolltabindicatorpainter_raster.cpp; this file owns the per-strip model,
+// the dirty tracking and the one texture per strip (a virtual screen running
+// scrolling has a band of its own beside its siblings).
 namespace PlasmaZones {
 
 ScrollTabIndicatorPainter::ScrollTabIndicatorPainter() = default;
 
 ScrollTabIndicatorPainter::~ScrollTabIndicatorPainter() = default;
 
-ScrollTabIndicatorPainter::PerOutput* ScrollTabIndicatorPainter::find(KWin::LogicalOutput* output)
+ScrollTabIndicatorPainter::PerStrip* ScrollTabIndicatorPainter::find(const QString& strip)
 {
-    const auto it = m_outputs.find(output);
-    return it == m_outputs.end() ? nullptr : &it->second;
+    const auto it = m_strips.find(strip);
+    return it == m_strips.end() ? nullptr : &it->second;
 }
 
-const ScrollTabIndicatorPainter::PerOutput* ScrollTabIndicatorPainter::find(KWin::LogicalOutput* output) const
+const ScrollTabIndicatorPainter::PerStrip* ScrollTabIndicatorPainter::find(const QString& strip) const
 {
-    const auto it = m_outputs.find(output);
-    return it == m_outputs.end() ? nullptr : &it->second;
+    const auto it = m_strips.find(strip);
+    return it == m_strips.end() ? nullptr : &it->second;
 }
 
-void ScrollTabIndicatorPainter::rebuildLayout(PerOutput& entry)
+void ScrollTabIndicatorPainter::rebuildLayout(PerStrip& entry)
 {
     entry.hits.clear();
     entry.bounds = QRect();
@@ -74,7 +75,7 @@ void ScrollTabIndicatorPainter::rebuildLayout(PerOutput& entry)
     entry.hoveredWindowId.clear();
 }
 
-QRect ScrollTabIndicatorPainter::indicatorRectFor(const PerOutput& entry, const QString& windowId)
+QRect ScrollTabIndicatorPainter::indicatorRectFor(const PerStrip& entry, const QString& windowId)
 {
     if (windowId.isEmpty()) {
         return QRect();
@@ -89,17 +90,18 @@ QRect ScrollTabIndicatorPainter::indicatorRectFor(const PerOutput& entry, const 
     return QRect();
 }
 
-bool ScrollTabIndicatorPainter::setIndicators(KWin::LogicalOutput* output,
+bool ScrollTabIndicatorPainter::setIndicators(const QString& strip, KWin::LogicalOutput* output,
                                               const QVector<ScrollTabIndicator>& indicators,
                                               const ScrollTabIndicatorStyle& style)
 {
-    if (!output) {
+    if (!output || strip.isEmpty()) {
         return false;
     }
-    if (indicators.isEmpty() && !find(output)) {
+    if (indicators.isEmpty() && !find(strip)) {
         return false; // nothing to draw and nothing to forget — don't default-insert
     }
-    PerOutput& entry = m_outputs[output];
+    PerStrip& entry = m_strips[strip];
+    entry.output = output;
     // The whole point of the equality check: this is called on every caption
     // tick, colour reply and settings edge with mostly unchanged data, and
     // rasterising is a QPainter pass plus a texture upload. A false here
@@ -133,50 +135,68 @@ bool ScrollTabIndicatorPainter::setIndicators(KWin::LogicalOutput* output,
     return true;
 }
 
-bool ScrollTabIndicatorPainter::setHover(KWin::LogicalOutput* output, const QPointF& pos, const QPointF& viewOffset,
-                                         QString* hitWindowId)
+bool ScrollTabIndicatorPainter::setHover(KWin::LogicalOutput* output, const QPointF& pos,
+                                         const ViewOffsetFor& viewOffsetFor, QString* hitWindowId)
 {
-    PerOutput* const entry = find(output);
-    const QString hit = entry ? pillAt(output, pos, viewOffset) : QString();
+    const QString hit = pillAt(output, pos, viewOffsetFor);
     if (hitWindowId) {
         *hitWindowId = hit;
     }
-    if (!entry || hit == entry->hoveredWindowId) {
-        return false;
+    bool changed = false;
+    for (auto& [strip, entry] : m_strips) {
+        if (entry.output != output) {
+            continue;
+        }
+        // The hover belongs to the band whose pill it is; every other band on
+        // the output drops its own.
+        const QString hoverHere = indicatorRectFor(entry, hit).isValid() ? hit : QString();
+        if (hoverHere == entry.hoveredWindowId) {
+            continue;
+        }
+        // Only the indicators that lost and gained the hover change pixels, so
+        // only those rects need re-rasterising (see paint()). The full raster
+        // path still covers them when `dirty` is set for another reason.
+        const QRect lost = indicatorRectFor(entry, entry.hoveredWindowId);
+        const QRect gained = indicatorRectFor(entry, hoverHere);
+        entry.hoveredWindowId = hoverHere;
+        if (lost.isValid() && !entry.hoverDirtyRects.contains(lost)) {
+            entry.hoverDirtyRects.append(lost);
+        }
+        if (gained.isValid() && gained != lost && !entry.hoverDirtyRects.contains(gained)) {
+            entry.hoverDirtyRects.append(gained);
+        }
+        changed = true;
     }
-    // Only the indicators that lost and gained the hover change pixels, so
-    // only those rects need re-rasterising (see paint()). The full raster
-    // path still covers them when `dirty` is set for another reason.
-    const QRect lost = indicatorRectFor(*entry, entry->hoveredWindowId);
-    const QRect gained = indicatorRectFor(*entry, hit);
-    entry->hoveredWindowId = hit;
-    if (lost.isValid() && !entry->hoverDirtyRects.contains(lost)) {
-        entry->hoverDirtyRects.append(lost);
-    }
-    if (gained.isValid() && gained != lost && !entry->hoverDirtyRects.contains(gained)) {
-        entry->hoverDirtyRects.append(gained);
-    }
-    return true;
+    return changed;
 }
 
-QString ScrollTabIndicatorPainter::pillAt(KWin::LogicalOutput* output, const QPointF& pos,
-                                          const QPointF& viewOffset) const
+QString ScrollTabIndicatorPainter::pillIn(const PerStrip& entry, const QPointF& local)
 {
-    const PerOutput* const entry = find(output);
-    if (!entry) {
-        return {};
-    }
-    // The hit rects are stored where the model put them; the blit shifts them
-    // by the view offset, so undo that shift on the pointer rather than
-    // re-laying the model out every frame of a scroll.
-    const QPointF local = pos - viewOffset;
     // Reverse order: the raster draws the hits in model order, so the LAST
     // one containing the point is the one on top. Indicator rects do not
     // overlap in practice (one per column), but the rule should match the
     // pixels if they ever do.
-    for (auto it = entry->hits.crbegin(); it != entry->hits.crend(); ++it) {
+    for (auto it = entry.hits.crbegin(); it != entry.hits.crend(); ++it) {
         if (QRectF(it->rect).contains(local)) {
             return it->windowId;
+        }
+    }
+    return {};
+}
+
+QString ScrollTabIndicatorPainter::pillAt(KWin::LogicalOutput* output, const QPointF& pos,
+                                          const ViewOffsetFor& viewOffsetFor) const
+{
+    for (const auto& [strip, entry] : m_strips) {
+        if (entry.output != output) {
+            continue;
+        }
+        // The hit rects are stored where the model put them; the blit shifts
+        // them by the strip's view offset, so undo that shift on the pointer
+        // rather than re-laying the model out every frame of a scroll.
+        const QPointF offset = viewOffsetFor ? viewOffsetFor(strip) : QPointF();
+        if (const QString hit = pillIn(entry, pos - offset); !hit.isEmpty()) {
+            return hit;
         }
     }
     return {};
@@ -188,14 +208,15 @@ const ScrollTabIndicator* ScrollTabIndicatorPainter::indicatorFor(KWin::LogicalO
     if (windowId.isEmpty()) {
         return nullptr;
     }
-    const PerOutput* const entry = find(output);
-    if (!entry) {
-        return nullptr;
-    }
-    for (const ScrollTabIndicator& indicator : entry->indicators) {
-        for (const ScrollTabPill& tab : indicator.tabs) {
-            if (tab.windowId == windowId) {
-                return &indicator;
+    for (const auto& [strip, entry] : m_strips) {
+        if (entry.output != output) {
+            continue;
+        }
+        for (const ScrollTabIndicator& indicator : entry.indicators) {
+            for (const ScrollTabPill& tab : indicator.tabs) {
+                if (tab.windowId == windowId) {
+                    return &indicator;
+                }
             }
         }
     }
@@ -245,21 +266,36 @@ QString ScrollTabIndicatorPainter::neighbourPill(KWin::LogicalOutput* output, co
     return {};
 }
 
-QRect ScrollTabIndicatorPainter::boundsFor(KWin::LogicalOutput* output) const
+QRect ScrollTabIndicatorPainter::boundsFor(const QString& strip) const
 {
-    const PerOutput* const entry = find(output);
+    const PerStrip* const entry = find(strip);
     return entry ? entry->bounds : QRect();
+}
+
+QStringList ScrollTabIndicatorPainter::stripsOn(KWin::LogicalOutput* output) const
+{
+    QStringList strips;
+    for (const auto& [strip, entry] : m_strips) {
+        if (entry.output == output) {
+            strips.append(strip);
+        }
+    }
+    return strips;
 }
 
 bool ScrollTabIndicatorPainter::hasIndicators(KWin::LogicalOutput* output) const
 {
-    const PerOutput* const entry = find(output);
-    return entry && !entry->bounds.isEmpty();
+    for (const auto& [strip, entry] : m_strips) {
+        if (entry.output == output && !entry.bounds.isEmpty()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool ScrollTabIndicatorPainter::hasAnyIndicators() const
 {
-    for (const auto& [output, entry] : m_outputs) {
+    for (const auto& [strip, entry] : m_strips) {
         if (!entry.bounds.isEmpty()) {
             return true;
         }
@@ -269,18 +305,24 @@ bool ScrollTabIndicatorPainter::hasAnyIndicators() const
 
 bool ScrollTabIndicatorPainter::paintedLastPass(KWin::LogicalOutput* output) const
 {
-    const PerOutput* const entry = find(output);
-    return entry && entry->paintedLastPass;
+    for (const auto& [strip, entry] : m_strips) {
+        if (entry.output == output && entry.paintedLastPass) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void ScrollTabIndicatorPainter::notePassOutcome(KWin::LogicalOutput* output, bool painted)
 {
-    if (PerOutput* const entry = find(output)) {
-        entry->paintedLastPass = painted;
+    for (auto& [strip, entry] : m_strips) {
+        if (entry.output == output) {
+            entry.paintedLastPass = painted;
+        }
     }
 }
 
-void ScrollTabIndicatorPainter::retireTexture(PerOutput& entry)
+void ScrollTabIndicatorPainter::retireTexture(PerStrip& entry)
 {
     // Both callers erase the entry right after this, so only the texture's
     // ownership matters here.
@@ -307,22 +349,34 @@ void ScrollTabIndicatorPainter::drainRetiredTextures()
     drainRetired();
 }
 
-void ScrollTabIndicatorPainter::clearOutput(KWin::LogicalOutput* output)
+void ScrollTabIndicatorPainter::clearStrip(const QString& strip)
 {
-    const auto it = m_outputs.find(output);
-    if (it == m_outputs.end()) {
+    const auto it = m_strips.find(strip);
+    if (it == m_strips.end()) {
         return;
     }
     retireTexture(it->second);
-    m_outputs.erase(it);
+    m_strips.erase(it);
+}
+
+void ScrollTabIndicatorPainter::clearOutput(KWin::LogicalOutput* output)
+{
+    for (auto it = m_strips.begin(); it != m_strips.end();) {
+        if (it->second.output == output) {
+            retireTexture(it->second);
+            it = m_strips.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void ScrollTabIndicatorPainter::clearAll()
 {
-    for (auto& [output, entry] : m_outputs) {
+    for (auto& [strip, entry] : m_strips) {
         retireTexture(entry);
     }
-    m_outputs.clear();
+    m_strips.clear();
 }
 
 void ScrollTabIndicatorPainter::releaseGl()
@@ -332,7 +386,7 @@ void ScrollTabIndicatorPainter::releaseGl()
     // sets the entry dirty. The graveyard is drained here too, so a clear
     // that ran off-context before teardown still frees its name under this
     // context.
-    for (auto& [output, entry] : m_outputs) {
+    for (auto& [strip, entry] : m_strips) {
         entry.texture.reset();
         entry.textureBounds = QRect();
         entry.textureDeviceOrigin = QPoint();
@@ -351,16 +405,34 @@ void ScrollTabIndicatorPainter::releaseGl()
 
 bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::RenderTarget& renderTarget,
                                       const KWin::RenderViewport& viewport, const KWin::Region& clipRegion,
-                                      const QPointF& viewOffset)
+                                      const ViewOffsetFor& viewOffsetFor)
 {
     // GL-current point: whatever a clear retired since the last paint is
     // deleted here, before this output's own work.
     drainRetired();
 
-    PerOutput* const entry = find(output);
-    if (!entry) {
-        return false;
+    bool anyBand = false;
+    bool allStand = true;
+    for (auto& [strip, entry] : m_strips) {
+        if (entry.output != output) {
+            continue;
+        }
+        const bool hasBand = !entry.bounds.isEmpty();
+        const bool stands =
+            paintStrip(entry, renderTarget, viewport, clipRegion, viewOffsetFor ? viewOffsetFor(strip) : QPointF());
+        if (hasBand) {
+            anyBand = true;
+            allStand = allStand && stands;
+        }
     }
+    return anyBand && allStand;
+}
+
+bool ScrollTabIndicatorPainter::paintStrip(PerStrip& stripEntry, const KWin::RenderTarget& renderTarget,
+                                           const KWin::RenderViewport& viewport, const KWin::Region& clipRegion,
+                                           const QPointF& viewOffset)
+{
+    PerStrip* const entry = &stripEntry;
     if (entry->bounds.isEmpty()) {
         // Nothing to draw: release the texture rather than leaving VRAM held
         // by a strip that no longer has tabbed columns.
@@ -571,7 +643,7 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
         entry->hoverDirtyRects.clear();
         if (entry->dirty) {
             // Fractional-grid fallback: redo this frame as a full raster.
-            return paint(output, renderTarget, viewport, clipRegion, viewOffset);
+            return paintStrip(stripEntry, renderTarget, viewport, clipRegion, viewOffset);
         }
     }
     if (!entry->texture) {

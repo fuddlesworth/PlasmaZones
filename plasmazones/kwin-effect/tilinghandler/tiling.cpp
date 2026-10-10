@@ -548,7 +548,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // would mean the engine resolved one screen twice in one pass, where the
     // first answer is as good as any.
     //
-    // This is what makes the strip rigid: one spring per output, read back by
+    // This is what makes the strip rigid: one spring per strip, read back by
     // the paint path for every column, instead of N per-window springs that
     // each start a moment apart and integrate themselves apart.
     //
@@ -602,15 +602,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString stripEffectId;
         QVariantMap stripEffectParams;
         QSet<QString> seededScreens;
-        QSet<KWin::LogicalOutput*> seededOutputs;
-        // Outputs whose FIRST spelling took the immediate (no-leg) path.
+        QSet<QString> seededStrips;
+        // Strips whose FIRST spelling took the immediate (no-leg) path.
         // The duplicate-spelling arm classifies from this, never from its
         // own entry's flags: a mixed-flag batch (one spelling immediate, the
-        // other not) would otherwise put a spring-live output into
+        // other not) would otherwise put a spring-live strip into
         // immediateViewScreens — whose apply arm takes the outright
         // placement origin against a non-zero paint offset — or drop the
         // second spelling's entries from both sets.
-        QSet<KWin::LogicalOutput*> immediateOutputs;
+        QSet<QString> immediateStrips;
         for (const TileSnap& s : toApply) {
             if (s.viewDelta == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
                 continue;
@@ -621,32 +621,30 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // carried column repeats the delta — could not retry it.
             if (KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
                 seededScreens.insert(s.screenId);
-                // Dedup on the resolved OUTPUT as well as the id string:
-                // applyBatchDelta is additive, so two screenId spellings
-                // resolving to one output would spring the strip twice as
-                // far — the exact defect the once-per-output rule exists to
-                // prevent. A second spelling still lands in seededScreens
-                // (and startedViewScreens below) so ITS entries take the
-                // residual-origin path against the one shared spring.
-                if (seededOutputs.contains(out)) {
-                    if (immediateOutputs.contains(out)) {
+                // Dedup on the STRIP, not the id (applyBatchDelta is additive):
+                // two spellings of one unsplit monitor share one spring, and
+                // each virtual screen has its own.
+                const QString strip = stripKeyFor(s.screenId);
+                if (seededStrips.contains(strip)) {
+                    if (immediateStrips.contains(strip)) {
                         immediateViewScreens.insert(s.screenId);
-                    } else if (m_effect->m_stripViewAnimator->isAnimatingOn(out)) {
+                    } else if (m_effect->m_stripViewAnimator->isAnimatingOn(strip)) {
                         startedViewScreens.insert(s.screenId);
                     }
                     continue;
                 }
-                seededOutputs.insert(out);
+                seededStrips.insert(strip);
+                qCDebug(lcStripDiag) << "view delta" << s.viewDelta << "on strip" << strip;
                 if (s.viewImmediate) {
                     // Heartbeat-driven view motion: disarm any strip shader
                     // pass (there is no leg for it to decorate) and fold the
                     // delta straight into the accumulator. No profile resolve
                     // — nothing animates.
                     const PhosphorProtocol::ScrollAxis immediateAxis = scrollAxisForScreen(s.screenId);
-                    m_effect->m_stripTransition.notifyLeg(out, QString(), QVariantMap(), 0, immediateAxis);
-                    m_effect->m_stripViewAnimator->applyImmediateDelta(out, s.viewDelta, immediateAxis);
+                    m_effect->m_stripTransition.notifyLeg(out, strip, QString(), QVariantMap(), 0, immediateAxis);
+                    m_effect->m_stripViewAnimator->applyImmediateDelta(strip, out, s.viewDelta, immediateAxis);
                     immediateViewScreens.insert(s.screenId);
-                    immediateOutputs.insert(out);
+                    immediateStrips.insert(strip);
                     continue;
                 }
                 if (!resolved) {
@@ -669,15 +667,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // the one the spring still holds, so this ordering is
                 // load-bearing on both counts (see its header contract).
                 const PhosphorProtocol::ScrollAxis batchAxis = scrollAxisForScreen(s.screenId);
-                m_effect->m_stripTransition.notifyLeg(out, stripEffectId, stripEffectParams, s.viewDelta, batchAxis);
-                if (m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDelta, batchAxis, viewProfile)) {
+                // The pass decorates a whole output, so a virtual-screen strip scrolls without one.
+                const bool wholeOutput = !PhosphorIdentity::VirtualScreenId::isVirtual(s.screenId);
+                m_effect->m_stripTransition.notifyLeg(out, strip, wholeOutput ? stripEffectId : QString(),
+                                                      stripEffectParams, s.viewDelta, batchAxis);
+                if (m_effect->m_stripViewAnimator->applyBatchDelta(strip, out, s.viewDelta, batchAxis, viewProfile)) {
                     startedViewScreens.insert(s.screenId);
                 } else {
                     // The spring declined (animations off, no clock): there
                     // is no leg for the pass to decorate and no offset for
                     // a residual origin to lean on — disarm the pass and
                     // let this screen's entries take the ordinary paths.
-                    m_effect->m_stripTransition.notifyLeg(out, QString(), QVariantMap(), 0, batchAxis);
+                    m_effect->m_stripTransition.notifyLeg(out, strip, QString(), QVariantMap(), 0, batchAxis);
                 }
             }
         }
@@ -737,11 +738,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         const auto screenRectFor = [&](const TileSnap& s) -> QRect {
             auto it = screenRectCache.find(s.screenId);
             if (it == screenRectCache.end()) {
-                QRect outRect;
-                if (const KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
-                    outRect = out->geometry();
-                }
-                it = screenRectCache.insert(s.screenId, outRect);
+                it = screenRectCache.insert(s.screenId, stripScreenRect(s.screenId));
             }
             return it.value();
         };
@@ -1155,9 +1152,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (immediateViewScreens.contains(screenIt.key())) {
                     continue;
                 }
-                if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenIt.key())) {
-                    damageScrollTabBand(out, m_effect->m_scrollTabPainter->boundsFor(out));
-                }
+                const QString strip = stripKeyFor(screenIt.key());
+                damageScrollTabBand(strip, m_effect->m_scrollTabPainter->boundsFor(strip));
             }
         }
     };
@@ -2133,9 +2129,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     //    even though the cull draws nothing there (the
                     //    committed geometry never enters its render list).
                     //
-                    // The edge math resolves the screen id to its OUTPUT
-                    // geometry; scrolling is assigned per physical screen, so
-                    // a virtual sub-screen spelling never reaches this path.
+                    // The edge math measures against the strip's own screen:
+                    // a virtual screen's region on a split monitor, else the output.
                     QRectF originOverride;
                     QRectF visualTargetOverride;
                     bool skipScrollAnimation = false;
@@ -2271,8 +2266,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // of popping straight to the (off-screen) park.
                             // Same edge math as the scrollEdge branch below;
                             // same teleport fallback when no output resolves.
-                            const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
-                            const QRect screenRect = out ? QRect(out->geometry()) : QRect();
+                            const QRect screenRect = stripScreenRect(snap.screenId);
                             if (!screenRect.isValid()) {
                                 qCDebug(lcEffect) << "scroll batch: no output for" << snap.screenId << "- teleporting"
                                                   << snap.windowId << "to its target";
@@ -2369,8 +2363,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             }
                         }
                     } else if (!snap.scrollEdge.isEmpty()) {
-                        const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
-                        const QRect screenRect = out ? QRect(out->geometry()) : QRect();
+                        const QRect screenRect = stripScreenRect(snap.screenId);
                         if (screenRect.isValid()) {
                             const bool arriving = screenRect.intersects(committedGeo);
                             // Arriving: start from the target's own row and
@@ -2410,16 +2403,16 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // not scroll-tracked and their targets are on-screen
                         // anyway.)
                         //
-                        // LEAVING (target entirely off its own output): a
-                        // vertical stack-overflow park, or a tab going hidden.
+                        // LEAVING (target entirely off its own screen): a
+                        // cross-axis stack-overflow park, or a tab going hidden.
                         // There is no side to slide out by, and animating to a
                         // target below the union would sweep the window down
                         // the whole screen. Commit without an animation.
                         //
-                        // ARRIVING (target on its output, window sitting at a
+                        // ARRIVING (target on its screen, window sitting at a
                         // park right now): the tab of an on-screen tabbed
                         // column being ACTIVATED, or a tile the layout pushed
-                        // past the stack floor coming back. The park is below
+                        // past the stack's cross-axis end coming back. The park is below
                         // the union of every output and is chosen for safety,
                         // so it says nothing about where the window should
                         // appear to come from — animating from it flies the
@@ -2431,8 +2424,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // branch above. It is also what makes the pair
                         // symmetric: the outgoing tab teleports away, so a
                         // travelling arrival had nothing to travel from.
-                        const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
-                        const QRect screenRect = out ? QRect(out->geometry()) : QRect();
+                        const QRect screenRect = stripScreenRect(snap.screenId);
                         if (!screenRect.isValid()) {
                             // No resolvable output (disconnect race): both
                             // arms below need the rect, and falling through

@@ -27,6 +27,7 @@
 
 #include "tilinghandler.h"
 #include "scrolldecisions.h"
+#include "stripkeys.h"
 #include "compositor/scrollbehaviourparse.h"
 #include "compositor/stripviewanimator.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
@@ -241,20 +242,13 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     m_scrollVerticalAxisScreens = verticalAxis;
     // An axis flip landing MID-LEG must cancel that screen's view spring and
     // armed strip pass, the setScrollingScreens teardown shape: the painted
-    // axis lives in StripViewAnimator's per-output stamp, which only
+    // axis lives in StripViewAnimator's per-strip stamp, which only
     // applyBatchDelta rewrites — and it early-returns on a ZERO delta, so
     // the flip's own re-layout batch (a reflow, not a scroll) never
     // restamps it. Without this the stale leg keeps sliding the strip along
     // the axis the screen no longer has until the next genuine scroll.
-    // forgetOutput fires no repaint of its own, so damage the output too.
     for (const QString& flippedScreen : axisFlipped) {
-        if (KWin::LogicalOutput* out = m_effect->outputForScreenId(flippedScreen)) {
-            m_effect->m_stripTransition.outputRemoved(out);
-            m_effect->m_stripViewAnimator->forgetOutput(out);
-            if (KWin::effects) {
-                KWin::effects->addRepaint(out->geometry());
-            }
-        }
+        dropStripMotion(flippedScreen);
     }
     // Crop is PAINTED state: a screen that just started (or stopped) cropping
     // has stale pixels on it, and nothing else will revisit them, since the
@@ -262,7 +256,7 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // guaranteed.
     //
     // The axis set is NOT read by the paint path — StripViewAnimator holds the
-    // per-output stamp that offsetFor and the shader pass answer from. It is
+    // per-strip stamp that offsetFor and the shader pass answer from. It is
     // damaged here anyway, defensively: an axis change means the daemon has
     // re-resolved a screen's layout, and a full repaint on that is cheap
     // against getting it wrong. Do not cite this repaint as evidence the set
@@ -398,6 +392,43 @@ void TilingHandler::slotStripContextChanged(const QString& screenId, const QStri
     retireStripScopedState(screenId);
 }
 
+QString TilingHandler::stripKeyFor(const QString& screenId) const
+{
+    KWin::LogicalOutput* const out = m_effect->outputForScreenId(screenId);
+    return StripKeys::stripKey(screenId, out ? m_effect->outputScreenId(out) : QString());
+}
+
+QRect TilingHandler::stripScreenRect(const QString& screenId) const
+{
+    KWin::LogicalOutput* const out = m_effect->outputForScreenId(screenId);
+    if (!out) {
+        return QRect();
+    }
+    return StripKeys::screenRect(
+        screenId, QRect(out->geometry()),
+        m_effect->m_virtualScreenDefs.value(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)));
+}
+
+bool TilingHandler::dropStripMotion(const QString& screenId)
+{
+    KWin::LogicalOutput* const out = m_effect->outputForScreenId(screenId);
+    if (!out) {
+        return false;
+    }
+    // Both halves, as at every site that drops a strip's motion: the spring
+    // alone leaves an armed transition leg running with the OUTGOING strip's
+    // parameters. The whole output is damaged because the clip confines a
+    // column to the output, not to its virtual screen, so a leg can have been
+    // drawn over a sibling.
+    const QString strip = stripKeyFor(screenId);
+    m_effect->m_stripTransition.stripRemoved(strip);
+    m_effect->m_stripViewAnimator->forgetStrip(strip);
+    if (KWin::effects) {
+        KWin::effects->addRepaint(KWin::Rect(out->geometry()));
+    }
+    return true;
+}
+
 void TilingHandler::retireStripScopedState(const QString& screenId)
 {
     // THE RETIRE-SET RULE IS ON THIS FUNCTION'S DECLARATION. Read it before
@@ -447,22 +478,11 @@ void TilingHandler::retireStripScopedState(const QString& screenId)
             ++wit;
         }
     }
-    // The per-output view spring is strip-scoped for the same reason and is the
+    // The strip's view spring is strip-scoped for the same reason and is the
     // other half of a parked column's drawn position: its offset accumulated
     // from the OUTGOING strip's travel, and a parked column on the incoming one
     // would be painted at its own strip position plus a stranger's offset.
-    if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenId)) {
-        // Both halves, as at every other site that drops an output's strip
-        // motion. forgetOutput alone clears the spring but leaves any armed
-        // transition leg running, and that leg was armed with the OUTGOING
-        // strip's parameters, so the pass would keep capturing and decorating
-        // a strip that is no longer on screen.
-        m_effect->m_stripTransition.outputRemoved(out);
-        m_effect->m_stripViewAnimator->forgetOutput(out);
-        if (KWin::effects) {
-            KWin::effects->addRepaint(KWin::Rect(out->geometry()));
-        }
-    } else if (droppedAny && KWin::effects) {
+    if (!dropStripMotion(screenId) && droppedAny && KWin::effects) {
         // No output resolves for this id. Screen removal is not the case that
         // lands here — the effect's own screenRemoved handler has already
         // dropped this output's transition and spring by then — it is an id
@@ -652,17 +672,10 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // of the set, so the pass would keep capturing and decorating a scene
     // that is no longer scrolling for the leg's remaining duration, with
     // the whole capture now classified as wallpaper-under-everything.
-    // forgetOutput fires no repaint of its own, so damage the output too:
-    // the last presented frame carries the dying offset/pass and nothing
-    // else is scheduled to repaint it away.
+    // The last presented frame carries the dying offset/pass and nothing
+    // else is scheduled to repaint it away (dropStripMotion damages it).
     for (const QString& removedScreen : oldSet - newSet) {
-        if (KWin::LogicalOutput* out = m_effect->outputForScreenId(removedScreen)) {
-            m_effect->m_stripTransition.outputRemoved(out);
-            m_effect->m_stripViewAnimator->forgetOutput(out);
-            if (KWin::effects) {
-                KWin::effects->addRepaint(out->geometry());
-            }
-        }
+        dropStripMotion(removedScreen);
     }
 
     m_effect->invalidateAllRuleCaches();

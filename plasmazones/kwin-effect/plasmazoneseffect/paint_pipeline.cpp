@@ -403,7 +403,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
             // its output at once — so the output it belongs to IS its region,
             // and identity answers what an intersection would have to
             // approximate.
-            if (!touchesThisOutput && m_stripViewAnimator->isAnimatingOn(data.screen)) {
+            if (!touchesThisOutput && m_stripViewAnimator->isAnimatingOnOutput(data.screen)) {
                 touchesThisOutput = true;
             }
             if (!touchesThisOutput) {
@@ -1868,7 +1868,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
             // predictor pinned at the destination for the whole leg. It would
             // also centre by the size a geometry leg is still interpolating,
             // where the draw centres by the committed one.
-            if (KWin::LogicalOutput* scrollOut = scrollManagedOutputFor(w)) {
+            if (scrollManagedOutputFor(w)) {
                 if (!animatedFrame.isValid()) {
                     animatedFrame = w->frameGeometry();
                 }
@@ -1878,7 +1878,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
                     const QPoint translation = scrollVisualTranslationFor(*vit, w->frameGeometry());
                     animatedFrame.translate(translation.x(), translation.y());
                 }
-                animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));
+                animatedFrame.translate(scrollViewOffsetFor(w));
             }
             // No m_scrollCorpseFreeze arm here on purpose: this whole block is
             // gated on !w->isDeleted(), and freeze entries exist only for the
@@ -1979,7 +1979,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         // view, so the strip sliding underneath it is not something it can
         // double-count — unlike the animator transform above, which describes
         // the same motion the shader is already drawing.
-        if (KWin::LogicalOutput* managed = w ? scrollManagedOutputFor(w) : nullptr) {
+        if (w && scrollManagedOutputFor(w)) {
             // A parked column is committed below the union of all outputs, so
             // relocate the drawing to where it really sits on the strip BEFORE
             // the view offset goes on. The two together put it exactly where a
@@ -1995,7 +1995,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
                 const QPoint translation = scrollVisualTranslationFor(*vit, w->frameGeometry());
                 data += QPointF(translation.x(), translation.y());
             }
-            const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed);
+            const QPointF viewOffset = scrollViewOffsetFor(w);
             if (!viewOffset.isNull()) {
                 data += viewOffset;
             }
@@ -2114,12 +2114,9 @@ void PlasmaZonesEffect::paintScrollTabIndicators(const KWin::RenderTarget& rende
     // paint so a re-entrant trigger during the blit (none exists, but the
     // latch is what makes that true) cannot double it.
     m_scrollTabPainted = true;
-    // The SAME offset the columns take in the transform block above, read in
-    // the same paint pass: that is the entire reason the pills are drawn here
-    // rather than by the daemon — they move on exactly the frame the windows
-    // do, for a view leg, an edge auto-scroll tick, or anything else that
-    // slides the strip.
-    const QPointF viewOffset = m_stripViewAnimator->offsetFor(out);
+    // Each band takes its strip's offset, the SAME one its columns take in the
+    // transform block above in the same pass: that is why the pills are drawn
+    // here rather than by the daemon, moving on exactly the frame the windows do.
     // Clip to the WALK's region, not the trigger window's. KWin hands each
     // paintWindow the damage intersected with that window's own bounds, so a
     // trigger-bounded clip would cut every pill outside the anchor column
@@ -2134,7 +2131,8 @@ void PlasmaZonesEffect::paintScrollTabIndicators(const KWin::RenderTarget& rende
     // because the painter can refuse (a latched raster failure) and the pass
     // outcome must then say "nothing on screen" or pill input would answer
     // for invisible pills.
-    m_scrollTabBlitIssued = m_scrollTabPainter->paint(out, renderTarget, viewport, clip, viewOffset);
+    m_scrollTabBlitIssued =
+        m_scrollTabPainter->paint(out, renderTarget, viewport, clip, m_tilingHandler->scrollTabViewOffsets());
 }
 
 } // namespace PlasmaZones
