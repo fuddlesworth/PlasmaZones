@@ -1376,6 +1376,14 @@ target_link_libraries(test_drag_policy_transition PRIVATE Qt6::Test Qt6::Core Ph
 target_include_directories(test_drag_policy_transition PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_drag_policy_transition COMMAND test_drag_policy_transition)
 
+# Pure-logic test for the window flag edges (plasmazoneseffect/windowflagedges.h):
+# which flags push to the daemon, drop the cached verdicts, and run the
+# flags-settle eviction. Same header-only reach.
+add_executable(test_window_flag_edges ui/effect/test_window_flag_edges.cpp)
+target_link_libraries(test_window_flag_edges PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_window_flag_edges PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_window_flag_edges COMMAND test_window_flag_edges)
+
 # Pure-logic test for the minimize-float qualifiers
 # (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
 # can still be the tile it is about to get. Same header-only reach.

@@ -374,8 +374,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     });
 
     // The same gate's OTHER edges. A fullscreen window keeps isFullScreen()
-    // true while it is minimized, sent to another desktop, or moved to another
-    // output, so without these the covered set stays stale and a monitor with
+    // true while it is minimized, sent to another desktop or activity, or moved
+    // to another output, so without these the covered set stays stale and a monitor with
     // nothing on it goes on being undecorated. Each is pre-gated on the window
     // actually being fullscreen: the refresh walks the entire stacking order,
     // and the overwhelming majority of windows firing these are not fullscreen
@@ -400,6 +400,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // hold whichever of those it takes.
     if (KWin::Window* kw = w->window()) {
         connect(kw, &KWin::Window::outputChanged, this, [this, w]() {
+            if (w && w->isFullScreen()) {
+                refreshFullscreenSuppression();
+            }
+        });
+        // An activity move: the walk skips a window off the current activity,
+        // and the global currentActivityChanged edge covers only a switch.
+        connect(kw, &KWin::Window::activitiesChanged, this, [this, w]() {
             if (w && w->isFullScreen()) {
                 refreshFullscreenSuppression();
             }

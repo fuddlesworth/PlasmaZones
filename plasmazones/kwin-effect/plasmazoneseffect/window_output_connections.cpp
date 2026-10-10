@@ -4,13 +4,15 @@
 // Per-window output wiring for PlasmaZonesEffect: the cross-output move
 // (KWin outputChanged), the virtual-screen crossing detector that runs off
 // frame geometry because outputChanged cannot see a crossing inside one
-// monitor, the tracked-screen stamp both diff against, and the flags-settle
-// eviction backstop. Called once per window from setupWindowConnections. The
+// monitor, the tracked-screen stamp both diff against, the flags-settle
+// eviction backstop and the rule-field flag edges. Called once per window from
+// setupWindowConnections. The
 // crossing bodies live in ScreenChangeHandler, which also replays a crossing
 // deferred during a screen change at its settle.
 
 #include "plasmazoneseffect.h"
 #include "gestureenddecisions.h"
+#include "windowflagedges.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
@@ -72,17 +74,57 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         // revises. No signal fires because no state changes, so neither
         // these arms nor a longer settle defer can catch it; an Exclude
         // rule is the only lever.
-        connect(kw, &KWin::Window::keepAboveChanged, this, [this, safeW](bool) {
-            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        //
+        // Each flag is also a rule field on both ends: the daemon's registry
+        // copy is refreshed by the push, and the effect's verdicts are dropped
+        // except for keep-above, keep-below and the decoration, whose
+        // invalidation would re-assert or re-read PlasmaZones' own write
+        // (windowflagedges.h). The eviction runs first, as it always did, and
+        // the push before the invalidation, so a flush that re-resolves reads
+        // the field the daemon now holds.
+        const auto flagEdge = [this, safeW](WindowFlagEdges::Flag flag) {
+            KWin::EffectWindow* const window = safeW.data();
+            if (!window || window->isDeleted()) {
+                return;
+            }
+            const WindowFlagEdges::Actions actions = WindowFlagEdges::actionsFor(flag);
+            if (actions.reevaluateEligibility) {
+                m_tilingHandler->reevaluateWindowEligibility(window);
+            }
+            if (actions.pushMetadata) {
+                pushWindowMetadata(window);
+            }
+            if (actions.invalidateRules) {
+                invalidateRuleCacheForStateChange(getWindowId(window));
+            }
+        };
+        using WindowFlagEdges::Flag;
+        connect(kw, &KWin::Window::keepAboveChanged, this, [flagEdge](bool) {
+            flagEdge(Flag::KeepAbove);
         });
-        connect(kw, &KWin::Window::skipSwitcherChanged, this, [this, safeW]() {
-            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        connect(kw, &KWin::Window::keepBelowChanged, this, [flagEdge](bool) {
+            flagEdge(Flag::KeepBelow);
         });
-        connect(kw, &KWin::Window::transientChanged, this, [this, safeW]() {
-            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        connect(kw, &KWin::Window::skipTaskbarChanged, this, [flagEdge]() {
+            flagEdge(Flag::SkipTaskbar);
         });
-        connect(kw, &KWin::Window::modalChanged, this, [this, safeW]() {
-            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
+        connect(kw, &KWin::Window::skipPagerChanged, this, [flagEdge]() {
+            flagEdge(Flag::SkipPager);
+        });
+        connect(kw, &KWin::Window::skipSwitcherChanged, this, [flagEdge]() {
+            flagEdge(Flag::SkipSwitcher);
+        });
+        connect(kw, &KWin::Window::transientChanged, this, [flagEdge]() {
+            flagEdge(Flag::Transient);
+        });
+        connect(kw, &KWin::Window::modalChanged, this, [flagEdge]() {
+            flagEdge(Flag::Modal);
+        });
+        connect(kw, &KWin::Window::maximizeableChanged, this, [flagEdge](bool) {
+            flagEdge(Flag::Maximizable);
+        });
+        connect(kw, &KWin::Window::decorationChanged, this, [flagEdge]() {
+            flagEdge(Flag::Decoration);
         });
         connect(kw, &KWin::Window::outputChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted()) {
