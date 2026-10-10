@@ -138,6 +138,14 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             if (m_resizeHold.window == safeW) {
                 return;
             }
+            // A client that grew or shrank in place has not moved (F1007, the
+            // output twin of F248): KWin re-picks the output by the frame's
+            // centre, which an oversized frame can carry over the edge. The
+            // window stays where KWin put it and on the screen it was tracked
+            // on, as the virtual-screen arm below does.
+            if (!safeW->isUserMove() && m_sizeOnlyFrames.value(safeW) == QRectF(safeW->frameGeometry())) {
+                return;
+            }
             // The window's screen, and where it is going when this output
             // change is the ack of a move KWin has since been asked to
             // replace: a held "move to output" key (or a move reversed inside
@@ -200,7 +208,18 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         // (<PhosphorIdentity/VirtualScreenId.h>) — the same predicate used by
         // tilinghandler/tiling.cpp.
         const auto onFrameChanged = [this, safeW](KWin::EffectWindow*, const QRectF& oldGeometry) {
-            if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_daemonGate.virtualScreensReady) {
+            if (!safeW || safeW->isDeleted()) {
+                return;
+            }
+            // KWin emits this before outputChanged in the same commit
+            // (WaylandWindow::updateGeometry), so the output arm reads this
+            // record for the change that moved the output.
+            if (GestureEndDecisions::isSizeOnlyChange(oldGeometry, QRectF(safeW->frameGeometry()))) {
+                m_sizeOnlyFrames.insert(safeW, QRectF(safeW->frameGeometry()));
+            } else {
+                m_sizeOnlyFrames.remove(safeW);
+            }
+            if (m_virtualScreenDefs.isEmpty() || !m_daemonGate.virtualScreensReady) {
                 return;
             }
             // Suppress crossing detection while the daemon is moving this window in response
@@ -257,6 +276,7 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         KWin::EffectWindow* const rawW = safeW;
         connect(safeW, &QObject::destroyed, this, [this, rawW]() {
             m_trackedScreenPerWindow.remove(rawW);
+            m_sizeOnlyFrames.remove(rawW);
         });
     }
 }

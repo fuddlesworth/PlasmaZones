@@ -624,6 +624,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
         m_idCaches.windowIdReverse.remove(closedWindowId);
     }
     m_trackedScreenPerWindow.remove(w);
+    m_sizeOnlyFrames.remove(w);
     m_restoreSuppress.remove(w);
     // Drop any pending-but-not-yet-flushed frame geometry for the
     // closing window. The windowDeleted lambda in lifecycle_wiring.cpp

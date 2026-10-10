@@ -897,6 +897,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             m_scrollOfferedColumn.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
+        m_sizeOnlyFrames.remove(w);
         // Its settle records and deferred crossing, keyed by the same pointer.
         m_screenChangeHandler->forgetWindow(w);
         // The corpse's frozen strip displacement dies with it. This is THE

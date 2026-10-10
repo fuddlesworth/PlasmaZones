@@ -3672,18 +3672,18 @@ private:
     // one updateAllDecorations().
     bool m_borderSweepPending = false;
 
-    // Daemon readiness / virtual-screen fetch gate state. Fields + rationale in
-    // effect_state.h (DaemonGateState).
+    // Daemon readiness / virtual-screen fetch gate state (effect_state.h DaemonGateState).
     DaemonGateState m_daemonGate;
 
     // Screen/window id caches (mutable: populated from const accessors). Fields in
-    // effect_state.h (IdCacheState). m_trackedScreenPerWindow below is a
-    // non-mutable member and is deliberately kept out of this group.
+    // effect_state.h (IdCacheState); m_trackedScreenPerWindow is not one of them.
     mutable IdCacheState m_idCaches;
 
     // Per-window tracked screen ID for cross-screen move detection.
-    // Replaces the per-window `new QString` heap allocation that was leaked.
     QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
+    // The frame a window's last size-only change produced: the output arm has
+    // no old frame to judge one by (F1007). Cleared with the tracked screen.
+    QHash<KWin::EffectWindow*, QRectF> m_sizeOnlyFrames;
     // The window notifyWindowActivated last reported to the daemon, which is
     // the daemon's focused window until the next report. reportActiveWindowScreen
     // gates on it.
