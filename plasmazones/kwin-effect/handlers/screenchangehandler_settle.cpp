@@ -560,11 +560,15 @@ void ScreenChangeHandler::applyOutputCrossing(KWin::EffectWindow* w, const QStri
     } else {
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }
+    // Only the dragged window's crossing waits for the drop, which owns that
+    // window's transitions. Any other window crossing during a drag is its
+    // own move, and nothing at drag end would rediscover it (F241).
+    const bool dragSubject = dragging && m_effect->m_dragTracker->draggedWindow() == w;
     // The daemon drops what it held of the window on the screen left. A
     // window KWin moved off an output that went away, or back onto one that
-    // returned, never reaches here: the settle classified it. Not mid-drag,
-    // where the drop owns the transitions.
-    if (ownCrossing && !dragging) {
+    // returned, never reaches here: the settle classified it. Not for the
+    // dragged window, whose drop owns the transitions.
+    if (ownCrossing && !dragSubject) {
         reportCrossing(w, oldScreenId, newScreenId);
     }
 }
@@ -605,11 +609,15 @@ void ScreenChangeHandler::applyVirtualScreenCrossing(KWin::EffectWindow* w, cons
     // windows whose verdicts are stale all the same.
     if (m_effect->m_dragTracker->isDragging()) {
         m_effect->m_dragSuppressedRuleInvalidations.insert(windowId);
-        // The drag owns the transitions: autotile through the drag-policy
-        // path, snapping through the daemon at the drop.
-        return;
+        if (m_effect->m_dragTracker->draggedWindow() == w) {
+            // The drag owns the dragged window's transitions: autotile
+            // through the drag-policy path, snapping through the daemon at
+            // the drop. Any other window's crossing is its own (F241).
+            return;
+        }
+    } else {
+        m_effect->invalidateRuleCacheForStateChange(windowId);
     }
-    m_effect->invalidateRuleCacheForStateChange(windowId);
     // A tracked window's crossing is the tiling handler's own per-frame
     // detector's to handle (it reports too). Only an untracked window
     // (snapping entering an autotile virtual screen) needs the delegation.
