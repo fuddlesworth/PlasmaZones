@@ -164,8 +164,9 @@ void PlasmaZonesEffect::wireMetadataHandlers(KWin::EffectWindow* w)
         // coalesced per-window invalidation, mirroring the outputChanged
         // handler; the flush clears the caches and re-drives decoration /
         // title bar / layer for exactly this window.
+        // A resize holding the edit runs it from its drain instead.
         auto invalidateForContextMove = [this, safeW]() {
-            if (safeW && !safeW->isDeleted()) {
+            if (safeW && !safeW->isDeleted() && m_resizeHold.window != safeW) {
                 invalidateRuleCacheForStateChange(getWindowId(safeW));
             }
         };

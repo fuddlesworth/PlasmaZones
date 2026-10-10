@@ -117,6 +117,11 @@ public:
     /// Tell the daemon @p w crossed screens on its own: windowScreenChanged
     /// when no tiling engine runs either end, windowCrossedScreens otherwise.
     void reportCrossing(KWin::EffectWindow* w, const QString& oldScreenId, const QString& newScreenId);
+    /// The crossing a held resize made, settled once when it ended (F486).
+    /// Deferred to the settle inside a screen change, like the arms. A tracked
+    /// tile crossing virtual screens goes through the tiling handler's
+    /// transfer, since the per-frame detector skipped it while held.
+    void applyGestureEndCrossing(KWin::EffectWindow* w, const QString& oldScreenId, const QString& newScreenId);
 
 public Q_SLOTS:
     void slotScreenGeometryChanged();

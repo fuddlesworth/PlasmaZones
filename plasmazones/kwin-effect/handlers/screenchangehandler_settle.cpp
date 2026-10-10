@@ -622,4 +622,31 @@ void ScreenChangeHandler::applyVirtualScreenCrossing(KWin::EffectWindow* w, cons
     }
 }
 
+void ScreenChangeHandler::applyGestureEndCrossing(KWin::EffectWindow* w, const QString& oldScreenId,
+                                                  const QString& newScreenId)
+{
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    if (isScreenChangeInProgress()) {
+        deferCrossing(w, oldScreenId);
+        return;
+    }
+    if (!PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
+        applyOutputCrossing(w, oldScreenId, newScreenId);
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    TilingHandler* const tiling = m_effect->m_tilingHandler.get();
+    if (!tiling->isTrackedWindow(windowId)) {
+        applyVirtualScreenCrossing(w, oldScreenId, newScreenId);
+        return;
+    }
+    m_effect->evictExclusionVerdicts(windowId);
+    m_effect->invalidateRuleCacheForStateChange(windowId);
+    if (tiling->handleWindowOutputChanged(w)) {
+        reportCrossing(w, oldScreenId, newScreenId);
+    }
+}
+
 } // namespace PlasmaZones

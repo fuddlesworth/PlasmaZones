@@ -87,6 +87,14 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             if (!safeW || safeW->isDeleted()) {
                 return;
             }
+            // A window being resized stays on the screen it started on until
+            // the resize ends, where drainResizeHold settles it once (F486):
+            // KWin moves its output by the frame centre on every resize step.
+            // The stamp is not written either, so a resize that crosses and
+            // comes back has crossed nothing.
+            if (m_resizeHold.window == safeW) {
+                return;
+            }
             // The window's screen, and where it is going when this output
             // change is the ack of a move KWin has since been asked to
             // replace: a held "move to output" key (or a move reversed inside
@@ -158,6 +166,10 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             // applyWindowGeometry, so getWindowScreenId would resolve the new position against
             // stale boundaries and report a phantom crossing.
             if (m_daemonGate.inGeometryApply) {
+                return;
+            }
+            // Held through a resize, like the output arm.
+            if (m_resizeHold.window == safeW) {
                 return;
             }
             // Pending-aware like the output arm: a frame change that acks a

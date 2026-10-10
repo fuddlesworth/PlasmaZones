@@ -417,6 +417,10 @@ private:
     /// edge and of the window's tracking state (the table is in
     /// window_desktop_connections.cpp).
     void applyWindowContextEdit(KWin::EffectWindow* window, const WindowContextEdge::Edge& edge);
+    /// One desktop or activity edit, start to end: the push, the re-stamp and the arms.
+    void runContextEdit(KWin::EffectWindow* window, ResizeHold::ContextAxis axis);
+    /// The desktop and activity fields the window has now, as a push carries them.
+    static WindowContextFields liveContextFields(KWin::EffectWindow* w);
     /// The rest of setupWindowConnections' per-window wiring, split by concern
     /// and called from it in this order: cross-output and virtual-screen moves
     /// (window_output_connections.cpp), identity and metadata pushes
@@ -1450,15 +1454,8 @@ private:
     /// keepFloatingAboveDefault, consulted by reconcileRuleWindowLayer.
     ResolvedWindowAppearance resolveEffectiveWindowAppearance(KWin::EffectWindow* w, const QString& windowId) const;
 
-    // The window currently in an interactive RESIZE (set at
-    // windowStartUserMovedResized when isUserResize(), cleared at finish).
-    // windowFinishUserMovedResized does not reliably report isUserResize() at
-    // teardown, so the resize-vs-move discriminator is latched at start. Used to
-    // persist a floating window's new free size the instant the resize ends —
-    // distinct from a move, which the drag→snap pipeline owns (a move can end in
-    // a snap, so it must not be captured as a free geometry here). QPointer
-    // auto-nulls on window destruction.
-    QPointer<KWin::EffectWindow> m_resizingWindow;
+    // The interactive resize being held (effect_state.h, ResizeHold).
+    ResizeHold m_resizeHold;
 
     // Policy returned from the daemon's beginDrag for the currently-active
     // drag. Async-populated a few ms after the
@@ -1564,15 +1561,15 @@ private:
     /// called once from the constructor.
     void setupDecorationManager();
 
-    // Interactive-resize latch. windowStartUserMovedResized fires once with
-    // isUserResize() true when an edge drag begins; we capture the pre-resize
-    // frame so windowFinishUserMovedResized can report the before/after geometry
-    // to the daemon for neighbour reflow (GitHub #652). The resize-vs-move
-    // identity is the existing m_resizingWindow latch; this carries only the
-    // baseline geometry it lacks. The daemon's frame shadow can't serve as the
-    // baseline — it updates mid-drag via the debounced setFrameGeometry push.
-    QRect m_resizeStartGeometry;
-    void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
+    // The neighbour-reflow report (GitHub #652): the frame before the resize and
+    // the one it ended at.
+    void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry, const QRect& newGeometry);
+    /// Settle a held resize (ResizeHold): the crossing, the context edits that
+    /// waited and the end-of-resize reports, once. @p frame is the frame to read.
+    void drainResizeHold(const QRect& frame);
+    /// Wait for the client to commit the size a resize ended at, a newer
+    /// command or the deadline, then drain (F701).
+    void armResizeAckWatch(KWin::EffectWindow* w);
 
     void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
 

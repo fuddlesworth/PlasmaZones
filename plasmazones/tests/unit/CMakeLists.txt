@@ -1315,6 +1315,15 @@ target_link_libraries(test_instant_restore_decisions PRIVATE Qt6::Test Qt6::Core
 target_include_directories(test_instant_restore_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_instant_restore_decisions COMMAND test_instant_restore_decisions)
 
+# Pure-logic test for the end of an interactive resize
+# (plasmazoneseffect/gestureenddecisions.h): when the client has committed the
+# size it was dragged to, what a held resize crossed, and when the
+# neighbour-reflow report is sent. Same header-only reach.
+add_executable(test_gesture_end_decisions ui/effect/test_gesture_end_decisions.cpp)
+target_link_libraries(test_gesture_end_decisions PRIVATE Qt6::Test Qt6::Core PhosphorIdentity::PhosphorIdentity)
+target_include_directories(test_gesture_end_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_gesture_end_decisions COMMAND test_gesture_end_decisions)
+
 # The effect's pure placement-statement decisions (placementstatement.h).
 add_executable(test_placement_statement ui/effect/test_placement_statement.cpp)
 target_link_libraries(test_placement_statement PRIVATE Qt6::Test Qt6::Core)

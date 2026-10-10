@@ -193,13 +193,15 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // m_virtualScreenDefs may still reflect pre-rotation regions.
     if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()
         && m_effect->m_daemonGate.virtualScreensReady && !m_effect->m_daemonGate.inGeometryApply) {
-        // Don't detect VS crossings for the dragged window — the drop handler
-        // (callDragStopped / autotile drag end) owns state transitions.
-        // Detecting mid-drag would transfer the window before the user drops it.
+        // Don't detect VS crossings for the window in a gesture: the drop
+        // handler (callDragStopped / autotile drag end) owns a drag's
+        // transitions, and the resize drain owns a resize's (F486). Detecting
+        // mid-gesture would transfer the window before the user lets go.
         // Other windows (e.g., a terminal reflowing) should still get VS crossing checks.
-        const bool isDraggedWindow = m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
-            && windowId == m_effect->m_dragTracker->draggedWindowId();
-        if (!isDraggedWindow) {
+        const bool heldByGesture = (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
+                                    && windowId == m_effect->m_dragTracker->draggedWindowId())
+            || m_effect->m_resizeHold.window == w;
+        if (!heldByGesture) {
             const QString newScreenId = m_effect->getWindowScreenId(w);
             const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
             if (PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {

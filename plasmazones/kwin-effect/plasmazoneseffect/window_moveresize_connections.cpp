@@ -3,9 +3,11 @@
 
 // Per-window interactive move/resize wiring for PlasmaZonesEffect: the
 // gesture start and finish handlers KWin fires once per drag or resize.
-// Called once per window from setupWindowConnections.
+// Called once per window from setupWindowConnections. The resize hold and its
+// drain live here too.
 
 #include "plasmazoneseffect.h"
+#include "gestureenddecisions.h"
 #include "shader_internal.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -20,6 +22,7 @@
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
+#include "handlers/screenchangehandler.h"
 
 namespace PlasmaZones {
 
@@ -37,17 +40,22 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
     // DragTracker::updateCursorPosition(), throttled to ~30Hz.
     connect(w, &KWin::EffectWindow::windowStartUserMovedResized, this, [this](KWin::EffectWindow* window) {
         m_dragTracker->handleWindowStartMoveResize(window);
-        // Latch interactive-resize identity AND the pre-resize frame for the finish
-        // handler (see below): KWin clears isUserResize() before
-        // windowFinishUserMovedResized fires, so both the move-vs-resize
-        // discriminator and the baseline geometry must be captured here, at the
-        // start. The geometry feeds the neighbour-reflow report (GitHub #652);
-        // m_resizeStartGeometry is only read at finish when this latch identifies a
-        // resize, so a plain move leaves it cleared.
-        m_resizingWindow = (window && window->isUserResize()) ? window : nullptr;
-        m_resizeStartGeometry = QRect();
-        if (m_resizingWindow) {
-            m_resizeStartGeometry = window->frameGeometry().toRect();
+        // Open the resize hold (ResizeHold). It is latched here, at the start,
+        // because KWin clears isUserResize() before windowFinishUserMovedResized
+        // fires. The pre-resize frame is the neighbour-reflow report's baseline
+        // (GitHub #652), and the context is what every metadata push reports
+        // while an edit waits for the resize to end.
+        if (window && window->isUserResize()) {
+            if (m_resizeHold.window) {
+                // A new gesture settles the one before it.
+                drainResizeHold(m_resizeHold.window->frameGeometry().toRect());
+            }
+            const quint64 generation = m_resizeHold.generation + 1;
+            m_resizeHold = ResizeHold{};
+            m_resizeHold.generation = generation;
+            m_resizeHold.window = window;
+            m_resizeHold.startGeometry = window->frameGeometry().toRect();
+            m_resizeHold.context = liveContextFields(window);
         }
         // window.movement.move shader transition: KWin's interactive move is
         // its own animation system (Window::moveResize via pointer drag), but
@@ -261,48 +269,29 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
                 }
             }
         }
-        const bool wasResize = (window && m_resizingWindow == window);
-        m_resizingWindow = nullptr;
-        // A floating window the user just RESIZED has a new free size. Persist it
-        // immediately into the unified record's shared free geometry (overwrite=true)
-        // so the float-back is durable right away — recordFreeGeometry marks the
-        // placement store dirty, arming the debounced save. The save-time sweep only
-        // folds the live frame shadow into the record on the next dirtying event /
-        // shutdown, and a bare resize never marks anything dirty, so without this the
-        // new size could be lost on an unclean exit. Resizes never snap, so this can
-        // never race the drag→snap pipeline (which owns the move case); guarding on
-        // isWindowFloating keeps it to genuinely floated windows.
-        if (wasResize && shouldHandleWindow(window)) {
-            const QString windowId = getWindowId(window);
-            if (!windowId.isEmpty() && isWindowFloating(windowId)) {
-                // toRect() (rounding) rather than truncation: fractional-scale
-                // outputs leave sub-pixel residue in frameGeometry(), and the
-                // other geometry-capture paths round too. Correct for
-                // maximize/fullscreen (freeGeometryForCapture) so maximizing a
-                // floating window does not clobber its free-float size with the
-                // full-monitor rect (this store uses overwrite=true).
-                const QRect geom = freeGeometryForCapture(window, QRectF(window->frameGeometry())).toRect();
-                if (geom.width() > 0 && geom.height() > 0) {
-                    PhosphorProtocol::ClientHelpers::fireAndForget(
-                        this, PhosphorProtocol::Service::Interface::WindowTracking,
-                        QStringLiteral("storePreTileGeometry"),
-                        {windowId, geom.x(), geom.y(), geom.width(), geom.height(), getWindowScreenId(window),
-                         /*overwrite=*/true},
-                        QStringLiteral("storePreTileGeometry - float resize"));
-                }
+        const bool wasResize = (window && m_resizeHold.window == window && !m_resizeHold.finished);
+        if (wasResize) {
+            // The end-of-resize work runs from the frame the client commits for
+            // the size it was dragged to. KWin does not wait for that commit at
+            // the end of an interactive resize on Wayland, so when the frame
+            // does not answer the request yet, the drain waits for it, for a
+            // newer command, or for the deadline (F701).
+            KWin::Window* const kw = window->window();
+            const QRectF requested = kw ? QRectF(kw->moveResizeGeometry()) : QRectF();
+            m_resizeHold.finished = true;
+            m_resizeHold.requestedSize = requested.size();
+            m_resizeHold.commandStampAtFinish = m_daemonGate.commandStamps.current(window);
+            if (!requested.isValid()
+                || GestureEndDecisions::frameAnswersRequest(window->frameGeometry().size(), requested.size())) {
+                drainResizeHold(window->frameGeometry().toRect());
+            } else {
+                armResizeAckWatch(window);
             }
-            // Report the committed resize to the daemon so it can reflow tiled
-            // neighbours (GitHub #652). The daemon ignores floating / untracked
-            // windows, so this is harmless for the float case handled just above.
-            // The enclosing shouldHandleWindow(window) is the effect-side gate
-            // (excluded windows never reach here); the daemon then additionally
-            // re-validates membership before reflowing.
-            notifyWindowResized(window, m_resizeStartGeometry);
-        }
-        // The free geometry the effect remembers follows a hand placement, so a
-        // later desktop move or float-back returns to where the user left it.
-        if (window && !window->isDeleted() && shouldHandleWindow(window)) {
-            m_tilingHandler->noteFreeGeometryAfterGesture(window, wasResize);
+        } else if (window && !window->isDeleted() && shouldHandleWindow(window)) {
+            // The free geometry the effect remembers follows a hand placement,
+            // so a later desktop move or float-back returns to where the user
+            // left it.
+            m_tilingHandler->noteFreeGeometryAfterGesture(window, /*resized=*/false);
         }
         m_dragTracker->handleWindowFinishMoveResize(window);
         // Now that the COMPOSITOR's move is over (this signal, not forceEnd,
@@ -329,6 +318,116 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
         // one point that always runs at the end of a gesture.
         m_tilingHandler->reconcileMaximizeAfterGesture(window);
     });
+}
+
+void PlasmaZonesEffect::armResizeAckWatch(KWin::EffectWindow* w)
+{
+    const QPointer<KWin::EffectWindow> safeW = w;
+    disconnect(m_resizeHold.ackWatch);
+    m_resizeHold.ackWatch =
+        connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW](KWin::EffectWindow*) {
+            if (!safeW || m_resizeHold.window != safeW) {
+                return;
+            }
+            if (GestureEndDecisions::frameAnswersRequest(safeW->frameGeometry().size(), m_resizeHold.requestedSize)
+                || m_daemonGate.commandStamps.current(safeW) != m_resizeHold.commandStampAtFinish) {
+                drainResizeHold(safeW->frameGeometry().toRect());
+            }
+        });
+    // A client that never answers (a suspended one) must not hold the window:
+    // at the deadline the drain reads the size KWin asked for.
+    QTimer::singleShot(GestureEndDecisions::kAckDeadlineMs, this, [this, safeW, gen = m_resizeHold.generation]() {
+        if (!safeW || m_resizeHold.window != safeW || m_resizeHold.generation != gen) {
+            return;
+        }
+        const KWin::Window* const kw = safeW->window();
+        const QRectF requested = kw ? QRectF(kw->moveResizeGeometry()) : QRectF();
+        drainResizeHold(requested.isValid() ? requested.toRect() : QRectF(safeW->frameGeometry()).toRect());
+    });
+}
+
+void PlasmaZonesEffect::drainResizeHold(const QRect& frame)
+{
+    KWin::EffectWindow* const w = m_resizeHold.window.data();
+    const QRect start = m_resizeHold.startGeometry;
+    const quint8 heldAxes = m_resizeHold.heldAxes;
+    disconnect(m_resizeHold.ackWatch);
+    // Released FIRST: the bodies below must not see a hold.
+    const quint64 generation = m_resizeHold.generation + 1;
+    m_resizeHold = ResizeHold{};
+    m_resizeHold.generation = generation;
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    // Where the resize left the window, settled once (F486). At the deadline
+    // the committed frame is still the old size, so the screen is read from
+    // the frame the drain was handed.
+    const QString windowId = getWindowId(w);
+    QString after;
+    if (frame == QRectF(w->frameGeometry()).toRect()) {
+        after = pendingWindowScreenId(w);
+    } else {
+        const QString scrollTracked =
+            m_tilingHandler->hasScrollingScreens() ? m_tilingHandler->scrollTrackedScreenFor(windowId) : QString();
+        const QPoint centre = frame.center();
+        const KWin::LogicalOutput* const out = KWin::effects ? KWin::effects->screenAt(centre) : nullptr;
+        after = scrollTracked.isEmpty() ? resolveEffectiveScreenId(centre, out ? out : windowOutput(w)) : scrollTracked;
+    }
+    const QString before = m_trackedScreenPerWindow.value(w);
+    const auto crossing = GestureEndDecisions::classify(before, after);
+    if (crossing != GestureEndDecisions::Crossing::None) {
+        m_trackedScreenPerWindow[w] = after;
+        reportActiveWindowScreen(w, after);
+        m_screenChangeHandler->applyGestureEndCrossing(w, before, after);
+    }
+    // The context edits KWin made during the resize (F665), after the
+    // crossing, each pushing the context it left first.
+    if (heldAxes & ResizeHold::DesktopAxis) {
+        runContextEdit(w, ResizeHold::DesktopAxis);
+    }
+    if (heldAxes & ResizeHold::ActivityAxis) {
+        runContextEdit(w, ResizeHold::ActivityAxis);
+    }
+    if (heldAxes != 0) {
+        invalidateRuleCacheForStateChange(windowId);
+    }
+    if (!shouldHandleWindow(w)) {
+        return;
+    }
+    // A floating window the user just RESIZED has a new free size. Persist it
+    // immediately into the unified record's shared free geometry (overwrite=true)
+    // so the float-back is durable right away — recordFreeGeometry marks the
+    // placement store dirty, arming the debounced save. The save-time sweep only
+    // folds the live frame shadow into the record on the next dirtying event /
+    // shutdown, and a bare resize never marks anything dirty, so without this the
+    // new size could be lost on an unclean exit. Resizes never snap, so this can
+    // never race the drag→snap pipeline (which owns the move case); guarding on
+    // isWindowFloating keeps it to genuinely floated windows.
+    if (!windowId.isEmpty() && isWindowFloating(windowId)) {
+        // toRect() (rounding) rather than truncation: fractional-scale
+        // outputs leave sub-pixel residue in frameGeometry(), and the
+        // other geometry-capture paths round too. Correct for
+        // maximize/fullscreen (freeGeometryForCapture) so maximizing a
+        // floating window does not clobber its free-float size with the
+        // full-monitor rect (this store uses overwrite=true).
+        const QRect geom = freeGeometryForCapture(w, QRectF(frame)).toRect();
+        if (geom.width() > 0 && geom.height() > 0) {
+            PhosphorProtocol::ClientHelpers::fireAndForget(
+                this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                {windowId, geom.x(), geom.y(), geom.width(), geom.height(), getWindowScreenId(w),
+                 /*overwrite=*/true},
+                QStringLiteral("storePreTileGeometry - float resize"));
+        }
+    }
+    // Report the committed resize to the daemon so it can reflow tiled
+    // neighbours (GitHub #652), unless it ended on another screen, whose tiles
+    // it does not belong to. The daemon ignores floating / untracked windows,
+    // so this is harmless for the float case handled just above, and it
+    // re-validates membership before reflowing.
+    if (GestureEndDecisions::reportsResize(crossing)) {
+        notifyWindowResized(w, start, frame);
+    }
+    m_tilingHandler->noteFreeGeometryAfterGesture(w, /*resized=*/true);
 }
 
 } // namespace PlasmaZones

@@ -911,6 +911,13 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // address from inheriting a dead window's desktop set (which would make
         // the handler misread the new window's first desktop edit).
         m_contextStampPerWindow.remove(w);
+        // A window that dies mid-resize has nothing left to settle.
+        if (m_resizeHold.window == w) {
+            disconnect(m_resizeHold.ackWatch);
+            const quint64 generation = m_resizeHold.generation + 1;
+            m_resizeHold = ResizeHold{};
+            m_resizeHold.generation = generation;
+        }
         // Wired-window guard. The connections themselves die with the window, so
         // this is address-reuse safety, not connection hygiene: a stale entry
         // would make setupWindowConnections REFUSE to wire a new window that

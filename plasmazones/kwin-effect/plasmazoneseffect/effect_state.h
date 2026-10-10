@@ -15,10 +15,13 @@
 
 #include <QColor>
 #include <QHash>
+#include <QObject>
 #include <QPointer>
 #include <QRect>
 #include <QSet>
+#include <QSizeF>
 #include <QString>
+#include <QVariantList>
 #include <QtGlobal>
 
 #include <cstdint>
@@ -253,6 +256,44 @@ struct WindowCommandStamps
 
     QHash<const KWin::EffectWindow*, quint64> byWindow;
     quint64 seq = 0;
+};
+
+/// The desktop and activity fields of a metadata push, in the form the wire
+/// carries them: the first desktop's x11 number (0: every desktop or
+/// unknown) and the full list only for a window on several, the first
+/// activity (empty: every activity) and the full list only for several.
+struct WindowContextFields
+{
+    int virtualDesktop = 0;
+    QVariantList desktops;
+    QString activity;
+    QVariantList activities;
+};
+
+/// The interactive RESIZE in progress, from windowStartUserMovedResized until
+/// its end is settled (F486, F701): while it holds, the window's screen
+/// crossings and its desktop and activity edges wait, and
+/// PlasmaZonesEffect::drainResizeHold resolves them once. One at a time, since
+/// KWin runs one interactive move or resize. Call sites compare
+/// `m_resizeHold.window == w`.
+struct ResizeHold
+{
+    enum ContextAxis : quint8 {
+        DesktopAxis = 1,
+        ActivityAxis = 2
+    };
+    QPointer<KWin::EffectWindow> window;
+    QRect startGeometry; ///< the pre-resize frame, the #652 report's baseline
+    /// The context the window had when the resize began: every metadata push
+    /// reports it while an edit is held, so the daemon does not carry the
+    /// window into a context mid-gesture (F665).
+    WindowContextFields context;
+    bool finished = false; ///< KWin ended the gesture; the drain waits for the client
+    QSizeF requestedSize; ///< moveResizeGeometry().size() at the finish
+    quint64 commandStampAtFinish = 0;
+    quint8 heldAxes = 0; ///< ContextAxis bits whose handler waits for the drain
+    QMetaObject::Connection ackWatch;
+    quint64 generation = 0; ///< bumped per hold, read by the deadline timer
 };
 
 /// Daemon readiness / virtual-screen fetch gate state. Grouped from

@@ -746,7 +746,7 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w, const QString&
                                                    QStringLiteral("windowClosed"), {windowId, kindInt, closeScreenId});
 }
 
-void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry)
+void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry, const QRect& newGeometry)
 {
     if (!w) {
         return;
@@ -760,7 +760,6 @@ void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& 
         return;
     }
 
-    const QRect newGeometry = w->frameGeometry().toRect();
     if (!oldGeometry.isValid() || newGeometry.width() <= 0 || newGeometry.height() <= 0) {
         return;
     }

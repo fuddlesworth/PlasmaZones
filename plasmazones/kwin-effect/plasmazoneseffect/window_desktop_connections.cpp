@@ -77,30 +77,15 @@ void PlasmaZonesEffect::wireContextChangeHandlers(KWin::EffectWindow* w)
         if (!window || window->isDeleted()) {
             return;
         }
-        updateWindowStickyState(window);
-        // The registry, and the daemon's per-window membership reconcile it
-        // drives (the tiling per-key release and in-view adopt, the snap
-        // carry), must see the new desktop set before any notice this handler
-        // sends, so the push leads (F293). The sticky report goes first
-        // because the reconcile's autotile adopt reads it. This is the only
-        // push for a desktop edit.
-        pushWindowMetadata(window);
-        // The arms below adopt or drain by the exclusion verdict, which must
-        // be judged on the desktop the window moved to.
-        evictExclusionVerdicts(getWindowId(window));
-        // Re-stamp before any arm runs, so the next edit diffs against this one.
-        const auto stampIt = m_contextStampPerWindow.find(window);
-        const bool hadPrevious = stampIt != m_contextStampPerWindow.end();
-        WindowContextEdge::Stamp& stamp = hadPrevious ? *stampIt : m_contextStampPerWindow[window];
-        const WindowContextEdge::IdSet previous = stamp.desktops;
-        stamp.desktops = desktopIdsOf(window);
-        // Measured against the desktop the window's OWN output is showing, not
-        // the session-wide current one (desktopvisibility.h).
-        const KWin::VirtualDesktop* shown = desktopShownOn(window);
-        applyWindowContextEdit(window,
-                               WindowContextEdge::classify(previous, hadPrevious, stamp.desktops,
-                                                           shown ? shown->id() : QString(),
-                                                           window->isOnCurrentActivity()));
+        // Held while the window is being resized: KWin re-desks a window whose
+        // centre crosses outputs mid-resize under per-output desktops, and the
+        // window's screen is settled only when the resize ends. The drain runs
+        // this edit then, after the crossing notice (F665).
+        if (m_resizeHold.window == window) {
+            m_resizeHold.heldAxes |= ResizeHold::DesktopAxis;
+            return;
+        }
+        runContextEdit(window, ResizeHold::DesktopAxis);
     });
 
     // The activity axis, through the same arms: a move to another activity
@@ -115,20 +100,54 @@ void PlasmaZonesEffect::wireContextChangeHandlers(KWin::EffectWindow* w)
             if (!window || window->isDeleted()) {
                 return;
             }
-            pushWindowMetadata(window);
-            evictExclusionVerdicts(getWindowId(window));
-            const auto stampIt = m_contextStampPerWindow.find(window);
-            const bool hadPrevious = stampIt != m_contextStampPerWindow.end();
-            WindowContextEdge::Stamp& stamp = hadPrevious ? *stampIt : m_contextStampPerWindow[window];
-            const WindowContextEdge::IdSet previous = stamp.activities;
-            stamp.activities = activityIdsOf(window);
-            applyWindowContextEdit(
-                window,
-                WindowContextEdge::classify(previous, hadPrevious, stamp.activities,
-                                            KWin::effects ? KWin::effects->currentActivity() : QString(),
-                                            isOnOwnOutputCurrentDesktop(window)));
+            // Held like the desktop edit above.
+            if (m_resizeHold.window == window) {
+                m_resizeHold.heldAxes |= ResizeHold::ActivityAxis;
+                return;
+            }
+            runContextEdit(window, ResizeHold::ActivityAxis);
         });
     }
+}
+
+void PlasmaZonesEffect::runContextEdit(KWin::EffectWindow* window, ResizeHold::ContextAxis axis)
+{
+    const bool desktopAxis = axis == ResizeHold::DesktopAxis;
+    if (desktopAxis) {
+        updateWindowStickyState(window);
+    }
+    // The registry, and the daemon's per-window membership reconcile it
+    // drives (the tiling per-key release and in-view adopt, the snap carry),
+    // must see the new desktop or activity set before any notice this edit
+    // sends, so the push leads (F293). The sticky report goes first because
+    // the reconcile's autotile adopt reads it. This is the only push for a
+    // desktop edit.
+    pushWindowMetadata(window);
+    // The arms below adopt or drain by the exclusion verdict, which must be
+    // judged on the context the window moved to.
+    evictExclusionVerdicts(getWindowId(window));
+    // Re-stamp before any arm runs, so the next edit diffs against this one.
+    const auto stampIt = m_contextStampPerWindow.find(window);
+    const bool hadPrevious = stampIt != m_contextStampPerWindow.end();
+    WindowContextEdge::Stamp& stamp = hadPrevious ? *stampIt : m_contextStampPerWindow[window];
+    if (desktopAxis) {
+        const WindowContextEdge::IdSet previous = stamp.desktops;
+        stamp.desktops = desktopIdsOf(window);
+        // Measured against the desktop the window's OWN output is showing, not
+        // the session-wide current one (desktopvisibility.h).
+        const KWin::VirtualDesktop* shown = desktopShownOn(window);
+        applyWindowContextEdit(window,
+                               WindowContextEdge::classify(previous, hadPrevious, stamp.desktops,
+                                                           shown ? shown->id() : QString(),
+                                                           window->isOnCurrentActivity()));
+        return;
+    }
+    const WindowContextEdge::IdSet previous = stamp.activities;
+    stamp.activities = activityIdsOf(window);
+    applyWindowContextEdit(window,
+                           WindowContextEdge::classify(previous, hadPrevious, stamp.activities,
+                                                       KWin::effects ? KWin::effects->currentActivity() : QString(),
+                                                       isOnOwnOutputCurrentDesktop(window)));
 }
 
 // The arms. "tracked" is the effect's own tiling bookkeeping for the window,
