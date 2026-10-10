@@ -7,6 +7,7 @@
 #include <QList>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 
 #include <optional>
 
@@ -22,6 +23,7 @@ struct WindowDesktopContext
     QList<int> virtualDesktops; ///< full list when the window spans several desktops
     std::optional<bool> sticky; ///< on all desktops; disengaged when never reported
     QString activity; ///< empty = all activities / unknown
+    QStringList activities{}; ///< full list when on several activities; appended last (F426)
 
     /// The desktops the window is on, or nullopt when it is on all of them or
     /// they are unknown: the full list for a window spanning several, else

@@ -121,7 +121,8 @@ std::optional<WindowRegistry::WindowContext> WindowRegistry::windowContext(const
     if (it == m_records.constEnd()) {
         return std::nullopt;
     }
-    return WindowContext{it.value().virtualDesktop, it.value().virtualDesktops, it.value().activity};
+    return WindowContext{it.value().virtualDesktop, it.value().virtualDesktops, it.value().activity,
+                         it.value().activities};
 }
 
 QString WindowRegistry::appIdFor(const QString& instanceId) const
@@ -170,7 +171,7 @@ std::optional<WindowDesktopContext> WindowRegistry::desktopContext(const QString
     if (it == m_records.constEnd()) {
         return std::nullopt;
     }
-    return WindowDesktopContext{it->virtualDesktop, it->virtualDesktops, it->isSticky, it->activity};
+    return WindowDesktopContext{it->virtualDesktop, it->virtualDesktops, it->isSticky, it->activity, it->activities};
 }
 
 QStringList WindowRegistry::instancesWithAppId(const QString& appId) const

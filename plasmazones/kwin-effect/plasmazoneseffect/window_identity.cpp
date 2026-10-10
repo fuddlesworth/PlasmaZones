@@ -278,6 +278,17 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
                 }
             }
         }
+        // The activity axis of the same span: every activity when the window
+        // is on several, so the daemon does not model it on the first alone
+        // (F426). Empty or one activity leaves the key absent.
+        if (activities.size() > 1) {
+            QVariantList activitiesList;
+            activitiesList.reserve(activities.size());
+            for (const QString& activityId : activities) {
+                activitiesList.append(activityId);
+            }
+            extended.insert(Key::Activities, activitiesList);
+        }
     }
 
     // Fire-and-forget — the daemon side is idempotent.

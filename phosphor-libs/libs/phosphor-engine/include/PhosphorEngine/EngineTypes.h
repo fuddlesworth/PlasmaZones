@@ -251,6 +251,9 @@ struct DesktopSpan
     bool sticky = false; ///< on every desktop
     QSet<int> desktops; ///< when !sticky: the desktops it occupies (a span such as {1,2})
     QString activity; ///< empty: every activity, or unknown
+    /// When the window is on several (but not all) activities, all of them;
+    /// empty otherwise. Appended last (installed struct, F426).
+    QStringList activities{};
 
     /// Whether the span reaches desktop @p desktop.
     bool coversDesktop(int desktop) const
@@ -258,10 +261,14 @@ struct DesktopSpan
         return known && (sticky || desktops.contains(desktop));
     }
     /// Whether the span reaches activity @p other. An empty activity on either
-    /// side means "every activity" and never mismatches.
+    /// side means "every activity" and never mismatches; a window on several
+    /// activities reaches each of them.
     bool coversActivity(const QString& other) const
     {
-        return activity.isEmpty() || other.isEmpty() || activity == other;
+        if (activity.isEmpty() || other.isEmpty()) {
+            return true;
+        }
+        return activities.size() > 1 ? activities.contains(other) : activity == other;
     }
     /// Whether the span reaches the context @p key names.
     bool coversKey(const PlacementStateKey& key) const

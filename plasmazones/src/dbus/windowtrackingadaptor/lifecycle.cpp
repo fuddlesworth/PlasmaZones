@@ -643,6 +643,10 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             if (!meta.virtualDesktops.isEmpty() && meta.virtualDesktops.constFirst() != meta.virtualDesktop) {
                 meta.virtualDesktops.clear();
             }
+            // The activity span, likewise (F426).
+            if (!meta.activities.isEmpty() && meta.activities.constFirst() != meta.activity) {
+                meta.activities.clear();
+            }
         }
         // Fresh captionNormal from the caption tick, when the effect sent one.
         if (const auto it = extended.constFind(QString(Key::CaptionNormal)); it != extended.constEnd()) {
@@ -722,6 +726,16 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                         meta.virtualDesktops.append(desktop);
                     }
                 }
+            } else if (k == Key::Activities) {
+                // Multi-activity list, absent unless the window is on several
+                // (F426). Unwrapped like the desktop span.
+                const QVariantList list = DBusVariantUtils::convertDbusArgument(v).toList();
+                for (const QVariant& a : list) {
+                    const QString activityId = a.toString();
+                    if (!activityId.isEmpty() && !meta.activities.contains(activityId)) {
+                        meta.activities.append(activityId);
+                    }
+                }
             }
         }
     }
@@ -730,6 +744,10 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     // or one whose first entry was refused above) is no span (F81).
     if (meta.virtualDesktops.size() < 2 || meta.virtualDesktops.constFirst() != meta.virtualDesktop) {
         meta.virtualDesktops.clear();
+    }
+    // The same invariant on the activity axis (F426).
+    if (meta.activities.size() < 2 || meta.activities.constFirst() != meta.activity) {
+        meta.activities.clear();
     }
 
     // Universal canonical seed. setWindowMetadata is the per-window choke point —

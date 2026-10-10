@@ -120,6 +120,10 @@ inline constexpr QLatin1String CaptionNormal("captionNormal");
 /// virtual desktops. Sent only when the window spans more than one desktop;
 /// the positional virtualDesktop arg stays the first entry for compatibility.
 inline constexpr QLatin1String VirtualDesktops("virtualDesktops");
+/// Full activity UUID list for a window on SEVERAL (but not all) activities.
+/// Sent only when the window is on more than one; the positional activity arg
+/// stays the first entry for compatibility (F426).
+inline constexpr QLatin1String Activities("activities");
 }
 
 /// Keys of the two scrolling tab-indicator maps that cross the daemon → KWin

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <QTest>
 
@@ -23,6 +24,7 @@ private Q_SLOTS:
     void effectiveActivity_data();
     void effectiveActivity();
     void windowContextLookup();
+    void spanReachesEveryListedActivity();
 };
 
 void TestWindowContext::effectiveDesktop_data()
@@ -62,23 +64,34 @@ void TestWindowContext::effectiveDesktop()
 void TestWindowContext::effectiveActivity_data()
 {
     QTest::addColumn<QString>("activity");
+    QTest::addColumn<QStringList>("activities");
     QTest::addColumn<QString>("currentActivity");
     QTest::addColumn<QString>("expected");
 
     QTest::newRow("own-activity-beats-current")
-        << QStringLiteral("{aaaa}") << QStringLiteral("{bbbb}") << QStringLiteral("{aaaa}");
+        << QStringLiteral("{aaaa}") << QStringList() << QStringLiteral("{bbbb}") << QStringLiteral("{aaaa}");
     QTest::newRow("all-activities-falls-back-to-current")
-        << QString() << QStringLiteral("{bbbb}") << QStringLiteral("{bbbb}");
+        << QString() << QStringList() << QStringLiteral("{bbbb}") << QStringLiteral("{bbbb}");
+    // A window on several activities resolves to the one in view when it is
+    // listed, like a desktop span (F426), and to its first otherwise.
+    QTest::newRow("several-activities-prefer-the-current-one")
+        << QStringLiteral("{aaaa}") << QStringList{QStringLiteral("{aaaa}"), QStringLiteral("{bbbb}")}
+        << QStringLiteral("{bbbb}") << QStringLiteral("{bbbb}");
+    QTest::newRow("several-activities-current-not-listed")
+        << QStringLiteral("{aaaa}") << QStringList{QStringLiteral("{aaaa}"), QStringLiteral("{bbbb}")}
+        << QStringLiteral("{cccc}") << QStringLiteral("{aaaa}");
 }
 
 void TestWindowContext::effectiveActivity()
 {
     QFETCH(QString, activity);
+    QFETCH(QStringList, activities);
     QFETCH(QString, currentActivity);
     QFETCH(QString, expected);
 
     WindowRegistry::WindowContext ctx;
     ctx.activity = activity;
+    ctx.activities = activities;
     QCOMPARE(ctx.effectiveActivity(currentActivity), expected);
 }
 
@@ -93,6 +106,7 @@ void TestWindowContext::windowContextLookup()
     meta.virtualDesktop = 2;
     meta.virtualDesktops = QList<int>{2, 3};
     meta.activity = QStringLiteral("{aaaa}");
+    meta.activities = QStringList{QStringLiteral("{aaaa}"), QStringLiteral("{bbbb}")};
     registry.upsert(QStringLiteral("instance-1"), meta);
 
     const auto ctx = registry.windowContext(QStringLiteral("instance-1"));
@@ -101,8 +115,35 @@ void TestWindowContext::windowContextLookup()
     QCOMPARE(ctx->virtualDesktops, (QList<int>{2, 3}));
     QCOMPARE(ctx->activity, QStringLiteral("{aaaa}"));
     QCOMPARE(ctx->effectiveDesktop(3), 3);
+    QCOMPARE(ctx->activities, meta.activities);
+    QCOMPARE(ctx->effectiveActivity(QStringLiteral("{bbbb}")), QStringLiteral("{bbbb}"));
+    const auto desktopContext = registry.desktopContext(QStringLiteral("org.example.app|instance-1"));
+    QVERIFY(desktopContext.has_value());
+    QCOMPARE(desktopContext->activities, meta.activities);
 
     QVERIFY(!registry.windowContext(QStringLiteral("unknown")).has_value());
+}
+
+void TestWindowContext::spanReachesEveryListedActivity()
+{
+    // A window on several activities is a member of each (F426): a span that
+    // listed only its first marked every other activity's key stale.
+    PhosphorEngine::DesktopSpan span;
+    span.known = true;
+    span.desktops = {1};
+    span.activity = QStringLiteral("{aaaa}");
+    span.activities = QStringList{QStringLiteral("{aaaa}"), QStringLiteral("{bbbb}")};
+    QVERIFY(span.coversActivity(QStringLiteral("{aaaa}")));
+    QVERIFY(span.coversActivity(QStringLiteral("{bbbb}")));
+    QVERIFY(!span.coversActivity(QStringLiteral("{cccc}")));
+    QVERIFY(span.coversActivity(QString()));
+    QVERIFY(span.coversKey(PhosphorEngine::PlacementStateKey{QStringLiteral("DP-1"), 1, QStringLiteral("{bbbb}")}));
+
+    // One activity, or all of them, as before.
+    span.activities.clear();
+    QVERIFY(!span.coversActivity(QStringLiteral("{bbbb}")));
+    span.activity.clear();
+    QVERIFY(span.coversActivity(QStringLiteral("{bbbb}")));
 }
 
 QTEST_APPLESS_MAIN(TestWindowContext)

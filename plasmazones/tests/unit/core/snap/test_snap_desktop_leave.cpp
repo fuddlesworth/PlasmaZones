@@ -191,6 +191,34 @@ private Q_SLOTS:
         m_layoutManager->setCurrentActivity(QString());
     }
 
+    // A window on two activities, snapped while the second is in view, is a
+    // member there: the reconcile does not read its first activity as the
+    // only one and release it (F426).
+    void aWindowOnSeveralActivitiesKeepsItsZoneInEach()
+    {
+        const QString a = QStringLiteral("act-a");
+        const QString b = QStringLiteral("act-b");
+        m_layoutManager->setCurrentActivity(b);
+        m_engine->setCurrentActivity(b);
+        snapOn(1, kWindow, m_zoneIds[0]);
+
+        const PhosphorEngine::DesktopSpanQuery onBoth = [a, b](const QString&) {
+            PhosphorEngine::DesktopSpan span;
+            span.known = true;
+            span.desktops = {1};
+            span.activity = a;
+            span.activities = QStringList{a, b};
+            return span;
+        };
+        const auto result = m_engine->reconcileWindowMemberships(kWindow, onBoth);
+
+        QVERIFY(result.released.isEmpty());
+        QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
+        QCOMPARE(slotState(kWindow), QString(WindowPlacement::stateSnapped()));
+        m_engine->setCurrentActivity(QString());
+        m_layoutManager->setCurrentActivity(QString());
+    }
+
     // Removing desktop 2 renumbers 3 to 2: the stores move, and so do the
     // desktop numbers they hold for each window and for the last-used zone,
     // which otherwise named the desktop that took the old number (F145).

@@ -48,7 +48,7 @@ QSet<int> desktopSetOf(const PhosphorEngine::WindowMetadata& meta)
 bool sameContextFields(const PhosphorEngine::WindowMetadata& a, const PhosphorEngine::WindowMetadata& b)
 {
     return a.virtualDesktop == b.virtualDesktop && a.virtualDesktops == b.virtualDesktops && a.activity == b.activity
-        && a.isSticky == b.isSticky;
+        && a.activities == b.activities && a.isSticky == b.isSticky;
 }
 } // namespace
 
@@ -57,6 +57,7 @@ PhosphorEngine::DesktopSpan TilingAdaptor::spanFor(const PhosphorEngine::WindowM
 {
     PhosphorEngine::DesktopSpan span;
     span.activity = meta.activity;
+    span.activities = meta.activities;
     // The effect stamps the on-all-desktops bit into the same metadata push
     // that carries the desktop set, so the two are one snapshot. The
     // service's own sticky report (setWindowSticky) is the fallback for a

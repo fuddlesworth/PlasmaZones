@@ -107,6 +107,32 @@ private Q_SLOTS:
         QCOMPARE(f.registry.metadata(QStringLiteral("span-1"))->virtualDesktops, (QList<int>{2, 3}));
     }
 
+    // The activity list follows the same invariant: two or more, led by the
+    // scalar activity. A caption-only refresh that moves the scalar drops a
+    // list from before the move (F426).
+    void metadataActivityListFollowsTheSpanInvariant()
+    {
+        FloatBackFixture f;
+        const QString a = QStringLiteral("act-a");
+        const QString b = QStringLiteral("act-b");
+        const auto pushActivities = [&f](const QString& activity, const QVariantMap& extended) {
+            f.wta->setWindowMetadata(QStringLiteral("acts-1"), QStringLiteral("app"), QString(), QStringLiteral("t"),
+                                     QString(), 100, 1, activity,
+                                     static_cast<int>(PhosphorProtocol::WindowType::Normal), extended);
+        };
+        pushActivities(a, {{QString(Key::Width), 640}, {QString(Key::Activities), QVariantList{a, b}}});
+        QCOMPARE(f.registry.metadata(QStringLiteral("acts-1"))->activities, (QStringList{a, b}));
+
+        pushActivities(a, {{QString(Key::Width), 640}, {QString(Key::Activities), QVariantList{b, a}}});
+        QVERIFY2(f.registry.metadata(QStringLiteral("acts-1"))->activities.isEmpty(),
+                 "a list not led by the scalar activity is no list");
+
+        pushActivities(a, {{QString(Key::Width), 640}, {QString(Key::Activities), QVariantList{a, b}}});
+        pushActivities(b, {});
+        QVERIFY2(f.registry.metadata(QStringLiteral("acts-1"))->activities.isEmpty(),
+                 "a caption refresh that moved the scalar drops the stale list");
+    }
+
     // A non-positive size is unknown, not one the min-size gate compares.
     void metadataNonPositiveSizeIsUnknown()
     {

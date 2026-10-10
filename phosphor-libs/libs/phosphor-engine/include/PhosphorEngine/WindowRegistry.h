@@ -75,6 +75,10 @@ struct WindowMetadata
     std::optional<int> positionX{}; ///< frame left edge X in px
     std::optional<int> positionY{}; ///< frame top edge Y in px
     std::optional<QString> captionNormal{}; ///< title without the WM-added app-name suffix
+    /// Full activity list when the window is on SEVERAL (but not all)
+    /// activities; empty otherwise. When non-empty, activity equals the first
+    /// entry. Appended last (installed struct).
+    QStringList activities{};
 
     bool operator==(const WindowMetadata& other) const
     {
@@ -89,7 +93,7 @@ struct WindowMetadata
             && isModal == other.isModal && hasDecoration == other.hasDecoration && isResizable == other.isResizable
             && isMovable == other.isMovable && isMaximizable == other.isMaximizable && width == other.width
             && height == other.height && positionX == other.positionX && positionY == other.positionY
-            && captionNormal == other.captionNormal;
+            && captionNormal == other.captionNormal && activities == other.activities;
     }
     bool operator!=(const WindowMetadata& other) const
     {
@@ -121,6 +125,7 @@ public:
         int virtualDesktop = 0;
         QList<int> virtualDesktops;
         QString activity;
+        QStringList activities; ///< full list when on several activities (appended last)
 
         /// Effective desktop for per-window mode resolution: the window's own
         /// desktop when known (virtualDesktop > 0), never the screen's current
@@ -139,13 +144,15 @@ public:
             return virtualDesktop > 0 ? virtualDesktop : screenCurrentDesktop;
         }
 
-        /// Effective activity: the window's own when known, else
-        /// @p currentActivity. No span analogue to effectiveDesktop's
-        /// current-context preference exists here — the metadata carries only
-        /// the window's first activity, not a list, so there is nothing to
-        /// prefer against.
+        /// Effective activity, the activity axis of effectiveDesktop: a window
+        /// on several activities resolves to @p currentActivity when that is
+        /// one of them, else its own (first) activity when known, else
+        /// @p currentActivity (F426).
         QString effectiveActivity(const QString& currentActivity) const
         {
+            if (activities.size() > 1 && activities.contains(currentActivity)) {
+                return currentActivity;
+            }
             return activity.isEmpty() ? currentActivity : activity;
         }
     };
