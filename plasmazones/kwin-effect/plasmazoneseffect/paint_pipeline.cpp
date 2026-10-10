@@ -1501,9 +1501,12 @@ KWinCompat::PaintResult PlasmaZonesEffect::paintWindow(const KWin::RenderTarget&
 }
 
 bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                                        KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                        KWin::EffectWindow* w, int mask, const KWin::Region& fullDeviceRegion,
                                         KWin::WindowPaintData& data)
 {
+    // A column on a virtual-screen strip draws inside that virtual screen only.
+    // The tab pills keep the full region: they draw every band on the output.
+    const KWin::Region deviceRegion = scrollStripPaintRegion(w, viewport, fullDeviceRegion);
     // Scrolling-strip boundary clip. A strip column legitimately straddles
     // its screen's edge (centering the active column pushes both neighbours
     // across it). In default clamp mode the engine clamps BOTH edges
@@ -1548,12 +1551,9 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         // file applies.
         //
         // `w` IS TREATED AS NULLABLE THROUGHOUT THIS FUNCTION, here included.
-        // Both scroll predicates and getWindowId tolerate a null window, so
-        // the guard is not there to stop a crash — it is there so every use of
-        // `w` in this function reads the same way, rather than leaving the
-        // reader to check three callee contracts to find out which uses are
-        // load-bearing. The shared derivation below spells it `w ? ... : ...`
-        // for the same reason.
+        // Every callee tolerates a null window, so the guard is there so each
+        // use of `w` reads the same way, not to stop a crash; the shared
+        // derivation below spells it `w ? ... : ...` for the same reason.
         if (const KWin::LogicalOutput* managed = w ? scrollManagedOutputFor(w) : nullptr;
             managed && managed != m_currentPassOutput) {
             // Culled, not failed: there is nothing to paint for this window in
@@ -1705,7 +1705,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         // the failure arms exist to stop. m_scrollTabPainted is deliberately left
         // alone, so a later good pass still blits.
         if (blitTabsAfterThisWindow && !m_scrollTabPainted && !m_currentPassPaintFailed) {
-            paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
+            paintScrollTabIndicators(renderTarget, viewport, fullDeviceRegion);
         }
     });
     // Second trigger: the anchor's paint alone is not reliable. The scene culls a
@@ -1717,7 +1717,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
     // guard's failure term too, since this is the same raw GL on the same lost context.
     if (!m_capturingSnapshot && !m_directPaintCapture && w && m_scrollTabPaintAnchor && !m_scrollTabPainted
         && m_scrollTabAboveAnchor.contains(w) && !m_currentPassPaintFailed) {
-        paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
+        paintScrollTabIndicators(renderTarget, viewport, fullDeviceRegion);
     }
 
     // Read the cached per-frame clock pinned by prePaintScreen. Multiple

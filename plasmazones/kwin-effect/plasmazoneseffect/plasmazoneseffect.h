@@ -976,20 +976,19 @@ private:
      *        are confined to, or an invalid rect when no confinement applies.
      *
      * Valid only for a scroll-managed, non-floating window that is not in a
-     * user move/resize: the managed output's geometry. paintWindow skips the
-     * window in OUTPUT paint passes whose output is not the managed one
-     * (snapshot captures are exempt via m_capturingSnapshot — the test would
-     * blank a parked column's snapshot), and the overhang input filter treats
-     * hits outside this rect as landing on the clipped-away (invisible)
-     * overhang. One predicate, two consumers — keep them in lockstep.
-     *
-     * Answers an invalid rect immediately when no screen is scrolling, so the
-     * common case costs one bool on the per-window-per-output-per-frame path.
-     *
-     * SCOPE: the physical output, on purpose, so a strip on a virtual screen may
-     * overhang its sibling; the point is to keep a column off another monitor.
+     * user move/resize: its strip's screen (a virtual screen's region on a
+     * split monitor, else the output). paintWindow skips the window in OUTPUT
+     * passes whose output is not the managed one and clips it to this rect in
+     * its own (scrollStripPaintRegion; snapshot captures are exempt via
+     * m_capturingSnapshot), and the overhang input filter treats hits outside
+     * it as landing on the clipped-away overhang. Keep the consumers in
+     * lockstep. An invalid rect at once when no screen is scrolling, so the
+     * common case costs one bool per window per output per frame.
      */
     QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
+    /// @p deviceRegion clipped to @p w's strip when that strip is a virtual screen.
+    KWin::Region scrollStripPaintRegion(KWin::EffectWindow* w, const KWin::RenderViewport& viewport,
+                                        const KWin::Region& deviceRegion) const;
     /**
      * @brief Is this strip column parked entirely off its output's viewport
      *        right now — drawn (if at all) where nobody can see it?

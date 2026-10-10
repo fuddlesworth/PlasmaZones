@@ -107,12 +107,32 @@ QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const
     // keep-above overlays — so keying on it clipped any window merely sitting
     // on a scrolling screen, and a modal straddling the boundary had half of
     // itself treated as dead overhang.
-    const KWin::LogicalOutput* managedOutput = scrollManagedOutputFor(w);
-    if (!managedOutput) {
-        return QRect();
+    //
+    // The strip's own screen, so on a split monitor the part of a column over
+    // a sibling virtual screen, which paintWindow clips away
+    // (scrollStripPaintRegion), takes no input either.
+    const ScrollManagedAnswer managed = scrollManagedFor(w);
+    return managed.output ? managed.stripRect : QRect();
+}
+
+KWin::Region PlasmaZonesEffect::scrollStripPaintRegion(KWin::EffectWindow* w, const KWin::RenderViewport& viewport,
+                                                       const KWin::Region& deviceRegion) const
+{
+    // Only a strip on a virtual screen needs it: a whole output's pass already
+    // ends at the monitor edge. Snapshot captures are exempt, as from the
+    // foreign-output cull, because they build their viewport from the window's
+    // own rect and must see all of it.
+    if (m_capturingSnapshot || !w) {
+        return deviceRegion;
     }
-    const KWin::Rect g = managedOutput->geometry();
-    return QRect(g.x(), g.y(), g.width(), g.height());
+    const ScrollManagedAnswer managed = scrollManagedFor(w);
+    if (!managed.output || !managed.stripRect.isValid() || managed.stripRect == QRect(managed.output->geometry())) {
+        return deviceRegion;
+    }
+    // KWin scissors a transformed window to the region it is handed (both the
+    // item renderer and OffscreenEffect do), so a column sliding out of its
+    // virtual screen is cut at the boundary rather than drawn over the sibling.
+    return deviceRegion & viewport.mapToDeviceCoordinatesAligned(KWin::RectF(QRectF(managed.stripRect)));
 }
 
 QPoint PlasmaZonesEffect::scrollVisualTranslationFor(const QString& windowId, const QRectF& frameRect) const
@@ -281,17 +301,10 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
         const qreal pad = decoIt->outerPadding;
         visual.adjust(-pad, -pad, pad, pad);
     }
-    // Against the strip's own screen. On a virtual screen the BODY has to reach
-    // it: the sibling paints in the same output pass, so a column whose shadow
-    // alone touched the strip would draw its whole body over the sibling, where
-    // a whole output's pass trims it back to the shadow.
-    const QRectF stripRect(managed.stripRect);
-    bool parked = !visual.intersects(stripRect);
-    if (!parked && stripRect != QRectF(managed.output->geometry())) {
-        QRectF body = animated.isValid() ? animated : frame;
-        body.translate(QPointF(translation) + viewOffset);
-        parked = !body.intersects(stripRect);
-    }
+    // Against the strip's own screen: a column drawn wholly over a virtual
+    // screen's sibling is off its strip, and one that reaches it is clipped to
+    // it (scrollStripPaintRegion).
+    const bool parked = !visual.intersects(QRectF(managed.stripRect));
 
     // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). This is the
     // one place both halves of a parked column's drawn position are in hand at
