@@ -1332,6 +1332,13 @@ target_link_libraries(test_window_screen_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_window_screen_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_window_screen_decisions COMMAND test_window_screen_decisions)
 
+# The effect's per-window command stamps (plasmazoneseffect/effect_state.h): a
+# daemon loss supersedes every deferred apply at once. Header-only reach.
+add_executable(test_command_stamps ui/effect/test_command_stamps.cpp)
+target_link_libraries(test_command_stamps PRIVATE Qt6::Test Qt6::Core PhosphorCompositor::PhosphorCompositor)
+target_include_directories(test_command_stamps PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_command_stamps COMMAND test_command_stamps)
+
 # The effect's pure placement-statement decisions (placementstatement.h).
 add_executable(test_placement_statement ui/effect/test_placement_statement.cpp)
 target_link_libraries(test_placement_statement PRIVATE Qt6::Test Qt6::Core)

@@ -241,6 +241,15 @@ struct WindowCommandStamps
         byWindow.remove(w);
         staleAcks.remove(w);
     }
+    /// Supersede every pending deferred apply at once (daemon loss, F405):
+    /// each window's stamp moves on, so no captured stamp is current any more.
+    void supersedeAll()
+    {
+        for (auto it = byWindow.begin(); it != byWindow.end(); ++it) {
+            it.value() = ++seq;
+        }
+        staleAcks.clear();
+    }
 
     /// A command KWin applied WITHOUT a configure (it asked for the size the
     /// client already has) while an older configure for a different size was

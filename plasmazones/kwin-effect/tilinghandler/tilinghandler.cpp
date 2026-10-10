@@ -1237,8 +1237,8 @@ void TilingHandler::clearPerSessionDaemonState()
     // screenId ever seen, never pruned), so resetting here both restarts the
     // staggered-apply epochs cleanly and keeps the map bounded across reconnects.
     //
-    // The GLOBAL epoch is bumped alongside the clear, and the bump is the part
-    // that actually retires the dead session's cascades. The clear alone puts
+    // The GLOBAL epoch is bumped alongside the clear, and the bump retires any
+    // cascade the loss teardown could not see. The clear alone puts
     // every per-screen value back to absent (reading 0), so the new session's
     // first batch on a screen re-derives 1 — exactly the value a pre-restart
     // batch still cascading captured. Both guard sites test the global epoch

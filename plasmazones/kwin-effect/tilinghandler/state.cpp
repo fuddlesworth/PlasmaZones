@@ -54,6 +54,10 @@ void TilingHandler::clearTiledTracking()
     // DecorationManager's job — teardown callers pair this with
     // DecorationManager::restoreAll().
     m_border.tiledWindowsByScreen.clear();
+    // The tile cascade's completion (untile diff, raises, decorations) checks
+    // only the global epoch, so a teardown bumps it here too; the successor's
+    // bring-up bumps it again, harmlessly (F405).
+    ++m_tileStaggerGeneration;
     // The screen set belongs to the daemon session that published it. Both
     // callers (daemon loss, effect teardown) mean that session is gone —
     // keeping the set let stale membership answer isAutotileScreen until the
