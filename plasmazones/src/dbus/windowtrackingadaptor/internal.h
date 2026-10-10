@@ -34,9 +34,9 @@ namespace WindowTrackingInternal {
 /// The screen of a store that holds @p windowId as a member with a zone, on a
 /// screen other than @p excludeScreen; empty when there is none (screenleave.cpp).
 QString snapZoneScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& excludeScreen);
-/// Whether snap holds @p windowId in any store on another monitor than
-/// @p keepScreenId's (another virtual screen of the same monitor does not count).
-bool snapHoldsOffMonitor(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& keepScreenId);
+/// Whether snap holds @p windowId in any store on another screen than
+/// @p keepScreenId (another virtual screen of the same monitor counts).
+bool snapHoldsOffScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& keepScreenId);
 
 /// Release @p windowId from @p source (when given and distinct from the
 /// destination) and receive it into @p dest, VERIFYING adoption.

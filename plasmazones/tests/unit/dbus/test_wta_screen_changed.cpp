@@ -432,10 +432,9 @@ private Q_SLOTS:
         QCOMPARE(onB->lastUsedZoneId(), m_zoneIds[0]);
     }
 
-    // A crossing between virtual screens of ONE monitor unsnaps like any
-    // move, but keeps the record's snap slot for now: only a change of
-    // monitor releases it.
-    void testScreenChanged_virtualScreenCrossingKeepsTheRecordSlot()
+    // A crossing between virtual screens of ONE monitor is a move like any
+    // other: the record forgets the zone.
+    void testScreenChanged_virtualScreenCrossingReleasesTheRecordSlot()
     {
         installPerScreenResolver();
         const auto restore = qScopeGuard([this] {
@@ -455,7 +454,7 @@ private Q_SLOTS:
         const auto rec = m_wta->service()->placementStore().peekExact(w);
         QVERIFY(rec.has_value());
         QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
-                 QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
     }
 
     // ── Activation and the focused screen ────────────────────────────────

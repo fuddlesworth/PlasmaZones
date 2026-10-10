@@ -46,15 +46,14 @@ QString snapZoneScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& wind
     return {};
 }
 
-bool snapHoldsOffMonitor(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& keepScreenId)
+bool snapHoldsOffScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& keepScreenId)
 {
     if (!snap) {
         return false;
     }
-    const QString keepPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(keepScreenId);
     for (PhosphorSnapEngine::SnapState* state : snap->allSnapStates()) {
         if (state && snap->holdsWindowInState(windowId, state)
-            && !PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(state->screenId(), keepPhysical)) {
+            && !PhosphorScreens::ScreenIdentity::screensMatch(state->screenId(), keepScreenId)) {
             return true;
         }
     }
@@ -100,13 +99,12 @@ void WindowTrackingAdaptor::releaseLeftScreens(const QString& windowId, const QS
     }
     PhosphorSnapEngine::SnapEngine* snap = snapEngine();
     const QString canonical = shadowWindowId(windowId);
-    const QString keepPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(keepScreenId);
 
-    // Whether snap memory is left on another MONITOR, decided before anything
-    // is released: a membership there, or a live record slot naming a
-    // connected output (one naming an output that went away is the evacuee
-    // park's). A virtual-screen crossing on one monitor keeps the slot.
-    bool snapLeft = WindowTrackingInternal::snapHoldsOffMonitor(snap, windowId, keepScreenId);
+    // Whether snap memory is left on another screen, decided before anything
+    // is released: a membership there, or a live record slot naming a screen
+    // of a connected output (one naming an output that went away is the
+    // evacuee park's). A virtual screen of the same monitor is another screen.
+    bool snapLeft = WindowTrackingInternal::snapHoldsOffScreen(snap, windowId, keepScreenId);
     if (!snapLeft) {
         const auto rec = m_service->placementStore().peekExact(canonical);
         if (rec) {
@@ -115,7 +113,7 @@ void WindowTrackingAdaptor::releaseLeftScreens(const QString& windowId, const QS
             const QString recordPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(rec->screenId);
             PhosphorScreens::ScreenManager* mgr = m_service->screenManager();
             snapLeft = live && !recordPhysical.isEmpty()
-                && !PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(rec->screenId, keepPhysical) && mgr
+                && !PhosphorScreens::ScreenIdentity::screensMatch(rec->screenId, keepScreenId) && mgr
                 && mgr->physicalScreenFor(recordPhysical).isValid();
         }
     }
@@ -196,22 +194,20 @@ void WindowTrackingAdaptor::windowCrossedScreens(const QString& windowId, const 
     PhosphorSnapEngine::SnapEngine* snap = snapEngine();
     // Decided before anything is released: the effect still shows the window
     // snapped while any store holds it off the new screen.
-    const bool heldSnap = WindowTrackingInternal::snapHoldsOffMonitor(snap, windowId, resolved)
+    const bool heldSnap = WindowTrackingInternal::snapHoldsOffScreen(snap, windowId, resolved)
         || !WindowTrackingInternal::snapZoneScreen(snap, windowId, resolved).isEmpty();
     const auto record = m_service->placementStore().peekExact(canonical);
 
     releaseLeftScreens(windowId, resolved, arrival);
 
-    // The record names the monitor the window left: every engine's slot there
+    // The record names the screen the window left: every engine's slot there
     // goes, the arriving engine's excepted, or a reopen or a mode switch on the
     // new monitor would read a tile or a float of the old one (F673). A record
     // for an output that went away is the evacuee park's.
     if (record) {
         const QString recordPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(record->screenId);
-        const QString resolvedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(resolved);
-        if (!recordPhysical.isEmpty()
-            && !PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(record->screenId, resolvedPhysical) && mgr
-            && mgr->physicalScreenFor(recordPhysical).isValid()) {
+        if (!recordPhysical.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(record->screenId, resolved)
+            && mgr && mgr->physicalScreenFor(recordPhysical).isValid()) {
             for (auto it = record->engines.cbegin(); it != record->engines.cend(); ++it) {
                 if (!arrival || it.key() != arrival->engineId()) {
                     m_service->releaseEngineSlot(windowId, it.key());
@@ -430,13 +426,9 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     if (snap) {
         snap->releaseWindowOffScreen(windowId, resolved);
     }
-    // The record's snap slot goes too when the window changed monitors, or
-    // the next restore or resnap reads A's zone from it and applies it on B.
-    // A virtual-screen crossing on one monitor keeps it for now.
-    if (!PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(
-            heldScreen, PhosphorIdentity::VirtualScreenId::extractPhysicalId(resolved))) {
-        m_service->releaseEngineSlot(windowId, PhosphorEngine::WindowPlacement::snapEngineId());
-    }
+    // The record's snap slot goes too, or the next restore or resnap reads
+    // A's zone from it and applies it on B.
+    m_service->releaseEngineSlot(windowId, PhosphorEngine::WindowPlacement::snapEngineId());
 
     // Report the resolved (effective) screen, the same value the decision and
     // log above use, not the raw newScreenId.

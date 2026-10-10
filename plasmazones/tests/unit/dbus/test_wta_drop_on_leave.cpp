@@ -194,9 +194,10 @@ private Q_SLOTS:
         QCOMPARE(snapSlotState(w), QString(PhosphorEngine::WindowPlacement::stateSnapped()));
     }
 
-    // A crossing between virtual screens of one monitor drops the membership
-    // on the virtual screen left but keeps the record's slot.
-    void releaseLeftScreens_virtualScreenCrossingKeepsTheSlot()
+    // A crossing between virtual screens of one monitor is a move like any
+    // other: the membership on the virtual screen left goes, and the record
+    // forgets the zone too.
+    void releaseLeftScreens_virtualScreenCrossingReleasesTheSlot()
     {
         const QString w = QStringLiteral("app|vs-leave");
         const QString vs0 = QStringLiteral("DP-1/vs:0");
@@ -209,6 +210,20 @@ private Q_SLOTS:
         m_wta->releaseLeftScreens(w, vs1, nullptr);
 
         QVERIFY(!m_snapEngine->isWindowTracked(w));
+        QCOMPARE(snapSlotState(w), QString(PhosphorEngine::WindowPlacement::stateReleased()));
+    }
+
+    // Kept on the virtual screen its record names, nothing is left behind.
+    void releaseLeftScreens_sameScreenKeepsTheSlot()
+    {
+        const QString w = QStringLiteral("app|vs-stay");
+        const QString vs0 = QStringLiteral("DP-1/vs:0");
+        m_snapEngine->setCurrentDesktopForScreen(vs0, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], vs0, 1);
+        m_wta->service()->placementStore().record(*m_snapEngine->capturePlacement(w));
+
+        m_wta->releaseLeftScreens(w, vs0, nullptr);
+
         QCOMPARE(snapSlotState(w), QString(PhosphorEngine::WindowPlacement::stateSnapped()));
     }
 
@@ -476,8 +491,8 @@ private Q_SLOTS:
     }
 
     // A crossing between virtual screens of one monitor drops the snap
-    // membership but keeps the record's slots.
-    void crossedScreens_virtualScreenCrossingKeepsTheRecord()
+    // membership and the record's snap slot, as a monitor change does.
+    void crossedScreens_virtualScreenCrossingReleasesTheRecord()
     {
         RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, nullptr, 0);
         // The split the crossing names, so its ids are screens the daemon knows.
@@ -494,7 +509,7 @@ private Q_SLOTS:
 
         QVERIFY(!env.snap->isWindowTracked(env.window));
         QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::snapEngineId()),
-                 QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
     }
 
     // A record naming an output that went away is the evacuee park's.
