@@ -26,12 +26,12 @@
 // moved.
 
 #include "tilinghandler.h"
+#include "scrolldecisions.h"
 #include "compositor/scrollbehaviourparse.h"
 #include "compositor/stripviewanimator.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
-#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <effect/effectwindow.h>
@@ -64,7 +64,6 @@ void TilingHandler::clearTiledTracking()
     // scrollingScreenIntersection snapshot/compare/invalidate contract (see
     // the header) — it is valid only while every caller is a teardown.
     m_managedScreens.clear();
-    m_managedSetDesktops.clear();
 }
 
 void TilingHandler::setFocusFollowsMouse(bool enabled)
@@ -352,17 +351,18 @@ void TilingHandler::clearScrollEffectBehaviourForTeardown()
     }
 }
 
-void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
+void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds, bool isContextSwitch,
+                                                const QStringList& leavingToAutotile)
 {
-    // Mode discriminator — no per-screen LIFECYCLE transitions here (the
-    // union set arriving via slotScreensChanged owns those). But the set IS
-    // an input to ruleQuery's Mode stamp, and rule verdicts are memoised per
-    // window: on an autotile↔scrolling flip the union does not move, so
-    // slotScreensChanged never invalidates anything and a `Mode Equals
-    // "scrolling"` border/opacity/decoration rule would keep its stale
-    // verdict indefinitely. Invalidate + sweep on a GENUINE change only
-    // (identical-set desktop-switch re-emits stay free).
-    setScrollingScreens(QSet<QString>(screenIds.cbegin(), screenIds.cend()));
+    // The set is an input to ruleQuery's Mode stamp AND the trigger of the
+    // engine flip inside the tiling union (setScrollingScreens). Rule verdicts
+    // are memoised per window: on an autotile↔scrolling flip the union does
+    // not move, so slotScreensChanged never invalidates anything and a `Mode
+    // Equals "scrolling"` rule would keep its stale verdict. The switch flag
+    // and the screens leaving for autotile tell that flip from a switch and
+    // from a move out of the union.
+    setScrollingScreens(QSet<QString>(screenIds.cbegin(), screenIds.cend()), /*announceFlipped=*/true, isContextSwitch,
+                        QSet<QString>(leavingToAutotile.cbegin(), leavingToAutotile.cend()));
 }
 
 void TilingHandler::slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel)
@@ -469,7 +469,8 @@ void TilingHandler::retireStripScopedState(const QString& screenId)
     }
 }
 
-void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped)
+void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped, bool isContextSwitch,
+                                        const QSet<QString>& leavingToAutotile)
 {
     // Any authoritative write voids in-flight property replies, identical
     // set or not — the writer is always newer than a reply dispatched
@@ -489,26 +490,12 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // verb on the new engine refuses. Re-announce the flipped screens'
     // windows here; the daemon routes windowOpened by the screen's current
     // mode, so the receiving engine adopts them (order-seeded from the
-    // capture the daemon took during the flip). A cross-union transition
-    // announces once: snapping→scrolling is filtered here (the screen is not
-    // yet in m_managedScreens) and handled by slotScreensChanged, and
-    // scrolling→snapping on a desktop switch is filtered by the stale-set test
-    // below.
-    QSet<QString> flipped = (newSet - oldSet) + (oldSet - newSet);
-    flipped &= m_managedScreens;
-    // A flip on a screen whose output has switched desktops since the last
-    // managed set is that switch's, not an engine change: the daemon sends the
-    // scrolling set first, so m_managedScreens still describes the desktop
-    // left. Re-announcing there handed a snapping desktop's windows to tiling
-    // on a switch from a scrolling one; the switch's own announce handles the
-    // screen, and the engines already hold the desktop entered (F1004).
-    flipped.removeIf([this](const QString& screenId) {
-        const QString physical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-        const auto announced = m_managedSetDesktops.constFind(physical);
-        const auto reported = m_effect->lastReportedScreenDesktops().constFind(physical);
-        return announced != m_managedSetDesktops.constEnd()
-            && reported != m_effect->lastReportedScreenDesktops().constEnd() && *announced != *reported;
-    });
+    // capture the daemon took during the flip). A screen entering from
+    // snapping is not in m_managedScreens yet, and one leaving for snapping is
+    // not in the list the daemon sends, so slotScreensChanged handles both;
+    // a desktop or activity switch flips nothing (ScrollDecisions::engineFlipScreens).
+    const QSet<QString> flipped =
+        ScrollDecisions::engineFlipScreens(oldSet, newSet, m_managedScreens, isContextSwitch, leavingToAutotile);
     const bool announcing = announceFlipped && !flipped.isEmpty();
 
     // The re-announce's per-window screen ids are resolved HERE, under the

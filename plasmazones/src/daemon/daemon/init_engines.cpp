@@ -1059,29 +1059,27 @@ void Daemon::initEnginesAndWiring()
     // pipeline (no dispatch, replay cache or relay); its stake is zone occupancy.
     m_tilingAdaptor->setMembershipEngines({snapEngine});
     // Desktop-membership reconcile: the registry's per-window desktop set is
-    // the authority on which desktop a window belongs to, and the adaptor
-    // sees every engine state, so a window that leaves a desktop is released
-    // from that desktop's stack here rather than by the effect guessing from the
-    // desktop in view (see TilingAdaptor::setWindowRegistry; the effect relays a release only for a genuine move).
+    // the authority, so a window that leaves a desktop is released here
+    // (TilingAdaptor::setWindowRegistry; the effect relays a genuine move).
     m_tilingAdaptor->setWindowRegistry(m_windowRegistry.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_algorithmRegistry.get(), this);
     m_scrollingAdaptor = new ScrollingAdaptor(scrollEngine, this);
-    // The wheel's view step reads ShortcutManager's narrow getter over
-    // Settings, where the other step percents live. m_shortcutManager is
-    // ctor-owned and never reset, so the capture outlives every adaptor this
-    // pass creates.
+    // The wheel's view step, from ShortcutManager (ctor-owned, never reset).
     m_scrollingAdaptor->setViewScrollStepProvider([this]() {
         return m_shortcutManager->scrollViewScrollStepPercent();
     });
-    // The same per-context disable gate the keyboard scroll verbs pass
-    // through (scrolling_init.cpp's engineFor), so a context the user turned
-    // off cannot be panned or resized from the wheel or the bus. Installed
-    // unconditionally: the adaptor fails closed without it. The gate reads
-    // the resolver live, so a null resolver early in start-up refuses the
-    // way the keyboard path does.
+    // The per-context disable gate the keyboard scroll verbs pass through
+    // (scrolling_init.cpp's engineFor). Installed unconditionally: the adaptor
+    // fails closed without it, and it reads the resolver live.
     m_scrollingAdaptor->setContextGateProvider([this](const QString& screenId) {
         return isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Scrolling);
     });
+    // Which screens leaving the scrolling set run autotile now. updateEngineScreens
+    // sets autotile's screens before the scrolling ones, so the answer is final.
+    m_scrollingAdaptor->setAutotileScreenResolver(
+        [engine = QPointer<PhosphorTileEngine::AutotileEngine>(autotileEngine)](const QString& screenId) {
+            return engine && engine->isActiveOnScreen(screenId);
+        });
     connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::windowsTiled, m_tilingAdaptor,
             &TilingAdaptor::relayTileRequestsJson);
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,

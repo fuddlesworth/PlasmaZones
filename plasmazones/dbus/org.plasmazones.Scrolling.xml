@@ -214,6 +214,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="screenIds" type="as">
                 <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine."/>
             </arg>
+            <arg name="isContextSwitch" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True when a desktop or activity switch changed the set. Such a change is never an engine flip: the engines already hold the context entered."/>
+            </arg>
+            <arg name="leavingToAutotile" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="Screens that left the set in this change and run autotile now, so they are still in the engine-managed union."/>
+            </arg>
         </signal>
 
         <signal name="stripContextChanged">

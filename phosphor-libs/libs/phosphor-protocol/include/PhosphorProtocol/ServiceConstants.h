@@ -619,6 +619,12 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       geometry for (a float with nothing to restore, a move to a tiling
 //       engine), on which the effect ends the window's own fullscreen. An old
 //       effect never connects it, and the window stays fullscreen as before.
+//
+//       Also in v10, Scrolling.scrollingScreensChanged gains isContextSwitch
+//       (b) and leavingToAutotile (as) (as -> asbas): whether a desktop or
+//       activity switch changed the set, and which screens left it for
+//       autotile, so the effect re-announces windows only on an engine flip
+//       inside the tiling union.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

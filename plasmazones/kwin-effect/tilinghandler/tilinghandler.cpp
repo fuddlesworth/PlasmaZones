@@ -994,8 +994,8 @@ void TilingHandler::drainDeadSessionState()
     // signal — see the header for why draining any later destroyed the new
     // session's own state.
     //
-    // The scrolling set is a pure discriminator with no lifecycle attached,
-    // so clear the DEAD session's snapshot ahead of onDaemonReady's re-query:
+    // The scrolling set belongs to the dead session like the managed set, so
+    // clear its snapshot ahead of onDaemonReady's re-query:
     // an errored/timed-out Properties.Get (daemon still starting, or one
     // without org.plasmazones.Scrolling) is reply.isValid()-gated and would
     // otherwise leave the old set stamping Mode "scrolling" indefinitely.

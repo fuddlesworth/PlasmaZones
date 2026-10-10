@@ -65,19 +65,27 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
         return;
     }
     connect(m_engine, &PhosphorScrollEngine::ScrollEngine::scrollingScreensChanged, this,
-            [this](const QStringList& screenIds, bool /*isDesktopSwitch*/) {
+            [this](const QStringList& screenIds, bool isDesktopSwitch) {
                 // Change-gated: the engine's identical-set desktop-switch
-                // re-emit exists for the TILING channel's catch-scan; this
-                // interface is a pure Mode discriminator, so an unchanged
-                // set must not hit the bus (emit-on-change rule). The
-                // isDesktopSwitch flag is deliberately not carried on this
-                // wire — the effect's handler has no per-screen transitions
-                // to skip.
+                // re-emit exists for the TILING channel's catch-scan, so an
+                // unchanged set must not hit the bus (emit-on-change rule).
+                // The switch flag and the screens leaving for autotile ride
+                // the wire because the effect re-announces windows on an
+                // engine flip inside the tiling union, and it can tell such
+                // a flip from a switch, or from a move out of the union, only
+                // from them: the managed set that would say so arrives after
+                // this change (F231, F286).
                 if (screenIds == m_lastBroadcastScreens) {
                     return;
                 }
+                QStringList leavingToAutotile;
+                for (const QString& screenId : std::as_const(m_lastBroadcastScreens)) {
+                    if (!screenIds.contains(screenId) && m_isAutotileScreen && m_isAutotileScreen(screenId)) {
+                        leavingToAutotile.append(screenId);
+                    }
+                }
                 m_lastBroadcastScreens = screenIds;
-                Q_EMIT scrollingScreensChanged(screenIds);
+                Q_EMIT scrollingScreensChanged(screenIds, isDesktopSwitch, leavingToAutotile);
             });
     // Strip identity. Relayed with NO extra change gate, unlike the screen-set
     // relay above: the engine already announces this on change only, and a
@@ -227,6 +235,11 @@ void ScrollingAdaptor::setViewScrollStepProvider(std::function<int()> provider)
 void ScrollingAdaptor::setContextGateProvider(std::function<bool(const QString&)> provider)
 {
     m_contextGated = std::move(provider);
+}
+
+void ScrollingAdaptor::setAutotileScreenResolver(std::function<bool(const QString&)> resolver)
+{
+    m_isAutotileScreen = std::move(resolver);
 }
 
 bool ScrollingAdaptor::refusesForContext(const QString& screenId) const
@@ -633,6 +646,8 @@ void ScrollingAdaptor::clearEngine()
     // would just mean a detached adaptor whose "last broadcast" memory
     // contradicts every other slot it answers.
     m_lastBroadcastScreens.clear();
+    // The autotile resolver captures the engine it reads.
+    m_isAutotileScreen = nullptr;
     // m_scrollEffectBehaviour and m_scrollFocusScrollBlockedWindows are
     // deliberately NOT cleared, and they are the two members that differ: the
     // set above is engine-derived, so leaving it populated would contradict

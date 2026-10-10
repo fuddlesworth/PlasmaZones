@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <QSet>
 #include <QSize>
+#include <QString>
 #include <QtGlobal>
 
 /// Pure decision logic for the scroll-managed window mechanisms in
@@ -399,6 +401,23 @@ inline constexpr int claimReleaseOrder(Claim claim)
 inline constexpr bool claimRetainsOnFullscreenSkip(Claim claim)
 {
     return claim != Claim::WindowedFullscreen;
+}
+
+/// The screens a scrolling-set change flips between engines inside the tiling
+/// union, whose windows the effect re-announces: a screen entering the strip
+/// from autotile (still in the managed set), or leaving it for autotile (the
+/// daemon names those, because the managed set that says so lands after this
+/// change). A desktop or activity switch flips nothing: the engines already
+/// hold the context entered, and the switch's own announce places its windows
+/// (F231, F286, F1004).
+inline QSet<QString> engineFlipScreens(const QSet<QString>& oldSet, const QSet<QString>& newSet,
+                                       const QSet<QString>& managed, bool isContextSwitch,
+                                       const QSet<QString>& leavingToAutotile)
+{
+    if (isContextSwitch) {
+        return {};
+    }
+    return ((newSet - oldSet) & managed) + ((oldSet - newSet) & leavingToAutotile);
 }
 
 } // namespace PlasmaZones::ScrollDecisions

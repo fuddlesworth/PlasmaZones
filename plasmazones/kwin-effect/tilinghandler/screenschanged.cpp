@@ -745,10 +745,6 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                          << "— already on" << m_effect->lastReportedScreenDesktops();
         return;
     }
-    // The desktops this accepted set describes, which setScrollingScreens
-    // reads to tell an engine flip from a desktop switch in flight (F1004).
-    m_managedSetDesktops.insert(announcedDesktops);
-
     const QSet<QString> newScreens(screenIds.begin(), screenIds.end());
     const QSet<QString> removed = m_managedScreens - newScreens;
     const QSet<QString> added = newScreens - m_managedScreens;

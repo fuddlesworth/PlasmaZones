@@ -1090,7 +1090,8 @@ public Q_SLOTS:
     ///        this effect last reported has been overtaken by a newer switch and
     ///        is dropped — see announceMatchesReportedDesktops.
     void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch, const QVariantMap& screenDesktops);
-    void slotScrollingScreensChanged(const QStringList& screenIds);
+    void slotScrollingScreensChanged(const QStringList& screenIds, bool isContextSwitch,
+                                     const QStringList& leavingToAutotile);
     /// The strip @p screenId is showing has been replaced (desktop or activity
     /// switch, sticky-pin change). Retires the strip-scoped paint state this
     /// process holds for that screen, which is not keyed by desktop and would
@@ -1462,9 +1463,9 @@ private:
     PlasmaZonesEffect* m_effect;
 
     QSet<QString> m_managedScreens;
-    /// Screens running the scrolling engine — a pure mode discriminator
-    /// (see isScrollingScreen); all lifecycle gating keys on
-    /// m_managedScreens, which carries the union.
+    /// Screens running the scrolling engine — the Mode stamp input (see
+    /// isScrollingScreen) and the trigger of the in-union engine flip
+    /// (setScrollingScreens); the union's lifecycle keys on m_managedScreens.
     QSet<QString> m_scrollingScreens;
     /// Windows already reported as having lost their scroll clip via the
     /// connected-output gate. Every exit from scrollTrackedScreenFor fails
@@ -1477,14 +1478,14 @@ private:
     /// comes back so a later failure reports again, and entries die with the
     /// window in cleanupAutotileTracking and on daemon bring-up.
     mutable QSet<QString> m_scrollClipLossReported;
-    /// Authoritative write for the scrolling discriminator. A screen that
-    /// flips engine WITHIN the managed union transits no managedScreensChanged,
-    /// so this re-announces the flipped screens' windows to hand them to the
-    /// new engine. Pass @p announceFlipped false only for BRING-UP clears
-    /// (drainDeadSessionState), where the tracking maps are about to be reset and
-    /// loadSettings owns the re-announce — announcing there desyncs the
+    /// Authoritative write for the scrolling set. A screen that flips engine
+    /// WITHIN the managed union transits no managedScreensChanged, so this
+    /// re-announces its windows to the new engine (ScrollDecisions::engineFlipScreens).
+    /// @p announceFlipped false only for BRING-UP clears (drainDeadSessionState),
+    /// where loadSettings owns the re-announce and announcing would desync the
     /// daemon's view from the effect's until that batch lands.
-    void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true);
+    void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true, bool isContextSwitch = false,
+                             const QSet<QString>& leavingToAutotile = {});
     /// The bring-up property Gets loadSettings dispatches (scrolling screens,
     /// active layouts, scroll effect behaviour, and the scroll cap's
     /// blocked-window list), factored out
@@ -1640,8 +1641,8 @@ private:
     /// share the tick.
     bool m_deferredRouteDispatchScheduled = false;
     /// Per-screen rules-visible active layout ids, pushed by the daemon
-    /// (see activeLayoutForScreen). A pure ruleQuery input like
-    /// m_scrollingScreens — no lifecycle transitions key on it.
+    /// (see activeLayoutForScreen). A pure ruleQuery input: no lifecycle
+    /// transition keys on it.
     QHash<QString, QString> m_activeLayouts;
     /// Authoritative write for m_activeLayouts: generation bump (voids
     /// in-flight property replies), change gate, then rule-cache invalidate
@@ -1799,7 +1800,6 @@ private:
     };
     QHash<QString, ExpectedOutputMove> m_expectedOutputMove;
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
-    QHash<QString, int> m_managedSetDesktops; ///< physical screen → desktop the last accepted managed set described
     DesktopMoveStash m_desktopMoveStash; ///< free geometry of windows that left a desktop (desktopmovestash.h)
     /// Re-entrancy guard for handleWindowOutputChanged, PER WINDOW.
     ///

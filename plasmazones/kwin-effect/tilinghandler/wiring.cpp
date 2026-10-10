@@ -60,7 +60,7 @@ void TilingHandler::connectSignals()
                    SLOT(slotWindowFloatingChanged(QString, bool, QString)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
-                   SLOT(slotScrollingScreensChanged(QStringList)));
+                   SLOT(slotScrollingScreensChanged(QStringList, bool, QStringList)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("stripContextChanged"), this,
                    SLOT(slotStripContextChanged(QString, QString, QString)));
@@ -106,7 +106,7 @@ void TilingHandler::connectSignals()
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
-                SLOT(slotScrollingScreensChanged(QStringList)));
+                SLOT(slotScrollingScreensChanged(QStringList, bool, QStringList)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("stripContextChanged"), this,
@@ -284,10 +284,10 @@ void TilingHandler::loadSettings()
     fetchScrollTabStrips();
 }
 
-// Scrolling screen subset — the Mode-stamp discriminator only, no
-// lifecycle transitions to run, so the reply handling is a guarded
-// plain assignment. Dispatched from loadSettings; a failed Get re-dispatches
-// itself while the retry budget lasts.
+// Scrolling screen subset — a bring-up load: announceFlipped=false, so the
+// reply sets the Mode stamp input and runs no engine flip. Dispatched from
+// loadSettings; a failed Get re-dispatches itself while the retry budget
+// lasts.
 void TilingHandler::fetchScrollingScreens()
 {
     QDBusMessage scrollMsg =

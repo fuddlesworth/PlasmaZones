@@ -532,6 +532,35 @@ private Q_SLOTS:
         QFETCH(bool, carries);
         QCOMPARE(mayCarryCommittedSize(declaredRect, columnAnswered, committed, column), carries);
     }
+
+    // The engine flip inside the tiling union (F231, F286, F1004): only a
+    // screen that stays in the union while it changes engine is re-announced.
+    void engineFlip_autotileToScrolling()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QCOMPARE(engineFlipScreens({}, s, s, false, {}), s);
+    }
+    void engineFlip_scrollingToAutotile()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QCOMPARE(engineFlipScreens(s, {}, s, false, s), s);
+    }
+    void engineFlip_scrollingToSnapping()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QVERIFY(engineFlipScreens(s, {}, s, false, {}).isEmpty());
+    }
+    void engineFlip_contextSwitchFlipsNothing()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QVERIFY(engineFlipScreens(s, {}, s, true, s).isEmpty());
+        QVERIFY(engineFlipScreens({}, s, s, true, {}).isEmpty());
+    }
+    void engineFlip_snappingToScrollingIsNotManaged()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QVERIFY(engineFlipScreens({}, s, {}, false, {}).isEmpty());
+    }
 };
 
 QTEST_APPLESS_MAIN(TestScrollDecisions)
