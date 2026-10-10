@@ -52,12 +52,13 @@ struct SpanTargetResult
     bool grew = false;
 };
 
-/// True when @p storedScreen still resolves on the live screen set: a
-/// physical id must be connected; a virtual id additionally needs its backing
-/// physical output present AND continued membership in @p mgr's effective
-/// screen list (guards against stale ids after a config removal). Shared by
-/// the resolver's stored-screen preference and SnapEngine's resolveNavScreen
-/// so the validation rule lives in one place.
+/// True when @p storedScreen still resolves on the live screen set, judged by
+/// @p mgr: a physical id must be a screen it tracks, and a virtual id must be
+/// in its effective screen list (which also drops a stale id after a config
+/// removal). With no manager wired, a physical id is checked against Qt's
+/// screen list and a virtual id is never valid. Shared by the resolver's
+/// stored-screen preference and SnapEngine's resolveNavScreen so the
+/// validation rule lives in one place.
 PHOSPHORSNAPENGINE_EXPORT bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& storedScreen);
 
 /// The edge a neighbour surface is entered from when crossing in @p direction:

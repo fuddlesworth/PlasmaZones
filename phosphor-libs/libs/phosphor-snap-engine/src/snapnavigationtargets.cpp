@@ -82,12 +82,14 @@ bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& sto
     if (storedScreen.isEmpty()) {
         return false;
     }
+    // The manager is the authority every other screen gate in the daemon reads,
+    // so a screen it tracks is valid whether or not Qt has a QScreen for it.
+    // The QScreen list answers only when no manager is wired.
     if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
-        QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-        if (!PhosphorScreens::ScreenIdentity::findByIdOrName(physId)) {
-            return false;
-        }
         return mgr && mgr->effectiveScreenIds().contains(storedScreen);
+    }
+    if (mgr) {
+        return mgr->physicalScreenFor(storedScreen).isValid();
     }
     return PhosphorScreens::ScreenIdentity::findByIdOrName(storedScreen) != nullptr;
 }

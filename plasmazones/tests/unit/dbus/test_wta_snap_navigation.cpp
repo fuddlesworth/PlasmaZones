@@ -670,10 +670,11 @@ private Q_SLOTS:
 
     // ── L14.14: the screen a verb acts on (F839) ──
 
-    // A window that is not snapped is acted on on the caller's screen, then
-    // the cursor's, then the last active one. The snapped tier (its own
-    // stored screen) cannot be reached here: the stored-screen check asks
-    // Qt's screen list, which the fake outputs are not on (F1006).
+    // A snapped window is acted on on its own stored screen; one that is not
+    // snapped, or whose stored screen is gone, on the caller's screen, then
+    // the cursor's, then the last active one. The fake outputs are on the
+    // screen manager only, not on Qt's screen list, which is what the stored
+    // screen is judged by (F1006).
     void navScreenTiers()
     {
         SnapNavFixture f;
@@ -687,6 +688,17 @@ private Q_SLOTS:
         f.wta->cursorScreenChanged(kLeft);
         QCOMPARE(f.snap->navigationScreenFor(free, QString()), kLeft);
         QCOMPARE(f.snap->navigationScreenFor(free, kRight), kRight);
+
+        const QString snapped = f.live(QStringLiteral("tier-3"), QRect(2000, 100, 400, 300));
+        f.snapOn(snapped, {f.zone(0)}, kRight, 1);
+        QCOMPARE(f.snap->navigationScreenFor(snapped, kLeft), kRight);
+
+        // A virtual screen DP-2 is not split into is gone, so the window falls
+        // through to the caller's screen.
+        const QString stale = f.live(QStringLiteral("tier-4"), QRect(2000, 100, 400, 300));
+        f.snapOn(stale, {f.zone(1)}, kRight + QStringLiteral("/vs:0"), 1);
+        QCOMPARE(f.wta->service()->screenForWindow(stale), kRight + QStringLiteral("/vs:0"));
+        QCOMPARE(f.snap->navigationScreenFor(stale, kLeft), kLeft);
     }
 
 private:
