@@ -438,7 +438,7 @@ private Q_SLOTS:
         // Daemon-only restart regression: the old WindowZoneAssignmentsFull is
         // still loaded, so a window that was FLOATED comes back with its zone
         // assignment intact (floating keeps the assignment) → isWindowSnapped()
-        // == true. The unified store MUST be consulted before the legacy
+        // == true. The unified store MUST be consulted before the
         // "already has assignment, skipping" path, otherwise the window stays
         // snapped instead of floating. Same uuid (daemon restart), so the record
         // is found uuid-exact.
@@ -483,16 +483,16 @@ private Q_SLOTS:
     {
         // Float-back source of truth: toggling a snapped window to floating must
         // restore it to the float-back geometry carried by its unified placement
-        // record — NOT the legacy m_unmanagedGeometries store (which is uuid-keyed
-        // and dropped on load by the disabled-context gate). The record survives
-        // where the legacy store does not.
+        // record, the only store of it (the per-engine store that sat beside it
+        // was uuid-keyed, dropped on load by the disabled-context gate, and is
+        // gone).
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
         const QString w = QStringLiteral("settings|floatback");
         const QRect floatBack(271, 314, 962, 655);
 
         m_snapEngine->commitSnap(w, m_zoneIds[0], m_screenId);
-        // Record a snapped placement carrying the float-back, and ensure the legacy
-        // store has NOTHING (simulates the post-restart disabled-context-drop case).
+        // Record a snapped placement carrying the float-back, the post-restart
+        // shape where nothing but the record holds it.
         PhosphorEngine::WindowPlacement rec;
         rec.windowId = w;
         rec.appId = QStringLiteral("settings");
@@ -675,7 +675,7 @@ private Q_SLOTS:
 
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
 
-        // Snap both windows to different zones via the WTA's windowSnapped slot
+        // Snap both windows to different zones
         m_snapEngine->commitSnap(window1, m_zoneIds[0], m_screenId);
         m_snapEngine->commitSnap(window2, m_zoneIds[1], m_screenId);
 

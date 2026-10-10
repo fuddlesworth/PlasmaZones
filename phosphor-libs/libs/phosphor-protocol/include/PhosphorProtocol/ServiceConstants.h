@@ -625,6 +625,13 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       activity switch changed the set, and which screens left it for
 //       autotile, so the effect re-announces windows only on an engine flip
 //       inside the tiling union.
+//
+//       Also in v10, WindowTracking gains activeWindowScreenChanged (s s): the
+//       focused window moved to another screen without a new activation (a
+//       KWin, user or daemon move), so the screen every window shortcut acts
+//       on follows it. An old daemon answers with an error, which the
+//       fire-and-forget call ignores, and its shortcuts keep acting on the
+//       screen the window was last activated on.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;
