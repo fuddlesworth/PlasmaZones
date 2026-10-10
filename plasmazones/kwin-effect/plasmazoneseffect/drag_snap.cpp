@@ -25,14 +25,6 @@
 
 namespace PlasmaZones {
 
-bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)
-{
-    Q_UNUSED(border)
-    // We no longer reserve edges, so this callback won't be triggered by our effect.
-    // The daemon handles disabling Quick Tile via KWin config.
-    return false;
-}
-
 // The kwin-effect no longer calls the legacy dragStarted D-Bus method;
 // beginDrag sets up snap-path state internally on the daemon side, so
 // there's only one code path into the drag state machine. The dragMoved

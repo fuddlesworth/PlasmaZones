@@ -125,9 +125,6 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
     }
 
-    // Note: KWin Quick Tile override is now handled permanently by Daemon
-    // (using kwriteconfig6 + KWin.reconfigure()) instead of per-drag toggling
-
     // Check if window started inside a zone (for restoreOriginalSizeOnUnsnap feature)
     // Primary method: Check if window is tracked as snapped in WindowTrackingAdaptor
     // This is more reliable than geometry matching because KWin may report window

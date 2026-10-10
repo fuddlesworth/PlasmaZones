@@ -479,10 +479,6 @@ void PlasmaZonesEffect::initExistingWindowsAndInput()
         setupWindowConnections(w);
     }
 
-    // The daemon disables KWin's Quick Tile via kwriteconfig6. We don't reserve electric borders
-    // here because that would turn on the edge effect visually; the daemon's config approach
-    // is the right way to prevent Quick Tile from activating.
-
     // Seed m_lastCursorOutput with the compositor's active screen. This ensures
     // the daemon has a valid cursor screen even if no mouse movement occurs after login.
     // slotMouseChanged will overwrite this as soon as the cursor moves.

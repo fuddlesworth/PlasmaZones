@@ -61,7 +61,7 @@
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
-#include <effect/globals.h> // For ElectricBorder enum
+#include <effect/globals.h>
 #include <scene/borderradius.h>
 
 #include <QObject>
@@ -1224,18 +1224,11 @@ private:
                           bool skipAnimation = false, std::function<void()> onComplete = nullptr,
                           std::function<void()> onError = nullptr);
 
-    // The effect deliberately reserves NO screen edges. Reserving one turns on
-    // KWin's electric-edge effect, whose glow and its own tile preview would
-    // fight the zone overlay for the same gesture. Quick Tile is disabled
-    // daemon-side via kwriteconfig6 instead, which leaves the edges free
-    // without the effect having to hold them. borderActivated below still
-    // exists to consume any edge activation that does reach us.
+    // PlasmaZones reserves no screen edges and leaves KWin's Quick Tile and
+    // edge-maximize settings alone. Reserving an edge would turn on KWin's edge
+    // glow over the zone overlay, and nothing here changes KWin's configuration.
 
 public Q_SLOTS:
-    // Handle electric border activation - return true to consume the event
-    // and prevent KWin Quick Tile from triggering
-    bool borderActivated(KWin::ElectricBorder border) override;
-
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper class access methods — consumed across the handler split
     // (ScreenChangeHandler via applyStaggeredOrImmediate,
