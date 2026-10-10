@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 
+#include "dragpolicytransition.h"
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
@@ -15,10 +16,7 @@
 #include <PhosphorProtocol/DragMarshalling.h>
 
 #include <effect/effecthandler.h>
-#include <window.h>
 
-#include <QDBusConnection>
-#include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -235,115 +233,81 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
     }
 
     const PhosphorProtocol::DragBypassReason oldReason = m_currentDragPolicy.bypassReason;
-    const PhosphorProtocol::DragBypassReason newReason = newPolicy.bypassReason;
-    // The latch has to agree with the reason for this to be a genuine no-op,
-    // not just the two reasons matching. The un-bypass transition below gates
-    // on the effect's OWN latch precisely because the drag-start fast path can
-    // set it while m_currentDragPolicy still holds the conservative default
-    // (reason None) — and when the beginDrag reply errors, its correction arm
-    // never runs, so that mismatch persists. A later None→None emission from
-    // the daemon (which compares against its own record, not ours) then landed
-    // here and returned early, so the un-bypass never ran: tracking stayed
-    // held, the keyboard was never grabbed, and Escape went uncaught for the
-    // rest of the drag. Requiring the latch to agree lets that case fall
-    // through to the transition it was always meant to reach.
-    const bool latchAgreesWithReason =
-        m_dragBypassedForEngine == (newReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
-    if (oldReason == newReason && latchAgreesWithReason) {
-        // Same reason but different screenId (autotile→autotile cross-VS):
-        // update the captured screen so endDrag's ApplyFloat uses the right one.
-        m_currentDragPolicy = newPolicy;
-        if (newReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen) {
-            m_dragBypassScreenId = newPolicy.screenId;
-        }
-        return;
+    if (oldReason != newPolicy.bypassReason) {
+        qCInfo(lcEffect) << "slotDragPolicyChanged:" << windowId << oldReason << "->" << newPolicy.bypassReason
+                         << "screen=" << newPolicy.screenId;
     }
-
-    qCInfo(lcEffect) << "slotDragPolicyChanged:" << windowId << oldReason << "->" << newReason
-                     << "screen=" << newPolicy.screenId;
-
+    // Every emission is applied, a same-reason one included: a tiling engine to
+    // another can change the screen and the keyboard answer, and the LATCH, not
+    // the reason, says whether there is a bypass to leave (the drag-start fast
+    // path can latch while the policy still holds the conservative default).
     m_currentDragPolicy = newPolicy;
+    applyDragPolicyTransition(m_dragTracker->draggedWindow(), windowId, oldReason, DragPolicyTransition::Source::Flip);
+}
 
-    if (newReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen) {
-        // Snap → autotile (or context-disabled → autotile). Cancel any
-        // active snap overlay, enter bypass mode. Mirrors the old
-        // effect-side flip block's "snap→autotile" branch, but driven by
-        // daemon truth rather than an effect-cached screen set.
-        if (!m_dragBypassedForEngine) {
-            m_snapHandler->callCancelSnap();
-            m_dragBypassedForEngine = true;
-            m_dragBypassScreenId = newPolicy.screenId;
-        } else {
-            // Already in bypass but on a different autotile screen — just
-            // update the captured screen id.
-            m_dragBypassScreenId = newPolicy.screenId;
-        }
-        return;
+void PlasmaZonesEffect::applyDragPolicyTransition(KWin::EffectWindow* w, const QString& windowId,
+                                                  PhosphorProtocol::DragBypassReason oldReason,
+                                                  DragPolicyTransition::Source source)
+{
+    DragPolicyTransition::Input in;
+    in.oldReason = oldReason;
+    in.policy = m_currentDragPolicy;
+    in.source = source;
+    in.bypassLatched = m_dragBypassedForEngine;
+    in.keyboardGrabbed = m_keyboardGrabbed;
+    in.daemonUp = m_daemonGate.serviceRegistered;
+    in.windowLive = w && !w->isDeleted();
+    in.tileHeld = !windowId.isEmpty() && m_tilingHandler->isTrackedWindow(windowId);
+    in.floating = !windowId.isEmpty() && isWindowFloating(windowId);
+    in.floatedThisDrag = m_dragActivation.floatedWindowIds.contains(windowId);
+    const DragPolicyTransition::Plan p = DragPolicyTransition::plan(in);
+
+    // Entering a tiling engine's screen sends the daemon nothing: its own flip
+    // already hid what the snap path showed, and a cancelSnap here latched the
+    // cancel for the rest of the drag, so coming back could never snap.
+    if (p.enterBypass) {
+        m_dragBypassedForEngine = true;
     }
-
-    // Gate on the effect's OWN latch, not merely on the daemon's previous
-    // reason. The drag-start fast path latches the bypass from the union
-    // isManagedScreen without consulting the context-disable lists, while the
-    // daemon checks ContextDisabled FIRST and so answers ContextDisabled (not
-    // EngineOwnedScreen) for an engine-managed screen whose context is disabled.
-    // The beginDrag correction layer only clears the latch on a reply of None,
-    // so the drag can be underway latched-bypassed with a policy that was never
-    // EngineOwnedScreen. Keying this transition on oldReason alone then let
-    // ContextDisabled -> None (and SnappingDisabled -> None) fall through to the
-    // no-op tail with the latch still set for the rest of the drag: the engine
-    // tracking drop never ran (the window kept its tile tracking and hidden
-    // title bar while it snapped), the keyboard was never grabbed, and the
-    // activation state was never reset. Scrolling widens the reachable surface
-    // because every scrolling screen is in the union the fast path latches on.
-    if (oldReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen || m_dragBypassedForEngine) {
-        // Autotile → snap (or autotile → context-disabled). Drop the
-        // bypass flag and initialize snap-drag state as if the drag just
-        // started on this snap screen. Remove the window from autotile
-        // tracking so slotWindowFrameGeometryChanged doesn't fight the
-        // snap geometry on subsequent geometry changes.
-        //
-        // Do NOT call handleDragToFloat here: the mid-drag schedule would
-        // race against the zone snap at drop, making the window jump after
-        // the user lets go. onWindowClosed alone clears the tracking state.
-        // Guarded on the ID, not the dragged-window pointer: the call is
-        // id-keyed bookkeeping that never derefs the window, and a
-        // died-mid-drag pointer must not skip the tracking cleanup for a
-        // still-valid id.
+    if (p.bypassScreen) {
+        m_dragBypassScreenId = *p.bypassScreen;
+    }
+    if (p.leave != DragPolicyTransition::Leave::None) {
+        // Id-keyed bookkeeping, so a window that died mid-drag still has its
+        // tracking settled. On a flip the daemon still holds the tile and the
+        // drop decides, so the tile is only suspended effect-side, with no
+        // relay. On the reply no engine owns the start screen, so the effect's
+        // own stale tracking goes.
         if (!windowId.isEmpty()) {
-            // releaseWindowTracking, NOT onWindowClosed: the window is live
-            // and mid-drag, and the close relay's capture would record the
-            // drag frame as its float-back.
-            m_tilingHandler->releaseWindowTracking(windowId, m_dragBypassScreenId);
-        }
-        m_dragBypassedForEngine = false;
-        // Cleared with the flag, as the equivalent transition in
-        // lifecycle_wiring.cpp does: leaving a stale engine screen id behind
-        // meant it survived into any later re-bypass until the EngineOwnedScreen
-        // branch above happened to overwrite it.
-        m_dragBypassScreenId.clear();
-        m_dragActivation.detected = false;
-        // KWin::effects guarded: this slot runs from a D-Bus signal
-        // dispatch (slotDragPolicyChanged), which can land during compositor
-        // teardown when the global is already gone — same rule and reason
-        // repaintSnapRegions documents (window_geometry_apply.cpp).
-        if (!m_keyboardGrabbed && KWin::effects) {
-            // The return value is the grab: KWin refuses when another effect
-            // already holds the keyboard. Latching m_keyboardGrabbed true
-            // without having earned it made the unconditional ungrabKeyboard at
-            // drag end release the OTHER effect's grab, silently cutting it off
-            // from keys for the rest of its session.
-            m_keyboardGrabbed = KWin::effects->grabKeyboard(this);
-            if (!m_keyboardGrabbed) {
-                qCWarning(lcEffect) << "dragPolicyChanged: keyboard grab refused (another effect holds it) for"
-                                    << windowId << "- Escape will reach KWin's move filter";
+            if (p.leave == DragPolicyTransition::Leave::SuspendTile) {
+                m_tilingHandler->suspendTileForSnapDrag(windowId);
+                m_dragActivation.tileSuspended = true;
+            } else {
+                m_tilingHandler->cleanupAutotileTracking(windowId);
             }
         }
-        return;
+        m_dragBypassedForEngine = false;
+        m_dragActivation.detected = false;
     }
-
-    // Other transitions (snap ↔ context_disabled / snapping_disabled) with no
-    // bypass latch held: no compositor-level work needed. The daemon will
-    // return a NoOp at endDrag for disabled paths.
+    if (p.floatNow) {
+        m_tilingHandler->handleDragToFloat(w, windowId, /*immediate=*/true);
+        m_dragActivation.floatedWindowIds.insert(windowId);
+    }
+    // The grab follows the daemon's answer both ways. KWin::effects guarded:
+    // both callers are D-Bus dispatches, which can land during compositor
+    // teardown. grabKeyboard answers false when another effect holds the
+    // keyboard, and recording a grab not earned would make the drag-end
+    // ungrabKeyboard release that effect's.
+    if (p.ungrab && KWin::effects) {
+        KWin::effects->ungrabKeyboard();
+        m_keyboardGrabbed = false;
+    }
+    if (p.grab && KWin::effects) {
+        m_keyboardGrabbed = KWin::effects->grabKeyboard(this);
+        if (!m_keyboardGrabbed) {
+            qCWarning(lcEffect) << "drag policy: keyboard grab refused (another effect holds it) for" << windowId
+                                << "- Escape will reach KWin's move filter";
+        }
+    }
 }
 
 } // namespace PlasmaZones

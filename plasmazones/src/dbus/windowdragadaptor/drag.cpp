@@ -502,10 +502,9 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
     // ── Drag-insert preview (runs even when m_snapCancelled) ────────────────
     // This block is intentionally ABOVE the snap-cancelled early return because
-    // the KWin effect calls callCancelSnap() when the cursor crosses from a snap
-    // screen to an engine-owned screen mid-drag. That sets m_snapCancelled=true,
-    // and would otherwise starve this block for the entire remainder of the
-    // drag. Drag-insert lives on independent trigger lists, so it should
+    // Escape (cancelSnap) latches m_snapCancelled for the rest of the drag, and
+    // that must not starve a drag-insert the user begins afterwards: it lives
+    // on independent trigger lists, with its own trigger, so it should
     // activate regardless of snap-overlay cancel state. The engine owning the
     // cursor's screen (autotile or scrolling) selects which trigger list and
     // toggle setting apply this tick; the rising-edge latch is shared (the

@@ -28,6 +28,7 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -57,6 +58,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // wrong drag's state. Capturing a local is the same staleness guard the
     // beginDrag reply gets from m_dragActivation.generation.
     const bool startedFloating = m_dragActivation.startedFloating;
+    // Taken now for the same reason: a tile a snapping excursion suspended is
+    // settled once the drop has an answer, whichever exit that is.
+    const bool tileSuspended = std::exchange(m_dragActivation.tileSuspended, false);
+    const auto settleSuspendedTile = [this, windowId, tileSuspended]() {
+        if (tileSuspended) {
+            m_tilingHandler->settleSuspendedTileAfterDrop(findWindowByIdExact(windowId), windowId);
+        }
+    };
 
     // Revoke the drag-start optimistic float on every arm that applies no
     // outcome. In Float mode the effect floats a tracked window synchronously
@@ -173,7 +182,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // a raw watcher capture would still dangle if that invariant ever slips.
     connect(timeoutTimer, &QTimer::timeout, this,
             [this, windowId, handled, watcherGuard = QPointer<QDBusPendingCallWatcher>(watcher), timeoutTimer,
-             revertOptimisticDragFloat]() {
+             revertOptimisticDragFloat, settleSuspendedTile]() {
                 if (*handled) {
                     return;
                 }
@@ -185,6 +194,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 // reply is discarded by `handled`, and any real daemon-side
                 // float lands later through its own windowFloatingChanged.
                 revertOptimisticDragFloat();
+                settleSuspendedTile();
                 // The window still sits wherever the user dropped it, on whatever
                 // screen that is, so a crossing the handlers deferred during the
                 // drag has to be re-resolved even though no outcome ever arrived.
@@ -198,7 +208,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, safeWindow, windowId, handled, timeoutTimer, startedFloating, dragMoveGeneration,
-             revertOptimisticDragFloat](QDBusPendingCallWatcher* w) {
+             revertOptimisticDragFloat, settleSuspendedTile](QDBusPendingCallWatcher* w) {
                 // True only while THIS drag's interactive move is still the one
                 // KWin is running, and only when the left button is already up
                 // (the case the rescues exist for: KWin waits for the last
@@ -234,6 +244,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 if (reply.isError()) {
                     qCWarning(lcEffect) << "endDrag call failed:" << reply.error().message();
                     revertOptimisticDragFloat();
+                    settleSuspendedTile();
                     drainDragSuppressedRuleInvalidations();
                     return;
                 }
@@ -245,6 +256,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     qCWarning(lcEffect) << "endDrag outcome rejected:" << err
                                         << "— dropping without applying any action for" << windowId;
                     revertOptimisticDragFloat();
+                    settleSuspendedTile();
                     drainDragSuppressedRuleInvalidations();
                     return;
                 }
@@ -299,10 +311,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // previously inlined in the dragStopped lambda; now it
                     // fires here off the daemon's authoritative answer.
                     //
-                    // Cross-VS transitions that happened mid-drag were
-                    // applied by slotDragPolicyChanged at the moment of
-                    // crossing, so by the time we get here the autotile
-                    // handler has the right tracking state.
+                    // A crossing mid-drag only re-latched the bypass: a tile
+                    // that crossed a snapping screen and came back is still
+                    // tracked, and this float takes it off the stack.
                     //
                     // isDeleted: same reply-latency hygiene as ApplySnap /
                     // RestoreSize below — floating a dying window would
@@ -602,6 +613,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 // drag gate, so the tracked screen already equals the live one.
                 // Idempotent with the per-branch calls above (the flush coalesces
                 // the turn), so it runs for every outcome rather than only the two.
+                // The suspended tile settles first, against the outcome just applied.
+                settleSuspendedTile();
                 drainDragSuppressedRuleInvalidations();
 
                 // Auto-fill: if window was dropped without snapping to a

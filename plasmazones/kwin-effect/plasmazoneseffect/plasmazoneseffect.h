@@ -41,6 +41,7 @@
 // state types the members below are declared with. Each is self-contained, so
 // this block sits with the other project includes rather than after the Qt /
 // KDE ones (own header → project → KDE → Qt).
+#include "dragpolicytransition.h"
 #include "effect_state.h"
 #include "placementstatement.h"
 #include "kwincompat.h" // KWinCompat::PaintResult — the paint hooks' return type per KWin version
@@ -336,11 +337,12 @@ private Q_SLOTS:
 
     // Float toggle is entirely daemon-local — no effect-side slot needed.
 
-    // Daemon tells the effect the drag routing has flipped mid-drag (cursor
-    // crossed a virtual-screen boundary that changes autotile↔snap mode).
-    // Effect applies the transition: entering/exiting autotile bypass,
-    // canceling snap overlay, etc.
+    // The daemon's policy changed mid-drag (the cursor reached a screen that
+    // places differently): applyDragPolicyTransition carries it out.
     void slotDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy);
+    /// Carry out DragPolicyTransition::plan for a policy just adopted, which replaced @p oldReason.
+    void applyDragPolicyTransition(KWin::EffectWindow* w, const QString& windowId,
+                                   PhosphorProtocol::DragBypassReason oldReason, DragPolicyTransition::Source source);
 
     // Daemon-driven batch operations (rotate, resnap, vs_reconfigure arrive
     // over the wire; the effect-local snap_all path calls this slot directly)
@@ -3524,10 +3526,8 @@ private:
     PhosphorRules::RuleSet m_animationExclusionRuleSet;
     PhosphorRules::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
 
-    // Autotile: true when the current drag was started on an engine-managed (autotile or scrolling) screen
-    // (callDragStarted was skipped). Captured at drag start so the drag end
-    // handler uses the same decision, preventing a race where m_managedScreens
-    // changes mid-drag (e.g., async D-Bus signal) and leaves the popup visible.
+    // True while the drag is on a screen a tiling engine owns: the drag
+    // forwards every cursor tick so the daemon can flip it back (mouse_drag.cpp).
     bool m_dragBypassedForEngine = false;
     QString m_dragBypassScreenId; // Screen at drag start (for float D-Bus call on drag end)
 

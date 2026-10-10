@@ -30,9 +30,9 @@ void PlasmaZonesEffect::wireMetadataHandlers(KWin::EffectWindow* w)
         // daemon state keyed to the first-seen class. Push the latest metadata
         // to the WindowRegistry so consumers query the current value.
         //
-        // Per feedback_class_change_exclusion.md: the registry only updates its
-        // record. It does NOT retroactively unsnap, re-snap, or re-evaluate
-        // rules — that would surprise users. Committed state stays committed.
+        // The registry only updates its record. It does NOT retroactively
+        // unsnap, re-snap, or re-evaluate rules — that would surprise users.
+        // Committed state stays committed.
         auto pushLatest = [this, safeW]() {
             if (safeW && !safeW->isDeleted()) {
                 pushWindowMetadata(safeW);

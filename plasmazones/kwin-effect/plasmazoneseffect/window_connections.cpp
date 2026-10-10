@@ -410,7 +410,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFrameGeometryChanged);
 
-    // Single windowFrameGeometryChanged lambda combining the effect-side
+    // One windowFrameGeometryChanged lambda for the effect-side
     // per-tick work, in the order the bodies run: the answer to a superseded
     // configure's late ack (Body -1.5), a strip-animation retarget
     // onto the rect the client actually committed (Body -1), the offered-column
@@ -422,7 +422,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // are independent so collapsing them just runs one capture+vtable
     // hop per tick instead of two. The autotile-handler connection
     // immediately above is kept separate because it dispatches to a slot
-    // on a different receiver (`m_tilingHandler.get()`).
+    // on a different receiver (`m_tilingHandler.get()`). The virtual-screen
+    // crossing detector is its own connection (window_output_connections.cpp).
     //
     // Body 1 — first-frame open suppression release: a window withheld
     // from compositing on open (see RestoreSuppression) is released the

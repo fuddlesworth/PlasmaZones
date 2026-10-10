@@ -30,7 +30,7 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
     // Detect when a window moves between monitors (e.g., "Move to Screen Right").
     // KWin::Window::outputChanged fires once when the window's output property changes.
     // Transfer the window from the old screen's autotile state to the new screen's state,
-    // and unsnap any snapped window that crosses screens.
+    // and report the move, whose meaning for a snapped window is the daemon's (reportCrossing).
     KWin::Window* kw = w->window();
     if (kw) {
         QPointer<KWin::EffectWindow> safeW = w;

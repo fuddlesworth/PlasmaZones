@@ -1022,14 +1022,14 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
                 }
             }
             Q_EMIT dragPolicyChanged(windowId, candidate);
-            // After the flip, fall through: if we're now on the snap path
-            // we still want to call legacy dragMoved below for overlay
-            // updates. If we're now bypassed, legacy dragMoved is a
-            // no-op because m_snapCancelled isn't set and dragMoved only
-            // does real work when m_draggedWindowId matches — which it
-            // does — but the overlay/zone state will be hidden by the
-            // effect's reaction handler, so running dragMoved here does
-            // no harm.
+            // After the flip, fall through: dragMoved runs as usual. On the
+            // snap path it drives the overlay, and on an engine screen
+            // prepareHandlerContext hides the overlay and returns, while the
+            // drag-insert block above it keeps working. The effect sends no
+            // cancelSnap on the flip, so a drag that comes back to the snap
+            // path finds the overlay again and its drop can snap. The
+            // keyboard grab follows the new policy's grabKeyboard on the
+            // effect side.
         }
     }
 

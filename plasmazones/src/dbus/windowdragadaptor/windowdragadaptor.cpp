@@ -468,11 +468,11 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
     // "the preview is gone, the settle finds nothing" — but the popup-only
     // arm below can BEGIN a fresh preview off a stored pick, which would
     // durably reorder the strip on a cancelled gesture. Gate on
-    // m_dragExternallyCancelled ONLY: m_snapCancelled is not just Escape —
-    // the policy-flip path sets it via cancelSnap while the drag-insert
-    // preview deliberately keeps working for the rest of the drag
-    // (drag.cpp's block-above-the-early-return note), so bailing on it here
-    // would float a legitimately previewed cross-screen insert at drop.
+    // m_dragExternallyCancelled ONLY: m_snapCancelled is Escape's latch, and
+    // a drag-insert preview the user began after it keeps working for the
+    // rest of the drag (drag.cpp's block-above-the-early-return note), so
+    // bailing on it here would float a legitimately previewed insert at
+    // drop.
     // Escape itself is covered anyway: cancelSnap already cancels the
     // previews and clears the stored pick, so neither arm below can fire.
     if (m_dragExternallyCancelled) {

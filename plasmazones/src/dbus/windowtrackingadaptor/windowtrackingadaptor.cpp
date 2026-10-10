@@ -378,9 +378,9 @@ void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* re
                                               });
     m_registryConnections << QObject::connect(registry, &PhosphorEngine::WindowRegistry::windowDisappeared, this,
                                               &WindowTrackingAdaptor::onShellRegistryWindowGone);
-    // Reactive metadata updates. Per feedback_class_change_exclusion.md we do
-    // NOT retroactively enforce rules — a committed snap/autotile/float state
-    // stays put even if the new class would have behaved differently at open.
+    // Reactive metadata updates. We do NOT retroactively enforce rules — a
+    // committed snap/autotile/float state stays put even if the new class
+    // would have behaved differently at open.
     // The only safe reactive update is refreshing tracking fields that mirror
     // the app class, so future lookups don't compare against a stale string.
     m_registryConnections << QObject::connect(

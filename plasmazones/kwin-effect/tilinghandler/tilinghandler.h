@@ -337,6 +337,11 @@ public:
      * @param immediate Apply size restore synchronously during the interactive move
      */
     void handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate = false);
+    /// A tile dragged onto the snap path mid-drag: suspend its tile state (the
+    /// daemon still holds it, and the drop decides), then settle it after the
+    /// drop, untracking it unless it came back to a tiling screen.
+    void suspendTileForSnapDrag(const QString& windowId);
+    void settleSuspendedTileAfterDrop(KWin::EffectWindow* w, const QString& windowId);
     void savePreTileForDesktopMove(const QString& windowId);
     /// Consume the desktop-move stash for @p windowId, folding the preserved
     /// pre-autotile rect back into @p screenId's bucket so a float-restore
@@ -1801,18 +1806,12 @@ private:
     QHash<QString, ExpectedOutputMove> m_expectedOutputMove;
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
     DesktopMoveStash m_desktopMoveStash; ///< free geometry of windows that left a desktop (desktopmovestash.h)
-    /// Re-entrancy guard for handleWindowOutputChanged, PER WINDOW.
-    ///
-    /// A single global bool refused every nested call, including one for a
-    /// DIFFERENT window, and that refusal was permanent: window_connections.cpp
-    /// pre-writes m_trackedScreenPerWindow before calling in, so the detector
-    /// will not re-fire for the same physical hop, and the only other re-entry
-    /// path triggers solely on a virtual-screen crossing. A dropped physical hop
-    /// therefore had no re-detect path anywhere and the window kept the old
-    /// screen's tracking for the session. Keyed by windowId, re-entry is refused
-    /// only for the window already being handled, which is the case the guard was
-    /// written for (the transfer's own releaseWindowTracking / notifyWindowAdded
-    /// can move the window across screens again).
+    /// Re-entrancy guard for handleWindowOutputChanged, PER WINDOW: a global one
+    /// refused a nested call for a DIFFERENT window for good, since
+    /// window_output_connections.cpp pre-writes m_trackedScreenPerWindow before
+    /// calling in and nothing re-detects that hop. Refused only for the window
+    /// being handled, whose transfer (releaseWindowTracking / notifyWindowAdded)
+    /// can move it across screens again.
     QSet<QString> m_outputChangeInFlight;
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection

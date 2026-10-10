@@ -650,6 +650,41 @@ void TilingHandler::markWindowTiled(const QString& screenId, const QString& wind
     }
 }
 
+void TilingHandler::suspendTileForSnapDrag(const QString& windowId)
+{
+    // The snap path owns the drag now, so nothing tile-side may land on it: a
+    // pending tile command, the centring target, the commanded rect and the
+    // tiled mark go, the sheds applyFloatCleanup makes for the same reason.
+    // The window stays in m_notifiedWindows, because the daemon still holds the
+    // tile and a drop back on its screen must find it there. Its claims
+    // (monocle, maximize-to-edges) are kept too: the untrack funnel releases
+    // them if the drop lets the tile go (settleSuspendedTileAfterDrop).
+    KWin::EffectWindow* const live = m_effect->findWindowByIdExact(windowId);
+    m_effect->m_daemonGate.commandStamps.bump(live);
+    m_tileTargetZones.remove(windowId);
+    m_centeredWaylandZones.remove(windowId);
+    m_effect->m_scrollCommandedRects.remove(windowId);
+    clearWindowTiledAllScreens(windowId);
+    m_effect->reconcileDecorationOnPlacementFlip(windowId);
+}
+
+void TilingHandler::settleSuspendedTileAfterDrop(KWin::EffectWindow* w, const QString& windowId)
+{
+    if (!w || w->isDeleted() || !isTrackedWindow(windowId)) {
+        return;
+    }
+    // Back on a tiling screen: the drop's outcome placed it (a reorder into the
+    // stack, or a float), and the batch that follows re-marks the tile.
+    if (isManagedScreen(m_effect->getWindowScreenId(w))) {
+        return;
+    }
+    // Dropped on the snap path. The daemon's drop released every engine's hold
+    // on it (drop.cpp's cross-screen block), so only the effect's half is left,
+    // with no relay.
+    cleanupAutotileTracking(windowId);
+    m_effect->reconcileDecorationOnPlacementFlip(windowId);
+}
+
 void TilingHandler::clearWindowTiledAllScreens(const QString& windowId)
 {
     if (TilingStateHelpers::removeFromAllScreens(m_border, windowId)) {

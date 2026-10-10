@@ -195,6 +195,11 @@ struct DragActivationState
     // any resize the user made while floating. Only the tiled→float transition
     // wants the pre-autotile size restore.
     bool startedFloating = false;
+
+    // A snapping excursion suspended the dragged tile mid-drag
+    // (TilingHandler::suspendTileForSnapDrag); callEndDrag settles it once the
+    // drop has an answer.
+    bool tileSuspended = false;
 };
 
 /// Per-window geometry command stamp: the one supersession model every deferred

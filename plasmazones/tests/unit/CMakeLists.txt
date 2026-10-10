@@ -1367,6 +1367,15 @@ target_link_libraries(test_untile_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_untile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_untile_decisions COMMAND test_untile_decisions)
 
+# Pure-logic test for the drag-policy transition
+# (plasmazoneseffect/dragpolicytransition.h): the bypass latch, the tile
+# suspend versus untrack, the float on reaching a float-on-drag engine, and
+# the keyboard grab following the daemon's answer. Same header-only reach.
+add_executable(test_drag_policy_transition ui/effect/test_drag_policy_transition.cpp)
+target_link_libraries(test_drag_policy_transition PRIVATE Qt6::Test Qt6::Core PhosphorProtocol::PhosphorProtocol)
+target_include_directories(test_drag_policy_transition PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_drag_policy_transition COMMAND test_drag_policy_transition)
+
 # Pure-logic test for the minimize-float qualifiers
 # (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
 # can still be the tile it is about to get. Same header-only reach.
