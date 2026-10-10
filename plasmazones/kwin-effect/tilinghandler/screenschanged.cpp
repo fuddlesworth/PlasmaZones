@@ -282,12 +282,12 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
         // scrubbed id caches (same hazard as the batch loop in
         // wiring.cpp).
         if (w && !w->isDeleted() && removed.contains(m_effect->getWindowScreenId(w))) {
-            // Only restore borders for windows on the CURRENT desktop
-            // AND activity. Windows in other contexts may still be
+            // Only restore borders for windows on the desktop their own
+            // output shows, and the current activity. Windows in other contexts may still be
             // autotiled and must keep their borderless state —
             // restoring them here would leak title bars into those
             // contexts' autotile sessions.
-            if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+            if (!isOnOwnOutputCurrentDesktop(w) || !w->isOnCurrentActivity()) {
                 continue;
             }
             // Skip sticky (all-desktops) and multi-desktop windows when
@@ -355,7 +355,7 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     // Save autotile stacking order before restoring snap-mode order.
     // This allows restoring the user's autotile z-order (e.g. floated
     // windows raised to front) when re-entering autotile mode.
-    // Only save windows on the current desktop — other desktops' windows
+    // Only save windows on the desktop their own output shows — other desktops' windows
     // are not being toggled and their stacking order is irrelevant here.
     //
     // ONE window pass with a set lookup, not screen-major nesting. The
@@ -368,7 +368,7 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     {
         QHash<QString, QStringList> orderByScreen;
         for (KWin::EffectWindow* w : windows) {
-            if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
+            if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !isOnOwnOutputCurrentDesktop(w)
                 || !w->isOnCurrentActivity()) {
                 continue;
             }
@@ -1034,7 +1034,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
                     continue;
                 }
-                if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+                if (!isOnOwnOutputCurrentDesktop(w) || !w->isOnCurrentActivity()) {
                     continue;
                 }
                 const QString screenId = m_effect->getWindowScreenId(w);

@@ -201,7 +201,7 @@ struct OutputSettleRow
     bool fullscreen = false;
     /// Only KWin moved it: no interactive move or resize since the baseline.
     bool kwinOnly = true;
-    /// On the current desktop and activity, and not minimized.
+    /// On the desktop its own output shows and the current activity, and not minimized.
     bool placeableNow = true;
     /// The fields below carry S0, the state when its output went away.
     bool hasS0 = false;

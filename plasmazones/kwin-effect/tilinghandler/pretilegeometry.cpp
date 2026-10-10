@@ -239,7 +239,7 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // window's tracking, so a re-resolve of a parked (off-canvas) frame
                 // can positionally land on a neighbouring output — skipping the
                 // restore and stranding the window at its parked rect.
-                if (!safeW->isOnCurrentDesktop() || !safeW->isOnCurrentActivity()
+                if (!isOnOwnOutputCurrentDesktop(safeW.data()) || !safeW->isOnCurrentActivity()
                     || m_notifiedWindows.contains(windowId) || m_managedScreens.contains(capturedScreenId)
                     || m_effect->isWindowMarkedSnapped(windowId) || m_effect->isWindowFloating(windowId)
                     || safeW->isUserMove() || safeW->isUserResize()) {

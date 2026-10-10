@@ -13,6 +13,7 @@
 #include "handlers/snaphandler.h"
 #include "compositor/windowanimator.h"
 #include "compositor/effectlogging.h"
+#include "desktopvisibility.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -705,7 +706,7 @@ void PlasmaZonesEffect::notifyActiveWindowRawFirst()
 {
     KWin::EffectWindow* activeWindow = KWin::effects ? KWin::effects->activeWindow() : nullptr;
     const bool rawEligible = activeWindow && !activeWindow->isDeleted() && !activeWindow->isMinimized()
-        && activeWindow->isOnCurrentDesktop() && activeWindow->isOnCurrentActivity();
+        && isOnOwnOutputCurrentDesktop(activeWindow) && activeWindow->isOnCurrentActivity();
     if (!rawEligible || !notifyWindowActivated(activeWindow)) {
         if (KWin::EffectWindow* fallback = getActiveWindow(); fallback && fallback != activeWindow) {
             notifyWindowActivated(fallback);

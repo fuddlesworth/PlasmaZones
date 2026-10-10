@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
+#include "desktopvisibility.h"
 
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -1063,6 +1064,7 @@ void PlasmaZonesEffect::logWindowDiagnostics(KWin::EffectWindow* w, const char* 
                           << "minimized:" << w->isMinimized() << "skipSwitcher:" << w->isSkipSwitcher()
                           << "keepAbove:" << w->keepAbove() << "ownKeepAbove:" << windowOwnKeepAbove(w)
                           << "hasDecoration:" << w->hasDecoration() << "onCurrentDesktop:" << w->isOnCurrentDesktop()
+                          << "onOwnOutputDesktop:" << isOnOwnOutputCurrentDesktop(w)
                           << "onCurrentActivity:" << w->isOnCurrentActivity()
                           << "onAllDesktops:" << w->isOnAllDesktops();
     qCDebug(lcEffectDiag) << "[window-diag]   geometry — frame:" << w->frameGeometry()
@@ -1089,22 +1091,22 @@ bool PlasmaZonesEffect::isDaemonReady(const char* methodName) const
 
 KWin::EffectWindow* PlasmaZonesEffect::getActiveWindow() const
 {
-    // Prefer KWin's active (focused) window when it is manageable and on current
-    // desktop. Skip a close-grabbed dying window here for the same reason the
+    // Prefer KWin's active (focused) window when it is manageable and on the
+    // desktop its own output shows. Skip a close-grabbed dying window here for the same reason the
     // fallback loop does — it must not become the navigation / snap-assist anchor.
     KWin::EffectWindow* active = KWin::effects->activeWindow();
-    if (active && !active->isDeleted() && active->isOnCurrentActivity() && active->isOnCurrentDesktop()
+    if (active && !active->isDeleted() && active->isOnCurrentActivity() && isOnOwnOutputCurrentDesktop(active)
         && !active->isMinimized() && shouldHandleWindow(active)) {
         return active;
     }
-    // Fallback: topmost manageable window on current desktop (e.g. when activeWindow() is
+    // Fallback: topmost manageable window on the desktop its own output shows (e.g. when activeWindow() is
     // null or refers to a dialog/utility we don't handle)
     const auto windows = KWin::effects->stackingOrder();
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         KWin::EffectWindow* w = *it;
         // Skip close-grabbed dying windows — a topmost close animation must
         // not become the navigation / snap-assist anchor.
-        if (w && !w->isDeleted() && w->isOnCurrentActivity() && w->isOnCurrentDesktop() && !w->isMinimized()
+        if (w && !w->isDeleted() && w->isOnCurrentActivity() && isOnOwnOutputCurrentDesktop(w) && !w->isMinimized()
             && shouldHandleWindow(w)) {
             return w;
         }

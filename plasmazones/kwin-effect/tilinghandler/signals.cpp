@@ -7,6 +7,7 @@
 // Part of TilingHandler — split from tilinghandler.cpp for SRP.
 
 #include "tilinghandler.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/navigationhandler.h"
 #include "compositor/effectlogging.h"
@@ -440,7 +441,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
                 // Elsewhere keep it parked (record + saved) for that re-track.
                 m_fullscreenFloatedWindows.insert(windowId);
                 const QString currentScreen = m_effect->getWindowScreenId(w);
-                if (w->isOnCurrentDesktop() && w->isOnCurrentActivity() && isScrollingScreen(currentScreen)) {
+                if (isOnOwnOutputCurrentDesktop(w) && w->isOnCurrentActivity() && isScrollingScreen(currentScreen)) {
                     m_savedNotifiedForDesktopReturn.remove(windowId);
                     m_notifiedWindows.insert(windowId);
                     m_notifiedWindowScreens[windowId] = currentScreen;

@@ -410,7 +410,8 @@ bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     }
 
     // The predicate mirrors the re-add condition below.
-    const bool willReAdd = newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
+    const bool willReAdd =
+        newIsAutotile && !w->isMinimized() && isOnOwnOutputCurrentDesktop(w) && w->isOnCurrentActivity();
 
     // Minimize-float ownership must SURVIVE the transfer: releaseWindowTracking's
     // cleanup wipes it wholesale, the window is alive and still floated

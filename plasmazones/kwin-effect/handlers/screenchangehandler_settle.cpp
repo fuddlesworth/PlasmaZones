@@ -14,6 +14,7 @@
 #include "dragtracker.h"
 #include "snaphandler.h"
 #include "tilinghandler/tilinghandler.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -303,7 +304,7 @@ PhosphorProtocol::OutputSettleRowList ScreenChangeHandler::buildSettleRows() con
         row.quickTileMode = now.quickTileMode;
         row.fullscreen = now.fullscreen;
         row.kwinOnly = now.moveResizeCount == base.moveResizeCount && row.windowId != dragged;
-        row.placeableNow = !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
+        row.placeableNow = !w->isMinimized() && isOnOwnOutputCurrentDesktop(w) && w->isOnCurrentActivity();
         if (s0) {
             row.hasS0 = true;
             row.s0Uuid = s0->state.outputUuid;

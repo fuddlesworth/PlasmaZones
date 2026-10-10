@@ -1052,7 +1052,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     //     stacking order, so the walk answers exactly as before and the set
     //     can only change once windowDeleted has removed it;
     //   • desktopChanged and currentActivityChanged, because the gate is scoped
-    //     to the CURRENT desktop and a fullscreen window parked elsewhere must
+    //     to the desktop each output shows and a fullscreen window parked elsewhere must
     //     not strip the desktop being looked at;
     //   • screenAdded / screenRemoved / virtualScreenGeometryChanged, because a
     //     layout change re-resolves which output a window sits on and can
