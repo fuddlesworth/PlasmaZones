@@ -472,13 +472,6 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     // would race that clear and store the zone geometry as pre-tile,
     // corrupting the restore path on subsequent mode transitions.
 
-    // Capture stacking order before applying geometries (moveResize raises on Wayland)
-    const auto allWindows = KWin::effects->stackingOrder();
-    QVector<QPointer<KWin::EffectWindow>> savedStack;
-    for (KWin::EffectWindow* w : allWindows) {
-        savedStack.append(QPointer<KWin::EffectWindow>(w));
-    }
-
     // Map the daemon's action string to a shader-tree ProfilePath. "resnap" is a layout
     // change (different layout or autotile recompute) — semantically a layout switch. "rotate"
     // moves windows between existing zones in the same layout — a snap-in. Everything else
@@ -487,17 +480,6 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     const QString batchProfilePath = (action == QLatin1String("resnap"))
         ? PhosphorAnimation::ProfilePaths::WindowLayoutSwitch
         : PhosphorAnimation::ProfilePaths::WindowPlaceIn;
-
-    // Per-screen epoch (see m_daemonGate.batchGenByScreen), bumped and
-    // snapshotted for each target screen. Only the z-order restore below reads
-    // it; whether an entry still applies is its own command stamp's call.
-    QHash<QString, uint64_t> genByScreen;
-    for (const auto& p : pending) {
-        if (p.screenId.isEmpty() || genByScreen.contains(p.screenId)) {
-            continue;
-        }
-        genByScreen.insert(p.screenId, ++m_daemonGate.batchGenByScreen[p.screenId]);
-    }
 
     // The per-window motion resolve happens inside this callable, at FIRE
     // time, so a motion-tree refetch landing part-way through a cascade
@@ -607,34 +589,12 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 m_snapHandler->markWindowSnapped(batchWid, p.screenId);
             }
         },
-        [this, savedStack, action, genByScreen]() {
-            // Restore z-order after all geometries applied — but skip it when a
-            // newer batch has superseded every screen this one targeted. The
-            // superseding cascade captured and re-asserts the current stacking
-            // order itself; replaying this batch's stale savedStack would
-            // shuffle windows into a pre-supersession order. Snap-assist below
-            // stays unconditional: for the non-resnap batches (rotate,
-            // vs_reconfigure, snap_all) it is a no-op, and a superseded resnap
-            // is still safe because the superseding resnap re-evaluates snap
-            // assist itself.
-            bool fullySuperseded = !genByScreen.isEmpty();
-            for (auto it = genByScreen.constBegin(); it != genByScreen.constEnd(); ++it) {
-                if (m_daemonGate.batchGenByScreen.value(it.key()) == it.value()) {
-                    fullySuperseded = false;
-                    break;
-                }
-            }
-            auto* ws = fullySuperseded ? nullptr : KWin::Workspace::self();
-            if (ws) {
-                for (const auto& wPtr : savedStack) {
-                    if (wPtr && !wPtr->isDeleted()) {
-                        KWin::Window* kw = wPtr->window();
-                        if (kw) {
-                            ws->raiseWindow(kw);
-                        }
-                    }
-                }
-            }
+        [this, action]() {
+            // No z-order restore: a snap batch has no overlap group and KWin's
+            // moveResize does not raise, so replaying the stacking order from
+            // the batch's arrival could only bury a window the user raised
+            // during the cascade (F329).
+            //
             // Show snap assist after resnap if applicable.
             //
             // A resnap follows a layout switch or a mode toggle; rotate,

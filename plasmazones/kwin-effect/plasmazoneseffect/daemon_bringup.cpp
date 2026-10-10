@@ -587,16 +587,9 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 }
             }
 
-            // Snapshot the current stacking order before snap restores.
-            // moveResize() on KWin 6 / Wayland implicitly raises the target
-            // window. After all restores complete, we re-raise windows in
-            // their original order — same pattern as the autotile handler's
-            // onComplete raise loop in tiling.cpp.
+            // No stacking snapshot: KWin's moveResize does not raise, so the
+            // restores below leave the stacking order as it is (F681).
             const auto allWindows = KWin::effects->stackingOrder();
-            QVector<QPointer<KWin::EffectWindow>> savedStackingOrder;
-            for (KWin::EffectWindow* w : allWindows) {
-                savedStackingOrder.append(QPointer<KWin::EffectWindow>(w));
-            }
 
             // Collect windows that need snap restoration (untracked).
             // Don't skip windows on autotile screens: KWin session restore may
@@ -641,61 +634,17 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             qCInfo(lcEffect) << "Triggered snap restore for" << toRestore.size()
                              << "untracked windows after daemon ready";
 
-            // Track how many windows actually moved (moveResize was called).
-            // If none moved, skip the stacking restoration — no disruption occurred.
-            auto pending = std::make_shared<int>(toRestore.size());
-            auto movedCount = std::make_shared<int>(0);
-
             for (const auto& safeWindow : toRestore) {
                 if (!safeWindow || safeWindow->isDeleted()) {
-                    // Window destroyed between collection and dispatch — count
-                    // it as done so the pending counter still reaches zero.
-                    if (--(*pending) == 0) {
-                        qCDebug(lcEffect) << "Stacking restore: all targets gone, skipping";
-                    }
-                    continue;
+                    continue; // destroyed between collection and dispatch
                 }
-                // Snapshot geometry before the async call; if it changes after
-                // applyWindowGeometry, we know a moveResize happened.
-                QRectF geoBefore = safeWindow->frameGeometry();
-
                 m_snapHandler->callResolveWindowRestore(
-                    safeWindow.data(),
-                    [pending, movedCount, safeWindow, geoBefore, savedStackingOrder](bool) {
-                        // Detect whether moveResize actually fired by comparing geometry.
-                        if (safeWindow && !safeWindow->isDeleted() && safeWindow->frameGeometry() != geoBefore) {
-                            ++(*movedCount);
-                        }
-
-                        if (--(*pending) > 0) {
-                            return;
-                        }
-
-                        // All snap restores done.
-                        if (*movedCount == 0) {
-                            qCDebug(lcEffect) << "Stacking restore: all windows at target geometry, skipping";
-                            return;
-                        }
-
-                        // Re-raise windows in original order (bottom-to-top).
-                        auto* ws = KWin::Workspace::self();
-                        if (!ws) {
-                            return;
-                        }
-                        for (const auto& wPtr : savedStackingOrder) {
-                            if (wPtr && !wPtr->isDeleted()) {
-                                KWin::Window* kw = wPtr->window();
-                                if (kw) {
-                                    ws->raiseWindow(kw);
-                                }
-                            }
-                        }
-                    },
+                    safeWindow.data(), [](bool) { },
                     /*releaseSuppressionOnMiss=*/true,
                     // DaemonRestartSweep: this sweep re-resolves windows that
                     // are ALREADY open and on screen, exactly like the
-                    // pending-restores sweep. It restores zone geometry and
-                    // stacking, and a window that left its recorded screen
+                    // pending-restores sweep. It restores zone geometry, and
+                    // a window that left its recorded screen
                     // while the daemon was down stays where the user put it.
                     PhosphorEngine::RestoreReason::DaemonRestartSweep);
             }

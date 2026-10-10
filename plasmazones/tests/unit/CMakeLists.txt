@@ -1339,6 +1339,14 @@ target_link_libraries(test_command_stamps PRIVATE Qt6::Test Qt6::Core PhosphorCo
 target_include_directories(test_command_stamps PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_command_stamps COMMAND test_command_stamps)
 
+# Pure-logic test for a tile batch's overlap restack
+# (tilinghandler/stackdecisions.h): each group at its lowest member's slot,
+# every other window kept where it is. Same header-only reach.
+add_executable(test_stack_decisions ui/effect/test_stack_decisions.cpp)
+target_link_libraries(test_stack_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_stack_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_stack_decisions COMMAND test_stack_decisions)
+
 # The effect's pure placement-statement decisions (placementstatement.h).
 add_executable(test_placement_statement ui/effect/test_placement_statement.cpp)
 target_link_libraries(test_placement_statement PRIVATE Qt6::Test Qt6::Core)

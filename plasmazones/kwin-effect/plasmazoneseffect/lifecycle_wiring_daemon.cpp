@@ -256,10 +256,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // The dead session's deferred applies (the tile and snap cascades, the
         // screen-change cascade, the mid-gesture replay) all fire against a
         // command stamp; moving every stamp on retires them before the
-        // teardown below hands the windows back (F405). The snap cascade's
-        // z-order restore reads the per-screen epochs, so they go too.
+        // teardown below hands the windows back (F405).
         m_daemonGate.commandStamps.supersedeAll();
-        m_daemonGate.batchGenByScreen.clear();
         m_tilingHandler->clearTiledTracking();
         // The scrolling set is a dead session's Mode discriminator: keeping
         // it would stamp Mode "scrolling" into rule verdicts resolved

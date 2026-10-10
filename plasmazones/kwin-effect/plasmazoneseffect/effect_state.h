@@ -351,12 +351,6 @@ struct DaemonGateState
     /// own leg, and the frame-change hook's strip retarget must not answer
     /// the synchronous re-entry, or it zeroes the leg's velocity first.
     const KWin::EffectWindow* animatedApplyCommit = nullptr;
-    /// Per-screen epoch for slotApplyGeometriesBatch cascades, read ONLY by a
-    /// cascade's z-order restore: each batch bumps and captures it for every
-    /// screen it targets, and the restore skips when every screen it targeted
-    /// has advanced (the superseding cascade re-asserts the stacking itself).
-    /// Whether a staggered apply still fires is commandStamps' call, per window.
-    QHash<QString, uint64_t> batchGenByScreen;
     /// See WindowCommandStamps.
     WindowCommandStamps commandStamps;
     int pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
