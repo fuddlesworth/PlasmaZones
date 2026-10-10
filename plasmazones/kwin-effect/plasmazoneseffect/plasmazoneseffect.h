@@ -3781,18 +3781,11 @@ private:
     /// Physical screen ID -> list of virtual screens (empty = no subdivisions)
     QHash<QString, QVector<EffectVirtualScreenDef>> m_virtualScreenDefs;
 
-    /**
-     * @brief Resolve a global point to the effective screen ID (virtual-aware).
-     *
-     * If the physical screen (from output) has virtual subdivisions, returns
-     * the virtual screen ID whose geometry contains pos. Otherwise returns
-     * the physical screen ID unchanged.
-     *
-     * @param pos Global compositor-space point
-     * @param output The KWin output the point is on
-     * @return Effective screen ID (virtual or physical)
-     */
+    /// The effective (virtual-aware) screen id of @p pos on @p output.
     QString resolveEffectiveScreenId(const QPoint& pos, const KWin::LogicalOutput* output) const;
+    /// The virtual screen a window filling a split output belongs to, or empty
+    /// when it does not fill one (screens_fill.cpp).
+    QString fillingWindowScreenId(KWin::EffectWindow* w, const QString& windowId, KWin::LogicalOutput* output) const;
 
     /// Apply virtual-screen subdivisions for an already-resolved PHYSICAL screen id.
     /// This is the shared implementation; the output-taking overload above wraps it

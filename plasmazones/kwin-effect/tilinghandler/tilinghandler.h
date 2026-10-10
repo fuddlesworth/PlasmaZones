@@ -1014,15 +1014,13 @@ public:
         return m_savedNotifiedForDesktopReturn.contains(windowId);
     }
 
-    /**
-     * @brief Update the notified screen ID for a tracked window.
-     *
-     * Called after virtual screen config changes re-resolve window screen IDs,
-     * so that slotWindowFrameGeometryChanged does not compare against stale
-     * screen IDs and trigger spurious cross-VS transfers.
-     *
-     * No-op if the window is not in m_notifiedWindowScreens.
-     */
+    /// The screen a tracked window was last notified on (empty when untracked).
+    QString notifiedScreenFor(const QString& windowId) const
+    {
+        return m_notifiedWindowScreens.value(windowId);
+    }
+    /// Update a tracked window's notified screen after a virtual-screen change
+    /// re-resolves it, so the VS detector does not compare against a stale one.
     void updateNotifiedScreen(const QString& windowId, const QString& newScreenId)
     {
         auto it = m_notifiedWindowScreens.find(windowId);

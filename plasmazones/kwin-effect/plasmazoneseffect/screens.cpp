@@ -326,8 +326,13 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w, const QStrin
     // which agrees with the daemon per-output — the #724 bug was only the
     // window→output trust. (QScreen can't be used here: inside the compositor
     // QScreen::manufacturer() / model() are empty, so a QScreen-derived id
-    // degrades to "::serial".)
-    return resolveEffectiveScreenId(c, windowOutput(w));
+    // degrades to "::serial".) A window filling a split output answers the
+    // virtual screen it belongs to, not the one under the output's centre.
+    KWin::LogicalOutput* const output = windowOutput(w);
+    if (const QString filling = fillingWindowScreenId(w, windowId, output); !filling.isEmpty()) {
+        return filling;
+    }
+    return resolveEffectiveScreenId(c, output);
 }
 
 QString PlasmaZonesEffect::pendingWindowScreenId(KWin::EffectWindow* w) const
@@ -358,6 +363,11 @@ QString PlasmaZonesEffect::pendingWindowScreenId(KWin::EffectWindow* w) const
             const QPointF cf = pending.center();
             const QPoint c(qRound(cf.x()), qRound(cf.y()));
             KWin::LogicalOutput* const output = KWin::effects->screenAt(c);
+            // KWin's move of a maximized window carries its restore rect.
+            if (const QString filling = fillingWindowScreenId(w, windowId, output ? output : windowOutput(w));
+                !filling.isEmpty()) {
+                return filling;
+            }
             return resolveEffectiveScreenId(c, output ? output : windowOutput(w));
         }
     }

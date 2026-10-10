@@ -111,6 +111,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_query.cpp
     plasmazoneseffect/window_query.h
     plasmazoneseffect/screens.cpp
+    plasmazoneseffect/screens_fill.cpp
     plasmazoneseffect/window_lifecycle.cpp
     plasmazoneseffect/window_connections.cpp
     plasmazoneseffect/window_output_connections.cpp

@@ -1324,6 +1324,14 @@ target_link_libraries(test_gesture_end_decisions PRIVATE Qt6::Test Qt6::Core Pho
 target_include_directories(test_gesture_end_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_gesture_end_decisions COMMAND test_gesture_end_decisions)
 
+# Pure-logic test for the screen of a window filling a split output
+# (plasmazoneseffect/windowscreendecisions.h): engine, then restore rect, then
+# the last stamp, and only a live virtual screen. Same header-only reach.
+add_executable(test_window_screen_decisions ui/effect/test_window_screen_decisions.cpp)
+target_link_libraries(test_window_screen_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_window_screen_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_window_screen_decisions COMMAND test_window_screen_decisions)
+
 # The effect's pure placement-statement decisions (placementstatement.h).
 add_executable(test_placement_statement ui/effect/test_placement_statement.cpp)
 target_link_libraries(test_placement_statement PRIVATE Qt6::Test Qt6::Core)
