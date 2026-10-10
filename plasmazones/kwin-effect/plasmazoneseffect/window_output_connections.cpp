@@ -10,6 +10,7 @@
 // deferred during a screen change at its settle.
 
 #include "plasmazoneseffect.h"
+#include "gestureenddecisions.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
@@ -156,7 +157,7 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         // VS crossing detection uses PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing()
         // (<PhosphorIdentity/VirtualScreenId.h>) — the same predicate used by
         // tilinghandler/tiling.cpp.
-        connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
+        const auto onFrameChanged = [this, safeW](KWin::EffectWindow*, const QRectF& oldGeometry) {
             if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_daemonGate.virtualScreensReady) {
                 return;
             }
@@ -170,6 +171,14 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             }
             // Held through a resize, like the output arm.
             if (m_resizeHold.window == safeW) {
+                return;
+            }
+            // A client that only changed its size has not moved (F248): an
+            // oversized ack of a snap apply grows the frame from the zone's
+            // corner, and an application resizing itself does the same, and
+            // either can carry the centre over a virtual-screen edge.
+            if (!safeW->isUserMove()
+                && GestureEndDecisions::isSizeOnlyChange(oldGeometry, QRectF(safeW->frameGeometry()))) {
                 return;
             }
             // Pending-aware like the output arm: a frame change that acks a
@@ -195,7 +204,8 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
                 return;
             }
             m_screenChangeHandler->applyVirtualScreenCrossing(safeW, oldScreenId, newScreenId);
-        });
+        };
+        connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, onFrameChanged);
 
         // Clean up the tracked screen entry when the window is destroyed. Capture the RAW
         // pointer value, not the QPointer: inside a destroyed() slot the QPointer has already

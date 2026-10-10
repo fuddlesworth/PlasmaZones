@@ -5,14 +5,15 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
+#include <QRectF>
 #include <QSizeF>
 #include <QString>
 #include <QtGlobal>
 
-/// The end of an interactive resize, header-only so the rules are
-/// unit-testable without a compositor (same pattern as pretiledecisions.h).
-/// The hold itself, and the drain that applies these, are in
-/// window_moveresize_connections.cpp.
+/// The end of an interactive resize, and what a frame change crossed,
+/// header-only so the rules are unit-testable without a compositor (same
+/// pattern as pretiledecisions.h). The hold itself, and the drain that applies
+/// these, are in window_moveresize_connections.cpp.
 namespace PlasmaZones::GestureEndDecisions {
 
 /// The client has committed the size KWin asked for at the end of a resize:
@@ -53,6 +54,15 @@ inline Crossing classify(const QString& before, const QString& after)
 inline bool reportsResize(Crossing crossing)
 {
     return crossing == Crossing::None;
+}
+
+/// A frame change that kept the window's top-left (within a pixel) and
+/// changed only its size: a client resizing itself, or acking a size its
+/// placement did not ask for. It moves nothing, so it crosses no screen
+/// (F248). A frame that also moved is judged by its centre as before.
+inline bool isSizeOnlyChange(const QRectF& before, const QRectF& after)
+{
+    return (before.topLeft() - after.topLeft()).manhattanLength() <= 1.0 && before.size() != after.size();
 }
 
 /// How long the end-of-resize reports wait for the client to commit the size

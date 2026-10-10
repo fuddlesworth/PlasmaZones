@@ -12,6 +12,7 @@
 #include "handlers/dragtracker.h"
 #include "handlers/screenchangehandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/gestureenddecisions.h"
 #include "compositor/windowanimator.h"
 #include "compositor/effectlogging.h"
 
@@ -32,7 +33,6 @@ namespace PlasmaZones {
 
 void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)
 {
-    Q_UNUSED(oldGeometry)
     // isDeleted: every other entry point bails on a corpse BEFORE the id
     // lookup, explicitly to avoid re-polluting the scrubbed id caches; this
     // slot sees strictly more geometry changes since the counter-assert
@@ -198,10 +198,12 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         // transitions, and the resize drain owns a resize's (F486). Detecting
         // mid-gesture would transfer the window before the user lets go.
         // Other windows (e.g., a terminal reflowing) should still get VS crossing checks.
+        // A tile whose client acks a larger size than its tile has not moved
+        // either (F248): the centring pass below is what answers it.
         const bool heldByGesture = (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
                                     && windowId == m_effect->m_dragTracker->draggedWindowId())
             || m_effect->m_resizeHold.window == w;
-        if (!heldByGesture) {
+        if (!heldByGesture && !GestureEndDecisions::isSizeOnlyChange(oldGeometry, QRectF(w->frameGeometry()))) {
             const QString newScreenId = m_effect->getWindowScreenId(w);
             const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
             if (PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {

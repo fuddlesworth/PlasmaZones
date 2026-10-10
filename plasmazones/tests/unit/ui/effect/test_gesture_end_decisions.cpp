@@ -3,10 +3,10 @@
 
 /**
  * @file test_gesture_end_decisions.cpp
- * @brief The end-of-resize rules (plasmazoneseffect/gestureenddecisions.h):
+ * @brief The end-of-resize and crossing rules (plasmazoneseffect/gestureenddecisions.h):
  *        when the client has committed the size it was dragged to, what a
- *        held resize crossed, and when the neighbour-reflow report is sent
- *        (F486, F701).
+ *        held resize crossed, when the neighbour-reflow report is sent, and
+ *        when a frame change moved nothing (F486, F701, F248).
  */
 
 #include "plasmazoneseffect/gestureenddecisions.h"
@@ -54,6 +54,29 @@ private Q_SLOTS:
         QVERIFY(reportsResize(Crossing::None));
         QVERIFY(!reportsResize(Crossing::VirtualScreen));
         QVERIFY(!reportsResize(Crossing::Output));
+    }
+
+    // A frame that kept its top-left and changed only its size has not moved,
+    // so it crosses no screen (F248). One that moved is judged by its centre.
+    void sizeOnly_grownFromTheCorner()
+    {
+        QVERIFY(isSizeOnlyChange(QRectF(0, 0, 800, 600), QRectF(0, 0, 1100, 700)));
+    }
+    void sizeOnly_subPixelCornerDrift()
+    {
+        QVERIFY(isSizeOnlyChange(QRectF(100, 100, 800, 600), QRectF(100.6, 100, 900, 600)));
+    }
+    void sizeOnly_moved()
+    {
+        QVERIFY(!isSizeOnlyChange(QRectF(0, 0, 800, 600), QRectF(40, 0, 800, 600)));
+    }
+    void sizeOnly_movedAndResized()
+    {
+        QVERIFY(!isSizeOnlyChange(QRectF(0, 0, 800, 600), QRectF(0, 40, 900, 600)));
+    }
+    void sizeOnly_unchanged()
+    {
+        QVERIFY(!isSizeOnlyChange(QRectF(0, 0, 800, 600), QRectF(0, 0, 800, 600)));
     }
 };
 
