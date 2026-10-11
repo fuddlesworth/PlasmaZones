@@ -34,6 +34,7 @@
 #include <PhosphorEngine/LayerFocusSwitch.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorZones/Layout.h>
@@ -1037,7 +1038,24 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
         return;
     }
     QVector<ZoneAssignmentEntry> entries = calculateRotation(clockwise, screenId);
+    // The compositor-layer cursor screen, else the active window's screen.
+    const auto userScreen = [this]() -> QString {
+        if (!m_navState) {
+            return QString();
+        }
+        const QString cursor = m_navState->lastCursorScreenName();
+        return cursor.isEmpty() ? m_navState->lastActiveScreenName() : cursor;
+    };
+    // The all-screens form (an empty screenId) has no one layout to explain an
+    // empty result by: resolveLayoutForScreen("") is the default layout, which
+    // no screen need run. Its feedback names the screen the user is on (F875).
+    const QString feedbackScreen = screenId.isEmpty() ? userScreen() : screenId;
     if (entries.isEmpty()) {
+        if (screenId.isEmpty()) {
+            Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_snapped_windows"), QString(),
+                                      QString(), feedbackScreen);
+            return;
+        }
         auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
         if (!layout) {
             Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_active_layout"), QString(),
@@ -1052,31 +1070,29 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
         return;
     }
 
-    // Apply the batch through WTS's unified helper. UserInitiated intent
+    // Apply the batch through applyBatchAssignments. UserInitiated intent
     // preserves historical rotate semantics (each window's snap updates
-    // last-used-zone). The fallback resolver queries the compositor-layer
-    // cursor/active-screen shadows via INavigationStateProvider — only
-    // used when none of the built-in strategies (targetScreenId /
-    // geometry.center() / QGuiApplication::screens()) yield a screen.
+    // last-used-zone). The fallback resolver (userScreen) is only used when
+    // none of the built-in strategies (targetScreenId / geometry.center() /
+    // QGuiApplication::screens()) yield a screen.
     PhosphorProtocol::WindowGeometryList geometries =
-        applyBatchAssignments(entries, SnapIntent::UserInitiated, [this]() -> QString {
-            if (!m_navState) {
-                return QString();
-            }
-            QString cursor = m_navState->lastCursorScreenName();
-            if (cursor.isEmpty()) {
-                cursor = m_navState->lastActiveScreenName();
-            }
-            return cursor;
-        });
+        applyBatchAssignments(entries, SnapIntent::UserInitiated, userScreen);
     if (!geometries.isEmpty()) {
         Q_EMIT applyGeometriesBatch(geometries, QStringLiteral("rotate"));
     }
 
     const QString direction = clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise");
     const QString reason = QStringLiteral("%1:%2").arg(direction).arg(entries.size());
-    Q_EMIT navigationFeedback(true, QStringLiteral("rotate"), reason, entries.first().sourceZoneId,
-                              entries.first().targetZoneId, screenId);
+    // The zones shown are an entry's on the screen the OSD names: rotating every
+    // screen, entries.first() can sit on another one. A named screen holds every
+    // entry, so it reports its first, as before.
+    const auto shown = std::find_if(entries.cbegin(), entries.cend(), [&feedbackScreen](const ZoneAssignmentEntry& e) {
+        return PhosphorScreens::ScreenIdentity::screensMatch(e.targetScreenId, feedbackScreen);
+    });
+    const bool onFeedbackScreen = shown != entries.cend();
+    Q_EMIT navigationFeedback(true, QStringLiteral("rotate"), reason,
+                              onFeedbackScreen ? shown->sourceZoneId : QString(),
+                              onFeedbackScreen ? shown->targetZoneId : QString(), feedbackScreen);
 }
 
 // Note: resnapToNewLayout and the resnapCurrentAssignments overloads

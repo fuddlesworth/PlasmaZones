@@ -128,6 +128,22 @@ private Q_SLOTS:
         QCOMPARE(f.floatBack(w, kLeft), kFree);
     }
 
+    // The live frame replaces an older float-back on that screen: the snap's
+    // sample is the window's newest free spot (F808).
+    void aDaemonSnapReplacesAnOlderFloatBack()
+    {
+        PresnapFixture f;
+        const QString w = f.registerWindow(QStringLiteral("f808"));
+        f.floatingAt(w, kFree);
+        const QRect older(500, 400, 640, 480);
+        f.wta->service()->recordFreeGeometry(w, kLeft, older, /*overwrite=*/true);
+        QCOMPARE(f.floatBack(w, kLeft), older);
+
+        f.adaptor->moveWindowToZoneOnScreen(w, f.zone(1), kLeft);
+
+        QCOMPARE(f.floatBack(w, kLeft), kFree);
+    }
+
     // Every user unfloat records the frame it leaves, from the D-Bus float
     // calls as much as from Meta+F, so the next float returns there (F52).
     void dbusUnfloatsRecordTheFreeFrame_data()

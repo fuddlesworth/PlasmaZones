@@ -38,6 +38,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorEngine/NavigationContext.h>
+#include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include "core/utils/utils.h"
@@ -83,6 +84,29 @@ public:
     QString getFirstZoneInDirection(const QString&, const QString&) const override
     {
         return QString();
+    }
+};
+
+/// Compositor-layer shadows naming a cursor screen and nothing else.
+class FakeNavStateQueries : public PhosphorSnapEngine::INavigationStateProvider
+{
+public:
+    QString cursorScreen;
+    QString lastCursorScreenName() const override
+    {
+        return cursorScreen;
+    }
+    QString lastActiveScreenName() const override
+    {
+        return QString();
+    }
+    QString lastActiveWindowId() const override
+    {
+        return QString();
+    }
+    QRect frameGeometry(const QString&) const override
+    {
+        return QRect();
     }
 };
 
@@ -609,6 +633,69 @@ private Q_SLOTS:
         QCOMPARE(entries[0].targetGeometry, m_service->zoneGeometry(entries[0].targetZoneId, QString()));
     }
 
+    // Rotating every screen (an empty screen id, reachable over D-Bus only)
+    // with nothing snapped says so. The default layout resolveLayoutForScreen("")
+    // reads, which no screen need run, has one zone here and used to answer
+    // single_zone (F875).
+    void testRotateAllScreens_nothingSnappedSaysNoSnappedWindows()
+    {
+        PhosphorZones::Layout* single = createTestLayout(1, m_layoutManager);
+        m_layoutManager->addLayout(single);
+        const QString singleId = single->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([singleId]() {
+            return singleId;
+        });
+        m_layoutManager->assignLayout(QStringLiteral("DP-1"), m_layoutManager->currentVirtualDesktop(), QString(),
+                                      m_testLayout);
+        QSignalSpy feedbackSpy(m_engine, &SnapEngine::navigationFeedback);
+
+        m_engine->rotateWindowsInLayout(/*clockwise=*/true, QString());
+
+        QCOMPARE(feedbackSpy.count(), 1);
+        QCOMPARE(feedbackSpy.first().at(0).toBool(), false);
+        QCOMPARE(feedbackSpy.first().at(2).toString(), QStringLiteral("no_snapped_windows"));
+    }
+
+    // Rotating every screen names the screen the user is on (the cursor's) and
+    // shows the zones of the entry there, or none when no screen is known.
+    // DP-1's window turns from zone 1 to 2, DP-2's from 2 to 3 (F875).
+    void testRotateAllScreens_successNamesAnEntryOnTheFeedbackScreen_data()
+    {
+        QTest::addColumn<QString>("cursorScreen");
+        QTest::addColumn<int>("sourceIndex"); // -1: no zones shown
+        QTest::newRow("no screen known") << QString() << -1;
+        QTest::newRow("cursor on DP-1") << QStringLiteral("DP-1") << 0;
+        QTest::newRow("cursor on DP-2") << QStringLiteral("DP-2") << 1;
+    }
+    void testRotateAllScreens_successNamesAnEntryOnTheFeedbackScreen()
+    {
+        QFETCH(QString, cursorScreen);
+        QFETCH(int, sourceIndex);
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        SnapState* snap = m_engine->snapState();
+        snap->assignWindowToZone(QStringLiteral("appA:win:1"), m_zoneIds.at(0), QStringLiteral("DP-1"), 0);
+        snap->assignWindowToZone(QStringLiteral("appB:win:1"), m_zoneIds.at(1), QStringLiteral("DP-2"), 0);
+        FakeNavStateQueries nav;
+        nav.cursorScreen = cursorScreen;
+        m_engine->setNavigationStateProvider(&nav);
+        QSignalSpy feedbackSpy(m_engine, &SnapEngine::navigationFeedback);
+
+        m_engine->rotateWindowsInLayout(/*clockwise=*/true, QString());
+
+        m_engine->setNavigationStateProvider(nullptr);
+        QVERIFY(!feedbackSpy.isEmpty());
+        const QList<QVariant> fb = feedbackSpy.takeLast();
+        QCOMPARE(fb.at(0).toBool(), true);
+        QCOMPARE(fb.at(1).toString(), QStringLiteral("rotate"));
+        QCOMPARE(fb.at(2).toString(), QStringLiteral("clockwise:2"));
+        QCOMPARE(fb.at(3).toString(), sourceIndex < 0 ? QString() : m_zoneIds.at(sourceIndex));
+        QCOMPARE(fb.at(4).toString(), sourceIndex < 0 ? QString() : m_zoneIds.at(sourceIndex + 1));
+        QCOMPARE(fb.at(5).toString(), cursorScreen);
+    }
+
     // =====================================================================
     // P2: App ID Fallbacks
     // =====================================================================
@@ -723,19 +810,25 @@ private Q_SLOTS:
         m_engine->setZoneAdjacencyResolver(nullptr);
     }
 
-    // ── Cross-mode swap (Phase 4c): swapping a snapped window toward an AUTOTILE
-    //    neighbour output defers to the daemon via crossModeSwapRequested (the
-    //    two-way exchange), rather than snapping onto the tiled screen. ──
-    void testCrossModeSwap_autotileNeighbourOutput_emitsCrossModeSwapRequested()
+    // ── Cross-mode swap (Phase 4c): swapping a snapped window toward a TILING
+    //    (autotile or scrolling) neighbour output defers to the daemon via
+    //    crossModeSwapRequested (the two-way exchange), rather than snapping
+    //    onto the tiled screen. Scrolling has no snap zones either (F813). ──
+    void testCrossModeSwap_tilingNeighbourOutput_emitsCrossModeSwapRequested_data()
     {
+        tilingModeRows();
+    }
+    void testCrossModeSwap_tilingNeighbourOutput_emitsCrossModeSwapRequested()
+    {
+        QFETCH(int, mode);
         const QString layoutId = m_testLayout->id().toString();
         m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
             return layoutId;
         });
-        // DP-2 is an AUTOTILE neighbour to the right (current desktop 0).
-        PhosphorZones::AssignmentEntry autotileEntry;
-        autotileEntry.mode = PhosphorZones::AssignmentEntry::Autotile;
-        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotileEntry);
+        // DP-2 is a TILING neighbour to the right (current desktop 0).
+        PhosphorZones::AssignmentEntry tilingEntry;
+        tilingEntry.mode = static_cast<PhosphorZones::AssignmentEntry::Mode>(mode);
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), tilingEntry);
 
         FakeCrossSurfaceQueries cross;
         cross.outputRight = QStringLiteral("DP-2");
@@ -765,44 +858,43 @@ private Q_SLOTS:
         m_engine->setZoneAdjacencyResolver(nullptr);
     }
 
-    // ── Cross-mode MOVE (Phase 3): moving a snapped window toward an AUTOTILE
-    //    neighbour output defers to the daemon via crossModeMoveRequested (the
-    //    one-way insert), rather than snapping onto the tiled screen. ──
-    void testCrossModeMove_autotileNeighbourOutput_emitsCrossModeMoveRequested()
+    // ── Cross-mode MOVE (Phase 3): moving a snapped window toward a TILING
+    //    (autotile or scrolling) neighbour output defers to the daemon via
+    //    crossModeMoveRequested (the one-way insert), rather than snapping onto
+    //    the tiled screen (F813). ──
+    void testCrossModeMove_tilingNeighbourOutput_emitsCrossModeMoveRequested_data()
+    {
+        tilingModeRows();
+    }
+    void testCrossModeMove_tilingNeighbourOutput_emitsCrossModeMoveRequested()
+    {
+        QFETCH(int, mode);
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        PhosphorZones::AssignmentEntry tilingEntry;
+        tilingEntry.mode = static_cast<PhosphorZones::AssignmentEntry::Mode>(mode);
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), tilingEntry);
+        expectCrossModeMoveToDp2();
+    }
+
+    // The live mode resolver, which the daemon wires, decides over the
+    // cascade: DP-2's cascade says snapping, the live answer scrolling, so the
+    // move is handed off and snapping does not claim DP-2 (F813).
+    void testCrossModeMove_liveResolverDecides()
     {
         const QString layoutId = m_testLayout->id().toString();
         m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
             return layoutId;
         });
-        PhosphorZones::AssignmentEntry autotileEntry;
-        autotileEntry.mode = PhosphorZones::AssignmentEntry::Autotile;
-        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotileEntry);
-
-        FakeCrossSurfaceQueries cross;
-        cross.outputRight = QStringLiteral("DP-2");
-        FakeAdjacencyQueries adj;
-        m_engine->setZoneAdjacencyResolver(&adj);
-        m_engine->setCrossSurfaceResolver(&cross);
-
-        const QString f = QStringLiteral("appF:win:1");
-        m_engine->snapState()->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
-
-        QSignalSpy moveSpy(m_engine, &SnapEngine::crossModeMoveRequested);
-
-        PhosphorEngine::NavigationContext ctx;
-        ctx.windowId = f;
-        ctx.screenId = QStringLiteral("DP-1");
-        m_engine->moveFocusedInDirection(QStringLiteral("right"), ctx);
-
-        QCOMPARE(moveSpy.count(), 1);
-        const QList<QVariant> args = moveSpy.takeFirst();
-        QCOMPARE(args.at(0).toString(), f);
-        QCOMPARE(args.at(1).toString(), QStringLiteral("DP-2"));
-        QCOMPARE(args.at(2).toInt(), 0); // monitor crossing, current desktop
-        QCOMPARE(args.at(3).toString(), QStringLiteral("right"));
-
-        m_engine->setCrossSurfaceResolver(nullptr);
-        m_engine->setZoneAdjacencyResolver(nullptr);
+        m_engine->setLiveModeResolver([](const QString& screenId) {
+            return screenId == QLatin1String("DP-2") ? PhosphorZones::AssignmentEntry::Scrolling
+                                                     : PhosphorZones::AssignmentEntry::Snapping;
+        });
+        QVERIFY(!m_engine->isActiveOnScreen(QStringLiteral("DP-2")));
+        expectCrossModeMoveToDp2();
+        m_engine->setLiveModeResolver({});
     }
 
     // ── A SNAP (non-autotile) neighbour output with no entry zone is a genuine
@@ -891,6 +983,45 @@ private Q_SLOTS:
     // peek/take appId-FIFO tests.
 
 private:
+    /// The two tiling modes a neighbour output can run.
+    static void tilingModeRows()
+    {
+        QTest::addColumn<int>("mode");
+        QTest::newRow("autotile") << int(PhosphorZones::AssignmentEntry::Autotile);
+        QTest::newRow("scrolling") << int(PhosphorZones::AssignmentEntry::Scrolling);
+    }
+
+    /// A window snapped in DP-1's last zone, moved right toward the DP-2
+    /// neighbour with no in-surface adjacent zone, is handed to the daemon as
+    /// one crossModeMoveRequested to DP-2 on the current desktop.
+    void expectCrossModeMoveToDp2()
+    {
+        FakeCrossSurfaceQueries cross;
+        cross.outputRight = QStringLiteral("DP-2");
+        FakeAdjacencyQueries adj;
+        m_engine->setZoneAdjacencyResolver(&adj);
+        m_engine->setCrossSurfaceResolver(&cross);
+
+        const QString f = QStringLiteral("appF:win:1");
+        m_engine->snapState()->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
+
+        QSignalSpy moveSpy(m_engine, &SnapEngine::crossModeMoveRequested);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = f;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->moveFocusedInDirection(QStringLiteral("right"), ctx);
+
+        m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
+        QCOMPARE(moveSpy.count(), 1);
+        const QList<QVariant> args = moveSpy.takeFirst();
+        QCOMPARE(args.at(0).toString(), f);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("DP-2"));
+        QCOMPARE(args.at(2).toInt(), 0); // monitor crossing, current desktop
+        QCOMPARE(args.at(3).toString(), QStringLiteral("right"));
+    }
+
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsQueries* m_settings = nullptr;
