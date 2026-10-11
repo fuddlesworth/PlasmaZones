@@ -5,10 +5,10 @@
 // agnostic facade every placement engine and the daemon share, and this is an
 // INSTALLED public header — splitting the class is an API break for the
 // third-party consumers the LGPL boundary exists to serve. The implementation
-// is already split by concern across src/*.cpp (snap, resnap, navigation,
-// virtualscreenmigration, lifecycle), and the member ordering here encodes
-// which of those owns what. Same rationale as
-// PhosphorTileEngine/AutotileEngine.h.
+// is already split by concern across src/ (WindowTrackingService.cpp and its
+// _sticky part, snap, resnap, navigation, virtualscreenmigration, lifecycle),
+// and the member ordering here encodes which of those owns what. Same
+// rationale as PhosphorTileEngine/AutotileEngine.h.
 
 #pragma once
 
@@ -61,25 +61,16 @@ namespace PhosphorPlacement {
 /**
  * @brief Window-zone tracking service (business logic layer)
  *
- * This service encapsulates all window tracking business logic that was
- * previously in WindowTrackingAdaptor. Following the separation-of-concerns
- * principle, it handles:
+ * The engine-agnostic facade over the snap stores and the unified
+ * WindowPlacementStore:
  *
- * - PhosphorZones::Zone assignment management (which window is in which zone)
- * - Pre-snap geometry storage (for restoring original size)
- * - Floating window state tracking
- * - Session persistence (save/load state across restarts)
- * - Auto-snap logic (snap new windows to last zone)
- * - Window rotation calculations
+ * - zone assignments (which window is in which zone), read through SnapState
+ * - free (float-back) geometry per screen, held in the placement records
+ * - float routing to the owning engine, and the suspension-float and sticky bits
+ * - the resnap buffer, the dirty mask and the last-used zone companions
  *
- * The WindowTrackingAdaptor becomes a thin D-Bus facade that delegates
- * all business logic to this service.
- *
- * Design benefits:
- * - Testable: Service can be unit tested without D-Bus
- * - Reusable: Logic can be used by other components
- * - Maintainable: Clear separation of concerns
- * - Debuggable: Easier to trace logic flow
+ * The WindowTrackingAdaptor persists it through the dirty mask. The auto-snap
+ * and rotation decisions are SnapEngine's (calculateSnapToLastZone, calculateRotation).
  */
 class PHOSPHORPLACEMENT_EXPORT WindowTrackingService : public QObject, public PhosphorEngine::IWindowTrackingService
 {
@@ -107,13 +98,14 @@ public:
     ~WindowTrackingService() override;
 
     /**
-     * @brief Wire up the shared WindowRegistry.
+     * @brief Wire the shared WindowRegistry. Not owned; the adaptor forwards its
+     * own setter, so it can be swapped or cleared at any time.
      *
-     * Optional — unit tests construct WTS without a registry and fall back to
-     * parsing composite windowIds. Production daemons set this so the service
-     * queries live class via appIdFor() and ignores first-seen strings.
-     *
-     * Must be set before start. Not owned.
+     * Feeds currentAppIdFor, canonicalizeForLookup, the placement store's
+     * live-instance probe, the durable resnap arm's desktop context, and
+     * recordFloatingClose's minimized and output-filling refusals. Without one
+     * (unit tests) each is permissive: the class parsed from the id, a
+     * passthrough key, no live instance, no context, no refusal.
      */
     void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
 
@@ -137,34 +129,29 @@ public:
     const PhosphorEngine::WindowPlacementStore& placementStore() const;
 
     /**
-     * @brief Wire the snap-mode placement engine.
+     * @brief Wire the snap-mode placement engine. Not owned.
      *
-     * Float-back / free geometry is SHARED across modes and lives in the single
-     * unified WindowPlacementStore (freeGeometryByScreen), not per-engine — so this
-     * pointer is not the geometry store (validatedUnmanagedGeometry reads the record
-     * directly). Retained for the engine reference used elsewhere (stale-window
-     * pruning, the D-Bus facade's snapEngine() accessor).
-     *
-     * Must be set after construction. Not owned.
+     * Not the float-back store (that is the shared WindowPlacementStore). Read
+     * for the stale-window prune and for isActiveOnScreen, the "snapping runs
+     * here live" test of the resnap, prune and occupancy paths; unset (unit
+     * tests), those read the configured mode or pass.
      */
     void setSnapEngine(PhosphorEngine::PlacementEngineBase* engine);
 
     PhosphorEngine::PlacementEngineBase* snapEngine() const;
 
     /**
-     * @brief Predicate: is the window currently in Autotile mode?
+     * @brief Predicate: is the window's CURRENT screen in Autotile mode?
      *
-     * Injected by the daemon (engine-/settings-agnostic LGPL boundary). The
-     * single owning-engine signal used by the capture funnel and float
-     * routing (see isWindowInAutotileMode). When unset, every window is
-     * treated as snap-mode.
+     * Injected by the daemon (engine-/settings-agnostic LGPL boundary). Its one
+     * reader is the adaptor's capture funnel, which tries the autotile capture
+     * first when it answers true. When unset, every window reads as not autotile.
      */
     using AutotileModePredicate = std::function<bool(const QString& windowId)>;
     void setAutotileModePredicate(AutotileModePredicate predicate);
 
-    /// True if the window's CURRENT screen mode is autotile: the predicate the float
-    /// resolver, the float writer, validatedUnmanagedGeometry and the capture funnel
-    /// share. False when unwired (snap-only tests / early init).
+    /// The AutotileModePredicate's answer for @p windowId; false when unwired
+    /// (snap-only tests / early init).
     bool isWindowInAutotileMode(const QString& windowId) const;
 
     /**
@@ -227,9 +214,8 @@ public:
                                                              const QString& recordedScreenId,
                                                              const QString& closeScreenId);
 
-    /**
-     * @brief Accessor for consumers that need direct access (effect, adaptor).
-     */
+    /// The wired registry, or null. Read by the daemon's engine seed, release and
+    /// minimize filters and by the drag adaptor.
     PhosphorEngine::WindowRegistry* windowRegistry() const;
 
     PhosphorScreens::ScreenManager* screenManager() const override;
@@ -303,8 +289,10 @@ public:
      */
     QStringList snappedWindows() const;
 
-    /// Remove zone/screen/desktop assignments for windows not in the alive set.
-    /// Returns the number of pruned entries.
+    /// Drop per-window state for windows not in the alive set: every snap store's
+    /// assignments, the sticky map, the legacy float set, the suspension floats and
+    /// SnapEngine's state-index memberships (SnapEngine::pruneStaleWindows).
+    /// Refuses an empty set. Returns the number of pruned entries.
     int pruneStaleAssignments(const QSet<QString>& aliveWindowIds);
 
     /**
@@ -319,19 +307,20 @@ public:
     /**
      * @brief Validate and adjust a saved geometry for screen-aware restore.
      *
-     * Pure utility — reads no internal state. Given a saved geometry and the
-     * screen it was captured on, returns the geometry adjusted for the
-     * @p currentScreenName. Cross-screen mismatches are resolved by centering
-     * on the target screen (size clamped to fit). On-screen geometries are
-     * returned as-is; off-screen geometries are nudged to the nearest screen.
+     * When @p savedScreen and @p currentScreenId name different screens the rect
+     * keeps its size (clamped) and is centred on the current screen's available
+     * area; otherwise an on-screen rect comes back as is and an off-screen one is
+     * clamped onto the nearest screen. Reads the screen manager. Its one caller,
+     * validatedUnmanagedGeometry, passes the same screen twice, so only the
+     * on-screen check runs there.
      *
      * @param geo             Saved geometry (e.g. a window's recorded free geometry)
-     * @param savedScreen     Screen connector name at capture time (may be empty)
-     * @param currentScreenName Screen where the window currently is
+     * @param savedScreen     Screen id at capture time (may be empty)
+     * @param currentScreenId Screen id the window is on now
      * @return Adjusted geometry, or nullopt if @p geo is invalid
      */
     std::optional<QRect> validateGeometryForScreen(const QRect& geo, const QString& savedScreen,
-                                                   const QString& currentScreenName) const;
+                                                   const QString& currentScreenId) const;
 
     /**
      * @brief Look up a window's free (unmanaged) geometry from the unified
@@ -380,9 +369,11 @@ public:
     /// capture, the close, the snap pre-snap capture), never for an explicit rect.
     void recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,
                             bool overwrite) override;
-    /// The close-time capture of an engine-orphaned window: records the float
-    /// geometry AND adopts @p screenId as the record's managed screen (KWin's word
-    /// on where it closed), keeping the record's other slots and context.
+    /// The close-time capture of an engine-orphaned window: the float geometry
+    /// (P, M, S as above) and @p screenId as the record's managed screen. A managed
+    /// slot recorded on another screen is downgraded to a float and forgets its
+    /// per-desktop zones, the owning engine gets a floating slot if it lacks one,
+    /// and the app's pure-float siblings on the screen collapse into this record.
     void recordFloatingClose(const QString& windowId, const QString& screenId, const QRect& geometry);
     /// (M): @p frame equals a rect a snap membership of the window resolves to (its
     /// zones and pre-float zones, each on its store's screen) or one the injected
@@ -423,7 +414,7 @@ public:
      *
      * Float state is genuinely per-engine: a window floated in autotile mode is
      * NOT floating in snapping mode and vice versa. The authoritative store lives
-     * in each engine (SnapState::isFloating / TilingState::isFloating), keyed by
+     * in each engine (SnapState, TilingState, the scroll engine's float set), keyed by
      * the screen's current mode. The placement library is intentionally engine-
      * and settings-agnostic (LGPL boundary), so the daemon injects a resolver
      * (reader) and writer that route to the engine owning the window's CURRENT
@@ -444,7 +435,7 @@ public:
     void setEngineFloatLister(EngineFloatLister lister);
 
     /**
-     * @brief Check if a window is floating (excluded from snapping)
+     * @brief Whether the engine running the window's current screen mode floats it
      *
      * Delegates to the per-engine resolver when wired; otherwise falls back to
      * the legacy shared floating set.
@@ -461,10 +452,10 @@ public:
      * after the animation grace — a placement capture landing inside that
      * window would otherwise persist the suspension float as a genuine user
      * float. Marked by the adaptor at the float WRITE (where minimize state is
-     * still fresh), and cleared BY THE ADAPTOR on unfloat and on windowClosed
-     * (WindowTrackingService::windowClosed itself does not touch the set — a
-     * direct WTS caller must clear it explicitly). The prune backstop sweeps
-     * it for windows that die without a close signal.
+     * still fresh). Cleared by the adaptor on unfloat and on windowClosed, and
+     * by SnapEngine's Meta+F unfloat, which never crosses the adaptor
+     * (WindowTrackingService::windowClosed itself does not touch the set). The
+     * prune backstop sweeps it for windows that die without a close signal.
      */
     bool isSuspensionFloat(const QString& windowId) const override;
     void markSuspensionFloat(const QString& windowId);
@@ -521,14 +512,14 @@ public:
     void clearPreFloatZone(const QString& windowId) override;
 
     /**
-     * @brief Clear floating state when snapping a floating window
+     * @brief Clear the float when a floating window is snapped
      *
-     * Atomically clears floating flag and pre-float zone data.
-     * Shared logic used by both SnapEngine and WindowTrackingAdaptor
-     * to avoid duplicating the isFloating → clear → clearPreFloat pattern.
+     * Unfloats through the routed writer and drops the pre-float zone in the
+     * window's primary store. Called by SnapEngine's commit, which emits
+     * windowFloatingClearedForSnap when this or snap's own float bit cleared.
      *
      * @param windowId Window identifier
-     * @return true if the window was floating (caller should emit windowFloatingChanged)
+     * @return true if the routed float read answered floating
      */
     bool clearFloatingForSnap(const QString& windowId) override;
 
@@ -586,10 +577,9 @@ public:
     /**
      * @brief Update the last-used-zone class tag without touching zone/screen.
      *
-     * Called by the reactive metadata handler when a window renames mid-session
-     * and its old class was the class tracked on last-used-zone. Only the
-     * class string is refreshed so the next auto-snap-by-class lookup matches
-     * against the live name.
+     * Called by the reactive metadata handler when the renamed window was the
+     * tracked class's only instance. The tag is informational and rides with the
+     * last-used companions: auto-snap by class reads userSnappedClasses instead.
      */
     void retagLastUsedZoneClass(const QString& newClass);
 
@@ -668,7 +658,7 @@ public:
      * read from a map over every loaded layout. Every layout switch builds its
      * buffer here, and the result replaces the buffer even when it is empty.
      *
-     * @param excludeScreens Screens to skip (e.g. autotile screens handled separately)
+     * @param excludeScreens Screens to skip (the screens a tiling engine runs, autotile or scrolling)
      * @param includeScreens When non-empty, only process windows on these
      *        screens. Only memberships of the activity in view are taken.
      * @param desktopFilter When > 0, only windows on their screen's current
@@ -737,9 +727,9 @@ public:
      * @brief Find physical screens whose state still references virtual ids,
      *        excluding screens the caller knows are still subdivided.
      *
-     * Sweeps every state store that holds a screen id (active screen
-     * assignments, pre-float assignments, placement records, pre-tile
-     * geometry on the snap engine) and returns the set of physical screen ids
+     * Sweeps every state that holds a screen id (each snap store's screen and
+     * pre-float screen assignments, every placement record's managed screen and
+     * free-geometry keys) and returns the set of physical screen ids
      * for which any stored value is still a "physId/vs:N" form whose physId
      * is NOT in @p subdividedPhysicalIds.
      *
@@ -849,36 +839,28 @@ public:
     void setUserSnappedClasses(const QSet<QString>& classes);
 
     /**
-     * @brief Set last used zone info (loaded from KConfig by adaptor)
+     * @brief Set last used zone info (the adaptor's session load; held until a store is wired)
      */
     void setLastUsedZone(const QString& zoneId, const QString& screenId, const QString& zoneClass, int desktop);
 
     /**
      * @brief Set floating windows (test / bulk-seed entry point)
      *
-     * No production loader remains: floating state is ephemeral and the
-     * adaptor's save path never writes it (the implementation documents
-     * this). Kept as public API for the unit suites that seed float state
-     * directly.
+     * Seeds only the legacy fallback set, which nothing persists and which is
+     * unread once the engine float resolver is wired. A snap float itself does
+     * persist, as the record's floating snap slot. Kept for the unit suites.
      */
     void setFloatingWindows(const QSet<QString>& windows);
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Dirty field tracking (Phase 3 of refactor/dbus-performance)
+    // Dirty field tracking
     //
-    // Replaces "any mutation forces a full re-serialization" with a bitfield
-    // mask of which persisted state has changed since the last successful
-    // save. WindowTrackingAdaptor::saveState() reads this mask to decide
-    // which JSON maps to re-write, and the persistence worker's write-
-    // completed signal clears the committed bits — surviving bits either
-    // represent new mutations that landed during the in-flight write, or
-    // the write itself failed (same treatment in both cases: retry on the
-    // next tick).
-    //
-    // The mask is initialized to All so the first save after a daemon
-    // startup always writes every field. loadState() should clear the mask
-    // immediately after populating in-memory state so the first real save
-    // doesn't redundantly write back what we just loaded.
+    // A bitfield of which persisted state changed. WindowTrackingAdaptor::
+    // saveState() snapshots and clears it in one step (takeDirty) and writes
+    // only the keys its bits name; a write that fails re-marks the bits it
+    // carried, so the next tick retries them. The mask starts at DirtyAll, but
+    // the adaptor's constructor load ends with clearDirty(), so the first save
+    // writes only what changed after the load.
     // ═══════════════════════════════════════════════════════════════════════
     // NOTE: several bits below (DirtyZoneAssignments,
     // DirtyPreTileGeometries, DirtyPreFloatZones, DirtyPreFloatScreens,
@@ -888,7 +870,7 @@ public:
     // marking ANY bit schedules a save, and saveState()'s refreshOpenWindowPlacements()
     // re-derives the affected per-window state into the placement record. They are
     // therefore "schedule a save" triggers, not independent persisted fields; only
-    // DirtyActiveLayoutId / DirtyLastUsedZone / DirtyUserSnapped / DirtyWindowPlacements
+    // DirtyActiveLayoutId / DirtyLastUsedZone / DirtyUserSnapped / DirtyWindowPlacements / DirtyScrollStrips
     // map to their own on-disk key.
     enum DirtyField : uint32_t {
         DirtyNone = 0,
@@ -909,13 +891,11 @@ public:
     };
     using DirtyMask = uint32_t;
 
-    /// OR the given fields into the dirty mask AND emit stateChanged.
-    /// Primary (and only) entry point for mutators — replaces direct
-    /// scheduleSaveState(). Public because the adaptor also needs to
-    /// mark dirty from outside, e.g. when the active-layout change is
-    /// observed via PhosphorZones::LayoutRegistry or when a failed async write needs
-    /// its bits re-marked for retry. Multiple calls are idempotent
-    /// (OR semantics) and cheap (bit OR + one signal emission).
+    /// OR the given fields into the dirty mask AND emit stateChanged. The
+    /// mutators' entry point (scheduleSaveState is its DirtyAll wrapper).
+    /// Public because the adaptor also marks from outside: an active-layout
+    /// change it observes, and a failed write's bits re-marked for retry.
+    /// Idempotent (OR) and cheap.
     void markDirty(DirtyMask fields);
 
     /// Return the current dirty mask, clearing it atomically. Used by the
@@ -932,9 +912,8 @@ public:
     void clearDirty();
 
 Q_SIGNALS:
-    // WARNING: AutotileEngine connects to this signal via string-based SIGNAL/SLOT
-    // (it holds IWindowTrackingService*, not WindowTrackingService*, so PMF connect
-    // is unavailable). Renaming this signal will silently break autotile zone tracking.
+    /// The window's primary zone changed (empty: it left every zone). Relayed by
+    /// WindowTrackingAdaptor::windowZoneChanged; the daemon dismisses Snap Assist on it.
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
     /// Emitted when state needs to be saved
@@ -947,13 +926,9 @@ private:
 
     // Helpers
     //
-    // scheduleSaveState() wraps markDirty(DirtyAll). Retained as the
-    // default entry point for mutators that haven't been updated to
-    // declare which specific fields they touch — marking everything dirty
-    // is behaviorally equivalent to the pre-refactor code. Hot-path
-    // mutators (assign/unassign zone, storePreTileGeometry, etc.) should
-    // call markDirty() directly with a narrow mask so the next save
-    // only re-serializes the fields that actually changed.
+    // scheduleSaveState() wraps markDirty(DirtyAll), for a mutator that does
+    // not name the fields it touched (windowClosed, the VS migrations). The
+    // rest call markDirty with a narrow mask.
     void scheduleSaveState(DirtyMask fields = DirtyAll);
     bool isGeometryOnScreen(const QRect& geometry) const;
 
@@ -1069,9 +1044,9 @@ private:
     PhosphorSnapEngine::SnapState* snapRepresentativeLastUsed() const;
     /// Clear the GLOBAL holder's last-used zone if it names a zone in @p removedZones
     /// and the holder is not @p owningStore (whose own last-used the caller already
-    /// handled). Returns true if it cleared. Shared by the unassign / unsnap-for-float
-    /// paths, which both drop a store's zones and must scrub the disk-restored
-    /// representative that lives on the global holder.
+    /// handled). Returns true if it cleared. Shared by unassignFromStore, unsnapForFloat
+    /// and pruneMigratedWindows, which each drop a store's zones and must scrub the
+    /// disk-restored representative that lives on the global holder.
     bool clearGlobalLastUsedIfRemoved(const QStringList& removedZones,
                                       const PhosphorSnapEngine::SnapState* owningStore);
     /// unassignWindow's body on @p store, which need not be the primary.
@@ -1092,8 +1067,8 @@ private:
     /// Every store, for aggregate iteration. Elements are never null (see the
     /// resolver's `allStates` contract), so callers deref them directly.
     QList<PhosphorSnapEngine::SnapState*> snapAllStates() const;
-    /// True once the resolver is wired — the drop-in replacement for the former
-    /// `m_snapState != nullptr` guards.
+    /// True while the resolver's globals store resolves: wired, and (for the engine
+    /// resolver, whose arms hold a QPointer) while the snap engine is alive.
     bool hasSnapState() const;
     /// Invoke @p fn once per (window, store) zone assignment the window is a
     /// MEMBER of (a leftover in another store is skipped), with its zones and
@@ -1102,8 +1077,8 @@ private:
     /// Keyless (an unset keyFor, the single-store convenience) passes the
     /// window's recorded desktop and an empty activity, which every filter
     /// reads as current. @p fn must not mutate the stores: collect, then
-    /// mutate the visited @p store. Kept in lockstep with
-    /// SnapEngine::forEachSnapAssignment.
+    /// mutate the visited @p store. SnapEngine::forEachSnapAssignment is not its
+    /// twin: it has no membership guard and visits leftovers too.
     void forEachZoneAssignedWindow(
         const std::function<void(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                  int desktop, const QString& activity, PhosphorSnapEngine::SnapState* store)>& fn)
@@ -1122,8 +1097,9 @@ private:
     IGeometryResolver* m_geometryResolver;
     PlacementConfig m_config;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
-    // Shared registry for current-class queries and canonical key translation; not owned, null in unit
-    // tests. QPointer: these are Daemon children with no contractual destruction order, so it auto-nulls.
+    // Shared registry for current-class queries and canonical key translation; not owned, null in unit tests.
+    // Daemon::stop() clears it, and the QPointer (as for the screen manager) covers the destruction order: both
+    // are Daemon unique_ptr members, destroyed before ~QObject deletes the adaptor and this service.
     QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
     QPointer<PhosphorScreens::ScreenManager> m_screenManager;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
@@ -1135,8 +1111,9 @@ private:
     // resolver/writer is wired (unit tests, early init).
     QSet<QString> m_floatingWindows;
 
-    // Suspension-float classification (see isSuspensionFloat), canonical-keyed and never persisted:
-    // a restart's restored floats are re-classified when their windows re-report minimize state.
+    // Suspension-float classification (see isSuspensionFloat), canonical-keyed, never persisted. After a
+    // restart only a tiling screen's minimize floats are re-marked (the effect re-asserts them); a snap
+    // screen's are not, so that window's unminimize unfloat runs as a user toggle.
     QSet<QString> m_suspensionFloats;
 
     // Daemon-injected per-engine float reader/writer/lister. See setEngineFloatResolver.
@@ -1149,8 +1126,7 @@ private:
 
     QVector<ResnapEntry> m_resnapBuffer;
 
-    // Delta-persistence dirty mask: DirtyAll makes the first save after startup write every field;
-    // loadState() clears it once in-memory state mirrors the disk file.
+    // Delta-persistence dirty mask (see markDirty). Starts at DirtyAll; the adaptor's constructor load clears it.
     DirtyMask m_dirtyMask = DirtyAll;
 
     // Appended last (installed class).

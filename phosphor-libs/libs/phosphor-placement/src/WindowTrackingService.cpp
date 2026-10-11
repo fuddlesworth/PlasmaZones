@@ -372,7 +372,7 @@ bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
 // ═══════════════════════════════════════════════════════════════════════════════
 
 std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRect& geo, const QString& savedScreen,
-                                                                      const QString& currentScreenName) const
+                                                                      const QString& currentScreenId) const
 {
     if (!geo.isValid() || geo.width() <= 0 || geo.height() <= 0) {
         return std::nullopt;
@@ -384,21 +384,21 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
     // 1. Different physical monitors (e.g. DP-1 vs HDMI-1)
     // 2. Different virtual screens on the same physical monitor (e.g. DP-1/vs:0 vs DP-1/vs:1)
     //    — the virtual screens have different geometry bounds, so coordinates are wrong.
-    if (!savedScreen.isEmpty() && !currentScreenName.isEmpty()
-        && !PhosphorScreens::ScreenIdentity::screensMatch(savedScreen, currentScreenName)) {
+    if (!savedScreen.isEmpty() && !currentScreenId.isEmpty()
+        && !PhosphorScreens::ScreenIdentity::screensMatch(savedScreen, currentScreenId)) {
         PhosphorScreens::ScreenManager* mgr = m_screenManager;
         QRect available;
         bool haveTarget = false;
         if (mgr) {
-            const PhosphorScreens::PhysicalScreen target = mgr->physicalScreenFor(currentScreenName);
+            const PhosphorScreens::PhysicalScreen target = mgr->physicalScreenFor(currentScreenId);
             if (target.isValid()) {
                 haveTarget = true;
                 // For virtual screens, prefer virtual screen bounds over full physical screen
-                available = mgr->screenGeometry(currentScreenName).isValid()
-                    ? mgr->screenAvailableGeometry(currentScreenName)
+                available = mgr->screenGeometry(currentScreenId).isValid()
+                    ? mgr->screenAvailableGeometry(currentScreenId)
                     : mgr->actualAvailableGeometry(target);
             }
-        } else if (QScreen* target = PhosphorScreens::ScreenIdentity::findByIdOrName(currentScreenName)) {
+        } else if (QScreen* target = PhosphorScreens::ScreenIdentity::findByIdOrName(currentScreenId)) {
             haveTarget = true;
             available = target->availableGeometry();
         }
@@ -415,7 +415,7 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
             int y = available.y() + (available.height() - h) / 2;
             QRect adjusted(x, y, w, h);
             qCDebug(lcPlacement) << "validateGeometryForScreen: cross-screen adjustment from" << savedScreen << "to"
-                                 << currentScreenName << ":" << geo << "->" << adjusted;
+                                 << currentScreenId << ":" << geo << "->" << adjusted;
             return adjusted;
         }
     }
