@@ -7,21 +7,29 @@
  *        current activity (F480): the instant-restore cache the effect reads
  *        (getPendingRestoreGeometries) and the snap engine's restore
  *        predicate. Both passed no activity, so a disabled activity never
- *        gated them.
+ *        gated them. The cache is also empty wherever the zone restore would
+ *        say no (F703).
  */
 
 #include <QTest>
+#include <QScopeGuard>
 #include <QString>
+#include <QUuid>
 #include <memory>
 
 #include <PhosphorContext/IContextResolver.h>
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleStore.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
+#include "config/configdefaults.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
@@ -154,6 +162,57 @@ private Q_SLOTS:
 
         m_resolver.disabledActivity = kActivity;
         QCOMPARE(m_wta->getPendingRestoreGeometries(), QStringLiteral("{}"));
+    }
+
+    // The cache stands in for the snap restore's answer, so it is empty while
+    // "Restore windows to their previous zone" is off (F703): the effect
+    // teleported the opener onto the zone the restore then refused.
+    void pendingRestoreIsEmptyWithZoneRestoreOff()
+    {
+        QVERIFY(recordClosedSnap(QStringLiteral("app|closed")));
+        QVERIFY(m_wta->getPendingRestoreGeometries().contains(QStringLiteral("\"app\"")));
+
+        m_settings->setRestoreWindowsToZonesOnLogin(false);
+        QCOMPARE(m_wta->getPendingRestoreGeometries(), QStringLiteral("{}"));
+    }
+
+    // The same with snapping switched off (F703).
+    void pendingRestoreIsEmptyWithSnappingOff()
+    {
+        QVERIFY(recordClosedSnap(QStringLiteral("app|closed")));
+        QVERIFY(m_wta->getPendingRestoreGeometries().contains(QStringLiteral("\"app\"")));
+
+        m_settings->setSnappingEnabled(false);
+        QCOMPARE(m_wta->getPendingRestoreGeometries(), QStringLiteral("{}"));
+    }
+
+    // An enabled SetRestoreToZoneOnLogin(false) rule can refuse the restore
+    // for a window the closed record cannot be matched against, so the cache
+    // is empty while one exists; a rule that turns the restore on is no
+    // refusal (F703).
+    void pendingRestoreIsEmptyWhenARuleCanRefuseIt()
+    {
+        QVERIFY(recordClosedSnap(QStringLiteral("app|closed")));
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId,
+                                                              PhosphorRules::Operator::Equals, QStringLiteral("app"));
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::SetRestoreToZoneOnLogin);
+        action.params.insert(QString(PhosphorRules::ActionParam::Value), false);
+        rule.actions = {action};
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath(), nullptr);
+        QVERIFY(store.addRule(rule));
+        m_wta->setRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+        });
+        QCOMPARE(m_wta->getPendingRestoreGeometries(), QStringLiteral("{}"));
+
+        rule.actions.first().params.insert(QString(PhosphorRules::ActionParam::Value), true);
+        QVERIFY(store.updateRule(rule));
+        QVERIFY(m_wta->getPendingRestoreGeometries().contains(QStringLiteral("\"app\"")));
     }
 
     // The snap engine's restore predicate refuses an opener when the activity

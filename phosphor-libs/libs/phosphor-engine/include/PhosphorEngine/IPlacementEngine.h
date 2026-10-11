@@ -34,6 +34,7 @@ class QObject;
 
 namespace PhosphorEngine {
 
+class DesktopRemap;
 class ICrossSurfaceResolver;
 
 /// Unified placement engine interface, implemented by all three engines (snap
@@ -1098,28 +1099,15 @@ public:
     {
         Q_UNUSED(removedDesktop)
     }
-    /// Shift every per-(screen, desktop, activity) state ABOVE @p
-    /// removedDesktop down by one, because Plasma renumbers x11 desktop
-    /// numbers when a desktop in the middle is deleted (removing 2 of 4
-    /// makes 3 become 2 and 4 become 3).
-    ///
-    /// This is the companion to pruneStatesForDesktop, which only drops the
-    /// removed desktop's own state. Without the shift, every surviving
-    /// higher state stays filed under the number it had before, and any
-    /// consumer that compares a stored key against a number the compositor
-    /// reports now — the daemon's desktop-membership reconcile above all —
-    /// reads a window that never moved as having left its desktop.
-    ///
-    /// The caller drives prune first, then this, and must have established
-    /// which desktop was removed. desktopCountChanged alone cannot: it
-    /// carries the new count, and after a mid-list removal every surviving
-    /// number is still within it.
-    ///
-    /// An implementation must move EVERY structure keyed by a
-    /// PlacementStateKey or by a bare desktop number, not just the state
-    /// store, and must walk the affected desktops in ASCENDING order so
-    /// each target key is already vacant when it is written (descending
-    /// collides at every step, and the store's insert overwrites silently).
+    /// Shift every per-(screen, desktop, activity) state ABOVE @p removedDesktop down by one, because Plasma
+    /// renumbers x11 desktop numbers when a desktop in the middle is deleted (removing 2 of 4 makes 3 become 2 and
+    /// 4 become 3). The companion to pruneStatesForDesktop, which only drops the removed desktop's own state:
+    /// without the shift every surviving higher state keeps its old number, and a consumer comparing a stored key
+    /// against the compositor's numbers (the daemon's desktop-membership reconcile above all) reads a window that
+    /// never moved as having left its desktop. The caller drives prune first, then this, knowing which desktop was
+    /// removed (desktopCountChanged alone cannot tell). An implementation must move EVERY structure keyed by a
+    /// PlacementStateKey or by a bare desktop number, walking the affected desktops in ASCENDING order so each
+    /// target key is vacant when written. The single-removal form of remapDesktops.
     virtual void renumberDesktopsAfterRemoval(int removedDesktop)
     {
         Q_UNUSED(removedDesktop)
@@ -1317,6 +1305,13 @@ public:
         Q_UNUSED(physicalScreenId)
         return false;
     }
+
+    /// OPTIONAL: KWin's desktop list changed (a removal, an insert or a reorder). Move every structure keyed by a
+    /// desktop number through @p remap and prune the removed desktops' (F763, F787). The default runs a change
+    /// that only removes desktops as pruneStatesForDesktop then renumberDesktopsAfterRemoval per removal, highest
+    /// first, and only logs an insert or a reorder, which it cannot apply. Defined in PlacementEngineBase.cpp.
+    /// Appended last for ABI.
+    virtual void remapDesktops(const DesktopRemap& remap);
 };
 
 } // namespace PhosphorEngine

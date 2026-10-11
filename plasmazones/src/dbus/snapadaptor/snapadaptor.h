@@ -413,8 +413,9 @@ private:
     std::optional<BusSnapTarget> validBusSnapTarget(const QString& windowId, const QStringList& zoneIds,
                                                     const QString& screenHint, int pinnedDesktop = 0) const;
     /// validBusSnapTarget plus what the keyboard twin applies to a user verb:
-    /// snapping runs the screen live, is switched on and not disabled in the
-    /// landing context, and the window is not excluded (F20). The one bus-verb gate.
+    /// the window is not being dragged (F773), snapping runs the screen live, is
+    /// switched on and not disabled in the landing context, and the window is
+    /// not excluded (F20). The one bus-verb gate.
     std::optional<BusSnapTarget> admitBusSnap(const QString& windowId, const QStringList& zoneIds,
                                               const QString& screenHint, int pinnedDesktop = 0) const;
     /// The desktop @p windowId lands on for @p screenId: 0 when it is on the one
@@ -423,11 +424,12 @@ private:
     std::optional<int> landingDesktop(const QString& windowId, const QString& screenId, int pinnedDesktop) const;
     /// The keyboard gates for a bus verb on the focused window: snapping on, a
     /// named screen known, and the screen the verb acts on running snapping and,
-    /// when it @p placesWindow, not disabled in the context in view.
+    /// when it @p placesWindow, not disabled in the context in view and the
+    /// focused window not being dragged (F773).
     bool focusedVerbPermitted(const QString& screenHint, bool placesWindow) const;
     /// The screen a bus float or unfloat of @p windowId acts on (@p screenHint
     /// resolved, else the window's live screen), or empty when a keyboard
-    /// toggle could not act there.
+    /// toggle could not act there or the window is being dragged (F773).
     QString admitBusFloat(const QString& windowId, const QString& screenHint) const;
     /// Release the record's snap slot once no store holds a zone or the float
     /// bit for @p windowId (an unsnap confirmation leaves it free).

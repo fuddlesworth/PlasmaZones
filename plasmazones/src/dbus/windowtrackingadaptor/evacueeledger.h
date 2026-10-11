@@ -35,6 +35,9 @@ struct EvacueeLedger
         int maximizeMode = 0;
         int quickTileMode = 0;
         bool fullscreen = false;
+        /// Snap held the window floating there when the output went away. Read
+        /// at the park, since the removed-screen prune drops that float (F670).
+        bool snapFloating = false;
     };
 
     /// By canonical window id: one entry per output the window is parked for.

@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorEngine/ScreenContextTracker.h>
+#include <PhosphorEngine/DesktopRemap.h>
+
+#include <algorithm>
 
 namespace PhosphorEngine {
 
@@ -186,6 +189,48 @@ void ScreenContextTracker::renumberDesktopsAfterRemoval(int removedDesktop)
     if (m_currentDesktop > removedDesktop) {
         --m_currentDesktop;
     }
+}
+
+void ScreenContextTracker::remapDesktops(const DesktopRemap& remap)
+{
+    if (remap.isIdentity()) {
+        return;
+    }
+    // In place: each map holds one desktop per screen, so no write can land
+    // on an entry not yet visited.
+    for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end();) {
+        const int pinned = remap.map(it.value());
+        if (pinned < 1) {
+            it = m_screenDesktopOverride.erase(it);
+        } else {
+            it.value() = pinned;
+            ++it;
+        }
+    }
+    for (auto it = m_screenCurrentDesktop.begin(); it != m_screenCurrentDesktop.end();) {
+        const int shown = remap.successor(it.value());
+        if (shown < 1) {
+            it = m_screenCurrentDesktop.erase(it);
+        } else {
+            it.value() = shown;
+            ++it;
+        }
+    }
+    if (const int global = remap.successor(m_currentDesktop); global >= 1) {
+        m_currentDesktop = global;
+    }
+}
+
+int ScreenContextTracker::highestDesktop() const
+{
+    int highest = m_currentDesktop;
+    for (const int desktop : m_screenDesktopOverride) {
+        highest = std::max(highest, desktop);
+    }
+    for (const int desktop : m_screenCurrentDesktop) {
+        highest = std::max(highest, desktop);
+    }
+    return highest;
 }
 
 } // namespace PhosphorEngine

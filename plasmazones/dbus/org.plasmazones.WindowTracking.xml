@@ -213,7 +213,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getPendingRestoreGeometries">
-            <annotation name="org.gtk.GDBus.DocString" value="Pre-computed zone geometries for pending restore entries. The effect caches these for instant window teleport on open (no D-Bus round-trip flash)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Pre-computed zone geometries for pending restore entries. The effect caches these for instant window teleport on open (no D-Bus round-trip flash). Empty while snapping or the zone restore is off, or while an enabled rule can turn that restore off for a window."/>
             <arg name="geometriesJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object: { appId: [ {x, y, width, height, screenId, windowId}, ... ], ... }, newest record first. windowId is the record's; the effect applies the newest entry on the opener's output whose window it cannot still see."/>
             </arg>
@@ -529,10 +529,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getPreTileGeometries">
-            <annotation name="org.gtk.GDBus.DocString" value="Return the pre-tile geometry of every window the daemon currently holds a LIVE record for (appId → rect + screen). The effect pre-populates its local cache from this on bringup so it can teleport restoring windows to their pre-tile geometry without a round-trip on every restore. Each entry carries the appId, the geometry rect (x,y,w,h), and the screen the geometry was captured on. Live records only: the consumer keys by appId and applies an entry to an open window of that app, so a closed instance's rect reaching it would be handed to a different window than the one that recorded it."/>
-            <arg name="geometries" type="a(siiiis)" direction="out">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the pre-tile geometry of every window the daemon currently holds a LIVE record for (appId → rect + screen). The effect pre-populates its local cache from this on bringup so it can teleport restoring windows to their pre-tile geometry without a round-trip on every restore. Each entry carries the appId, the geometry rect (x,y,w,h), and the screen the geometry was captured on. Each entry names the window whose record it is (windowId, the registry's canonical composite), and the compositor applies it to that window only."/>
+            <arg name="geometries" type="a(siiiiss)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::PreTileGeometryList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (appId, x, y, width, height, screenId) — the same marshalling shape as applyGeometriesBatch and getUpdatedWindowGeometries."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (appId, x, y, width, height, screenId, windowId)."/>
             </arg>
         </method>
         <method name="reapplyWindowAppearance">

@@ -132,6 +132,21 @@ void WindowTrackingService::renumberDesktopZones(int removedDesktop)
     }
 }
 
+void WindowTrackingService::remapDesktopZones(const PhosphorEngine::DesktopRemap& remap)
+{
+    if (remap.isIdentity()) {
+        return;
+    }
+    if (m_placementStore.remapDesktopZones(remap) > 0) {
+        markDirty(DirtyWindowPlacements);
+    }
+    // The buffered resnap rows move the same way renumberDesktopZones moves
+    // them; a row on a removed desktop maps to 0, the all-desktops sentinel.
+    for (PhosphorEngine::ResnapEntry& entry : m_resnapBuffer) {
+        entry.virtualDesktop = remap.map(entry.virtualDesktop);
+    }
+}
+
 QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) const
 {
     // Prefer the live, runtime assignment — it reflects this session's snaps.

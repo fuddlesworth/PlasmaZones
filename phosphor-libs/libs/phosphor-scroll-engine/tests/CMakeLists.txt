@@ -164,6 +164,12 @@ pse_add_test(test_scrollengine_membership test_scrollengine_membership.cpp)
 # The evacuee park: a strip parked across an output's disconnect, its save
 # exemption, and the exact-id re-seat on the output's return.
 pse_add_test(test_scrollengine_evacuee test_scrollengine_evacuee.cpp)
+# A window that left the context a mode-round-trip stash remembers (another
+# monitor, desktop or activity) gives up its stashed column there.
+pse_add_test(test_scrollengine_stashleave test_scrollengine_stashleave.cpp)
+# The desktop renumber: strips, stashes and per-context overrides follow a
+# removal, an insert or a reorder of KWin's desktop list.
+pse_add_test(test_scrollengine_desktopremap test_scrollengine_desktopremap.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrollstubsettings.h)

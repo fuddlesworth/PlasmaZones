@@ -3,6 +3,7 @@
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/LayerFocusSwitch.h>
 #include <PhosphorEngine/PerScreenStates.h>
@@ -47,6 +48,38 @@ void PlacementEngineBase::releaseWindowOffScreen(const QString& windowId, const 
     qCInfo(lcPlacementEngineBase) << "releaseWindowOffScreen:" << engineId() << "releases" << windowId << "held on"
                                   << heldScreen << "— it was placed on" << keepScreenId;
     handoffRelease(windowId);
+}
+
+void IPlacementEngine::remapDesktops(const DesktopRemap& remap)
+{
+    if (remap.isIdentity()) {
+        return;
+    }
+    // The shape the per-removal pair can apply: desktops removed, the rest in
+    // their order (desktops appended after them move no number). Applied one
+    // removal at a time in DESCENDING position order, which keeps each later
+    // position valid. An engine that keys state by desktop number and has not
+    // overridden this keeps its old numbers for an insert or a reorder, which
+    // is worth a line in the journal.
+    QList<int> removedPositions;
+    int nextSurvivor = 1;
+    for (int oldPosition = 1; oldPosition <= remap.oldCount(); ++oldPosition) {
+        const int newPosition = remap.map(oldPosition);
+        if (newPosition == 0) {
+            removedPositions.prepend(oldPosition);
+        } else if (newPosition == nextSurvivor) {
+            ++nextSurvivor;
+        } else {
+            qCWarning(lcPlacementEngineBase) << "remapDesktops:" << engineId()
+                                             << "has no remap for desktops inserted or moved; its per-desktop state"
+                                             << "keeps the old numbers";
+            return;
+        }
+    }
+    for (const int removed : std::as_const(removedPositions)) {
+        pruneStatesForDesktop(removed);
+        renumberDesktopsAfterRemoval(removed);
+    }
 }
 
 bool PlacementEngineBase::isManagedSize(const QList<QSize>& managedSizes, const QSize& size)

@@ -3,6 +3,10 @@
 
 #include "windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleSet.h>
+#include <PhosphorRules/RuleStore.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -89,14 +93,10 @@ PhosphorProtocol::PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometrie
     // not apply here — mirroring the snap engine's floating-branch policy in
     // SnapEngine::resolveWindowRestore.
     for (const PhosphorEngine::WindowPlacement& p : m_service->placementStore().records()) {
-        // LIVE records only. The consumer (TilingHandler's pre-tile fetch)
-        // keys each entry by appId, matches it against the live windows on
-        // the screen and skips when more than one matches — so the only entry
-        // it can ever apply belongs to a window that is open right now. A
-        // dead sibling's record reaching it is the cross-instance borrow
-        // getValidatedPreTileGeometry refuses by construction, handed to the
-        // live window as its own pre-tile rect; a live window's own record is
-        // exactly what the seed is for.
+        // LIVE records only, and each names its window: the consumer
+        // (TilingHandler's pre-tile fetch) applies an entry to the window it
+        // belongs to (by instance id), never to a same-app sibling (F627). A
+        // closed record has no window to seed.
         if (!m_service->placementStore().isLiveInstance(p.windowId)) {
             continue;
         }
@@ -107,6 +107,7 @@ PhosphorProtocol::PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometrie
             }
             PhosphorProtocol::PreTileGeometryEntry entry;
             entry.appId = p.appId;
+            entry.windowId = p.windowId;
             entry.x = geo.x();
             entry.y = geo.y();
             entry.width = geo.width();
@@ -185,8 +186,40 @@ PhosphorProtocol::WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeom
     return result;
 }
 
+namespace {
+// An enabled rule that can turn the zone restore off for some window. A closed
+// record has no live window to ask the rule about, so any such rule empties
+// the cache (F703).
+bool anyRuleRefusesZoneRestore(const PhosphorRules::RuleSet& rules)
+{
+    for (const PhosphorRules::Rule& rule : rules.rules()) {
+        if (!rule.enabled) {
+            continue;
+        }
+        for (const PhosphorRules::RuleAction& action : rule.actions) {
+            if (action.type == PhosphorRules::ActionType::SetRestoreToZoneOnLogin
+                && !action.params.value(QString(PhosphorRules::ActionParam::Value)).toBool()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+} // namespace
+
 QString WindowTrackingAdaptor::getPendingRestoreGeometries()
 {
+    // The cache stands in for the snap restore's own answer, so it is empty
+    // wherever that answer is no: snapping off, the zone restore off
+    // (shouldRestoreToZoneOnLogin's global setting), or a rule that can switch
+    // it off for a window (F703). A window the cache skips still restores
+    // through resolveWindowRestore; it only loses the instant placement.
+    if (m_settings && (!m_settings->snappingEnabled() || !m_settings->restoreWindowsToZonesOnLogin())) {
+        return QStringLiteral("{}");
+    }
+    if (m_ruleStore && anyRuleRefusesZoneRestore(m_ruleStore->ruleSet())) {
+        return QStringLiteral("{}");
+    }
     auto targets = m_service->pendingRestoreGeometries();
     if (targets.isEmpty()) {
         return QStringLiteral("{}");

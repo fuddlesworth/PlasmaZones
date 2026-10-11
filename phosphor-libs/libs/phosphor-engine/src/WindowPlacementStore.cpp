@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorIdentity/WindowId.h>
 
 #include <QJsonArray>
@@ -743,6 +744,27 @@ int WindowPlacementStore::renumberDesktopZones(int removedDesktop)
     if (removedDesktop < 1) {
         return 0;
     }
+    // The removal map must reach every number stored, or an entry above its
+    // old count would read as outside the list and stay put.
+    int highest = removedDesktop;
+    for (auto it = m_byApp.cbegin(); it != m_byApp.cend(); ++it) {
+        for (const WindowPlacement& p : it.value()) {
+            highest = std::max(highest, p.virtualDesktop);
+            for (const EngineSlot& slot : p.engines) {
+                for (auto d = slot.zonesByDesktop.constBegin(); d != slot.zonesByDesktop.constEnd(); ++d) {
+                    highest = std::max(highest, d.key());
+                }
+            }
+        }
+    }
+    return remapDesktopZones(DesktopRemap::removal(removedDesktop, highest));
+}
+
+int WindowPlacementStore::remapDesktopZones(const DesktopRemap& remap)
+{
+    if (remap.isIdentity()) {
+        return 0;
+    }
     int changed = 0;
     for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
         for (WindowPlacement& p : it.value()) {
@@ -752,31 +774,28 @@ int WindowPlacementStore::renumberDesktopZones(int removedDesktop)
                 if (byDesktop.isEmpty()) {
                     continue;
                 }
-                // The removed desktop's entry goes; every entry above it
-                // shifts down one, mirroring what the engines do to their
-                // live per-desktop stores. Rebuilt into a fresh map so a
-                // shifting entry cannot land on one not yet visited.
-                QHash<int, QStringList> shifted;
+                // A removed desktop's entry goes and the rest move with their
+                // desktop, mirroring what the engines do to their live
+                // per-desktop stores. Rebuilt into a fresh map so a moving
+                // entry cannot land on one not yet visited; a moved entry
+                // outranks a stale number it lands on.
+                QHash<int, QStringList> moved;
+                QHash<int, QStringList> kept;
                 for (auto d = byDesktop.constBegin(); d != byDesktop.constEnd(); ++d) {
-                    if (d.key() == removedDesktop) {
-                        touched = true;
+                    const int to = remap.map(d.key());
+                    touched = touched || to != d.key();
+                    if (to < 1) {
                         continue;
                     }
-                    if (d.key() > removedDesktop) {
-                        touched = true;
-                        shifted.insert(d.key() - 1, d.value());
-                    } else {
-                        shifted.insert(d.key(), d.value());
-                    }
+                    (to != d.key() ? moved : kept).insert(to, d.value());
                 }
-                byDesktop = std::move(shifted);
+                kept.insert(moved);
+                byDesktop = std::move(kept);
             }
-            // The record-level desktop indexes the same numbering.
-            if (p.virtualDesktop == removedDesktop) {
-                p.virtualDesktop = 0;
-                touched = true;
-            } else if (p.virtualDesktop > removedDesktop) {
-                --p.virtualDesktop;
+            // The record-level desktop indexes the same numbering. A record
+            // ON a removed desktop reads as unknown (0).
+            if (const int to = remap.map(p.virtualDesktop); to != p.virtualDesktop) {
+                p.virtualDesktop = to;
                 touched = true;
             }
             if (touched) {

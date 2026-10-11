@@ -204,6 +204,15 @@ void WindowTrackingAdaptor::saveState()
         }
     }
 
+    // The desktop ids the session last saw (the daemon's start-up desktop sweep). KWin's ids are UUIDs, no comma.
+    if (dirty & D::DirtyKnownDesktops) {
+        if (m_knownDesktopIds.isEmpty()) {
+            tracking->deleteKey(ConfigKeys::knownDesktopIdsKey());
+        } else {
+            tracking->writeString(ConfigKeys::knownDesktopIdsKey(), m_knownDesktopIds.join(QLatin1Char(',')));
+        }
+    }
+
     tracking.reset(); // release group before write
 
     // Async I/O: snapshot the in-memory JSON root (COW copy) and hand off
@@ -386,6 +395,8 @@ void WindowTrackingAdaptor::loadState()
             }
         }
     }
+    m_knownDesktopIds =
+        readVal(ConfigKeys::knownDesktopIdsKey(), QString()).split(QLatin1Char(','), Qt::SkipEmptyParts);
 
     // Restore active layout from previous session so that previousLayout() is correct
     // on the next layout switch. Without this, the daemon starts with defaultLayout()
@@ -425,6 +436,17 @@ void WindowTrackingAdaptor::loadState()
     // after startup would re-serialize every field we just loaded.
     if (m_service) {
         m_service->clearDirty();
+    }
+}
+
+void WindowTrackingAdaptor::setKnownDesktopIds(const QStringList& ids)
+{
+    if (ids == m_knownDesktopIds) {
+        return;
+    }
+    m_knownDesktopIds = ids;
+    if (m_service) {
+        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyKnownDesktops);
     }
 }
 

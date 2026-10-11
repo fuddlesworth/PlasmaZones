@@ -688,20 +688,23 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(uint count)
         return;
     }
 
-    m_desktopCount = newCount;
-
-    if (m_useKWinDBus) {
-        // Asynchronous once started: nothing has been re-read by the time
-        // the clamp below runs, and the full snapshot (ids, names, rows,
-        // current) commits later in applyDesktopListArg, which re-clamps
-        // and re-emits change-gated against the values written here.
+    // With KWin's list on the way, nothing is committed here: the snapshot
+    // commits the count, the clamp and both signals together, the renumber
+    // BEFORE the count. Committing the count first published it ahead of the
+    // map that says which desktop went, so a mid-list removal had the last
+    // desktop's per-screen entry clamped and then moved again by the map, and
+    // the daemon's count handler pruned the engine states past the new count
+    // that the map was about to move down.
+    if (m_useKWinDBus && m_kwinVDInterface && m_kwinVDInterface->isValid()) {
         Q_EMIT desktopListChanging();
         refreshFromKWin();
+        return;
     }
 
+    m_desktopCount = newCount;
+
     // Clamp against the live member, not the signal arg, so this handler
-    // stays self-consistent with desktopCount() at every point: between
-    // here and the async commit the member IS the authoritative count.
+    // stays self-consistent with desktopCount() at every point.
     if (m_currentDesktop > m_desktopCount) {
         m_currentDesktop = m_desktopCount;
         Q_EMIT currentDesktopChanged(m_currentDesktop);

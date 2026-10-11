@@ -1262,11 +1262,12 @@ void Daemon::initEnginesAndWiring()
         });
     });
 
-    // Per-window tab-colour re-drive. A `Title contains …` tab-colour rule
-    // changes verdict on a retitle with no rules edit at all, and the
-    // adaptor's memo is keyed on the title precisely so this relay can move
-    // it. Two edges are wired. metadataChanged's title arm is the one that
-    // carries the work: it fires on every later rename. windowAppeared is the
+    // Per-window tab-colour re-drive. A tab-colour rule on any field of the
+    // window's registry record (title, state flags, desktop) changes verdict
+    // with no rules edit, and the adaptor's memo is keyed on the whole record,
+    // so this relay moves it on any change (F699). Two edges are wired.
+    // metadataChanged carries the work, firing on every later record change
+    // (the registry emits it only on a real change). windowAppeared is the
     // window's FIRST record, and it is the belt for an id whose strip is
     // already cached when the record lands (a reopen into a column the effect
     // is still painting); in the ordinary open it finds no strip naming the
@@ -1294,11 +1295,8 @@ void Daemon::initEnginesAndWiring()
         connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowAppeared, m_tilingAdaptor,
                 relayTabColors);
         connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::metadataChanged, m_tilingAdaptor,
-                [relayTabColors](const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
-                                 const PhosphorEngine::WindowMetadata& newMeta) {
-                    if (oldMeta.title == newMeta.title) {
-                        return;
-                    }
+                [relayTabColors](const QString& instanceId, const PhosphorEngine::WindowMetadata&,
+                                 const PhosphorEngine::WindowMetadata&) {
                     relayTabColors(instanceId);
                 });
     }

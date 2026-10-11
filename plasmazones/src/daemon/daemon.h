@@ -525,12 +525,10 @@ private:
     /** @brief Handle cycle-layout shortcut (previous or next) */
     void handleCycleLayout(const QString& screenId, bool forward);
 
-    // Start-up sub-methods. Definitions are split by concern across
-    // start.cpp (screen / desktop / activity wiring), signals.cpp (unified
-    // controller, layout and overlay wiring), shortcuts_wiring.cpp
-    // (connectShortcutSignals), autotile_init.cpp (initializeAutotile),
-    // scrolling_init.cpp (connectScrollingShortcuts) and scrolling.cpp
-    // (the two per-recompute scrolling helpers).
+    // Start-up sub-methods, split by concern: start.cpp (screen, desktop and activity wiring),
+    // desktop_renumber.cpp (desktop and activity edits), signals.cpp (controller, layout and
+    // overlay wiring), shortcuts_wiring.cpp, autotile_init.cpp, scrolling_init.cpp and
+    // scrolling.cpp (the two per-recompute scrolling helpers).
     void connectScreenSignals();
     void connectDesktopActivity();
     void connectShortcutSignals();
@@ -1347,9 +1345,13 @@ private:
      */
     void syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId);
 
-    /** @brief Prune m_lastEngineOrders for stale desktops */
+    // Desktop and activity edits (desktop_renumber.cpp): the handlers, the start-up
+    // sweep (connectDesktopActivity's last call), and the m_lastEngineOrders prunes.
+    void onDesktopsRenumbered(const PhosphorEngine::DesktopRemap& remap);
+    void onDesktopCountChanged(int newCount);
+    void onActivitiesChanged();
+    void reconcileDesktopsAtStartup();
     void pruneContextMapsForDesktop(int maxDesktop);
-    /** @brief Prune context maps for removed activities */
     void pruneContextMapsForActivities(const QSet<QString>& validActivities);
     /** @brief Prune m_lastEngineOrders for old virtual screen IDs that no longer exist */
     void pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId);
@@ -1442,12 +1444,9 @@ private:
     // between swap and rotate is not a user pattern.
     QElapsedTimer m_virtualScreenDebounce;
 
-    // Last TILING-FAMILY window order per (screen, desktop, activity),
-    // captured when a screen leaves autotile OR scrolling and shared by
-    // both engines' seeding (captureScrollingOrders / updateScrollingScreens
-    // and the autotile capture/seed) — a same-pass flip replays one
-    // engine's order into the other. Keyed by TilingStateKey (not plain
-    // screen name) so cross-desktop toggles don't overwrite each other.
+    // Last TILING-FAMILY window order per (screen, desktop, activity), captured when a screen
+    // leaves autotile or scrolling and replayed into either engine's seed (a same-pass flip
+    // replays one engine's order into the other); keyed by TilingStateKey so each desktop keeps its own.
     //
     // Its focus half is m_transitionFocusSeed, declared just below: the same
     // two capture sites write both, and the two together are what makes a

@@ -91,6 +91,11 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // Same preview hygiene as handoffRelease: an arriving window that a
     // live preview still names would be double-placed at commit.
     dropClosedWindowFromDragPreview(windowId);
+    // The window has left every other screen: a column stashed for it on one
+    // is given up, as insertOpenedWindow does for an arrival (F648).
+    forgetStashedWindowWhere(windowId, [&ctx](const PhosphorEngine::PlacementStateKey& key) {
+        return key.screenId != ctx.toScreenId;
+    });
     PhosphorEngine::PlacementStateKey key = currentKeyForScreen(ctx.toScreenId);
     if (ctx.toDesktop > 0) {
         key.desktop = ctx.toDesktop;

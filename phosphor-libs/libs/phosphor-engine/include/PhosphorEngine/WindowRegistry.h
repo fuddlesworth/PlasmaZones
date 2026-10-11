@@ -16,6 +16,8 @@
 
 namespace PhosphorEngine {
 
+class DesktopRemap;
+
 struct WindowMetadata
 {
     QString appId;
@@ -23,7 +25,9 @@ struct WindowMetadata
     QString title;
     QString windowRole{}; ///< X11 WM_WINDOW_ROLE; empty for Wayland-native windows
     int pid = 0; ///< process id; 0 = unknown
-    int virtualDesktop = 0; ///< 1-based x11 desktop number; 0 = all desktops / unknown
+    /// 1-based x11 desktop number; 0 = all desktops / unknown. KWin renumbers on a mid-list change, and the
+    /// registry follows (WindowRegistry::remapDesktops) for every record the effect has not re-pushed.
+    int virtualDesktop = 0;
     /// Full desktop list when the window spans SEVERAL (but not all) desktops;
     /// empty for the common single-desktop / sticky / unknown cases. When
     /// non-empty, virtualDesktop equals the first entry.
@@ -207,6 +211,19 @@ public:
     /// exists: the effect's first alive report can come before restored apps map.
     int pruneStaleInstances(const QSet<QString>& aliveInstanceIds);
 
+    /// Snapshot the recorded instances as the ones a coming desktop renumber
+    /// applies to. Called when KWin's desktop list starts changing (the
+    /// desktop manager's desktopListChanging): any upsert or remove after this
+    /// drops its instance from the snapshot, since its push already carries
+    /// the new numbering.
+    void beginDesktopRenumber();
+    /// Move the desktop fields of every instance still in the snapshot through
+    /// @p remap (a removed desktop goes to its successor, where KWin sends its
+    /// windows), emit metadataChanged for each record that changed, and end the
+    /// snapshot. Without a beginDesktopRenumber first it changes nothing.
+    /// Returns the count changed (F763).
+    int remapDesktops(const DesktopRemap& remap);
+
 Q_SIGNALS:
     void windowAppeared(const QString& instanceId);
     void metadataChanged(const QString& instanceId, const WindowMetadata& oldMetadata,
@@ -231,6 +248,8 @@ private:
     /// seam.) A counter, not a bool — a NESTED clear() from a subscriber must
     /// not un-flag the outer one on its way out.
     int m_clearing = 0;
+    /// beginDesktopRenumber's snapshot (appended last: installed class).
+    QSet<QString> m_desktopRenumberPending;
 
     void indexInsert(const QString& instanceId, const QString& appId);
     void indexRemove(const QString& instanceId, const QString& appId);

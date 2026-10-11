@@ -14,9 +14,11 @@
 namespace PhosphorEngine {
 
 /// The contexts the compositor last reported a window on, as far as the
-/// registry knows them. A restore or membership decision reads this instead
-/// of the SCREEN's current desktop, which is not the window's when the window
-/// is being placed onto a background desktop.
+/// registry knows them, in KWin's current desktop numbering: a renumber moves
+/// the numbers of records not reported since (WindowRegistry::remapDesktops).
+/// A restore or membership decision reads this instead of the SCREEN's current
+/// desktop, which is not the window's when the window is being placed onto a
+/// background desktop.
 struct WindowDesktopContext
 {
     int virtualDesktop = 0; ///< 1-based x11 desktop; 0 = all desktops / unknown

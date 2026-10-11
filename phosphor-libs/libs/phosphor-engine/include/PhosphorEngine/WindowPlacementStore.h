@@ -17,6 +17,8 @@
 
 namespace PhosphorEngine {
 
+class DesktopRemap;
+
 /// The single source of truth for window restore state in the unified model.
 ///
 /// Holds AT MOST ONE WindowPlacement record PER WINDOW INSTANCE (not per engine),
@@ -381,8 +383,13 @@ public:
     /// deleted. The persisted fields have to follow the same renumbering the
     /// engines apply to their live stores, or a restart seeds a zone under a
     /// number that now belongs to another desktop. Returns the number of
-    /// records changed.
+    /// records changed. The single-removal form of remapDesktopZones.
     int renumberDesktopZones(int removedDesktop);
+    /// Move every slot's zonesByDesktop entries and the record-level desktop
+    /// through @p remap, for any change of KWin's desktop list: a removed
+    /// desktop's entry goes and a record on it reads as unknown (0). Returns
+    /// the number of records changed (F763).
+    int remapDesktopZones(const DesktopRemap& remap);
 
     /// Apply an in-place mutation to every record; @p fn returns true when it changed
     /// the record. Returns the number changed. For bulk rewrites that keep the appId

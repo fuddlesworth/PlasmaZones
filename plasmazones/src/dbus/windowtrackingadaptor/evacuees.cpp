@@ -84,12 +84,17 @@ QStringList WindowTrackingAdaptor::parkOutput(const QString& physicalScreenId)
     for (const QString& rawId : std::as_const(parked)) {
         const QString windowId = shadowWindowId(rawId);
         QList<EvacueeLedger::Entry>& entries = m_evacuees->entries[windowId];
-        const bool known = std::any_of(entries.cbegin(), entries.cend(), [&](const EvacueeLedger::Entry& e) {
+        // Read before the prunes, which drop the float with its store (F670).
+        const bool snapFloating = m_cachedSnapEngine && m_cachedSnapEngine->isFloating(windowId);
+        const auto known = std::find_if(entries.begin(), entries.end(), [&](const EvacueeLedger::Entry& e) {
             return e.physicalId == physicalScreenId;
         });
-        if (!known) {
+        if (known != entries.end()) {
+            known->snapFloating = snapFloating;
+        } else {
             EvacueeLedger::Entry entry;
             entry.physicalId = physicalScreenId;
+            entry.snapFloating = snapFloating;
             entries.append(entry);
         }
         // The record's snap slot naming the output that went away goes before
@@ -178,6 +183,10 @@ WindowTrackingAdaptor::reportOutputSettle(const PhosphorProtocol::OutputSettleRo
                                                  return e.hasS0 && !stateEqualsS0(row, e);
                                              })
                 || !row.kwinOnly;
+            // Read before the touched arm drops the entries.
+            const bool snapFloating = std::any_of(entries.cbegin(), entries.cend(), [](const EvacueeLedger::Entry& e) {
+                return e.snapFloating;
+            });
             if (returned != entries.end() && !touched) {
                 // KWin returned it untouched: back into its parked place.
                 const QString parkedFor = returned->physicalId;
@@ -189,7 +198,7 @@ WindowTrackingAdaptor::reportOutputSettle(const PhosphorProtocol::OutputSettleRo
                 // Untouched, but not (yet) back on that output: the output is
                 // still gone, or KWin put it on another real one. The park
                 // stays and the window floats where it is (F746, F768).
-                floatEvacuee(row);
+                floatEvacuee(row, snapFloating);
                 verdict.verdict = OutputSettleVerdict::EvacueeFloat;
                 verdict.screenId = rowScreen(mgr, row);
             } else {
@@ -198,7 +207,7 @@ WindowTrackingAdaptor::reportOutputSettle(const PhosphorProtocol::OutputSettleRo
                 // away, which still makes it an evacuee.
                 dropEvacueeParks(windowId);
                 if (!row.sourceConnected) {
-                    floatEvacuee(row);
+                    floatEvacuee(row, snapFloating);
                     verdict.verdict = OutputSettleVerdict::EvacueeFloat;
                     verdict.screenId = rowScreen(mgr, row);
                 } else {
@@ -208,7 +217,7 @@ WindowTrackingAdaptor::reportOutputSettle(const PhosphorProtocol::OutputSettleRo
         } else if (!row.sourceConnected) {
             // KWin moved it off an output that went away, and no engine had
             // it to park: an evacuee all the same.
-            floatEvacuee(row);
+            floatEvacuee(row, false);
             verdict.verdict = OutputSettleVerdict::EvacueeFloat;
             verdict.screenId = rowScreen(mgr, row);
         } else if (m_evacuees->placedAfterEvacuation.contains(windowId) || row.kwinOnly) {
@@ -291,7 +300,7 @@ bool WindowTrackingAdaptor::readoptEvacuee(const QString& windowId, const QStrin
     return seated;
 }
 
-void WindowTrackingAdaptor::floatEvacuee(const OutputSettleRow& row)
+void WindowTrackingAdaptor::floatEvacuee(const OutputSettleRow& row, bool snapFloating)
 {
     const QString windowId = shadowWindowId(row.windowId);
     if (!row.placeableNow) {
@@ -311,9 +320,11 @@ void WindowTrackingAdaptor::floatEvacuee(const OutputSettleRow& row)
     if (tiling) {
         // Floats where KWin put it; the tiles already there do not move.
         setWindowFloatingForScreen(row.windowId, screen, true);
-    } else if (m_snapEngine && m_service && m_service->isWindowFloating(windowId)) {
+    } else if (m_snapEngine && m_service && (snapFloating || m_service->isWindowFloating(windowId))) {
         // A snap float keeps floating on the output it landed on, with a
         // residence there and no home on the output it left (F670, F639).
+        // @p snapFloating is the float the park saw, which the prune of the
+        // output's stores has dropped by now.
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = row.windowId;
         ctx.toScreenId = screen;

@@ -7,8 +7,9 @@
  *        window lands only where a keyboard snap could, on the window's own
  *        desktop, and Control.snapWindowToZone resolves its screen the same
  *        way (F20, F142, F179, F21, F22, F26, F85). The focused-window verbs
- *        and a swap pass the same gates (F362, F79), and the effect's
- *        confirmations commit only real zones on real screens (F459).
+ *        and a swap pass the same gates (F362, F79), none of them acts on the
+ *        window being dragged (F773), and the effect's confirmations commit
+ *        only real zones on real screens (F459).
  */
 
 #include "wta_float_back_fixture.h"
@@ -582,6 +583,62 @@ private Q_SLOTS:
         f.adaptor->toggleFloatForWindow(QString(), kLeft);
         QCOMPARE(feedback.count(), 1);
         QCOMPARE(feedback.first().at(2).toString(), QStringLiteral("invalid_window"));
+    }
+
+    // A bus snap leaves the window being dragged alone, so the drop decides
+    // where it goes (F773). Once the drag ends the same call snaps.
+    void busSnapRefusesTheDraggedWindow()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("drag-1"), 1);
+        f.wta->setInteractiveDragWindow(w);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->moveWindowToZoneOnScreen(w, f.zone(0), kLeft);
+        QCOMPARE(applies.count(), 0);
+        QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+
+        f.wta->setInteractiveDragWindow(QString());
+        f.adaptor->moveWindowToZoneOnScreen(w, f.zone(0), kLeft);
+        QCOMPARE(applies.count(), 1);
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+    }
+
+    // The bus float toggle leaves the dragged window unfloated (F773).
+    void busFloatRefusesTheDraggedWindow()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("drag-float-1"), 1);
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        f.wta->setInteractiveDragWindow(w);
+        f.adaptor->toggleFloatForWindow(w, kLeft);
+        QVERIFY(!f.snap->isFloating(w));
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+
+        f.wta->setInteractiveDragWindow(QString());
+        f.adaptor->toggleFloatForWindow(w, kLeft);
+        QVERIFY(f.snap->isFloating(w));
+    }
+
+    // A focused-window verb that places the dragged window is refused, while
+    // a focus verb, which places nothing, still answers (F773).
+    void focusedVerbRefusesTheDraggedWindow()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("drag-focus-1"), 1);
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        f.wta->windowActivated(w, kLeft);
+        f.wta->setInteractiveDragWindow(w);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        QSignalSpy activations(f.snap.get(), &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+        f.adaptor->snapToZoneByNumber(2, QString());
+        f.adaptor->moveWindowToAdjacentZone(QStringLiteral("right"));
+        QCOMPARE(applies.count(), 0);
+        QCOMPARE(feedback.count() + activations.count(), 0);
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+
+        f.adaptor->focusAdjacentZone(QStringLiteral("right"));
+        QVERIFY(feedback.count() + activations.count() > 0);
     }
 
     // The confirmations commit only a live window, a known screen and a zone

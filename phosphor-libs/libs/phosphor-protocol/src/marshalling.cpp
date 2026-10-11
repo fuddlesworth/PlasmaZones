@@ -354,7 +354,7 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, RestoreTargetResult& e
 QDBusArgument& operator<<(QDBusArgument& arg, const PreTileGeometryEntry& e)
 {
     arg.beginStructure();
-    arg << e.appId << e.x << e.y << e.width << e.height << e.screenId;
+    arg << e.appId << e.x << e.y << e.width << e.height << e.screenId << e.windowId;
     arg.endStructure();
     return arg;
 }
@@ -362,7 +362,7 @@ QDBusArgument& operator<<(QDBusArgument& arg, const PreTileGeometryEntry& e)
 const QDBusArgument& operator>>(const QDBusArgument& arg, PreTileGeometryEntry& e)
 {
     arg.beginStructure();
-    arg >> e.appId >> e.x >> e.y >> e.width >> e.height >> e.screenId;
+    arg >> e.appId >> e.x >> e.y >> e.width >> e.height >> e.screenId >> e.windowId;
     arg.endStructure();
     return arg;
 }

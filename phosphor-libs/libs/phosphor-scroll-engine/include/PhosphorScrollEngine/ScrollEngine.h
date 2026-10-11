@@ -789,8 +789,11 @@ public:
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
     void renumberDesktopsAfterRemoval(int removedDesktop) override;
+    void remapDesktops(const PhosphorEngine::DesktopRemap& remap) override; // engine_desktopremap.cpp
     void pruneStatesForActivities(const QStringList& validActivities) override;
     void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
+    /// The base release, plus the stashed columns the window holds on any other screen (engine_stashleave.cpp).
+    void releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId) override;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Persistence + settings
@@ -1204,24 +1207,26 @@ private:
     /// it.
     void stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state,
                              std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis = std::nullopt);
-    /// insertOpenedWindow's stash restore: place @p windowId per the
-    /// stashed structure for @p key (rejoin its stashed column beside an
-    /// already-arrived sibling, or recreate the column at its stashed
-    /// position with its width/display), re-applying its height intent.
-    /// Returns false when the stash has no verdict (no entry, id absent,
-    /// or already consumed) — the caller falls through to the seed path.
-    /// NOT side-effect free on that false: an entry that exists for @p key
-    /// hands its blueprint cursor and identity to @p state before any tile
-    /// is matched, because the claim can fail for an arrival the entry does
-    /// not name while the spent-ness is owed to the state regardless.
-    /// @p params is the caller's already-resolved layout params (the only
-    /// caller holds them; re-deriving would pay a second ScreenManager
-    /// query plus context-gap-provider call).
+    /// insertOpenedWindow's stash restore: place @p windowId per the stashed structure for @p key (rejoin its stashed
+    /// column beside an already-arrived sibling, or recreate the column at its stashed position with its
+    /// width/display), re-applying its height intent. Returns false when the stash has no verdict (no entry, id
+    /// absent, or already consumed) — the caller falls through to the seed path. NOT side-effect free on that false:
+    /// an entry that exists for @p key hands its blueprint cursor and identity to @p state before any tile is
+    /// matched, because the claim can fail for an arrival the entry does not name while the spent-ness is owed to
+    /// the state regardless. @p params is the caller's already-resolved layout params (the only caller holds them).
     bool restoreFromStripStash(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
                                const QString& windowId, const ScrollLayoutParams& params, int minWidth, int minHeight);
     /// Drop stash entries whose key @p stale answers true for — called by
     /// the same prunes that reap context states.
     void sweepStripStash(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale);
+    // engine_stashleave.cpp
+    /// Erase @p windowId's tile from every stash entry whose key @p left answers true for (a context it left).
+    void forgetStashedWindowWhere(const QString& windowId,
+                                  const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& left);
+    /// pruneStaleWindows' sweep of the stash on aliveness, and the restart-move arm.
+    void sweepStripStashForAliveness(const QSet<QString>& aliveWindowIds);
+    /// Move every desktop-number-keyed structure through @p remap; the removed desktops are pruned already.
+    void applyDesktopRemap(const PhosphorEngine::DesktopRemap& remap);
     // engine_apply.cpp
     /// The smart-gaps arm is resolved INSIDE, not passed in: a single-column
     /// strip on the screen's current context zeroes the OUTER gaps for every
@@ -1517,7 +1522,7 @@ private:
     /// Armed wherever announceStripContextIfChanged fires, so a screen is
     /// forced exactly when its consumer was told to retire: the identical-set
     /// branch of setActiveScreens, its added and stayer loops, the sticky-pin
-    /// release in updateStickyScreenPins, and renumberDesktopsAfterRemoval's
+    /// release in updateStickyScreenPins, and applyDesktopRemap's
     /// re-keyed strips. Producers not paired with an announce: applyLayout's
     /// promotion of an m_pendingFocusEmitContexts entry once its context is on
     /// screen (a background focus report moved focus and anchor with only
@@ -1752,17 +1757,11 @@ private:
     StashedStrip
     buildStashFromState(const ScrollState* state,
                         std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis = std::nullopt) const;
-    /// Mode-round-trip structure stash (see stashStripStructure). The
-    /// stashed lists stay INTACT while they live (positions are counted
-    /// against windows already present); consumption is tracked in
-    /// m_stripStashConsumed and both entries drop once every stashed id is
-    /// consumed. Swept with the context on desktop/activity/output removal,
-    /// and by pruneStaleWindows on ALIVENESS — which is the only sweep that
-    /// reaches a stash whose context is still live, i.e. a window that closed
-    /// while its screen sat in another mode. Entries staged from persistence
-    /// are exempt from the aliveness sweep until their first claim; see
-    /// StashedTile::stagedFromPersistence. The stash value types live in
-    /// ScrollStashTypes.h (hoisted for the file-size ceiling).
+    /// Mode-round-trip structure stash (see stashStripStructure). A restore leaves the stashed lists INTACT
+    /// (positions count against windows already present) and records the claim in m_stripStashConsumed; both drop
+    /// once every id is consumed. Swept with the context on desktop/activity/output removal, of a closed window's
+    /// tile on ALIVENESS (sweepStripStashForAliveness) and of one that left the context (forgetStashedWindowWhere).
+    /// The value types live in ScrollStashTypes.h.
     QHash<PhosphorEngine::PlacementStateKey, StashedStrip> m_stripStash;
     QHash<PhosphorEngine::PlacementStateKey, QSet<QString>> m_stripStashConsumed;
     /// How long StashedStrip::fuzzyClaimWindow stays open, in ms. Seeded from

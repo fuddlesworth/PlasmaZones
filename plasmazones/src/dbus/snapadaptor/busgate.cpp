@@ -124,6 +124,12 @@ std::optional<SnapAdaptor::BusSnapTarget> SnapAdaptor::validBusSnapTarget(const 
 std::optional<SnapAdaptor::BusSnapTarget> SnapAdaptor::admitBusSnap(const QString& windowId, const QStringList& zoneIds,
                                                                     const QString& screenHint, int pinnedDesktop) const
 {
+    // A snap of the window being dragged would commit a zone the drop then
+    // overrides (F773), as the placement shortcuts refuse it.
+    if (m_adaptor && m_adaptor->isInteractiveDragWindow(windowId)) {
+        qCInfo(lcDbusWindow) << "Bus snap of" << windowId << "refused: it is being dragged";
+        return std::nullopt;
+    }
     const std::optional<BusSnapTarget> target = validBusSnapTarget(windowId, zoneIds, screenHint, pinnedDesktop);
     if (!target) {
         return std::nullopt;
@@ -161,6 +167,11 @@ bool SnapAdaptor::focusedVerbPermitted(const QString& screenHint, bool placesWin
         return false;
     }
     const QString windowId = m_adaptor->lastActiveWindowId();
+    // A verb that places the window being dragged waits for the drop (F773).
+    if (placesWindow && m_adaptor->isInteractiveDragWindow(windowId)) {
+        qCInfo(lcDbusWindow) << "Bus verb refused:" << windowId << "is being dragged";
+        return false;
+    }
     const QString screen = m_engine->navigationScreenFor(windowId, resolvedHint);
     if (screen.isEmpty()) {
         return true; // the engine reports no_window itself
@@ -186,6 +197,9 @@ QString SnapAdaptor::admitBusFloat(const QString& windowId, const QString& scree
     }
     if (!m_adaptor->isRegistryTracked(windowId)) {
         return refuse("not a live window", QString());
+    }
+    if (m_adaptor->isInteractiveDragWindow(windowId)) {
+        return refuse("it is being dragged", QString()); // F773
     }
     const QString screen = screenHint.isEmpty() ? m_adaptor->liveScreenForWindow(windowId)
                                                 : m_adaptor->resolveBusScreen(screenHint, windowId);

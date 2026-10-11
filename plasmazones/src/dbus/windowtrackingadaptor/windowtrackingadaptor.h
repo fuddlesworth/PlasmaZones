@@ -230,18 +230,24 @@ public:
         return m_loadedScrollStripState;
     }
 
+    /// The virtual desktop ids the session last saw, in position order (KnownDesktopIds). The daemon hands them to
+    /// VirtualDesktopManager::setBaselineDesktopIds at start-up and sets the live list on every change.
+    QStringList knownDesktopIds() const
+    {
+        return m_knownDesktopIds;
+    }
+    /// Marks DirtyKnownDesktops; the list already held marks nothing.
+    void setKnownDesktopIds(const QStringList& ids);
+
     PhosphorSnapEngine::SnapEngine* snapEngine() const;
 
     /**
      * @brief Wire the daemon's central ScreenModeRouter.
      *
-     * REQUIRED for correct dispatch on window-lifecycle entry points
-     * (resolveWindowRestore, resnapCurrentAssignments, etc.) — those
-     * methods route through the router instead of direct engine pointer
-     * checks so engines can stay pure and the mode lookup has exactly
-     * one source of truth.
+     * Read by resolveSnapModeScreensForResnap, which keeps a resnap off the
+     * screens snapping does not run on.
      *
-     * @param router ScreenModeRouter instance (not owned; Daemon::stop() clears it before freeing it)
+     * @param router Not owned; Daemon::stop() clears it before freeing it
      */
     void setScreenModeRouter(ScreenModeRouter* router);
 
@@ -375,10 +381,9 @@ public Q_SLOTS:
     void clearPreTileGeometry(const QString& windowId);
 
     /**
-     * Pre-tile geometry for every LIVE record (appId, rect, screen). Live only:
-     * the consumer keys by appId and applies an entry to an OPEN window of that
-     * app, so a closed instance's rect would be the borrow
-     * getValidatedPreTileGeometry refuses. An effect-(re)start seed.
+     * Pre-tile geometry for every live record (appId, rect, screen, windowId).
+     * The consumer applies an entry only to the window it names. An
+     * effect-(re)start seed.
      */
     PhosphorProtocol::PreTileGeometryList getPreTileGeometries();
 
@@ -567,13 +572,13 @@ public Q_SLOTS:
     PhosphorProtocol::WindowGeometryList getUpdatedWindowGeometries();
 
     /**
-     * @brief Pre-computed zone geometries for pending restore entries.
-     * @return JSON object, one ARRAY per app, newest record first:
-     *         { appId: [ {x, y, width, height, screenId, windowId}, ... ], ... }
-     * The effect caches these so the open dispatch can teleport windows to
-     * their zone without a round trip. It applies the newest entry on the
-     * opener's own output whose instance is not live, so a second window of a
-     * snapped app never gets the rect its open sibling still uses.
+     * @brief Zone rects for pending restores, one ARRAY per app, newest first:
+     *        { appId: [ {x, y, width, height, screenId, windowId}, ... ], ... }
+     * The effect caches these to teleport an opener to its zone without a round
+     * trip, taking the newest entry on the opener's output whose instance is not
+     * live, so a second window never gets the rect its open sibling still uses.
+     * Empty while snapping or the zone restore is off, or while an enabled rule
+     * can turn that restore off for a window, since the async restore would refuse.
      */
     QString getPendingRestoreGeometries();
 
@@ -863,6 +868,8 @@ public:
     void setOutputRetirer(std::function<void(const QString&)> retirer);
     /// The window an interactive drag moves (empty clears): its frames are not settled managed frames.
     void setInteractiveDragWindow(const QString& windowId);
+    /// The drag subject: no placement verb acts on it until the drop (F773).
+    bool isInteractiveDragWindow(const QString& windowId) const;
     /// Told (windowId, keepScreenId) at the end of every releaseLeftScreens, for the daemon's own per-screen memory.
     void setWindowLeftScreenHook(std::function<void(const QString&, const QString&)> hook);
     /// An evacuee announced on @p screenId that could not be adopted floating when its output
@@ -1020,8 +1027,8 @@ public:
     /// through a PRIVATE memo (see m_tabColorMemo) — not the shared evaluator
     /// cache, which cannot serve this query in either direction. Unlike
     /// scrollOpenRuleParams this runs per tab the effect queries
-    /// (TilingAdaptor::scrollTabColors) and per title change (the per-window
-    /// relay) rather than once per window open, so it is deliberately kept to
+    /// (TilingAdaptor::scrollTabColors) and per registry record change (the
+    /// per-window relay) rather than once per window open, so it is kept to
     /// a slot read with no screen or mode stamping.
     QVariantMap tabColorRuleParams(const QString& windowId);
 
@@ -1055,40 +1062,21 @@ private:
     /// the stamper-first ordering invariant; reading it would miss forever for
     /// every already-open window (all six seeders run on the OPEN path and a
     /// rules save bumps the revision), and this runs once per tab per colour
-    /// query plus once per window per title change. It caches the extracted
+    /// query plus once per window per record change. It caches the extracted
     /// COLOUR MAP: the three slots are all this path reads, and the map keeps
     /// this header free of the rules-engine include.
     ///
-    /// Keyed by the rule revision plus title, captionNormal (title-derived),
-    /// virtual desktop, activity and the colour-scheme token. Title because the
-    /// daemon re-drives this consumer per window on a title change, so a `Title
-    /// contains …` rule would otherwise stick until the next rules save.
-    /// ColorScheme because a light/dark flip changes a `ColorScheme Equals
-    /// dark` verdict with no rules edit; this path re-reads the token each call
-    /// and invalidateRuleMemosForColorSchemeChange() drops stale entries at the
-    /// flip.
-    ///
-    /// KNOWN GAP, deliberate: the ~20 EXTENDED fields buildRuleQueryForWindow
-    /// copies (isMaximized, isFocused, isMinimized, keepAbove, the geometry
-    /// quartet, the other state flags) are not keyed, so a rule on one stays
-    /// pinned until title, desktop, activity, scheme or revision moves. A wider
-    /// key would not fix it: the effect re-queries only on three edges (the
-    /// scrollTabColorsChanged broadcast on a rules or colour-scheme change, and
-    /// the per-window relay on a title change or a first registry record,
-    /// TilingAdaptor::relayScrollTabColorsForWindow), none of them on those
-    /// fields. ColorScheme is keyed precisely because it has a re-drive signal
-    /// (ISettings::systemColorSchemeChanged). The fix is a second trigger, not a
-    /// bigger key. windowRole, pid and windowType are immutable per id; appId
-    /// and desktopFile are not (a class-mutating app renames mid-life while the
-    /// INSTANCE-derived key survives), and stay unkeyed for the same no-re-drive
-    /// reason.
+    /// Keyed by the rule revision, the window's whole registry record and the
+    /// colour-scheme token. The daemon re-drives this per window on every
+    /// registry record change (the metadataChanged relay) and on a scheme flip,
+    /// so a verdict follows every field the effect pushes (F699). isFocused and
+    /// the live geometry are as fresh as the last push, which the effect sends
+    /// on state, class, caption, desktop, activity and output edges, not on
+    /// focus or every move.
     struct TabColorMemoEntry
     {
         quint64 revision = 0;
-        std::optional<QString> title;
-        std::optional<QString> captionNormal;
-        int virtualDesktop = 0;
-        QString activity;
+        PhosphorEngine::WindowMetadata metadata;
         QString colorScheme;
         QVariantMap colors;
     };
@@ -1698,6 +1686,7 @@ private:
     std::function<void(const PhosphorProtocol::WindowOpenedEntry&)> m_routedOpenDispatcher;
     std::function<void(const QString&, const QString&)> m_windowLeftScreenHook;
     QJsonObject m_loadedScrollStripState;
+    QStringList m_knownDesktopIds;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     PhosphorWorkspaces::ActivityManager* m_activityManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)
@@ -1814,7 +1803,7 @@ private:
     void noteEvacueeTouched(const QString& windowId, const QString& placedOnScreen);
     void dropEvacueeParks(const QString& windowId);
     bool readoptEvacuee(const QString& windowId, const QString& onScreen, const QString& parkedPhysicalId);
-    void floatEvacuee(const PhosphorProtocol::OutputSettleRow& row);
+    void floatEvacuee(const PhosphorProtocol::OutputSettleRow& row, bool snapFloating);
     QString reassertEvacuee(const PhosphorProtocol::OutputSettleRow& row, QSet<QString>& reassertedScreens);
     std::unique_ptr<EvacueeLedger> m_evacuees;
     WindowLifecycleRelay* m_lifecycleRelay = nullptr; ///< child; see lifecycleRelay()

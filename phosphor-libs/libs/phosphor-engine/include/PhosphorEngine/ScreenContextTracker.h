@@ -14,6 +14,8 @@
 
 namespace PhosphorEngine {
 
+class DesktopRemap;
+
 /// Outcome of a context mutation on ScreenContextTracker.
 ///
 /// The tracker owns the "was a context ever established" arming subtleties
@@ -249,6 +251,17 @@ public:
     /// naming a position whose content moved — the desync pruneDesktop's own
     /// comment warns about, in the other direction.
     void renumberDesktopsAfterRemoval(int removedDesktop);
+
+    /// Move every stored desktop number through @p remap, for any change of
+    /// KWin's desktop list (F763, F787): a sticky pin through map(), dropped
+    /// when its desktop was removed, and each per-output desktop and the
+    /// global one through successor(), since KWin moves an output that showed
+    /// a removed desktop onto the one that takes its place. A per-output entry
+    /// with no successor left is dropped.
+    void remapDesktops(const DesktopRemap& remap);
+    /// The highest desktop number any of the stored values names (the global
+    /// desktop included), for sizing a removal map that must reach them all.
+    int highestDesktop() const;
 
 private:
     /// Current desktop/activity context. `*ContextEverSet` carry "a context was

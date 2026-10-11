@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <phosphorengine_export.h>
@@ -294,6 +295,18 @@ public:
     /// An engine cleared a last-used zone in one of its stores: persist it.
     virtual void markLastUsedZoneDirty()
     {
+    }
+
+    /// renumberDesktopZones for any change of KWin's desktop list (F763): move
+    /// every persisted per-desktop zone map and record-level desktop through
+    /// @p remap and mark the placements dirty. The default handles a single
+    /// removal through renumberDesktopZones and nothing else. Appended last
+    /// for ABI.
+    virtual void remapDesktopZones(const DesktopRemap& remap)
+    {
+        if (const int removed = remap.singleRemoval(); removed > 0) {
+            renumberDesktopZones(removed);
+        }
     }
 };
 

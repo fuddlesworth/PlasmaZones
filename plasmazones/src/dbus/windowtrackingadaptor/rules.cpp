@@ -514,20 +514,19 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     //    This function runs once per window per call of
     //    TilingAdaptor::scrollTabColors (the effect queries it per tab it
     //    paints) and again on every per-window relay the daemon fires on a
-    //    title change, so a permanent miss means a full rule-set walk per tab
-    //    per retitle.
+    //    registry record change, so a permanent miss means a full rule-set
+    //    walk per tab per change.
     //
     // A private memo keyed the same way is free of both: nothing else reads it,
     // so its filter can be exactly right for THIS query, and a second call
     // costs a hash lookup again.
-    // The key is the revision PLUS the query fields that move under a live
-    // window. Title is load-bearing: the daemon re-drives this per window on
-    // every title change (the metadataChanged relay that emits
-    // scrollTabColorsChanged), so a revision-only key would pin a
-    // `Title contains …` rule to its first verdict for the window's lifetime.
-    // The colour-scheme token is in the key for the same reason with a
-    // different trigger: it moves on a light/dark flip with no rules edit, so
-    // the revision does not budge (see the TabColorMemoEntry doc).
+    // The key is the revision, the window's registry record and the scheme
+    // token: the daemon re-drives this per window on every record change (the
+    // metadataChanged relay) and on a scheme flip, so nothing the query reads
+    // can move under a cached entry (F699).
+    const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry
+        ? m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId))
+        : std::nullopt;
     const quint64 revision = m_ruleStore->ruleSet().revision();
     // Shadow-keyed so the writer and the windowClosed remover share one key
     // space BY CONSTRUCTION — the close path removes by shadowWindowId, and
@@ -536,9 +535,8 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     // so the shadow key is what makes the two callers share one entry.)
     const QString memoKey = shadowWindowId(windowId);
     const auto memoIt = m_tabColorMemo.constFind(memoKey);
-    if (memoIt != m_tabColorMemo.constEnd() && memoIt->revision == revision && memoIt->title == query->title
-        && memoIt->captionNormal == query->captionNormal && memoIt->virtualDesktop == query->virtualDesktop
-        && memoIt->activity == query->activity && memoIt->colorScheme == query->colorScheme) {
+    if (meta && memoIt != m_tabColorMemo.constEnd() && memoIt->revision == revision && memoIt->metadata == *meta
+        && memoIt->colorScheme == query->colorScheme) {
         return memoIt->colors;
     }
     // admitNothingStamped, not admitScreenStamped: this query stamps NO
@@ -547,9 +545,9 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     const PhosphorRules::ResolvedActions resolved =
         m_ruleEvaluator->resolveFiltered(*query, admitWith(&admitNothingStamped, *query));
     const QVariantMap colors = tabColorsFromResolved(resolved);
-    m_tabColorMemo.insert(memoKey,
-                          TabColorMemoEntry{revision, query->title, query->captionNormal, query->virtualDesktop,
-                                            query->activity, query->colorScheme, colors});
+    if (meta) {
+        m_tabColorMemo.insert(memoKey, TabColorMemoEntry{revision, *meta, query->colorScheme, colors});
+    }
     return colors;
 }
 

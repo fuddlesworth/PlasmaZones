@@ -633,6 +633,11 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       on follows it. An old daemon answers with an error, which the
 //       fire-and-forget call ignores, and its shortcuts keep acting on the
 //       screen the window was last activated on.
+//
+//       Also in v10, WindowTracking.getPreTileGeometries entries gain a
+//       trailing windowId (a(siiiis) -> a(siiiiss)), the window whose record
+//       each one is, so the effect seeds that window only, never a same-app
+//       sibling (F627).
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

@@ -640,13 +640,14 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             // forward rather than re-sent — but virtualDesktop above is
             // authoritative on this push, and the effect re-derives it from
             // x11DesktopNumber every time. A window that moved between the last
-            // full push and this caption tick therefore arrives with a fresh
-            // scalar beside a span from before the move, which breaks
-            // WindowMetadata's stated invariant that a non-empty span starts
-            // with the scalar. Drop the span in that case: it describes a
-            // membership the window no longer has, and the next full push
-            // re-establishes it. Consumers then read the scalar, which is the
-            // one field this push actually knows.
+            // full push and this caption tick (a desktop renumber no longer
+            // causes this: WindowRegistry::remapDesktops moves the span with
+            // the scalar) therefore arrives with a fresh scalar beside a span
+            // from before the move, which breaks WindowMetadata's stated
+            // invariant that a non-empty span starts with the scalar. Drop the
+            // span in that case: it describes a membership the window no
+            // longer has, and the next full push re-establishes it. Consumers
+            // then read the scalar, which is the one field this push knows.
             if (!meta.virtualDesktops.isEmpty() && meta.virtualDesktops.constFirst() != meta.virtualDesktop) {
                 meta.virtualDesktops.clear();
             }
@@ -803,6 +804,12 @@ void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int
 void WindowTrackingAdaptor::setInteractiveDragWindow(const QString& windowId)
 {
     m_interactiveDragWindow = windowId.isEmpty() ? QString() : shadowWindowId(windowId);
+}
+
+bool WindowTrackingAdaptor::isInteractiveDragWindow(const QString& windowId) const
+{
+    return !windowId.isEmpty() && !m_interactiveDragWindow.isEmpty()
+        && m_interactiveDragWindow == shadowWindowId(windowId);
 }
 
 void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth,

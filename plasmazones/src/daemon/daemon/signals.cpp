@@ -708,6 +708,11 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
         return;
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    // The Tiling channel never hears this edge: its dedup memory goes, so the
+    // next active float edge there goes out (F593).
+    if (m_tilingAdaptor) {
+        m_tilingAdaptor->forgetFloatBroadcast(windowId);
+    }
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);
         m_autotileEngine->markModeSpecificFloated(windowId);
@@ -746,6 +751,10 @@ void Daemon::syncScrollFloatStatePassive(const QString& windowId, bool floating,
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     if (!wts) {
         return;
+    }
+    // As in syncAutotileFloatStatePassive (F593).
+    if (m_tilingAdaptor) {
+        m_tilingAdaptor->forgetFloatBroadcast(windowId);
     }
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);

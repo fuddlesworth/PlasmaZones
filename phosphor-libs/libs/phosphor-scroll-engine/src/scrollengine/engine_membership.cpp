@@ -167,6 +167,19 @@ MembershipReconcileResult ScrollEngine::reconcileWindowMemberships(const QString
         return {};
     }
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    const DesktopSpan span = spanOf(windowId);
+    // A stash entry the window's span no longer covers is a desktop or
+    // activity it LEFT, and its column there is given up, BEFORE the untracked
+    // return: a window whose strip was stashed by a mode change is tracked
+    // nowhere, and the stash is its only memory of that context (F696). Only
+    // the contexts left: a window still on a desktop keeps its column there,
+    // however many others it spans (F714). A key under its screen's sticky pin
+    // is the pin's, as in collectMembershipWork.
+    if (span.known) {
+        forgetStashedWindowWhere(windowId, [this, &span](const PlacementStateKey& key) {
+            return !span.coversKey(key) && key.desktop != m_context.stickyPinnedDesktop(key.screenId);
+        });
+    }
     // A window is on exactly one screen: every membership shares it, and the
     // first one names it. An untracked window has no context to reconcile.
     QString screenId;
@@ -179,7 +192,6 @@ MembershipReconcileResult ScrollEngine::reconcileWindowMemberships(const QString
     if (screenId.isEmpty()) {
         return {};
     }
-    const DesktopSpan span = spanOf(windowId);
     const bool adoptAllowed = m_scrollingScreens.contains(screenId)
         && (!span.sticky
             || effectiveStickyWindowHandling(screenId) == PhosphorEngine::StickyWindowHandling::TreatAsNormal);

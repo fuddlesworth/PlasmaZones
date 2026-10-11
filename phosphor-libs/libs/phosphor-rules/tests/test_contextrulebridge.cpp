@@ -10,7 +10,8 @@
  * (assignment-slot losslessness across all four slots + empty-field omission
  * + caller-supplied priority), makeDisableRule, the makeContextMatch →
  * contextDimsOf / disableRuleMode round-trips, and the axis classifiers
- * including the strict Activity / Combined pair the batch APIs key on.
+ * including the strict Activity / Combined pair the batch APIs key on, and
+ * remapContextRules (a desktop removed, inserted or moved, an activity removed).
  */
 
 #include <QTest>
@@ -588,6 +589,304 @@ private Q_SLOTS:
         for (const MatchExpression& m : {monitor, desktop, activity, combined}) {
             QVERIFY(!(CRB::matchIsExactContextActivityStrict(m) && CRB::matchIsExactContextCombined(m)));
         }
+    }
+
+    // ─── remapContextRules: a desktop or an activity edit ─────────────────
+
+    void testRemap_desktopRemoval_dropsTheRemovedDesktopsRules()
+    {
+        const QString s = QStringLiteral("DP-1");
+        const QList<Rule> rules{
+            CRB::makeAssignmentRule(QString(), s, 1, QString(), QStringLiteral("snapping"), kLayoutA, QString(),
+                                    CRB::kContextBandBase, QString()),
+            CRB::makeAssignmentRule(QString(), s, 2, QString(), QStringLiteral("autotile"), QString(),
+                                    QStringLiteral("bsp"), CRB::kContextBandBase, QString()),
+            CRB::makeDisableRule(QString(), s, 2, QString(), QStringLiteral("snapping"), CRB::kContextBandBase),
+        };
+        const auto remapped = CRB::remapContextRules(rules, {removal(2), {}});
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 1);
+        QCOMPARE(remapped->first().id, rules.first().id);
+    }
+
+    void testRemap_desktopRemoval_shiftsHigherDesktopsAndReMintsIds()
+    {
+        const QString s = QStringLiteral("DP-1");
+        const QString act = QStringLiteral("act-a");
+        const QList<Rule> rules{
+            CRB::makeAssignmentRule(CRB::contextRuleName(s, 3, QString()), s, 3, QString(), QStringLiteral("snapping"),
+                                    kLayoutA, QString(), CRB::kContextBandBase, QString()),
+            CRB::makeDisableRule(CRB::contextRuleName(s, 3, QString()), s, 3, QString(), QStringLiteral("autotile"),
+                                 CRB::kContextBandBase),
+            CRB::makeAssignmentRule(QString(), s, 4, act, QStringLiteral("snapping"), kLayoutB, QString(),
+                                    CRB::kContextBandBase, QString()),
+        };
+        const auto remapped = CRB::remapContextRules(rules, {removal(2), {}});
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 3);
+
+        const Rule& assignment = remapped->at(0);
+        QCOMPARE(assignment.id, CRB::assignmentRuleIdFor(s, 2, QString()));
+        QCOMPARE(assignment.name, CRB::contextRuleName(s, 2, QString()));
+        QVERIFY(CRB::matchIsExactContext(assignment.match, s, 2, QString()));
+        QVERIFY(assignment.actions == rules.at(0).actions);
+
+        const Rule& disable = remapped->at(1);
+        QCOMPARE(disable.id, CRB::disableRuleIdFor(s, 2, QString(), QStringLiteral("autotile")));
+        QCOMPARE(disable.name, CRB::contextRuleName(s, 2, QString()));
+        QVERIFY(CRB::matchIsExactContext(disable.match, s, 2, QString()));
+
+        const Rule& combined = remapped->at(2);
+        QCOMPARE(combined.id, CRB::assignmentRuleIdFor(s, 3, act));
+        QVERIFY(CRB::matchIsExactContext(combined.match, s, 3, act));
+    }
+
+    /// A reorder moves two rules through each other's numbers. Both survive,
+    /// each with the id of its new tuple, and each still carries its own layout.
+    void testRemap_reorderSwapsWithoutCollision()
+    {
+        const QString s = QStringLiteral("DP-1");
+        const QList<Rule> rules{
+            CRB::makeAssignmentRule(QString(), s, 2, QString(), QStringLiteral("snapping"), kLayoutA, QString(),
+                                    CRB::kContextBandBase, QString()),
+            CRB::makeAssignmentRule(QString(), s, 3, QString(), QStringLiteral("snapping"), kLayoutB, QString(),
+                                    CRB::kContextBandBase, QString()),
+        };
+        const auto swap = [](int d) {
+            return d == 2 ? 3 : (d == 3 ? 2 : d);
+        };
+        const auto remapped = CRB::remapContextRules(rules, {swap, {}});
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 2);
+        QCOMPARE(remapped->at(0).id, CRB::assignmentRuleIdFor(s, 3, QString()));
+        QVERIFY(remapped->at(0).actions == rules.at(0).actions);
+        QCOMPARE(remapped->at(1).id, CRB::assignmentRuleIdFor(s, 2, QString()));
+        QVERIFY(remapped->at(1).actions == rules.at(1).actions);
+    }
+
+    /// The settings app's "layout on virtual desktop" template writes the exact
+    /// context shape with a random id and a name of its own. It follows its
+    /// desktop like a minted rule but keeps both.
+    void testRemap_handBuiltContextRuleKeepsIdAndName()
+    {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("My desktop");
+        rule.priority = CRB::kContextBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 3);
+        rule.actions = CRB::makeAssignmentActions(QStringLiteral("snapping"), kLayoutA, QString(), QString());
+        const auto remapped = CRB::remapContextRules({rule}, {removal(2), {}});
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 1);
+        QCOMPARE(remapped->first().id, rule.id);
+        QCOMPARE(remapped->first().name, rule.name);
+        QVERIFY(remapped->first().match == MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 2));
+    }
+
+    /// A context match with a Mode leaf is not one context's setting. Its
+    /// desktop leaf moves and the Mode leaf stays; naming the removed desktop
+    /// switches it off instead of deleting it.
+    void testRemap_contextMatchWithAModeLeafFollowsLikeAWindowRule()
+    {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = CRB::kContextBandBase;
+        const MatchExpression modeLeaf =
+            MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QStringLiteral("snapping"));
+        rule.match = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+            MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 3),
+            modeLeaf,
+        });
+        rule.actions = CRB::makeAssignmentActions(QStringLiteral("snapping"), kLayoutA, QString(), QString());
+
+        const auto moved = CRB::remapContextRules({rule}, {removal(2), {}});
+        QVERIFY(moved);
+        QCOMPARE(moved->size(), 1);
+        QCOMPARE(moved->first().id, rule.id);
+        QVERIFY(moved->first().enabled);
+        QVERIFY(moved->first().match.children().at(1) == desktopLeaf(2));
+        QVERIFY(moved->first().match.children().at(2) == modeLeaf);
+
+        const auto gone = CRB::remapContextRules({rule}, {removal(3), {}});
+        QVERIFY(gone);
+        QCOMPARE(gone->size(), 1);
+        QVERIFY(!gone->first().enabled);
+        QVERIFY(gone->first().match == rule.match);
+    }
+
+    /// l18_desktop_rules_renumber: a window rule follows the desktops it names,
+    /// in its match and in its RouteToDesktop target.
+    void testRemap_windowRuleFollowsItsDesktop()
+    {
+        const Rule rule = windowRule(MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 3), 4);
+        const auto remapped = CRB::remapContextRules({rule}, {removal(2), {}});
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 1);
+        const Rule& out = remapped->first();
+        QCOMPARE(out.id, rule.id);
+        QVERIFY(out.enabled);
+        QVERIFY(out.match.children().at(1) == desktopLeaf(2));
+        QCOMPARE(out.actions.first().params.value(ActionParam::TargetDesktop).toInt(), 3);
+    }
+
+    /// l18_desktop_rules_renumber: a window rule that named the removed desktop
+    /// is switched off, not deleted, and keeps what it said. A negated leaf
+    /// names the desktop too, and so does the RouteToDesktop target alone.
+    void testRemap_windowRuleNamingTheRemovedDesktopIsSwitchedOff()
+    {
+        const Rule negated = windowRule(
+            MatchExpression::makeNone({MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 2)}), 0);
+        const Rule routed = windowRule(MatchExpression(), 2);
+        const auto remapped = CRB::remapContextRules({negated, routed}, {removal(2), {}});
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 2);
+        QVERIFY(!remapped->at(0).enabled);
+        QVERIFY(remapped->at(0).match == negated.match);
+        QVERIFY(!remapped->at(1).enabled);
+        QVERIFY(remapped->at(1).actions == routed.actions);
+    }
+
+    /// A range has no rewrite that names the same desktops after a reorder,
+    /// so it is left as written; so is a rule below the removed desktop and a
+    /// monitor-only one, and then nothing changed at all.
+    void testRemap_untouchedRulesAreNullopt()
+    {
+        const QString s = QStringLiteral("DP-1");
+        const QList<Rule> rules{
+            windowRule(MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::GreaterThan, 2), 0),
+            CRB::makeAssignmentRule(QString(), s, 1, QString(), QStringLiteral("snapping"), kLayoutA, QString(),
+                                    CRB::kContextBandBase, QString()),
+            CRB::makeAssignmentRule(QString(), s, 0, QString(), QStringLiteral("snapping"), kLayoutB, QString(),
+                                    CRB::kContextBandBase, QString()),
+        };
+        QVERIFY(!CRB::remapContextRules(rules, {removal(2), {}}));
+        QVERIFY(!CRB::remapContextRules(rules, {}));
+    }
+
+    /// The count sweep: every desktop past the count is gone.
+    void testRemap_countDropsRulesPastIt()
+    {
+        const QString s = QStringLiteral("DP-1");
+        const QList<Rule> rules{
+            CRB::makeAssignmentRule(QString(), s, 3, QString(), QStringLiteral("snapping"), kLayoutA, QString(),
+                                    CRB::kContextBandBase, QString()),
+            CRB::makeAssignmentRule(QString(), s, 4, QString(), QStringLiteral("snapping"), kLayoutB, QString(),
+                                    CRB::kContextBandBase, QString()),
+        };
+        const auto threeLeft = [](int d) {
+            return d > 3 ? 0 : d;
+        };
+        const auto remapped = CRB::remapContextRules(rules, {threeLeft, {}});
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 1);
+        QCOMPARE(remapped->first().id, rules.first().id);
+    }
+
+    /// A context rule pinned to a removed activity goes, Combined included; a
+    /// live activity's stays, and a window rule naming an activity is left alone.
+    void testRemap_activityDropsRulesOfAGoneActivity()
+    {
+        const QString s = QStringLiteral("DP-1");
+        const QString live = QStringLiteral("act-live");
+        const QString gone = QStringLiteral("act-gone");
+        const Rule windowOnGone = windowRule(MatchExpression::makeLeaf(Field::Activity, Operator::Equals, gone), 0);
+        const QList<Rule> rules{
+            CRB::makeAssignmentRule(QString(), s, 0, gone, QStringLiteral("snapping"), kLayoutA, QString(),
+                                    CRB::kContextBandBase, QString()),
+            CRB::makeAssignmentRule(QString(), s, 2, gone, QStringLiteral("snapping"), kLayoutA, QString(),
+                                    CRB::kContextBandBase, QString()),
+            CRB::makeDisableRule(QString(), s, 0, live, QStringLiteral("snapping"), CRB::kContextBandBase),
+            windowOnGone,
+        };
+        const auto remapped = CRB::remapContextRules(rules, {{}, [&live](const QString& a) {
+                                                                 return a == live;
+                                                             }});
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 2);
+        QCOMPARE(remapped->at(0).id, rules.at(2).id);
+        QVERIFY(remapped->at(1) == windowOnGone);
+    }
+
+    /// A malformed desktop value is refused by contextDimsOf and has no number
+    /// to move, so the rule is left exactly as it is.
+    void testRemap_malformedDesktopValueIsLeftAlone()
+    {
+        for (const QVariant& bad : {QVariant(QStringLiteral("abc")), QVariant(0), QVariant(-3)}) {
+            Rule rule =
+                CRB::makeAssignmentRule(QString(), QStringLiteral("DP-1"), 3, QString(), QStringLiteral("snapping"),
+                                        kLayoutA, QString(), CRB::kContextBandBase, QString());
+            rule.match = MatchExpression::makeAll({
+                MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+                MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, bad),
+            });
+            QVERIFY2(!CRB::remapContextRules({rule}, {removal(2), {}}), qPrintable(bad.toString()));
+        }
+    }
+
+    /// A desktop inserted at the front moves desktop 2 onto 3. A stale rule
+    /// already at 3, past the old two-desktop list, is not the map's to move
+    /// and would now share the moved rule's id: the moved one is kept.
+    void testRemap_staleRuleOnAMovedIdIsDropped()
+    {
+        const QString s = QStringLiteral("DP-1");
+        const QList<Rule> rules{
+            CRB::makeAssignmentRule(QString(), s, 3, QString(), QStringLiteral("snapping"), kLayoutB, QString(),
+                                    CRB::kContextBandBase, QString()),
+            CRB::makeAssignmentRule(QString(), s, 2, QString(), QStringLiteral("snapping"), kLayoutA, QString(),
+                                    CRB::kContextBandBase, QString()),
+        };
+        const auto insertAtFront = [](int d) {
+            return d >= 1 && d <= 2 ? d + 1 : d;
+        };
+        const auto remapped = CRB::remapContextRules(rules, {insertAtFront, {}});
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 1);
+        QCOMPARE(remapped->first().id, CRB::assignmentRuleIdFor(s, 3, QString()));
+        QVERIFY(remapped->first().actions == rules.at(1).actions);
+    }
+
+private:
+    inline static const QString kLayoutA = QStringLiteral("{00000000-0000-0000-0000-00000000000a}");
+    inline static const QString kLayoutB = QStringLiteral("{00000000-0000-0000-0000-00000000000b}");
+
+    static MatchExpression desktopLeaf(int desktop)
+    {
+        return MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, desktop);
+    }
+
+    /// One desktop removed at @p removed: the map the daemon builds for it.
+    static std::function<int(int)> removal(int removed)
+    {
+        return [removed](int d) {
+            return d == removed ? 0 : (d > removed ? d - 1 : d);
+        };
+    }
+
+    /// A window rule: an AppId leaf beside @p extra (none for the catch-all),
+    /// routing to @p routeDesktop when it is above 0, else snapping to zone 1.
+    static Rule windowRule(const MatchExpression& extra, int routeDesktop)
+    {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("Browser");
+        rule.priority = 500;
+        QList<MatchExpression> leaves{
+            MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("org.example.browser"))};
+        if (!extra.isCatchAll()) {
+            leaves.append(extra);
+        }
+        rule.match = MatchExpression::makeAll(leaves);
+        RuleAction action;
+        if (routeDesktop > 0) {
+            action.type = QString(ActionType::RouteToDesktop);
+            action.params.insert(ActionParam::TargetDesktop, routeDesktop);
+        } else {
+            action.type = QString(ActionType::SetEngineMode);
+            action.params.insert(ActionParam::Mode, QStringLiteral("snapping"));
+        }
+        rule.actions.append(action);
+        return rule;
     }
 };
 

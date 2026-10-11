@@ -12,6 +12,8 @@
 
 #include "wta_convenience_fixture.h"
 
+#include <QScopeGuard>
+
 using PhosphorProtocol::OutputSettleRow;
 using PhosphorProtocol::OutputSettleVerdict;
 
@@ -172,6 +174,43 @@ private Q_SLOTS:
         QVERIFY(!m_wta->takeEvacueeFloatPending(w, kB));
     }
 
+    // A window snap held floating on A keeps floating on B, a snapping
+    // output, when A goes away (F670). The prune drops A's stores and the float
+    // with them, so the settle reads the float the park saw. A second settle
+    // naming the same untouched window leaves it as it is.
+    void aSnapFloatEvacueeFloatsOnTheSnappingOutput()
+    {
+        const QString w = QStringLiteral("app|float-evacuee");
+        floatOnA(w);
+        const auto clearResolver = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+        });
+        unplugA();
+        for (int settle = 0; settle < 2; ++settle) {
+            QCOMPARE(verdictOf(m_wta->reportOutputSettle({unplugRow(w)}), w), int(OutputSettleVerdict::EvacueeFloat));
+            QVERIFY(m_snapEngine->isFloating(w));
+            QCOMPARE(m_snapEngine->screenForTrackedWindow(w), kB);
+        }
+    }
+
+    // The same for a window the user touched while A went away: the touched
+    // arm drops the park first, and the float it saw still decides (F670).
+    void aTouchedSnapFloatEvacueeStillFloatsOnB()
+    {
+        const QString w = QStringLiteral("app|touched-float-evacuee");
+        floatOnA(w);
+        const auto clearResolver = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+        });
+        unplugA();
+        OutputSettleRow row = unplugRow(w);
+        row.moveResizeCount = 4;
+        QCOMPARE(verdictOf(m_wta->reportOutputSettle({row}), w), int(OutputSettleVerdict::EvacueeFloat));
+        QVERIFY(!m_snapEngine->hasParked(w, QString()));
+        QVERIFY(m_snapEngine->isFloating(w));
+        QCOMPARE(m_snapEngine->screenForTrackedWindow(w), kB);
+    }
+
     // A window announced on the output it is parked for, after an effect
     // reload lost the records that would have classified it, goes back into
     // its parked place.
@@ -213,6 +252,20 @@ private:
         m_snapEngine->setCurrentDesktopForScreen(kA, 1);
         m_wta->service()->assignWindowToZone(windowId, m_zoneIds[0], kA, 1);
         QCOMPARE(m_wta->service()->zoneForWindow(windowId), m_zoneIds[0]);
+    }
+
+    /// Snap @p windowId on A and float it there, with the daemon's float
+    /// resolver (the snap engine's answer), so the service reads the float
+    /// from the engine's stores as it does in the daemon. The caller clears it.
+    void floatOnA(const QString& windowId)
+    {
+        snapOnA(windowId);
+        m_wta->service()->setEngineFloatResolver([this](const QString& id) {
+            return m_snapEngine->isFloating(id);
+        });
+        m_snapEngine->setWindowFloat(windowId, true, kA);
+        QVERIFY(m_snapEngine->isFloating(windowId));
+        QVERIFY(m_wta->service()->isWindowFloating(windowId));
     }
 
     /// The daemon's retire for A: park, prune, release the parked slots.

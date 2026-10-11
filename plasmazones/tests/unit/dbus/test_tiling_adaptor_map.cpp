@@ -16,6 +16,8 @@
  *     managed focus, across every hook that re-reads it (the focus report,
  *     the engine-driven activation, a close, the coalesced announce), and
  *     managedFocusedWindow answers the live value with strict ownership.
+ *  3. The float relay's dedup memory is forgotten on request and on a fresh
+ *     open (F593, F604).
  *
  * The focus half runs against a REAL ScrollEngine with headless geometry
  * providers, wired the way init_engines.cpp wires it (activation and
@@ -274,6 +276,50 @@ private Q_SLOTS:
         QTest::qWait(10);
         QCOMPARE(spy.count(), 5);
 
+        adaptor.clearEngine();
+    }
+
+    // The float relay's dedup memory is forgettable: an engine float change
+    // that never reached this channel must not swallow the next equal edge
+    // here (F593).
+    void floatRelayGoesOutAgainAfterTheMemoryIsForgotten()
+    {
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        QSignalSpy spy(&adaptor, &TilingAdaptor::windowFloatingChanged);
+        const QString w = QStringLiteral("app|a");
+        adaptor.relayWindowFloatingChanged(w, true, QStringLiteral("DP-1"));
+        adaptor.relayWindowFloatingChanged(w, true, QStringLiteral("DP-1"));
+        QCOMPARE(spy.count(), 1);
+        adaptor.forgetFloatBroadcast(w);
+        adaptor.relayWindowFloatingChanged(w, true, QStringLiteral("DP-1"));
+        QCOMPARE(spy.count(), 2);
+    }
+
+    // A fresh open forgets the float the channel last broadcast for the id,
+    // which an exit that bypassed the adaptor left standing (F604).
+    void aFreshOpenForgetsTheFloatMemory()
+    {
+        PhosphorScrollEngine::ScrollEngine engine(nullptr, nullptr);
+        engine.setScreenGeometryProviders(
+            [](const QString&) {
+                return QRect(0, 40, 1200, 760);
+            },
+            [](const QString&) {
+                return QRect(0, 0, 1200, 800);
+            });
+        engine.setActiveScreens({QStringLiteral("DP-1")});
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+        QSignalSpy spy(&adaptor, &TilingAdaptor::windowFloatingChanged);
+        const QString w = QStringLiteral("app|a");
+        adaptor.relayWindowFloatingChanged(w, true, QStringLiteral("DP-1"));
+        QCOMPARE(spy.count(), 1);
+        adaptor.windowOpened(w, QStringLiteral("DP-1"), 0, 0);
+        QVERIFY(engine.isWindowTracked(w));
+        adaptor.relayWindowFloatingChanged(w, true, QStringLiteral("DP-1"));
+        QCOMPARE(spy.count(), 2);
         adaptor.clearEngine();
     }
 };

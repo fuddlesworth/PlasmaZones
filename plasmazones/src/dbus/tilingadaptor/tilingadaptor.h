@@ -134,11 +134,11 @@ public:
     /// their placement of the arrival; the membership question is no longer
     /// theirs. Pass nullptr on shutdown. Not owned.
     ///
-    /// Both sides speak x11 desktop NUMBERS, which Plasma renumbers when a
-    /// desktop in the middle is deleted. That is safe only because the daemon
-    /// re-keys engine state on removal (IPlacementEngine::
-    /// renumberDesktopsAfterRemoval); without it the two numberings drift and
-    /// every window on a shifted desktop reads as having left it. A screen
+    /// Both sides speak x11 desktop NUMBERS, which Plasma renumbers when a desktop is added, removed or moved in
+    /// the middle. That is safe only because the daemon re-keys the scroll engine's state and the registry's
+    /// records on every such change (IPlacementEngine::remapDesktops, WindowRegistry::remapDesktops), and snap's
+    /// and autotile's on a removal only; without it the numberings drift and every window on a shifted desktop
+    /// reads as having left it (an insert or a move still does that for snap and autotile). A screen
     /// pinned to one desktop is the other case where the key is not a
     /// compositor desktop, and the reconcile skips those.
     ///
@@ -235,15 +235,15 @@ public:
     /// the receiver re-queries scrollTabColors for the windows it paints.
     void relayScrollTabColorsChanged();
     /// Targeted tab-colour re-drive for ONE window, fired by the daemon when
-    /// that window's title changes (a `Title contains …` tab-colour rule can
-    /// flip on a retitle with no rules edit, so the revision-keyed memo alone
-    /// would never re-resolve it). Resolves through the WTA and carries the
-    /// map, so the effect does not have to round-trip a query.
+    /// that window's registry record changes (a tab-colour rule on its title,
+    /// state flags or desktop can flip with no rules edit, F699). Resolves
+    /// through the WTA and carries the map, so the effect does not have to
+    /// round-trip a query.
     ///
     /// Gated on the strip cache naming the window: the effect only paints
     /// pills for windows that are tabs, so relaying for anything else would
     /// grow its per-window colour cache with entries it never draws, on every
-    /// retitle of every window in the session. The effect evicts a window's
+    /// record change of every window in the session. The effect evicts a window's
     /// cached verdict when it stops being a tab anywhere, so a window that
     /// becomes a tab (again) is re-queried when its strip arrives and cannot
     /// carry a verdict this relay skipped while it was not a tab. Change-gated
@@ -894,6 +894,12 @@ public:
      * List payload matching WindowLifecycleRelay::stalePruned.
      */
     void pruneStaleFloatBroadcasts(const QStringList& aliveInstances);
+
+    /// Forget @p windowId's float broadcast in both key forms, so its next edge
+    /// on this channel goes out: for engine float changes that never reach this
+    /// channel (the daemon's passive float syncs) and for a fresh adoption
+    /// (F593, F604). Plain method, not a slot.
+    void forgetFloatBroadcast(const QString& windowId);
 };
 
 } // namespace PlasmaZones

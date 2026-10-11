@@ -248,7 +248,7 @@ void TilingAdaptor::relayScrollTabColorsForWindow(const QString& windowId)
     // screen id, a colour or a title fragment. Nothing constructible collides.
     // The cost of a hypothetical collision is also bounded: one extra colour
     // relay for a window the effect does not paint a pill for, which the
-    // effect ignores. Parsing the JSON per title change to close it would be
+    // effect ignores. Parsing the JSON per record change to close it would be
     // strictly worse on the hot path this bound exists to keep cheap.
     const QString quoted = QLatin1Char('"') + windowId + QLatin1Char('"');
     bool named = false;
@@ -374,6 +374,10 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
         return;
     }
+    // A fresh adoption: whatever float this channel last broadcast for the id
+    // predates it, and an exit that bypassed this adaptor left it standing
+    // (F593, F604). Before the evacuee arms, which float through the engines.
+    forgetFloatBroadcast(entry.windowId);
     // An evacuee that could not float in place when its output went away
     // (minimized, or out of view) floats now instead of tiling (F643), and one
     // announced on the output it is parked for re-enters its parked place.
@@ -467,6 +471,8 @@ void TilingAdaptor::setWindowTrackingAdaptor(WindowTrackingAdaptor* wta)
 void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
                                                  bool allowCrossScreenClaim)
 {
+    // The routed open dispatcher and the parked-open retry enter here directly.
+    forgetFloatBroadcast(entry.windowId);
     // "Focus new windows" focuses genuine opens only. State the entry's intent
     // to every lifecycle engine for the length of this dispatch, at the HEAD so
     // the reopen claim below (which re-enters windowOpened on the claiming
@@ -925,6 +931,14 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
     m_pendingOpens.removeIf([&alive](const PhosphorProtocol::WindowOpenedEntry& entry) {
         return !alive.contains(PhosphorIdentity::WindowId::extractInstanceId(entry.windowId));
     });
+}
+
+void TilingAdaptor::forgetFloatBroadcast(const QString& windowId)
+{
+    m_lastFloatBroadcast.remove(windowId);
+    if (m_windowTrackingAdaptor) {
+        m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
+    }
 }
 
 void TilingAdaptor::releaseWindowTracking(const QString& windowId)

@@ -399,8 +399,9 @@ public:
     /// Dirty-marking wrapper for WindowPlacementStore::renumberDesktopZones
     /// that also shifts the buffered resnap rows the same way: a row on the
     /// removed desktop maps to 0, the all-desktops sentinel, and a row past it
-    /// moves down one.
+    /// moves down one. remapDesktopZones is the same for any desktop list change (F763).
     void renumberDesktopZones(int removedDesktop) override;
+    void remapDesktopZones(const PhosphorEngine::DesktopRemap& remap) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
@@ -689,18 +690,16 @@ public:
     /**
      * @brief Migrate window screen assignments from physical to virtual screen IDs
      *
-     * Windows snapped before virtual screens were configured have physical screen IDs
-     * in the snap stores' screen assignments. When
-     * virtual screens are active, all per-screen
-     * lookups use virtual IDs, so these windows become invisible to zone occupancy
-     * checks, snap assist, float/unfloat, etc.
+     * Windows snapped before virtual screens were configured have physical screen IDs in the snap stores' screen
+     * assignments. When virtual screens are active, all per-screen lookups use virtual IDs, so these windows become
+     * invisible to zone occupancy checks, snap assist, float/unfloat, etc.
      *
-     * This method iterates all screen assignments and, for any window whose screen
-     * matches the given physical screen, determines which virtual screen the window's
-     * zone falls within and updates the assignment accordingly.
+     * This method iterates all screen assignments and, for any window whose screen matches the given physical
+     * screen, determines which virtual screen the window's zone falls within and updates the assignment accordingly.
      *
-     * Also migrates pre-float screen assignments in SnapState, and the placement
-     * records: a closed window's by the zones its record's snapped slot names.
+     * Also migrates pre-float screen assignments in SnapState, and the placement records: a closed window's by the
+     * zones its record's snapped slot names. The snap engine then re-files each membership under the store for its
+     * new screen (SnapStateResolver::rekeyToRecordedScreens, F105) before the zones are pruned.
      *
      * @param physicalScreenId The physical screen being subdivided
      * @param virtualScreenIds Virtual screen IDs for the physical screen
@@ -714,7 +713,7 @@ public:
      *
      * Called when virtual screen configuration is removed for a physical screen.
      * Strips the "/vs:N" suffix from all tracked window screen assignments that
-     * belong to the given physical screen, reverting them to the physical ID.
+     * belong to the given physical screen, reverting them to the physical ID, and re-files the snap stores likewise.
      *
      * @param physicalScreenId The physical screen ID to migrate back to
      */
@@ -873,7 +872,7 @@ public:
         DirtyNone = 0,
         DirtyActiveLayoutId = 1u << 0,
         DirtyZoneAssignments = 1u << 1, // legacy save-trigger → DirtyWindowPlacements
-        // bit 2 reserved (was DirtyPendingRestores, removed with the pending-restore queue)
+        DirtyKnownDesktops = 1u << 2, ///< the virtual desktop ids the session last saw (was DirtyPendingRestores)
         DirtyPreTileGeometries = 1u << 3, // legacy save-trigger → DirtyWindowPlacements
         DirtyLastUsedZone = 1u << 4,
         DirtyPreFloatZones = 1u << 5, // legacy save-trigger → DirtyWindowPlacements
@@ -884,7 +883,7 @@ public:
         // bit 10 reserved (was DirtyFloatRestores, removed with the FloatRestoreQueues key)
         DirtyWindowPlacements = 1u << 11, ///< unified WindowPlacementStore (sole per-window restore state)
         DirtyScrollStrips = 1u << 12, ///< scrolling strip-structure snapshots (WTA-provided blob)
-        DirtyAll = 0x1FFFu, // covers bits 0-12 incl. the reserved bits 2 and 10
+        DirtyAll = 0x1FFFu, // covers bits 0-12 incl. the reserved bit 10
     };
     using DirtyMask = uint32_t;
 

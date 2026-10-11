@@ -232,6 +232,14 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // later open, persisted across sessions, and could hand its slot to an
     // unrelated same-app window through the cross-session claim). The seed
     // entry is still consumed so it cannot linger past the adoption.
+    //
+    // A window arriving here has left every other screen, and a column stashed
+    // for it there is given up first: no engine releases the arriving one's
+    // stash on a move, and the strip's return to scrolling would pull the
+    // window back across monitors (F648).
+    forgetStashedWindowWhere(windowId, [&screenId](const PhosphorEngine::PlacementStateKey& key) {
+        return key.screenId != screenId;
+    });
     if (restoreFromStripStash(state, currentKeyForScreen(screenId), windowId, params, minWidth, minHeight)) {
         inserted = true;
         restoredFromStash = true;

@@ -335,31 +335,36 @@ private Q_SLOTS:
     // float-restore — close-while-floating → reopen-floating (unified store)
     // =====================================================================
 
-    // getPreTileGeometries answers LIVE records only. Its sole consumer keys
-    // each entry by appId and applies it to an OPEN window of that app, so a
-    // closed instance's rect reaching it would be handed to a window that
-    // never recorded it — the cross-instance borrow the per-window read
-    // refuses by construction.
+    // getPreTileGeometries answers LIVE records only, and each entry names its
+    // window, so the consumer applies it to that window only, never to a
+    // same-app sibling (F627). A closed instance has no window to seed.
     void testGetPreTileGeometries_liveRecordsOnly()
     {
         using PhosphorEngine::WindowPlacement;
         auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
         m_wta->setWindowRegistry(registry);
-        // Only this instance is registered, so only it is live.
-        m_wta->setWindowMetadata(QStringLiteral("liveinst"), QStringLiteral("pretile"), QString(), QString(), QString(),
-                                 0, 0, QString(), 0, QVariantMap());
+        // Only these two instances are registered, so only they are live.
+        for (const QString& inst : {QStringLiteral("liveinst"), QStringLiteral("liveinst2")}) {
+            m_wta->setWindowMetadata(inst, QStringLiteral("pretile"), QString(), QString(), QString(), 0, 0, QString(),
+                                     0, QVariantMap());
+        }
         const auto teardown = qScopeGuard([this] {
             m_wta->setWindowRegistry(nullptr);
         });
 
         PhosphorEngine::WindowPlacementStore& store = m_wta->service()->placementStore();
         const QRect liveRect(40, 50, 900, 700);
+        const QRect siblingRect(500, 60, 700, 500);
         WindowPlacement live;
         live.windowId = QStringLiteral("pretile|liveinst");
         live.appId = QStringLiteral("pretile");
         live.screenId = m_screenId;
         live.freeGeometryByScreen.insert(m_screenId, liveRect);
         QVERIFY(store.record(live));
+        WindowPlacement sibling = live;
+        sibling.windowId = QStringLiteral("pretile|liveinst2");
+        sibling.freeGeometryByScreen.insert(m_screenId, siblingRect);
+        QVERIFY(store.record(sibling));
         WindowPlacement dead;
         dead.windowId = QStringLiteral("pretile|deadinst");
         dead.appId = QStringLiteral("pretile");
@@ -368,9 +373,14 @@ private Q_SLOTS:
         QVERIFY(store.record(dead));
 
         const PhosphorProtocol::PreTileGeometryList entries = m_wta->getPreTileGeometries();
-        QCOMPARE(entries.size(), 1);
-        QCOMPARE(entries.at(0).appId, QStringLiteral("pretile"));
-        QCOMPARE(QRect(entries.at(0).x, entries.at(0).y, entries.at(0).width, entries.at(0).height), liveRect);
+        QCOMPARE(entries.size(), 2);
+        QHash<QString, QRect> byWindow;
+        for (const PhosphorProtocol::PreTileGeometryEntry& entry : entries) {
+            QCOMPARE(entry.appId, QStringLiteral("pretile"));
+            byWindow.insert(entry.windowId, entry.toRect());
+        }
+        QCOMPARE(byWindow.value(QStringLiteral("pretile|liveinst")), liveRect);
+        QCOMPARE(byWindow.value(QStringLiteral("pretile|liveinst2")), siblingRect);
     }
 
     // An engine's size-only restore (#1106) reaches the wire as a size-only

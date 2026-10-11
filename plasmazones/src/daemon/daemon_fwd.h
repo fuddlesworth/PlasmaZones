@@ -35,6 +35,7 @@ class SurfaceShaderRegistry;
 }
 
 namespace PhosphorEngine {
+class DesktopRemap;
 class WindowRegistry;
 }
 

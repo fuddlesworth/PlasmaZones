@@ -1494,6 +1494,11 @@ add_executable(test_wta_scroll_strips dbus/test_wta_scroll_strips.cpp)
 target_link_libraries(test_wta_scroll_strips PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_scroll_strips COMMAND test_wta_scroll_strips)
 
+# The desktop ids the session last saw (KnownDesktopIds) round-trip through session state.
+add_executable(test_wta_known_desktops dbus/test_wta_known_desktops.cpp)
+target_link_libraries(test_wta_known_desktops PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_known_desktops COMMAND test_wta_known_desktops)
+
 add_executable(test_wta_routing dbus/test_wta_routing.cpp
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_wta_routing PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)

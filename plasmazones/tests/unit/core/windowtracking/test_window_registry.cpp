@@ -32,8 +32,11 @@
  *    receiver-deletes-registry) leave the registry consistent and emit once
  *  - isMinimized resolves composite windowIds to the instance record
  *  - pruneStaleInstances sweeps absent records and orphaned canonicals
+ *  - remapDesktops moves the desktop numbers of the records not pushed since
+ *    beginDesktopRenumber, a removed desktop to its successor (F763)
  */
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <QPointer>
 #include <QRegularExpression>
@@ -43,6 +46,7 @@
 #include <algorithm>
 #include <functional>
 
+using PhosphorEngine::DesktopRemap;
 using PhosphorEngine::WindowMetadata;
 using PhosphorEngine::WindowRegistry;
 
@@ -1036,6 +1040,101 @@ private Q_SLOTS:
 
         QVERIFY(!reg.minimizedState(QStringLiteral("unknown")).has_value());
         QVERIFY(!reg.minimizedState(QStringLiteral("kate|unknown")).has_value());
+    }
+
+    // Desktop renumber (F763). Desktop 2 of 4 removed. KWin re-desks only the windows ON it, so a record
+    // on a desktop above it is never pushed again and has to be moved here.
+    void remapDesktops_movesRecordsPushedBeforeTheChange()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), onDesktops(3));
+        reg.upsert(QStringLiteral("u2"), onDesktops(3, {3, 4}));
+        reg.upsert(QStringLiteral("u3"), onDesktops(1));
+        reg.upsert(QStringLiteral("u4"), onDesktops(0));
+        QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
+        reg.beginDesktopRenumber();
+
+        QCOMPARE(reg.remapDesktops(DesktopRemap::removal(2, 4)), 2);
+
+        QCOMPARE(reg.metadata(QStringLiteral("u1"))->virtualDesktop, 2);
+        QCOMPARE(reg.metadata(QStringLiteral("u2"))->virtualDesktop, 2);
+        QCOMPARE(reg.metadata(QStringLiteral("u2"))->virtualDesktops, (QList<int>{2, 3}));
+        QCOMPARE(reg.metadata(QStringLiteral("u3"))->virtualDesktop, 1);
+        QCOMPARE(reg.metadata(QStringLiteral("u4"))->virtualDesktop, 0);
+        QCOMPARE(changed.count(), 2);
+    }
+
+    // A push after the change began already speaks the new numbering, an
+    // identical one included, and is not moved a second time.
+    void remapDesktops_leavesAPushAfterTheChangeAlone()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), onDesktops(4));
+        reg.upsert(QStringLiteral("u2"), onDesktops(3));
+        reg.beginDesktopRenumber();
+        reg.upsert(QStringLiteral("u1"), onDesktops(3));
+        reg.upsert(QStringLiteral("u2"), onDesktops(3));
+
+        QCOMPARE(reg.remapDesktops(DesktopRemap::removal(2, 4)), 0);
+
+        QCOMPARE(reg.metadata(QStringLiteral("u1"))->virtualDesktop, 3);
+        QCOMPARE(reg.metadata(QStringLiteral("u2"))->virtualDesktop, 3);
+    }
+
+    // A window on the removed desktop goes where KWin sends it: the desktop
+    // that takes the number, or the one before when the last was removed.
+    void remapDesktops_removedDesktopGoesToItsSuccessor()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), onDesktops(4));
+        reg.upsert(QStringLiteral("u2"), onDesktops(2, {2, 4}));
+        reg.upsert(QStringLiteral("u3"), onDesktops(3, {3, 4}));
+        reg.beginDesktopRenumber();
+
+        reg.remapDesktops(DesktopRemap::removal(4, 4));
+
+        QCOMPARE(reg.metadata(QStringLiteral("u1"))->virtualDesktop, 3);
+        QCOMPARE(reg.metadata(QStringLiteral("u2"))->virtualDesktops, (QList<int>{2, 3}));
+        // {3, 4} folds onto 3 alone: a single desktop carries no list.
+        QCOMPARE(reg.metadata(QStringLiteral("u3"))->virtualDesktop, 3);
+        QVERIFY(reg.metadata(QStringLiteral("u3"))->virtualDesktops.isEmpty());
+    }
+
+    // A reorder moves numbers both ways.
+    void remapDesktops_followsAReorder()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), onDesktops(2));
+        reg.upsert(QStringLiteral("u2"), onDesktops(3));
+        reg.upsert(QStringLiteral("u3"), onDesktops(2, {2, 3}));
+        reg.beginDesktopRenumber();
+
+        reg.remapDesktops(DesktopRemap::fromIds({QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")},
+                                                {QStringLiteral("a"), QStringLiteral("c"), QStringLiteral("b")}));
+
+        QCOMPARE(reg.metadata(QStringLiteral("u1"))->virtualDesktop, 3);
+        QCOMPARE(reg.metadata(QStringLiteral("u2"))->virtualDesktop, 2);
+        QCOMPARE(reg.metadata(QStringLiteral("u3"))->virtualDesktop, 3);
+        QCOMPARE(reg.metadata(QStringLiteral("u3"))->virtualDesktops, (QList<int>{3, 2}));
+    }
+
+    // Without a snapshot there is nothing known to be stale: the records the
+    // effect pushes at start-up already carry KWin's current numbering.
+    void remapDesktops_withoutABeginChangesNothing()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), onDesktops(3));
+        QCOMPARE(reg.remapDesktops(DesktopRemap::removal(2, 4)), 0);
+        QCOMPARE(reg.metadata(QStringLiteral("u1"))->virtualDesktop, 3);
+    }
+
+private:
+    static WindowMetadata onDesktops(int desktop, const QList<int>& desktops = {})
+    {
+        WindowMetadata m = make(QStringLiteral("kate"));
+        m.virtualDesktop = desktop;
+        m.virtualDesktops = desktops;
+        return m;
     }
 };
 
