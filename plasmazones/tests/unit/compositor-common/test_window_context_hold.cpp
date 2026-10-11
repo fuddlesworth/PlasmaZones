@@ -7,9 +7,12 @@
  *        caused it (EE): the drag subject until its drop is settled, a
  *        visible window whose move to another output the client has not
  *        committed yet, and a window whose crossing waits for the
- *        screen-change settle. Each row pins one condition.
+ *        screen-change settle. Each row pins one condition. Also the desktop
+ *        set PlasmaZones' own move to another output re-desks the window to
+ *        (pzReDesk, F161, F693, F719).
  */
 
+#include <QStringList>
 #include <QTest>
 
 #include "plasmazoneseffect/windowcontexthold.h"
@@ -67,6 +70,57 @@ private Q_SLOTS:
         Inputs in;
         in.inViewByStamp = true;
         QCOMPARE(int(reasonsFor(in)), 0);
+    }
+
+    // F161: PlasmaZones' own move to another output swaps the desktop the
+    // source showed for the one the destination shows, as KWin's Move to
+    // Screen does, and keeps the window's other desktops.
+    void reDeskSwapsSourceForDestination()
+    {
+        const auto single = pzReDesk(QStringList{dA()}, dA(), dB(), /*visibleOnSource=*/true, /*pinned=*/false);
+        QVERIFY(single.has_value());
+        QCOMPARE(*single, QStringList{dB()});
+        const auto several = pzReDesk(QStringList{dA(), dC()}, dA(), dB(), /*visibleOnSource=*/true, /*pinned=*/false);
+        QVERIFY(several.has_value());
+        QCOMPARE(*several, (QStringList{dC(), dB()}));
+    }
+
+    // F693: a window already hidden on its source stays on its desktops.
+    void hiddenOnSourceIsNotReDesked()
+    {
+        QVERIFY(!pzReDesk(QStringList{dA()}, dA(), dB(), /*visibleOnSource=*/false, /*pinned=*/false));
+    }
+
+    // F719: a placement that routed the window to a desktop keeps it there.
+    void pinnedDesktopKept()
+    {
+        QVERIFY(!pzReDesk(QStringList{dA()}, dA(), dB(), /*visibleOnSource=*/true, /*pinned=*/true));
+    }
+
+    void alreadyOnDestinationUnchanged()
+    {
+        QVERIFY(!pzReDesk(QStringList{dA(), dB()}, dA(), dB(), /*visibleOnSource=*/true, /*pinned=*/false));
+        QVERIFY(!pzReDesk(QStringList{dB()}, dA(), dB(), /*visibleOnSource=*/true, /*pinned=*/false));
+    }
+
+    // A window on every desktop (the empty set) is in view on any output.
+    void stickyUnchanged()
+    {
+        QVERIFY(!pzReDesk(QStringList{}, dA(), dB(), /*visibleOnSource=*/true, /*pinned=*/false));
+    }
+
+private:
+    static QString dA()
+    {
+        return QStringLiteral("desktop-a");
+    }
+    static QString dB()
+    {
+        return QStringLiteral("desktop-b");
+    }
+    static QString dC()
+    {
+        return QStringLiteral("desktop-c");
     }
 };
 

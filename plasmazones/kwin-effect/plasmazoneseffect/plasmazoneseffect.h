@@ -420,16 +420,16 @@ private:
     void runContextEdit(KWin::EffectWindow* window, ResizeHold::ContextAxis axis);
     /// The desktop and activity fields the window has now, as a push carries them.
     static WindowContextFields liveContextFields(KWin::EffectWindow* w);
-    /// The context hold (EE, window_context_hold.cpp), and the held stamp's fields as a push carries them.
+    /// window_context_hold.cpp: the context hold (EE), the held stamp's push fields, PZ's own crossing re-desk (F161).
     bool holdContextEdit(KWin::EffectWindow* window, ResizeHold::ContextAxis axis);
     void releaseContextHold(KWin::EffectWindow* w, quint8 reasons);
     void releaseDragContextHold(KWin::EffectWindow* w);
     WindowContextFields stampContextFields(KWin::EffectWindow* w) const;
-    /// The rest of setupWindowConnections' per-window wiring, split by concern
-    /// and called from it in this order: cross-output and virtual-screen moves
-    /// (window_output_connections.cpp), identity and metadata pushes
-    /// (window_metadata_connections.cpp), and the interactive move/resize pair
-    /// (window_moveresize_connections.cpp).
+    void armPzCrossing(KWin::EffectWindow* window, const QRect& target);
+    bool reDeskPzCrossing(KWin::EffectWindow* window);
+    /// The rest of setupWindowConnections' per-window wiring, called from it in this order: cross-output and
+    /// virtual-screen moves (window_output_connections.cpp), identity and metadata pushes
+    /// (window_metadata_connections.cpp), and the interactive move/resize pair (window_moveresize_connections.cpp).
     void wireOutputChangeHandlers(KWin::EffectWindow* w);
     void wireMetadataHandlers(KWin::EffectWindow* w);
     void wireUserMoveResizeHandlers(KWin::EffectWindow* w);
@@ -1466,21 +1466,17 @@ private:
     // rather than a dead drag. Cleared at drag end.
     PhosphorProtocol::DragPolicy m_currentDragPolicy;
 
-    // Frame-geometry shadow push state. Effect debounces windowFrameGeometryChanged
-    // signals per-window to ~50ms and pushes the latest geometry to the daemon via
-    // WindowTracking::setFrameGeometry. Populates the daemon's frame-geometry
-    // shadow used by daemon-local shortcut handlers (float toggle, etc.) so they
-    // can read fresh geometry without a round-trip.
+    // Frame-geometry shadow push state. Throttled through the shared single-shot
+    // flush timer (at most one WindowTracking::setFrameGeometry per window per
+    // 50ms); feeds the daemon's frame shadow, which daemon-local shortcut handlers
+    // (float toggle, etc.) read instead of a round-trip.
     //
-    // The window pointer rides along so the debounced flush can run the
-    // shouldHandleWindow exclusion gate ONCE per flush instead of on every
-    // geometry tick — during animated geometry (retiles, morphs, interactive
-    // resize) the per-tick gate was an uncached rule resolve plus a full
-    // ruleQuery build, hundreds of times per second (discussion #816). The
-    // decoration resync deliberately stays PER TICK in the stash lambda (see
-    // window_connections.cpp): it is cheap, and deferring it let a re-decorated
-    // title bar flash for the throttle window. QPointer auto-nulls if the
-    // window dies before the flush; the flush skips those entries.
+    // The window pointer rides along so the flush can run the shouldHandleWindow
+    // gate ONCE per window per flush, after its geometry-scoped verdict eviction,
+    // not on every frame of an interactive move or resize (discussion #816). The
+    // decoration resync stays PER TICK in the stash lambda (window_connections.cpp):
+    // it is cheap, and deferring it let a re-decorated title bar flash. QPointer
+    // auto-nulls if the window dies before the flush; the flush skips those.
     // PendingFrameGeometry moved to effect_state.h.
     QHash<QString, PendingFrameGeometry> m_pendingFrameGeometry;
     /// Last caption pushed via the caption-only metadata refresh, per window.
@@ -3684,6 +3680,9 @@ private:
     // The frame a window's last size-only change produced: the output arm has
     // no old frame to judge one by (F1007). Cleared with the tracked screen.
     QHash<KWin::EffectWindow*, QRectF> m_sizeOnlyFrames;
+    /// A daemon move to another screen pre-seeds the tracked screen, so neither crossing arm sees a
+    /// change: the screen it was sent to, until a frame lands there and its rule verdicts go (F160, F333).
+    QHash<KWin::EffectWindow*, QString> m_ruleScreenOwed;
     // The window notifyWindowActivated last reported to the daemon, which is
     // the daemon's focused window until the next report. reportActiveWindowScreen
     // gates on it.

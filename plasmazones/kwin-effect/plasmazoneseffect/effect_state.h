@@ -356,6 +356,17 @@ struct ContextHold
     quint64 generation = 0; ///< read by the in-flight deadline timer
 };
 
+/// PlasmaZones' own move of a window to another output, from the apply that
+/// commits it until the window lands there (F161). The destination's desktop is
+/// read when it lands, as KWin's Move to Screen reads it (F717).
+struct PzCrossing
+{
+    const KWin::LogicalOutput* target = nullptr; ///< compared, never dereferenced
+    QString sourceDesktopId; ///< the desktop the source output showed at the apply
+    bool visibleOnSource = false; ///< on that desktop and not parked for an arrival (F693)
+    QString pinnedDesktopId; ///< the desktop the open's placement routed it to, kept (F719)
+};
+
 /// Every context hold (window_context_hold.cpp). Raw keys, erased in the
 /// windowDeleted cleanup.
 struct ContextHoldState
@@ -366,6 +377,11 @@ struct ContextHoldState
     /// subject at the left button's release, before the outcome (F751).
     QSet<const KWin::EffectWindow*> dragLatched;
     quint64 seq = 0; ///< hands out ContextHold::generation
+    /// Re-armed by every apply that commits, consumed where the window lands.
+    QHash<const KWin::EffectWindow*, PzCrossing> pzCrossings;
+    /// The desktop an open's RouteToDesktop moved the window to, until the
+    /// open's next apply takes it into its PzCrossing.
+    QHash<const KWin::EffectWindow*, QString> pinnedDesktops;
 };
 
 /// Daemon readiness / virtual-screen fetch gate state. Grouped from

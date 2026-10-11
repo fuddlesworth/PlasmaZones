@@ -805,9 +805,30 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // transition's duration later. It never derefs it, so this is not a crash
     // guard — a freed pointer must simply not linger and be matched against a
     // live desktop.
-    connect(KWin::effects, &KWin::EffectsHandler::desktopRemoved, this, [this](KWin::VirtualDesktop* desktop) {
-        m_desktopTransition.desktopRemoved(desktop);
-    });
+    //
+    // KWin renumbers the desktops after one is removed, inserted or moved, and
+    // reports a desktop change only for an output whose desktop went away. The
+    // per-output dedup cache holds numbers, so it is re-read here, silently: the
+    // daemon renumbers its own map, and a report now could reach it first and be
+    // shifted twice. Left stale, a later switch to the desktop now carrying the
+    // cached number was dropped, and the announce gate compared the daemon's
+    // new numbers with the old ones (F798).
+    const auto resyncReportedDesktops = [this]() {
+        for (KWin::LogicalOutput* const output : KWin::effects->screens()) {
+            const KWin::VirtualDesktop* const vd = output ? KWin::effects->currentDesktop(output) : nullptr;
+            const QString screenId = output ? outputScreenId(output) : QString();
+            if (vd && m_lastScreenDesktop.contains(screenId)) {
+                m_lastScreenDesktop.insert(screenId, static_cast<int>(vd->x11DesktopNumber()));
+            }
+        }
+    };
+    connect(KWin::effects, &KWin::EffectsHandler::desktopRemoved, this,
+            [this, resyncReportedDesktops](KWin::VirtualDesktop* desktop) {
+                m_desktopTransition.desktopRemoved(desktop);
+                resyncReportedDesktops();
+            });
+    connect(KWin::effects, &KWin::EffectsHandler::desktopAdded, this, resyncReportedDesktops);
+    connect(KWin::effects, &KWin::EffectsHandler::desktopMoved, this, resyncReportedDesktops);
 
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred
     // timer re-adds one between windowClosed and windowDeleted, the Item tree
@@ -922,6 +943,8 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // stamp's reasons above.
         m_contextHold.holds.remove(w);
         m_contextHold.dragLatched.remove(w);
+        m_contextHold.pzCrossings.remove(w);
+        m_contextHold.pinnedDesktops.remove(w);
         // Wired-window guard. The connections themselves die with the window, so
         // this is address-reuse safety, not connection hygiene: a stale entry
         // would make setupWindowConnections REFUSE to wire a new window that

@@ -13,6 +13,7 @@
 #include <PhosphorProtocol/WindowMarshalling.h>
 
 #include <effect/effecthandler.h>
+#include <virtualdesktops.h>
 #include <window.h>
 #include <workspace.h>
 
@@ -39,6 +40,21 @@
 #include <cstdlib>
 
 namespace PlasmaZones {
+
+namespace {
+// A daemon move to another screen: the window's rule verdicts were resolved
+// where it is, and are owed again where it lands (F160, F333). The output
+// handler's frame arm drops them once a frame lands on @p to.
+void noteRuleScreenOwed(QHash<KWin::EffectWindow*, QString>& owed, KWin::EffectWindow* w, const QString& from,
+                        const QString& to)
+{
+    if (from != to) {
+        owed.insert(w, to);
+    } else {
+        owed.remove(w);
+    }
+}
+} // namespace
 
 void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason,
                                                const QString& sourceZoneId, const QString& targetZoneId,
@@ -109,8 +125,7 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // Checked BEFORE the range arm below: a sticky window is present on every
     // desktop, so it was never displaced, and driving the recovery restore at
     // it (for a 0 "all desktops" sentinel, say) would re-place a window that
-    // went nowhere — the unsolicited re-placement the arrival arm in
-    // window_desktop_connections.cpp avoids for the grew / un-stuck cases.
+    // went nowhere.
     if (w->isOnAllDesktops()) {
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
         return;
@@ -153,7 +168,13 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
     // (not on-all-desktops) so the window genuinely moves to the target.
     KWin::VirtualDesktop* target = all.at(desktop - 1);
+    const bool wasActive = KWin::effects->activeWindow() == w;
     KWin::effects->windowToDesktops(w, {target});
+    // An open's RouteToDesktop names the desktop its placement keeps: the
+    // re-desk of a crossing that placement makes leaves it there (F719).
+    if (parkCause() == DesktopArrivalParks::Cause::OpenContinuation) {
+        m_contextHold.pinnedDesktops.insert(w, target->id());
+    }
 
     // The window has just left the desktop on screen, so nothing will place it
     // until the user goes to where it went. On a tiling or scrolling screen that
@@ -176,6 +197,18 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
             out ? KWin::effects->currentDesktop(out) : KWin::effects->currentDesktop();
         if (shownHere != target) {
             m_snapHandler->armDesktopArrivalRestore(getWindowId(w), parkCause());
+            // KWin's own Window to Desktop hands focus on when it hides the
+            // active window, and setDesktops does not: the hidden window kept
+            // the keyboard and stayed the daemon's focused window, so the next
+            // shortcut moved it again (F762). activateNextWindow picks the way
+            // KWin does, on the desktop this output shows, and returns when
+            // the window is no longer the active one. Not when a KWin rule
+            // kept the window where it was, as KWin's own move does not.
+            KWin::Window* const kw = w->window();
+            KWin::Workspace* const ws = KWin::workspace();
+            if (wasActive && kw && ws && shownHere && !w->isOnDesktop(shownHere)) {
+                ws->activateNextWindow(kw);
+            }
         }
     }
 }
@@ -327,6 +360,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         // VS-crossing handler resolve a cross-screen apply against stale
         // state and report a phantom crossing.
         if (!screenId.isEmpty()) {
+            noteRuleScreenOwed(m_ruleScreenOwed, w, getWindowScreenId(w), screenId);
             m_trackedScreenPerWindow[w] = screenId;
             m_tilingHandler->updateNotifiedScreen(liveWindowId, screenId);
             // A daemon move of its own focused window, reported now: a
@@ -520,6 +554,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // applyWindowGeometry, which would otherwise resolve the new position against
             // pre-rotation m_virtualScreenDefs and report a phantom cross-VS unsnap.
             if (!p.screenId.isEmpty()) {
+                noteRuleScreenOwed(m_ruleScreenOwed, p.window, getWindowScreenId(p.window), p.screenId);
                 m_trackedScreenPerWindow[p.window] = p.screenId;
                 m_tilingHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
                 // Same report as the single-window apply.

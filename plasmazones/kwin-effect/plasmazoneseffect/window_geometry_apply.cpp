@@ -432,6 +432,13 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         return;
     }
 
+    // A move to an output showing another desktop is re-desked where it lands,
+    // as KWin's Move to Screen is (F161, window_context_hold.cpp). Armed ahead
+    // of both arms' commit, inside which an X11 or same-size move lands.
+    if (!window->isDeleted()) {
+        armPzCrossing(window, geo);
+    }
+
     // Animation: moveResize to the final geometry immediately, then morph
     // the window visually from its old position/size to the new one using
     // translate + scale in paintWindow(). This follows the standard KDE

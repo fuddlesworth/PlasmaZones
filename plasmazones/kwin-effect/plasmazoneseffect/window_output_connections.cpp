@@ -23,8 +23,10 @@
 
 #include <QPointer>
 #include <QScopeGuard>
+#include <QTimer>
 
 #include "tilinghandler/tilinghandler.h"
+#include "handlers/dragtracker.h"
 #include "handlers/screenchangehandler.h"
 
 namespace PlasmaZones {
@@ -149,6 +151,29 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             if (!safeW->isUserMove() && m_sizeOnlyFrames.value(safeW) == QRectF(safeW->frameGeometry())) {
                 return;
             }
+            // PlasmaZones' own move landed on an output showing another desktop:
+            // the window joins that desktop as KWin's Move to Screen would (F161).
+            // Ahead of the apply gate below, since an X11 or same-size move lands
+            // inside the apply. The edit it emits waits until this lambda's exit,
+            // after the crossing body, so the arms see the crossing's result (F717).
+            // Inside an apply it waits a turn more: the daemon apply's own
+            // bookkeeping after the commit (the snapped mark the arrival arm's
+            // owed-placement pay reads) has not run yet.
+            const bool reDesked = reDeskPzCrossing(safeW);
+            const auto pzCrossingDone = qScopeGuard([this, safeW, reDesked, inApply = m_daemonGate.inGeometryApply]() {
+                if (!reDesked || !safeW) {
+                    return;
+                }
+                if (inApply) {
+                    QTimer::singleShot(0, this, [this, safeW]() {
+                        if (safeW) {
+                            releaseContextHold(safeW, WindowContextHold::PzCrossing);
+                        }
+                    });
+                    return;
+                }
+                releaseContextHold(safeW, WindowContextHold::PzCrossing);
+            });
             // The ack of a move KWin re-desked the window for before the client
             // committed it (F650): an edit held meanwhile runs at this lambda's
             // exit, after the crossing notice below, or waits on for the settle
@@ -249,6 +274,20 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             } else {
                 m_sizeOnlyFrames.remove(safeW);
             }
+            // Rule verdicts owed by a daemon move to another screen, dropped once
+            // the frame lands there: inside the apply on X11, at the client's ack
+            // on Wayland (F160, F333). Ahead of the returns below, which both of
+            // those reach. The coalesced flush resolves after the apply returns.
+            if (const auto owed = m_ruleScreenOwed.constFind(safeW.data());
+                owed != m_ruleScreenOwed.constEnd() && getWindowScreenId(safeW) == *owed) {
+                m_ruleScreenOwed.erase(owed);
+                const QString windowId = getWindowId(safeW);
+                if (m_dragTracker->isDragging()) {
+                    m_dragSuppressedRuleInvalidations.insert(windowId);
+                } else {
+                    invalidateRuleCacheForStateChange(windowId);
+                }
+            }
             if (m_virtualScreenDefs.isEmpty() || !m_daemonGate.virtualScreensReady) {
                 return;
             }
@@ -307,6 +346,7 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         connect(safeW, &QObject::destroyed, this, [this, rawW]() {
             m_trackedScreenPerWindow.remove(rawW);
             m_sizeOnlyFrames.remove(rawW);
+            m_ruleScreenOwed.remove(rawW);
         });
     }
 }
