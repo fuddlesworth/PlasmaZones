@@ -19,6 +19,7 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <QUuid>
 
 #include <memory>
 
@@ -1033,6 +1034,91 @@ private Q_SLOTS:
         QCOMPARE(args.at(2).toString(), QStringLiteral("unfloated"));
         QCOMPARE(engine.snapState()->zoneForWindow(w), homeZone);
         QVERIFY2(!m_wts->isSuspensionFloat(w), "a successful unfloat toggle must drop the suspension classification");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // A pre-float zone of a layout the context no longer runs (F963): the
+    // screen switched layouts while the window floated or was minimized.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testResolveUnfloat_preFloatZoneOfAnotherLayout_refuses()
+    {
+        SnapEngine& engine = *m_engine;
+        const QString w = QStringLiteral("app|switched");
+        floatOutOfFirstZone(engine, w);
+        QVERIFY2(engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1")).found, "control: before the switch");
+
+        switchDp1To(2);
+
+        QVERIFY2(!engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1")).found,
+                 "a zone of the layout the screen left is not a home");
+    }
+
+    void testSuspensionUnfloat_afterLayoutSwitch_staysFloating()
+    {
+        SnapEngine& engine = *m_engine;
+        const QString w = QStringLiteral("app|minimized-switch");
+        m_wts->markSuspensionFloat(w);
+        floatOutOfFirstZone(engine, w);
+        switchDp1To(2);
+        QSignalSpy restatement(&engine, &SnapEngine::restatementGeometryRequested);
+        QSignalSpy userVerb(&engine, &SnapEngine::applyGeometryRequested);
+
+        engine.setWindowFloat(w, false, QStringLiteral("DP-1"));
+
+        QVERIFY(engine.snapState()->isFloating(w));
+        QVERIFY(engine.snapState()->zoneForWindow(w).isEmpty());
+        QCOMPARE(restatement.count(), 0);
+        QCOMPARE(userVerb.count(), 0);
+    }
+
+    void testUserUnfloat_afterLayoutSwitch_takesFallbackZone()
+    {
+        SnapEngine& engine = *m_engine;
+        const QString w = QStringLiteral("app|toggle-switch");
+        floatOutOfFirstZone(engine, w);
+        PhosphorZones::Layout* two = switchDp1To(2);
+
+        m_settings->setSnapUnfloatFallbackToZone(false);
+        engine.toggleWindowFloat(w, QStringLiteral("DP-1"));
+        QVERIFY2(engine.snapState()->isFloating(w), "with the fallback off it stays floating");
+
+        m_settings->setSnapUnfloatFallbackToZone(true);
+        engine.toggleWindowFloat(w, QStringLiteral("DP-1"));
+        const QString landed = engine.snapState()->zoneForWindow(w);
+        QVERIFY2(two->zoneById(QUuid(landed)), "the fallback picks a zone of the layout the screen runs");
+    }
+
+    void testResolveUnfloat_recordSlotOfAnotherLayout_refuses()
+    {
+        SnapEngine& engine = *m_engine;
+        auto* three = installLayout(3);
+        const QString w = QStringLiteral("app|record-switch");
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateFloating()),
+                                   {three->zones().first()->id().toString()}));
+        switchDp1To(2);
+
+        QVERIFY(!engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1")).found);
+    }
+
+private:
+    /// @p windowId snapped into the first zone of a three-zone layout on DP-1
+    /// and floated out of it.
+    void floatOutOfFirstZone(SnapEngine& engine, const QString& windowId)
+    {
+        auto* three = installLayout(3);
+        engine.commitSnap(windowId, three->zones().first()->id().toString(), QStringLiteral("DP-1"));
+        engine.setWindowFloat(windowId, true, QStringLiteral("DP-1"));
+    }
+
+    /// DP-1's desktop 1 switched to a layout of @p zoneCount zones.
+    PhosphorZones::Layout* switchDp1To(int zoneCount)
+    {
+        auto* layout = createTestLayout(zoneCount, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->assignLayout(QStringLiteral("DP-1"), 1, QString(), layout);
+        return layout;
     }
 };
 

@@ -80,9 +80,8 @@ void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationLi
         }
 
         if (entry.isRestore) {
-            // Unsnap a live window and drop its float-back on that screen, as
-            // the engine's RestoreSentinel arm does; every screen's only when
-            // the screen cannot be resolved (F366).
+            // Unsnap a live window and drop its float-back on that screen;
+            // every screen's only when the screen cannot be resolved (F366).
             if (!m_engine || !m_adaptor || !m_adaptor->service() || !m_adaptor->isRegistryTracked(entry.windowId)) {
                 continue;
             }

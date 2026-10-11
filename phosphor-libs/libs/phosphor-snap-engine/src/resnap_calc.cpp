@@ -56,6 +56,10 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
             restoreEntry.sourceZoneId = QString();
             restoreEntry.targetZoneId = PhosphorEngine::RestoreSentinel;
             restoreEntry.targetGeometry = *preTile;
+            // The screen the rect was read for: the batch's restore arm clears
+            // the float-back there, and a centre-derived screen can be a
+            // neighbour or none (F664).
+            restoreEntry.targetScreenId = entry->screenId;
             result.append(restoreEntry);
         } else {
             qCDebug(PhosphorSnapEngine::lcSnapEngine) << "No pre-tile geometry for excess window" << entry->windowId

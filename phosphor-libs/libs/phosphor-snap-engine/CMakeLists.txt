@@ -93,6 +93,7 @@ add_library(PhosphorSnapEngine SHARED
     src/navigation.cpp
     src/navigation_actions.cpp
     src/navigation_crosssurface.cpp
+    src/pendingcarries_p.h
     src/resnap_calc.cpp
     src/snapnavigationtargets.cpp
     src/snapenginelogging.h

@@ -225,6 +225,12 @@ target_link_libraries(test_snap_carry_gates PRIVATE Qt6::Test Qt6::Core Qt6::DBu
                       PhosphorRules::PhosphorRules)
 add_test(NAME test_snap_carry_gates COMMAND test_snap_carry_gates)
 
+# The desktop carry: kept zones and floats, span policy, no-slot destinations,
+# the pending carry of a move to an activity not in view (L18.S.3, S.5, S.6).
+add_executable(test_snap_desktop_carry core/snap/test_snap_desktop_carry.cpp)
+target_link_libraries(test_snap_desktop_carry PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_desktop_carry COMMAND test_snap_desktop_carry)
+
 # What a window leaving a desktop or activity takes with it: the record's
 # snap slot on a move to a desktop snap does not run, and the desktop and
 # activity prunes of a window still open there.
@@ -1559,6 +1565,16 @@ target_link_libraries(test_wta_snap_desktop_nav PRIVATE Qt6::Test Qt6::Core Qt6:
                       PhosphorSnapEngine::PhosphorSnapEngine PhosphorEngine::PhosphorEngine
                       PhosphorZones::PhosphorZones PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_snap_desktop_nav COMMAND test_wta_snap_desktop_nav)
+
+# The float state a snap announces and the restore's free-geometry clears
+# (L18.S.1, S.2, S.4); needs real output geometry behind the ScreenManager.
+add_executable(test_snap_float_statement dbus/test_snap_float_statement.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_snap_float_statement PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_snap_float_statement PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorEngine::PhosphorEngine
+                      PhosphorZones::PhosphorZones PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_snap_float_statement COMMAND test_snap_float_statement)
 
 # The bus boundary of the effect's reports: unknown screens held until they
 # arrive, split monitors resolved, metadata normalised. Same fixture.

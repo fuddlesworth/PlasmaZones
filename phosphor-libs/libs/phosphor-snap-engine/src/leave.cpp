@@ -12,6 +12,7 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorEngine/IWindowRegistry.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include "pendingcarries_p.h"
 #include "snapenginelogging.h"
 
 #include <QSet>
@@ -124,6 +125,20 @@ void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
     m_states.removeWindowsIf([&](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return matches(key);
     });
+    // A carry waiting for an activity that is gone, or leaving one, has
+    // nowhere to land.
+    if (m_pendingCarries) {
+        auto& carries = m_pendingCarries->byWindow;
+        for (auto it = carries.begin(); it != carries.end();) {
+            const bool gone = (!it->toActivity.isEmpty() && !valid.contains(it->toActivity))
+                || (!it->fromActivity.isEmpty() && !valid.contains(it->fromActivity));
+            if (gone) {
+                it = carries.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
     // A window still open there leaves its snap memory like any other leave:
     // the record slot is released, and one that held a zone is told it is
     // unsnapped (F122).

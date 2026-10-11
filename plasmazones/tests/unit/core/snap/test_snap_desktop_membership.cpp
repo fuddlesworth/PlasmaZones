@@ -222,10 +222,12 @@ private Q_SLOTS:
         QVERIFY(recordCapture(kWindow));
         QVERIFY(persistedZonesByDesktop(kWindow).contains(1));
 
-        // Un-stuck onto desktop 2 while desktop 2 is in view.
+        // Un-stuck onto desktop 2 while desktop 2 is in view, where it keeps its zone.
+        QVector<PhosphorEngine::ZoneAssignmentEntry> batch;
+        wireResnapCommit(&batch);
         const auto result = m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
-        QCOMPARE(result.released.size(), 1);
-        QCOMPARE(result.released.first().second.desktop, 1);
+        QVERIFY2(result.released.isEmpty(), "a kept zone in view is not reported away");
+        QVERIFY2(batch.isEmpty(), "the window already shows the zone it keeps");
         QVERIFY(zonesOn(1, kWindow).isEmpty());
         QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[1]});
         QVERIFY2(!persistedZonesByDesktop(kWindow).contains(1), "the forget must reach the record");
@@ -358,9 +360,9 @@ private Q_SLOTS:
     }
 
     // The destination layout has no slot in the window's position (zone 3 of
-    // three, moved onto a two-zone layout). The window goes back to its
-    // pre-snap rect, the way a layout switch answers the same question, and
-    // the release IS reported because it genuinely stopped being snapped.
+    // three, moved onto a two-zone layout). The window floats at its pre-snap
+    // rect there, the way a layout switch answers the same question, and the
+    // release IS reported because it genuinely stopped being snapped.
     void aPositionTheDestinationLayoutHasNotFallsBackToThePreSnapRect()
     {
         PhosphorZones::Layout* destination = addLayout(2);
@@ -376,7 +378,9 @@ private Q_SLOTS:
         QCOMPARE(batch.size(), 1);
         QCOMPARE(batch.first().targetZoneId, QString(PhosphorEngine::RestoreSentinel));
         QCOMPARE(batch.first().targetGeometry, QRect(120, 80, 640, 480));
+        QCOMPARE(batch.first().virtualDesktop, 2);
         QVERIFY(zonesOn(2, kWindow).isEmpty());
+        QVERIFY(static_cast<SnapState*>(m_engine->stateForScreen(kScreen))->isFloating(kWindow));
     }
 
     // A destination desktop in a tiling mode is that engine's to place: the
@@ -452,10 +456,9 @@ private Q_SLOTS:
                  "desktop 1 is still a live snap");
     }
 
-    // A FLOATED window carries nothing: it sits at its own free geometry, so
-    // there is no foreign zone rect to correct, and a float moves its zones to
-    // the pre-float memory.
-    void aFloatedWindowCarriesNothing()
+    // A FLOATED window arrives floating, at its own frame, with no zone to
+    // unfloat into there (float_home_cross_desktop, F608).
+    void aFloatedWindowArrivesFloating()
     {
         PhosphorZones::Layout* destination = addLayout(3);
         m_layoutManager->assignLayout(kScreen, 2, QString(), destination);
@@ -469,6 +472,8 @@ private Q_SLOTS:
         QCOMPARE(result.released.size(), 1);
         QVERIFY(batch.isEmpty());
         QVERIFY(zonesOn(2, kWindow).isEmpty());
+        const SnapState* there = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
+        QVERIFY(there->isFloating(kWindow) && there->preFloatZones(kWindow).isEmpty());
     }
 
     // The aggregate queries see a window in every member store: it occupies

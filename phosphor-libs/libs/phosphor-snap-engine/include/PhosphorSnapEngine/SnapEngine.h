@@ -6,12 +6,8 @@
 // declaration across headers. The implementation is partitioned by concern
 // under src/; shrinking this header means extracting collaborator classes,
 // a deliberate refactor rather than a mechanical file split. Same rationale
-// as AutotileEngine.h / daemon.h / windowtrackingadaptor.h. Grew with the
-// per-desktop membership change: the membership pass and its helpers, the
-// per-desktop seed / restore-desktop resolution, the window-scoped resnap,
-// the pinned-desktop store resolution and the float residence helper. Grew
-// with the cross-output bounce fix (#1124): the free-frame capture before a
-// user snap.
+// as AutotileEngine.h / daemon.h / windowtrackingadaptor.h. It grew with the
+// per-desktop membership work and the #1124 fixes.
 
 #pragma once
 
@@ -61,6 +57,7 @@ class INavigationStateProvider;
 class IZoneAdjacencyResolver;
 class SnapNavigationTargetResolver;
 struct SnapEvacueePark;
+struct SnapPendingCarries;
 
 /**
  * @brief Engine for manual zone-based window snapping
@@ -255,16 +252,9 @@ public:
         m_liveModeResolver = std::move(resolver);
     }
 
-    /// INERT, kept for ABI: whether the tiling engine owning @p mode is LIVE
-    /// on @p screenId. It fed resolveWindowRestore's cross-screen tile-defer
-    /// gate, which is gone: under the reopen contract snap never defers a
-    /// window to another engine's reclaim of a record on another screen, and
-    /// nothing reads the stored resolver any more. The daemon no longer wires
-    /// it. A setter call is harmless; the resolver is held and never invoked.
-    /// (A new caller wanting engine liveness must ask the daemon, which is the
-    /// only side that sees the engines' live screen sets.)
-    ///
-    /// Clear with {} at teardown, like every injected resolver.
+    /// INERT, kept for ABI: nothing reads the stored resolver since snap no
+    /// longer defers an open to another engine's reclaim (the reopen
+    /// contract), and the daemon does not wire it. Clear with {} at teardown.
     using TilingEngineLiveResolver =
         std::function<bool(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId)>;
     void setTilingEngineLiveResolver(TilingEngineLiveResolver resolver)
@@ -811,7 +801,7 @@ public:
     /// frame's last chance before the commit makes the effect's capture refused.
     /// Filed under the screen the frame is on, which a cross-screen snap is
     /// leaving; @p screenId when no screen manager can place it. Refuses a
-    /// minimized, suspension-floated, maximized or fullscreen window.
+    /// minimized, suspension-floated, maximized (either axis) or fullscreen window.
     void recordFreeFrameBeforeUserSnap(const QString& windowId, const QString& screenId);
     /// The tail of every user snap the daemon drives: record the free frame the window leaves
     /// (on @p captureScreen; nothing when empty), commit @p zoneIds on @p screenId pinned to
@@ -1091,9 +1081,12 @@ private:
     void collectMembershipWork(const QString& windowId, const QString& screenId,
                                const PhosphorEngine::PlacementStateKey& currentKey,
                                const PhosphorEngine::DesktopSpan& span, QList<PendingMembership>& pending) const;
+    /// @p onlyWindow scopes the re-apply and the activity-carry flush to that
+    /// window (a per-window reconcile); empty is a screen-wide pass.
     PhosphorEngine::MembershipReconcileResult applyMembershipWork(const QString& screenId,
                                                                   const PhosphorEngine::PlacementStateKey& currentKey,
-                                                                  const QList<PendingMembership>& pending);
+                                                                  const QList<PendingMembership>& pending,
+                                                                  const QString& onlyWindow);
 
     /// migrateWindowToScreen onto an explicit key: a pinned commit or a
     /// cross-desktop handoff lands in exactly the context it names.
@@ -1300,6 +1293,7 @@ private:
     // Appended last (installed header). Created by the first parkOutput.
     std::unique_ptr<SnapEvacueePark> m_evacueePark;
     ExclusionAdmission m_exclusionAdmission{};
+    std::unique_ptr<SnapPendingCarries> m_pendingCarries; // created by the first hidden-activity carry
 };
 
 } // namespace PhosphorSnapEngine

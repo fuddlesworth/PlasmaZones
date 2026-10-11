@@ -7,6 +7,7 @@
 #include <PhosphorEngine/IWindowRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include "pendingcarries_p.h"
 #include "snapenginelogging.h"
 
 #include <QGuiApplication>
@@ -87,48 +88,70 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     }
     const QString& primaryZoneId = zoneIds.first();
 
-    // The broadcast is gated on EITHER float verdict, not the routed one
-    // alone. clearFloatingForSnap reads the mode-routed isWindowFloating,
-    // which on a screen mid-flip answers the FOREIGN engine's bit — false —
-    // while snap's OWN bit is true and the zone assignment below clears it
-    // silently. Subscribers that last heard "floating" (the adaptor's float
-    // bookkeeping, the effect's per-screen float cache) then keep stale float
-    // chrome on a window snap just committed to a zone. The routed call still
-    // runs for its own bookkeeping; when only the own bit was set, the
-    // pre-float capture is cleared to match the normal path.
-    const bool ownFloating = isFloating(windowId);
-    const bool routedCleared = m_windowTracker->clearFloatingForSnap(windowId);
-    if (ownFloating && !routedCleared) {
-        stateForWindow(windowId)->clearPreFloatZone(canonicalWindowId(windowId));
+    const QString canonical = canonicalWindowId(windowId);
+    // A commit places the window, so a carry waiting for an activity is over.
+    if (m_pendingCarries) {
+        m_pendingCarries->byWindow.remove(canonical);
     }
-    if (ownFloating || routedCleared) {
-        Q_EMIT windowFloatingClearedForSnap(windowId, screenId);
-    }
-
-    // A pinned desktop (virtualDesktop >= 1) is preserved as-is: RouteToDesktop
-    // placements pin their destination desktop, and resnap batch entries pin each
-    // window's recorded desktop (ZoneAssignmentEntry::virtualDesktop) so a
-    // cross-desktop batch never re-stamps an off-desktop window. Unpinned (0)
-    // commits record on the window's current desktop — which means a window whose
-    // RECORDED desktop was 0 (all-desktops) re-records on the current desktop when
-    // a resnap batch re-commits it; desktop-0 stickiness is not round-tripped here
-    // (sticky visibility itself is separate WTS state), matching the pre-batch
-    // behaviour. Tracking the right desktop keeps zone occupancy, snap-assist,
-    // and empty-zone detection correct on both the source and destination desktops.
+    // Pinned (>= 1) is kept as-is: RouteToDesktop placements pin their
+    // destination desktop and resnap batch entries pin each window's recorded
+    // desktop, so a cross-desktop batch never re-stamps an off-desktop window.
+    // Unpinned (0) commits record on the TARGET screen's current desktop, so a
+    // window recorded on desktop 0 (all desktops) re-records on that desktop
+    // when a batch re-commits it; sticky visibility is separate WTS state
+    // (F255). The store the assignment below lands in is the pinned key, or
+    // the screen's current one when no desktop is known.
     const int assignmentDesktop = virtualDesktop >= 1 ? virtualDesktop : currentVirtualDesktopForScreen(screenId);
+    const PhosphorEngine::PlacementStateKey viewKey = currentKeyForScreen(screenId);
+    const PhosphorEngine::PlacementStateKey targetKey = assignmentDesktop >= 1
+        ? PhosphorEngine::PlacementStateKey{screenId, assignmentDesktop, currentActivity()}
+        : viewKey;
+    const SnapState* target = m_states.stateForKey(targetKey);
+    // The float state subscribers hear is the one of the desktop in view: a
+    // commit there, or one for a window with no place in view, ends it. A
+    // commit pinned to another desktop of a window that has its own state in
+    // view leaves that state alone, and the assignment below clears only the
+    // pinned store's own bit (F725, F741, F776).
+    const bool statesView = targetKey == viewKey || !m_states.hasMembership(canonical, viewKey);
+    if (statesView) {
+        // Every bit the view could show: the in-view store's and a screenless
+        // one in the global holder (isFloating), the pinned store's, and the
+        // routed engine's, which on a screen mid-flip answers the FOREIGN
+        // engine while snap's own bit is set. Subscribers that last heard
+        // "floating" (the adaptor's float bookkeeping, the effect's float
+        // cache) would otherwise keep float chrome on a window just committed
+        // to a zone. The routed call still runs for its own bookkeeping; when
+        // only the own bit was set, the pre-float capture is cleared to match.
+        const bool ownFloating = isFloating(windowId) || (target && target->isFloating(canonical));
+        const bool routedCleared = m_windowTracker->clearFloatingForSnap(windowId);
+        if (ownFloating && !routedCleared) {
+            stateForWindow(windowId)->clearPreFloatZone(canonical);
+        }
+        // A bit parked in the global holder before the window had a store
+        // lives in no store the assignment clears (F331).
+        m_globals->setFloating(windowId, false);
+        // A float on another of the window's desktops is what subscribers
+        // last heard when it floated there (F741).
+        const QList<PhosphorEngine::PlacementStateKey> held = m_states.membershipsForWindow(canonical);
+        const bool floatsElsewhere =
+            std::any_of(held.cbegin(), held.cend(), [&](const PhosphorEngine::PlacementStateKey& key) {
+                const SnapState* state = key == targetKey ? nullptr : m_states.stateForKey(key);
+                return state && state->isFloating(canonical);
+            });
+        if (ownFloating || routedCleared || floatsElsewhere) {
+            Q_EMIT windowFloatingClearedForSnap(windowId, screenId);
+        }
+    }
 
     // A RE-STATEMENT of the zones the window already holds in that context
     // (a membership reapply, a virtual-screen resnap: system resnap batches
     // commit UserInitiated) is not the user snapping it, so it neither clears
-    // the auto-snapped flag nor records a last-used zone (F456).
-    // The store the assignment below lands in: the pinned key, or the
-    // screen's current one when no desktop is known.
-    const SnapState* target = m_states.stateForKey(
-        assignmentDesktop >= 1 ? PhosphorEngine::PlacementStateKey{screenId, assignmentDesktop, currentActivity()}
-                               : currentKeyForScreen(screenId));
-    const bool restatement = target && target->zonesForWindow(canonicalWindowId(windowId)) == zoneIds;
+    // the auto-snapped flag nor records a last-used zone (F456). The
+    // auto-snapped flag lives on the in-view primary, so only a commit that
+    // states the view clears it.
+    const bool restatement = target && target->zonesForWindow(canonical) == zoneIds;
     const bool userSnap = intent == SnapIntent::UserInitiated && !restatement;
-    if (userSnap) {
+    if (userSnap && statesView) {
         m_windowTracker->clearAutoSnapped(windowId);
     }
 
@@ -320,20 +343,52 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
     geometries.reserve(entries.size());
     for (const auto& entry : entries) {
         if (entry.targetZoneId == PhosphorEngine::RestoreSentinel) {
-            // uncommitSnap already dereferences m_windowTracker unconditionally
-            // (production deps are non-null; tests never reach this path with a
-            // null tracker), so no separate guard is needed here.
-            uncommitSnap(entry.windowId);
-            // Screen-scoped when a screen is resolvable: this restore
-            // consumes ONE screen's float-back, and the all-screens form
-            // destroyed the position remembered for every other monitor.
-            // The empty-screen escalation to the wholesale clear is the
-            // pre-existing fallback for an unresolvable entry.
+            // The screen the producer read the rect for; a centre lookup only
+            // for an entry that names none. No screen at all clears nothing:
+            // the all-screens form destroyed the position remembered for every
+            // other monitor (F664).
             QString restoreScreen = entry.targetScreenId;
             if (restoreScreen.isEmpty() && mgr && entry.targetGeometry.isValid()) {
                 restoreScreen = mgr->effectiveScreenAt(entry.targetGeometry.center());
             }
-            m_windowTracker->clearFreeGeometry(entry.windowId, restoreScreen);
+            const QString canonical = canonicalWindowId(entry.windowId);
+            // The context's desktop for an unpinned entry, as
+            // setFloatingWithResidence uses: it always names one.
+            const int desktop =
+                entry.virtualDesktop >= 1 ? entry.virtualDesktop : currentKeyForScreen(restoreScreen).desktop;
+            if (entry.virtualDesktop >= 1) {
+                // A pinned landing (the desktop carry's, or a bus batch's):
+                // the window keeps the zones it holds on its other desktops,
+                // so only the landing store is unsnapped, and its float-back
+                // stays its free spot there (F477, F779).
+                const PhosphorEngine::PlacementStateKey key{restoreScreen, entry.virtualDesktop, currentActivity()};
+                if (SnapState* landing = m_states.stateForKey(key); landing && landing->isWindowSnapped(canonical)) {
+                    const QStringList removed = landing->zonesForWindow(canonical);
+                    const bool lastUsedCleared = landing->unassignWindow(canonical).lastUsedZoneCleared;
+                    if (clearGlobalLastUsedIfRemoved(removed) || lastUsedCleared) {
+                        m_windowTracker->markLastUsedZoneDirty();
+                    }
+                    m_windowTracker->forgetDesktopZones(canonical, engineId(), entry.virtualDesktop);
+                }
+            } else {
+                uncommitSnap(entry.windowId);
+                if (!restoreScreen.isEmpty()) {
+                    m_windowTracker->clearFreeGeometry(entry.windowId, restoreScreen);
+                }
+            }
+            // Snapping has two states, so a window put back to its free spot
+            // floats there. Left in neither it was untracked, and its capture
+            // kept the stale snapped record (F107, F535). Float first, capture
+            // after, as restoreFocusedWindow does (F353).
+            if (!restoreScreen.isEmpty() && !entry.windowId.isEmpty()) {
+                stateForWindowOnScreen(entry.windowId, restoreScreen, entry.virtualDesktop)
+                    ->setFloatingOnScreen(entry.windowId, restoreScreen, desktop);
+                if (auto placement = capturePlacementAtDesktop(entry.windowId, desktop)) {
+                    placement->virtualDesktop = desktop;
+                    m_windowTracker->placementStore().record(std::move(*placement));
+                }
+                Q_EMIT windowFloatingChanged(entry.windowId, true, restoreScreen);
+            }
             // Applied with an empty screen: the window returns to free
             // floating, so no tracked-screen seeding should override the
             // compositor's geometry-based resolution for it.

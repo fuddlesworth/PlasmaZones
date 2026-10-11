@@ -8,9 +8,11 @@
  *        layout-switch resnap and the rotation place nothing with snapping
  *        off, in a context the user disabled, on a desktop running no layout,
  *        or for a window snapping leaves alone, and a floating membership is
- *        not carried. And the re-apply puts back
+ *        not carried into a zone. And the re-apply puts back
  *        only zones the layout in view still holds (F982). A batch or span
- *        with an empty zone commits nothing (F459).
+ *        with an empty zone commits nothing (F459). A restore pinned to one
+ *        desktop leaves the window's other desktops alone, and a float parked
+ *        before the window had a store ends with the unfloat (F331).
  */
 
 #include <QSet>
@@ -167,10 +169,9 @@ private Q_SLOTS:
         QVERIFY2(m_batch.isEmpty(), "a window snapping leaves alone is not carried");
     }
 
-    // A membership floating with its zone still held is not carried: the
-    // window sits at its own free geometry, so there is no foreign rect to
-    // correct. Only the float bit is set here. setWindowFloat would move the
-    // zone to the pre-float memory and leave nothing to carry anyway.
+    // A membership floating with its zone still held is not carried into a
+    // zone: the window sits at its own free geometry, so there is no foreign
+    // rect to correct, and it arrives floating. Only the float bit is set here.
     void aFloatingMembershipStillHoldingItsZoneIsNotCarried()
     {
         snapOn(1, m_zoneIds[1]);
@@ -342,6 +343,50 @@ private Q_SLOTS:
         m_engine->commitMultiZoneSnap(kWindow, {m_zoneIds[0], QString()}, kScreen);
         QCOMPARE(changed.count(), 0);
         QVERIFY(zonesOn(1).isEmpty());
+    }
+
+    // A restore pinned to desktop 2 floats the window there and leaves the
+    // zones it holds on desktops 1 and 3 and its float-back alone (F477).
+    void aPinnedRestoreKeepsTheWindowsOtherDesktopZones()
+    {
+        recordFreeGeometry(QRect(100, 100, 600, 400));
+        snapOn(1, m_zoneIds[0]);
+        snapOn(3, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        PhosphorEngine::ZoneAssignmentEntry restore;
+        restore.windowId = kWindow;
+        restore.targetZoneId = PhosphorEngine::RestoreSentinel;
+        restore.targetGeometry = QRect(100, 100, 600, 400);
+        restore.targetScreenId = kScreen;
+        restore.virtualDesktop = 2;
+
+        m_engine->applyBatchAssignments({restore});
+
+        QCOMPARE(zonesOn(1), QStringList{m_zoneIds[0]});
+        QCOMPARE(zonesOn(3), QStringList{m_zoneIds[1]});
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        QVERIFY(static_cast<SnapState*>(m_engine->stateForScreen(kScreen))->isFloating(kWindow));
+        const auto rec = m_service->placementStore().peekExact(kWindow);
+        QVERIFY(rec.has_value());
+        QVERIFY2(rec->freeGeometryByScreen.value(kScreen).isValid(), "the float-back stays the free spot there");
+    }
+
+    // A float set before the window had a store parks in the global holder.
+    // A restore that grants the window a store without the eviction keeps
+    // that bit readable, and the unfloat must clear it (F331).
+    void aParkedFloatClearsWithTheUnfloat()
+    {
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        m_engine->setFloatingWithResidence(kWindow, kScreen);
+        PhosphorEngine::EngineSlot slot;
+        slot.zonesByDesktop.insert(2, {m_destination->zones().at(0)->id().toString()});
+        m_engine->seedPersistedDesktopZones(kWindow, slot, kScreen, 1, QString());
+        QVERIFY(m_engine->isWindowTracked(kWindow));
+        QVERIFY(m_engine->isFloating(kWindow));
+
+        m_engine->setFloating(kWindow, false);
+
+        QVERIFY2(!m_engine->isFloating(kWindow), "the unfloat clears the parked bit");
     }
 
 private:

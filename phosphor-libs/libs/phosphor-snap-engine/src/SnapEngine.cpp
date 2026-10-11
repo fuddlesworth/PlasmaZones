@@ -11,6 +11,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include "evacueepark_p.h"
+#include "pendingcarries_p.h"
 #include "snapenginelogging.h"
 
 namespace PhosphorSnapEngine {
@@ -83,8 +84,8 @@ SnapState* SnapEngine::stateForWindow(const QString& windowId)
     // placed into on first snap/float. A window with no reverse-map entry falls back
     // to m_globals — the holder where screenless float bookkeeping lives (and the
     // store the single-store test convenience writes to). A genuinely untracked
-    // window then reads EMPTY per-window data from the holder, observably identical
-    // to the null the null-guarding callers handle, so no caller misbehaves.
+    // window then reads empty per-window data from the holder, except a screenless
+    // float parked there (isFloating and commitSnapImpl read it).
     // migrateWindowToScreen deliberately bypasses this fallback (it queries the
     // reverse map directly) so an untracked window is never "migrated" out of globals.
     if (SnapState* state = m_states.forWindow(canonicalWindowId(windowId))) {
@@ -309,6 +310,9 @@ void SnapEngine::forgetWindow(const QString& windowId)
         }
     }
     m_states.removeWindow(canonical);
+    if (m_pendingCarries) {
+        m_pendingCarries->byWindow.remove(canonical);
+    }
 }
 
 bool SnapEngine::holdsWindowInState(const QString& windowId, const SnapState* state) const
@@ -358,21 +362,26 @@ bool SnapEngine::isFloating(const QString& windowId) const
     }
     // Screenless float bookkeeping falls to the global holder, which is not in the
     // reverse map; check it explicitly so isFloating stays symmetric with setFloating.
-    // This fall-through IS load-bearing for a TRACKED window: it resolves to its own
-    // store above, which never sees a screenless float. For an untracked one the
-    // check above already read m_globals (stateForWindow's fallback), so this simply
-    // re-reads the same holder and answers false a second time. m_globals is
+    // For a TRACKED window this reads a bit setFloatingWithResidence parked in the
+    // holder before the window had a store; setFloating(false) and every commit
+    // clear it. For an untracked one the check above already read m_globals
+    // (stateForWindow's fallback), so this re-reads the same holder. m_globals is
     // constructed in the initializer list and never reassigned, so it needs no guard.
     return m_globals->isFloating(windowId);
 }
 
 void SnapEngine::setFloating(const QString& windowId, bool floating)
 {
-    // stateForWindow never returns null: a tracked window resolves to its owning
-    // per-key store; an untracked one falls back to m_globals (constructed in the
-    // ctor), which holds the screen-agnostic float bookkeeping the former single
-    // store kept. Unfloating an untracked window is a no-op there.
-    stateForWindow(windowId)->setFloating(windowId, floating);
+    // stateForWindow never returns null: a tracked window resolves to its
+    // owning per-key store, an untracked one to m_globals. An unfloat also
+    // clears a bit the global holder kept from before the window had a store
+    // (setFloatingWithResidence's untracked arm): isFloating reads it as a
+    // fallback, and nothing else would ever clear it (F331).
+    SnapState* owner = stateForWindow(windowId);
+    owner->setFloating(windowId, floating);
+    if (!floating && owner != m_globals) {
+        m_globals->setFloating(windowId, false);
+    }
 }
 
 void SnapEngine::setFloatingWithResidence(const QString& windowId, const QString& screenId)
@@ -590,6 +599,17 @@ void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     m_context.removeScreensIf([&physicalScreenId](const QString& screenId) {
         return PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physicalScreenId);
     });
+    // A carry waiting for an activity on this output has nowhere to land.
+    if (m_pendingCarries) {
+        auto& carries = m_pendingCarries->byWindow;
+        for (auto it = carries.begin(); it != carries.end();) {
+            if (PhosphorIdentity::VirtualScreenId::samePhysical(it->screenId, physicalScreenId)) {
+                it = carries.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
     // Announced once the stores are gone, so a subscriber reading the engine
     // back sees the prune.
     const auto snappedElsewhere = [this](const QString& windowId) {
@@ -893,9 +913,9 @@ void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
     // remembered targets). stateForWindow never returns null by
     // construction (m_globals is built in the ctor and is the fallback), so
     // unlike the m_globals assert-and-guard sites this call is direct — an
-    // untracked window resolves to m_globals, where noteFocused finds it on
-    // neither layer and takes neither branch: a no-op by classification,
-    // not by lookup failure.
+    // untracked window resolves to m_globals, where noteFocused finds it
+    // floating only when a screenless float was parked there (harmless: the
+    // switch verb reads the screen's own store).
     stateForWindow(windowId)->noteFocused(windowId);
 }
 

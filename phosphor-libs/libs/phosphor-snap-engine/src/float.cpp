@@ -9,7 +9,9 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/Zone.h>
+#include "pendingcarries_p.h"
 #include "snapenginelogging.h"
 
 namespace PhosphorSnapEngine {
@@ -84,6 +86,10 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
         // focus walk blind to it.
         setFloatingWithResidence(windowId, screenId);
         m_windowTracker->setWindowFloating(windowId, true);
+        // A float ends a carry waiting for an activity (F550).
+        if (m_pendingCarries) {
+            m_pendingCarries->byWindow.remove(canonicalWindowId(windowId));
+        }
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         applyFloatGeometryUnlessMinimized(windowId, screenId);
         Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"), QString(), QString(),
@@ -161,6 +167,9 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
         // residence is recorded with it.
         setFloatingWithResidence(windowId, screenId);
         m_windowTracker->setWindowFloating(windowId, true);
+        if (m_pendingCarries) {
+            m_pendingCarries->byWindow.remove(canonicalWindowId(windowId));
+        }
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         // Guarded: the minimize path reaches here via setWindowFloatingForScreen
         // and must not teleport the hidden frame (see the helper's comment).
@@ -485,6 +494,24 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
     }
     const QString restoreScreen = resolveUnfloatScreen(preFloatScreenId, fallbackScreen);
 
+    // The pre-float zones have to belong to the layout the restore context runs
+    // NOW (#1104, F963). Zone geometry resolves a zone from any registered
+    // layout, so a window floated or minimized out of layout A whose screen
+    // then switched to layout B came back in A's zone over B's. The desktop
+    // carry re-slots a minimized window into its destination's layout first
+    // (l18_minimized_layout_switch), so only a zone still stale is refused
+    // here. Not found sends a user toggle to the fallback-zone tier and keeps
+    // a suspension unfloat floating where it is. A context with no layout
+    // holds no zones and refuses too. The desktop is the context key's, the
+    // one whose store the pre-float zones were read from.
+    if (!PhosphorZones::LayoutUtils::contextLayoutHoldsZones(
+            m_layoutManager, restoreScreen, currentKeyForScreen(restoreScreen).desktop, currentActivity(), zoneIds)) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine)
+            << "resolveUnfloatGeometry:" << windowId << "pre-float zone(s)" << zoneIds << "are not in the layout"
+            << restoreScreen << "runs now — not restoring into another layout";
+        return result;
+    }
+
     QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
     if (!geo.isValid()) {
         return result;
@@ -780,6 +807,10 @@ void SnapEngine::handoffRelease(const QString& windowId)
     // context goes, and so does any membership whose own context has left
     // snapping.
     const QString canonical = canonicalWindowId(windowId);
+    // Another engine took the window, so a carry waiting for an activity is over.
+    if (m_pendingCarries) {
+        m_pendingCarries->byWindow.remove(canonical);
+    }
     QList<PhosphorEngine::PlacementStateKey> kept;
     for (const PhosphorEngine::PlacementStateKey& key : m_states.membershipsForWindow(canonical)) {
         const bool handedOff = (key == currentKeyForScreen(key.screenId));
