@@ -10,14 +10,14 @@
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "placementlogging.h"
 #include <QSet>
 #include <algorithm>
-#include <tuple>
+#include <utility>
 
 namespace PhosphorPlacement {
 
@@ -229,21 +229,13 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
         return {};
     }
 
-    // Get the current layout to resolve zone numbers
-    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-    if (!layout || layout->zoneCount() == 0) {
-        return {};
-    }
+    // Each window's zone number in the layout that holds the zone. Asking the
+    // screen's layout fails after the screen has already switched to tiling,
+    // which resolves the registry default, not the layout the windows were
+    // snapped in (F183, the updateEngineScreens seed).
+    const QHash<QString, int> zoneNumberMap =
+        PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts());
 
-    // Build zone UUID → zone number lookup (braced-string keys, matching the
-    // braced zone ids the assignments store)
-    const QVector<PhosphorZones::Zone*> zones = layout->zones();
-    QHash<QString, int> zoneNumberMap;
-    for (PhosphorZones::Zone* zone : zones) {
-        zoneNumberMap[zone->id().toString()] = zone->zoneNumber();
-    }
-
-    // Collect (zoneNumber, insertionIndex, windowId) for windows on this screen.
     // Screen assignments may store connector names or EDID-based screen IDs
     // depending on the code path. Use screensMatch() for format-agnostic comparison.
 
@@ -257,8 +249,7 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     // populateResnapBufferForAllScreens (addCandidate).
     const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 
-    int insertionIdx = 0;
-    QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
+    QVector<std::pair<int, QString>> windowsByZone; // (zone position, window id)
     // Per-window dedup. The single-owning-store invariant makes duplicates
     // impossible today, but a duplicate here would double-seed the autotile
     // order (double-tile), so the guard is kept.
@@ -304,24 +295,23 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
         // Use primary zone's zone number
         auto numIt = zoneNumberMap.constFind(zoneIds.first());
         if (numIt != zoneNumberMap.constEnd()) {
-            windowsByZone.append({numIt.value(), insertionIdx++, windowId});
+            windowsByZone.append({numIt.value(), windowId});
         } else {
             qCWarning(lcPlacement) << "buildZoneOrderedWindowList: zone UUID" << zoneIds.first() << "for window"
-                                   << windowId << "not found in layout - skipping";
+                                   << windowId << "is in no registered layout - skipping";
         }
     });
 
-    // Sort by zone number ascending, preserving iteration order as tie-breaker
-    std::stable_sort(windowsByZone.begin(), windowsByZone.end(), [](const auto& a, const auto& b) {
-        if (std::get<0>(a) != std::get<0>(b))
-            return std::get<0>(a) < std::get<0>(b);
-        return std::get<1>(a) < std::get<1>(b); // preserve iteration order
-    });
+    // Zone number first. Windows stacked in one zone have no order of their
+    // own here (the walk is over hash maps, whose order changes from run to
+    // run), so the window id breaks the tie and the seed is the same every
+    // run (F476).
+    std::sort(windowsByZone.begin(), windowsByZone.end());
 
     QStringList result;
     result.reserve(windowsByZone.size());
     for (const auto& entry : windowsByZone) {
-        result.append(std::get<2>(entry));
+        result.append(entry.second);
     }
 
     qCDebug(lcPlacement) << "buildZoneOrderedWindowList for" << screenId << ":" << result;
@@ -382,79 +372,108 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
 QHash<QString, QList<WindowTrackingService::PendingRestoreTarget>>
 WindowTrackingService::pendingRestoreGeometries() const
 {
+    using PhosphorEngine::WindowPlacement;
+    using PhosphorIdentity::VirtualScreenId::extractPhysicalId;
     QHash<QString, QList<PendingRestoreTarget>> result;
 
-    // Source the effect's instant-restore cache from the unified placement store:
-    // every snapped WindowPlacement of a closed window, resolved to its zone
-    // geometry, grouped by appId. The async resolveWindowRestore re-validates and
-    // corrects, so this is a best-effort anti-flash fast path (an invalid/stale
-    // zone resolves to an empty rect and is skipped). Each app's list is ordered
-    // NEWEST record first, because the daemon's open claim reserves the newest
-    // unclaimed record ON THE OPENER'S OUTPUT and the effect applies the newest
-    // entry saved on that same output, so the teleport and the resolve agree
-    // instead of a flash-then-move. The effect keeps the whole list: entries on
-    // other outputs serve openers there, and a record it can see is still open
-    // (daemon-only restart, before re-announce) costs nothing.
+    // Source the effect's instant-restore cache from the unified placement
+    // store: every snapped record of a closed window that the async resolve
+    // would restore where the window opens now, resolved to its zone geometry
+    // and grouped by appId, newest record first. The effect applies the newest
+    // entry saved on the opener's own output before the resolve runs, and the
+    // resolve claims the newest record on that output, so the two agree only
+    // while they read the same record in the same context:
+    //  - the context is the one the window opens into (the screen's shown
+    //    desktop, the activity in view), as the resolver's is;
+    //  - on each output the list stops at the first newer record the claim
+    //    would take instead (a floated sibling, or a snapped one refused here).
+    // The resolve does not move a teleported window back when it restores no
+    // zone, and the effect fetches this once per daemon-ready, so a layout,
+    // desktop or work-area change after the fetch leaves entries stale (F625).
+    // A record the effect can see is still open is dropped there by window id.
+    const QString activity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
     QHash<QString, QList<quint64>> sequences;
-    for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
-        const PhosphorEngine::EngineSlot snapSlot = p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
-        if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped()) {
-            continue;
-        }
-        const QStringList zoneIds = snapSlot.zoneIds;
-        if (zoneIds.isEmpty() || p.appId.isEmpty()) {
-            continue;
-        }
+    // Per app and physical output, the newest record the open claim could take
+    // that this cache does not serve. The empty output key is every output: an
+    // unscreened snapped record is claimable on any of them.
+    QHash<QString, QHash<QString, quint64>> newestUnserved;
+    const auto noteUnserved = [&](const WindowPlacement& p, const QString& output) {
+        quint64& seq = newestUnserved[p.appId][output];
+        seq = std::max(seq, p.sequence);
+    };
+    for (const WindowPlacement& p : m_placementStore.records()) {
         // A record whose window is still open is that window's, not a pending
         // restore: served through the appId-keyed cache it teleported the
         // next same-app window into the open sibling's zone. Answers false
         // without a registry (daemon-only restart, before the effect has
         // re-announced), which is why the target also carries the window id
-        // for the effect to check against what it can see.
-        if (m_placementStore.isLiveInstance(p.windowId)) {
+        // for the effect to check against what it can see. The claim skips
+        // it too, so it cuts nothing.
+        if (p.appId.isEmpty() || m_placementStore.isLiveInstance(p.windowId)) {
+            continue;
+        }
+        const PhosphorEngine::EngineSlot snapSlot = p.slotFor(WindowPlacement::snapEngineId());
+        if (snapSlot.state != WindowPlacement::stateSnapped()) {
+            // A floated record with a float spot on the opener's screen is one
+            // the open claim takes for an opener there (claimPlacementForOpen).
+            // An unscreened one answers on every output it holds a spot on.
+            if (snapSlot.state == WindowPlacement::stateFloating()) {
+                if (!p.screenId.isEmpty()) {
+                    if (p.freeGeometryFor(p.screenId).isValid()) {
+                        noteUnserved(p, extractPhysicalId(p.screenId));
+                    }
+                } else {
+                    for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
+                        if (it.value().isValid() && !it.key().isEmpty()) {
+                            noteUnserved(p, extractPhysicalId(it.key()));
+                        }
+                    }
+                }
+            }
             continue;
         }
 
         const QString screenId = resolveEffectiveScreenId(p.screenId);
-        // Per-output virtual desktops (#648): validate the record against ITS
-        // screen's current desktop, not the global current.
-        const int currentDesktop =
-            m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
-
-        // Skip screens a tiling engine owns: it places there and would fight
-        // a stale snap teleport. Both context dimensions come from the RECORD
-        // (mirrors the cross-engine claim gates). For the context in view the
-        // live mode answers, so a configured tiling mode whose engine is off
-        // runs snapping here as everywhere else (F112).
-        const bool recordInView = (p.virtualDesktop == 0 || p.virtualDesktop == currentDesktop)
-            && (!m_layoutManager || activityInView(p.activity, m_layoutManager->currentActivity()));
-        if (recordInView && m_snapEngine) {
-            if (!m_snapEngine->isActiveOnScreen(screenId)) {
-                continue;
+        // Per-output virtual desktops (#648): the desktop ITS screen shows.
+        const int shown = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
+        // Skip screens a tiling engine runs: it places there and would fight a
+        // snap teleport. The context in view answers by its live mode, so a
+        // configured tiling mode whose engine is off runs snapping here as
+        // everywhere else (F112). A record captured on another desktop also
+        // needs that desktop to snap, as the resolve's accept gate asks. The
+        // claim refuses a record either gate refuses, so neither cuts.
+        if (m_snapEngine ? !m_snapEngine->isActiveOnScreen(screenId)
+                         : (m_layoutManager
+                            && m_layoutManager->modeForScreen(screenId, shown, activity)
+                                != PhosphorZones::AssignmentEntry::Mode::Snapping)) {
+            continue;
+        }
+        if (p.virtualDesktop >= 1 && p.virtualDesktop != shown && m_layoutManager
+            && m_layoutManager->modeForScreen(screenId, p.virtualDesktop, activity)
+                != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+            continue;
+        }
+        // A single-desktop record from another desktop is left to the resolve;
+        // a multi-desktop record answers with the zone of the desktop shown
+        // (F130).
+        QStringList zoneIds;
+        if (snapSlot.zonesByDesktop.isEmpty()) {
+            if (desktopMatchesFilter(p.virtualDesktop, shown)) {
+                zoneIds = snapSlot.zoneIds;
             }
-        } else if (m_layoutManager
-                   && m_layoutManager->modeForScreen(screenId, p.virtualDesktop, p.activity)
-                       != PhosphorZones::AssignmentEntry::Mode::Snapping) {
-            continue;
+        } else {
+            zoneIds = shown > 0 ? snapSlot.zonesByDesktop.value(shown) : snapSlot.zoneIds;
         }
-
-        // Validate desktop context (sticky-0 windows pass; unknown current passes).
-        if (!desktopMatchesFilter(p.virtualDesktop, currentDesktop)) {
-            continue;
-        }
-
-        // The zone must belong to the layout the record's context currently
-        // runs, the same gate the async resolver applies (#1104): zoneGeometry
-        // finds a zone in ANY loaded layout, and a record naming a zone of a
-        // layout no longer assigned there teleported the window onto that
-        // ghost zone before the resolver moved it again.
-        if (!PhosphorZones::LayoutUtils::contextLayoutHoldsZones(m_layoutManager, screenId, p.virtualDesktop,
-                                                                 p.activity, zoneIds)) {
-            continue;
-        }
-
-        const QRect geo = resolveZoneGeometry(zoneIds, screenId);
+        // The zone must belong to the layout of the context the window opens
+        // into, in the activity in view, the gate the resolver applies (#1104,
+        // F205): zone geometry finds a zone in ANY loaded layout.
+        const QRect geo = (!zoneIds.isEmpty()
+                           && PhosphorZones::LayoutUtils::contextLayoutHoldsZones(m_layoutManager, screenId, shown,
+                                                                                  activity, zoneIds))
+            ? resolveZoneGeometry(zoneIds, screenId)
+            : QRect();
         if (!geo.isValid()) {
+            noteUnserved(p, extractPhysicalId(p.screenId));
             continue;
         }
         // Insert in descending sequence order (newest first).
@@ -468,6 +487,30 @@ WindowTrackingService::pendingRestoreGeometries() const
         targets.insert(at, PendingRestoreTarget{geo, screenId, p.windowId});
     }
 
+    // On each output, cut an app's list at the first newer record the claim
+    // would take instead (F285). Over-counting a blocker only costs a
+    // teleport, never a wrong one: a floated record on one virtual screen also
+    // cuts an opener on its sibling.
+    for (auto app = result.begin(); app != result.end();) {
+        const auto blockers = newestUnserved.constFind(app.key());
+        if (blockers != newestUnserved.constEnd()) {
+            const QList<quint64>& order = sequences[app.key()];
+            QList<PendingRestoreTarget> kept;
+            for (int i = 0; i < app->size(); ++i) {
+                const quint64 cut =
+                    std::max(blockers->value(QString(), 0), blockers->value(extractPhysicalId(app->at(i).screenId), 0));
+                if (order.at(i) > cut) {
+                    kept.append(app->at(i));
+                }
+            }
+            *app = kept;
+        }
+        if (app->isEmpty()) {
+            app = result.erase(app);
+        } else {
+            ++app;
+        }
+    }
     return result;
 }
 

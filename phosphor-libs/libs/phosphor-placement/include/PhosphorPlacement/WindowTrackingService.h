@@ -308,8 +308,8 @@ public:
      * keeps its size (clamped) and is centred on the current screen's available
      * area; otherwise an on-screen rect comes back as is and an off-screen one is
      * clamped onto the nearest screen. Reads the screen manager. Its one caller,
-     * validatedUnmanagedGeometry, passes the same screen twice, so only the
-     * on-screen check runs there.
+     * validatedUnmanagedGeometry, reaches it only when no screen manager can
+     * measure the output, passing the same screen twice.
      *
      * @param geo             Saved geometry (e.g. a window's recorded free geometry)
      * @param savedScreen     Screen id at capture time (may be empty)
@@ -529,9 +529,8 @@ public:
      */
     void setWindowSticky(const QString& windowId, bool sticky);
 
-    /**
-     * @brief Check if window is sticky
-     */
+    /// Whether the window is on all desktops: the compositor's setWindowSticky
+    /// report when one arrived, else the registry's last metadata push, else false.
     bool isWindowSticky(const QString& windowId) const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -673,9 +672,9 @@ public:
      */
     void clearResnapBuffer();
 
-    /// The windows snapped on @p screenId in the context in view, sorted by
-    /// their primary zone's number in the screen's layout. Seeds the autotile
-    /// order on a switch to tiling.
+    /// The windows snapped (not floating) on @p screenId in the context in view,
+    /// sorted by their primary zone's number in the layout that holds it, ties
+    /// by window id. Seeds the autotile order on a switch to tiling.
     QStringList buildZoneOrderedWindowList(const QString& screenId) const;
 
     /// Replace the resnap buffer with the windows in view on a snapping screen
@@ -700,7 +699,8 @@ public:
      * matches the given physical screen, determines which virtual screen the window's
      * zone falls within and updates the assignment accordingly.
      *
-     * Also migrates pre-float screen assignments in SnapState.
+     * Also migrates pre-float screen assignments in SnapState, and the placement
+     * records: a closed window's by the zones its record's snapped slot names.
      *
      * @param physicalScreenId The physical screen being subdivided
      * @param virtualScreenIds Virtual screen IDs for the physical screen
@@ -765,11 +765,11 @@ public:
     };
 
     /// appId -> list of {geometry, screenId, windowId}, newest first: the
-    /// snapped records minus still-open windows' (#1106). A best-effort
-    /// anti-flash hint the async resolve corrects; the effect applies the
-    /// newest entry on the opener's own output. Skips saved screens in autotile
-    /// mode, zones the record's context no longer runs (#1104) and desktop
-    /// contexts the resolver would reject.
+    /// snapped records of closed windows the resolve would restore where they
+    /// open now (a snapping context, a zone its layout holds, the shown
+    /// desktop's zone for a multi-desktop record), cut on each output at the
+    /// first newer record the open claim would take instead. Read once per
+    /// daemon-ready; not re-checked when a layout or desktop changes (F625).
     QHash<QString, QList<PendingRestoreTarget>> pendingRestoreGeometries() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -806,9 +806,9 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Live snap zones if present, else the durable placement-record snap slot.
-    /// See IWindowTrackingService::recordedSnapZones. A multi-desktop window
-    /// answers for the desktop its screen shows (its live store there, else
-    /// the record's per-desktop map), never another desktop's zone.
+    /// See IWindowTrackingService::recordedSnapZones. A multi-desktop or sticky window
+    /// answers for the desktop its screen shows: its live store there, else its
+    /// record's zone for that desktop, else nothing. A single-desktop window answers its own store.
     QStringList recordedSnapZones(const QString& windowId) const override;
     /// @p slot's zones for the desktop @p screenId shows: the per-desktop map's
     /// entry when the slot carries one (empty when it names no zone there),
@@ -962,8 +962,8 @@ private:
     /// that store's own layout (lastUsedLayoutFor; a store with none is left alone, as nothing can prove
     /// it stale). Marks DirtyLastUsedZone itself, so a caller that schedules no save still persists it.
     void validateLastUsedZone(const QString& targetScreen);
-    /// The layout @p state's last-used zone belongs to on @p screenId: the store's own desktop and
-    /// activity (F162). Null for a context that does not snap or has no layout.
+    /// The layout @p state's context runs on @p screenId: the store's own desktop and activity, for its
+    /// last-used zone (F162) and the VS prunes (F533). Null for a context that does not snap or has none.
     PhosphorZones::Layout* lastUsedLayoutFor(const PhosphorSnapEngine::SnapState* state, const QString& screenId) const;
 
     /// Find the nearest virtual screen by index proximity.
@@ -980,8 +980,8 @@ private:
     ZoneLookupResult findZoneInAllLayouts(const QUuid& zoneUuid) const;
 
 public:
-    /// Resolve a screen ID to an effective screen ID, falling back to the physical
-    /// screen ID if a virtual screen no longer exists in the current configuration.
+    /// A live or non-virtual id comes back as is; a virtual screen that no longer exists resolves to the
+    /// nearest-index live one on its monitor, or the monitor itself when it is no longer split or connected.
     QString resolveEffectiveScreenId(const QString& screenId) const override;
 
     /// Resolve zone geometry: combined geometry for multi-zone, single for single zone.
@@ -1041,25 +1041,22 @@ private:
     PhosphorSnapEngine::SnapState* snapRepresentativeLastUsed() const;
     /// Clear the GLOBAL holder's last-used zone if it names a zone in @p removedZones
     /// and the holder is not @p owningStore (whose own last-used the caller already
-    /// handled). Returns true if it cleared. Shared by unassignFromStore, unsnapForFloat
-    /// and pruneMigratedWindows, which each drop a store's zones and must scrub the
+    /// handled). Returns true if it cleared. Shared by unassignFromStore (which
+    /// pruneMigratedWindows runs) and unsnapForFloat, which each drop a store's zones and must scrub the
     /// disk-restored representative that lives on the global holder.
     bool clearGlobalLastUsedIfRemoved(const QStringList& removedZones,
                                       const PhosphorSnapEngine::SnapState* owningStore);
     /// unassignWindow's body on @p store, which need not be the primary.
     bool unassignFromStore(const QString& windowId, PhosphorSnapEngine::SnapState* store);
 
-    /// Unassign every window in @p windowsToRemove (live windows whose zones
-    /// did not survive the change) and drop its pre-float zone, keeping its
-    /// free geometry and sticky flag, then emit windowZoneChanged for each
-    /// window that actually held a zone, as the interactive unassign path
-    /// does. The emit is per-window and comes after that window's clears.
-    /// Shared by the two VS-migration prune loops
-    /// (migrateScreenAssignmentsToVirtual / ...FromVirtual). Marks
-    /// DirtyLastUsedZone when any last-used cleared; returns true when given a
-    /// non-empty list (the callers only build it from zone-assigned windows,
-    /// so non-empty means state changed and a save is due).
-    bool pruneMigratedWindows(const QStringList& windowsToRemove);
+    /// Drop the zones a virtual-screen change left a window holding in a store whose
+    /// own context's layout no longer has them, in that store (not the primary): the
+    /// visited store's float bit and context decide (lastUsedLayoutFor, so None and
+    /// tiling contexts keep their zones, F264). A window left with no zone anywhere
+    /// also gives up its record's snap slot. True when given any visit (a save is due).
+    bool pruneMigratedWindows(const QList<QPair<QString, PhosphorSnapEngine::SnapState*>>& visits);
+    /// Whether any snap store the window is a member of (or its primary) holds a zone for it.
+    bool holdsAnyZone(const QString& windowId) const;
     PhosphorSnapEngine::SnapState* snapGlobals() const;
     /// Every store, for aggregate iteration. Elements are never null (see the
     /// resolver's `allStates` contract), so callers deref them directly.

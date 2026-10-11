@@ -122,6 +122,24 @@ add_executable(test_wts_registry_integration core/windowtracking/test_wts_regist
 target_link_libraries(test_wts_registry_integration PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_registry_integration COMMAND test_wts_registry_integration)
 
+# The free-geometry rescue and the per-monitor measures need real output
+# geometry behind the ScreenManager (FakePhysicalScreenSource), as above.
+add_executable(test_wts_free_geometry_screens core/windowtracking/test_wts_free_geometry_screens.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wts_free_geometry_screens PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wts_free_geometry_screens PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
+add_test(NAME test_wts_free_geometry_screens COMMAND test_wts_free_geometry_screens)
+
+add_executable(test_wts_desktop_context core/windowtracking/test_wts_desktop_context.cpp)
+target_link_libraries(test_wts_desktop_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wts_desktop_context COMMAND test_wts_desktop_context)
+
+add_executable(test_wts_vs_memberships core/windowtracking/test_wts_vs_memberships.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wts_vs_memberships PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wts_vs_memberships PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wts_vs_memberships COMMAND test_wts_vs_memberships)
+
 # DirtyMask invariants for delta-persistence (Phase 3 of refactor/dbus-performance).
 add_executable(test_wts_dirty_mask core/windowtracking/test_wts_dirty_mask.cpp)
 target_link_libraries(test_wts_dirty_mask PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)

@@ -18,6 +18,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTest>
+#include <algorithm>
 #include <memory>
 
 #include "helpers/IsolatedConfigGuard.h"
@@ -202,6 +203,48 @@ private Q_SLOTS:
         const QStringList seed = m_service->buildZoneOrderedWindowList(kScreen);
         QCOMPARE(QSet<QString>(seed.begin(), seed.end()), (QSet<QString>{inZone1, inZone2, sticky}));
         QVERIFY(seed.indexOf(inZone1) < seed.indexOf(inZone2));
+    }
+
+    // The seed runs after the screen has switched to tiling, where the
+    // screen's layout resolves the registry default. Each zone is numbered in
+    // the layout that holds it (F183).
+    void seedNumbersZonesFromTheLayoutTheWindowsHold()
+    {
+        switchTo(kActivityX);
+        PhosphorZones::Layout* snapped = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(snapped);
+        m_layoutManager->assignLayout(kScreen, 1, kActivityX, snapped);
+        const QString inZone2 = QStringLiteral("app|l2-z2");
+        const QString inZone1 = QStringLiteral("app|l2-z1");
+        m_service->assignWindowToZone(inZone2, snapped->zones().at(1)->id().toString(), kScreen, 1);
+        m_service->assignWindowToZone(inZone1, snapped->zones().at(0)->id().toString(), kScreen, 1);
+        PhosphorZones::AssignmentEntry tiling;
+        tiling.mode = PhosphorZones::AssignmentEntry::Autotile;
+        tiling.tilingAlgorithm = QStringLiteral("bsp");
+        tiling.snappingLayout = snapped->id().toString();
+        m_layoutManager->setAssignmentEntryDirect(kScreen, 1, kActivityX, tiling);
+
+        QCOMPARE(m_service->buildZoneOrderedWindowList(kScreen), (QStringList{inZone1, inZone2}));
+    }
+
+    // Windows stacked in one zone come out in window-id order, the same every
+    // run, instead of the hash walk's order (F476).
+    void seedBreaksTiesByWindowId()
+    {
+        switchTo(kActivityX);
+        QStringList stacked;
+        for (const QString& suffix : {QStringLiteral("e"), QStringLiteral("b"), QStringLiteral("d"),
+                                      QStringLiteral("a"), QStringLiteral("c")}) {
+            stacked.append(QStringLiteral("app|stack-") + suffix);
+            m_service->assignWindowToZone(stacked.last(), m_zoneIds[0], kScreen, 1);
+        }
+        const QString inZone2 = QStringLiteral("app|stack-0-zone2");
+        m_service->assignWindowToZone(inZone2, m_zoneIds[1], kScreen, 1);
+
+        QStringList expected = stacked;
+        std::sort(expected.begin(), expected.end());
+        expected.append(inZone2);
+        QCOMPARE(m_service->buildZoneOrderedWindowList(kScreen), expected);
     }
 
     // The work-area re-apply answers a window held on two desktops with the

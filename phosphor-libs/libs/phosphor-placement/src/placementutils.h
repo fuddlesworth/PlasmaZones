@@ -8,7 +8,7 @@
 #include <QScreen>
 #include <QString>
 #include <QUuid>
-#include <climits>
+#include <limits>
 #include <optional>
 
 namespace PhosphorPlacement {
@@ -39,23 +39,23 @@ inline std::optional<QUuid> parseUuid(const QString& str)
     return uuid.isNull() ? std::nullopt : std::optional<QUuid>(uuid);
 }
 
+/// Squared distance from @p point to the nearest point of @p rect; 0 inside it.
+inline qint64 squaredDistanceToRect(const QPoint& point, const QRect& rect)
+{
+    const qint64 dx =
+        point.x() < rect.left() ? rect.left() - point.x() : (point.x() > rect.right() ? point.x() - rect.right() : 0);
+    const qint64 dy =
+        point.y() < rect.top() ? rect.top() - point.y() : (point.y() > rect.bottom() ? point.y() - rect.bottom() : 0);
+    return dx * dx + dy * dy;
+}
+
 inline QScreen* findNearestScreen(const QPoint& point)
 {
     QScreen* nearest = nullptr;
-    int minDist = INT_MAX;
+    qint64 minDist = std::numeric_limits<qint64>::max();
     const auto screens = QGuiApplication::screens();
     for (QScreen* screen : screens) {
-        QRect geom = screen->geometry();
-        int dx = 0, dy = 0;
-        if (point.x() < geom.left())
-            dx = geom.left() - point.x();
-        else if (point.x() > geom.right())
-            dx = point.x() - geom.right();
-        if (point.y() < geom.top())
-            dy = geom.top() - point.y();
-        else if (point.y() > geom.bottom())
-            dy = point.y() - geom.bottom();
-        int dist = dx * dx + dy * dy;
+        const qint64 dist = squaredDistanceToRect(point, screen->geometry());
         if (dist < minDist) {
             minDist = dist;
             nearest = screen;

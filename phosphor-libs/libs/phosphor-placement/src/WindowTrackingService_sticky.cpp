@@ -16,6 +16,7 @@
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "placementlogging.h"
@@ -78,7 +79,20 @@ void WindowTrackingService::setWindowSticky(const QString& rawWindowId, bool sti
 
 bool WindowTrackingService::isWindowSticky(const QString& rawWindowId) const
 {
-    return m_windowStickyStates.value(canonicalizeForLookup(rawWindowId), false);
+    // The compositor's own report wins: on a live edge it reaches the daemon
+    // before the metadata push (F293). A window that already existed when the
+    // daemon registered never sends one, so the registry's copy of its last
+    // metadata push answers instead (F610).
+    const auto it = m_windowStickyStates.constFind(canonicalizeForLookup(rawWindowId));
+    if (it != m_windowStickyStates.constEnd()) {
+        return it.value();
+    }
+    if (m_windowRegistry) {
+        if (const auto ctx = m_windowRegistry->desktopContext(rawWindowId); ctx && ctx->sticky) {
+            return *ctx->sticky;
+        }
+    }
+    return false;
 }
 
 void WindowTrackingService::forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop)
@@ -129,16 +143,43 @@ QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) co
         // desktop's store while the viewed desktop holds no membership, and
         // that store's zone is the wrong answer here (a return to snapping
         // would put the window in the other desktop's zone).
-        const PhosphorSnapEngine::SnapState* inView = snapForScreen(snapState->screenForWindow(windowId));
+        const QString screenId = snapState->screenForWindow(windowId);
+        const PhosphorSnapEngine::SnapState* inView = snapForScreen(screenId);
         if (inView && inView != snapState && snapHoldsWindow(windowId, inView)) {
             snapState = inView;
         }
+        const QStringList live = snapState->zonesForWindow(windowId);
+        if (!live.isEmpty() && snapState == inView) {
+            return live;
+        }
+        // The live store is another desktop's. A window the registry places on
+        // the desktop the screen shows (sticky, or one of its desktops) is
+        // answered by its own record's zone for that desktop or by nothing:
+        // the held count cannot tell it from a window that lives elsewhere, and
+        // a sticky window snapped only on desktop 2 took desktop 2's zone on
+        // desktop 1 (F964).
+        const int shown = (snapState != inView && m_virtualDesktopManager && !screenId.isEmpty())
+            ? m_virtualDesktopManager->currentDesktopForScreen(screenId)
+            : 0;
+        if (const auto ctx =
+                (shown > 0 && m_windowRegistry) ? m_windowRegistry->desktopContext(windowId) : std::nullopt) {
+            const auto desktops = ctx->desktopSet();
+            if (ctx->sticky.value_or(false) || (desktops && desktops->contains(shown))) {
+                const auto own = m_placementStore.peekExact(windowId);
+                const PhosphorEngine::EngineSlot ownSlot =
+                    own ? own->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()) : PhosphorEngine::EngineSlot{};
+                return ownSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()
+                    ? ownSlot.zonesByDesktop.value(shown)
+                    : QStringList{};
+            }
+        }
+        // A window on one desktop the screen does not show keeps that
+        // desktop's zone when it is the only one it holds.
         int held = 0;
         for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
             held += snapHoldsWindow(windowId, state) ? 1 : 0;
         }
-        const QStringList live = snapState->zonesForWindow(windowId);
-        if (!live.isEmpty() && (snapState == inView || held <= 1)) {
+        if (!live.isEmpty() && held <= 1) {
             return live;
         }
     }

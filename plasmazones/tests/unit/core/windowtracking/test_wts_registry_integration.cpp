@@ -19,7 +19,8 @@
  *      before consulting the registry.
  *   5. The instant-restore cache source (pendingRestoreGeometries) judges a
  *      record's liveness through the registry: composite record ids against
- *      bare registry keys, which is exactly the strip the probe performs.
+ *      bare registry keys, which is exactly the strip the probe performs. It
+ *      serves only the record and the context the async resolve will use.
  */
 
 #include <QCoreApplication>
@@ -37,6 +38,7 @@
 #include "config/configbackends.h"
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorZones/Zone.h>
 
 #include "helpers/IsolatedConfigGuard.h"
@@ -177,6 +179,39 @@ private Q_SLOTS:
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // isWindowSticky — the compositor's report, else the registry's (F610)
+    // ────────────────────────────────────────────────────────────────────
+
+    // A window that was already on every desktop when the daemon registered
+    // never sends a sticky report; its metadata push answers.
+    void isWindowSticky_registryAnswersWhenNeverReported()
+    {
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.isSticky = true;
+        m_registry->upsert(QStringLiteral("sticky-uuid"), meta);
+        QVERIFY(m_service->isWindowSticky(QStringLiteral("sticky-uuid")));
+    }
+
+    // A live report reaches the daemon before the metadata push, so it wins.
+    void isWindowSticky_reportOutranksRegistry()
+    {
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.isSticky = true;
+        m_registry->upsert(QStringLiteral("sticky-uuid"), meta);
+        m_service->setWindowSticky(QStringLiteral("sticky-uuid"), false);
+        QVERIFY(!m_service->isWindowSticky(QStringLiteral("sticky-uuid")));
+    }
+
+    void isWindowSticky_unknownIsFalse()
+    {
+        QVERIFY(!m_service->isWindowSticky(QStringLiteral("never-seen")));
+        PhosphorPlacement::WindowTrackingService bare(m_layoutManager, nullptr, nullptr);
+        QVERIFY(!bare.isWindowSticky(QStringLiteral("never-seen")));
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // pendingRestoreGeometries — the effect's instant-restore cache source
     // ────────────────────────────────────────────────────────────────────
 
@@ -240,20 +275,195 @@ private Q_SLOTS:
         QCOMPARE(firefox.at(0).windowId, QStringLiteral("firefox|c2"));
         QCOMPARE(firefox.at(1).windowId, QStringLiteral("firefox|c1"));
         QCOMPARE(firefox.at(2).windowId, QStringLiteral("firefox|other-closed"));
+    }
 
-        // A record naming a zone the context's layout no longer holds is
-        // not served (the #1104 layout gate the async resolver applies).
-        PhosphorEngine::WindowPlacement ghost = rec;
-        ghost.windowId = QStringLiteral("firefox|ghost");
-        ghost.engines[PhosphorEngine::WindowPlacement::snapEngineId()].zoneIds =
-            QStringList{QUuid::createUuid().toString()};
-        QVERIFY(m_service->placementStore().record(ghost));
-        targets = m_service->pendingRestoreGeometries();
-        QCOMPARE(targets.value(QStringLiteral("firefox")).size(), 3);
-        QCOMPARE(targets.value(QStringLiteral("firefox")).first().windowId, QStringLiteral("firefox|c2"));
+    // A record naming a zone of a layout that is registered but not the one
+    // its context runs is not served: zone geometry finds the zone in ANY
+    // loaded layout, and the async resolver refuses it (#1104).
+    void pending_ghostOfAnotherRegisteredLayout()
+    {
+        PhosphorZones::Layout* other = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(other);
+        QVERIFY(m_service->placementStore().record(
+            snappedRecord(QStringLiteral("app|ghost"), m_screenId, {other->zones().first()->id().toString()})));
+        QVERIFY(!m_service->pendingRestoreGeometries().contains(QStringLiteral("app")));
+        // Control: the layout the context runs is served.
+        QVERIFY(m_service->placementStore().record(
+            snappedRecord(QStringLiteral("other|held"), m_screenId, {m_zoneIds[0]}, QStringLiteral("other"))));
+        QVERIFY(m_service->pendingRestoreGeometries().contains(QStringLiteral("other")));
+    }
+
+    // A screen a tiling engine runs is that engine's to place on.
+    void pending_tilingContextIsSkipped()
+    {
+        QVERIFY(m_service->placementStore().record(snappedRecord(QStringLiteral("app|t"), m_screenId, {m_zoneIds[0]})));
+        QVERIFY(m_service->pendingRestoreGeometries().contains(QStringLiteral("app")));
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        entry.tilingAlgorithm = QStringLiteral("bsp");
+        m_layoutManager->setAssignmentEntryDirect(m_screenId, 0, QString(), entry);
+        QVERIFY(!m_service->pendingRestoreGeometries().contains(QStringLiteral("app")));
+    }
+
+    // A single-desktop record from a desktop the screen does not show is left
+    // to the resolve; a record on every desktop (0) is served.
+    void pending_singleDesktopRecordFromAnotherDesktopIsSkipped()
+    {
+        PhosphorWorkspaces::VirtualDesktopManager vdm;
+        vdm.updateScreenDesktop(m_screenId, 1);
+        auto service = localService(&vdm);
+        auto elsewhere = snappedRecord(QStringLiteral("app|d2"), m_screenId, {m_zoneIds[0]});
+        elsewhere.virtualDesktop = 2;
+        QVERIFY(service->placementStore().record(elsewhere));
+        QVERIFY(!service->pendingRestoreGeometries().contains(QStringLiteral("app")));
+        auto everywhere = snappedRecord(QStringLiteral("all|d0"), m_screenId, {m_zoneIds[1]}, QStringLiteral("all"));
+        QVERIFY(service->placementStore().record(everywhere));
+        QVERIFY(service->pendingRestoreGeometries().contains(QStringLiteral("all")));
+        service->setSnapState(nullptr);
+    }
+
+    // A floating snap slot still carrying its pre-float zones is not a snap
+    // the resolve restores.
+    void pending_floatingSlotIsSkipped()
+    {
+        auto rec = snappedRecord(QStringLiteral("app|f"), m_screenId, {m_zoneIds[0]});
+        rec.engines[PhosphorEngine::WindowPlacement::snapEngineId()].state =
+            PhosphorEngine::WindowPlacement::stateFloating();
+        QVERIFY(m_service->placementStore().record(rec));
+        QVERIFY(!m_service->pendingRestoreGeometries().contains(QStringLiteral("app")));
+    }
+
+    // A record on several desktops answers with the zone of the desktop its
+    // screen shows, as the resolver restores it (F130), and with no zone
+    // there it is not served.
+    void pending_multiDesktopRecordServesTheShownDesktopsZone()
+    {
+        PhosphorWorkspaces::VirtualDesktopManager vdm;
+        vdm.updateScreenDesktop(m_screenId, 2);
+        auto service = localService(&vdm);
+        auto rec = snappedRecord(QStringLiteral("app|multi"), m_screenId, {m_zoneIds[0]});
+        rec.virtualDesktop = 1;
+        rec.engines[PhosphorEngine::WindowPlacement::snapEngineId()].zonesByDesktop = {{1, {m_zoneIds[0]}},
+                                                                                       {2, {m_zoneIds[1]}}};
+        QVERIFY(service->placementStore().record(rec));
+        const auto targets = service->pendingRestoreGeometries().value(QStringLiteral("app"));
+        QCOMPARE(targets.size(), 1);
+        QCOMPARE(targets.first().geometry, service->resolveZoneGeometry({m_zoneIds[1]}, m_screenId));
+        QVERIFY(targets.first().geometry != service->resolveZoneGeometry({m_zoneIds[0]}, m_screenId));
+
+        auto onlyOne = snappedRecord(QStringLiteral("one|solo"), m_screenId, {m_zoneIds[0]}, QStringLiteral("one"));
+        onlyOne.virtualDesktop = 1;
+        onlyOne.engines[PhosphorEngine::WindowPlacement::snapEngineId()].zonesByDesktop = {{1, {m_zoneIds[0]}}};
+        QVERIFY(service->placementStore().record(onlyOne));
+        QVERIFY(!service->pendingRestoreGeometries().contains(QStringLiteral("one")));
+        service->setSnapState(nullptr);
+    }
+
+    // The layout gate reads the activity in view, not the record's: a record
+    // from activity A in A's layout opens into activity B's layout (F205).
+    void pending_layoutGateReadsTheLiveActivity()
+    {
+        PhosphorZones::Layout* layoutB = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layoutB);
+        m_layoutManager->assignLayout(m_screenId, 0, QStringLiteral("act-a"), m_testLayout);
+        m_layoutManager->assignLayout(m_screenId, 0, QStringLiteral("act-b"), layoutB);
+        m_layoutManager->setCurrentActivity(QStringLiteral("act-b"));
+
+        auto inA = snappedRecord(QStringLiteral("a|rec"), m_screenId, {m_zoneIds[0]}, QStringLiteral("a"));
+        inA.activity = QStringLiteral("act-a");
+        QVERIFY(m_service->placementStore().record(inA));
+        auto inB = snappedRecord(QStringLiteral("b|rec"), m_screenId, {layoutB->zones().first()->id().toString()},
+                                 QStringLiteral("b"));
+        inB.activity = QStringLiteral("act-a");
+        QVERIFY(m_service->placementStore().record(inB));
+
+        const auto targets = m_service->pendingRestoreGeometries();
+        m_layoutManager->setCurrentActivity(QString());
+        QVERIFY2(!targets.contains(QStringLiteral("a")), "a zone of the layout another activity runs is not served");
+        QVERIFY2(targets.contains(QStringLiteral("b")), "a zone of the layout in view is served");
+    }
+
+    // On each output the list stops at the first newer record the open claim
+    // would take instead, here a floated sibling with a float spot (F285).
+    // Every record has its own instance part: the store keys by instance.
+    void pending_newerFloatedSiblingCutsTheOutput()
+    {
+        const QString dp2 = QStringLiteral("DP-2");
+        const QRect spot(100, 100, 400, 300);
+        // (i) Older snapped, newer floated on the same output: nothing served.
+        QVERIFY(m_service->placementStore().record(
+            snappedRecord(QStringLiteral("i|si"), m_screenId, {m_zoneIds[0]}, QStringLiteral("i"))));
+        QVERIFY(m_service->placementStore().record(
+            floatedRecord(QStringLiteral("i|fi"), m_screenId, m_screenId, spot, QStringLiteral("i"))));
+        // (ii) The floated record on another output cuts nothing here.
+        QVERIFY(m_service->placementStore().record(
+            snappedRecord(QStringLiteral("ii|sii"), m_screenId, {m_zoneIds[0]}, QStringLiteral("ii"))));
+        QVERIFY(m_service->placementStore().record(
+            floatedRecord(QStringLiteral("ii|fii"), dp2, dp2, spot, QStringLiteral("ii"))));
+        // (iii) Oldest snapped, then floated, then newest snapped: the newest only.
+        QVERIFY(m_service->placementStore().record(
+            snappedRecord(QStringLiteral("iii|s2iii"), m_screenId, {m_zoneIds[1]}, QStringLiteral("iii"))));
+        QVERIFY(m_service->placementStore().record(
+            floatedRecord(QStringLiteral("iii|fiii"), m_screenId, m_screenId, spot, QStringLiteral("iii"))));
+        QVERIFY(m_service->placementStore().record(
+            snappedRecord(QStringLiteral("iii|s1iii"), m_screenId, {m_zoneIds[0]}, QStringLiteral("iii"))));
+        // (iv) An unscreened floated record with a spot on this output cuts it.
+        QVERIFY(m_service->placementStore().record(
+            snappedRecord(QStringLiteral("iv|siv"), m_screenId, {m_zoneIds[0]}, QStringLiteral("iv"))));
+        QVERIFY(m_service->placementStore().record(
+            floatedRecord(QStringLiteral("iv|fiv"), QString(), m_screenId, spot, QStringLiteral("iv"))));
+
+        const auto targets = m_service->pendingRestoreGeometries();
+        QVERIFY2(!targets.contains(QStringLiteral("i")), "a newer floated sibling on the output cuts the snap");
+        QCOMPARE(targets.value(QStringLiteral("ii")).size(), 1);
+        QCOMPARE(targets.value(QStringLiteral("ii")).first().windowId, QStringLiteral("ii|sii"));
+        QCOMPARE(targets.value(QStringLiteral("iii")).size(), 1);
+        QCOMPARE(targets.value(QStringLiteral("iii")).first().windowId, QStringLiteral("iii|s1iii"));
+        QVERIFY2(!targets.contains(QStringLiteral("iv")), "an unscreened floated sibling with a spot here cuts it");
     }
 
 private:
+    static PhosphorEngine::WindowPlacement snappedRecord(const QString& windowId, const QString& screenId,
+                                                         const QStringList& zones,
+                                                         const QString& appId = QStringLiteral("app"))
+    {
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = windowId;
+        rec.appId = appId;
+        rec.screenId = screenId;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = zones;
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        return rec;
+    }
+
+    static PhosphorEngine::WindowPlacement floatedRecord(const QString& windowId, const QString& screenId,
+                                                         const QString& spotScreen, const QRect& spot,
+                                                         const QString& appId)
+    {
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = windowId;
+        rec.appId = appId;
+        rec.screenId = screenId;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(spotScreen, spot);
+        return rec;
+    }
+
+    /// A service on @p vdm sharing the fixture's layouts, registry and snap
+    /// state. The caller detaches the snap state before it returns.
+    std::unique_ptr<PhosphorPlacement::WindowTrackingService>
+    localService(PhosphorWorkspaces::VirtualDesktopManager* vdm) const
+    {
+        auto service = std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, nullptr, vdm);
+        service->setSnapState(m_snapState);
+        service->setWindowRegistry(m_registry);
+        return service;
+    }
+
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;

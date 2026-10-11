@@ -480,12 +480,6 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     // remembered spot here to return to. A caller that finds nothing leaves the
     // window where it is, which is both honest and the least surprising
     // outcome.
-    //
-    // The re-centring in validateGeometryForScreen is still reachable through
-    // its other callers; what is gone is this function MANUFACTURING a
-    // cross-screen case to feed it. Passing screenId on both sides keeps the
-    // on-screen sanity check (a remembered rect can be off-canvas after a
-    // resolution change) without any cross-screen adjustment.
     const QRect exact = rec->freeGeometryFor(resolvedScreen);
     if (!exact.isValid()) {
         return std::nullopt;
@@ -502,6 +496,18 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
         qCWarning(lcPlacement) << "validatedUnmanagedGeometry: record for" << windowId << "is filed under"
                                << resolvedScreen << "but" << exact << "does not lie there — ignoring";
         return std::nullopt;
+    }
+    // That test is also the on-screen check, and the right one: it measures this
+    // screen's own output with thresholds sized to the window. The generic rescue
+    // measures against any one virtual screen with a flat 100 px floor, so it read a
+    // small window, or one across a virtual-screen edge, as off-screen and clamped it
+    // into whichever screen's centre was nearest, the neighbouring monitor included
+    // (F219). Only where the overlap test fails open, with no ScreenManager or an
+    // output it cannot measure, is the rescue still needed.
+    if (m_screenManager
+        && m_screenManager->screenGeometry(PhosphorIdentity::VirtualScreenId::extractPhysicalId(resolvedScreen))
+               .isValid()) {
+        return exact;
     }
     return validateGeometryForScreen(exact, resolvedScreen, resolvedScreen);
 }

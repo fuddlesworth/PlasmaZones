@@ -19,7 +19,7 @@
 #include "placementlogging.h"
 #include <QScreen>
 #include <QUuid>
-#include <climits>
+#include <limits>
 
 namespace PhosphorPlacement {
 
@@ -170,16 +170,6 @@ WindowTrackingService::ZonePruneResult WindowTrackingService::pruneStaleZoneAssi
         visits.append({windowId, survivors, screenId, desktop, activity, store});
     });
 
-    const auto holdsAnyZone = [this](const QString& windowId) {
-        const PhosphorSnapEngine::SnapState* owner = snapForWindow(windowId);
-        for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-            if ((state == owner || snapHoldsWindow(windowId, state)) && !state->zonesForWindow(windowId).isEmpty()) {
-                return true;
-            }
-        }
-        return false;
-    };
-
     for (const Visit& v : std::as_const(visits)) {
         if (v.survivors.isEmpty()) {
             // In the store that holds it, not through the primary: a
@@ -232,6 +222,17 @@ WindowTrackingService::ZonePruneResult WindowTrackingService::pruneStaleZoneAssi
         }
     }
     return result;
+}
+
+bool WindowTrackingService::holdsAnyZone(const QString& windowId) const
+{
+    const PhosphorSnapEngine::SnapState* owner = snapForWindow(windowId);
+    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        if ((state == owner || snapHoldsWindow(windowId, state)) && !state->zonesForWindow(windowId).isEmpty()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -392,16 +393,16 @@ QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
         const QStringList ids = mgr->effectiveScreenIds();
         const QPoint center = geometry.center();
         QRect nearestGeo;
-        int minDist = INT_MAX;
+        qint64 minDist = std::numeric_limits<qint64>::max();
 
         for (const QString& id : ids) {
             QRect screenGeo = mgr->screenGeometry(id);
             if (!screenGeo.isValid()) {
                 continue;
             }
-            // Manhattan distance from center to screen center
-            QPoint diff = center - screenGeo.center();
-            int dist = qAbs(diff.x()) + qAbs(diff.y());
+            // Nearest by distance from the centre to each screen's rect, the
+            // QScreen fallback's metric (F219)
+            const qint64 dist = squaredDistanceToRect(center, screenGeo);
             if (dist < minDist) {
                 minDist = dist;
                 nearestGeo = screenGeo;
@@ -502,8 +503,14 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
     // The stored virtual screen no longer exists. Try to find another virtual screen
     // on the same physical monitor, so the window stays in the virtual-screen domain
     // (screensMatch() returns false for physical-vs-virtual comparisons).
+    // Live siblings only: virtualScreenIdsFor answers the monitor's own id when
+    // it is no longer split, and keeps the configured ids of an output that is
+    // no longer connected (F584).
     QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-    const QStringList vsIds = smgr->virtualScreenIdsFor(physId);
+    QStringList vsIds = smgr->virtualScreenIdsFor(physId);
+    vsIds.removeIf([&effectiveIds](const QString& id) {
+        return !PhosphorIdentity::VirtualScreenId::isVirtual(id) || !effectiveIds.contains(id);
+    });
     if (!vsIds.isEmpty()) {
         // Find the virtual screen with the nearest index to the old one,
         // so windows migrate to the geometrically closest region rather
@@ -514,8 +521,8 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
         return nearest;
     }
 
-    qCWarning(lcPlacement) << "Virtual screen" << screenId << "no longer exists, falling back to physical screen"
-                           << physId;
+    qCInfo(lcPlacement) << "Virtual screen" << screenId << "no longer exists and no virtual screen of" << physId
+                        << "is live; answering the monitor";
     return physId;
 }
 
