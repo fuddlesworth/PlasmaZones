@@ -737,6 +737,39 @@ private Q_SLOTS:
         QVERIFY(stored.zonesByDesktop.isEmpty());
     }
 
+    void testRecordFloatingClose_axisMaximizedFrameIsNotAFloatBack()
+    {
+        // A window maximized on one axis closes with a frame as tall (or as
+        // wide) as the output. That is not a free position, so the close keeps
+        // it out of the float-back (F65); the same frame unmaximized is kept.
+        PhosphorEngine::WindowRegistry registry;
+        const auto clearRegistry = qScopeGuard([this] {
+            m_service->setWindowRegistry(nullptr);
+        });
+        m_service->setWindowRegistry(&registry);
+        const QRect tallFrame(30, 0, 600, 1080);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("kate");
+        meta.isMaximized = false;
+        meta.isFullscreen = false;
+        meta.isAxisMaximized = true;
+        registry.upsert(QStringLiteral("axis-close"), meta);
+        // Another app, so the pure-float sibling collapse cannot drop the first record.
+        meta.appId = QStringLiteral("gedit");
+        meta.isAxisMaximized = false;
+        registry.upsert(QStringLiteral("plain-close"), meta);
+
+        m_service->recordFloatingClose(QStringLiteral("kate|axis-close"), QStringLiteral("DP-1"), tallFrame);
+        m_service->recordFloatingClose(QStringLiteral("gedit|plain-close"), QStringLiteral("DP-1"), tallFrame);
+
+        const auto axisRec = m_service->placementStore().peekExact(QStringLiteral("kate|axis-close"));
+        QVERIFY2(!axisRec || !axisRec->freeGeometryFor(QStringLiteral("DP-1")).isValid(),
+                 "a one-axis maximized frame must not become the float-back");
+        const auto plainRec = m_service->placementStore().peekExact(QStringLiteral("gedit|plain-close"));
+        QVERIFY(plainRec.has_value());
+        QCOMPARE(plainRec->freeGeometryFor(QStringLiteral("DP-1")), tallFrame);
+    }
+
     void testRecordFloatingClose_prefixMutationKeepsOwnEngineSlots()
     {
         // Closing floating after an appId-prefix mutation must merge into the

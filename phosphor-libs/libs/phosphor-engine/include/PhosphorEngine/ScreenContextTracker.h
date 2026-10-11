@@ -239,7 +239,8 @@ public:
     void pruneDesktop(int removedDesktop);
 
     /// Shift every stored desktop number ABOVE @p removedDesktop down by one,
-    /// after pruneDesktop has dropped the entries that referenced it.
+    /// the global desktop included, after pruneDesktop has dropped the entries
+    /// that referenced it.
     ///
     /// The companion to the engines' renumberDesktopsAfterRemoval, and it must
     /// run with them or not at all. Both maps hold POSITIONAL desktop numbers

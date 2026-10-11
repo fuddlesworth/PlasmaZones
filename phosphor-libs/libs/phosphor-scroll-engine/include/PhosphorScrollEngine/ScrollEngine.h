@@ -181,10 +181,9 @@ public:
     // ═══════════════════════════════════════════════════════════════════════
 
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
+    /// Announces Passive (windowFloatingStateSynced, F557); the user float verbs announce Active (F578).
     void setWindowFloat(const QString& windowId, bool shouldFloat, const QString& screenId = QString()) override;
-    /// Authoritative per-window scroll float state (the scroll half of the
-    /// per-engine float contract; daemon WTS resolver consults this for
-    /// Scrolling-mode windows).
+    /// Authoritative scroll float state (the scroll half of the per-engine float contract the WTS resolver reads).
     bool isWindowFloatingInScroll(const QString& windowId) const;
     QStringList allFloatingWindows() const;
     bool isModeSpecificFloated(const QString& windowId) const override;
@@ -991,9 +990,8 @@ Q_SIGNALS:
     /// in dbus/org.plasmazones.Tiling.xml's TileRequestEntry annotation,
     /// which is the single source: an inline copy here named a handful of
     /// the fields actually emitted and drifted every time one was added,
-    /// which is why no count is repeated here. Float transitions are
-    /// signalled separately via
-    /// windowFloatingChanged — this batch never carries release entries.
+    /// which is why no count is repeated here. Float transitions go out on the
+    /// two float signals; this batch never carries release entries.
     void windowsTiled(const QString& tileRequestsJson);
     /// Scrolling twin of autotileScreensChanged, with the same
     /// identical-set re-emit contract on desktop/activity switches.
@@ -1351,6 +1349,8 @@ private:
         Passive
     };
     void announceFloat(FloatAnnounce announce, const QString& windowId, bool floating, const QString& screenId);
+    void setWindowFloatAnnounced(const QString& rawWindowId, bool shouldFloat, const QString& screenId,
+                                 FloatAnnounce announce);
     /// Queue @p windowId for announceReleasedFullscreenHolds when its slot carries the hold.
     void rememberReleasedFullscreenHold(const QString& windowId);
     void announceReleasedFullscreenHolds();

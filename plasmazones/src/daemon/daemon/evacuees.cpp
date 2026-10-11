@@ -13,6 +13,9 @@
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
+
+#include <QSet>
 
 #include <algorithm>
 
@@ -116,6 +119,35 @@ void Daemon::applyScreenDesktopSeed(const QString& screenId, int desktop)
     if (m_screenManager) {
         reconcileMembershipsForScreens(m_tilingAdaptor, m_screenManager->virtualScreenIdsFor(screenId));
     }
+}
+
+void Daemon::reseedScreenDesktopsAfterRenumber()
+{
+    // Every engine's desktop prune dropped the per-output desktop of an output
+    // showing the removed desktop. KWin hands that output the successor, which
+    // takes the removed number, so nothing reports a change there and the
+    // engines laid it out under the desktop the session started on until its
+    // next switch (F799). The desktop manager's map is renumbered by now, so
+    // push it back as a seed. Pushed per PHYSICAL output, the key the effect
+    // reports under; an output whose number did not move gets the value it
+    // holds, which changes nothing.
+    if (!m_screenManager || !m_virtualDesktopManager) {
+        return;
+    }
+    QSet<QString> outputs;
+    for (const QString& screenId : m_screenManager->effectiveScreenIds()) {
+        outputs.insert(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+    }
+    for (const QString& output : std::as_const(outputs)) {
+        const int desktop = m_virtualDesktopManager->currentDesktopForScreen(output);
+        for (PhosphorEngine::PlacementEngineBase* engine :
+             {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
+            if (engine) {
+                engine->setCurrentDesktopForScreen(output, desktop);
+            }
+        }
+    }
+    updateEngineScreens();
 }
 
 } // namespace PlasmaZones

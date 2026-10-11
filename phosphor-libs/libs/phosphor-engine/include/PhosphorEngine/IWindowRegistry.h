@@ -120,10 +120,11 @@ public:
     // exported, and its vtable order is part of the ABI a released build
     // shipped.
 
-    /// Whether @p windowId is maximized or fullscreen as last reported: engaged
-    /// true when either state is on, engaged false when both are known off,
-    /// nullopt when either was never delivered or the window is
-    /// unknown. Such a window's frame is the output, not a free position, and
+    /// Whether @p windowId is maximized on either axis or fullscreen as last
+    /// reported: engaged true when any of those is on, engaged false when the
+    /// full maximize and fullscreen are both known off, nullopt when either was
+    /// never delivered or the window is unknown. Such a window's frame is the
+    /// output (on one axis at least), not a free position, and
     /// only the compositor knows its restore rect. Default reports unknown,
     /// like minimizedState.
     virtual std::optional<bool> fillsOutputState(const QString& windowId) const

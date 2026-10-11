@@ -1148,23 +1148,21 @@ void Daemon::initEnginesAndWiring()
         });
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, m_tilingAdaptor,
             &TilingAdaptor::relayWindowFloatingChanged);
-    // The scroll engine manages its float STATE itself, but only the daemon can
-    // restore the float-back geometry — floatWindowInternal merely pulls the
-    // window out of the strip and windowsTiled never carries release entries, so
-    // without this the window sits frozen at its old column rect after Meta+F.
-    //
-    // This is the ACTIVE arm and windowFloatingChanged now carries only the two
-    // user float actions (floatWindowInternal / unfloatWindowInternal). The
-    // engine's own-initiative transitions — the rule and record floats at open,
-    // the migration drops, the unfloat-by-adoption and the handoffReceive
-    // re-float — go out as windowFloatingStateSynced and land on the passive
-    // handler below. Routing them all through here treated every one as a user
-    // float: a floating window dragged onto a scrolling screen was teleported
-    // to its stored free geometry (the discussion #271 class), and every open
-    // raised a spurious OSD. A snap pre-float home goes, as in the autotile arm.
+    // The ACTIVE arm: the user float verbs (Meta+F, move to floating, move to
+    // tiling). Only the daemon restores the float-back geometry; the engine just
+    // pulls the window out of the strip. Every other transition (the open-time
+    // rule and record floats, migrations, adoptions, and the tracking adaptor's
+    // setWindowFloat for minimize, a drag float and the shell map) goes out as
+    // windowFloatingStateSynced to the passive arm below and moves nothing
+    // (discussion #271, F557). Through the adaptor's float writer like the
+    // autotile arm, so its last-broadcast memory sees the edge (F558).
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, this,
             [this](const QString& windowId, bool floating, const QString& screenId) {
-                if (floating && m_windowTrackingAdaptor) {
+                if (!m_windowTrackingAdaptor) {
+                    return;
+                }
+                m_windowTrackingAdaptor->setWindowFloating(windowId, floating);
+                if (floating) {
                     m_windowTrackingAdaptor->service()->clearPreFloatZone(windowId);
                     m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
                 }
@@ -1175,9 +1173,9 @@ void Daemon::initEnginesAndWiring()
                 }
             });
     // Passive arm: engine-initiated float transitions, which must not restore
-    // geometry or raise an OSD. It also carries the cross-engine eviction, so a
-    // window adopted onto a scrolling screen releases any stale snap or autotile
-    // tracking instead of leaving a ghost the sibling engine retiles around.
+    // geometry or raise an OSD. It drops what the other engines hold of the
+    // window off the screen it is on; holds on that screen's other desktops
+    // stay, since a float toggle moves no ownership (F579).
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced, this,
             &Daemon::syncScrollFloatStatePassive);
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowsReleased, m_tilingAdaptor,

@@ -512,12 +512,11 @@ void Daemon::connectDesktopActivity()
                 // Every screen's number is already correct when this runs:
                 // VirtualDesktopManager shifts the renumbered entries and pulls
                 // down the ones a last-desktop removal left out of range, both
-                // silently, before it emits. So this diff resolves against the
-                // post-removal numbering and the clamp that follows has nothing
-                // left to correct. Re-diff
-                // here, where the engines are already correct.
+                // silently, before it emits. So the re-seed and the diff below
+                // resolve against the post-removal numbering, and the clamp that
+                // follows has nothing left to correct.
                 //
-                // The disabled-desktop gates are re-keyed FIRST, because both
+                // The disabled-desktop gates are re-keyed FIRST, because the
                 // calls below read them: diffActiveAssignments resolves each
                 // context through isContextDisabled, and hideDisabledAndRefresh
                 // is named for it. Re-keying afterwards would publish one pass
@@ -535,6 +534,7 @@ void Daemon::connectDesktopActivity()
                         m_settings->save();
                     }
                 }
+                reseedScreenDesktopsAfterRenumber();
                 diffActiveAssignments();
                 if (m_overlayService) {
                     m_overlayService->hideDisabledAndRefresh();

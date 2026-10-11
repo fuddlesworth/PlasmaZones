@@ -268,7 +268,7 @@ void TestScrollEngineSmoke::floatPullsOutAndRestoresSlot()
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
 
-    QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+    QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
     engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
     QVERIFY(engine->isWindowFloatingInScroll(QStringLiteral("app|b")));
     QVERIFY(engine->isModeSpecificFloated(QStringLiteral("app|b")));
@@ -2364,7 +2364,7 @@ void TestScrollEngineSmoke::migrateOutAnnouncesDroppedFloat()
     // The announcement rides windowFloatingStateSynced. A migration is the
     // engine's own bookkeeping, not a user float action, so the daemon must
     // mirror the state without restoring geometry or raising an OSD; only the
-    // explicit setWindowFloat below is an active transition.
+    // user toggle below is an active transition.
     QObject owner;
     ScrollEngine* engine = makeEngine(&owner);
     QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
@@ -2372,7 +2372,7 @@ void TestScrollEngineSmoke::migrateOutAnnouncesDroppedFloat()
 
     // windowOpened's context migration.
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
-    engine->setWindowFloat(QStringLiteral("app|a"), true, QStringLiteral("S1"));
+    engine->toggleWindowFloat(QStringLiteral("app|a"), QStringLiteral("S1"));
     QCOMPARE(activeFloatSpy.count(), 1); // the user float is the ACTIVE arm
     QCOMPARE(floatSpy.count(), 0);
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S2"), 0, 0);

@@ -79,6 +79,9 @@ struct WindowMetadata
     /// activities; empty otherwise. When non-empty, activity equals the first
     /// entry. Appended last (installed struct).
     QStringList activities{};
+    /// Maximized on ONE axis (vertical or horizontal). Separate from isMaximized,
+    /// which rules match on and which stays full-maximize only (F65). Appended last.
+    std::optional<bool> isAxisMaximized{};
 
     bool operator==(const WindowMetadata& other) const
     {
@@ -93,7 +96,8 @@ struct WindowMetadata
             && isModal == other.isModal && hasDecoration == other.hasDecoration && isResizable == other.isResizable
             && isMovable == other.isMovable && isMaximizable == other.isMaximizable && width == other.width
             && height == other.height && positionX == other.positionX && positionY == other.positionY
-            && captionNormal == other.captionNormal && activities == other.activities;
+            && captionNormal == other.captionNormal && activities == other.activities
+            && isAxisMaximized == other.isAxisMaximized;
     }
     bool operator!=(const WindowMetadata& other) const
     {
@@ -170,8 +174,8 @@ public:
     /// window is unknown or the field was never delivered. Accepts either a
     /// bare instance id or a composite appId|instanceId window id.
     std::optional<bool> minimizedState(const QString& windowId) const override;
-    /// IWindowRegistry::fillsOutputState over the reported maximize and
-    /// fullscreen fields. Accepts a bare instance id or a composite id.
+    /// IWindowRegistry::fillsOutputState over the reported maximize (either
+    /// axis) and fullscreen fields. Accepts a bare instance id or a composite id.
     std::optional<bool> fillsOutputState(const QString& windowId) const override;
     std::optional<WindowDesktopContext> desktopContext(const QString& windowId) const override;
     /// Every instance currently recorded under @p appId, most recently indexed

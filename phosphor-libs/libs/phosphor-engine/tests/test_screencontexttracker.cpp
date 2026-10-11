@@ -23,6 +23,7 @@ private Q_SLOTS:
     void releaseScreenOwnership_keepsPerOutputDesktop();
     void removeScreensIf_byPredicate();
     void pruneDesktop_byValue();
+    void renumber_shiftsTheGlobalDesktop();
     void virtualScreen_followsItsParentOutput();
 };
 
@@ -224,7 +225,27 @@ void TestScreenContextTracker::pruneDesktop_byValue()
     t.pruneDesktop(5);
     QVERIFY(!t.hasStickyPin(QStringLiteral("S1"))); // pinned to removed desktop 5
     QVERIFY(t.hasStickyPin(QStringLiteral("S2"))); // desktop 6 survives
-    QCOMPARE(t.screenDesktop(QStringLiteral("S3")), 1); // per-output 5 gone
+    // Per-output 5 gone: S3 falls back to the global until the daemon re-seeds
+    // it (Daemon::reseedScreenDesktopsAfterRenumber).
+    QCOMPARE(t.screenDesktop(QStringLiteral("S3")), 1);
+}
+
+void TestScreenContextTracker::renumber_shiftsTheGlobalDesktop()
+{
+    // The global desktop names a desktop, not a number: removing one below it
+    // moves it down with the per-output entries, so an unpinned screen keeps
+    // resolving the desktop it was on (F799).
+    ScreenContextTracker t;
+    t.setCurrentDesktop(3);
+    t.setCurrentDesktopForScreen(QStringLiteral("S1"), 4);
+    t.renumberDesktopsAfterRemoval(2);
+    QCOMPARE(t.currentDesktop(), 2);
+    QCOMPARE(t.currentKeyForScreen(QStringLiteral("S2")).desktop, 2);
+    QCOMPARE(t.screenDesktop(QStringLiteral("S1")), 3);
+
+    // A removal above it leaves it alone.
+    t.renumberDesktopsAfterRemoval(5);
+    QCOMPARE(t.currentDesktop(), 2);
 }
 
 QTEST_MAIN(TestScreenContextTracker)

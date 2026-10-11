@@ -142,12 +142,13 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
     //
     // Dropping a per-output entry here is safe, and NOT in tension with
     // releaseScreenOwnership's argument that the same entry must survive a mode
-    // leave. The difference is what re-establishes it. On this path the daemon
-    // clamps every screen's desktop and pushes the new values BEFORE the count
-    // change propagates, so a dropped entry is rewritten immediately. On a mode
-    // leave nothing pushes at all, and the global desktop the lookup would fall
-    // back to is written once at startup — so there the drop is permanent and
-    // merges every output onto one desktop.
+    // leave. The difference is what re-establishes it. The daemon re-seeds each
+    // screen's desktop afterwards (Daemon::reseedScreenDesktopsAfterRenumber):
+    // KWin hands a screen that showed the removed desktop its successor, which
+    // takes the removed number, so nothing reports a change there (F799). On a
+    // mode leave nothing pushes at all, and the global desktop the lookup would
+    // fall back to is written once at startup — so there the drop is permanent
+    // and merges every output onto one desktop.
     for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end();) {
         if (it.value() == removedDesktop) {
             it = m_screenDesktopOverride.erase(it);
@@ -180,6 +181,11 @@ void ScreenContextTracker::renumberDesktopsAfterRemoval(int removedDesktop)
     };
     shift(m_screenDesktopOverride);
     shift(m_screenCurrentDesktop);
+    // The global desktop is the startup seed every unpinned screen falls back
+    // to, so it follows the desktop it named rather than the number (F799).
+    if (m_currentDesktop > removedDesktop) {
+        --m_currentDesktop;
+    }
 }
 
 } // namespace PhosphorEngine

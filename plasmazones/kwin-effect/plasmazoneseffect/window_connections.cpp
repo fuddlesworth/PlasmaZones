@@ -215,6 +215,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // interceptMaximizeRequest would dispatch a toggle,
                 // turning the user's axis maximize into a column maximize
                 // (or, on a member, into an un-maximize).
+                //
+                // The daemon's capture reads the axis state too (F65): its
+                // registry must not keep the pre-edge answer.
+                pushWindowMetadata(window);
                 m_tilingHandler->cancelAxisOnlyMaximize(window);
                 return;
             }

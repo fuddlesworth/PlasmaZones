@@ -1394,8 +1394,8 @@ public Q_SLOTS:
      * whose float bit lives in the source is adopted by a tiling destination
      * (tiling the arrival) or, for a snap destination, released from the source
      * with a not-floating broadcast. The suspension-float classification is
-     * stamped before routing. Used by minimize/unminimize, drag-to-float, and
-     * monocle unmaximize handlers.
+     * stamped before routing. Used by minimize/unminimize, drag-to-float, the
+     * monocle unmaximize and the shell placement map; a tiling engine answers it passively.
      */
     void setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating);
 

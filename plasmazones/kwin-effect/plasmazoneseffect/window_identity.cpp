@@ -234,6 +234,13 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         if (props.isMaximized) {
             extended.insert(Key::IsMaximized, *props.isMaximized);
         }
+        // Maximized on one axis (Maximize Vertically / Horizontally) fills the
+        // output that way, so its frame is no free position (F65). Read off
+        // KWin::Window like urgency: it is not a rule-matchable field.
+        if (window) {
+            const KWin::MaximizeMode mode = window->maximizeMode();
+            extended.insert(Key::IsAxisMaximized, mode == KWin::MaximizeVertical || mode == KWin::MaximizeHorizontal);
+        }
         if (props.isFocused) {
             extended.insert(Key::IsFocused, *props.isFocused);
         }

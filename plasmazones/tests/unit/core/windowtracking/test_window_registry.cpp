@@ -146,6 +146,19 @@ private Q_SLOTS:
         maximizedOnly.isMaximized = true;
         reg.upsert(QStringLiteral("u3"), maximizedOnly);
         QCOMPARE(reg.fillsOutputState(QStringLiteral("u3")), std::optional<bool>(true));
+
+        // Maximized on one axis only: its frame is the output's height or width,
+        // not a free position (F65), whatever the other two say.
+        PhosphorEngine::WindowMetadata axisOnly = make(QStringLiteral("firefox"));
+        axisOnly.isMaximized = false;
+        axisOnly.isFullscreen = false;
+        axisOnly.isAxisMaximized = true;
+        reg.upsert(QStringLiteral("u4"), axisOnly);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u4")), std::optional<bool>(true));
+        // An effect that never sends the axis field keeps today's answer.
+        axisOnly.isAxisMaximized.reset();
+        reg.upsert(QStringLiteral("u4"), axisOnly);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u4")), std::optional<bool>(false));
     }
 
     void upsert_rejectsEmptyInstanceId()
@@ -736,7 +749,7 @@ private Q_SLOTS:
               &WindowMetadata::isNotification, &WindowMetadata::keepAbove, &WindowMetadata::keepBelow,
               &WindowMetadata::skipTaskbar, &WindowMetadata::skipPager, &WindowMetadata::skipSwitcher,
               &WindowMetadata::isModal, &WindowMetadata::hasDecoration, &WindowMetadata::isResizable,
-              &WindowMetadata::isMovable, &WindowMetadata::isMaximizable}) {
+              &WindowMetadata::isMovable, &WindowMetadata::isMaximizable, &WindowMetadata::isAxisMaximized}) {
             mutators.append([term](WindowMetadata& m) {
                 m.*term = true;
             });

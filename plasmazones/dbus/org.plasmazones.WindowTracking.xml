@@ -288,7 +288,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <method name="setWindowFloatingForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state explicitly (directional, not toggle). Routes to autotile engine for autotile screens, handles snap mode locally. Used by minimize/unminimize, drag-to-float, and monocle unmaximize."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state explicitly (directional, not toggle) on the engine that runs the screen: autotile, scrolling or snapping. Used by minimize and unminimize, drag-to-float, the monocle unmaximize and the Phosphor shell placement map. A tiling engine floats or tiles the window where it is, with no float-back geometry and no OSD."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier (from KWin)."/>
             </arg>
@@ -403,7 +403,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setWindowMetadata">
-            <annotation name="org.gtk.GDBus.DocString" value="Register or update metadata for a live window. Called by the compositor bridge on window-added and on every mutation of the window's app class, desktop file, caption, virtual desktop, activity or role, and on its minimize, urgency, maximize and fullscreen edges. Idempotent, so it is safe to call on every observation and a no-op if metadata is unchanged."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Register or update metadata for a live window. Called by the compositor bridge on window-added and on every mutation of the window's app class, desktop file, caption, virtual desktop, activity or role, and on its minimize, urgency, maximize and fullscreen edges, a maximize on one axis included. Idempotent, so it is safe to call on every observation and a no-op if metadata is unchanged."/>
             <arg name="instanceId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Opaque compositor handle, stable for the window lifetime (KWin internalId)."/>
             </arg>

@@ -270,23 +270,23 @@ private:
     /// an off toggle (the rule's force-ON half; its suppress half lives in
     /// shouldSuppressOsd). A screenless call reads the toggle alone.
     bool isOsdTriggerEnabled(OsdTrigger trigger, const QString& screenId = QString()) const;
-    /// Stop @p screenId's armed strip-preview settle timer, if any. Called
-    /// from every showScrollingModeOsd arm that does NOT arm it, so a toggle
-    /// followed by a reconcile cannot land a duplicate card a beat later.
+    /// Stop @p screenId's armed strip-preview settle timer, if any. Called from every showScrollingModeOsd arm
+    /// that does NOT arm it, so a toggle followed by a reconcile cannot land a duplicate card a beat later.
     void stopScrollingOsdSettleTimer(const QString& screenId);
     /// Destroy the per-screen strip-preview settle timers: every one when
     /// @p screenId is empty, else that output's and its virtual screens'.
     void reapScrollingOsdSettleTimers(const QString& screenId = QString());
-    /// Reap the settle timers whose screen id satisfies @p pred. The overload
-    /// above matches by physical output, WRONG for a virtual-screen
-    /// reconfigure, where the output survives and only some vs:N ids go: the
-    /// dropped sub-screens' timers would accumulate and could still fire.
+    /// Reap the settle timers whose screen id satisfies @p pred. The overload above matches by physical output,
+    /// WRONG for a virtual-screen reconfigure, where the output survives and only some vs:N ids go: the dropped
+    /// sub-screens' timers would accumulate and could still fire.
     void reapScrollingOsdSettleTimersWhere(const std::function<bool(const QString&)>& pred);
     /// An output went away: park its windows, reap every engine's states on
     /// it, release the parked windows' slots, drop its remembered orders.
     void retireOutputPlacements(const QString& physicalScreenId);
     /// The desktop an output shows as it comes (back), set without a switch.
     void applyScreenDesktopSeed(const QString& screenId, int desktop);
+    /// After a desktop removal, push every output's renumbered desktop into the engines as a seed (F799).
+    void reseedScreenDesktopsAfterRenumber();
     void clearHighlight();
 
     /**
@@ -1325,18 +1325,17 @@ private:
      * @brief Scroll twin of syncAutotileFloatStatePassive.
      *
      * Handler for ScrollEngine::windowFloatingStateSynced. The scroll engine
-     * emits that signal (rather than windowFloatingChanged) for every float
-     * transition it makes on its OWN initiative: the rule/oversize float at
-     * open, the record-restore float at open, the cross-context and stale-key
-     * migration drops, the unfloat-by-adoption, and the handoffReceive
-     * re-float. None of those is a user float action, so none may restore the
-     * stored free geometry (it would teleport a window that already has a
-     * valid position — discussion #271) or raise a navigation OSD.
+     * emits that signal (rather than windowFloatingChanged) for every float transition that is not a user
+     * float verb: the rule/oversize float at open, the record-restore float at open, the cross-context and
+     * stale-key migration drops, the unfloat-by-adoption, the handoffReceive re-float, and the tracking
+     * adaptor's setWindowFloat (minimize, a drag float, the shell map). None may restore the stored free
+     * geometry (it would teleport a window that already has a valid position, discussion #271) or raise a
+     * navigation OSD.
      *
-     * It also carries the cross-engine eviction the autotile twin performs:
-     * scroll adoption must release any stale snap or autotile tracking, or a
-     * window re-announced onto a scrolling screen leaves a permanent ghost in
-     * the engine that still tracks it.
+     * It also drops what the other engines hold of the window off the screen it
+     * is on (WindowTrackingAdaptor::releaseLeftScreens), as the autotile twin
+     * does; a float toggle moves no ownership, so holds on that screen's other
+     * desktops stay (F579).
      */
     void syncScrollFloatStatePassive(const QString& windowId, bool floating, const QString& screenId);
 

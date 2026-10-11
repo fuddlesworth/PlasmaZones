@@ -153,11 +153,14 @@ std::optional<bool> WindowRegistry::fillsOutputState(const QString& windowId) co
     if (it == m_records.constEnd()) {
         return std::nullopt;
     }
-    if (it->isMaximized.value_or(false) || it->isFullscreen.value_or(false)) {
+    // A one-axis maximize stretches the frame to the output on that axis, so
+    // it is not a free position either (F65).
+    if (it->isMaximized.value_or(false) || it->isAxisMaximized.value_or(false) || it->isFullscreen.value_or(false)) {
         return true;
     }
     // Off only when BOTH are known off: an unknown maximize next to a known
-    // fullscreen=false may well be on (F141).
+    // fullscreen=false may well be on (F141). The axis field is left out of
+    // this: an effect that never sends it keeps the answer it had.
     if (it->isMaximized.has_value() && it->isFullscreen.has_value()) {
         return false;
     }

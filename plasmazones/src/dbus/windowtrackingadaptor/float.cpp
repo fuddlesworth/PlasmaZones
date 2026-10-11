@@ -159,11 +159,15 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     }
     qCInfo(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
 
-    // Emit unified state change
+    // The snap zone only where snapping runs: a tiling engine's float has none,
+    // and a frozen snap zone sent here is written back into the effect's zone
+    // cache, making a tile read as snapped (F488).
+    PhosphorSnapEngine::SnapEngine* snap = snapEngine();
+    const QString zone = (snap && snap->isActiveOnScreen(screen)) ? m_service->zoneForWindow(windowId) : QString();
     Q_EMIT windowStateChanged(windowId,
                               PhosphorProtocol::WindowStateEntry{
                                   windowId,
-                                  m_service->zoneForWindow(windowId),
+                                  zone,
                                   screen,
                                   floating,
                                   floating ? QStringLiteral("floated") : QStringLiteral("unfloated"),

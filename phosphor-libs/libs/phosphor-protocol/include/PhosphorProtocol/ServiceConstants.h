@@ -98,6 +98,7 @@ inline constexpr QLatin1String IsDemandingAttention("isDemandingAttention");
 inline constexpr QLatin1String IsFullscreen("isFullscreen");
 inline constexpr QLatin1String IsSticky("isSticky");
 inline constexpr QLatin1String IsMaximized("isMaximized");
+inline constexpr QLatin1String IsAxisMaximized("isAxisMaximized");
 inline constexpr QLatin1String IsFocused("isFocused");
 inline constexpr QLatin1String IsTransient("isTransient");
 inline constexpr QLatin1String IsNotification("isNotification");

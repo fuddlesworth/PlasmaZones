@@ -354,6 +354,16 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
 
 void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, const QString& screenId)
 {
+    // The tracking adaptor's entry (minimize, a drag float, the shell map): an
+    // engine-side transition that leaves the window where it is (F557,
+    // shell_map_float). The float verbs announce Active through
+    // setWindowFloatAnnounced themselves (F578).
+    setWindowFloatAnnounced(rawWindowId, shouldFloat, screenId, FloatAnnounce::Passive);
+}
+
+void ScrollEngine::setWindowFloatAnnounced(const QString& rawWindowId, bool shouldFloat, const QString& screenId,
+                                           FloatAnnounce announce)
+{
     const QString windowId = canonicalizeForLookup(rawWindowId);
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
@@ -430,9 +440,9 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
     }
 
     if (shouldFloat) {
-        floatWindowInternal(state, key, windowId, screenId);
+        floatWindowInternal(state, key, windowId, screenId, announce);
     } else {
-        unfloatWindowInternal(state, windowId, key.screenId);
+        unfloatWindowInternal(state, windowId, key.screenId, true, announce);
     }
 }
 
@@ -542,7 +552,7 @@ void ScrollEngine::settleReannouncedFullscreenHold(const QString& windowId)
 
 void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& screenId)
 {
-    // setWindowFloat canonicalizes its own input; canonicalizeForLookup is
+    // setWindowFloatAnnounced canonicalizes its own input; canonicalizeForLookup is
     // idempotent, so passing the resolved id through is a single-pass
     // pipeline, not a second translation.
     const QString windowId = canonicalizeForLookup(rawWindowId);
@@ -550,7 +560,7 @@ void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& 
     if (!state) {
         // Report instead of absorbing the press silently: a toggle aimed at
         // an untracked window would resolve floating=false below and
-        // setWindowFloat's no-state arm silently rejects the float. Every
+        // setWindowFloatAnnounced's no-state arm silently rejects the float. Every
         // other navigation shortcut produces feedback, and a silent
         // shortcut reads as broken — mirrors SnapEngine::toggleWindowFloat
         // and the autotile facade's not_managed report. Direct callers only:
@@ -564,7 +574,7 @@ void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& 
         return;
     }
     const bool floating = state->isFloating(windowId);
-    setWindowFloat(windowId, !floating, screenId);
+    setWindowFloatAnnounced(windowId, !floating, screenId, FloatAnnounce::Active);
 }
 
 } // namespace PhosphorScrollEngine

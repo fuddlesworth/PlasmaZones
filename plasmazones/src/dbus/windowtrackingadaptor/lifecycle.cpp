@@ -678,6 +678,8 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                 meta.isSticky = v.toBool();
             } else if (k == Key::IsMaximized) {
                 meta.isMaximized = v.toBool();
+            } else if (k == Key::IsAxisMaximized) {
+                meta.isAxisMaximized = v.toBool();
             } else if (k == Key::IsFocused) {
                 meta.isFocused = v.toBool();
             } else if (k == Key::IsTransient) {

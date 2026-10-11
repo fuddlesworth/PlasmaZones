@@ -850,11 +850,11 @@ void ScrollEngine::moveFocusedToFloating(const QString& screenId)
     // from `screen`, and floatWindowInternal's announcement uses the id it is
     // handed — a foreign raw hint would label the change with a screen that
     // does not own the window. A SUCCESSFUL press is deliberately silent (no
-    // navigationFeedback): the verb delegates to setWindowFloat and the
+    // navigationFeedback): the verb floats through setWindowFloatAnnounced (Active) and the
     // window visibly moving IS the feedback, the rule snapAllWindows also
     // follows — only refusals speak. Pinned by
     // moveToFloatingAndBackAnswersEveryPress.
-    setWindowFloat(windowId, true, screen);
+    setWindowFloatAnnounced(windowId, true, screen, FloatAnnounce::Active);
 }
 
 void ScrollEngine::moveFocusedToTiling(const QString& screenId)
@@ -891,7 +891,7 @@ void ScrollEngine::moveFocusedToTiling(const QString& screenId)
     }
     // Resolved screen for the same reason as moveFocusedToFloating, and the
     // same silent-success convention.
-    setWindowFloat(windowId, false, screen);
+    setWindowFloatAnnounced(windowId, false, screen, FloatAnnounce::Active);
 }
 
 void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
