@@ -833,7 +833,7 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. The desktop-move stash outlives the release on
-    // purpose; close and bring-up clear it. Also drop the unconsumed output-move
+    // purpose; only close clears it. Also drop the unconsumed output-move
     // marker and the pending cross-screen-restore connection (a stale one could
     // fire a spurious applyWindowGeometry).
     m_savedNotifiedForDesktopReturn.remove(windowId);
@@ -1109,35 +1109,33 @@ void TilingHandler::onDaemonReady()
     // its query and the reply clears it — a false store first was dead.
     loadSettings();
 
-    // Re-send the effect's pre-autotile geometry cache to the freshly
-    // (re)connected daemon as a backstop. storePreTileGeometry lands in the
-    // unified WindowPlacementStore record (which IS persisted), but a record
-    // the store had not flushed before the daemon died — or a daemon started
-    // with wiped state — would leave already-tiled windows with no
-    // pre-autotile position to return to on autotile→snap or drag-to-float.
-    // The effect survives daemon restarts and still holds each window's true
-    // pre-autotile frame here. overwrite=false so anything the daemon
-    // restored from its own persisted records wins.
+    // Re-send the effect's pre-autotile geometry to the (re)connected daemon as
+    // a backstop: a record the store had not flushed before the daemon died, or
+    // a daemon started with wiped state, would leave tiled windows with no free
+    // position to return to. The effect survives daemon restarts and still
+    // holds each true frame. overwrite=false: the daemon's own records win.
     if (m_effect->m_daemonGate.serviceRegistered) {
         int resent = 0;
+        const auto resend = [this, &resent](const QString& windowId, const QString& screenId, const QRectF& geo) {
+            if (geo.width() <= 0 || geo.height() <= 0) {
+                return;
+            }
+            // qRound, not truncation: fractional-scale residue (the toRect() capture convention).
+            PhosphorProtocol::ClientHelpers::fireAndForget(
+                m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                {windowId, qRound(geo.x()), qRound(geo.y()), qRound(geo.width()), qRound(geo.height()), screenId,
+                 false},
+                QStringLiteral("storePreTileGeometry"));
+            ++resent;
+        };
         for (auto scrIt = m_preTileGeometries.constBegin(); scrIt != m_preTileGeometries.constEnd(); ++scrIt) {
-            const QString& screenId = scrIt.key();
             for (auto winIt = scrIt.value().constBegin(); winIt != scrIt.value().constEnd(); ++winIt) {
-                const QRectF& geo = winIt.value();
-                if (geo.width() <= 0 || geo.height() <= 0) {
-                    continue;
-                }
-                // qRound, not truncation: fractional-scale sub-pixel residue
-                // (matches the toRect() geometry-capture convention).
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                    QStringLiteral("storePreTileGeometry"),
-                    {winIt.key(), qRound(geo.x()), qRound(geo.y()), qRound(geo.width()), qRound(geo.height()), screenId,
-                     false},
-                    QStringLiteral("storePreTileGeometry"));
-                ++resent;
+                resend(winIt.key(), scrIt.key(), winIt.value());
             }
         }
+        // A window that left a tiling desktop holds its free frame only in the
+        // desktop-move stash, under the screen it was measured on (F952).
+        m_desktopMoveStash.forEach(resend);
         if (resent > 0) {
             qCInfo(lcEffect) << "Re-sent" << resent << "pre-autotile geometries to daemon after reconnect";
         }
@@ -1160,7 +1158,8 @@ void TilingHandler::clearPerSessionDaemonState()
     m_notifiedWindowScreens.clear();
     m_scrollClipLossReported.clear();
     m_savedNotifiedForDesktopReturn.clear();
-    m_desktopMoveStash.clear();
+    // Not the desktop-move stash: its rects are the effect's own captures and
+    // onDaemonReady re-sends them (F952).
     // The per-session scroll maps the serviceUnregistered teardown
     // clears, repeated here so bring-up is authoritative on its own rather
     // than on what that edge left behind. A stale commanded rect

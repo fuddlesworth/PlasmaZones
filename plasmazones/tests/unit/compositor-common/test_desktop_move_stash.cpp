@@ -125,6 +125,24 @@ private Q_SLOTS:
     }
 
     // A managed arrival spends the owed placement with the entry.
+    // The bring-up re-send walks every entry with the screen it was measured
+    // on (F952); a consumed or forgotten entry is not visited.
+    void forEachVisitsEveryEntryWithItsScreen()
+    {
+        DesktopMoveStash stash;
+        stash.stash(kWin, QStringLiteral("DP-1"), kRect);
+        stash.stash(QStringLiteral("app|v"), QStringLiteral("HDMI-1"), QRectF(5, 6, 300, 200));
+        stash.stash(QStringLiteral("app|gone"), QStringLiteral("DP-1"), QRectF(1, 1, 50, 50));
+        stash.forget(QStringLiteral("app|gone"));
+        QHash<QString, QPair<QString, QRectF>> seen;
+        stash.forEach([&seen](const QString& id, const QString& screen, const QRectF& rect) {
+            seen.insert(id, {screen, rect});
+        });
+        QCOMPARE(seen.size(), 2);
+        QCOMPARE(seen.value(kWin), qMakePair(QStringLiteral("DP-1"), kRect));
+        QCOMPARE(seen.value(QStringLiteral("app|v")), qMakePair(QStringLiteral("HDMI-1"), QRectF(5, 6, 300, 200)));
+    }
+
     void managedArrivalClearsOwed()
     {
         DesktopMoveStash stash;

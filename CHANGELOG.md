@@ -152,6 +152,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A window closed before you split a monitor reopens on the right part of it**: its remembered place kept naming the whole monitor, so it could reopen stretched across both halves. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **Dragging a window to a monitor on another desktop keeps it where you drop it**: with each monitor showing its own desktop, dragging a snapped window to the other monitor could send it back to the first one on a desktop nobody was looking at, so it vanished. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **Move to Screen across desktops lands the window on the screen you chose**: with each monitor showing its own desktop, KWin's Move to Screen on a maximized or resized window could leave it on the old monitor on a desktop not shown there. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **A tiled window moved to another desktop keeps its free size there across a PlasmaZones restart**: after the restart it could only float at its tile size. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 
 ## [3.4.19] - 2026-09-21
 

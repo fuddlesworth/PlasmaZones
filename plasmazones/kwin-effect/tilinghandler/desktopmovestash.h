@@ -118,11 +118,15 @@ public:
         m_owed.remove(windowId);
     }
 
-    /// Daemon loss or bring-up.
-    void clear()
+    /// Visit every stashed rect with the screen it was measured on. Daemon loss
+    /// and bring-up keep the stash: the rects are the effect's own captures,
+    /// which the bring-up re-sends (F952).
+    template<typename Visit>
+    void forEach(Visit&& visit) const
     {
-        m_entries.clear();
-        m_owed.clear();
+        for (auto it = m_entries.constBegin(); it != m_entries.constEnd(); ++it) {
+            visit(it.key(), it->screenId, it->rect);
+        }
     }
 
 private:
