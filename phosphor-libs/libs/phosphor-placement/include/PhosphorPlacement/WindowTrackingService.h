@@ -115,10 +115,9 @@ public:
 
     void setSnapStateResolver(SnapStateResolver resolver);
 
-    /// Convenience wiring for a SINGLE snap store (unit tests / the collapsed
-    /// Phase-2 store). Builds a resolver whose every arm routes to @p state, so the
-    /// facade behaves exactly as the former single-SnapState pointer. Passing
-    /// nullptr clears the resolver (the "no SnapState wired" no-op path).
+    /// Convenience wiring for a SINGLE snap store (unit tests). Every store arm routes to @p state; forgetWindow is a
+    /// no-op (windowClosed already cleared the one store) and holdsWindow / keyFor stay unset, so the store is the
+    /// window's only membership and its recorded desktop stands for its context. nullptr clears the resolver.
     void setSnapState(PhosphorSnapEngine::SnapState* state);
 
     /// The unified, engine-agnostic placement store (one WindowPlacement record

@@ -169,6 +169,7 @@ void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
     resolver.allStates = [state]() {
         return QList<PhosphorSnapEngine::SnapState*>{state};
     };
+    // A no-op: WindowTrackingService::windowClosed already ran this one store's windowClosed.
     resolver.forgetWindow = [](const QString&) { };
     m_snapResolver = std::move(resolver);
     flushPendingUserSnappedClasses();

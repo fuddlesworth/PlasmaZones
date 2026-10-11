@@ -231,6 +231,41 @@ private Q_SLOTS:
         QCOMPARE(geometries.value(kWindow), m_service->resolveZoneGeometry({m_zoneIds[2]}, kScreen));
     }
 
+    // The session load of the last-used zone lands on the store filed under
+    // the named screen's current context, not on the global holder (F835).
+    void setLastUsedZone_namedScreenLandsInItsContextStore()
+    {
+        switchTo(kActivityX);
+        m_service->setLastUsedZone(m_zoneIds[0], kScreen, QStringLiteral("app"), 1);
+        auto* store = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
+        QVERIFY(store);
+        QVERIFY(store != m_engine->globalState());
+        const auto key = m_engine->keyForState(store);
+        QVERIFY(key.has_value());
+        QCOMPARE(key->screenId, kScreen);
+        QCOMPARE(key->desktop, 1);
+        QCOMPARE(key->activity, kActivityX);
+        QCOMPARE(store->lastUsedZoneId(), m_zoneIds[0]);
+        QCOMPARE(store->lastUsedScreenId(), kScreen);
+        QCOMPARE(store->lastUsedZoneClass(), QStringLiteral("app"));
+        QCOMPARE(store->lastUsedDesktop(), 1);
+        QVERIFY2(m_engine->globalState()->lastUsedZoneId().isEmpty(), "the global holder must stay untouched");
+    }
+
+    // An empty screen (the disk restore persists only the zone id) lands on
+    // the global holder.
+    void setLastUsedZone_emptyScreenLandsOnTheGlobalHolder()
+    {
+        m_service->setLastUsedZone(m_zoneIds[1], QString(), QStringLiteral("app"), 0);
+        SnapState* globals = m_engine->globalState();
+        QCOMPARE(globals->lastUsedZoneId(), m_zoneIds[1]);
+        QVERIFY(globals->lastUsedScreenId().isEmpty());
+        QCOMPARE(globals->lastUsedZoneClass(), QStringLiteral("app"));
+        for (SnapState* state : m_engine->allSnapStates()) {
+            QVERIFY2(state == globals || state->lastUsedZoneId().isEmpty(), "no per-screen store holds the zone");
+        }
+    }
+
 private:
     /// The registry reads each screen's desktop from the same manager.
     void followTheManagersDesktop()
