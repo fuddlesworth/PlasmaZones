@@ -337,7 +337,9 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
         if (m_hasGeometryScopedRules) {
             invalidateRuleCachesForWindowGeometry(it.key(), w);
         }
-        if (!shouldHandleWindow(w)) {
+        // The eviction above still runs with no daemon; the push does not, and
+        // nothing is lost: the bring-up seeds every shadow (F573).
+        if (!shouldHandleWindow(w) || !m_daemonGate.serviceRegistered) {
             continue;
         }
         const QRect& geo = it.value().geometry;

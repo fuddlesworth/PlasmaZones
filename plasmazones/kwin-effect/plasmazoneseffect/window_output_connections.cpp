@@ -134,8 +134,9 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             // the resize ends, where drainResizeHold settles it once (F486):
             // KWin moves its output by the frame centre on every resize step.
             // The stamp is not written either, so a resize that crosses and
-            // comes back has crossed nothing.
-            if (m_resizeHold.window == safeW) {
+            // comes back has crossed nothing. A move tail is held the same way
+            // until drainMoveTail (F751).
+            if (m_resizeHold.window == safeW || m_dragActivation.tail.window == safeW) {
                 return;
             }
             // A client that grew or shrank in place has not moved (F1007, the
@@ -230,8 +231,8 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             if (m_daemonGate.inGeometryApply) {
                 return;
             }
-            // Held through a resize, like the output arm.
-            if (m_resizeHold.window == safeW) {
+            // Held through a resize or a move tail, like the output arm.
+            if (m_resizeHold.window == safeW || m_dragActivation.tail.window == safeW) {
                 return;
             }
             // A client that only changed its size has not moved (F248): an

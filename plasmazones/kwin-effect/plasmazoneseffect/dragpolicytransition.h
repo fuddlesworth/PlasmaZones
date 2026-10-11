@@ -17,7 +17,9 @@
 /// - The keyboard grab follows the daemon's answer on every adopted policy,
 ///   both ways, and never while the daemon is gone: a grab swallows every key
 ///   for the drag, so holding one the daemon declined, or one nothing will
-///   answer, takes Escape away from KWin's move for no gain.
+///   answer, takes Escape away from KWin's move for no gain. Nor for a drag
+///   with no pointer button held: KWin's keyboard move needs the arrows and
+///   Return, and a touch drag has no Escape to dismiss (F1010).
 /// - Entering an engine-owned screen latches the bypass and sends nothing:
 ///   the daemon's own flip already hid what the snap path showed, and a
 ///   cancelSnap there latched the cancel for the rest of the drag, so a
@@ -59,6 +61,7 @@ struct Input
     bool bypassLatched = false; ///< m_dragBypassedForEngine
     bool keyboardGrabbed = false; ///< m_keyboardGrabbed
     bool daemonUp = false; ///< the daemon's service is registered
+    bool pointerDrag = false; ///< a pointer button was held at the drag's start
     bool windowLive = false; ///< the dragged window exists and is not deleted
     bool tileHeld = false; ///< the effect tracks the window as a tile
     bool floating = false; ///< the window floats already
@@ -91,7 +94,7 @@ inline Plan plan(const Input& in)
     }
     p.floatNow = engine && in.policy.immediateFloatOnStart && in.windowLive && !in.floating && !in.floatedThisDrag
         && (in.tileHeld || in.source == Source::BeginDragReply);
-    const bool wantGrab = in.daemonUp && in.policy.grabKeyboard;
+    const bool wantGrab = in.daemonUp && in.pointerDrag && in.policy.grabKeyboard;
     p.grab = wantGrab && !in.keyboardGrabbed;
     p.ungrab = !wantGrab && in.keyboardGrabbed;
     return p;

@@ -40,6 +40,16 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
     // DragTracker::updateCursorPosition(), throttled to ~30Hz.
     connect(w, &KWin::EffectWindow::windowStartUserMovedResized, this, [this](KWin::EffectWindow* window) {
         m_dragTracker->handleWindowStartMoveResize(window);
+        // A move the tracker did not take (a window PlasmaZones does not place,
+        // a dialog) is held like a drop's tail: its crossing is reported once,
+        // at the end (F751). A re-grab of the held window while its drop's
+        // answer is pending keeps that record.
+        MoveTailHold& tail = m_dragActivation.tail;
+        if (window && !window->isUserResize() && m_dragTracker->draggedWindow() != window
+            && !(tail.window == window && tail.awaitingOutcome)) {
+            drainMoveTail();
+            tail.window = window;
+        }
         // Open the resize hold (ResizeHold). It is latched here, at the start,
         // because KWin clears isUserResize() before windowFinishUserMovedResized
         // fires. The pre-resize frame is the neighbour-reflow report's baseline
@@ -293,6 +303,20 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
             m_tilingHandler->noteFreeGeometryAfterGesture(window, /*resized=*/false);
         }
         m_dragTracker->handleWindowFinishMoveResize(window);
+        // A held tail drains once its drop (if any) has been applied. Queued, so
+        // a deferred replay of the drop (applyWindowGeometry's own connection,
+        // made later, so it runs after this lambda) has placed the window first.
+        if (window && m_dragActivation.tail.window == window) {
+            m_dragActivation.tail.finished = true;
+            if (!m_dragActivation.tail.awaitingOutcome) {
+                QTimer::singleShot(0, this, [this, safeW = QPointer<KWin::EffectWindow>(window)]() {
+                    if (safeW && m_dragActivation.tail.window == safeW && m_dragActivation.tail.finished
+                        && !m_dragActivation.tail.awaitingOutcome) {
+                        drainMoveTail();
+                    }
+                });
+            }
+        }
         // Now that the COMPOSITOR's move is over (this signal, not forceEnd,
         // is when compositorMoveResizeActive() clears), re-drive the pill
         // hover: the dragStopped re-drive fires on LMB release and is
@@ -343,6 +367,26 @@ void PlasmaZonesEffect::armResizeAckWatch(KWin::EffectWindow* w)
         const QRectF requested = kw ? QRectF(kw->moveResizeGeometry()) : QRectF();
         drainResizeHold(requested.isValid() ? requested.toRect() : QRectF(safeW->frameGeometry()).toRect());
     });
+}
+
+void PlasmaZonesEffect::drainMoveTail()
+{
+    KWin::EffectWindow* const w = m_dragActivation.tail.window.data();
+    // Released FIRST, as in drainResizeHold: the bodies below must not see a hold.
+    m_dragActivation.tail = {};
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    // The crossing arms wrote no stamp while the tail was held, so the stamp
+    // is the screen the tail began on (or the one a deferred replay re-stamped
+    // after the drop's placement).
+    const QString before = m_trackedScreenPerWindow.value(w);
+    const QString after = pendingWindowScreenId(w);
+    if (GestureEndDecisions::classify(before, after) != GestureEndDecisions::Crossing::None) {
+        m_trackedScreenPerWindow[w] = after;
+        reportActiveWindowScreen(w, after);
+        m_screenChangeHandler->applyGestureEndCrossing(w, before, after);
+    }
 }
 
 void PlasmaZonesEffect::drainResizeHold(const QRect& frame)
@@ -402,7 +446,7 @@ void PlasmaZonesEffect::drainResizeHold(const QRect& frame)
     // new size could be lost on an unclean exit. Resizes never snap, so this can
     // never race the drag→snap pipeline (which owns the move case); guarding on
     // isWindowFloating keeps it to genuinely floated windows.
-    if (!windowId.isEmpty() && isWindowFloating(windowId)) {
+    if (!windowId.isEmpty() && isWindowFloating(windowId) && m_daemonGate.serviceRegistered) {
         // toRect() (rounding) rather than truncation: fractional-scale
         // outputs leave sub-pixel residue in frameGeometry(), and the
         // other geometry-capture paths round too. Correct for

@@ -138,6 +138,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A tile dragged across a snapping monitor and back is still floated by its own engine**: with the zone selector off, PlasmaZones stopped following the drag once it reached the snapping monitor, so the window was dropped back with nothing managing it. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **A window dragged out of its zone stays under the pointer on X11**: the restored size kept the zone's top-left corner, so the window shrank away from the cursor and jumped on the next motion. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **Animation rules scoped to a monitor follow the window to where it lands**: a placement that moved a window onto another monitor matched its animation rules against the monitor it was leaving. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **Moving a window with the keyboard works on a snapping monitor**: during KWin's Window Move, PlasmaZones took every key, so the arrow keys did nothing and Return could not finish the move. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **Moving a snapped window with the keyboard or touch takes it out of its zone**: a move accepted with Return, or ended by lifting a finger, was treated as cancelled and the window kept its zone. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **A window you keep moving after letting go of the left button is placed once, where the drop put it**: with a mouse-button trigger still held, a monitor crossing after the drop was reported before the drop was settled, and the window could end up off the zone it was dropped on. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **No log flood while PlasmaZones is turned off**: with the PlasmaZones service disabled, moving or dragging a window no longer writes a failed-call warning to the system log for every step of the move. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 
 ## [3.4.19] - 2026-09-21
 

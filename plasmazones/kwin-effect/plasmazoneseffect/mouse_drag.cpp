@@ -107,9 +107,11 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             const bool shouldForward = m_daemonGate.serviceRegistered
                 && (bypassed || shouldForwardDragTicks() || m_cachedZoneSelectorEnabled || !m_triggersLoaded);
             if (shouldForward) {
+                // The drag's point, not the pointer's: a touch or tablet drag leaves the pointer idle (F774).
+                const QPointF at = m_dragTracker->dragPoint();
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
-                    {m_dragTracker->draggedWindowId(), qRound(pos.x()), qRound(pos.y()),
+                    {m_dragTracker->draggedWindowId(), qRound(at.x()), qRound(at.y()),
                      static_cast<int>(m_currentModifiers), static_cast<int>(m_currentMouseButtons)},
                     QStringLiteral("updateDragCursor - modifier/button change"));
             }

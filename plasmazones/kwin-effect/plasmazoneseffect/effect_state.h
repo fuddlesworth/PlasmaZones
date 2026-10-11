@@ -161,6 +161,18 @@ struct MinimizeShaderStamp
 /// Per-drag activation / float tracking. Grouped from PlasmaZonesEffect's
 /// trailing member block; see PlasmaZonesEffect::m_dragActivation. Set/read from
 /// the drag-tracker and async begin/endDrag reply lambdas.
+/// A window KWin is still moving after the effect stopped tracking the drag
+/// (the left button came up with another held), or a move the tracker never
+/// took. Its crossings wait for the drain, which runs once KWin's move has
+/// finished and, for a dropped drag, the drop's outcome has been applied
+/// (F751).
+struct MoveTailHold
+{
+    QPointer<KWin::EffectWindow> window;
+    bool awaitingOutcome = false; ///< a drop was dispatched for it
+    bool finished = false; ///< windowFinishUserMovedResized fired
+};
+
 struct DragActivationState
 {
     // Per-drag activation tracking: set once any activation trigger is detected
@@ -200,6 +212,8 @@ struct DragActivationState
     // (TilingHandler::suspendTileForSnapDrag); callEndDrag settles it once the
     // drop has an answer.
     bool tileSuspended = false;
+
+    MoveTailHold tail;
 };
 
 /// Per-window geometry command stamp: the one supersession model every deferred

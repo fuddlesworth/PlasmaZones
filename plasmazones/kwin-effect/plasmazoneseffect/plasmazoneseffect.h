@@ -1563,12 +1563,12 @@ private:
     // The neighbour-reflow report (GitHub #652): the frame before the resize and
     // the one it ended at.
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry, const QRect& newGeometry);
-    /// Settle a held resize (ResizeHold): the crossing, the context edits that
-    /// waited and the end-of-resize reports, once. @p frame is the frame to read.
+    /// Settle a held resize (ResizeHold) once: the crossing, the waiting context edits, the reports.
     void drainResizeHold(const QRect& frame);
-    /// Wait for the client to commit the size a resize ended at, a newer
-    /// command or the deadline, then drain (F701).
+    /// Drain on the client's commit of the resize's size, a newer command or the deadline (F701).
     void armResizeAckWatch(KWin::EffectWindow* w);
+    /// Settle a held move tail (MoveTailHold) once: the crossing it made, if any (F751).
+    void drainMoveTail();
 
     void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
 

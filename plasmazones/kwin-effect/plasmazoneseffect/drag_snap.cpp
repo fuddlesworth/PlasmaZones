@@ -267,6 +267,7 @@ void PlasmaZonesEffect::applyDragPolicyTransition(KWin::EffectWindow* w, const Q
     in.bypassLatched = m_dragBypassedForEngine;
     in.keyboardGrabbed = m_keyboardGrabbed;
     in.daemonUp = m_daemonGate.serviceRegistered;
+    in.pointerDrag = m_dragTracker->pointerDrag();
     in.windowLive = w && !w->isDeleted();
     in.tileHeld = !windowId.isEmpty() && m_tilingHandler->isTrackedWindow(windowId);
     in.floating = !windowId.isEmpty() && isWindowFloating(windowId);
@@ -302,11 +303,11 @@ void PlasmaZonesEffect::applyDragPolicyTransition(KWin::EffectWindow* w, const Q
         m_tilingHandler->handleDragToFloat(w, windowId, /*immediate=*/true);
         m_dragActivation.floatedWindowIds.insert(windowId);
     }
-    // The grab follows the daemon's answer both ways. KWin::effects guarded:
-    // both callers are D-Bus dispatches, which can land during compositor
-    // teardown. grabKeyboard answers false when another effect holds the
-    // keyboard, and recording a grab not earned would make the drag-end
-    // ungrabKeyboard release that effect's.
+    // The grab follows the daemon's answer both ways (the KWin::effects test is
+    // belt and braces, see PlasmaZonesEffect::windowOutput). grabKeyboard
+    // answers false when another effect holds the keyboard, and recording a
+    // grab not earned would make the drag-end ungrabKeyboard release that
+    // effect's.
     if (p.ungrab && KWin::effects) {
         KWin::effects->ungrabKeyboard();
         m_keyboardGrabbed = false;

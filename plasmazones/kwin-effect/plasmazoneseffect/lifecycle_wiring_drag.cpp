@@ -221,7 +221,7 @@ void PlasmaZonesEffect::connectDragTracker()
                     // reconciles the grab with the daemon's answer, and an error
                     // reply releases it, so an engine drag outside always-on
                     // re-insert holds it only for the round trip.
-                    if (daemonUp && !m_keyboardGrabbed && KWin::effects) {
+                    if (daemonUp && m_dragTracker->pointerDrag() && !m_keyboardGrabbed && KWin::effects) {
                         // See the reply lambda: grabKeyboard returns false when
                         // another effect owns the grab, and claiming it anyway
                         // makes drag-end release someone else's.
@@ -246,7 +246,9 @@ void PlasmaZonesEffect::connectDragTracker()
                 // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
                 // Without this, Escape cancels the interactive move AND the overlay.
                 // With the grab, Escape only dismisses the overlay while the drag continues.
-                if (daemonUp && !m_keyboardGrabbed && KWin::effects) {
+                // Not for a drag with no pointer button held: KWin's keyboard move needs
+                // the keys the grab would swallow (F1010).
+                if (daemonUp && m_dragTracker->pointerDrag() && !m_keyboardGrabbed && KWin::effects) {
                     // Same answer-respecting capture as the two sites above.
                     m_keyboardGrabbed = KWin::effects->grabKeyboard(this);
                     if (!m_keyboardGrabbed) {
@@ -337,6 +339,12 @@ void PlasmaZonesEffect::connectDragTracker()
                 // the PhosphorProtocol::DragOutcome, and callEndDrag settles a
                 // suspended tile once it has the answer.
                 callEndDrag(w, windowId, cancelled, effectFloatedThisDrag);
+                // KWin's move outlives the drop while another button is held:
+                // its crossings wait for the drop's outcome (none comes with no
+                // daemon, F573) and the move's end (F751).
+                if (w && !w->isDeleted() && w->isUserMove()) {
+                    m_dragActivation.tail = {w, /*awaitingOutcome=*/m_daemonGate.serviceRegistered, /*finished=*/false};
+                }
 
                 // Bump the per-drag generation so any in-flight beginDrag
                 // reply for the drag we just ended is discarded by the

@@ -36,6 +36,7 @@ Input input(R oldReason, const PhosphorProtocol::DragPolicy& p, bool latched, bo
     in.bypassLatched = latched;
     in.keyboardGrabbed = grabbed;
     in.daemonUp = true;
+    in.pointerDrag = true;
     return in;
 }
 
@@ -170,6 +171,19 @@ private Q_SLOTS:
     {
         Input in = input(R::None, policy(R::None, QStringLiteral("DP-1"), true), false, false);
         in.daemonUp = false;
+        QVERIFY(!plan(in).grab);
+        in.keyboardGrabbed = true;
+        QVERIFY(plan(in).ungrab);
+    }
+
+    /// F1010: a drag with no pointer button held (KWin's keyboard move, a
+    /// touch drag) never grabs, and lets go of a grab it holds. HEAD grabbed
+    /// and swallowed the arrows and Return, so the keyboard move never moved
+    /// or ended.
+    void pointerlessDragNeverGrabs()
+    {
+        Input in = input(R::None, policy(R::None, QStringLiteral("DP-1"), true), false, false);
+        in.pointerDrag = false;
         QVERIFY(!plan(in).grab);
         in.keyboardGrabbed = true;
         QVERIFY(plan(in).ungrab);

@@ -578,6 +578,11 @@ void ScreenChangeHandler::reportCrossing(KWin::EffectWindow* w, const QString& o
     if (!w || oldScreenId.isEmpty() || newScreenId.isEmpty() || oldScreenId == newScreenId) {
         return;
     }
+    // Nothing to tell a daemon that is not there: a fresh one learns every
+    // window's screen at bring-up (F573).
+    if (!m_effect->m_daemonGate.serviceRegistered) {
+        return;
+    }
     const QString windowId = m_effect->getWindowId(w);
     TilingHandler* const tiling = m_effect->m_tilingHandler.get();
     if (!tiling->isManagedScreen(oldScreenId) && !tiling->isManagedScreen(newScreenId)) {

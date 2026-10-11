@@ -157,6 +157,15 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     m_daemonGate.commandStamps.bump(window);
     m_daemonGate.commandStamps.noteDrop(window);
 
+    // No daemon, no outcome: the drop settles now as an unanswered one does,
+    // and no call goes out to fail (F573).
+    if (!m_daemonGate.serviceRegistered) {
+        revertOptimisticDragFloat();
+        settleSuspendedTile();
+        drainDragSuppressedRuleInvalidations();
+        return;
+    }
+
     // qRound the cursor coords (not truncation): the hot-path updateDragCursor
     // stream rounds, so on fractional-scale outputs the release coordinate the
     // daemon resolves the drop zone against must round too, or it can differ by
@@ -181,13 +190,26 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     timeoutTimer->setSingleShot(true);
     // QPointer: the `handled` handshake already prevents a double-delete, but
     // a raw watcher capture would still dangle if that invariant ever slips.
+    // The drop's outcome is in for a held move tail (F751): it drains once KWin's
+    // move has finished too. Every exit runs it, after the outcome is applied.
+    const auto settleMoveTail = [this, safeWindow]() {
+        MoveTailHold& tail = m_dragActivation.tail;
+        if (!safeWindow || tail.window != safeWindow || !tail.awaitingOutcome) {
+            return;
+        }
+        tail.awaitingOutcome = false;
+        if (tail.finished) {
+            drainMoveTail();
+        }
+    };
     connect(timeoutTimer, &QTimer::timeout, this,
             [this, windowId, handled, watcherGuard = QPointer<QDBusPendingCallWatcher>(watcher), timeoutTimer,
-             revertOptimisticDragFloat, settleSuspendedTile]() {
+             revertOptimisticDragFloat, settleSuspendedTile, settleMoveTail]() {
                 if (*handled) {
                     return;
                 }
                 *handled = true;
+                settleMoveTail();
                 qCWarning(lcEffect) << "endDrag timed out after" << EndDragTimeoutMs
                                     << "ms; daemon unresponsive. Leaving window" << windowId << "at release position.";
                 // No outcome will ever arrive, so the drag-start float is
@@ -209,7 +231,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, safeWindow, windowId, handled, timeoutTimer, startedFloating, dragMoveGeneration,
-             revertOptimisticDragFloat, settleSuspendedTile](QDBusPendingCallWatcher* w) {
+             revertOptimisticDragFloat, settleSuspendedTile, settleMoveTail](QDBusPendingCallWatcher* w) {
                 // True only while THIS drag's interactive move is still the one
                 // KWin is running, and only when the left button is already up
                 // (the case the rescues exist for: KWin waits for the last
@@ -237,6 +259,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 *handled = true;
                 timeoutTimer->stop();
                 timeoutTimer->deleteLater();
+                // At this lambda's exit, after the outcome and any rescue (whose
+                // cancel fires the move's finish inside this reply).
+                const auto tailGuard = qScopeGuard(settleMoveTail);
 
                 // Both failure paths below leave the window at its release
                 // position on its release screen, so the deferred cross-screen
@@ -346,6 +371,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // while it was floating. The float-screen reassignment
                     // (setWindowFloatingForScreen) below still runs so a
                     // cross-screen move updates the daemon's float tracking.
+                    // The float drop is the window's newest command: a tile batch
+                    // deferred while this answer was pending must not replay over it.
+                    beginGeometryCommand(safeWindow);
                     if (!startedFloating) {
                         m_tilingHandler->handleDragToFloat(safeWindow, windowId);
                     } else {

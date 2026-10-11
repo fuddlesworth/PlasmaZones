@@ -915,6 +915,9 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             m_resizeHold = ResizeHold{};
             m_resizeHold.generation = generation;
         }
+        if (m_dragActivation.tail.window == w) {
+            m_dragActivation.tail = {};
+        }
         // Wired-window guard. The connections themselves die with the window, so
         // this is address-reuse safety, not connection hygiene: a stale entry
         // would make setupWindowConnections REFUSE to wire a new window that

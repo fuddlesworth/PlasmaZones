@@ -83,6 +83,24 @@ inline QRect frameUnderGrab(const QRectF& frame, const QPointF& grab, const QSiz
     return QRect(QPoint(qRound(grab.x() - fx * size.width()), qRound(grab.y() - fy * size.height())), size);
 }
 
+/// A move that finished without a pointer release was reverted by KWin (the
+/// Escape of a keyboard or pointer move puts the window back at its start
+/// rect) when the rect it ends on is the one it started on. Integer-aligned:
+/// a fractional-scale frame carries sub-pixel residue. A move that ends
+/// exactly where it began reads as reverted, which changes nothing (F752).
+inline bool moveReverted(const QRectF& start, const QRectF& commandedAtEnd)
+{
+    return start.toRect() == commandedAtEnd.toRect();
+}
+
+/// The grab point of a drag that left the pointer idle (touch, tablet),
+/// carried with the window: where it was grabbed plus how far the window
+/// has moved since (F774).
+inline QPointF grabPointAt(const QPointF& anchor, const QPointF& startTopLeft, const QPointF& nowTopLeft)
+{
+    return anchor + (nowTopLeft - startTopLeft);
+}
+
 /// How long the end-of-resize reports wait for the client to commit the size
 /// it was dragged to (F701): long enough for a slow first frame at 60 Hz,
 /// short enough that a client that never answers does not hold the window.

@@ -7,7 +7,9 @@
  *        when the client has committed the size it was dragged to, what a
  *        held resize crossed, when the neighbour-reflow report is sent, and
  *        when a frame change moved nothing, and where a size restored
- *        mid-move puts the window (F486, F701, F248, F702).
+ *        mid-move puts the window, whether a move KWin ended was reverted
+ *        and where a pointerless drag's grab point is (F486, F701, F248,
+ *        F702, F752, F774).
  */
 
 #include "plasmazoneseffect/gestureenddecisions.h"
@@ -99,6 +101,25 @@ private Q_SLOTS:
     {
         QCOMPARE(frameUnderGrab(QRectF(100, 100, 400, 300), QPointF(600, 50), QSize(200, 100)),
                  QRect(400, 50, 200, 100));
+    }
+    // A move KWin put back at its start (Escape) is cancelled; one accepted
+    // elsewhere (Return, a lifted finger) is not (F752).
+    void moveReverted_escapeRevertIsCancelled()
+    {
+        QVERIFY(moveReverted(QRectF(8, 8, 329, 752), QRectF(8, 8, 329, 752)));
+    }
+    void moveReverted_acceptedKeyboardMoveIsNotCancelled()
+    {
+        QVERIFY(!moveReverted(QRectF(8, 8, 329, 752), QRectF(48, 8, 329, 752)));
+    }
+    void moveReverted_fractionalResidueStillReverted()
+    {
+        QVERIFY(moveReverted(QRectF(10.4, 10.4, 300, 300), QRectF(10, 10, 300, 300)));
+    }
+    // The grab point of a pointerless drag travels with the window (F774).
+    void grabPointAt_followsTheWindow()
+    {
+        QCOMPARE(grabPointAt(QPointF(100, 100), QPointF(50, 50), QPointF(450, 250)), QPointF(500, 300));
     }
     void frameUnderGrab_emptyFrameKeepsTheTopLeft()
     {

@@ -70,7 +70,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         }
         const QString windowId = getWindowId(window);
         const QRect geom = freeGeometryForCapture(window, QRectF(window->frameGeometry())).toRect();
-        if (windowId.isEmpty() || !geom.isValid() || geom == window->frameGeometry().toRect()) {
+        if (windowId.isEmpty() || !geom.isValid() || geom == window->frameGeometry().toRect()
+            || !m_daemonGate.serviceRegistered) {
             return;
         }
         PhosphorProtocol::ClientHelpers::fireAndForget(
