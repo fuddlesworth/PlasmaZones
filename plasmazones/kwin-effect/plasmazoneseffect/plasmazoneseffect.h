@@ -814,12 +814,11 @@ private:
     /// see the new state immediately instead of waiting for a daemon
     /// broadcast that some paths (drag-out unsnap) never send.
     void clearWindowZone(const QString& windowId);
-    /// Build a window-rule match query for @p w with the effect's runtime
-    /// placement state (floating / snapped / zone) threaded into the free
-    /// `ruleQueryFor` builder. Use this at EVERY rule-evaluation site so
-    /// IsFloating / IsSnapped / Zone resolve uniformly; the free builder stays
-    /// KWin-only and can't reach the effect's caches.
-    PhosphorRules::WindowQuery ruleQuery(KWin::EffectWindow* w) const;
+    /// Build a window-rule match query for @p w with the effect's runtime placement state (floating / snapped /
+    /// zone) threaded into the free `ruleQueryFor` builder. Use this at EVERY rule-evaluation site so IsFloating /
+    /// IsSnapped / Zone resolve uniformly; the free builder stays KWin-only and can't reach the effect's caches.
+    /// @p screenOverride, when set, stands in for the window's screen (a placement leg onto another screen).
+    PhosphorRules::WindowQuery ruleQuery(KWin::EffectWindow* w, const QString& screenOverride = QString()) const;
 
     /// Resolve the animation rule-action verdict for @p w, skipping the per-frame
     /// `ruleQuery(w)` build (≈30 KWin accessor reads) when the evaluator

@@ -137,6 +137,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A window you move before its remembered zone is restored stays where you put it**: a slow restore answer could snap it into the zone after you had already dragged it away. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **A tile dragged across a snapping monitor and back is still floated by its own engine**: with the zone selector off, PlasmaZones stopped following the drag once it reached the snapping monitor, so the window was dropped back with nothing managing it. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **A window dragged out of its zone stays under the pointer on X11**: the restored size kept the zone's top-left corner, so the window shrank away from the cursor and jumped on the next motion. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **Animation rules scoped to a monitor follow the window to where it lands**: a placement that moved a window onto another monitor matched its animation rules against the monitor it was leaving. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 
 ## [3.4.19] - 2026-09-21
 
