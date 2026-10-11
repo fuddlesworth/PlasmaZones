@@ -240,9 +240,8 @@ PhosphorProtocol::OutputSettleRowList ScreenChangeHandler::buildSettleRows() con
     if (!m_outputSetChanged) {
         return rows;
     }
-    const QString dragged = m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
-        ? m_effect->m_dragTracker->draggedWindowId()
-        : QString();
+    const QString dragged =
+        m_effect->m_dragTracker->isDragging() ? m_effect->m_dragTracker->draggedWindowId() : QString();
     for (KWin::EffectWindow* w : KWin::effects->stackingOrder()) {
         if (!w || w->isDeleted() || !w->window()) {
             continue;

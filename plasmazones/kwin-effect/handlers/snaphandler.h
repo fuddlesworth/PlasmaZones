@@ -299,13 +299,14 @@ public Q_SLOTS:
                                                int height);
     void slotPendingRestoresAvailable();
     /// Re-drive the snap restore for windows parked by armDesktopArrivalRestore
-    /// that the just-arrived desktop has brought into view. Connected to KWin's
-    /// desktopChanged.
+    /// that the just-arrived desktop has brought into view. Connected (queued)
+    /// to KWin's desktopChanged and currentActivityChanged.
     ///
     /// The snapping counterpart of the autotile desktop-return catch-scan in
-    /// TilingHandler::slotScreensChanged: snapping has no membership set the
-    /// effect can consult, so where the catch-scan can safely re-announce
-    /// anything it does not already track, this arm carries its own list.
+    /// TilingHandler::slotScreensChanged. The effect holds no snap membership
+    /// of its own (the daemon keeps it per screen, desktop and activity and
+    /// carries a moved window's zone itself), so this drains only the windows
+    /// armDesktopArrivalRestore parked, never a sweep of the desktop shown.
     void slotDesktopChangedRestoreArrivals();
     void slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
                              const PhosphorProtocol::EmptyZoneList& emptyZones);
@@ -317,8 +318,8 @@ public:
     /// is not the one on screen.
     void armDesktopArrivalRestore(const QString& windowId, DesktopArrivalParks::Cause cause);
 
-    /// Drop @p windowId from the desktop-arrival park (window closed, or the
-    /// daemon placed it by another route).
+    /// Drop @p windowId from the desktop-arrival park when it closes
+    /// (SnapHandler::onWindowClosed, the one caller).
     void cancelDesktopArrivalRestore(const QString& windowId)
     {
         m_desktopArrivalParks.cancel(windowId);

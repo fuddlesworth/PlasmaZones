@@ -201,7 +201,7 @@ void PlasmaZonesEffect::drainDragSuppressedRuleInvalidations()
     // which would run the decoration rebuild the drag gate exists to defer.
     // Nothing is stranded by returning here: the successor always reaches
     // callEndDrag, whose drain picks these ids up.
-    if (m_dragTracker && m_dragTracker->isDragging()) {
+    if (m_dragTracker->isDragging()) {
         return;
     }
     // The suppressed ids were recorded by the cross-screen handlers, which stamp

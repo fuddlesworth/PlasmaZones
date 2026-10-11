@@ -23,7 +23,6 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
-#include <QScopeGuard>
 #include <QTimer>
 
 #include <memory>
@@ -434,7 +433,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // the activation mouse button is held (LMB already
                     // released), cancel KWin's interactive move so we can
                     // snap immediately. Without this, applyWindowGeometry
-                    // defers (100ms retry) until ALL buttons are released —
+                    // defers to the end of KWin's move, when ALL buttons are released —
                     // noticeable delay when using a mouse button (RMB) for
                     // zone activation.
                     //
@@ -465,13 +464,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     if (!outcome.targetScreenId.isEmpty()) {
                         m_trackedScreenPerWindow[safeWindow] = outcome.targetScreenId;
                     }
-                    // Save/restore, not set/clear (nesting-safe).
-                    const bool prevInApply = m_daemonGate.inGeometryApply;
-                    m_daemonGate.inGeometryApply = true;
                     {
-                        const auto applyGuard = qScopeGuard([this, prevInApply] {
-                            m_daemonGate.inGeometryApply = prevInApply;
-                        });
+                        const auto applyGuard = geometryApplyScope();
                         if (KWin::Window* kw = rescuableMove()) {
                             kw->cancelInteractiveMoveResize();
                         }
@@ -574,12 +568,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         // the window back where the user dropped it and the
                         // tracked screen (still the drop screen, because the
                         // guard suppresses the revert's stamp) stays correct.
-                        // Save/restore, not set/clear (nesting-safe).
-                        const bool prevInApply = m_daemonGate.inGeometryApply;
-                        m_daemonGate.inGeometryApply = true;
-                        const auto applyGuard = qScopeGuard([this, prevInApply] {
-                            m_daemonGate.inGeometryApply = prevInApply;
-                        });
+                        const auto applyGuard = geometryApplyScope();
                         if (KWin::Window* kw = rescuableMove()) {
                             kw->cancelInteractiveMoveResize();
                         }

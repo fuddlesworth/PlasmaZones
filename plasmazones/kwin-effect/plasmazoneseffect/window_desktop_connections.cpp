@@ -171,7 +171,7 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
     // A window that became present on every desktop is in view now, whatever
     // the edge: an open's continuation is drained, any other snap park is
     // cancelled, since the window never moved (F295).
-    if (edge.becameEverywhere && m_snapHandler) {
+    if (edge.becameEverywhere) {
         m_snapHandler->settleDesktopArrivalOnEverywhere(windowId, window);
     }
 
@@ -232,17 +232,14 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
                 if (edge.genuineMove) {
                     tiling->payOwedFreePlacement(window, windowId, screenId);
                 }
-                if (m_snapHandler) {
-                    m_snapHandler->drainDesktopArrivalFor(windowId, window);
-                }
+                m_snapHandler->drainDesktopArrivalFor(windowId, window);
             }
             return;
         }
-        // Onto a tiled desktop in view. A snap park is spent (the drain
-        // answers false on a managed screen).
-        if (m_snapHandler) {
-            m_snapHandler->drainDesktopArrivalFor(windowId, window);
-        }
+        // Onto a tiled desktop in view. The drain spends a snap park here, since
+        // this screen's catch-scan owns the window, except a minimized arrival's,
+        // which waits for a later desktop switch (drainDesktopArrivalFor).
+        m_snapHandler->drainDesktopArrivalFor(windowId, window);
         // The reconcile carries a held tile here without reading any rule. A
         // rule excluding the window on this desktop lets it go (F292).
         if (isExcludedBySnappingRule(window)) {

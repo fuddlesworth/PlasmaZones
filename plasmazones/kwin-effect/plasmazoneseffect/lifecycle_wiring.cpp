@@ -552,8 +552,8 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // Snap restores for windows the daemon relocated to a desktop that was not
     // in view (a RouteToDesktop rule, or the move-to-desktop shortcut). The
     // autotile/scrolling equivalent rides slotScreensChanged's desktop-return
-    // catch-scan; snapping has no membership set to sweep against, so its arm
-    // carries an explicit park list and this is where it is drained.
+    // catch-scan; the effect holds no snap membership to sweep (the daemon
+    // carries a moved window's zone itself), so its arm drains a park list here.
     //
     // Queued, not run inline. Two other desktopChanged handlers feed the daemon
     // the state this restore is resolved against, and both land in a LATER event
@@ -567,9 +567,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         QMetaObject::invokeMethod(
             this,
             [this]() {
-                if (m_snapHandler) {
-                    m_snapHandler->slotDesktopChangedRestoreArrivals();
-                }
+                m_snapHandler->slotDesktopChangedRestoreArrivals();
             },
             Qt::QueuedConnection);
     });
@@ -581,9 +579,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         QMetaObject::invokeMethod(
             this,
             [this]() {
-                if (m_snapHandler) {
-                    m_snapHandler->slotDesktopChangedRestoreArrivals();
-                }
+                m_snapHandler->slotDesktopChangedRestoreArrivals();
             },
             Qt::QueuedConnection);
     });

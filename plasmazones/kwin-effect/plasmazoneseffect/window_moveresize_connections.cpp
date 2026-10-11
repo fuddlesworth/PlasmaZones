@@ -153,8 +153,9 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
                 // Seed the generic soft-body lattice (iMoveMesh) so a
                 // mesh-consuming pack (wobble, ...) gets neighbour-coupled
                 // physics from the first frame. The grip is the node
-                // nearest the cursor at grab; physics constants use KWin's
-                // middle preset (per-pack tuning can layer on later). A
+                // nearest the cursor at grab; physics constants are the leg's
+                // meshParams, KWin wobblywindows' default preset (pset[0])
+                // unless the pack overrides them (beginShaderTransition). A
                 // re-grab while the previous release is still ringing out
                 // (this leg kept by the same-effect short-circuit) keeps the
                 // deformation and moves only the grip; seeding it flat jumped
@@ -194,16 +195,14 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
                     // The timer is only a generous SAFETY cap in case the
                     // sim never reaches its settle threshold.
                     //
-                    // Fresh epoch for the handoff: the start-scheduled
-                    // duration timer in tryBeginShaderForEvent captured the
-                    // install generation and only stands down while
-                    // holdUntilRelease is set. On a drag SHORTER than the
-                    // nominal duration that timer fires after this clear,
-                    // sees a matching generation, and would cut the ring-out
-                    // off mid-settle — so bump the generation to invalidate
-                    // it. The paint pipeline's expiry teardown captures the
-                    // live generation at queue time, so the settle gate and
-                    // the safety cap below both own the new epoch.
+                    // Fresh epoch for the handoff. The start-scheduled
+                    // duration timer is already retired: the start handler's
+                    // heldMove branch bumped the generation at the grab, so
+                    // that timer fails its generation check whatever the
+                    // drag's length. This bump only gives the settle gate and
+                    // the safety cap below an epoch of their own; the paint
+                    // pipeline's expiry teardown captures the live generation
+                    // at queue time.
                     st->holdUntilRelease = false;
                     st->generation = ++m_shaderManager.m_shaderTransitionGenerationCounter;
                     const quint64 myGeneration = st->generation;
@@ -222,7 +221,7 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
                     // next fraction of a second, so keep the fixed tail.
                     // holdUntilRelease stays SET here, so the start-scheduled
                     // duration timer keeps standing down and this tail timer
-                    // (guarded on the install generation) owns the teardown.
+                    // (guarded on the generation the grab stamped) owns the teardown.
                     // Stamp the release leg: paintWindow ramps the pinned
                     // progress back toward 0 from this moment. The ramp is
                     // scaled by the transition's OWN durationMs (a per-event
@@ -300,21 +299,21 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
         // suppressed while KWin still holds the move for other buttons, so a
         // multi-button drop onto the pill band would otherwise stay unlit
         // until the next pointer twitch.
-        // KWin::effects, not m_tilingHandler: cursorPos() needs the former, while
-        // the latter is constructed with the effect and outlives every window
-        // connection — the tail call below dereferences it unguarded, as does
+        // The KWin::effects test is belt and braces (see PlasmaZonesEffect::windowOutput);
+        // m_tilingHandler lives as long as the effect and is dereferenced unguarded, as in
         // the rest of this file.
         if (KWin::effects) {
             m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
         }
         // A maximize claim taken during the gesture was never paid: the batch
         // arms insert membership and then skip the compositor call while the
-        // user is dragging, and nothing re-drives them — this lambda replays
-        // geometry only, and its two GEOMETRY REPORTS are gated on wasResize,
-        // so a MOVE end reports nothing at all. (Other calls in this lambda do
-        // run unconditionally; the claim is about the geometry path.) The
-        // engine emits on change, so a drag that leaves the strip alone
-        // schedules no batch either. This is the
+        // user is dragging, and nothing re-drives them. The deferred geometry
+        // replay (applyWindowGeometry's own connection, made later, so it runs
+        // after this lambda) re-applies geometry only, and the geometry reports
+        // this lambda reaches (the resize drain's float-size store and
+        // notifyWindowResized) run only for a resize, so a MOVE end sends the
+        // daemon no geometry from here. The engine emits on change, so a drag
+        // that leaves the strip alone schedules no batch either. This is the
         // one point that always runs at the end of a gesture.
         m_tilingHandler->reconcileMaximizeAfterGesture(window);
     });

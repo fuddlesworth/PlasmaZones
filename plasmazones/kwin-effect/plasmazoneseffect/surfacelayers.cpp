@@ -146,10 +146,10 @@ QRectF PlasmaZonesEffect::surfaceWindowRect(KWin::EffectWindow* w) const
 }
 
 // Shadow-margin cache refresh for surfaceWindowRect() above. Seeded at
-// connect time (setupWindowConnections — nothing is resizing then, so the
-// pair agrees) and re-run on every windowExpandedGeometryChanged, which is
-// the one moment KWin has just recomputed the expanded rect against the live
-// frame.
+// connect time (setupWindowConnections; a window the load sweep wires
+// mid-resize can seed a lagged pair, which the next signal corrects) and re-run
+// on every windowExpandedGeometryChanged, which is the one moment KWin has just
+// recomputed the expanded rect against the live frame.
 //
 // A resize is exactly the interval where those two disagree (see
 // surfaceWindowRect's declaration for the measured X11 case), so the cache

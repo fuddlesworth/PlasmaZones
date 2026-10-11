@@ -2199,7 +2199,7 @@ private:
     /// KWin stock effects syncStockEffectSuppression unloaded because one of
     /// OUR packs owns the event they animate: windowaperture/eyeonscreen for
     /// a `desktop.peek` pack, magiclamp/squash for a window.minimize pack,
-    /// maximize for a window.maximize pack. Only names WE
+    /// maximize for a placeIn or placeOut pack. Only names WE
     /// unloaded are recorded, so clearing the pack (or unloading this effect)
     /// loads back exactly what the user had — never an effect KWin left
     /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop Effects
@@ -2250,7 +2250,7 @@ private:
     /// event-contract match, animations enabled):
     ///   desktop.peek       → windowaperture / eyeonscreen
     ///   window.minimize    → magiclamp / squash
-    ///   window.maximize    → maximize
+    ///   placeIn / placeOut → maximize
     /// Unloading is the only suppression that works for all three: the
     /// show-desktop scripts never consult activeFullScreenEffect() (and the
     /// peek deliberately takes no fullscreen claim anyway, see
@@ -2894,19 +2894,18 @@ private:
     /// on daemon loss AND at bring-up (drainDeadSessionState). NOT dropped by
     /// cleanupAutotileTracking — the re-announce re-seeds it inline.
     QHash<QString, QSize> m_lastReportedMinSize;
-    /// Per scroll-managed X11 window: the rect the last batch commanded, so
-    /// an EXTERNAL move can be detected and countered. X11 clients can
-    /// reposition themselves through ConfigureRequests KWin honors — a Wine
-    /// game re-asserting its saved window position was seen live undoing
-    /// the strip's parks and straddles (the window crawled back on-screen
-    /// over its neighbour's column, and the engine's emit-on-change gate
-    /// stayed silent because its own rects never moved). Written by the
-    /// batch apply, consumed by TilingHandler::slotWindowFrameGeometryChanged
-    /// (counter-assert RATE-LIMITED to 3 per rolling second, re-armed by
-    /// every fresh batch command — a client that refuses to stay put is
-    /// countered at that ceiling indefinitely, it does not win outright).
-    /// Wayland windows are covered by m_tileTargetZones instead and never
-    /// appear here. Dropped on close, the deleted backstop, float cleanup
+    /// Per scroll-managed X11 window, and per Wayland one while its column is
+    /// maximized to the edges: the rect the last batch commanded, so an
+    /// EXTERNAL move can be detected and countered. X11 clients reposition
+    /// themselves through ConfigureRequests KWin honors (a Wine game
+    /// re-asserting its saved position was seen undoing the strip's parks),
+    /// and KWin re-runs its maximize placement over a MaximizeFull column on
+    /// both platforms. Written by the batch apply, consumed by
+    /// TilingHandler::slotWindowFrameGeometryChanged (counter-assert
+    /// RATE-LIMITED to 3 per rolling second, re-armed by every fresh batch
+    /// command). A plain Wayland strip tile is centred through
+    /// m_scrollOfferedColumn instead; m_tileTargetZones holds no strip entry.
+    /// Dropped on close, the deleted backstop, float cleanup
     /// (both channels), the untrack funnel (cleanupAutotileTracking), the
     /// per-batch disarm when the commit deferred or the fullscreen bail
     /// fired (load-bearing: it disarms the counter rather than recording a
@@ -3697,7 +3696,7 @@ private:
     QHash<KWin::EffectWindow*, WindowContextEdge::Stamp> m_contextStampPerWindow;
 
     // Windows that already have their per-window connections. setupWindowConnections
-    // issues raw connects with lambda slots, so a second call on the same window
+    // issues raw connects, most with lambda slots, so a second call on the same window
     // doubles every per-window handler — and Qt::UniqueConnection is illegal with a
     // lambda slot, so the check has to live here.
     //

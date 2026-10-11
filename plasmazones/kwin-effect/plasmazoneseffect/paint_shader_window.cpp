@@ -1085,7 +1085,7 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
         // Race window: between this queue and the lambda firing, a
         // fresh `beginShaderTransition` may install a SUCCESSOR at
         // the same EffectWindow* (e.g. window.focus retriggers while
-        // window.maximize was on its expiry frame). Without the
+        // a placement leg was on its expiry frame). Without the
         // generation check the lambda would call
         // `endShaderTransition` on the successor and kill it before
         // it ever paints. Mirrors the timer-driven teardown pattern

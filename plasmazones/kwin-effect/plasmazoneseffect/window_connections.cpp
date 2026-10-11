@@ -14,7 +14,6 @@
 
 #include <QLoggingCategory>
 #include <QPointer>
-#include <QScopeGuard>
 
 #include "tilinghandler/tilinghandler.h"
 #include "compositor/windowanimator.h"
@@ -47,12 +46,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     if (!w)
         return;
 
-    // Idempotency guard. Every connect below uses a lambda slot, which rules out
-    // Qt::UniqueConnection, so a second call for the same window would silently
-    // double each per-window handler — every geometry change handled twice, every
-    // push marshalled twice. The two callers' window sets are disjoint by
-    // construction (see the member's declaration), so this never fires today; it
-    // is here so that stays true when a third caller appears.
+    // Idempotency guard. Most connects below take a lambda slot, and
+    // Qt::UniqueConnection cannot de-duplicate a functor (it covers
+    // member-function slots only), so a second call for the same window would
+    // silently double each per-window handler — every geometry change handled
+    // twice, every push marshalled twice. The two callers' window sets are
+    // disjoint by construction (see the member's declaration), so this never
+    // fires today; it is here so that stays true when a third caller appears.
     if (m_wiredWindows.contains(w)) {
         return;
     }
@@ -85,9 +85,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // such a window (effect reload or compositor restart mid-gesture), so
     // without this the tracker would report no compositor move for the rest of
     // that drag.
-    if (m_dragTracker) {
-        m_dragTracker->noteWiredWindowMoveState(w);
-    }
+    m_dragTracker->noteWiredWindowMoveState(w);
 
     // Desktop and activity set changes (the classified edit and the stamp it
     // is diffed against) live in window_desktop_connections.cpp.
@@ -134,18 +132,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 }
             });
 
-    // window.maximize / window.unmaximize shader transition. Sibling lambda
-    // to the TilingHandler hookup above (autotile drives the snap-back
-    // logic; we drive the shader leg).
+    // The maximize edge: the rule and metadata refresh, the scrolling
+    // maximize interception and the maximize morph (beginMaximizeShaderMorph,
+    // which rides WindowPlaceIn / WindowPlaceOut). The TilingHandler hookup
+    // above only floats a monocle member the user unmaximized by hand.
     //
-    // KWin emits windowMaximizedStateChanged once per axis flip — a
-    // user-driven left-half-snap → fully-maximize sequence fires twice
-    // (vertical-only first, then fully-maximized). Without an edge filter
-    // we'd start the placement morph for the intermediate state, then
-    // immediately install it again on the next emission, with
-    // the timer-driven teardown of the first racing the install of the
-    // second. Track the last fully-maximized state per window and only
-    // fire on actual edge transitions.
+    // KWin emits windowMaximizedStateChanged on every maximize-mode change,
+    // axis-only ones included (Maximize Vertically / Horizontally from the
+    // decoration's middle or right click, KWin's unbound shortcuts, a window
+    // rule, the client). Only a change into or out of full maximize is the
+    // morph's edge, so track the last fully-maximized state per window and
+    // fire on those transitions only; an axis flip between two modes that
+    // are not full plays nothing.
     // Seed from the LIVE maximize mode: a window already fully maximized when
     // the effect (re)loads has no entry, so its first RESTORE compared
     // false==false, read as a no-edge, and played no morph.
@@ -153,7 +151,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // No equivalent seed for m_maximizedToEdgesWindows, and that asymmetry is
     // intended. This map is an EDGE FILTER whose whole job is answering
     // "did the state change", so a missing entry is a wrong answer with no
-    // way back — nothing else ever writes it. The claim ledger is an
+    // way back — nothing else writes a TRUE entry (noteMaximizeDemotedForSnap
+    // stamps false, what a missing entry already answers). The claim ledger is an
     // OWNERSHIP record, and an unseeded one is self-healing: the daemon's
     // first tile batch carries the flag, and the Apply arm re-inserts
     // membership for any column the engine still says is maximized. Seeding
@@ -170,10 +169,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     }
 
     // Shadow-margin cache for surfaceWindowRect(). Seed from the window's
-    // current rects (nothing is resizing at connect time, so the pair agrees),
-    // then refresh on every windowExpandedGeometryChanged. The body — and the
-    // write-side invariants: never refresh from a paint-time sample, refuse
-    // implausible margins — lives beside surfaceWindowRect in surfacelayers.cpp.
+    // current rects, then refresh on every windowExpandedGeometryChanged. The
+    // effect-load sweep can wire a window mid-resize (the move state recovered
+    // above), when the expanded rect lags the frame; the plausibility cap can
+    // admit that lagged pair, and the next windowExpandedGeometryChanged
+    // corrects it. The body — and the write-side invariants: never refresh
+    // from a paint-time sample, refuse implausible margins — lives beside
+    // surfaceWindowRect in surfacelayers.cpp.
     refreshSurfaceShadowMargins(w);
     connect(w, &KWin::EffectWindow::windowExpandedGeometryChanged, this,
             &PlasmaZonesEffect::refreshSurfaceShadowMargins);
@@ -195,18 +197,23 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // Intermediate axis-only flip, so no shader — but on a
                 // scroll-managed tile the bit still has to go back.
                 //
-                // A quick tile (Meta+Left and friends) sets ONE axis, which
-                // never reaches the interception below, and nothing else
-                // clears it: the batch arm that would only runs when a
-                // batch arrives, and the engine emits on change, so a quick
-                // tile that moves no column schedules none. The window then
-                // sits half-maximized against the strip's rects with no
-                // correction coming.
+                // An axis-only maximize (Maximize Vertically / Horizontally:
+                // the decoration's middle or right click, KWin's unbound
+                // shortcuts, a window rule, the client) never reaches the
+                // interception below, and nothing else clears it: the batch
+                // arm that would only runs when a batch arrives, and the
+                // engine emits on change, so a flip that moves no column
+                // schedules none. The window then sits maximized on one axis
+                // against the strip's rects with no correction coming. A KWin
+                // quick tile is not one of these: it un-maximizes and
+                // moveResizes to the tile, so it lands as a frame change (on a
+                // column-maximize member, as the full-to-restore edge the
+                // interception claims).
                 //
                 // CANCEL ONLY, never a dispatch. Routing this through
                 // interceptMaximizeRequest would dispatch a toggle,
-                // turning the user's quick tile into a column maximize (or,
-                // on a member, into an un-maximize).
+                // turning the user's axis maximize into a column maximize
+                // (or, on a member, into an un-maximize).
                 m_tilingHandler->cancelAxisOnlyMaximize(window);
                 return;
             }
@@ -231,10 +238,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // to KWin: the strip owns the column's width, so letting both
             // answer would give one window two maximize authorities.
             // Placed AFTER the edge filter and the tracking write so it
-            // sees genuine full-maximize edges only (KWin emits once per
-            // axis, and a half-snapped window going to full fires twice —
-            // a toggle verb driven off both would cancel itself), and
-            // after the rule-cache invalidation, which must run for the
+            // sees genuine full-maximize edges only (an axis-only flip
+            // must never dispatch the toggle verb, see the edge filter),
+            // and after the rule-cache invalidation, which must run for the
             // IsMaximized field whoever ends up owning the state.
             //
             // The suppression check keeps this off the handler's own
@@ -342,7 +348,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
         });
 
-    // Track when a monocle-maximized window goes fullscreen
+    // TilingHandler::slotWindowFullScreenChanged: a windowed-fullscreen
+    // member's enter and exit, and for any other tiled window the enter's
+    // untrack (clearWindowTiledAllScreens; monocle membership survives) and
+    // the exit's re-track, decoration refresh and strip re-emit.
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFullScreenChanged);
 
@@ -382,12 +391,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // and cannot move the answer. The refresh's own set comparison then makes a
     // no-change call cost one compare.
     connect(w, &KWin::EffectWindow::minimizedChanged, this, [this, w]() {
-        if (w && w->isFullScreen()) {
+        if (w->isFullScreen()) {
             refreshFullscreenSuppression();
         }
     });
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this, w]() {
-        if (w && w->isFullScreen()) {
+        if (w->isFullScreen()) {
             refreshFullscreenSuppression();
         }
     });
@@ -399,15 +408,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // returns, including one for daemon-driven applies, and the gate has to
     // hold whichever of those it takes.
     if (KWin::Window* kw = w->window()) {
-        connect(kw, &KWin::Window::outputChanged, this, [this, w]() {
-            if (w && w->isFullScreen()) {
+        // The EffectWindow is not the sender here, so it is held weakly.
+        const QPointer<KWin::EffectWindow> safeW = w;
+        connect(kw, &KWin::Window::outputChanged, this, [this, safeW]() {
+            if (safeW && safeW->isFullScreen()) {
                 refreshFullscreenSuppression();
             }
         });
         // An activity move: the walk skips a window off the current activity,
         // and the global currentActivityChanged edge covers only a switch.
-        connect(kw, &KWin::Window::activitiesChanged, this, [this, w]() {
-            if (w && w->isFullScreen()) {
+        connect(kw, &KWin::Window::activitiesChanged, this, [this, safeW]() {
+            if (safeW && safeW->isFullScreen()) {
                 refreshFullscreenSuppression();
             }
         });
@@ -423,7 +434,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // onto the rect the client actually committed (Body -1), the offered-column
     // centring for a client that would not take its column (Body -0.5),
     // deferred maximize completion (Body 0), first-frame suppression release
-    // (Body 1), and the debounced daemon push (Body 2). Keeping the last two
+    // (Body 1), and the throttled daemon push (Body 2). Keeping the last two
     // as separate connections (which they were originally) doubled the per-geometry-
     // tick lambda dispatch cost without functional benefit; the bodies
     // are independent so collapsing them just runs one capture+vtable
@@ -444,9 +455,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     //
     // Body 2 — frame-geometry shadow: push the latest geometry to the
     // daemon so daemon-local shortcut handlers (float toggle, etc.) can
-    // read fresh geometry without round-tripping. Debounced at ~50 ms
-    // per window via m_frameGeometryFlushTimer so rapid move/resize
-    // sequences collapse into at most one D-Bus push.
+    // read fresh geometry without round-tripping. Throttled by the shared
+    // single-shot m_frameGeometryFlushTimer: at most one setFrameGeometry
+    // per window per 50 ms, so a long drag sends one every 50 ms.
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
             [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
                 // isDeleted() alongside the null test, as the other lambdas
@@ -488,11 +499,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         if (KWin::Window* kwStale = safeW->window()) {
                             qCInfo(lcEffect) << "Re-issuing" << stale.target << "over a superseded configure's ack"
                                              << committed << "for" << getWindowId(safeW.data());
-                            const bool prevInApply = m_daemonGate.inGeometryApply;
-                            m_daemonGate.inGeometryApply = true;
-                            const auto staleGuard = qScopeGuard([this, prevInApply] {
-                                m_daemonGate.inGeometryApply = prevInApply;
-                            });
+                            const auto staleGuard = geometryApplyScope();
                             kwStale->moveResize(QRectF(stale.target));
                         }
                     }
@@ -643,12 +650,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                                 // pass, both connected ahead of this lambda.
                                 // Without the gate they treat a move the effect
                                 // itself made as a user-driven one.
-                                // Save/restore, not set/clear (nesting-safe).
-                                const bool prevInApply = m_daemonGate.inGeometryApply;
-                                m_daemonGate.inGeometryApply = true;
-                                const auto restoreGate = qScopeGuard([this, prevInApply] {
-                                    m_daemonGate.inGeometryApply = prevInApply;
-                                });
+                                const auto restoreGate = geometryApplyScope();
                                 safeW->window()->move(QPointF(centred));
                             }
                         }
@@ -671,9 +673,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         // The deadline SKIPS the morph for a stale entry; the
                         // entry itself is consumed either way by the remove
                         // above (only a size-landing geometry change reaches
-                        // this branch, so a never-landing entry lives until
-                        // the windowDeleted cleanup — bounded, and cheaper
-                        // than a timer per entry).
+                        // this branch). A never-landing entry is otherwise
+                        // dropped by the next genuine full-maximize edge (the
+                        // state lambda removes or replaces it on every path),
+                        // by noteMaximizeDemotedForSnap, or by the windowDeleted
+                        // cleanup: bounded, and cheaper than a timer per entry.
                         const bool stale =
                             ShaderInternal::shaderClockNowMs() - pending.armedAtMs > kPendingMaximizeMorphDeadlineMs;
                         // Same interactive guard as the arming site: a drag
@@ -692,14 +696,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     && it->targetGeometry.isValid() && safeW->frameGeometry().toRect() != it->spawnGeometry.toRect()) {
                     endRestoreSuppression(safeW.data());
                 }
-                // Body 2 — debounced daemon shadow. Per tick this stashes the
-                // latest geometry and runs ONLY the cheap decoration resync:
-                // the shouldHandleWindow exclusion gate (an uncached rule
-                // resolve over a freshly built ruleQuery) moved into
-                // flushPendingFrameGeometry, so it runs once per 50ms flush
-                // per window instead of on every geometry tick — animated
-                // geometry (retiles, morphs, interactive resize) fired it
-                // hundreds of times per second (discussion #816).
+                // Body 2 — throttled daemon shadow. Per tick this stashes the
+                // latest geometry and runs ONLY the cheap decoration resync.
+                // The shouldHandleWindow gate decides only whether the push
+                // goes out, so it runs where the push does, in
+                // flushPendingFrameGeometry once per window per flush, after
+                // the flush's geometry-scoped verdict eviction (the one place
+                // its cached exclusion verdict routinely misses). Per tick it
+                // ran on every frame of an interactive move or resize
+                // (discussion #816).
                 const QString windowId = getWindowId(safeW);
                 if (windowId.isEmpty()) {
                     return;
@@ -717,8 +722,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // a hash lookup plus two flag checks for the untracked common
                 // case, and deferring it to the flush let the re-decorated
                 // title bar flash for up to the 50ms throttle window. No
-                // shouldHandleWindow gate needed — the manager only ever owns
-                // windows that passed it.
+                // shouldHandleWindow gate: the manager owns whatever the title-bar
+                // reconcile hides (reconcileRuleHiddenTitleBar shields structural and
+                // own surfaces only, not the dialogs and transients shouldHandleWindow
+                // rejects), so a gate would drop this self-heal for exactly those.
                 m_decorationManager->resyncWindow(windowId);
                 const QRect geo = safeW->frameGeometry().toRect();
                 if (geo.width() <= 0 || geo.height() <= 0) {
@@ -731,17 +738,19 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             });
 
     // Refresh the daemon's registry metadata on every minimize edge, connected
-    // BEFORE the handler connections below. For SNAP the ordering matters on
-    // the bus: the handler's float commit rides the same edge, and the push
-    // must land first so the daemon's suspension classification reads fresh
-    // minimize state. The AUTOTILE handler's float commit is debounced
-    // (kMinimizeFloatDebounceMs), so for it the ordering guarantee comes from
-    // that delay, not from connection order. The daemon's mode-swap
-    // seed/restore decisions consult WindowMetadata::isMinimized, which would
-    // otherwise remain at its previous snapshot until an unrelated refresh —
-    // a stale value lets a mode-swap seed tile a window that is minimized
-    // right now (the per-slot floating check cannot cover this: it resolves
-    // via the screen's CURRENT mode, which flips mid-toggle).
+    // BEFORE the handler connections below so the daemon's suspension
+    // classification reads fresh minimize state. Both handlers debounce their
+    // ordinary float (kSpuriousMinimizePairMs), so that commit lands after the
+    // push anyway; their same-edge sends depend on this connection order: both
+    // re-minimize countermands send setWindowFloatingForScreen on the edge, and
+    // so does the snap handler's unfloat of an adopted autotile minimize-float
+    // (commitUnminimizeUnfloat). The daemon's mode-swap seed/restore decisions
+    // consult WindowMetadata::isMinimized, which would otherwise remain at its
+    // previous snapshot until an unrelated refresh — a stale value lets a
+    // mode-swap seed tile a window that is minimized right now (nothing else
+    // catches it: the seed filter keeps every non-minimized entry, and its one
+    // float test, the target engine's slot, runs only once this read says
+    // minimized).
     // Liveness-guarded but deliberately NOT gated on shouldHandleWindow /
     // isTileableWindow: the open-time push in slotWindowAdded registers EVERY
     // window, and the daemon's rule predicates (IsMinimized) evaluate against
@@ -773,15 +782,19 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::minimizedChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowMinimizedChanged);
 
-    // Snap mode: track minimize/unminimize to float/unfloat snapped windows
+    // The window.minimize shader leg for every window the animation filter
+    // admits, then the snap handler's minimize float / unminimize unfloat for
+    // a snapped one.
     connect(w, &KWin::EffectWindow::minimizedChanged, this, &PlasmaZonesEffect::slotWindowMinimizedChanged);
 
     // Refresh the registry on every urgency edge, for the same reason as the
     // minimize edge above: WindowMetadata::isDemandingAttention would
     // otherwise sit at whatever the last unrelated push snapshotted, and a
-    // stale urgency is worse than none — the tab indicator would keep a tab
-    // lit long after the window stopped asking for attention, or never light
-    // it at all. The signal lives on KWin::Window, not EffectWindow, so this
+    // stale urgency is worse than none: the daemon mirrors it to the Phosphor
+    // shell (windowUrgencyChanged, getUrgentWindows), whose placement map would
+    // keep a window lit long after it stopped asking for attention, or never
+    // light it. The effect's own tab pill reads KWin's live bit at model
+    // rebuild. The signal lives on KWin::Window, not EffectWindow, so this
     // connection needs the underlying window; a window without one (no
     // KWin::Window backing) simply never reports urgency, which the daemon
     // reads as "not urgent". The EffectWindow is captured weakly; the
@@ -795,8 +808,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         return;
                     }
                     pushWindowMetadata(safeW.data());
-                    // Urgency lights a compositor-drawn tab pill; same rebuild
-                    // as the caption hook above.
+                    // Urgency lights a compositor-drawn tab pill in both bar
+                    // styles, so this rebuilds every strip naming the window
+                    // (noteScrollTabWindowChanged), unlike the caption hook in
+                    // window_metadata_connections.cpp, which skips segment-bar
+                    // screens.
                     m_tilingHandler->noteScrollTabWindowChanged(getWindowId(safeW.data()));
                 });
     }

@@ -792,7 +792,7 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
                                     // provider is warm before the first transition needs it.
                                     scheduleEffectAudioSync();
                                     // It can also assign or clear any suppression-owning pack
-                                    // (`desktop.peek`, `window.minimize`, `window.maximize`);
+                                    // (`desktop.peek`, `window.minimize`, placeIn / placeOut for maximize);
                                     // keep KWin's own stock effects unloaded exactly while
                                     // ours owns the event.
                                     syncStockEffectSuppression();

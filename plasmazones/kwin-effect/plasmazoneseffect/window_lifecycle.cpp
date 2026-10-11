@@ -952,11 +952,13 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::reportActiveWindowScreen(KWin::EffectWindow* w, const QString& screenId)
 {
-    // The daemon acts on its focused window's screen for every window
-    // shortcut, and learns it otherwise only from an activation, so a move of
-    // that window (an output change, a virtual-screen crossing, a split
-    // added or removed under it, a daemon apply) has to be reported or the
-    // next snap-to-zone key puts the window back on the screen it left.
+    // The daemon's window shortcuts act on its focused window's screen
+    // (WindowTrackingAdaptor::lastActiveScreenName). That answer comes from an
+    // engine's record of the window where one holds it, and otherwise from the
+    // screen the last activation or this report named, so a move of the window
+    // (an output change, a virtual-screen crossing, a split added or removed
+    // under it, a daemon apply) has to be reported or the next snap-to-zone key
+    // puts the window back on the screen it left.
     //
     // Gated on the window this effect last REPORTED activated, not on KWin's
     // active window: the daemon honours the report only for its own last
