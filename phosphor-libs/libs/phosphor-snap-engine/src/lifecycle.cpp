@@ -303,6 +303,20 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                                                  << own->screenId << "for" << screenId << "— not restored, released";
     }
 
+    // Exclusion before the store branch and either rule return: an excluded
+    // app is never snapped by a placement rule, a stored record, an empty zone
+    // or the last zone, and taking a record here would re-bind it to a window
+    // that is never snapped, so the app's next real window could not reopen
+    // from it (F735). The window's own registry-aware lookup resolves the full
+    // WindowQuery (class, title, frame) with the minimum-size thresholds. The
+    // opening screen is the query's hint because the window is in no SnapState
+    // yet, so an Exclude rule keyed on ScreenId or ActiveLayout would not
+    // resolve otherwise.
+    if (m_windowTracker && isWindowExcluded(windowId, screenId)) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "excluded by rule or size";
+        return SnapResult::noSnap();
+    }
+
     // Unified placement store — the single authoritative restore record for this
     // window. Consulted before the legacy "already has assignment" skip and the
     // snap/float chains (but after a matched SnapToZone rule, above). This
@@ -688,35 +702,14 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     //
     // Placed AFTER the isWindowSnapped/consume guard so windows that are
     // already snapped still consume their appId pending entry; placed
-    // BEFORE the exclusion lookup and the calculate* chain so placement rules,
-    // session restore, empty-zone, and last-zone fallbacks are all gated
-    // by the same predicate.
+    // BEFORE the calculate* chain so placement rules, session restore,
+    // empty-zone, and last-zone fallbacks are all gated by the same predicate.
     //
     // Predicate is daemon-injected; absence means "no gating" — the
     // historical default that unit tests rely on.
     if (m_shouldRestorePredicate && !m_shouldRestorePredicate(screenId, currentVirtualDesktopForScreen(screenId))) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: skipping" << windowId << "on" << screenId
                                                   << "— disabled-context gate rejected restore";
-        return SnapResult::noSnap();
-    }
-
-    // Exclusion check: skip auto-snap for excluded applications/window classes.
-    // This must run before any calculate method so excluded apps are never snapped
-    // by placement rules, session restore, empty zone, or last zone features.
-    //
-    // Use the WTS's registry-aware lookup so a window whose class the effect
-    // has already updated (Electron/CEF apps renaming themselves) matches
-    // against its CURRENT class, not a stale first-seen one. m_windowTracker
-    // is non-null at runtime; production code never reaches this with a null
-    // tracker. isWindowExcluded resolves the full WindowQuery (class/title/
-    // frame size) through the unified RuleEvaluator and applies the
-    // minimum-window-size thresholds — the same match model the autotile
-    // engine uses, replacing the hand-rolled appIdMatches loops.
-    // The opening screen is passed as the query's screen hint: the window is not
-    // in a SnapState yet, so the daemon cannot resolve its screen on its own and
-    // an Exclude rule keyed on ScreenId / ActiveLayout would not resolve here.
-    if (m_windowTracker && isWindowExcluded(windowId, screenId)) {
-        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "excluded by rule or size";
         return SnapResult::noSnap();
     }
 

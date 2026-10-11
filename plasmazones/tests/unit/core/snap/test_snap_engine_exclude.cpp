@@ -8,7 +8,8 @@
 /**
  * @brief SnapEngine exclusion + cross-mode handoff coverage: setExcludeRuleSet
  *        wiring, isWindowExcluded full-query/size checks, the resolveWindowRestore
- *        size-exclusion consumer, and entryZoneForCrossing.
+ *        exclusion consumer (ahead of any stored record or placement rule), and
+ *        entryZoneForCrossing.
  */
 class TestSnapEngineExclude : public SnapEngineTestFixture
 {
@@ -331,6 +332,80 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    // The exclusion runs before the store branch (F735): an excluded window
+    // neither restores from another instance's record nor takes it, so the
+    // app's next real window can still reopen from it.
+    void testResolveWindowRestore_excludedWindowTakesNoRecord()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        recordSnappedSibling();
+        PhosphorRules::RuleSet set;
+        QVERIFY(set.addRule(excludeAppRule(QStringLiteral("x"))));
+        engine.setExcludeRuleSet(&set);
+
+        const PhosphorEngine::SnapResult result = engine.resolveWindowRestore(kOpening, kRecordScreen, false);
+
+        QVERIFY(!result.shouldSnap);
+        QVERIFY2(!m_wts->placementStore().peekExact(kOpening).has_value(), "the record is not re-bound to it");
+        QVERIFY(m_wts->placementStore().peekExact(kClosed).has_value());
+        engine.setExcludeRuleSet(nullptr);
+        m_wts->setSnapState(nullptr);
+    }
+
+    // ...and the same for a window the minimum size leaves alone.
+    void testResolveWindowRestore_smallWindowTakesNoRecord()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        recordSnappedSibling();
+        m_settings->setMinimumWindowWidth(200);
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
+            PhosphorRules::WindowQuery q;
+            q.appId = QStringLiteral("x");
+            q.width = 120;
+            q.height = 400;
+            return std::optional<PhosphorRules::WindowQuery>(q);
+        });
+
+        const PhosphorEngine::SnapResult result = engine.resolveWindowRestore(kOpening, kRecordScreen, false);
+
+        QVERIFY(!result.shouldSnap);
+        QVERIFY2(!m_wts->placementStore().peekExact(kOpening).has_value(), "the record is not re-bound to it");
+        QVERIFY(m_wts->placementStore().peekExact(kClosed).has_value());
+        m_wts->setSnapState(nullptr);
+    }
+
+    // A placement rule is no way round the exclusion. Zone geometry does not
+    // resolve in this guiless fixture, so the rule's own return is not
+    // observable here: what is pinned is that the rule path, which re-binds
+    // a stored record before it applies the rule, takes nothing either.
+    void testResolveWindowRestore_excludedWindowIgnoresAPlacementRule()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        recordSnappedSibling();
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            PlacementDirective directive;
+            directive.zoneOrdinals = {1};
+            return directive;
+        });
+        PhosphorRules::RuleSet set;
+        QVERIFY(set.addRule(excludeAppRule(QStringLiteral("x"))));
+        engine.setExcludeRuleSet(&set);
+
+        const PhosphorEngine::SnapResult result = engine.resolveWindowRestore(kOpening, kRecordScreen, false);
+
+        QVERIFY(!result.shouldSnap);
+        QVERIFY(!m_wts->placementStore().peekExact(kOpening).has_value());
+        engine.setExcludeRuleSet(nullptr);
+        engine.setPlacementZonesResolver({});
+        m_wts->setSnapState(nullptr);
+    }
+
     // Honest scope of this test (renamed from the earlier
     // `…InvalidatesEvalCache` name): exercises that across in-place
     // `RuleSet::setRules` edits at the SAME bound pointer, the
@@ -458,6 +533,39 @@ private Q_SLOTS:
                  QStringLiteral("entry:up"));
         // An unknown token yields no entry zone.
         QVERIFY(engine.entryZoneForCrossing(QStringLiteral("diagonal"), QStringLiteral("DP-2")).isEmpty());
+    }
+
+private:
+    const QString kClosed = QStringLiteral("x|closed");
+    const QString kOpening = QStringLiteral("x|opening");
+    const QString kRecordScreen = QStringLiteral("DP-1");
+
+    /// A snapped record of another, closed instance of app "x" on DP-1: what
+    /// the opening window's FIFO restore would take.
+    void recordSnappedSibling()
+    {
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = kClosed;
+        rec.appId = QStringLiteral("x");
+        rec.screenId = kRecordScreen;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        m_wts->placementStore().record(rec);
+    }
+
+    static PhosphorRules::Rule excludeAppRule(const QString& appId)
+    {
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId,
+                                                              PhosphorRules::Operator::AppIdMatches, appId);
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Exclude);
+        rule.actions.append(action);
+        return rule;
     }
 };
 
