@@ -60,19 +60,34 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::windowFloatingChanged, adaptor,
                                  &WindowTrackingAdaptor::relayWindowFloatingChanged));
 
-    // Daemon-driven geometry application (used by autotile float restore via SnapEngine)
+    // Daemon-driven geometry application, each with its placement purpose.
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::applyGeometryRequested, adaptor,
-                                 &WindowTrackingAdaptor::applyGeometryRequested));
+                                 [adaptor](const QString& windowId, int x, int y, int width, int height,
+                                           const QString& zoneId, const QString& screenId, bool sizeOnly) {
+                                     Q_EMIT adaptor->applyGeometryRequested(
+                                         windowId, x, y, width, height, zoneId, screenId, sizeOnly,
+                                         static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+                                 }));
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::fullscreenHandBackRequested, adaptor,
+                                 &WindowTrackingAdaptor::fullscreenHandBackRequested));
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::restatementGeometryRequested, adaptor,
+                                 [adaptor](const QString& windowId, int x, int y, int width, int height,
+                                           const QString& zoneId, const QString& screenId) {
+                                     Q_EMIT adaptor->applyGeometryRequested(
+                                         windowId, x, y, width, height, zoneId, screenId, false,
+                                         static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
+                                 }));
 
     // Snap-all-windows (effect collects candidates, daemon calculates)
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::snapAllWindowsRequested, adaptor,
                                  &WindowTrackingAdaptor::snapAllWindowsRequested));
 
-    // Batched resnap: emitBatchedResnap is called from the Daemon layer (autotile→snap
-    // transition) which bypasses WTA navigation methods. Route through handleBatchedResnap
-    // for proper bookkeeping (windowSnapped per entry) + applyGeometriesBatch emission.
+    // Batched resnap: the engine's own batches (emitBatchedResnap, the
+    // autotile→snap transition, the desktop carry) are committed by the relay
+    // as they are. The bus slot of the same shape, handleBatchedResnap, checks
+    // an external caller's entries first.
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::resnapToNewLayoutRequested, this,
-                                 &SnapAdaptor::handleBatchedResnap));
+                                 &SnapAdaptor::applyEngineResnap));
 
     // Batched geometry application: rotate / resnap / snap-all paths build
     // a PhosphorProtocol::WindowGeometryList and emit it here. WTA's applyGeometriesBatch
@@ -107,12 +122,6 @@ void SnapAdaptor::clearEngine()
     // a possibly-stale pointer; the existing per-slot null guards now
     // catch the cleared state instead.
     m_contextResolver = nullptr;
-    // The cross-screen reclaim hook is a late-bound dependency like the
-    // others above (it captures the two tiling engines), so it is cleared
-    // here too. Daemon::stop() also clears it explicitly; both exist so the
-    // teardown contract holds whichever path runs and stays
-    // grep-discoverable.
-    m_crossScreenTileReclaim = {};
 }
 
 PhosphorSnapEngine::SnapEngine* SnapAdaptor::engine() const

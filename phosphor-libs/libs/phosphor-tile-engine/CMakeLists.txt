@@ -98,6 +98,8 @@ add_library(PhosphorTileEngine SHARED
     src/autotileengine/insert.cpp
     src/autotileengine/layout_apply.cpp
     src/autotileengine/drag_preview.cpp
+    src/autotileengine/evacueepark.cpp
+    src/autotileengine/evacueepark_p.h
     src/autotileengine/facade.cpp
     src/AutotileConfig.cpp
     src/NavigationController.cpp

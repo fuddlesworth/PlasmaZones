@@ -72,6 +72,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // (shortcuts_wiring.cpp).
     m_draggedWindowId = windowId;
     m_originalGeometry = QRect(qRound(x), qRound(y), qRound(width), qRound(height));
+    m_originalFrameFillsOutput = windowFillsOutput(windowId);
     m_currentZoneId.clear();
     m_currentZoneScreenId.clear();
     m_currentZoneGeometry = QRect();
@@ -123,9 +124,6 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         auto* snapEngine = m_windowTracking ? m_windowTracking->snapEngine() : nullptr;
         m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
     }
-
-    // Note: KWin Quick Tile override is now handled permanently by Daemon
-    // (using kwriteconfig6 + KWin.reconfigure()) instead of per-drag toggling
 
     // Check if window started inside a zone (for restoreOriginalSizeOnUnsnap feature)
     // Primary method: Check if window is tracked as snapped in WindowTrackingAdaptor
@@ -501,10 +499,9 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
     // ── Drag-insert preview (runs even when m_snapCancelled) ────────────────
     // This block is intentionally ABOVE the snap-cancelled early return because
-    // the KWin effect calls callCancelSnap() when the cursor crosses from a snap
-    // screen to an engine-owned screen mid-drag. That sets m_snapCancelled=true,
-    // and would otherwise starve this block for the entire remainder of the
-    // drag. Drag-insert lives on independent trigger lists, so it should
+    // Escape (cancelSnap) latches m_snapCancelled for the rest of the drag, and
+    // that must not starve a drag-insert the user begins afterwards: it lives
+    // on independent trigger lists, with its own trigger, so it should
     // activate regardless of snap-overlay cancel state. The engine owning the
     // cursor's screen (autotile or scrolling) selects which trigger list and
     // toggle setting apply this tick; the rising-edge latch is shared (the
@@ -984,13 +981,13 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     } else {
         // Cursor left all zones: restore pre-snap size immediately if window was snapped.
         // The record is read for the CURSOR's screen, the same basis the
-        // drop-time commit uses (drop.cpp reads validatedUnmanagedGeometry
-        // for the release screen) — getValidatedPreTileGeometry resolves the
+        // drop-time commit uses (drop.cpp reads preSnapSizeFor for the
+        // release screen) — getValidatedPreTileGeometry resolves the
         // window's TRACKED screen instead, so a cross-monitor drag-out
         // previewed one monitor's remembered size and committed the other's.
         if (m_wasSnapped && !m_restoreSizeEmittedDuringDrag && m_windowTracking
             && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId)) {
-            const auto preSnap = m_windowTracking->service()->validatedUnmanagedGeometry(windowId, cursorScreenId);
+            const auto preSnap = preSnapSizeFor(windowId, cursorScreenId);
             if (preSnap) {
                 m_restoreSizeEmittedDuringDrag = true;
                 m_lastEmittedZoneGeometry = QRect(); // Reset so re-entering zone will emit

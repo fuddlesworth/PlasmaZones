@@ -42,9 +42,6 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
-    m_crossScreenClaimsExhausted.removeIf([&aliveWindowIds](const QString& id) {
-        return !aliveWindowIds.contains(id);
-    });
     // Same treatment for the column-maximize leg, which is maintained
     // alongside it everywhere.
     for (auto it = m_lastAppliedMaximizedToEdges.begin(); it != m_lastAppliedMaximizedToEdges.end();) {
@@ -56,8 +53,8 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     }
     // The remembered park edge is written only while a window sits parked and
     // consumed when it scrolls back on screen. windowClosed drops the entry
-    // (with the fs memory above) at close, and every path that drops
-    // m_lastAppliedRect for a still-alive window (float, handoff,
+    // (with the fs memory above) at close, and every path that takes a
+    // still-alive window off the strip (float, handoff,
     // cross-screen move, drag commit/cancel, the context sweeps) drops the
     // edge beside it — so this sweep, which fires exactly ONCE per session
     // at bring-up, is a belt for ids that died while this engine was not
@@ -289,10 +286,10 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     }
     for (const QString& screenId : affectedScreens) {
         scheduleRetileForScreen(screenId);
-        // The strip structure mutated durably (a column may have closed) and
-        // placementChanged is the sole producer of DirtyScrollStrips — the
-        // prune path is exactly the no-windowClosed case, so nothing else
-        // marks the save.
+        // The strip structure mutated durably (a column may have closed).
+        // placementChanged is this engine's only way to mark DirtyScrollStrips;
+        // the tracking service's scheduleSaveState (DirtyAll) also sets that
+        // bit, but a prune is not a windowClosed whose DirtyAll covers it.
         Q_EMIT placementChanged(screenId);
     }
     return pruned;
@@ -870,6 +867,10 @@ void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
 
 void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
+    // Empty is the activity service going away, not every activity removed (F423).
+    if (validActivities.isEmpty()) {
+        return;
+    }
     const auto stale = [&validActivities](const QString& activity) {
         return !activity.isEmpty() && !validActivities.contains(activity);
     };
@@ -964,8 +965,8 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     m_states.removeWindowsIf([&matches](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
     });
-    sweepStripStash([&matches](const PhosphorEngine::PlacementStateKey& key) {
-        return matches(key.screenId);
+    sweepStripStash([this, &matches](const PhosphorEngine::PlacementStateKey& key) {
+        return matches(key.screenId) && !isEvacueeParkedKey(key); // a parked strip outlives the output
     });
     // Standalone sweep for STATELESS sub-screens too: a virtual sub-screen
     // of the removed monitor can carry a seed or a rule override without

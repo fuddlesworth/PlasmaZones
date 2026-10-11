@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include <QObject>
+#include <QPointer>
 #include <QDBusAbstractAdaptor>
 #include <QDBusVariant>
 #include <QJsonObject>
@@ -546,6 +547,11 @@ public:
     /// so a lone bus call resnaps and announces like a batch close does.
     void stageOrApply(const QString& resolvedId);
 
+    /// Make @p layout the global active layout, at the batch close when a save
+    /// batch is open. flushPendingActiveLayout applies the held one.
+    void setActiveLayoutAtApply(PhosphorZones::Layout* layout);
+    void flushPendingActiveLayout();
+
     /**
      * @brief Publish the daemon's freshly recomputed active-assignment snapshot.
      *
@@ -725,6 +731,10 @@ private:
     // setters/clears, the batch setters, setScrollingTemplateLayout, ...),
     // consumed by applyAssignmentChanges.
     QSet<QString> m_changedScreenIds;
+
+    // The global active layout a staged write set, applied by
+    // applyAssignmentChanges after the apply (F724).
+    QPointer<PhosphorZones::Layout> m_pendingActiveLayout;
 
     // Resolved active layout id per effective screen, pushed by the daemon via
     // publishActiveAssignments. Mirrors Daemon::m_activeAssignmentByScreen — the

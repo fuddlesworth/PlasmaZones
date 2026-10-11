@@ -9,7 +9,9 @@
 // as AutotileEngine.h / daemon.h / windowtrackingadaptor.h. Grew with the
 // per-desktop membership change: the membership pass and its helpers, the
 // per-desktop seed / restore-desktop resolution, the window-scoped resnap,
-// the pinned-desktop store resolution and the float residence helper.
+// the pinned-desktop store resolution and the float residence helper. Grew
+// with the cross-output bounce fix (#1124): the free-frame capture before a
+// user snap.
 
 #pragma once
 
@@ -58,6 +60,7 @@ namespace PhosphorSnapEngine {
 class INavigationStateProvider;
 class IZoneAdjacencyResolver;
 class SnapNavigationTargetResolver;
+struct SnapEvacueePark;
 
 /**
  * @brief Engine for manual zone-based window snapping
@@ -110,10 +113,10 @@ public:
     /// Whether @p screenId resolves to SNAPPING mode in its current
     /// (desktop, activity) context — the same verdict resolveWindowRestore's
     /// screen-mode ownership gate reads, permissive when no layout manager is
-    /// wired (tests). Public for the SnapAdaptor's open-path reclaim-credit
-    /// burn, which must partition opens the way the open channels do: a
-    /// tiling-screen open burns via that engine's takeForReopen, a snap-screen
-    /// open has only the adaptor's resolve to do it.
+    /// wired (tests). Public for the SnapAdaptor: its open claim names the
+    /// opening screen's engine from it, and its DesktopArrival held-zone
+    /// re-apply only runs on a screen that snaps (a re-statement of a zone on
+    /// a screen another engine runs would fight that engine).
     bool isSnapModeScreen(const QString& screenId) const;
 
     /// Resolve the zone on @p screenId's @p targetDesktop layout that is
@@ -125,17 +128,15 @@ public:
     std::pair<QString, QRect> resolveCrossDesktopZone(const QString& currentZoneId, const QString& screenId,
                                                       int targetDesktop) const;
 
-    /// The zone a window ENTERS when it crosses onto @p neighbourScreen moving in
-    /// @p direction: the first zone on the edge facing back toward the source
-    /// (crossing "right" enters the neighbour's left-edge zone). Empty when no
-    /// zone-adjacency resolver is wired or the neighbour has no such zone. Used by
-    /// the daemon cross-mode handoff to place a window arriving on a snap monitor.
+    /// The zone a window ENTERS crossing onto @p neighbourScreen in @p direction: the edge zone facing back
+    /// toward the source (crossing "right" enters the left-edge zone), on @p desktop's layout (<= 0: the one
+    /// shown). Empty with no adjacency resolver or no such zone. The cross-mode handoff lands a window there.
     QString entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const;
+    QString entryZoneForCrossing(const QString& direction, const QString& neighbourScreen, int desktop) const;
 
-    /// The window snapped to @p zoneId on @p screenId (the daemon's stored
-    /// assignment pins it to that output), or empty if the zone is unoccupied
-    /// there. Used by the cross-mode swap to find the snap partner when THIS
-    /// engine is the swap target.
+    /// The window snapped to @p zoneId on @p screenId in the context the screen
+    /// shows, or empty if the zone is unoccupied there. Used by the cross-mode
+    /// swap to find the snap partner when THIS engine is the swap target.
     QString windowInZoneOnScreen(const QString& zoneId, const QString& screenId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -156,26 +157,11 @@ public:
      * @brief Predicate consulted on the auto-snap entry path to suppress
      *        zone restores onto a context the user disabled.
      *
-     * Returns true if the screenId is currently active for snap mode, false
-     * if disabled. The engine library is intentionally settings-agnostic
-     * (LGPL boundary) so the daemon adaptor injects the predicate; SnapEngine
-     * itself has no notion of disabled contexts. The daemon-side closure is
-     * responsible for resolving the current virtual desktop / activity at
-     * call time — SnapState does not track those.
-     *
-     * Applied inside `resolveWindowRestore` so BOTH the engine's own
-     * `windowOpened` path AND the D-Bus `SnapAdaptor::resolveWindowRestore`
-     * path (used by the KWin effect for per-window restores) hit the same
-     * gate. A PendingRestore authored before the user disabled the context
-     * can no longer drag a freshly opened window into a zone the user told
-     * us to stay out of (discussion #461 item 7). Without this gate,
-     * restarting the daemon was the only way to evict stale in-memory
-     * entries — the `isPersistedContextDisabled` filter on disk load only
-     * fires on startup, so any restore queued during the running session
-     * leaked through.
-     *
-     * When unset (default), the engine behaves as if every context is
-     * active — the historical default that unit tests rely on.
+     * True if the context is active for snap mode. The daemon injects it (the
+     * engine library is settings-agnostic) and passes the current activity.
+     * Applied by resolveWindowRestore, the desktop carry, the membership
+     * re-apply, the layout-switch resnap and the destination of a keyboard
+     * move (#461 item 7, F445, F208). Unset, every context is active.
      */
     /// Answers whether a stored snap may be re-applied on (@p screenId,
     /// @p desktop): the desktop the window is being restored ONTO, which
@@ -205,13 +191,12 @@ public:
      * the `snappingRestoreFloatedWindowsOnLogin` setting. Returns true to
      * restore the position, the ONE thing it governs for a FLOATED record:
      * such a record always re-marks the window floating, but its position is
-     * re-applied only when the predicate opts in and the rect is not a managed
-     * size (a zone-sized "free" rect is a spawn frame); a declined or refused
-     * move still gets a first placement its free SIZE.
-     *
-     * When the predicate is UNSET (default), the engine preserves its historical
-     * behaviour: a floated record is consumed only on the screen it reopens on and
-     * is marked floating without a position move — the path unit tests rely on.
+     * re-applied only when the predicate opts in, the rect is not a managed
+     * size (a zone-sized "free" rect is a spawn frame) and this is no re-entry
+     * (the window's own record, any reason but Open). A declined move still
+     * gets a first placement its free SIZE. When UNSET (default), a floated
+     * record is consumed only on the screen it reopens on and is marked
+     * floating without a move, the path unit tests rely on.
      */
     using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
 
@@ -231,17 +216,17 @@ public:
      *        window that was SNAPPED at logout should be restored to its recorded
      *        zone on reopen/login (the "managed restore").
      *
-     * This is the snapped-to-zone analogue of @ref RestorePositionPredicate
-     * (which governs FLOATED records). Keyed by the live windowId so the daemon
-     * closure stays settings-agnostic (LGPL boundary) — the engine only asks.
-     * The daemon wires it to the `restoreWindowsToZonesOnLogin` setting.
+     * The snapped-to-zone analogue of @ref RestorePositionPredicate. Keyed by
+     * the live windowId so the daemon closure stays settings-agnostic (LGPL
+     * boundary). The daemon wires it to `restoreWindowsToZonesOnLogin` and the
+     * per-window SetRestoreToZoneOnLogin rule. It governs an Open and a FIFO
+     * match only: a re-entry of the window's own record skips it.
      *
-     * When the predicate returns false the stored snap is not re-applied; the
-     * window falls through to the normal auto-snap policy chain, exactly as a
-     * disabled-context rejection does. When UNSET (default) the engine restores
-     * snapped records unconditionally — the historical behaviour unit tests rely
-     * on. This gate is independent of @ref ShouldRestorePredicate (the
-     * disabled-context gate); both must opt in for a managed restore to proceed.
+     * When it returns false the stored snap is not re-applied and the window
+     * falls through to the auto-snap chain, as a disabled-context rejection
+     * does. When UNSET (default) snapped records restore unconditionally, the
+     * behaviour unit tests rely on. Independent of @ref ShouldRestorePredicate
+     * (the disabled-context gate); both must opt in.
      */
     using ManagedRestorePredicate = std::function<bool(const QString& windowId)>;
 
@@ -256,30 +241,30 @@ public:
         m_managedRestorePredicate = std::move(predicate);
     }
 
-    /// Live placement-mode resolver injected by the daemon (its
-    /// ScreenModeRouter): engine-live-set-first with cascade fallback and
-    /// the tiling-mode→Snapping downgrade for unclaimed screens. The
-    /// capture gate consults it so a screen ENTERING a tiling mode (the
-    /// cascade already flipped but no engine claims it yet) can still
-    /// presave its live snap state; the raw cascade would refuse it and
-    /// the presave would silently write nothing. Falls back to the
-    /// registry's cascade when unset. Clear with {} at teardown.
+    /// Live placement-mode resolver injected by the daemon (its ScreenModeRouter):
+    /// engine-live-set-first with cascade fallback and the tiling-mode→Snapping
+    /// downgrade for unclaimed screens. isActiveOnScreen, isSnapModeScreen, the
+    /// capture gate and isTilingOutput consult it; through it a screen ENTERING a
+    /// tiling mode (the cascade already flipped but no engine claims it yet) can
+    /// still presave its live snap state, which the raw cascade would refuse,
+    /// writing nothing. Unset, isActiveOnScreen falls back to "not autotile" and
+    /// the others to the registry's cascade. Clear with {} at teardown.
     using LiveModeResolver = std::function<PhosphorZones::AssignmentEntry::Mode(const QString& screenId)>;
     void setLiveModeResolver(LiveModeResolver resolver)
     {
         m_liveModeResolver = std::move(resolver);
     }
 
-    /// Whether the tiling engine owning @p mode is actually LIVE on
-    /// @p screenId — the liveness half of resolveWindowRestore's
-    /// cross-screen tile-defer gate. The gate must ask exactly what the
-    /// CLAIMING side answers: both tiling engines' claimCrossScreenReopen
-    /// require the recorded home in their live screen set on top of the
-    /// record-context mode verdict, so a defer keyed on mode alone stands
-    /// down for a window the tiling engine then declines — the both-skipped
-    /// strand. Only the daemon sees the engines' live sets, hence the
-    /// injection. Unset → the gate falls back to mode alone (headless/test
-    /// path). Clear with {} at teardown.
+    /// INERT, kept for ABI: whether the tiling engine owning @p mode is LIVE
+    /// on @p screenId. It fed resolveWindowRestore's cross-screen tile-defer
+    /// gate, which is gone: under the reopen contract snap never defers a
+    /// window to another engine's reclaim of a record on another screen, and
+    /// nothing reads the stored resolver any more. The daemon no longer wires
+    /// it. A setter call is harmless; the resolver is held and never invoked.
+    /// (A new caller wanting engine liveness must ask the daemon, which is the
+    /// only side that sees the engines' live screen sets.)
+    ///
+    /// Clear with {} at teardown, like every injected resolver.
     using TilingEngineLiveResolver =
         std::function<bool(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId)>;
     void setTilingEngineLiveResolver(TilingEngineLiveResolver resolver)
@@ -351,17 +336,28 @@ public:
         m_placementZonesResolver = std::move(resolver);
     }
 
+    /// A no-op: snap's close is WindowTrackingService-driven (WTS::windowClosed
+    /// clears the window's SnapState), so the daemon's engine close loop skips it.
     void windowClosed(const QString& windowId) override;
 
-    /// The (screen, desktop, activity) key of the store that genuinely holds
-    /// @p windowId, in ANY context. Membership-grade like isWindowTracked, and
-    /// deliberately NOT scoped to the screen's current desktop: this answers
-    /// the daemon's desktop-membership reconcile, which asks precisely because
-    /// the holding store is usually a BACKGROUND one by the time it asks.
-    ///
-    /// The globals holder is excluded — it has no desktop identity, so a
-    /// window living only there has no membership to reconcile.
+    /// The key of the store that genuinely holds @p windowId, in ANY context:
+    /// membership-grade, NOT scoped to the screen's current desktop, since the
+    /// desktop reconcile asks when the holding store is usually a background
+    /// one. The globals holder is excluded (it has no desktop identity).
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
+
+    /// Silently release every membership off @p keepScreenId (every one when it
+    /// is empty): zone with the last-used naming it, float bit, residence,
+    /// pre-float home and persisted per-desktop entry. Emits nothing.
+    void releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId) override;
+
+    // Evacuee park (src/evacueepark.cpp; the contract is IPlacementEngine's).
+    QStringList parkOutput(const QString& physicalScreenId) override;
+    bool readoptParked(const QString& windowId, const QString& parkedPhysicalId,
+                       const QString& returnedPhysicalId) override;
+    void dropParked(const QString& windowId, const QString& physicalScreenId, int desktop,
+                    const QString& activity) override;
+    bool hasParked(const QString& windowId, const QString& physicalScreenId) const override;
 
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
@@ -392,29 +388,25 @@ public:
     /// decide whether a cross-engine handoff is needed.
     bool isWindowTracked(const QString& windowId) const override;
 
-    /**
-     * @brief Resnap windows from previous layout to current layout after layout switch
-     *
-     * Maps windows by zone number (1->1, 2->2, etc.) with wrapping when new
-     * layout has fewer zones.
-     */
+    /// Whether a resnap that finds nothing says so (no_windows_to_resnap): a
+    /// user verb does, a layout switch or a settings reflow does not.
+    enum class ResnapFeedback {
+        Report,
+        Silent
+    };
+
+    /// Resnap a switch's populated buffer by zone number into the new layouts.
     void resnapToNewLayout();
+    void resnapToNewLayout(ResnapFeedback feedback);
 
-    /**
-     * @brief Resnap windows to their current zone assignments (re-apply geometries)
-     * @param screenFilter Optional screen name filter (empty = all screens)
-     * @param onlyWindows When non-empty, only these windows are re-applied
-     *        (the membership pass re-applies the multi-desktop windows on the
-     *        desktop just entered without re-committing the whole screen)
-     */
+    /// Re-apply the zones windows hold, on @p screenFilter (all when empty),
+    /// only @p onlyWindows when it is not empty. Reports.
     void resnapCurrentAssignments(const QString& screenFilter = QString(), const QSet<QString>& onlyWindows = {});
+    void resnapCurrentAssignments(const QString& screenFilter, const QSet<QString>& onlyWindows,
+                                  ResnapFeedback feedback);
 
-    /**
-     * @brief Resnap windows using autotile window order as assignment source
-     * @param autotileWindowOrder Ordered list of window IDs from autotile engine
-     * @param screenId Screen to resnap on
-     * @note Falls back to resnapCurrentAssignments if no entries are calculated
-     */
+    /// Resnap @p screenId's windows in @p autotileWindowOrder, falling back to
+    /// their current zones when the order yields nothing.
     void resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId);
 
     /**
@@ -471,19 +463,19 @@ public:
      *
      * A matched SnapToZone rule (chain level 1) outranks any stored placement
      * (the store still re-binds the record first, so the float-back geometry
-     * survives). Otherwise the WindowPlacementStore reopens the window from
-     * its snapped (may cross screens) or floated (screen-local) record. With
-     * neither, levels 2 (empty zone) and 3 (last-used zone) run. A window
-     * nothing places is FLOATED, by a matched Float rule before the chain or
-     * the no-match default after it; a first-placement float that does not
-     * move gets its free size back. An already-floating window is skipped.
+     * survives). Otherwise the WindowPlacementStore reopens the window from a
+     * record it may restore WHERE IT OPENS (its own, on its screen; another
+     * instance's, on its output), never one that would move it to another
+     * monitor; a window whose own record names another screen left it and is
+     * released. Then levels 2 (empty zone) and 3 (last-used zone). A window
+     * nothing places is FLOATED; a re-entry never re-snaps a floating one.
      *
      * @param windowId Window identifier
      * @param screenId Screen where the window appeared
      * @param sticky Whether the window is on all desktops
-     * @param kind Accepted for D-Bus wire-compatibility but no longer gates
-     *             restore — the matched record carries its own kind.
-     * @param reason Why this resolve runs; gates the size restore only.
+     * @param kind Accepted for wire compatibility and ignored: nothing sets a
+     *             placement record's kind from a live window.
+     * @param reason Why this resolve runs: gates the size restore, the FIFO, a re-entry re-snap and a leaver's rule.
      * @return PhosphorEngine::SnapResult with geometry and zone info, or PhosphorEngine::SnapResult::noSnap()
      */
     PhosphorEngine::SnapResult
@@ -577,28 +569,23 @@ public:
     SnapState* stateForWindowOnScreen(const QString& windowId, const QString& screenId, int desktop = 0);
 
     /// Drop every membership @p windowId holds AND its data in each member
-    /// store (window closed / fully removed). A window present on several
-    /// desktops holds a zone assignment in each; clearing only the store in
-    /// view left the others listing a dead window as a zone occupant.
+    /// store (closed / removed): a window on several desktops holds a zone in
+    /// each, and clearing only the one in view left a dead zone occupant.
     void forgetWindow(const QString& windowId);
-    /// Whether @p state holds a MEMBERSHIP for @p windowId, as opposed to a
-    /// leftover from before a re-key. The WTS facade's aggregate walks use it
-    /// through the resolver seam.
+    /// Whether @p state holds a MEMBERSHIP for @p windowId, not a leftover from
+    /// before a re-key (the WTS facade's aggregate walks, via the resolver seam).
     bool holdsWindowInState(const QString& windowId, const SnapState* state) const;
+    /// The key @p state is filed under; nullopt for the global holder or a foreign store.
+    std::optional<PhosphorEngine::PlacementStateKey> keyForState(const SnapState* state) const;
+    /// The screen a navigation verb on @p windowId acts on: its stored screen when snapped,
+    /// else @p preferredScreen, else the cursor's, else the last active one.
+    QString navigationScreenFor(const QString& windowId, const QString& preferredScreen) const;
 
-    /// Re-home a tracked window's snap state onto @p newScreenId's per-key store
-    /// when it crosses monitors. Moves the window's per-window entries (zone, live
-    /// screen, desktop, floating bit, pre-float zone/screen, auto-snap flag) from
-    /// its current owning store to the store for @p newScreenId's current context
-    /// and updates the reverse map. The live screen value is rewritten to
-    /// @p newScreenId so screenForTrackedWindow reflects the destination (the #724
-    /// cross-monitor determinism requirement); the pre-float zone is preserved so an
-    /// unfloat back on the source monitor still restores the home zone. No-op when
-    /// the window is untracked here (e.g. adopted fresh from another engine) or the
-    /// resolved key is unchanged. Returns true when a migration happened. Driven by
-    /// the daemon's per-window screen handlers (windowScreenChanged / windowActivated)
-    /// and by handoffReceive; the analogue of AutotileEngine's windowFocused
-    /// cross-screen migration.
+    /// Re-home a tracked window onto the store for @p newScreenId's current
+    /// context. On a screen change every membership on the screen left is
+    /// released as releaseWindowOffScreen does; the float bit, auto-snap flag
+    /// and residence move, re-stamped to the destination key's desktop. A
+    /// same-screen move only re-keys. True when it moved.
     bool migrateWindowToScreen(const QString& windowId, const QString& newScreenId);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -650,18 +637,18 @@ public:
     void setFloating(const QString& windowId, bool floating);
     QStringList floatingWindows() const;
 
-    /// The no-match float-default terminal of resolveWindowRestore, callable by
-    /// the SnapAdaptor when a deferredToTilingEngine verdict's reclaim was then
-    /// DECLINED; without it the window ended the open with no state in any
-    /// engine. No-op with a definite snap state, snapping off, or empty args.
-    /// Pins the residence and restores the free size like the in-line
-    /// terminals. @p placedBefore is the caller's pre-reclaim snapshot.
+    /// The no-match float-default terminal of resolveWindowRestore for a caller
+    /// outside it. No in-tree caller since the tile-defer channel was removed
+    /// (installed API, kept). No-op with a definite snap state, snapping off,
+    /// or empty args. Pins the residence and restores the free size like the
+    /// in-line terminals; the caller must establish that the screen snaps.
+    /// @p placedBefore is the caller's lineage snapshot (wasPlacedByPreviousLineage).
     /// @p placedBefore has no default: false lets the resize through.
     void applyNoMatchFloatDefault(const QString& windowId, const QString& screenId,
                                   PhosphorEngine::RestoreReason reason, bool placedBefore);
 
-    /// That snapshot. A tiling claim reaching takeForReopen re-binds the record
-    /// under this uuid with its own slot and leaves it there on a decline.
+    /// That snapshot, taken before anything can re-bind a slot-bearing record
+    /// under this uuid. No in-tree caller (see applyNoMatchFloatDefault).
     bool wasPlacedByPreviousLineage(const QString& windowId) const;
 
     /// Primary zone of @p windowId across the per-screen stores (empty if none).
@@ -705,17 +692,9 @@ public:
      */
     void setNavigationStateProvider(INavigationStateProvider* provider);
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Navigation (moved out of WindowTrackingAdaptor)
-    //
-    // Every method takes a PhosphorEngine::NavigationContext populated by the daemon's
-    // shortcut handler. The engine uses ctx.windowId directly rather than
-    // re-reading it from the WTA shadow, which is a step toward retiring
-    // the SnapEngine -> WTA back-reference entirely. When ctx.windowId is
-    // empty, the engine may consult m_navState->lastActiveWindowId() as a
-    // best-effort fallback -- but in the normal path the daemon always
-    // provides a resolved target.
-    // ═══════════════════════════════════════════════════════════════════════════
+    // Navigation: every verb takes the daemon's NavigationContext except
+    // switchFocusBetweenFloatingAndTiling(screenId) and rotateWindowsInLayout(clockwise,
+    // screenId); an empty ctx.windowId falls back to m_navState's last-active window.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — navigation overrides
@@ -747,14 +726,14 @@ public:
     /// via IPlacementEngine. Forwards to rotateWindowsInLayout().
     void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;
 
-    /// Re-apply the current layout to all managed windows. Forwards to
-    /// resnapToNewLayout().
+    /// Re-apply the zones the windows on ctx.screenId hold in the context in
+    /// view. Never replays a pending layout-switch buffer.
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
 
-    /// Re-emit the snap geometry for every currently-snapped (non-floating)
-    /// window so the compositor re-applies its snap border / hidden title bar
-    /// after a bridge reconnect. Does not recompute zone assignments. See
-    /// IPlacementEngine::reapplyManagedWindowAppearance().
+    /// Re-emit the zone geometry of every non-floating window snapped in view
+    /// (the shown desktop's store on a screen snap runs) so the compositor
+    /// re-applies its snap border / hidden title bar after a bridge reconnect.
+    /// See IPlacementEngine::reapplyManagedWindowAppearance().
     void reapplyManagedWindowAppearance() override;
 
     /// Unified placement model — report this window's current snap state
@@ -782,7 +761,7 @@ public:
     /// Move the focused window to the first empty zone on ctx.screenId.
     void pushToEmptyZone(const PhosphorEngine::NavigationContext& ctx) override;
 
-    /// Restore the focused window to its captured pre-snap size and unsnap.
+    /// Restore the focused window in a zone to its float-back on its screen and float it; one in no zone is refused.
     void restoreFocusedWindow(const PhosphorEngine::NavigationContext& ctx) override;
 
     /// Toggle the focused window between snapped and floating.
@@ -827,19 +806,27 @@ public:
 
     void uncommitSnap(const QString& windowId);
 
-    /// Unconfined (user-toggle) form. Also the ABI-stable signature the
-    /// installed library exported before the confinement parameter existed.
+    /// Record a window's live frame as its float-back, ahead of a user snap the
+    /// DAEMON drives (keys, snap-all, every user unfloat, the D-Bus snap), the free
+    /// frame's last chance before the commit makes the effect's capture refused.
+    /// Filed under the screen the frame is on, which a cross-screen snap is
+    /// leaving; @p screenId when no screen manager can place it. Refuses a
+    /// minimized, suspension-floated, maximized or fullscreen window.
+    void recordFreeFrameBeforeUserSnap(const QString& windowId, const QString& screenId);
+    /// The tail of every user snap the daemon drives: record the free frame the window leaves
+    /// (on @p captureScreen; nothing when empty), commit @p zoneIds on @p screenId pinned to
+    /// @p virtualDesktop (0: the window's own), record the snap intent and apply @p geometry as
+    /// the user's verb. Refuses an invalid @p geometry or no zone; the resolvers validate first.
+    void commitUserSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                        const QRect& geometry, const QString& captureScreen, int virtualDesktop = 0);
+
+    /// The ABI-stable signature exported before the confinement parameter.
     PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
-    /// @p confineToFallbackScreen refuses (returns not-found) when the
-    /// RECORDED (raw, unresolved) home screen names a different physical
-    /// monitor than @p fallbackScreen — the comparison runs BEFORE
-    /// resolveUnfloatScreen, so a home screen that no longer resolves
-    /// (monitor unplugged) also refuses rather than degrading into snapping
-    /// a foreign layout's zone onto the live screen. True for suspension
-    /// (minimize) unfloats — the minimize round trip must never move the
-    /// window across monitors, and a cross-monitor home can only be stale
-    /// state (Discussion #724). False for user float toggles, whose
-    /// cross-monitor unfloat-to-home restore is deliberate.
+    /// Not-found when the RECORDED (raw) home screen names a different
+    /// physical monitor than @p fallbackScreen, for every cause: a window
+    /// moved to another monitor forgets the zone it floated from, so a home
+    /// there can only be stale. Compared before resolveUnfloatScreen, so an
+    /// unplugged home refuses too. @p confineToFallbackScreen is inert.
     PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen,
                                                          bool confineToFallbackScreen) const;
 
@@ -892,16 +879,8 @@ public:
     QVector<PhosphorEngine::ZoneAssignmentEntry> calculateRotation(bool clockwise,
                                                                    const QString& screenFilter = QString()) const;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Effect-reported windows (runtime flag — not persisted)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void markWindowReported(const QString& windowId);
-    const QSet<QString>& effectReportedWindows() const
-    {
-        return m_effectReportedWindows;
-    }
-
+    /// Drops the state-index membership of every window not in the
+    /// (canonical) alive set. See the definition for why only the membership.
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -947,10 +926,10 @@ public:
         m_loadFn = std::move(loadFn);
     }
 
-    /// Last screen the engine saw via windowFocused. Used for OSD fallback
-    /// when a navigation failure needs to cite a screen and the live cursor
-    /// hasn't landed on one yet. Exposed as a const getter so tests can
-    /// verify the focus-tracking contract without dummy signal stubs.
+    /// Last screen the engine saw via windowFocused (each activation and each
+    /// focused-screen report). Two readers: the resnap OSD feedback's screen,
+    /// and the float verb's last screen fallback (float.cpp). A const getter
+    /// so tests can verify the focus-tracking contract without signal stubs.
     QString lastActiveScreenId() const
     {
         return m_lastActiveScreenId;
@@ -980,25 +959,15 @@ public:
     /// translation unit redefine the function and the link fails.
     void setExcludeRuleSet(const PhosphorRules::RuleSet* ruleSet);
 
-    /// Provider that builds the full WindowQuery (window class / title / role /
-    /// frame size / flags) for a live windowId. Daemon-injected, keyed by the
-    /// live windowId — the daemon resolves it from its WindowRegistry (the same
-    /// `buildContextualRuleQuery` the float / restore predicates use, so the
-    /// query carries the screen-derived ScreenId / ActiveLayout context too).
-    /// When set, exclusion evaluates a window's FULL attributes (matching the
-    /// autotile engine) instead of appId alone, and the frame size carried in
-    /// the query is checked against the minimum-window-size thresholds. When
-    /// UNSET (default) the engine falls back to the appId-only query — the
-    /// historical behaviour unit tests rely on. A null/empty optional from the
-    /// provider (metadata not yet known) also falls back to appId-only.
-    ///
-    /// @p screenHint is the screen the caller knows the window belongs to, and
-    /// exists for the window-open path: a window being restored is not in any
-    /// SnapState yet, so the daemon's own screen resolution comes back empty and
-    /// the ScreenId / ActiveLayout leaves of an Exclude rule would not resolve.
-    /// Callers that ask about an already-tracked window (the navigation actions)
-    /// pass an empty hint and let the daemon resolve the screen from its
-    /// trackers.
+    /// Provider that builds the full WindowQuery for a live windowId. Its only
+    /// producer is the daemon's buildContextualRuleQuery, which stamps the
+    /// window's attributes, ScreenId / ActiveLayout / ScreenOrientation / Mode
+    /// for @p screenHint (or the screen the daemon tracks the window on) and the
+    /// live frame, which the minimum-window-size thresholds are checked against.
+    /// Every caller passes the screen it asks about: the open path the one the
+    /// window lands on, the navigation verbs the one they act on, the drag
+    /// selector the source screen or none. Unset, or an empty optional (no
+    /// metadata yet), falls back to the appId-only query unit tests rely on.
     using ExclusionQueryProvider =
         std::function<std::optional<PhosphorRules::WindowQuery>(const QString& windowId, const QString& screenHint)>;
 
@@ -1008,6 +977,15 @@ public:
     void setExclusionQueryProvider(ExclusionQueryProvider provider)
     {
         m_exclusionQueryProvider = std::move(provider);
+    }
+    /// Builds the rule admission for an exclusion query: a rule naming a field
+    /// the query left unstamped is skipped, since a negated leaf on it would
+    /// match every window. Unset admits every rule.
+    using ExclusionAdmission =
+        std::function<std::function<bool(const PhosphorRules::Rule&)>(const PhosphorRules::WindowQuery&)>;
+    void setExclusionAdmission(ExclusionAdmission admission)
+    {
+        m_exclusionAdmission = std::move(admission);
     }
 
     /// True if @p appId matches an enabled rule in the borrowed
@@ -1029,16 +1007,13 @@ public:
     /// and applies the minimum-window-size thresholds to the query's frame
     /// size. Falls back to the appId-only path (@ref isAppIdExcluded's query
     /// shape) when no provider is set or window metadata is not yet known.
-    /// @p screenHint is forwarded to the provider — see ExclusionQueryProvider;
-    /// pass the screen the window is opening on where it is known, and leave it
-    /// empty for an already-tracked window.
-    /// Public so the unit-test layer can drive the wiring directly.
+    /// @p screenHint is forwarded to the provider (see ExclusionQueryProvider):
+    /// the screen the navigation verbs act on, the open path's landing screen,
+    /// or the drag selector's source screen.
     bool isWindowExcluded(const QString& windowId, const QString& screenHint = QString()) const;
 
 Q_SIGNALS:
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Signals (relayed via SnapAdaptor -> WTA -> D-Bus -> effect)
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ── Signals (relayed to the effect by SnapAdaptor and the WTA) ──
 
     /// Snap state changed (commit / uncommit). WTA relays to D-Bus windowStateChanged.
     void windowSnapStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& entry);
@@ -1046,22 +1021,22 @@ Q_SIGNALS:
     /// Floating state cleared as part of a commit. WTA relays as windowFloatingChanged(id, false, screen).
     void windowFloatingClearedForSnap(const QString& windowId, const QString& screenId);
 
-    /// Daemon-driven geometry application (used by autotile float restore)
+    /// Places the window a user verb is about (relayed as PlacementPurpose::UserVerb).
     void applyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
                                 const QString& screenId, bool sizeOnly);
 
-    /// Batched resnap data (routed through WTA::handleBatchedResnap for bookkeeping)
+    /// Batched resnap data, committed by SnapAdaptor's applyEngineResnap relay
     void resnapToNewLayoutRequested(const QString& resnapData);
 
     /// Request KWin effect to collect unsnapped windows and snap them all
     void snapAllWindowsRequested(const QString& screenId);
 
-    /// Batch of window-geometry updates, applied by the KWin effect in a
-    /// single operation. The engine itself only ever emits action="rotate";
-    /// the SnapAdaptor layer attaches "resnap" / "vs_reconfigure" when it
-    /// relays its own batches over the same WTA D-Bus signal ("snap_all"
-    /// batches never cross the wire — the effect builds those locally).
+    /// Window geometries the effect applies in one go; the engine itself emits only action="rotate".
     void applyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
+    /// Re-states a placement the window already has (relayed as PlacementPurpose::Restatement).
+    void restatementGeometryRequested(const QString& windowId, int x, int y, int width, int height,
+                                      const QString& zoneId, const QString& screenId);
+    void fullscreenHandBackRequested(const QString& windowId); ///< a user verb with no apply: end its fullscreen
 
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
@@ -1093,20 +1068,21 @@ private:
     SnapState* ensureStateForKey(const PhosphorEngine::PlacementStateKey& key);
 
     /// Invoke @p fn once per (window, store) zone assignment across every snap
-    /// store, with the window's zones, screen, and recorded desktop read from
-    /// that store, plus the desktop the STORE is keyed under — the engine-side
-    /// sibling of WindowTrackingService::forEachZoneAssignedWindow, shared by
-    /// the resnap / rotation producers so their per-store walks stay in
-    /// lockstep. A window present on one desktop is visited once; a window
-    /// present on several holds an assignment in each member store and is
-    /// visited once per store. @p fn must not mutate the snap stores.
-    void
-    forEachSnapAssignment(const std::function<void(const QString& windowId, const QStringList& zoneIds,
-                                                   const QString& screenId, int desktop, int storeDesktop)>& fn) const;
+    /// store, with the window's zones, screen and recorded desktop read from
+    /// that store, plus the desktop and activity the STORE is keyed under. The
+    /// engine-side sibling of WindowTrackingService::forEachZoneAssignedWindow,
+    /// shared by the resnap and rotation producers. A window held on several
+    /// desktops is visited once per member store. @p fn must not mutate them.
+    void forEachSnapAssignment(
+        const std::function<void(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                 int desktop, int storeDesktop, const QString& storeActivity)>& fn) const;
 
-    /// The desktop a restored window is being placed onto: the registry's
-    /// answer for the window, else the record's own desktop when the record
-    /// still names a zone there, else the screen's current desktop.
+    /// Snapping's master switch is off (settings wired and saying so).
+    bool snappingSwitchedOff() const;
+    /// Snapping is on and not disabled in @p key's (screen, desktop) context.
+    bool snapsInContext(const PhosphorEngine::PlacementStateKey& key) const;
+    /// The desktop a restored window lands on: the registry's answer, else the
+    /// record's when it still names a zone there, else the screen's current.
     int restoreDesktopFor(const QString& windowId, const PhosphorEngine::WindowPlacement& rec,
                           const QString& restoreScreen) const;
 
@@ -1119,11 +1095,18 @@ private:
                                                                   const PhosphorEngine::PlacementStateKey& currentKey,
                                                                   const QList<PendingMembership>& pending);
 
-    /// Clear the last-used zone on every store (per-screen + the global holder)
-    /// that currently points at one of @p removedZones. Last-used is per-key now, so
-    /// a per-screen unassign has to sweep all stores in case another context pointed
-    /// at the same zone. Call with the window's zones captured BEFORE the unassign.
-    void syncGlobalLastUsedForRemovedZones(const QStringList& removedZones);
+    /// migrateWindowToScreen onto an explicit key: a pinned commit or a
+    /// cross-desktop handoff lands in exactly the context it names.
+    bool migrateWindowToKey(const QString& windowId, const PhosphorEngine::PlacementStateKey& newKey);
+    /// Forget @p windowId's pre-float home in @p state. For a window leaving the screen.
+    void dropPreFloatHome(SnapState* state, const QString& windowId);
+    /// Release one membership the way releaseWindowOffScreen does; @p removed
+    /// collects its zones for clearGlobalLastUsedIfRemoved. True when the
+    /// store's own last-used named the zone and was cleared.
+    bool releaseMembership(const QString& windowId, const PhosphorEngine::PlacementStateKey& key, QStringList& removed);
+    /// Clear the global representative when it names one of @p removed; true
+    /// when it did. A store's own last-used clears in its unassign.
+    bool clearGlobalLastUsedIfRemoved(const QStringList& removed);
 
     /// The store whose last-used zone should drive a placement on @p screenId: the
     /// screen's own per-key store when it has a recorded last-used, else the global
@@ -1164,6 +1147,9 @@ private:
     PhosphorEngine::ScreenContextTracker m_context;
     SnapState* m_globals = nullptr;
     PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
+    // Stored and never read: zone lookups go through m_windowTracker and the
+    // adjacency resolver. Kept because the constructor parameter and this
+    // member are part of the installed class's ABI.
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     PhosphorEngine::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QPointer<QObject> m_autotileEngineObj;
@@ -1182,13 +1168,8 @@ private:
     // QObject identity of m_navState — same stale-destroyed-guard rationale
     // as m_zoneAdjacencyResolverObj.
     QPointer<QObject> m_navStateObj;
-    // Snap-mode navigation target resolver. Owned by SnapEngine — moved
-    // here in Phase 5E from WindowTrackingAdaptor. Constructed lazily on
-    // first navigation call (so the construction order isn't constrained
-    // by the fact that SnapEngine has to exist before a resolver that
-    // takes WTS + PhosphorZones::LayoutRegistry can be built).
+    // Snap-mode navigation target resolver, built on the first navigation call.
     std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
-    QSet<QString> m_effectReportedWindows;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Float helpers (src/float.cpp)
@@ -1200,15 +1181,13 @@ private:
     /// What is asking for the unfloat — one fact driving all three tier
     /// decisions, so callers cannot set them inconsistently (#724).
     enum class UnfloatCause {
-        /// Explicit user action (Meta+F, D-Bus toggle): SnapToZone rule tier
-        /// allowed, cross-monitor restore to the remembered home allowed, and
-        /// the opt-in fallback-zone tier applies. Always used for a user
-        /// toggle even when the window is still classified as a suspension
-        /// float, so a refused unminimize can never dead-end the window.
+        /// Explicit user action (Meta+F, D-Bus toggle): the SnapToZone rule
+        /// tier and the opt-in fallback-zone tier apply. Used even for a
+        /// window still classified as a suspension float, so a refused
+        /// unminimize can never dead-end it.
         UserToggle,
-        /// The minimize/unminimize round trip: no rule tier, confined to the
-        /// caller's physical monitor, and no fallback-zone tier — it restores
-        /// prior state or nothing.
+        /// The minimize/unminimize round trip: no rule tier and no
+        /// fallback-zone tier. It restores prior state or nothing.
         Suspension,
     };
     bool unfloatToZone(const QString& windowId, const QString& screenId, UnfloatCause cause);
@@ -1219,58 +1198,47 @@ private:
     /// unminimize restore lands where the window really was.
     void applyFloatGeometryUnlessMinimized(const QString& windowId, const QString& screenId);
 
-    /// Lazy-constructs m_targetResolver on first call. Returns nullptr if
-    /// the service or layout manager is missing (unit tests with stub
-    /// deps, or shutdown race where WTS/PhosphorZones::LayoutRegistry are already gone).
-    ///
-    /// When @p action is non-empty and the resolver can't be built, emits
-    /// navigationFeedback(false, action, "engine_unavailable", ...) so the
-    /// OSD shows a specific reason instead of a silent no-op. Pass an
-    /// empty @p action to skip the emit (for call sites that want to
-    /// handle the null case themselves).
+    /// Builds m_targetResolver on first call with its providers (neighbour tiling, landing refusal, zone
+    /// occupants); nullptr without the service or layout manager. A non-empty @p action then reports
+    /// navigationFeedback(false, action, "engine_unavailable", ...).
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
 
-    /// Move @p windowId to the virtual desktop adjacent to the current one in
-    /// @p direction. Re-snaps the window into the EQUIVALENT zone on the target
-    /// desktop's layout (same zone id when the layout is shared, else the
-    /// positionally-equivalent zone), updating SnapState + the placement-store
-    /// record, asking the compositor to relocate the real window
-    /// (windowDesktopMoveRequested) and applying the target zone's geometry so it
-    /// lands snapped rather than floating. Falls back to a bare desktop re-stamp
-    /// when no equivalent zone is resolvable. Used when directional move reaches a
-    /// zone-layout boundary with no neighbour output. Returns false when there is
-    /// no neighbour desktop or the window is not snapped.
+    /// Move @p windowId to the next desktop in @p direction when a move reaches a layout edge with no
+    /// neighbour output. It keeps the zones or the float it already has there, else lands in its own
+    /// zones (a shared layout) or its first zone's position (another layout), committed there with its
+    /// snap on the desktop it leaves released; with no slot only the compositor moves it. Returns false
+    /// for a window on every desktop, no neighbour desktop, or a window that is not snapped.
     bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
 
-    /// If the neighbour OUTPUT in @p direction is a DIFFERENT mode (autotile or
-    /// scrolling), defer to the daemon cross-mode handoff and return true: a move
-    /// (@p swap false) emits crossModeMoveRequested so the tiling engine inserts
-    /// the window into its stack or strip; a swap (@p swap true) emits
-    /// crossModeSwapRequested so it trades the window with the neighbour's
-    /// entry-edge tile or column. Returns false when there is no neighbour output
-    /// or it is also snap-mode (handled by the resolver's entry-zone /
-    /// cross-output-swap path).
+    /// A tiling neighbour OUTPUT in @p direction takes the window through the daemon cross-mode handoff
+    /// (crossModeMoveRequested, or crossModeSwapRequested for @p swap). False with no neighbour or a
+    /// snapping one, which falls through to the desktop axis.
     bool tryCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId, bool swap);
+    /// True when @p screenId runs a tiling mode (the live resolver, else the cascade on its desktop).
+    bool isTilingOutput(const QString& screenId) const;
+    /// Focus across into a tiling neighbour output: its engine names the entry-edge window (F422).
+    bool tryCrossModeFocus(const QString& direction, const QString& screenId);
+    /// Move @p windowId out of snapping onto @p toScreen, or onto @p toDesktop of its own screen when >= 1, where
+    /// snapping is off: its snap memory where it leaves goes, it is stated unsnapped and placed at its free geometry.
+    void moveUnsnapped(const QString& windowId, const QString& fromScreen, const QString& toScreen, int toDesktop,
+                       const QString& direction);
 
-    /// Focus a window on the virtual desktop adjacent to the current one in
-    /// @p direction (the entry window on @p screenId there), switching KWin to
-    /// it. Used when directional focus reaches a zone-layout boundary with no
-    /// neighbour output. Returns false when there is no neighbour desktop or no
-    /// window on it. @p focusedWindowId is excluded from the target desktop's
-    /// occupants so an on-all-desktops (sticky) source window can't be picked as
-    /// its own cross-desktop focus target.
+    /// Focus the entry window of the next snapping desktop in @p direction on @p screenId, switching KWin
+    /// to it: that desktop's own store in the current activity, ordered by zone number (first stepping
+    /// forward, last stepping back), floats only when no snapped window is there. Minimized windows,
+    /// windows already visible here and @p focusedWindowId itself are skipped. False when none.
     bool tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId);
 
-    /// Check whether the window is excluded from the given navigation
-    /// action by an `Exclude` or `ExcludePlacement` action in the borrowed
-    /// placement-exclusion set. Emits navigationFeedback(false, action, "excluded", ...)
-    /// and returns true when excluded so callers can early-return. False
-    /// otherwise.
+    /// True, after navigationFeedback(false, action, "excluded", ...) on @p screenId, when an Exclude /
+    /// ExcludePlacement rule or the minimum-size thresholds exclude the window on @p screenId, the
+    /// screen the verb acts on (passed as the query's hint).
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
-
-    // `isAppIdExcluded` and `isWindowExcluded` are declared in the public
-    // section above (so the unit tests can drive the wiring directly); full
-    // docstrings live with those declarations.
+    /// isWindowExcluded with the query's desktop set to @p desktop (>= 1), for a move not landed yet.
+    bool isWindowExcludedAt(const QString& windowId, const QString& screenHint, int desktop) const;
+    /// The windows snapped in @p zoneId on @p screenId in the context it shows, sorted, once each, without
+    /// @p excludeWindowId (canonical compare) and without a float that still holds a zone (F182).
+    QStringList windowsInZoneInView(const QString& zoneId, const QString& screenId,
+                                    const QString& excludeWindowId) const;
 
     /// Shared tail of both exclusion entry points: bind the lazy evaluator to
     /// the current placement-exclusion rule set (empty/null set short-circuits) and resolve
@@ -1315,43 +1283,23 @@ private:
 
     // Auto-snap entry gate. Empty until the daemon wires it; while empty
     // the engine treats every screen as active — preserving the
-    // historical default that unit tests rely on. (The predicate takes
-    // the screen and the desktop being restored onto; the activity is
-    // resolved by the daemon-side closure at call time; see the
+    // historical default that unit tests rely on. (See the
     // ShouldRestorePredicate doc above and discussion #461 item 7.)
     ShouldRestorePredicate m_shouldRestorePredicate{};
 
-    // Unsnapped-position-restore gate. Empty until the daemon wires it; while
-    // empty the engine marks floated windows floating but restores their position
-    // only on the reopening screen — the historical behaviour unit tests rely on.
-    // See RestorePositionPredicate doc above.
+    // The gates and resolvers below are empty until the daemon wires them,
+    // and each type's doc above says what an empty one means.
     RestorePositionPredicate m_restorePositionPredicate{};
-
-    // Managed (snapped-to-zone) restore gate. Empty until the daemon wires it;
-    // while empty the engine restores snapped records unconditionally — the
-    // historical behaviour unit tests rely on. See ManagedRestorePredicate.
     ManagedRestorePredicate m_managedRestorePredicate{};
-
-    // Live placement-mode resolver. Empty until the daemon wires it; while empty
-    // the engine falls back to the layout registry's cascade. See LiveModeResolver
-    // doc above.
     LiveModeResolver m_liveModeResolver{};
-    /// See setTilingEngineLiveResolver.
     TilingEngineLiveResolver m_tilingEngineLiveResolver{};
-
-    // Rule-driven open-floating gate. Empty until the daemon wires it; while
-    // empty no window is rule-floated. See FloatPredicate doc above.
     FloatPredicate m_floatPredicate{};
-
-    // Rule-driven unfloat-fallback gate. Empty until the daemon wires it;
-    // while empty the ISnapSettings bool decides alone. See
-    // UnfloatFallbackPredicate doc above.
     UnfloatFallbackPredicate m_unfloatFallbackPredicate{};
-
-    // Rule-driven open-placement resolver (SnapToZone). Empty until the daemon
-    // wires it; while empty no window is rule-snapped. See PlacementZonesResolver
-    // doc above.
     PlacementZonesResolver m_placementZonesResolver{};
+
+    // Appended last (installed header). Created by the first parkOutput.
+    std::unique_ptr<SnapEvacueePark> m_evacueePark;
+    ExclusionAdmission m_exclusionAdmission{};
 };
 
 } // namespace PhosphorSnapEngine

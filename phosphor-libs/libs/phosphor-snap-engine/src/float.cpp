@@ -150,14 +150,11 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
 
     if (shouldFloat) {
         // NOTE: deliberately NO re-home to `screenId` here. Migrating the
-        // window to the caller's live screen first looks like it would fix
-        // the stale-home problem at its source, but SnapState::migrateWindowTo
-        // carries the ZONE assignment across verbatim while rewriting the live
-        // screen — so unsnapForFloat below would then capture monitor A's zone
-        // id paired with monitor B as its home screen. That is strictly worse
-        // than a stale home: the later unfloat resolves a foreign layout's
-        // zone onto B (zone lookup spans all layouts), and the suspension
-        // confinement can never fire because home == live by construction.
+        // window to the caller's live screen first would unassign its zone on
+        // the screen it is snapped on before unsnapForFloat below could
+        // capture it, so the float would remember no home at all. A home
+        // naming another monitor than the one a later unfloat runs on is
+        // refused there instead.
         m_windowTracker->unsnapForFloat(windowId);
         // Own store first — see toggleWindowFloat's float branch for why the
         // routed WTS write alone cannot be trusted to land here, and why the
@@ -171,7 +168,7 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
     } else {
         // Cause derived from the live classification: a minimize-suspension
         // unfloat restores prior state only, a user float toggle gets the
-        // rule tier and the cross-monitor go-home restore.
+        // rule tier and the fallback-zone tier.
         // No null guard on the tracker: this function already derefs it
         // unguarded on the float branch above, per this file's TRACKER CONTRACT.
         const UnfloatCause cause =
@@ -207,6 +204,12 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId,
     // the fallback-zone tier — a window that was not snapped at minimize time
     // must come back floating, not freshly snapped.
     const bool suspension = cause == UnfloatCause::Suspension;
+    // The frame a user unfloat leaves is the next float's float-back, from
+    // Meta+F and the D-Bus float calls alike (F52). A suspension's frame is
+    // the hidden rect, which the helper refuses anyway.
+    if (!suspension) {
+        recordFreeFrameBeforeUserSnap(windowId, screenId);
+    }
 
     // Highest-priority un-float target: a matched SnapToZone rule. Toggling a
     // window out of float lands it in the rule's zones, not a stale pre-float
@@ -241,23 +244,18 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId,
     UnfloatResult unfloat = resolveUnfloatGeometry(windowId, screenId, /*confineToFallbackScreen=*/suspension);
     if (!unfloat.found) {
         // Not-found here means either "no pre-float zone at all" (a
-        // never-snapped window that defaulted to floating) or, under
-        // confinement, "the remembered home names another monitor — refused".
-        // A SUSPENSION unfloat stops in both cases: the round trip restores
-        // prior state only, and the fallback tier below would snap the window
-        // FRESH — on the stale tracked screen first, no less — which is
-        // exactly the cross-monitor teleport the confinement refuses. The
-        // refusal deliberately leaves the pre-float capture and placement
-        // record untouched: they are the remembered home a later USER float
-        // toggle is entitled to restore to (the deliberate cross-monitor
-        // go-home behaviour).
+        // never-snapped window that defaulted to floating) or "the remembered
+        // home names another monitor", refused for every cause. A SUSPENSION
+        // unfloat stops in both cases: the round trip restores prior state
+        // only, and the fallback tier below would snap the window FRESH, on
+        // the stale tracked screen first, no less.
         if (suspension) {
             return false;
         }
-        // User toggle with no pre-float zone: with the unfloatFallbackToZone
-        // setting on, snap it to a fallback zone instead of refusing;
-        // otherwise return false so the caller keeps it floating with
-        // feedback.
+        // User toggle with no pre-float zone on this monitor: with the
+        // unfloatFallbackToZone setting on, snap it to a fallback zone on the
+        // monitor it is on instead of refusing; otherwise return false so the
+        // caller keeps it floating with feedback.
         unfloat = resolveFallbackUnfloatGeometry(windowId, screenId);
         if (!unfloat.found) {
             return false;
@@ -279,20 +277,23 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId,
     // future mode transition restores it snapped, not floating (single source of
     // truth).
 
-    // Commit the snap via the unified orchestration. User-initiated because
-    // the user just toggled float off — they want this snap to update the
-    // last-used-zone tracking. commitSnap handles clearing floating state
-    // (and emits windowFloatingClearedForSnap which WTA relays as
+    // Commit the snap via the unified orchestration. A user toggle is
+    // user-initiated: the user just snapped the window back, so it records
+    // the last-used zone. A SUSPENSION unfloat (an unminimize) only puts the
+    // window back where it was, so it commits as a replacement and writes no
+    // user-snap bookkeeping (F484). commitSnap handles clearing floating
+    // state (and emits windowFloatingClearedForSnap which WTA relays as
     // windowFloatingChanged), plus the zone assignment.
     // Desktop deliberately left at 0 (= the restore screen's CURRENT desktop).
     // The rule tier above forwards a routed desktop because RouteToDesktop
     // also MOVES the window there; an unfloat has no such move, so stamping a
     // placement record's remembered desktop would record occupancy on a
     // desktop the window is not actually on after a desktop switch.
+    const SnapIntent unfloatIntent = suspension ? SnapIntent::AutoReplaced : SnapIntent::UserInitiated;
     if (unfloat.zoneIds.size() > 1) {
-        commitMultiZoneSnap(windowId, unfloat.zoneIds, unfloat.screenId, SnapIntent::UserInitiated);
+        commitMultiZoneSnap(windowId, unfloat.zoneIds, unfloat.screenId, unfloatIntent);
     } else {
-        commitSnap(windowId, unfloat.zoneIds.first(), unfloat.screenId, SnapIntent::UserInitiated);
+        commitSnap(windowId, unfloat.zoneIds.first(), unfloat.screenId, unfloatIntent);
     }
 
     // Carry the (representative) zone id, NOT an empty string. The KWin effect's
@@ -302,8 +303,15 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId,
     // (→ markWindowSnapped, which re-applies it). Unfloat-to-zone IS a snap
     // commit, so an empty zoneId here would leave the re-snapped window wearing
     // its floating chrome (no hidden title bar, no snap border).
-    Q_EMIT applyGeometryRequested(windowId, unfloat.geometry.x(), unfloat.geometry.y(), unfloat.geometry.width(),
-                                  unfloat.geometry.height(), unfloat.zoneIds.first(), unfloat.screenId, false);
+    // A suspension's return re-states the zone the window was snapped in.
+    if (suspension) {
+        Q_EMIT restatementGeometryRequested(windowId, unfloat.geometry.x(), unfloat.geometry.y(),
+                                            unfloat.geometry.width(), unfloat.geometry.height(),
+                                            unfloat.zoneIds.first(), unfloat.screenId);
+    } else {
+        Q_EMIT applyGeometryRequested(windowId, unfloat.geometry.x(), unfloat.geometry.y(), unfloat.geometry.width(),
+                                      unfloat.geometry.height(), unfloat.zoneIds.first(), unfloat.screenId, false);
+    }
     return true;
 }
 
@@ -345,6 +353,9 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
     }
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "applyGeometryForFloat:" << windowId << "no free geometry on record — leaving in place";
+    // Nothing moves the window, so a fullscreen one would stay covering the
+    // monitor as a float: the effect ends its fullscreen in place (F546).
+    Q_EMIT fullscreenHandBackRequested(windowId);
     return false;
 }
 
@@ -432,13 +443,10 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
                 && (slot.state == WindowPlacement::stateFloating() || slot.state == WindowPlacement::stateSnapped())) {
                 zoneIds = recordZones;
                 // Home-screen hint. Exact for a stale SNAPPED slot (captured as the
-                // snap screen); an approximation for a FLOATING slot, whose record
-                // screen is the screen the window was floating on at capture time —
-                // after a cross-monitor drift while floating that is the drift
-                // monitor, not the pre-float home. resolveUnfloatScreen validates it
-                // and falls back to the caller's live screen, and cross-monitor
-                // unfloat-to-home is allowed anyway (#724), so the approximation is
-                // bounded.
+                // snap screen); for a FLOATING slot it is the screen the window was
+                // floating on at capture time, which is the home monitor for a slot
+                // written before a cross-monitor move. The refusal below then turns
+                // that leftover away; a capture after the move carries no home.
                 preFloatScreenId = rec->screenId;
                 qCInfo(PhosphorSnapEngine::lcSnapEngine)
                     << "resolveUnfloatGeometry:" << windowId << "no live pre-float capture — using placement record's"
@@ -450,36 +458,29 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         return result;
     }
 
-    // Cross-monitor restore is ALLOWED for user float toggles (Discussion #724
-    // follow-up): unfloat returns the window to its remembered home zone
-    // regardless of which monitor it is currently on. resolveUnfloatScreen
-    // prefers the pre-float (home) screen, so the zone resolves on the monitor
-    // the window was snapped on and the window goes home.
-    //
-    // A SUSPENSION (minimize) unfloat is confined to the caller's screen
-    // instead (Discussion #724, the 3.3.x regression): the minimize round trip
-    // exists to put the window back where it was before the minimize, so a
-    // home screen naming a different physical monitor can only be stale state
-    // — a pre-float capture or placement-record snap slot left behind by a
-    // cross-monitor move that bypassed windowScreenChanged (drag routes) and
-    // handoffRelease (which deliberately preserves the capture). Restoring it
-    // would teleport the unminimized window across monitors. Refuse — the
-    // caller keeps the window floating where it is. The comparison uses the
-    // RAW home screen, not resolveUnfloatScreen's output: for a suspension
-    // unfloat the caller's screen is the effect's authoritative live output,
-    // and a home screen that no longer resolves must also refuse rather than
-    // degrade into snapping a foreign layout's zone onto the live screen.
-    // Fail-open on an EMPTY id on either side is deliberate and benign: an
-    // empty home screen makes resolveUnfloatScreen fall to the caller's live
-    // screen (a same-monitor restore), and an empty fallbackScreen only occurs
-    // for engine-internal callers whose restore then resolves on the home
-    // screen — neither combination can cross monitors.
-    if (confineToFallbackScreen && !preFloatScreenId.isEmpty() && !fallbackScreen.isEmpty()
+    // An unfloat never restores across monitors, whatever asked for it. A
+    // floating window moved to another monitor forgets the zone it floated
+    // from (the move drops the capture), so a home naming a different
+    // physical monitor than the caller's can only be stale: a capture or
+    // placement-record slot a move left behind on a path that does not drop
+    // it. Restoring it would throw the window back to the monitor it left.
+    // Not found here sends a user toggle on to the fallback-zone tier, which
+    // places it on the monitor it is on when "Unfloat to a zone when there is
+    // no previous zone" is on, and a suspension unfloat leaves it floating.
+    // The comparison uses the RAW home screen, not resolveUnfloatScreen's
+    // output, so a home screen that no longer resolves (monitor unplugged)
+    // also refuses rather than degrading into snapping a foreign layout's
+    // zone onto the live screen. Fail-open on an EMPTY id on either side is
+    // deliberate and benign: an empty home makes resolveUnfloatScreen fall to
+    // the caller's live screen, and an empty fallbackScreen only occurs for
+    // engine-internal callers whose restore then resolves on the home screen.
+    // Neither can cross monitors. confineToFallbackScreen is inert.
+    Q_UNUSED(confineToFallbackScreen)
+    if (!preFloatScreenId.isEmpty() && !fallbackScreen.isEmpty()
         && !PhosphorIdentity::VirtualScreenId::samePhysical(preFloatScreenId, fallbackScreen)) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine)
-            << "resolveUnfloatGeometry:" << windowId << "suspension home screen" << preFloatScreenId
-            << "is a different monitor than the live screen" << fallbackScreen
-            << "— not restoring across monitors, keeping the window floating";
+            << "resolveUnfloatGeometry:" << windowId << "home screen" << preFloatScreenId
+            << "is a different monitor than the live screen" << fallbackScreen << "— not restoring across monitors";
         return result;
     }
     const QString restoreScreen = resolveUnfloatScreen(preFloatScreenId, fallbackScreen);
@@ -625,88 +626,79 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     // adopted fresh from another engine (untracked here). This also moves the
     // per-window state (floating bit, live screen rewritten to the
     // destination) so screenForTrackedWindow reflects the new monitor (#724);
-    // the pre-float zone rides along UNCHANGED (behaviour A).
-    migrateWindowToScreen(ctx.windowId, ctx.toScreenId);
+    // across monitors the zone and the pre-float home stay behind. The key
+    // carries the handoff's desktop: re-homing onto the screen's current one
+    // and then placing on ctx.toDesktop left the window a member of both.
+    PhosphorEngine::PlacementStateKey arrivalKey = currentKeyForScreen(ctx.toScreenId);
+    if (ctx.toDesktop > 0) {
+        arrivalKey.desktop = ctx.toDesktop;
+    }
+    // A window arriving on a desktop where it already holds zones keeps them
+    // (F611). Read before the migrate, which can move another context's data
+    // into the arrival key.
+    QStringList landing = ctx.sourceZoneIds;
+    if (ctx.toDesktop > 0) {
+        const QString canonical = canonicalWindowId(ctx.windowId);
+        const SnapState* const arrival = m_states.stateForKey(arrivalKey);
+        if (arrival && holdsWindowInState(canonical, arrival)) {
+            if (const QStringList kept = arrival->zonesForWindow(canonical); !kept.isEmpty()) {
+                landing = kept;
+            }
+        }
+    }
+    migrateWindowToKey(ctx.windowId, arrivalKey);
+    // The migrate only reaches a store the window is a member of. A home kept
+    // where it is not (a tiling engine took it and the snap release kept the
+    // capture, or it was never re-keyed) still answers every pre-float lookup,
+    // so one naming another screen than the arrival goes here too.
+    for (SnapState* state : m_states.states()) {
+        const QString home = state ? state->preFloatScreen(ctx.windowId) : QString();
+        if (!home.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(home, ctx.toScreenId)) {
+            dropPreFloatHome(state, ctx.windowId);
+        }
+    }
 
-    if (!ctx.sourceZoneIds.isEmpty()) {
-        QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);
+    if (!landing.isEmpty()) {
+        const QRect zoneGeo = m_windowTracker->resolveZoneGeometry(landing, ctx.toScreenId);
         if (zoneGeo.isValid()) {
+            // A desktop not in view is committed pinned to it, so the arrival
+            // is stated snapped to the effect like any other commit (F534's
+            // handoff sibling); a commit clears any float bit it carries.
             const int curDesktop = currentVirtualDesktopForScreen(ctx.toScreenId);
-            if (ctx.toDesktop > 0 && ctx.toDesktop != curDesktop) {
-                // Cross-DESKTOP handoff: the target desktop isn't the visible one,
-                // so assign the snap slot directly on SnapState for that desktop
-                // (commitSnap would stamp the current desktop) and refresh the
-                // placement-store record. This is the same path tryCrossDesktopMove
-                // uses, and it is safe to bypass commitSnap's WTS orchestration
-                // here: this SnapState is a store the WTS facade queries through the
-                // snap-state resolver (Daemon wires setSnapStateResolver()), so zoneForWindow et al.
-                // see this assignment; the snap chrome is applied below via the
-                // non-empty-zoneId applyGeometryRequested (→ markWindowSnapped); and
-                // persistence flows through the placement-store record. Every
-                // caller that sets toDesktop (the cross-desktop move paths)
-                // passes wasFloating==false, so there is no floating flag to
-                // clear in THIS branch; other handoffReceive callers land in
-                // the tail below.
-                // The cross-desktop callers' wasFloating==false invariant,
-                // enforced rather than comment-only: debug asserts, release
-                // clears the flag so a violating caller cannot leave a
-                // floating bit dangling behind the direct slot assignment.
-                Q_ASSERT(!ctx.wasFloating);
-                if (Q_UNLIKELY(ctx.wasFloating)) {
-                    qCWarning(PhosphorSnapEngine::lcSnapEngine)
-                        << "handoffReceive: cross-desktop handoff with wasFloating=true for" << ctx.windowId
-                        << "— clearing the float before the slot assignment";
-                    // Own store first, same ownership rule as every float
-                    // write in this file: the routed WTS clear can no-op or
-                    // misroute mid-transition.
-                    setFloating(ctx.windowId, false);
-                    m_windowTracker->setWindowFloating(ctx.windowId, false);
-                }
-                // Pinned to the destination desktop's store (see
-                // stateForWindowOnScreen): the handoff names it.
-                SnapState* targetState = stateForWindowOnScreen(ctx.windowId, ctx.toScreenId, ctx.toDesktop);
-                if (ctx.sourceZoneIds.size() > 1) {
-                    targetState->assignWindowToZones(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, ctx.toDesktop);
-                } else {
-                    targetState->assignWindowToZone(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId,
-                                                    ctx.toDesktop);
-                }
-                // Gate at the DESTINATION desktop: the daemon routed this
-                // handoff here because (screen, toDesktop) is snapping, but
-                // the screen's visible desktop may be a tiling one, and the
-                // plain capture's current-desktop gate then refused — so the
-                // durable record silently kept the OLD desktop and the next
-                // login restored the window there.
-                if (auto placement = capturePlacementAtDesktop(ctx.windowId, ctx.toDesktop)) {
-                    placement->virtualDesktop = ctx.toDesktop;
+            const int pinned = (ctx.toDesktop > 0 && ctx.toDesktop != curDesktop) ? ctx.toDesktop : 0;
+            if (landing.size() > 1) {
+                commitMultiZoneSnap(ctx.windowId, landing, ctx.toScreenId, SnapIntent::UserInitiated, pinned);
+            } else {
+                commitSnap(ctx.windowId, landing.first(), ctx.toScreenId, SnapIntent::UserInitiated, pinned);
+            }
+            // Gate at the DESTINATION desktop: the daemon routed this handoff
+            // here because (screen, toDesktop) is snapping, but the screen's
+            // visible desktop may be a tiling one, and the plain capture's
+            // current-desktop gate then refused, so the durable record kept
+            // the OLD desktop and the next login restored the window there.
+            if (pinned > 0) {
+                if (auto placement = capturePlacementAtDesktop(ctx.windowId, pinned)) {
+                    placement->virtualDesktop = pinned;
                     m_windowTracker->placementStore().record(std::move(*placement));
                 } else {
-                    // Mirror tryCrossDesktopMove: surface the SnapState↔placement
-                    // divergence rather than letting it hide.
                     qCDebug(PhosphorSnapEngine::lcSnapEngine)
                         << "handoffReceive: capturePlacement miss for" << ctx.windowId
-                        << "— placement-store desktop not updated to" << ctx.toDesktop;
+                        << "— placement-store desktop not updated to" << pinned;
                 }
-            } else if (ctx.sourceZoneIds.size() > 1) {
-                commitMultiZoneSnap(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, SnapIntent::UserInitiated);
-            } else {
-                commitSnap(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId, SnapIntent::UserInitiated);
             }
             // Non-empty zoneId so the effect routes this cross-engine snap to
             // markWindowSnapped (snap chrome), not clearWindowSnapped — see the
             // matching note in unfloatToZone().
             Q_EMIT applyGeometryRequested(ctx.windowId, zoneGeo.x(), zoneGeo.y(), zoneGeo.width(), zoneGeo.height(),
-                                          ctx.sourceZoneIds.first(), ctx.toScreenId, false);
+                                          landing.first(), ctx.toScreenId, false);
             return;
         }
     }
 
     const int currentDesktop = ctx.toDesktop > 0 ? ctx.toDesktop : currentVirtualDesktopForScreen(ctx.toScreenId);
     // Re-homing already happened at the top of the function (it must cover the
-    // zone-resolved branches too); a USER unfloat on any monitor restores the
-    // home zone (cross-monitor restore is allowed for float toggles; only
-    // suspension unfloats carry the cross-monitor refusal — see
-    // resolveUnfloatGeometry).
+    // zone-resolved branches too). A home that names another monitor is
+    // refused by any later unfloat (resolveUnfloatGeometry).
     if (!ctx.wasFloating) {
         // Explicit cross-mode MOVE of a MANAGED window whose source zones did
         // not resolve on this screen (foreign zone ids after a layout change).
@@ -757,12 +749,20 @@ void SnapEngine::handoffRelease(const QString& windowId)
     // feeds tryCrossDesktopFocus) would offer a window the destination engine
     // now owns. The pre-float capture is deliberately PRESERVED (see
     // testHandoffRelease_preservesPreFloatCapture): a return handoff may
-    // consult it for size restoration.
-    const auto releaseFrom = [this, &windowId](SnapState* state) {
+    // consult it for size restoration. This release has no destination, so
+    // it cannot tell a cross-monitor handoff from a same-monitor mode flip;
+    // the receiving side forgets a home on another monitor (the daemon's
+    // float relays clear it, and every unfloat refuses one).
+    //
+    // Each store's unassign clears its own last-used naming the zone; only the
+    // global representative is swept after, so another screen's store keeps
+    // its last-used of the same zone id in a shared layout (F167).
+    QStringList removed;
+    bool lastUsedCleared = false;
+    const auto releaseFrom = [&windowId, &removed, &lastUsedCleared](SnapState* state) {
         if (state->isWindowSnapped(windowId)) {
-            const QStringList removedZones = state->zonesForWindow(windowId);
-            state->unassignWindow(windowId);
-            syncGlobalLastUsedForRemovedZones(removedZones);
+            removed += state->zonesForWindow(windowId);
+            lastUsedCleared |= state->unassignWindow(windowId).lastUsedZoneCleared;
         }
         if (state->isFloating(windowId)) {
             state->setFloating(windowId, false);
@@ -798,6 +798,10 @@ void SnapEngine::handoffRelease(const QString& windowId)
     // The global holder carries the screenless float bookkeeping no
     // membership names (and is the store an untracked window resolves to).
     releaseFrom(m_globals);
+    lastUsedCleared |= clearGlobalLastUsedIfRemoved(removed);
+    if (lastUsedCleared && m_windowTracker) {
+        m_windowTracker->markLastUsedZoneDirty();
+    }
     if (kept.isEmpty()) {
         // Nothing of the window is snapping's any more: drop the reverse-map
         // record so this engine no longer claims it.

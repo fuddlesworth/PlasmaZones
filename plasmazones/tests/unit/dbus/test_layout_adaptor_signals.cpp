@@ -22,6 +22,7 @@
  */
 
 #include <QTest>
+#include <QGuiApplication>
 #include <QDBusVariant>
 #include <QScopeGuard>
 #include <QSignalSpy>
@@ -29,6 +30,7 @@
 #include <limits>
 
 #include "dbus/layoutadaptor/layoutadaptor.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -488,6 +490,47 @@ private Q_SLOTS:
         // rather than an inert fixture.
         m_adaptor->assignLayoutToScreenDesktop(screen, 1, m_layoutId);
         QVERIFY(m_adaptor->hasExplicitAssignmentForScreenDesktop(screen, 1));
+    }
+
+    // A save batch's global active layout lands after its apply (F724). Set
+    // at once, the active-layout change pruned the windows' zones before the
+    // apply's resnap could read them, and the apply carried nothing.
+    void batchedAssignmentSetsActiveLayoutAfterApply()
+    {
+        // The offscreen platform ctest runs under gives its screen no
+        // identity, so the primary-screen write has nothing to name there.
+        const QString primaryId = PhosphorScreens::ScreenIdentity::identifierFor(QGuiApplication::primaryScreen());
+        if (primaryId.isEmpty()) {
+            QSKIP("the primary screen has no identifier on this platform");
+        }
+        PhosphorZones::Layout* first = m_layoutManager->layoutById(QUuid::fromString(m_layoutId));
+        QVERIFY(first);
+        m_layoutManager->setActiveLayout(first);
+        auto* second = new PhosphorZones::Layout(QStringLiteral("SecondLayout"));
+        second->addZone(new PhosphorZones::Zone(QRectF(0.0, 0.0, 1.0, 1.0)));
+        m_layoutManager->addLayout(second);
+
+        QStringList order;
+        connect(m_adaptor, &LayoutAdaptor::assignmentChangesApplied, this, [&order]() {
+            order.append(QStringLiteral("applied"));
+        });
+        connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this, [&order]() {
+            order.append(QStringLiteral("active"));
+        });
+
+        m_adaptor->setSaveBatchMode(true);
+        m_adaptor->setAllScreenAssignments(QVariantMap{{primaryId, second->id().toString()}});
+        QVERIFY2(order.isEmpty(), "the active layout waits for the batch close");
+        m_adaptor->applyAssignmentChanges();
+        QCOMPARE(order, (QStringList{QStringLiteral("applied"), QStringLiteral("active")}));
+        QCOMPARE(m_layoutManager->activeLayout(), second);
+
+        // Outside a batch the write applies at once, and the active layout
+        // follows its apply.
+        order.clear();
+        m_adaptor->assignLayoutToScreen(primaryId, m_layoutId);
+        QCOMPARE(order, (QStringList{QStringLiteral("applied"), QStringLiteral("active")}));
+        QCOMPARE(m_layoutManager->activeLayout(), first);
     }
 
 private:

@@ -2,28 +2,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
-#include "desktopvisibility.h"
 #include "shader_internal.h"
+#include "paint_internal.h"
 #include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/RetargetPolicy.h>
-#include <PhosphorIdentity/VirtualScreenId.h>
-#include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorProtocol/ServiceConstants.h>
 
 #include <effect/effecthandler.h>
 #include <window.h>
 
 #include <QLoggingCategory>
 #include <QPointer>
-#include <QScopeGuard>
-#include <QTimer>
 
 #include "tilinghandler/tilinghandler.h"
 #include "compositor/windowanimator.h"
 #include "handlers/dragtracker.h"
-#include "handlers/screenchangehandler.h"
 
 namespace PlasmaZones {
 
@@ -52,735 +46,60 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     if (!w)
         return;
 
-    // Idempotency guard. Every connect below uses a lambda slot, which rules out
-    // Qt::UniqueConnection, so a second call for the same window would silently
-    // double each per-window handler — every geometry change handled twice, every
-    // push marshalled twice. The two callers' window sets are disjoint by
-    // construction (see the member's declaration), so this never fires today; it
-    // is here so that stays true when a third caller appears.
+    // Idempotency guard. Most connects below take a lambda slot, and
+    // Qt::UniqueConnection cannot de-duplicate a functor (it covers
+    // member-function slots only), so a second call for the same window would
+    // silently double each per-window handler — every geometry change handled
+    // twice, every push marshalled twice. The two callers' window sets are
+    // disjoint by construction (see the member's declaration), so this never
+    // fires today; it is here so that stays true when a third caller appears.
     if (m_wiredWindows.contains(w)) {
         return;
     }
     m_wiredWindows.insert(w);
+
+    // A maximize-on or fullscreen-on edge: KWin's restore rect is the frame the
+    // window left, a free spot the daemon keeps as its float-back (F215). The
+    // daemon refuses it for a window in a zone or on a tile. Nothing is sent
+    // when there is no restore rect (it equals the frame, or the window is a
+    // windowed-fullscreen or parked strip tile, which freeGeometryForCapture
+    // answers with an invalid rect).
+    const auto pushRestoreRect = [this](KWin::EffectWindow* window) {
+        if (!shouldHandleWindow(window)) {
+            return;
+        }
+        const QString windowId = getWindowId(window);
+        const QRect geom = freeGeometryForCapture(window, QRectF(window->frameGeometry())).toRect();
+        if (windowId.isEmpty() || !geom.isValid() || geom == window->frameGeometry().toRect()) {
+            return;
+        }
+        PhosphorProtocol::ClientHelpers::fireAndForget(
+            this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+            {windowId, geom.x(), geom.y(), geom.width(), geom.height(), getWindowScreenId(window),
+             /*overwrite=*/true},
+            QStringLiteral("storePreTileGeometry - maximize restore rect"));
+    };
 
     // Recover the compositor's move state for a window already being dragged
     // when we wired it. The start signal we connect below has come and gone for
     // such a window (effect reload or compositor restart mid-gesture), so
     // without this the tracker would report no compositor move for the rest of
     // that drag.
-    if (m_dragTracker) {
-        m_dragTracker->noteWiredWindowMoveState(w);
-    }
+    m_dragTracker->noteWiredWindowMoveState(w);
 
-    // Virtual-desktop set changes (departure / arrival arms and the stamp they
-    // diff against) live in window_desktop_connections.cpp.
-    wireDesktopChangeHandler(w);
+    // Desktop and activity set changes (the classified edit and the stamp it
+    // is diffed against) live in window_desktop_connections.cpp.
+    wireContextChangeHandlers(w);
 
-    // Detect when a window moves between monitors (e.g., "Move to Screen Right").
-    // KWin::Window::outputChanged fires once when the window's output property changes.
-    // Transfer the window from the old screen's autotile state to the new screen's state,
-    // and unsnap any snapped window that crosses screens.
-    KWin::Window* kw = w->window();
-    if (kw) {
-        QPointer<KWin::EffectWindow> safeW = w;
-        // Track the window's screen ID so we can detect cross-screen moves for snapping windows
-        // (not tracked by the autotile handler's m_notifiedWindowScreens).
-        m_trackedScreenPerWindow[w] = getWindowScreenId(w);
-        // Flags-settle eviction backstop: a client can set keep-above,
-        // skip-switcher or its transient parent AFTER mapping (Yakuake
-        // queues the first two in its map-time request burst; another client
-        // may flip one seconds later). Each of those flips a structural
-        // placement filter, and without these the map-time tileability
-        // verdict was permanent — the pre-settle window got inserted,
-        // focused and column-sized. The one-tick routing defer in
-        // slotWindowAdded harvests the same-burst case before any insert;
-        // these catch the late case and release the window
-        // (reevaluateWindowEligibility gates itself on announced windows, so
-        // the connection is free for everything else).
-        //
-        // transientChanged / modalChanged are the arms the keep-above pair
-        // could not reach: on Wayland an xdg_toplevel's set_parent and
-        // set_modal arrive as their own requests after the initial commit,
-        // so a dialog can map as a parentless normal toplevel and only
-        // become transient a beat later. Both are structural rejects in
-        // shouldHandleWindow and isTileableWindow, and window TYPE has no
-        // signal of its own, so transientChanged is also the only handle on
-        // the isDialog() reject for clients whose dialog type KWin derives
-        // from the transient relationship.
-        //
-        // What this does NOT cover, so nobody re-derives it from the
-        // Yakuake bug report: a dialog whose parent toplevel is destroyed
-        // BEFORE the dialog maps. Measured live 2026-08-30 — Yakuake's
-        // dropdown closed 32 ms before its First Run dialog arrived, so
-        // transientFor() was null permanently rather than late, and the
-        // dialog presented as a plain normal toplevel (resizable,
-        // unbounded maxSize, not special, not modal) that KWin never
-        // revises. No signal fires because no state changes, so neither
-        // these arms nor a longer settle defer can catch it; an Exclude
-        // rule is the only lever.
-        connect(kw, &KWin::Window::keepAboveChanged, this, [this, safeW](bool) {
-            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
-        });
-        connect(kw, &KWin::Window::skipSwitcherChanged, this, [this, safeW]() {
-            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
-        });
-        connect(kw, &KWin::Window::transientChanged, this, [this, safeW]() {
-            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
-        });
-        connect(kw, &KWin::Window::modalChanged, this, [this, safeW]() {
-            m_tilingHandler->reevaluateWindowEligibility(safeW.data());
-        });
-        connect(kw, &KWin::Window::outputChanged, this, [this, safeW]() {
-            if (!safeW || safeW->isDeleted()) {
-                return;
-            }
-            // Daemon-driven geometry applies must not be mistaken for user
-            // moves (symmetric with the frameGeometryChanged VS-crossing
-            // handler below). This matters for the scrolling engine: parked
-            // columns sit ENTIRELY outside the screen rect, so on a
-            // multi-head layout the parked frame's centre can land on the
-            // neighbouring output — KWin fires outputChanged and, without
-            // this guard, the parked window would be handed to the other
-            // screen's engine mid-apply.
-            if (m_daemonGate.inGeometryApply) {
-                return;
-            }
-            const QString newScreenId = getWindowScreenId(safeW);
-            const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
-            m_trackedScreenPerWindow[safeW] = newScreenId;
-            // A cross-screen move changes the Mode/screenId inputs of the
-            // window's cached rule verdict (tiling vs scrolling screens
-            // especially); nothing else invalidates it when the window stays
-            // tiled through the move. The invalidation itself is issued
-            // below, once the involuntary-move and mid-drag gates have been
-            // applied — an unconditional one here bypassed both (and ran the
-            // per-window decoration rebuild mid-drag, which the drag deferral
-            // exists to avoid).
-
-            // Detect involuntary moves up front: when a monitor drops out
-            // (DPMS standby on Wayland, hotplug-unplug) KWin reassigns the
-            // windows that were on it to a remaining output and fires
-            // outputChanged for each — even though the user did nothing. Both
-            // the autotile and snapping paths below must skip these, because
-            // routing them through the normal cross-screen logic would either
-            // tile a window from the disabled monitor into the active
-            // autotile zone (discussion #527) or fire a spurious unsnap.
-            // Recovery is owned by the daemon's virtualScreensReconfigured /
-            // ScreenChangeHandler debounce, which resettles assignments once
-            // the screen change has stopped chattering.
-            bool oldScreenStillConnected = false;
-            for (const auto* output : KWin::effects->screens()) {
-                if (outputScreenId(output) == oldScreenId) {
-                    oldScreenStillConnected = true;
-                    break;
-                }
-            }
-            const bool involuntaryMove = !oldScreenId.isEmpty()
-                && (!oldScreenStillConnected || m_screenChangeHandler->isScreenChangeInProgress());
-
-            // Delegate autotile handling (autotile→autotile, autotile→snapping, etc.)
-            // This must run even during drag so the autotile engine removes the
-            // window from the old screen's tiling state immediately. The
-            // involuntary-move guard is the symmetric partner of the snapping
-            // guard further down — before #527, only the snapping path was
-            // protected and KWin's orphan-reassignment got mistaken for the
-            // window genuinely entering autotile.
-            if (!involuntaryMove) {
-                m_tilingHandler->handleWindowOutputChanged(safeW);
-            }
-
-            // A genuine screen change stales this window's cached rule verdict.
-            // The verdict cache is keyed on (windowId, rule-set revision) and
-            // neither moves here, while ScreenId, ScreenOrientation and (since the
-            // ActiveLayout wire) the screen's active layout are all per-screen
-            // match inputs — so without this the window keeps matching against the
-            // monitor it came FROM, indefinitely, because two monitors sitting on
-            // unchanged layouts produce no broadcast to correct it.
-            //
-            // Gated exactly like the daemon notify below: not for KWin's
-            // orphan-reassignment when a monitor drops out, and not mid-drag,
-            // where the drag system owns the transitions and the deferred flush's
-            // decoration rebuild has not been established as safe.
-            //
-            // Mid-drag the invalidation is deferred, not dropped: the id goes
-            // into m_dragSuppressedRuleInvalidations and callEndDrag drains it
-            // once the daemon's outcome has been applied. Nothing at drag end
-            // could rediscover the crossing on its own, because the stamp above
-            // already made the tracked screen equal to the live one.
-            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId && !involuntaryMove) {
-                if (m_dragTracker->isDragging()) {
-                    m_dragSuppressedRuleInvalidations.insert(getWindowId(safeW));
-                } else {
-                    invalidateRuleCacheForStateChange(getWindowId(safeW));
-                }
-            }
-
-            // For snapping→snapping cross-screen moves: notify the daemon which
-            // decides whether to unsnap based on its own state. If the daemon just
-            // assigned this window to the new screen (restore/resnap/snap assist),
-            // the stored screen matches and no unsnap occurs. If the user moved
-            // the window via "Move to Screen" shortcut, the stored screen differs
-            // and the daemon unsnaps.
-            // Skip during drag: the drag system owns snap state transitions
-            // (float, unsnap, size restore, pre-tile cleanup) and handles them
-            // in dragStopped() with richer context.
-            // Skip involuntary moves: see the involuntaryMove computation above.
-            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId && !m_tilingHandler->isManagedScreen(oldScreenId)
-                && !m_tilingHandler->isManagedScreen(newScreenId) && !m_dragTracker->isDragging() && !involuntaryMove) {
-                const QString windowId = getWindowId(safeW);
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
-                    {windowId, newScreenId}, QStringLiteral("cross-screen move"));
-            }
-        });
-        // Virtual screen boundary detection: KWin's outputChanged only fires when
-        // the physical monitor changes. Moving a window between virtual screens on the
-        // same physical monitor (e.g., A/vs:0 → A/vs:1) is invisible to outputChanged.
-        // Detect these crossings via frameGeometryChanged, using the same trackedScreen
-        // state as the outputChanged handler above.
-        // (The autotile handler has its own detection in slotWindowFrameGeometryChanged;
-        // this covers snapping-mode windows which autotile doesn't track.)
-        //
-        // VS crossing detection uses PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing()
-        // (<PhosphorIdentity/VirtualScreenId.h>) — the same predicate used by
-        // tilinghandler/tiling.cpp.
-        connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
-            if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_daemonGate.virtualScreensReady) {
-                return;
-            }
-            // Suppress crossing detection while the daemon is moving this window in response
-            // to a VS swap/rotate or resnap. The cached m_virtualScreenDefs may still hold
-            // pre-rotation regions when the geometry change fires synchronously from
-            // applyWindowGeometry, so getWindowScreenId would resolve the new position against
-            // stale boundaries and report a phantom crossing.
-            if (m_daemonGate.inGeometryApply) {
-                return;
-            }
-            const QString newScreenId = getWindowScreenId(safeW);
-            const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
-            if (!PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
-                return;
-            }
-            m_trackedScreenPerWindow[safeW] = newScreenId;
-
-            // A virtual-screen crossing stales this window's cached rule verdict
-            // exactly like the physical cross-screen move above: ScreenId,
-            // ScreenOrientation and the screen's active layout are all per-screen
-            // match inputs, and the verdict cache is keyed on (windowId, rule-set
-            // revision), neither of which moves here. Same gating as the sibling —
-            // not mid-drag, where the drag system owns the transitions — and it
-            // runs ahead of the autotile / daemon delegation below, which return
-            // early for tracked and autotile-screen windows whose verdicts are
-            // stale all the same. The sibling's non-empty / differs terms are
-            // already guaranteed here by isVirtualScreenCrossing above. Mid-drag
-            // the id is parked in m_dragSuppressedRuleInvalidations for
-            // callEndDrag to drain, exactly as the sibling does, because the
-            // stamp above leaves nothing at drag end to detect the crossing from.
-            if (m_dragTracker->isDragging()) {
-                m_dragSuppressedRuleInvalidations.insert(getWindowId(safeW));
-            } else {
-                invalidateRuleCacheForStateChange(getWindowId(safeW));
-            }
-
-            // Skip during drag — the drag system owns state transitions.
-            // Autotile drag handles VS transfers via the drag-policy-changed path.
-            // Snapping drag handles cross-screen unsnap on drag-stop via the daemon.
-            if (m_dragTracker->isDragging()) {
-                return;
-            }
-
-            // Skip VS detection for autotile-tracked windows — the autotile
-            // handler's slotWindowFrameGeometryChanged owns VS crossing for
-            // windows it already tracks (m_notifiedWindows). Only untracked
-            // windows (snapping-mode entering an autotile VS) need delegation.
-            const QString windowId = getWindowId(safeW);
-            if (m_tilingHandler->isTrackedWindow(windowId)) {
-                return;
-            }
-
-            // Delegate autotile handling for untracked cross-VS transitions
-            // (snapping→autotile). The autotile handler's own detection only
-            // covers windows it already tracks.
-            m_tilingHandler->handleWindowOutputChanged(safeW);
-
-            // For snapping→snapping cross-VS moves: notify the daemon
-            if (!m_tilingHandler->isManagedScreen(oldScreenId) && !m_tilingHandler->isManagedScreen(newScreenId)
-                && !m_screenChangeHandler->isScreenChangeInProgress()) {
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
-                    {windowId, newScreenId}, QStringLiteral("virtual screen crossing"));
-            }
-        });
-
-        // Clean up the tracked screen entry when the window is destroyed. Capture the RAW
-        // pointer value, not the QPointer: inside a destroyed() slot the QPointer has already
-        // been nulled, so removing `safeW` would remove the null key and leave the real entry
-        // to leak. The pointer is only ever a lookup key here, never dereferenced, so its
-        // value is exactly what remove() needs.
-        KWin::EffectWindow* const rawW = safeW;
-        connect(safeW, &QObject::destroyed, this, [this, rawW]() {
-            m_trackedScreenPerWindow.remove(rawW);
-        });
-
-        // Metadata mutations: KWin fires these when an app swaps its class or
-        // desktop file after the surface is already mapped. Electron/CEF apps
-        // (Emby, some Discord forks) do this mid-session and silently break any
-        // daemon state keyed to the first-seen class. Push the latest metadata
-        // to the WindowRegistry so consumers query the current value.
-        //
-        // Per feedback_class_change_exclusion.md: the registry only updates its
-        // record. It does NOT retroactively unsnap, re-snap, or re-evaluate
-        // rules — that would surprise users. Committed state stays committed.
-        auto pushLatest = [this, safeW]() {
-            if (safeW && !safeW->isDeleted()) {
-                pushWindowMetadata(safeW);
-            }
-        };
-        // Caption changes fire every frame for terminals / browsers; the extended
-        // property snapshot (geometry / state flags) doesn't change on a title tick,
-        // so refresh the registry's core metadata (title) WITHOUT rebuilding and
-        // marshalling the ~20-entry a{sv} each frame. The daemon preserves the
-        // existing extended fields when none are sent.
-        auto pushCaptionOnly = [this, safeW]() {
-            if (!safeW || safeW->isDeleted()) {
-                return;
-            }
-            // Skip content-identical pushes: KWin can emit captionChanged
-            // without a net caption change, and the marshal (plus the
-            // daemon-side upsert) should not ride those. captionNormal
-            // derives from the caption, so an unchanged caption implies an
-            // unchanged push.
-            const QString caption = safeW->caption();
-            QString& last = m_lastPushedCaption[safeW.data()];
-            if (last == caption) {
-                return;
-            }
-            // Stamped only when the push can actually go out, mirroring BOTH of
-            // pushWindowMetadata's early returns. Recording the caption
-            // regardless made the de-dupe suppress every LATER push of that same
-            // caption — so a title that settled while the daemon was down, or
-            // while the window had no resolvable instance id, stayed stale in
-            // the registry until something else re-pushed it. The bringup sweep
-            // does re-push every live window, so this was bounded rather than
-            // permanent, but the de-dupe should record what was sent, not what
-            // was attempted. The cost of not recording is that a chatty title
-            // re-runs this lambda's tail per tick while the daemon is absent,
-            // which is a hash probe and a push that returns at its own gate.
-            if (m_daemonGate.serviceRegistered && !getWindowInstanceId(safeW.data()).isEmpty()) {
-                last = caption;
-            }
-            pushWindowMetadata(safeW, /*includeExtended=*/false);
-            // A compositor-drawn tab pill shows this caption in the CHIPS
-            // style; rebuild the strips that name the window, skipping screens
-            // whose bar style never draws it (a chatty terminal title must not
-            // re-raster a bar that cannot change). One hash probe when it is
-            // not a tab anywhere, which is the common case.
-            m_tilingHandler->noteScrollTabTitleChanged(getWindowId(safeW.data()));
-        };
-        // Class / desktop-file mutations invalidate the animation rule
-        // evaluator's per-window match cache. The cache is keyed on the
-        // window's frozen composite id but the cascade resolves against
-        // the LIVE windowClass — so without invalidation, a SetOpacity /
-        // OverrideAnimation* rule for the post-rename class silently
-        // never applies (Electron/CEF/Steam family). pushLatest already
-        // refreshes the daemon's WindowRegistry record; mirror that
-        // refresh on the effect's local resolver cache. Desktop / activity /
-        // role changes get their own invalidation connects below.
-        //
-        // CAPTION is the deliberate exception: Title and CaptionNormal ARE
-        // matchable fields stamped live into the query, so a Title-scoped
-        // verdict IS knowingly left stale until the next natural invalidation
-        // (focus change, placement change, rule edit). A per-caption clear is
-        // strictly worse than the staleness: terminals and browsers rewrite
-        // their title every frame, and each clear drops the GLOBAL per-window
-        // cache — one noisy terminal would cold-start every other window's
-        // verdict at title-tick rate.
-        auto invalidateRuleCache = [this, safeW]() {
-            // Gate each clear on its own rule set, mirroring the sibling
-            // invalidation in slotWindowActivated: the no-rules case pays
-            // nothing on a class swap.
-            if (!m_shaderManager.animationRuleSet().isEmpty()) {
-                m_shaderManager.animationRuleEvaluator().clearCache();
-            }
-            // The verdict cache keys on the same frozen id and matches on
-            // WindowClass / AppId just as readily (an Electron/CEF class swap
-            // is exactly how a per-app scroll multiplier starts or stops
-            // applying), so it takes the same clear.
-            if (!m_shaderManager.effectVerdictRuleSet().isEmpty()) {
-                m_shaderManager.effectVerdictRuleEvaluator().clearCache();
-            }
-            // The exclusion verdict caches key on the same frozen id and the
-            // WindowClass matcher — a class swap can flip an Exclude verdict.
-            if (!m_snappingExclusionRuleSet.isEmpty()) {
-                m_snappingExclusionEvaluator.clearCache();
-            }
-            if (!m_decorationExclusionRuleSet.isEmpty()) {
-                m_decorationExclusionEvaluator.clearCache();
-            }
-            // The cache drop alone revives nothing: appearance slots (opacity,
-            // tint, border colour) bake into the decoration at
-            // updateWindowDecoration time, and the stacking layer is
-            // EVENT-driven. Both applied eagerly at window-added against the
-            // pre-swap placeholder class — re-drive them here so a rule keyed
-            // to the real class applies (and one keyed to the placeholder
-            // releases) without waiting for an incidental focus / placement
-            // sweep. Decoration re-folds only for a window on the desktop its OWN
-            // OUTPUT shows, matching updateAllDecorations; off-desktop rides the sweep.
-            if (safeW && !safeW->isDeleted()) {
-                const QString wid = getWindowId(safeW);
-                if (isOnOwnOutputCurrentDesktop(safeW)) {
-                    updateWindowDecoration(wid, safeW);
-                }
-                // Title-bar override rides the same appearance resolve as the
-                // decoration re-fold, but updateWindowDecoration deliberately
-                // does not resolve it (decorations.cpp documents the split) —
-                // without this, a SetHideTitleBar rule keyed to the real
-                // post-swap class waits for the next focus-driven sweep.
-                // Outside the desktop gate, matching updateAllDecorations:
-                // title-bar state is persistent and survives desktop switches.
-                reconcileRuleHiddenTitleBar(wid, safeW);
-                reconcileRuleWindowLayer(wid, safeW);
-            }
-        };
-        connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
-        connect(kw, &KWin::Window::windowClassChanged, this, invalidateRuleCache);
-        connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
-        connect(kw, &KWin::Window::desktopFileNameChanged, this, invalidateRuleCache);
-        connect(kw, &KWin::Window::captionChanged, this, pushCaptionOnly);
-        // Per-window virtual-desktop / activity / role changes also refresh the
-        // registry so context-aware rule resolution sees current values. Same
-        // record-only contract: no retroactive re-evaluation of committed state.
-        connect(kw, &KWin::Window::desktopsChanged, this, pushLatest);
-        connect(kw, &KWin::Window::activitiesChanged, this, pushLatest);
-        connect(kw, &KWin::Window::windowRoleChanged, this, pushLatest);
-        // VirtualDesktop and Activity are matchable rule fields stamped live
-        // into the per-window query, but the verdict caches key on
-        // (windowId, ruleSet revision) — neither moves on a desktop or
-        // activity move, so a `WHEN VirtualDesktop Equals N` exclusion or
-        // appearance verdict would pin stale across the move. Enqueue the
-        // coalesced per-window invalidation, mirroring the outputChanged
-        // handler; the flush clears the caches and re-drives decoration /
-        // title bar / layer for exactly this window.
-        auto invalidateForContextMove = [this, safeW]() {
-            if (safeW && !safeW->isDeleted()) {
-                invalidateRuleCacheForStateChange(getWindowId(safeW));
-            }
-        };
-        connect(kw, &KWin::Window::desktopsChanged, this, invalidateForContextMove);
-        connect(kw, &KWin::Window::activitiesChanged, this, invalidateForContextMove);
-        // WindowRole is likewise matchable and stamped live; role changes are
-        // rare (X11 clients setting WM_WINDOW_ROLE post-map), so the heavier
-        // immediate class-swap invalidation is fine here and keeps the
-        // identity-change family on one code path.
-        connect(kw, &KWin::Window::windowRoleChanged, this, invalidateRuleCache);
-
-        // Diagnostic dump on identity change — but ONLY for class / desktop-file,
-        // never caption. CEF/Electron apps (Steam included) map with a
-        // placeholder class and swap in the real one here, so re-dumping on
-        // those catches the final classification the filters act on. Caption
-        // is deliberately excluded: it feeds no filter, and terminals /
-        // browsers (and this very tool's progress spinner) rewrite their title
-        // every frame — dumping on captionChanged floods the journal with
-        // identical blocks. See logWindowDiagnostics().
-        auto logIdentityChange = [this, safeW]() {
-            if (safeW && !safeW->isDeleted()) {
-                logWindowDiagnostics(safeW, "identityChanged");
-            }
-        };
-        connect(kw, &KWin::Window::windowClassChanged, this, logIdentityChange);
-        connect(kw, &KWin::Window::desktopFileNameChanged, this, logIdentityChange);
-    }
-
-    // Detect drag start/end via KWin's per-window signals instead of polling.
-    // windowStartUserMovedResized fires once when an interactive move (or resize) begins;
-    // windowFinishUserMovedResized fires once when it ends (button release, Escape, etc.).
-    // This eliminates the poll timer that previously scanned the full stacking order at
-    // 32ms intervals during drag — a significant source of compositor-thread overhead.
-    //
-    // NOTE: windowFrameGeometryChanged / windowStepUserMovedResized are intentionally NOT
-    // connected for drag tracking. They fire on every pixel of movement, which would flood
-    // D-Bus. Cursor position updates are handled event-driven via slotMouseChanged →
-    // DragTracker::updateCursorPosition(), throttled to ~30Hz.
-    connect(w, &KWin::EffectWindow::windowStartUserMovedResized, this, [this](KWin::EffectWindow* window) {
-        m_dragTracker->handleWindowStartMoveResize(window);
-        // Latch interactive-resize identity AND the pre-resize frame for the finish
-        // handler (see below): KWin clears isUserResize() before
-        // windowFinishUserMovedResized fires, so both the move-vs-resize
-        // discriminator and the baseline geometry must be captured here, at the
-        // start. The geometry feeds the neighbour-reflow report (GitHub #652);
-        // m_resizeStartGeometry is only read at finish when this latch identifies a
-        // resize, so a plain move leaves it cleared.
-        m_resizingWindow = (window && window->isUserResize()) ? window : nullptr;
-        m_resizeStartGeometry = QRect();
-        if (m_resizingWindow) {
-            m_resizeStartGeometry = window->frameGeometry().toRect();
-        }
-        // window.movement.move shader transition: KWin's interactive move is
-        // its own animation system (Window::moveResize via pointer drag), but
-        // we layer an effect-side shader for visual feedback.
-        // windowStartUserMovedResized doesn't disambiguate move from resize;
-        // w->isUserResize() does — interactive resize sets it, plain move
-        // leaves it false. Interactive RESIZE deliberately starts NO shader
-        // event: it is a held gesture with no discrete before/after until
-        // release (the compositor repaints the re-laid content live the whole
-        // time), so a crossfade pack has nothing meaningful to play, and the
-        // soft-body sim omits KWin's resize edge-lock logic (mesh_sim.cpp) so
-        // the move-physics packs have no real story there either. Discrete
-        // resizes are covered by the placeIn / placeOut / layoutSwitch events.
-        // tryBeginShaderForEvent silently no-ops if the user didn't assign a
-        // shader to the path.
-        if (window && !window->isUserResize()) {
-            tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMove, animationDurationMs());
-            // Genuine old-content capture for cross-fade legs: the drag
-            // begins with the window ALIVE and its pre-drag content still
-            // current, so a move pack that declares uOldWindow gets a real
-            // decorated snapshot to fade FROM — matching the drag-snap morph
-            // path — instead of leaning on the iHasOldWindow fallback (which
-            // collapses the old side to the live content). The !oldSnapshot
-            // guard preserves an existing capture on a retargeted transition,
-            // mirroring drag_snap; a failed capture clears needsSnapshot and
-            // the shader-side fallback covers it.
-            // `heldMove`, NOT liveness. window.movement.move is opt-in with no
-            // default shader, so the stock config installs nothing here and
-            // findTransition would hand back an unrelated leg — most reachably the
-            // window.focus leg the click that began this drag installed moments ago.
-            // Pinning THAT at progress 1, bumping its generation (killing its
-            // teardown timer) and ramping it 1→0 on release plays the focus
-            // animation backward after the drop; a maximize pack that declares
-            // iFromRect would freeze the window at its pre-drag rect for the whole
-            // drag. See ShaderTransition::heldMove.
-            if (auto* st = m_shaderManager.findTransition(window); st && st->cached && st->heldMove) {
-                if (st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
-                    st->needsSnapshot = true;
-                }
-                // Anchor iFromRect at the grab frame for rect-driven packs.
-                // Under the opt-in `move` class, only a pack declaring BOTH
-                // move and geometry can reach this leg with iFromRect
-                // declared (pure crossfade packs are refused by the
-                // resolvedShaderAppliesToEvent gate, and wobble reads no
-                // rects), but the anchor keeps such a hybrid correct:
-                // unseeded, rect-driven packs derive their drawn rect from
-                // iFromRect unconditionally, so the first `durationMs` of the
-                // drag would play mix(0-rect, live, t) — the window sweeping
-                // in from the screen origin. Seeded at the grab, the ramp is
-                // a short catch-up ease toward the live frame and the pinned
-                // tail (progress held at 1) draws the live rect exactly as
-                // before. The !isValid guard preserves a retargeted
-                // transition's original anchor.
-                if (st->cached->iFromRectLoc >= 0 && !st->fromGeometry.isValid()) {
-                    st->fromGeometry = window->frameGeometry();
-                }
-                // Re-grab during a release leg: resume from the current
-                // (descending) progress rather than snapping back to pinned-1.
-                // Freeze the accrued down-ramp and hand it to the decaying
-                // re-grab offset, which paintWindow subtracts from the painted
-                // progress and ramps to 0 over durationMs. startTimeMs is left
-                // ALONE on purpose — rewinding it cannot reconstruct the
-                // resumed value once iTime is curve-eased, and does nothing at
-                // all for a stateful spring. See ShaderTransition::regrabStartMs.
-                // A fresh grab (releaseStartMs still -1) skips this and keeps
-                // its normal ramp.
-                if (st->releaseStartMs >= 0 && st->durationMs > 0) {
-                    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-                    const qreal downP = qMax<qreal>(0.0, qreal(nowMs - st->releaseStartMs) / qreal(st->durationMs));
-                    st->regrabDownOffset = qMin<qreal>(1.0, downP);
-                    st->regrabStartMs = nowMs;
-                    st->releaseStartMs = -1;
-                }
-                // HELD transition: the drag is open-ended, so the shader
-                // stays active (progress clamped at 1) until the release
-                // handler below schedules the settle-tail teardown; the
-                // duration timer stands down for held transitions. The
-                // grab origin anchors iMoveOffset, and the velocity spring
-                // integrates from here (see the paint pipeline).
-                st->holdUntilRelease = true;
-                // Fresh epoch for the (re-)hold: a re-grab inside the prior
-                // drag's settle window rides the same-effect short-circuit
-                // (beginShaderTransition installs nothing new), so the prior
-                // release's tail / safety-cap timer still carries this
-                // transition's generation and would fire mid-drag, killing
-                // the shader for the rest of the new drag. Bumping here
-                // invalidates it. For a fresh install the bump is harmless:
-                // the just-scheduled duration timer stands down on the hold
-                // flag anyway, and every later consumer captures the live
-                // generation at its own schedule time.
-                st->generation = ++m_shaderManager.m_shaderTransitionGenerationCounter;
-                st->grabOrigin = window->frameGeometry().topLeft();
-                st->lastMovePos = st->grabOrigin;
-                st->lastMoveSampleMs = -1;
-                // Seed the generic soft-body lattice (iMoveMesh) so a
-                // mesh-consuming pack (wobble, ...) gets neighbour-coupled
-                // physics from the first frame. The grip is the node
-                // nearest the cursor at grab; physics constants use KWin's
-                // middle preset (per-pack tuning can layer on later).
-                if (st->cached->iMoveMeshLoc >= 0 && KWin::effects) {
-                    ShaderInternal::initMeshSim(st->meshSim, window->frameGeometry(), KWin::effects->cursorPos(),
-                                                st->meshParams);
-                }
-            }
-        }
-    });
-    connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
-        // Release a HELD move transition with a settle tail (interactive
-        // resize starts no shader transition, see the start handler): the
-        // velocity spring decays through zero over the next fraction of a
-        // second, letting wobble/tilt shaders relax to rest before the
-        // teardown lands. Generation-guarded exactly like the duration
-        // timer so an interrupting transition owns its own lifetime.
-        if (window) {
-            // `heldMove &&` guards the mirror of the drag-start defect: releasing
-            // must only ever act on the leg the drag itself installed, never on
-            // whatever is live. holdUntilRelease alone is not that test — it is the
-            // flag the old drag-start bug wrongly set on an unrelated leg.
-            if (auto* st = m_shaderManager.findTransition(window); st && st->heldMove && st->holdUntilRelease) {
-                QPointer<KWin::EffectWindow> safeWindow(window);
-                if (st->meshSim.initialized) {
-                    // Soft-body lattice: hand teardown to the settle gate.
-                    // Clearing holdUntilRelease drops the transition into
-                    // "active while the lattice still has energy" mode (see
-                    // the paint pipeline), so the wobble rings out for as
-                    // long as it physically takes rather than a fixed tail.
-                    // The timer is only a generous SAFETY cap in case the
-                    // sim never reaches its settle threshold.
-                    //
-                    // Fresh epoch for the handoff: the start-scheduled
-                    // duration timer in tryBeginShaderForEvent captured the
-                    // install generation and only stands down while
-                    // holdUntilRelease is set. On a drag SHORTER than the
-                    // nominal duration that timer fires after this clear,
-                    // sees a matching generation, and would cut the ring-out
-                    // off mid-settle — so bump the generation to invalidate
-                    // it. The paint pipeline's expiry teardown captures the
-                    // live generation at queue time, so the settle gate and
-                    // the safety cap below both own the new epoch.
-                    st->holdUntilRelease = false;
-                    st->generation = ++m_shaderManager.m_shaderTransitionGenerationCounter;
-                    const quint64 myGeneration = st->generation;
-                    constexpr int kMeshSettleSafetyCapMs = 4000;
-                    QTimer::singleShot(kMeshSettleSafetyCapMs, this, [this, safeWindow, myGeneration]() {
-                        if (!safeWindow) {
-                            return;
-                        }
-                        if (const auto* live = m_shaderManager.findTransition(safeWindow);
-                            live && live->generation == myGeneration) {
-                            endShaderTransition(safeWindow);
-                        }
-                    });
-                } else if (st->releaseStartMs < 0) {
-                    // Velocity / trail packs: the springLag decays over the
-                    // next fraction of a second, so keep the fixed tail.
-                    // holdUntilRelease stays SET here, so the start-scheduled
-                    // duration timer keeps standing down and this tail timer
-                    // (guarded on the install generation) owns the teardown.
-                    // Stamp the release leg: paintWindow ramps the pinned
-                    // progress back toward 0 from this moment. The ramp is
-                    // scaled by the transition's OWN durationMs (a per-event
-                    // duration or an OverrideAnimationTiming rule can differ
-                    // from the global default), so the tail timer must grant
-                    // exactly that many ms — a shorter tail would tear down
-                    // mid-ramp and snap, the artifact the release leg exists
-                    // to prevent. The releaseStartMs < 0 guard on this branch
-                    // makes a duplicate finish signal a no-op instead of
-                    // restarting the ramp and double-scheduling teardown.
-                    //
-                    // Fold any in-flight RE-GRAB offset into this release rather
-                    // than leaving both live. A release during a still-decaying
-                    // re-grab leaves paintWindow subtracting two offsets whose
-                    // slopes are equal and opposite (+1/durationMs and
-                    // -1/durationMs), so they cancel and the progress FREEZES on a
-                    // plateau until the re-grab offset expires — the dissolve
-                    // visibly stalls before it starts. Rebasing releaseStartMs by
-                    // the residual makes `down` start at exactly that residual, so
-                    // the ramp is continuous at this frame and descends at the
-                    // normal rate; the tail is shortened to match so the teardown
-                    // timer still lands when the ramp reaches 0 rather than cutting
-                    // it mid-flight.
-                    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-                    qreal residual = 0.0;
-                    if (st->regrabStartMs >= 0 && st->durationMs > 0) {
-                        residual = qBound<qreal>(
-                            0.0, st->regrabDownOffset - qreal(nowMs - st->regrabStartMs) / qreal(st->durationMs), 1.0);
-                        st->regrabStartMs = -1;
-                        st->regrabDownOffset = 0.0;
-                    }
-                    st->releaseStartMs = nowMs - qint64(residual * st->durationMs);
-                    const quint64 myGeneration = st->generation;
-                    const int rampMs = qMax(1, qRound((1.0 - residual) * st->durationMs));
-                    QTimer::singleShot(rampMs, this, [this, safeWindow, myGeneration]() {
-                        if (!safeWindow) {
-                            return;
-                        }
-                        if (const auto* live = m_shaderManager.findTransition(safeWindow);
-                            live && live->generation == myGeneration) {
-                            endShaderTransition(safeWindow);
-                        }
-                    });
-                }
-            }
-        }
-        const bool wasResize = (window && m_resizingWindow == window);
-        m_resizingWindow = nullptr;
-        // A floating window the user just RESIZED has a new free size. Persist it
-        // immediately into the unified record's shared free geometry (overwrite=true)
-        // so the float-back is durable right away — recordFreeGeometry marks the
-        // placement store dirty, arming the debounced save. The save-time sweep only
-        // folds the live frame shadow into the record on the next dirtying event /
-        // shutdown, and a bare resize never marks anything dirty, so without this the
-        // new size could be lost on an unclean exit. Resizes never snap, so this can
-        // never race the drag→snap pipeline (which owns the move case); guarding on
-        // isWindowFloating keeps it to genuinely floated windows.
-        if (wasResize && shouldHandleWindow(window)) {
-            const QString windowId = getWindowId(window);
-            if (!windowId.isEmpty() && isWindowFloating(windowId)) {
-                // toRect() (rounding) rather than truncation: fractional-scale
-                // outputs leave sub-pixel residue in frameGeometry(), and the
-                // other geometry-capture paths round too. Correct for
-                // maximize/fullscreen (freeGeometryForCapture) so maximizing a
-                // floating window does not clobber its free-float size with the
-                // full-monitor rect (this store uses overwrite=true).
-                const QRect geom = freeGeometryForCapture(window, QRectF(window->frameGeometry())).toRect();
-                if (geom.width() > 0 && geom.height() > 0) {
-                    PhosphorProtocol::ClientHelpers::fireAndForget(
-                        this, PhosphorProtocol::Service::Interface::WindowTracking,
-                        QStringLiteral("storePreTileGeometry"),
-                        {windowId, geom.x(), geom.y(), geom.width(), geom.height(), getWindowScreenId(window),
-                         /*overwrite=*/true},
-                        QStringLiteral("storePreTileGeometry - float resize"));
-                }
-            }
-            // Report the committed resize to the daemon so it can reflow tiled
-            // neighbours (GitHub #652). The daemon ignores floating / untracked
-            // windows, so this is harmless for the float case handled just above.
-            // The enclosing shouldHandleWindow(window) is the effect-side gate
-            // (excluded windows never reach here); the daemon then additionally
-            // re-validates membership before reflowing.
-            notifyWindowResized(window, m_resizeStartGeometry);
-        }
-        m_dragTracker->handleWindowFinishMoveResize(window);
-        // Now that the COMPOSITOR's move is over (this signal, not forceEnd,
-        // is when compositorMoveResizeActive() clears), re-drive the pill
-        // hover: the dragStopped re-drive fires on LMB release and is
-        // suppressed while KWin still holds the move for other buttons, so a
-        // multi-button drop onto the pill band would otherwise stay unlit
-        // until the next pointer twitch.
-        // KWin::effects, not m_tilingHandler: cursorPos() needs the former, while
-        // the latter is constructed with the effect and outlives every window
-        // connection — the tail call below dereferences it unguarded, as does
-        // the rest of this file.
-        if (KWin::effects) {
-            m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
-        }
-        // A maximize claim taken during the gesture was never paid: the batch
-        // arms insert membership and then skip the compositor call while the
-        // user is dragging, and nothing re-drives them — this lambda replays
-        // geometry only, and its two GEOMETRY REPORTS are gated on wasResize,
-        // so a MOVE end reports nothing at all. (Other calls in this lambda do
-        // run unconditionally; the claim is about the geometry path.) The
-        // engine emits on change, so a drag that leaves the strip alone
-        // schedules no batch either. This is the
-        // one point that always runs at the end of a gesture.
-        m_tilingHandler->reconcileMaximizeAfterGesture(window);
-    });
+    // Cross-output and virtual-screen moves with the flags-settle eviction
+    // backstop (window_output_connections.cpp), the identity and metadata
+    // pushes (window_metadata_connections.cpp) and the interactive
+    // move/resize pair (window_moveresize_connections.cpp). They are wired
+    // here, in this order, so a connection to a signal that is also
+    // connected further down keeps its place in that signal's slot order.
+    wireOutputChangeHandlers(w);
+    wireMetadataHandlers(w);
+    wireUserMoveResizeHandlers(w);
 
     // Track when user manually unmaximizes a monocle-maximized window
     connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, m_tilingHandler.get(),
@@ -813,18 +132,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 }
             });
 
-    // window.maximize / window.unmaximize shader transition. Sibling lambda
-    // to the TilingHandler hookup above (autotile drives the snap-back
-    // logic; we drive the shader leg).
+    // The maximize edge: the rule and metadata refresh, the scrolling
+    // maximize interception and the maximize morph (beginMaximizeShaderMorph,
+    // which rides WindowPlaceIn / WindowPlaceOut). The TilingHandler hookup
+    // above only floats a monocle member the user unmaximized by hand.
     //
-    // KWin emits windowMaximizedStateChanged once per axis flip — a
-    // user-driven left-half-snap → fully-maximize sequence fires twice
-    // (vertical-only first, then fully-maximized). Without an edge filter
-    // we'd start the placement morph for the intermediate state, then
-    // immediately install it again on the next emission, with
-    // the timer-driven teardown of the first racing the install of the
-    // second. Track the last fully-maximized state per window and only
-    // fire on actual edge transitions.
+    // KWin emits windowMaximizedStateChanged on every maximize-mode change,
+    // axis-only ones included (Maximize Vertically / Horizontally from the
+    // decoration's middle or right click, KWin's unbound shortcuts, a window
+    // rule, the client). Only a change into or out of full maximize is the
+    // morph's edge, so track the last fully-maximized state per window and
+    // fire on those transitions only; an axis flip between two modes that
+    // are not full plays nothing.
     // Seed from the LIVE maximize mode: a window already fully maximized when
     // the effect (re)loads has no entry, so its first RESTORE compared
     // false==false, read as a no-edge, and played no morph.
@@ -832,7 +151,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // No equivalent seed for m_maximizedToEdgesWindows, and that asymmetry is
     // intended. This map is an EDGE FILTER whose whole job is answering
     // "did the state change", so a missing entry is a wrong answer with no
-    // way back — nothing else ever writes it. The claim ledger is an
+    // way back — nothing else writes a TRUE entry (noteMaximizeDemotedForSnap
+    // stamps false, what a missing entry already answers). The claim ledger is an
     // OWNERSHIP record, and an unseeded one is self-healing: the daemon's
     // first tile batch carries the flag, and the Apply arm re-inserts
     // membership for any column the engine still says is maximized. Seeding
@@ -842,27 +162,26 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // The cost of not seeding is bounded to one click: after an effect
     // reload, the first maximize on an already-column-maximized window
     // un-maximizes and re-maximizes before the batch re-establishes the
-    // record.
-    // Re-takes w->window() rather than reusing the `kw` from the top of this
-    // function, deliberately: the seed belongs beside the lambda it seeds and
-    // the paragraph explaining it, not seven hundred lines up in an unrelated
-    // scope. It still lands before that lambda is connected, which is the only
-    // ordering that matters.
+    // record. The seed lands before that lambda is connected, which is the
+    // only ordering that matters.
     if (KWin::Window* kwSeed = w->window()) {
         m_shaderManager.m_lastFullyMaximized.insert(w, kwSeed->maximizeMode() == KWin::MaximizeFull);
     }
 
     // Shadow-margin cache for surfaceWindowRect(). Seed from the window's
-    // current rects (nothing is resizing at connect time, so the pair agrees),
-    // then refresh on every windowExpandedGeometryChanged. The body — and the
-    // write-side invariants: never refresh from a paint-time sample, refuse
-    // implausible margins — lives beside surfaceWindowRect in surfacelayers.cpp.
+    // current rects, then refresh on every windowExpandedGeometryChanged. The
+    // effect-load sweep can wire a window mid-resize (the move state recovered
+    // above), when the expanded rect lags the frame; the plausibility cap can
+    // admit that lagged pair, and the next windowExpandedGeometryChanged
+    // corrects it. The body — and the write-side invariants: never refresh
+    // from a paint-time sample, refuse implausible margins — lives beside
+    // surfaceWindowRect in surfacelayers.cpp.
     refreshSurfaceShadowMargins(w);
     connect(w, &KWin::EffectWindow::windowExpandedGeometryChanged, this,
             &PlasmaZonesEffect::refreshSurfaceShadowMargins);
     connect(
         w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
-        [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
+        [this, pushRestoreRect](KWin::EffectWindow* window, bool horizontal, bool vertical) {
             // isDeleted() as well as null. Every body below is meaningless
             // for a corpse, and one is actively harmful: the rule-cache
             // invalidation calls getWindowId, which re-populates the id
@@ -878,18 +197,23 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // Intermediate axis-only flip, so no shader — but on a
                 // scroll-managed tile the bit still has to go back.
                 //
-                // A quick tile (Meta+Left and friends) sets ONE axis, which
-                // never reaches the interception below, and nothing else
-                // clears it: the batch arm that would only runs when a
-                // batch arrives, and the engine emits on change, so a quick
-                // tile that moves no column schedules none. The window then
-                // sits half-maximized against the strip's rects with no
-                // correction coming.
+                // An axis-only maximize (Maximize Vertically / Horizontally:
+                // the decoration's middle or right click, KWin's unbound
+                // shortcuts, a window rule, the client) never reaches the
+                // interception below, and nothing else clears it: the batch
+                // arm that would only runs when a batch arrives, and the
+                // engine emits on change, so a flip that moves no column
+                // schedules none. The window then sits maximized on one axis
+                // against the strip's rects with no correction coming. A KWin
+                // quick tile is not one of these: it un-maximizes and
+                // moveResizes to the tile, so it lands as a frame change (on a
+                // column-maximize member, as the full-to-restore edge the
+                // interception claims).
                 //
                 // CANCEL ONLY, never a dispatch. Routing this through
                 // interceptMaximizeRequest would dispatch a toggle,
-                // turning the user's quick tile into a column maximize (or,
-                // on a member, into an un-maximize).
+                // turning the user's axis maximize into a column maximize
+                // (or, on a member, into an un-maximize).
                 m_tilingHandler->cancelAxisOnlyMaximize(window);
                 return;
             }
@@ -901,15 +225,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // interactive-gesture early return (the verdict must refresh
             // even when the shader is skipped).
             invalidateRuleCacheForStateChange(getWindowId(window));
+            // The daemon's registry holds the maximize state its float-back
+            // capture reads (fillsOutputState): without a push on the edge it
+            // kept the open-time value and recorded an output-sized frame
+            // over a good float-back (F33).
+            pushWindowMetadata(window);
+            if (fullyMaximized) {
+                pushRestoreRect(window);
+            }
             // MAXIMIZE INTERCEPTION. On a scroll-managed tile the request
             // belongs to the scrolling engine's maximize-to-edges verb, not
             // to KWin: the strip owns the column's width, so letting both
             // answer would give one window two maximize authorities.
             // Placed AFTER the edge filter and the tracking write so it
-            // sees genuine full-maximize edges only (KWin emits once per
-            // axis, and a half-snapped window going to full fires twice —
-            // a toggle verb driven off both would cancel itself), and
-            // after the rule-cache invalidation, which must run for the
+            // sees genuine full-maximize edges only (an axis-only flip
+            // must never dispatch the toggle verb, see the edge filter),
+            // and after the rule-cache invalidation, which must run for the
             // IsMaximized field whoever ends up owning the state.
             //
             // The suppression check keeps this off the handler's own
@@ -951,23 +282,29 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // (monocleBitWritten / monocleBitReleased in the tile batch) —
             // not by a second morph replayed over it from this handler.
             //
-            // On Wayland the MONOCLE echo has no skip here: it arrives with
-            // the counter back at 0, and the interception above declines
-            // it because a monocle screen is not scrolling. It falls
-            // through to beginMaximizeShaderMorph. Whether that ABSORBS
-            // onto the batch's live placement leg or SUPERSEDES it is
-            // decided by tryBeginShaderForEvent's same-effect short-circuit,
-            // which keeps the prior leg only when both resolve the same
-            // pack — so the two must ride the same node for the monocle
-            // echo to be absorbed rather than replayed. When they do, the
-            // morph only re-asserts the endpoints the batch already
-            // installed (toGeometry becomes the frame the client committed,
-            // and fromGeometry is left alone once the snapshot exists, or
-            // re-read from the same m_preMaximizeFrame capture the batch
-            // anchored on).
+            // On Wayland the MONOCLE echo arrives with the counter back at 0
+            // and the interception above declines it (a monocle screen is not
+            // scrolling); the one-shot below absorbs it instead.
             if (m_tilingHandler->isSuppressingMaximizeChanged()) {
                 m_shaderManager.m_pendingMaximizeMorph.remove(window);
                 return;
+            }
+            // ...and the Wayland MONOCLE echo, which arrives with the counter
+            // back at 0, is absorbed the same way when the batch armed it
+            // (ShaderTransitionManager::m_monocleEchoOwed). Without this it fell
+            // through to beginMaximizeShaderMorph, whose time-driven leg never
+            // matches the batch's animator-driven one in timing mode, so the
+            // same-effect short-circuit could not absorb it either: the echo
+            // replayed a second placement morph over the batch's leg.
+            if (const auto echoIt = m_shaderManager.m_monocleEchoOwed.find(window);
+                echoIt != m_shaderManager.m_monocleEchoOwed.end()) {
+                const bool matchingEcho = echoIt.value() == fullyMaximized;
+                m_shaderManager.m_monocleEchoOwed.erase(echoIt);
+                if (matchingEcho) {
+                    qCDebug(lcEffect) << "Absorbed the monocle maximize echo for" << getWindowId(window);
+                    m_shaderManager.m_pendingMaximizeMorph.remove(window);
+                    return;
+                }
             }
             // Drag-restore guard: KWin unmaximizes a window mid interactive
             // move when the user grabs the maximized title bar and pulls
@@ -1011,7 +348,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
         });
 
-    // Track when a monocle-maximized window goes fullscreen
+    // TilingHandler::slotWindowFullScreenChanged: a windowed-fullscreen
+    // member's enter and exit, and for any other tiled window the enter's
+    // untrack (clearWindowTiledAllScreens; monocle membership survives) and
+    // the exit's re-track, decoration refresh and strip re-emit.
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFullScreenChanged);
 
@@ -1027,34 +367,58 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, this, [this]() {
         refreshFullscreenSuppression();
     });
+    // IsFullscreen is a matchable rule field, and the daemon's float-back
+    // capture reads it through fillsOutputState: the edge refreshes the
+    // window's rule verdicts and pushes its metadata, as the full-maximize
+    // edge does (F33, F73).
+    connect(w, &KWin::EffectWindow::windowFullScreenChanged, this, [this, pushRestoreRect](KWin::EffectWindow* window) {
+        if (!window || window->isDeleted()) {
+            return;
+        }
+        invalidateRuleCacheForStateChange(getWindowId(window));
+        pushWindowMetadata(window);
+        if (window->isFullScreen()) {
+            pushRestoreRect(window);
+        }
+    });
 
     // The same gate's OTHER edges. A fullscreen window keeps isFullScreen()
-    // true while it is minimized, sent to another desktop, or moved to another
-    // output, so without these the covered set stays stale and a monitor with
+    // true while it is minimized, sent to another desktop or activity, or moved
+    // to another output, so without these the covered set stays stale and a monitor with
     // nothing on it goes on being undecorated. Each is pre-gated on the window
     // actually being fullscreen: the refresh walks the entire stacking order,
     // and the overwhelming majority of windows firing these are not fullscreen
     // and cannot move the answer. The refresh's own set comparison then makes a
     // no-change call cost one compare.
     connect(w, &KWin::EffectWindow::minimizedChanged, this, [this, w]() {
-        if (w && w->isFullScreen()) {
+        if (w->isFullScreen()) {
             refreshFullscreenSuppression();
         }
     });
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this, w]() {
-        if (w && w->isFullScreen()) {
+        if (w->isFullScreen()) {
             refreshFullscreenSuppression();
         }
     });
     // Moving to another monitor changes which output the gate covers, and the
     // set is derived positionally so nothing else re-derives it. A separate
-    // connection rather than a line in the outputChanged lambda above for the
-    // same reason the fullscreen one is separate: that lambda is placement
-    // machinery with several early returns, including one for daemon-driven
-    // applies, and the gate has to hold whichever of those it takes.
-    if (kw) {
-        connect(kw, &KWin::Window::outputChanged, this, [this, w]() {
-            if (w && w->isFullScreen()) {
+    // connection rather than a line in the placement outputChanged lambda
+    // (window_output_connections.cpp) for the same reason the fullscreen one
+    // is separate: that lambda is placement machinery with several early
+    // returns, including one for daemon-driven applies, and the gate has to
+    // hold whichever of those it takes.
+    if (KWin::Window* kw = w->window()) {
+        // The EffectWindow is not the sender here, so it is held weakly.
+        const QPointer<KWin::EffectWindow> safeW = w;
+        connect(kw, &KWin::Window::outputChanged, this, [this, safeW]() {
+            if (safeW && safeW->isFullScreen()) {
+                refreshFullscreenSuppression();
+            }
+        });
+        // An activity move: the walk skips a window off the current activity,
+        // and the global currentActivityChanged edge covers only a switch.
+        connect(kw, &KWin::Window::activitiesChanged, this, [this, safeW]() {
+            if (safeW && safeW->isFullScreen()) {
                 refreshFullscreenSuppression();
             }
         });
@@ -1064,18 +428,20 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFrameGeometryChanged);
 
-    // Single windowFrameGeometryChanged lambda combining the effect-side
-    // per-tick work, in the order the bodies run: a strip-animation retarget
+    // One windowFrameGeometryChanged lambda for the effect-side
+    // per-tick work, in the order the bodies run: the answer to a superseded
+    // configure's late ack (Body -1.5), a strip-animation retarget
     // onto the rect the client actually committed (Body -1), the offered-column
     // centring for a client that would not take its column (Body -0.5),
     // deferred maximize completion (Body 0), first-frame suppression release
-    // (Body 1), and the debounced daemon push (Body 2). Keeping the last two
+    // (Body 1), and the throttled daemon push (Body 2). Keeping the last two
     // as separate connections (which they were originally) doubled the per-geometry-
     // tick lambda dispatch cost without functional benefit; the bodies
     // are independent so collapsing them just runs one capture+vtable
     // hop per tick instead of two. The autotile-handler connection
     // immediately above is kept separate because it dispatches to a slot
-    // on a different receiver (`m_tilingHandler.get()`).
+    // on a different receiver (`m_tilingHandler.get()`). The virtual-screen
+    // crossing detector is its own connection (window_output_connections.cpp).
     //
     // Body 1 — first-frame open suppression release: a window withheld
     // from compositing on open (see RestoreSuppression) is released the
@@ -1089,9 +455,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     //
     // Body 2 — frame-geometry shadow: push the latest geometry to the
     // daemon so daemon-local shortcut handlers (float toggle, etc.) can
-    // read fresh geometry without round-tripping. Debounced at ~50 ms
-    // per window via m_frameGeometryFlushTimer so rapid move/resize
-    // sequences collapse into at most one D-Bus push.
+    // read fresh geometry without round-tripping. Throttled by the shared
+    // single-shot m_frameGeometryFlushTimer: at most one setFrameGeometry
+    // per window per 50 ms, so a long drag sends one every 50 ms.
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
             [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
                 // isDeleted() alongside the null test, as the other lambdas
@@ -1112,6 +478,31 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // before the lookup.
                 if (!safeW || safeW->isDeleted()) {
                     return;
+                }
+                // Body -1.5 — answer a superseded configure's late ack. An
+                // apply that asked for the size the client already had, while a
+                // different size was still in flight, was applied by KWin with
+                // no configure, so that older configure stayed outstanding and
+                // its ack just landed the stale size (WindowCommandStamps::
+                // StaleAck). Re-issue the command once: its size now differs
+                // from the client's, so KWin sends a real configure. Void once
+                // a newer command has landed or the user has the frame.
+                if (const auto staleIt = m_daemonGate.commandStamps.staleAcks.find(safeW.data());
+                    staleIt != m_daemonGate.commandStamps.staleAcks.end() && !m_daemonGate.inGeometryApply) {
+                    const WindowCommandStamps::StaleAck stale = *staleIt;
+                    const QSize committed = safeW->frameGeometry().toRect().size();
+                    if (!m_daemonGate.commandStamps.isCurrent(safeW.data(), stale.stamp) || safeW->isUserMove()
+                        || safeW->isUserResize()) {
+                        m_daemonGate.commandStamps.staleAcks.erase(staleIt);
+                    } else if (committed != stale.target.size()) {
+                        m_daemonGate.commandStamps.staleAcks.erase(staleIt);
+                        if (KWin::Window* kwStale = safeW->window()) {
+                            qCInfo(lcEffect) << "Re-issuing" << stale.target << "over a superseded configure's ack"
+                                             << committed << "for" << getWindowId(safeW.data());
+                            const auto staleGuard = geometryApplyScope();
+                            kwStale->moveResize(QRectF(stale.target));
+                        }
+                    }
                 }
                 // Body -1 — retarget a strip animation onto the rect the
                 // client actually committed.
@@ -1145,17 +536,20 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // size mismatch, and during an effect apply that mismatch is
                 // transient, so acting on it would fight the write in flight.
                 //
-                // The re-entrant case is also cheap: an effect moveResize
-                // commits synchronously, so frameGeometry() already equals the
-                // target and either isAnimatingToTarget short-circuits or the
-                // retarget lands on the window's own rect and reaps the
-                // converged leg, which is the outcome this correction wants.
+                // NOT for applyWindowGeometry's own animated commit, which it
+                // makes BEFORE retargeting the leg itself: the synchronous
+                // re-entry would retarget first with PreservePosition and zero
+                // the leg's velocity, so a spring curve lost its momentum on
+                // every animated re-apply. The apply marks that one commit
+                // (DaemonGateState::animatedApplyCommit); every other effect
+                // commit is a new destination the leg should adopt.
                 //
                 // Scoped to strip members: this is the only path that
                 // relocates a window away from its committed rect, so it is
                 // the only one where a divergent commit desynchronises the
                 // leg from where the window will actually be.
-                if (m_windowAnimator->hasAnimation(safeW.data()) && scrollManagedOutputFor(safeW.data())) {
+                if (m_windowAnimator->hasAnimation(safeW.data()) && scrollManagedOutputFor(safeW.data())
+                    && m_daemonGate.animatedApplyCommit != safeW.data()) {
                     const QRectF committed = safeW->frameGeometry();
                     if (!committed.isEmpty() && !m_windowAnimator->isAnimatingToTarget(safeW.data(), committed)) {
                         // PreservePosition: the leg keeps the pixels it is
@@ -1164,15 +558,24 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         // correction that is a few hundred pixels at most and
                         // overshoot it.
                         //
-                        // Result deliberately discarded, unlike the drag-snap
-                        // caller which starts a replacement leg on a
-                        // DegenerateReap. A reap here means the retarget landed
-                        // on the rect the window already occupies — the leg has
-                        // converged, which is the outcome this correction wants,
-                        // and reaping it runs the completion handler that ends
-                        // the leg cleanly. There is nothing to replace it with.
-                        static_cast<void>(m_windowAnimator->retargetWithResult(
-                            safeW.data(), committed, PhosphorAnimation::RetargetPolicy::PreservePosition));
+                        // A DegenerateReap needs no replacement: the retarget
+                        // landed on the rect the window already occupies, the
+                        // leg has converged, and the reap's completion handler
+                        // ends it cleanly. An ACCEPTED retarget restarts the
+                        // animator's progress from the pixels on screen, so a
+                        // geometry-owning morph riding it is re-anchored there
+                        // too, as applyWindowGeometry does after its own
+                        // retarget. Left alone, the morph replayed the whole leg
+                        // from its original departure rect (the #795 jump-back).
+                        const QRectF visualPos = m_windowAnimator->currentValue(safeW.data(), committed);
+                        const auto retarget = m_windowAnimator->retargetWithResult(
+                            safeW.data(), committed, PhosphorAnimation::RetargetPolicy::PreservePosition);
+                        auto* morph = m_shaderManager.findTransition(safeW.data());
+                        if (retarget == PhosphorAnimation::RetargetResult::Accepted && morph && morph->cached
+                            && morph->cached->iFromRectLoc >= 0 && morph->durationMs == 0) {
+                            morph->fromGeometry = visualPos;
+                            morph->toGeometry = committed;
+                        }
                     }
                 }
                 // Body -0.5 — centre a client that answered its column with
@@ -1238,8 +641,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                             const QPoint centred(offered.x() + qMax(0, offered.width() - live.width()) / 2,
                                                  offered.y() + qMax(0, offered.height() - live.height()) / 2);
                             if (live.topLeft() != centred && safeW->window()) {
-                                // Bracketed like every other geometry commit
-                                // in the tree. The move emits a synchronous
+                                // Bracketed like the effect's other commits
+                                // (applies, centring). The move emits a synchronous
                                 // frameGeometryChanged, which re-enters this
                                 // signal's whole connection list from the top
                                 // — including the virtual-screen crossing
@@ -1247,12 +650,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                                 // pass, both connected ahead of this lambda.
                                 // Without the gate they treat a move the effect
                                 // itself made as a user-driven one.
-                                // Save/restore, not set/clear (nesting-safe).
-                                const bool prevInApply = m_daemonGate.inGeometryApply;
-                                m_daemonGate.inGeometryApply = true;
-                                const auto restoreGate = qScopeGuard([this, prevInApply] {
-                                    m_daemonGate.inGeometryApply = prevInApply;
-                                });
+                                const auto restoreGate = geometryApplyScope();
                                 safeW->window()->move(QPointF(centred));
                             }
                         }
@@ -1275,9 +673,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         // The deadline SKIPS the morph for a stale entry; the
                         // entry itself is consumed either way by the remove
                         // above (only a size-landing geometry change reaches
-                        // this branch, so a never-landing entry lives until
-                        // the windowDeleted cleanup — bounded, and cheaper
-                        // than a timer per entry).
+                        // this branch). A never-landing entry is otherwise
+                        // dropped by the next genuine full-maximize edge (the
+                        // state lambda removes or replaces it on every path),
+                        // by noteMaximizeDemotedForSnap, or by the windowDeleted
+                        // cleanup: bounded, and cheaper than a timer per entry.
                         const bool stale =
                             ShaderInternal::shaderClockNowMs() - pending.armedAtMs > kPendingMaximizeMorphDeadlineMs;
                         // Same interactive guard as the arming site: a drag
@@ -1296,14 +696,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     && it->targetGeometry.isValid() && safeW->frameGeometry().toRect() != it->spawnGeometry.toRect()) {
                     endRestoreSuppression(safeW.data());
                 }
-                // Body 2 — debounced daemon shadow. Per tick this stashes the
-                // latest geometry and runs ONLY the cheap decoration resync:
-                // the shouldHandleWindow exclusion gate (an uncached rule
-                // resolve over a freshly built ruleQuery) moved into
-                // flushPendingFrameGeometry, so it runs once per 50ms flush
-                // per window instead of on every geometry tick — animated
-                // geometry (retiles, morphs, interactive resize) fired it
-                // hundreds of times per second (discussion #816).
+                // Body 2 — throttled daemon shadow. Per tick this stashes the
+                // latest geometry and runs ONLY the cheap decoration resync.
+                // The shouldHandleWindow gate decides only whether the push
+                // goes out, so it runs where the push does, in
+                // flushPendingFrameGeometry once per window per flush, after
+                // the flush's geometry-scoped verdict eviction (the one place
+                // its cached exclusion verdict routinely misses). Per tick it
+                // ran on every frame of an interactive move or resize
+                // (discussion #816).
                 const QString windowId = getWindowId(safeW);
                 if (windowId.isEmpty()) {
                     return;
@@ -1321,8 +722,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // a hash lookup plus two flag checks for the untracked common
                 // case, and deferring it to the flush let the re-decorated
                 // title bar flash for up to the 50ms throttle window. No
-                // shouldHandleWindow gate needed — the manager only ever owns
-                // windows that passed it.
+                // shouldHandleWindow gate: the manager owns whatever the title-bar
+                // reconcile hides (reconcileRuleHiddenTitleBar shields structural and
+                // own surfaces only, not the dialogs and transients shouldHandleWindow
+                // rejects), so a gate would drop this self-heal for exactly those.
                 m_decorationManager->resyncWindow(windowId);
                 const QRect geo = safeW->frameGeometry().toRect();
                 if (geo.width() <= 0 || geo.height() <= 0) {
@@ -1335,17 +738,19 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             });
 
     // Refresh the daemon's registry metadata on every minimize edge, connected
-    // BEFORE the handler connections below. For SNAP the ordering matters on
-    // the bus: the handler's float commit rides the same edge, and the push
-    // must land first so the daemon's suspension classification reads fresh
-    // minimize state. The AUTOTILE handler's float commit is debounced
-    // (kMinimizeFloatDebounceMs), so for it the ordering guarantee comes from
-    // that delay, not from connection order. The daemon's mode-swap
-    // seed/restore decisions consult WindowMetadata::isMinimized, which would
-    // otherwise remain at its previous snapshot until an unrelated refresh —
-    // a stale value lets a mode-swap seed tile a window that is minimized
-    // right now (the per-slot floating check cannot cover this: it resolves
-    // via the screen's CURRENT mode, which flips mid-toggle).
+    // BEFORE the handler connections below so the daemon's suspension
+    // classification reads fresh minimize state. Both handlers debounce their
+    // ordinary float (kSpuriousMinimizePairMs), so that commit lands after the
+    // push anyway; their same-edge sends depend on this connection order: both
+    // re-minimize countermands send setWindowFloatingForScreen on the edge, and
+    // so does the snap handler's unfloat of an adopted autotile minimize-float
+    // (commitUnminimizeUnfloat). The daemon's mode-swap seed/restore decisions
+    // consult WindowMetadata::isMinimized, which would otherwise remain at its
+    // previous snapshot until an unrelated refresh — a stale value lets a
+    // mode-swap seed tile a window that is minimized right now (nothing else
+    // catches it: the seed filter keeps every non-minimized entry, and its one
+    // float test, the target engine's slot, runs only once this read says
+    // minimized).
     // Liveness-guarded but deliberately NOT gated on shouldHandleWindow /
     // isTileableWindow: the open-time push in slotWindowAdded registers EVERY
     // window, and the daemon's rule predicates (IsMinimized) evaluate against
@@ -1377,15 +782,19 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::minimizedChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowMinimizedChanged);
 
-    // Snap mode: track minimize/unminimize to float/unfloat snapped windows
+    // The window.minimize shader leg for every window the animation filter
+    // admits, then the snap handler's minimize float / unminimize unfloat for
+    // a snapped one.
     connect(w, &KWin::EffectWindow::minimizedChanged, this, &PlasmaZonesEffect::slotWindowMinimizedChanged);
 
     // Refresh the registry on every urgency edge, for the same reason as the
     // minimize edge above: WindowMetadata::isDemandingAttention would
     // otherwise sit at whatever the last unrelated push snapshotted, and a
-    // stale urgency is worse than none — the tab indicator would keep a tab
-    // lit long after the window stopped asking for attention, or never light
-    // it at all. The signal lives on KWin::Window, not EffectWindow, so this
+    // stale urgency is worse than none: the daemon mirrors it to the Phosphor
+    // shell (windowUrgencyChanged, getUrgentWindows), whose placement map would
+    // keep a window lit long after it stopped asking for attention, or never
+    // light it. The effect's own tab pill reads KWin's live bit at model
+    // rebuild. The signal lives on KWin::Window, not EffectWindow, so this
     // connection needs the underlying window; a window without one (no
     // KWin::Window backing) simply never reports urgency, which the daemon
     // reads as "not urgent". The EffectWindow is captured weakly; the
@@ -1399,8 +808,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         return;
                     }
                     pushWindowMetadata(safeW.data());
-                    // Urgency lights a compositor-drawn tab pill; same rebuild
-                    // as the caption hook above.
+                    // Urgency lights a compositor-drawn tab pill in both bar
+                    // styles, so this rebuilds every strip naming the window
+                    // (noteScrollTabWindowChanged), unlike the caption hook in
+                    // window_metadata_connections.cpp, which skips segment-bar
+                    // screens.
                     m_tilingHandler->noteScrollTabWindowChanged(getWindowId(safeW.data()));
                 });
     }
@@ -1412,7 +824,7 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
         return;
     }
     // ALWAYS a forward leg. Geometry packs encode direction in the rects,
-    // not the timeline: the zone-snap path (drag_snap.cpp) never reverses
+    // not the timeline: the zone-snap path (window_geometry_apply.cpp) never reverses
     // either — a shrink into a small zone is a forward morph with a small
     // iToRect. Reversing here split the two geometry-shader families:
     // fragment morphs read raw iTime (flipped → played maximized→restored),
@@ -1437,6 +849,17 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
     // handler.
     const KWin::Window* kw = window->window();
     const bool toMaximized = kw && kw->maximizeMode() == KWin::MaximizeFull;
+    // A second maximize edge while this handler's own leg is still live (a
+    // rapid toggle) SUPERSEDES that leg, departing from the rect it is drawing
+    // now (see ShaderTransition::maximizeLeg). The drawn rect mirrors the paint
+    // predictor's split: position on the raw progress, size on the clamped one.
+    QRectF drawnDeparture;
+    if (ShaderTransition* live = m_shaderManager.findTransition(window); live && live->maximizeLeg) {
+        drawnDeparture = predictedMorphRect(*live, ShaderInternal::shaderClockNowMs());
+        endShaderTransition(window);
+    }
+    const ShaderTransition* liveBefore = m_shaderManager.findTransition(window);
+    const quint64 generationBefore = liveBefore ? liveBefore->generation : 0;
     bool ownsMaximizeLeg = false;
     tryBeginShaderForEvent(window,
                            toMaximized ? PhosphorAnimation::ProfilePaths::WindowPlaceIn
@@ -1444,8 +867,8 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
                            animationDurationMs(),
                            /*reverse=*/false, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
                            /*animateMinimized=*/false, &ownsMaximizeLeg);
-    // Geometry-morph endpoints — sibling of the drag-snap wiring in
-    // drag_snap.cpp. The placement legs are geometry-contract events, so every
+    // Geometry-morph endpoints — sibling of the snap-placement wiring in
+    // window_geometry_apply.cpp. The placement legs are geometry-contract events, so every
     // assignable pack derives its drawn rect from iFromRect/iToRect; leaving
     // them default-invalid pushes zero vec4s and a morph pack masks every
     // fragment outside a 0×0 rect at the origin — the window paints fully
@@ -1466,7 +889,7 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
         return;
     }
     const QRectF newFrame = window->frameGeometry();
-    QRectF preFrame = departureFrame;
+    QRectF preFrame = drawnDeparture.isValid() ? drawnDeparture : departureFrame;
     if (preFrame.isEmpty()) {
         // Degenerate departure rect: degrade to a static morph at the live
         // frame — visible, just motionless — rather than the transparent
@@ -1474,22 +897,22 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
         preFrame = newFrame;
     }
     // Always retarget the destination; anchor the departure + snapshot only
-    // on a fresh morph. A rapid maximize→unmaximize toggle with the same
-    // shader lands here while the first leg is still live (same effect,
-    // same direction, same timing mode → beginShaderTransition's
-    // same-effect short-circuit keeps the prior transition), and the
-    // captured snapshot already holds the ORIGINAL content — re-anchoring
-    // fromGeometry or re-capturing mid-flight would jump the drawn rect and
-    // collapse the cross-fade. Mirrors the drag-snap retarget rule.
+    // on a FRESH install. A leg the same-effect short-circuit KEPT (another
+    // placement leg of the same pack, already running) has its own departure
+    // and snapshot, and re-anchoring it mid-flight would jump the drawn rect
+    // and collapse the cross-fade. Fresh is decided by the generation, not by
+    // the snapshot: the default window-morph is vertex-only and never takes
+    // one, so a missing snapshot said nothing about whether the leg was new.
     st->toGeometry = newFrame;
-    if (!st->oldSnapshot) {
+    if (!liveBefore || st->generation != generationBefore) {
+        st->maximizeLeg = true;
         st->fromGeometry = preFrame;
         // preFrame is a REAL rect the window occupied, so any synthetic-origin
         // marker a kept scroll leg carried no longer describes fromGeometry.
         // Clear it, or the pending capture wrongly takes the raw path and the
         // maximize morph's old side loses its decorated composite seed. The
         // invariant: fromIsSynthetic tracks the provenance of the CURRENT
-        // fromGeometry, maintained at every writer (see drag_snap.cpp's
+        // fromGeometry, maintained at every writer (see window_geometry_apply.cpp's
         // sticky retarget arm for the synthetic-path counterpart).
         st->fromIsSynthetic = false;
         // Old-content cross-fade: same guard as the move-start hookup. The

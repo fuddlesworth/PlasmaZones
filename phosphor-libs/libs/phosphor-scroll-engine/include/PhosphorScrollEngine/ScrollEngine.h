@@ -40,6 +40,7 @@
 #include <QVector>
 
 #include <functional>
+#include <memory>
 #include <optional>
 
 namespace PhosphorEngine {
@@ -52,6 +53,8 @@ class ScreenManager;
 }
 
 namespace PhosphorScrollEngine {
+
+struct ScrollEvacueePark;
 
 /**
  * @brief niri-style scrolling placement engine.
@@ -133,14 +136,14 @@ public:
 
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
-    /// Cross-screen session reclaim (see IPlacementEngine for the base
-    /// contract). This implementation: first-observation gate by ScrollState
-    /// MEMBERSHIP (not the raw reverse-map key); decides via the store's
-    /// live-instance-excluding peekForReclaim over the registry-aware appId;
-    /// requires the recorded home in the LIVE scrolling set AND the record's
-    /// (desktop, activity) to match the home screen's current key (sticky and
-    /// unknown-context sentinel records stay eligible — see
-    /// recordContextMatchesLive); and
+    /// The reopen claim (see IPlacementEngine for the contract): only a FIFO
+    /// record on another virtual screen of the opening output, in scrolling
+    /// mode, for a window opening on a scrolling screen; never a record on
+    /// another monitor and never the window's own. This implementation:
+    /// first-observation gate by ScrollState MEMBERSHIP; the store's
+    /// claim-honouring, live-excluding peekForReclaim over the registry-aware
+    /// appId; the home in the LIVE scrolling set with the record's (desktop,
+    /// activity) matching its current key (sentinel records stay eligible);
     /// returns the REAL adoption outcome verified by membership after the
     /// windowOpened re-entry. Peek-not-take: consumption stays with the open
     /// path's own restore machinery (strip stash claim, takeForReopen).
@@ -148,6 +151,16 @@ public:
                                 int minHeight) override;
     QString heldScreenForWindow(const QString& windowId) const override;
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
+    // Evacuee park (engine_evacueepark.cpp; IPlacementEngine's contract). Each context is
+    // parked as a strip stash the sweeps and saves leave alone; an exact-id claim re-seats.
+    QStringList parkOutput(const QString& physicalScreenId) override;
+    bool readoptParked(const QString& windowId, const QString& parkedPhysicalId,
+                       const QString& returnedPhysicalId) override;
+    void dropParked(const QString& windowId, const QString& physicalScreenId, int desktop,
+                    const QString& activity) override;
+    bool hasParked(const QString& windowId, const QString& physicalScreenId) const override;
+    /// Retile @p screenId with its next layout forced to emit: the daemon re-asserting a strip KWin moved.
+    void forceReemit(const QString& screenId);
     void beginArrivalBurst() override;
     void endArrivalBurst() override;
     void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted) override;
@@ -880,37 +893,26 @@ public:
     /// other injected closures.
     using ModeResolver = std::function<bool(const QString& screenId, int desktop, const QString& activity)>;
 
-    /// Snapping-mode resolver for windowOpened's cross-screen restore defer
-    /// gate (one term of the N-way reciprocity with the other engines'
-    /// gates and claims). Must answer whether the RECORDED context resolves
-    /// to Snapping mode AND snapping is globally preferred — a disabled snap
-    /// engine never claims, so deferring to it would strand the window.
-    /// Unset → this gate TERM is off (the autotile term below self-gates
-    /// independently); with neither resolver set every open is claimed
-    /// (headless/test path).
+    /// INERT, kept for ABI: a snapping-mode resolver that fed windowOpened's
+    /// cross-screen restore defer gate, which the reopen contract removed (a
+    /// window opening on a scrolling screen is scroll's). Nothing reads it and
+    /// the daemon no longer wires it; a setter call is harmless.
     void setSnappingModeResolver(ModeResolver resolver)
     {
         m_snappingModeResolver = std::move(resolver);
     }
 
-    /// Scrolling-mode resolver for claimCrossScreenReopen — must answer
-    /// whether the RECORDED context resolves to Scrolling mode, so a session
-    /// window KWin dropped on the wrong output is pulled back to its recorded
-    /// scrolling screen. Unset → this engine never claims cross-screen
-    /// (headless/test path).
+    /// Scrolling-mode resolver for claimCrossScreenReopen: whether the
+    /// RECORDED context resolves to Scrolling mode, the same-mode half of the
+    /// reopen contract (a FIFO record on another virtual screen of the opening
+    /// output). Unset → this engine never claims (headless/test path).
     void setScrollingModeResolver(ModeResolver resolver)
     {
         m_scrollingModeResolver = std::move(resolver);
     }
 
-    /// Autotile-mode resolver for windowOpened's cross-screen tile-restore
-    /// defer gate: a window arriving here that carries a TILED autotile slot
-    /// recorded on an autotile-mode screen belongs to autotile's cross-screen
-    /// reclaim, and this engine must not splice it into the strip. Must
-    /// answer mode AND autotile liveness on that screen (the daemon owns
-    /// both engines and bakes the liveness term in — deferring to an engine
-    /// whose live set disagrees with the assignment would strand the
-    /// window). Unset → this gate TERM is off.
+    /// INERT, kept for ABI: an autotile-mode resolver that fed the same removed
+    /// defer gate. Nothing reads it and the daemon no longer wires it.
     void setAutotileModeResolver(ModeResolver resolver)
     {
         m_autotileModeResolver = std::move(resolver);
@@ -1494,7 +1496,7 @@ private:
     /// focus); the outermost endArrivalBurst applies once per screen.
     int m_arrivalBurstDepth = 0;
     QHash<PhosphorEngine::PlacementStateKey, bool> m_burstPendingApplies;
-    /// Re-stated per announce by the dispatch (noteCrossScreenClaimsExhausted); read by the defer gate.
+    /// INERT, kept for ABI layout: the defer gate it fed is gone, and nothing writes or reads it.
     QSet<QString> m_crossScreenClaimsExhausted;
     /// Armed by the context setters (desktop/activity switch), consumed by
     /// setActiveScreens so the identical-set re-emit only claims
@@ -1504,57 +1506,39 @@ private:
     /// Screens whose next applyLayout must emit even when every resolved rect
     /// equals the one already applied.
     ///
-    /// applyLayout's emit-on-change gate rests on an assumption that a context
-    /// switch breaks: that an unchanged rect means the compositor is already
-    /// showing this batch's answer. The baseline it compares against
-    /// (m_lastAppliedRect, and the state's lastAppliedViewOffset) describes
-    /// what the compositor was told about a DIFFERENT strip — the one that was
-    /// current before the switch — so "nothing moved" says nothing about what
-    /// is on screen now. Returning to a desktop whose strip is untouched
-    /// therefore emitted no batch at all, and the compositor's per-window strip
-    /// state (its visual-delta entries and the per-output view spring) kept
-    /// describing the strip it had been showing.
+    /// The emit-on-change gate assumes an unchanged rect means the compositor
+    /// already shows this batch's answer. After a context switch its baseline
+    /// (m_lastAppliedRect, the state's lastAppliedViewOffset) describes the
+    /// strip that was current BEFORE the switch, so returning to an untouched
+    /// desktop emitted no batch and the compositor's per-window strip state
+    /// (visual-delta entries, the per-output view spring) kept describing the
+    /// strip it had been showing.
     ///
-    /// Armed wherever announceStripContextIfChanged actually fires, which is
-    /// what pairs the two: on those paths a screen is forced when, and only
-    /// when, its consumer was just told to retire. Five sites do it — the
-    /// identical-set branch of setActiveScreens, its added and stayer loops,
-    /// the sticky-pin release in updateStickyScreenPins, and the re-keyed
-    /// strips of renumberDesktopsAfterRemoval.
+    /// Armed wherever announceStripContextIfChanged fires, so a screen is
+    /// forced exactly when its consumer was told to retire: the identical-set
+    /// branch of setActiveScreens, its added and stayer loops, the sticky-pin
+    /// release in updateStickyScreenPins, and renumberDesktopsAfterRemoval's
+    /// re-keyed strips. Producers not paired with an announce: applyLayout's
+    /// promotion of an m_pendingFocusEmitContexts entry once its context is on
+    /// screen (a background focus report moved focus and anchor with only
+    /// placementChanged emitted; see that member); the membership pass
+    /// (engine_membership.cpp), and dropFromOtherContexts on the close /
+    /// handoff / prune / cross-output paths, for a strip in view it adopted
+    /// into or released from, since the rect memory belongs to another
+    /// desktop's strip; and forceReemit, the daemon re-asserting a strip KWin
+    /// moved back on an output's return.
     ///
-    /// Two further producers are deliberately NOT announce-paired. applyLayout
-    /// promotes an m_pendingFocusEmitContexts entry into this set once the
-    /// context that armed it is the one on screen. Nothing retired there —
-    /// the arm exists because a background focus report moved the strip's
-    /// focus and anchor with only placementChanged emitted, so the return
-    /// owes a geometry batch the change gate would otherwise suppress. See
-    /// that member for the full contract. And the membership pass
-    /// (engine_membership.cpp) arms the screen whose strip in view it
-    /// adopted a window into or released one from — dropFromOtherContexts,
-    /// on the close / handoff / prune / cross-output paths, is the same
-    /// producer for the strips it empties: the window's rect memory belongs
-    /// to another desktop's strip, so the change gate cannot be trusted to
-    /// notice.
+    /// An ADDED screen is armed too. It is not fresh: releaseScreenState keeps
+    /// m_lastAppliedRect (see its contract) and the removal loop prunes only
+    /// the leaving screen's CURRENT context, so a context whose state survived
+    /// re-enters against a full live baseline and every rect can match.
     ///
-    /// A screen ADDED to the set is armed too, and the reason is worth stating
-    /// because the obvious argument for leaving it unarmed is wrong. That
-    /// argument runs: an added screen gets fresh state and no baseline, so it
-    /// emits on its own. But releaseScreenState deliberately does NOT drop
-    /// m_lastAppliedRect (see its own contract above), and the removal loop
-    /// prunes only the leaving screen's CURRENT context, so a screen
-    /// re-entering on a context whose state survived resolves against a full
-    /// live baseline. Every rect can then match and the batch is suppressed —
-    /// the same hole this flag exists to close, reached by a different door.
-    ///
-    /// Deliberately a forced EMIT rather than dropping m_lastAppliedRect for
-    /// the screen's windows, which is the tempting spelling because the header
-    /// above notes that dropping the rect memory forces an emit. That memory
-    /// is also the park/unpark discriminator (applyLayout's wasParked and
-    /// wasOnScreen read it), so
-    /// clearing it would make every parked column read as ARRIVING and hand
-    /// each one an edge-anchored origin it never departed from. The rect
-    /// memory is still true; it is the inference drawn from it that does not
-    /// survive the switch.
+    /// A forced EMIT rather than dropping m_lastAppliedRect for the screen's
+    /// windows: that memory is also the park/unpark discriminator
+    /// (applyLayout's wasParked and wasOnScreen), and clearing it would make
+    /// every parked column read as ARRIVING with an edge-anchored origin it
+    /// never departed from. The memory is still true; only the inference
+    /// drawn from it does not survive the switch.
     QSet<QString> m_forceEmitScreens;
     /// A focus report absorbed while its context was in the BACKGROUND
     /// (windowFocused's off-current-key arm): the strip's focus and anchor
@@ -1645,8 +1629,8 @@ private:
     /// openColumnPlacement rule and remembered positions outrank it).
     ScrollInsertPosition m_insertPosition = ScrollInsertPosition::RightOfActive;
 
-    /// The rect the compositor is currently believed to show per window while
-    /// strip-managed: the exact rect applyLayout last APPLIED, or, between an
+    /// The rect the compositor is believed to show per window while strip-managed
+    /// (kept through a float until re-adoption): the rect applyLayout last APPLIED, or, between an
     /// accepted user resize and the next relayout, the frame the user
     /// settled on (onWindowResized's accepted arm rewrites the entry to
     /// newFrame, since the window sits there now and the emit-on-change gate
@@ -2002,10 +1986,15 @@ private:
     FloatPredicate m_floatPredicate;
     RestorePositionPredicate m_restorePositionPredicate{};
     OpenParamsResolver m_openParamsResolver;
-    ModeResolver m_snappingModeResolver;
+    ModeResolver m_snappingModeResolver; ///< INERT (see setSnappingModeResolver)
     ModeResolver m_scrollingModeResolver;
-    ModeResolver m_autotileModeResolver;
+    ModeResolver m_autotileModeResolver; ///< INERT (see setAutotileModeResolver)
     ContextGapProvider m_contextGapProvider;
+
+    /// Whether @p key is a parked context, which the stash sweeps and the saves leave alone.
+    bool isEvacueeParkedKey(const PhosphorEngine::PlacementStateKey& key) const;
+    // Appended last (installed header). Created by the first parkOutput.
+    std::unique_ptr<ScrollEvacueePark> m_evacueePark;
 };
 
 } // namespace PhosphorScrollEngine

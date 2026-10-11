@@ -177,7 +177,16 @@ WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const Q
     // nothing, leaving the fields as buildRuleQueryForWindow left them rather
     // than stamping a guess.
     const QString screenId = screenIdHint.isEmpty() ? resolveScreenForWindow(windowId) : screenIdHint;
-    stampScreenContext(*query, screenId);
+    stampScreenAndMode(*query, windowId, screenId);
+    // The live frame, not the registry's open-time size: the shadow is fed by
+    // every frame report, while the registry's size comes only from metadata
+    // pushes (F226). A window never reported keeps the registry's values.
+    if (const QRect frame = m_frameGeometry.value(shadowWindowId(windowId)); frame.isValid()) {
+        query->width = frame.width();
+        query->height = frame.height();
+        query->positionX = frame.x();
+        query->positionY = frame.y();
+    }
     return query;
 }
 
@@ -405,7 +414,7 @@ void WindowTrackingAdaptor::stampScreenContext(PhosphorRules::WindowQuery& query
 }
 
 void WindowTrackingAdaptor::stampScreenAndMode(PhosphorRules::WindowQuery& query, const QString& windowId,
-                                               const QString& screenId)
+                                               const QString& screenId) const
 {
     stampScreenContext(query, screenId);
     if (screenId.isEmpty() || !m_layoutManager) {

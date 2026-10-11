@@ -664,6 +664,18 @@ private Q_SLOTS:
                  QStringList(
                      {QStringLiteral("nodesktopnumber"), QStringLiteral("DP-1/notanint"), QStringLiteral("DP-1/3")}));
     }
+
+    // There is always one activity, so an empty set is the activity service
+    // being unavailable: nothing is pruned, malformed entries included (F423).
+    void testPruneDisabledActivities_emptySetRemovesNothing()
+    {
+        QStringList entries{QStringLiteral("DP-1/act-a"), QStringLiteral("malformed")};
+        const QStringList before = entries;
+        QVERIFY(!pruneDisabledActivityEntries(entries, {}));
+        QCOMPARE(entries, before);
+        QVERIFY(pruneDisabledActivityEntries(entries, {QStringLiteral("act-b")}));
+        QVERIFY(entries.isEmpty());
+    }
 };
 
 QTEST_MAIN(TestSettingsDisablePerMode)

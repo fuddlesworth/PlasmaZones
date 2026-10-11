@@ -80,6 +80,49 @@ QString PlasmaZonesEffect::getWindowAppId(KWin::EffectWindow* w) const
     return ::PhosphorIdentity::WindowId::normalizeAppId(window->desktopFileName(), w->windowClass());
 }
 
+WindowContextFields PlasmaZonesEffect::liveContextFields(KWin::EffectWindow* w)
+{
+    WindowContextFields fields;
+    if (!w) {
+        return fields;
+    }
+    // virtualDesktop: 0 = on all desktops / unknown; otherwise the 1-based x11
+    // desktop number of the window's first desktop. A window spanning several
+    // (but not all) desktops reports its first here and the FULL list too, so
+    // the daemon's per-window mode resolution can prefer whichever spanned
+    // desktop the screen currently shows instead of pinning to the first. Null
+    // desktop entries are skipped on BOTH derivations, keeping the
+    // "virtualDesktop equals the span list's first entry" invariant even if
+    // KWin hands back a null pointer. The list is an explicit QVariantList: a
+    // QVariant wrapping QList<int> would not survive the daemon's .toList()
+    // readback.
+    if (KWin::Window* const window = w->window()) {
+        const QList<KWin::VirtualDesktop*> desktops = window->desktops();
+        for (const KWin::VirtualDesktop* vd : desktops) {
+            if (!vd) {
+                continue;
+            }
+            if (fields.virtualDesktop == 0) {
+                fields.virtualDesktop = static_cast<int>(vd->x11DesktopNumber());
+            }
+            if (desktops.size() > 1) {
+                fields.desktops.append(static_cast<int>(vd->x11DesktopNumber()));
+            }
+        }
+    }
+    // activity: empty = on all activities / unknown; otherwise the first UUID,
+    // and every activity when the window is on several, so the daemon does not
+    // model it on the first alone (F426).
+    const QStringList activities = w->activities();
+    fields.activity = activities.isEmpty() ? QString() : activities.first();
+    if (activities.size() > 1) {
+        for (const QString& activityId : activities) {
+            fields.activities.append(activityId);
+        }
+    }
+    return fields;
+}
+
 void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeExtended)
 {
     if (!w) {
@@ -114,28 +157,11 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     const int rawPid = static_cast<int>(w->pid());
     const int pid = rawPid > 0 ? rawPid : 0;
 
-    // virtualDesktop: 0 = on all desktops / unknown; otherwise the 1-based x11
-    // desktop number of the window's first desktop. A window spanning several
-    // (but not all) desktops reports its first here and the FULL list via the
-    // VirtualDesktops extended key below, so the daemon's per-window mode
-    // resolution can prefer whichever spanned desktop the screen currently
-    // shows instead of pinning to the first. Null desktop entries are skipped
-    // on BOTH derivations, keeping the "virtualDesktop equals the span list's
-    // first entry" invariant even if KWin hands back a null pointer.
-    int virtualDesktop = 0;
-    if (window) {
-        const QList<KWin::VirtualDesktop*> desktops = window->desktops();
-        for (const KWin::VirtualDesktop* vd : desktops) {
-            if (vd) {
-                virtualDesktop = static_cast<int>(vd->x11DesktopNumber());
-                break;
-            }
-        }
-    }
-
-    // activity: empty = on all activities / unknown; otherwise the first UUID.
-    const QStringList activities = w->activities();
-    const QString activity = activities.isEmpty() ? QString() : activities.first();
+    // While a resize holds the window's desktop or activity edit, every push
+    // reports the context it had before, so no daemon reconcile carries the
+    // window mid-gesture (F665); the drain pushes the new one.
+    const WindowContextFields context =
+        (m_resizeHold.window == w && m_resizeHold.heldAxes != 0) ? m_resizeHold.context : liveContextFields(w);
 
     const int windowType = static_cast<int>(windowTypeFor(w));
 
@@ -258,33 +284,22 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         if (props.captionNormal) {
             extended.insert(Key::CaptionNormal, *props.captionNormal);
         }
-        // Multi-desktop span list. Collected here (not with virtualDesktop
-        // above) so a caption-only refresh skips the walk along with the rest
-        // of the extended build. Built as an explicit QVariantList — a
-        // QVariant wrapping QList<int> would not survive the daemon's
-        // .toList() readback.
-        if (window) {
-            const QList<KWin::VirtualDesktop*> desktops = window->desktops();
-            if (desktops.size() > 1) {
-                QVariantList desktopsList;
-                desktopsList.reserve(desktops.size());
-                for (const KWin::VirtualDesktop* vd : desktops) {
-                    if (vd) {
-                        desktopsList.append(static_cast<int>(vd->x11DesktopNumber()));
-                    }
-                }
-                if (!desktopsList.isEmpty()) {
-                    extended.insert(Key::VirtualDesktops, desktopsList);
-                }
-            }
+        // The multi-desktop and multi-activity span lists, present only for a
+        // window on several (see liveContextFields).
+        if (!context.desktops.isEmpty()) {
+            extended.insert(Key::VirtualDesktops, context.desktops);
+        }
+        if (!context.activities.isEmpty()) {
+            extended.insert(Key::Activities, context.activities);
         }
     }
 
     // Fire-and-forget — the daemon side is idempotent.
-    PhosphorProtocol::ClientHelpers::fireAndForget(
-        this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setWindowMetadata"),
-        {instanceId, appId, desktopFile, title, windowRole, pid, virtualDesktop, activity, windowType, extended},
-        QStringLiteral("setWindowMetadata"));
+    PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("setWindowMetadata"),
+                                                   {instanceId, appId, desktopFile, title, windowRole, pid,
+                                                    context.virtualDesktop, context.activity, windowType, extended},
+                                                   QStringLiteral("setWindowMetadata"));
 }
 
 void PlasmaZonesEffect::flushPendingFrameGeometry()

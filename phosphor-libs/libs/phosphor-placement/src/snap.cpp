@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Auto-snap logic and snap tracking helpers.
-// Part of WindowTrackingService — split from windowtrackingservice.cpp for SRP.
+// Part of WindowTrackingService, split from WindowTrackingService.cpp.
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include "placementutils.h"
 
 #include <PhosphorZones/Layout.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -17,6 +18,7 @@
 #include <PhosphorScreens/Manager.h>
 #include "placementlogging.h"
 #include <QGuiApplication>
+#include <QPointer>
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
@@ -81,9 +83,10 @@ void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
     if (windowId.isEmpty()) {
         return;
     }
-    // Prefer the window's owning store; a not-yet-placed window (marked before its
-    // commit registers it) has none, so park the flag on the global holder. The
-    // is/clear paths scan every store, so it is found wherever it landed.
+    // Prefer the window's owning store; a window with none parks the flag on the
+    // global holder. The is/clear paths scan every store, so it is found wherever
+    // it landed. A caller marking a window it is about to commit marks AFTER the
+    // commit: the first placement evicts the global holder's copy.
     PhosphorSnapEngine::SnapState* store = snapForWindow(windowId);
     if (!store) {
         store = snapGlobals();
@@ -114,27 +117,6 @@ bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
     return cleared;
 }
 
-bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
-{
-    // Pop the oldest pending-restore entry for this window's live appId.
-    // Single authoritative implementation — see header for why earlier
-    // consumePendingAssignment / clearStalePendingAssignment twins were
-    // merged. Callers that don't care about the result ignore the bool.
-    const QString appId = currentAppIdFor(windowId);
-    auto it = m_pendingRestoreQueues.find(appId);
-    if (it == m_pendingRestoreQueues.end() || it->isEmpty()) {
-        return false;
-    }
-    it->removeFirst();
-    const int remaining = it->size();
-    if (it->isEmpty()) {
-        m_pendingRestoreQueues.erase(it);
-    }
-    qCDebug(lcPlacement) << "Consumed pending assignment for" << appId << "remaining:" << remaining;
-    markDirty(DirtyPendingRestores);
-    return true;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Snap-state resolver wiring and access helpers
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -150,11 +132,14 @@ void WindowTrackingService::setSnapStateResolver(SnapStateResolver resolver)
         // is wired next. The two detach paths are documented as equivalent, so
         // they must actually behave that way.
         m_pendingUserSnappedClasses.reset();
+        m_pendingLastUsedZone.reset();
         return;
     }
-    // A load that arrived before the resolver was wired parked its classes;
-    // now that a store exists they can land. See setUserSnappedClasses.
+    // A load that arrived before the resolver was wired parked its classes
+    // and last-used zone; now that a store exists they can land. See
+    // setUserSnappedClasses and setLastUsedZone.
     flushPendingUserSnappedClasses();
+    flushPendingLastUsedZone();
 }
 
 void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
@@ -165,6 +150,7 @@ void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
         // for the store that just went away into whatever store is wired
         // next — visible in tests that reuse one service across cases.
         m_pendingUserSnappedClasses.reset();
+        m_pendingLastUsedZone.reset();
         return;
     }
     SnapStateResolver resolver;
@@ -183,9 +169,45 @@ void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
     resolver.allStates = [state]() {
         return QList<PhosphorSnapEngine::SnapState*>{state};
     };
+    // A no-op: WindowTrackingService::windowClosed already ran this one store's windowClosed.
     resolver.forgetWindow = [](const QString&) { };
     m_snapResolver = std::move(resolver);
     flushPendingUserSnappedClasses();
+    flushPendingLastUsedZone();
+}
+
+SnapStateResolver snapStateResolverFor(PhosphorSnapEngine::SnapEngine* engine)
+{
+    SnapStateResolver r;
+    r.forWindow = [e = QPointer(engine)](const QString& id) -> PhosphorSnapEngine::SnapState* {
+        return e ? e->stateForWindow(id) : nullptr;
+    };
+    r.forWindowOnScreen = [e = QPointer(engine)](const QString& id, const QString& screenId,
+                                                 int desktop) -> PhosphorSnapEngine::SnapState* {
+        return e ? e->stateForWindowOnScreen(id, screenId, desktop) : nullptr;
+    };
+    r.forScreen = [e = QPointer(engine)](const QString& screenId) -> PhosphorSnapEngine::SnapState* {
+        return e ? static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(screenId)) : nullptr;
+    };
+    r.globals = [e = QPointer(engine)]() -> PhosphorSnapEngine::SnapState* {
+        return e ? e->globalState() : nullptr;
+    };
+    r.allStates = [e = QPointer(engine)]() -> QList<PhosphorSnapEngine::SnapState*> {
+        return e ? e->allSnapStates() : QList<PhosphorSnapEngine::SnapState*>{};
+    };
+    r.forgetWindow = [e = QPointer(engine)](const QString& id) {
+        if (e) {
+            e->forgetWindow(id);
+        }
+    };
+    r.holdsWindow = [e = QPointer(engine)](const QString& id, const PhosphorSnapEngine::SnapState* state) {
+        return e ? e->holdsWindowInState(id, state) : false;
+    };
+    r.keyFor = [e = QPointer(engine)](
+                   const PhosphorSnapEngine::SnapState* state) -> std::optional<PhosphorEngine::PlacementStateKey> {
+        return e ? e->keyForState(state) : std::nullopt;
+    };
+    return r;
 }
 
 void WindowTrackingService::setSnapEngine(PhosphorEngine::PlacementEngineBase* engine)
@@ -230,6 +252,49 @@ PhosphorSnapEngine::SnapState* WindowTrackingService::snapGlobals() const
 QList<PhosphorSnapEngine::SnapState*> WindowTrackingService::snapAllStates() const
 {
     return m_snapResolver.allStates ? m_snapResolver.allStates() : QList<PhosphorSnapEngine::SnapState*>{};
+}
+
+void WindowTrackingService::setManagedFramePredicate(ManagedFramePredicate predicate)
+{
+    m_managedFramePredicate = std::move(predicate);
+}
+
+bool WindowTrackingService::isManagedFrame(const QString& windowId, const QRect& frame) const
+{
+    if (windowId.isEmpty() || !frame.isValid()) {
+        return false;
+    }
+    // Every store the window is a member of: a window on several desktops sits
+    // on the zone it holds on another as much as on the one in view, and a
+    // floated window is still on the zone it floated from until it moves.
+    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        if (!state || !snapHoldsWindow(windowId, state)) {
+            continue;
+        }
+        const QString screen = state->screenId().isEmpty() ? state->screenForWindow(windowId) : state->screenId();
+        for (const QStringList& zones : {state->zonesForWindow(windowId), state->preFloatZones(windowId)}) {
+            if (!zones.isEmpty() && resolveZoneGeometry(zones, screen) == frame) {
+                return true;
+            }
+        }
+    }
+    return m_managedFramePredicate && m_managedFramePredicate(windowId, frame);
+}
+
+bool WindowTrackingService::occupiesZoneInView(const QString& windowId) const
+{
+    // The LIVE form (F487): a zone remembered for a context another engine now
+    // tiles, or for a desktop not shown, is memory, and the window's frame there
+    // can be a genuine free one.
+    const PhosphorSnapEngine::SnapState* owner = snapForWindow(windowId);
+    if (!owner || !owner->isWindowSnapped(windowId) || owner->isFloating(windowId)) {
+        return false;
+    }
+    const QString screen = owner->screenForWindow(windowId);
+    if (screen.isEmpty() || snapForScreen(screen) != owner) {
+        return false;
+    }
+    return !m_snapEngine || m_snapEngine->isActiveOnScreen(screen);
 }
 
 bool WindowTrackingService::hasSnapState() const

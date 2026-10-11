@@ -46,6 +46,7 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 const QString kScreen = QStringLiteral("DP-1");
+const QString kScreen2 = QStringLiteral("DP-2");
 const QString kWindow = QStringLiteral("app|11111111-2222-3333-4444-555555555555");
 const QString kOther = QStringLiteral("app|66666666-7777-8888-9999-000000000000");
 
@@ -101,6 +102,8 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_engine->setWindowRegistry(nullptr);
+        m_registry.reset();
         m_service->setSnapState(nullptr);
         m_service->setSnapEngine(nullptr);
         delete m_engine;
@@ -278,22 +281,18 @@ private Q_SLOTS:
         QVERIFY2(result.released.isEmpty(), "a window that is re-snapped on its new desktop is not a release");
         QCOMPARE(batch.size(), 1);
         QCOMPARE(batch.first().virtualDesktop, 2);
+        QVERIFY2(batch.first().restatement, "a carry re-states the window's own slot (F461)");
         QCOMPARE(batch.first().targetZoneId, sortedZoneIds(destination).at(1));
         QCOMPARE(zonesOn(2, kWindow), QStringList{sortedZoneIds(destination).at(1)});
         QVERIFY2(zonesOn(1, kWindow).isEmpty(), "the desktop it left keeps nothing");
-        // Desktop 2 is not the one in view, and its client is suspended there,
-        // so the geometry apply above may never be acked. The window is parked
-        // for the effect's desktop-arrival restore instead, and parked AFTER
-        // the batch, because a geometry apply cancels a park it finds.
-        QCOMPARE(parkSpy.count(), 1);
-        QCOMPARE(parkSpy.first().at(0).toString(), kWindow);
-        QCOMPARE(parkSpy.first().at(1).toInt(), 2);
+        // Desktop 2 is not in view, so the apply may never be acked; the effect
+        // parks a window whose zone apply lands on a hidden desktop. The carry
+        // asks for no desktop move, which would pin a window to one desktop.
+        QVERIFY2(parkSpy.isEmpty(), "a carry to a hidden desktop asks for no desktop move");
     }
 
-    // The park is asked for over windowDesktopMoveRequested, which the effect
-    // answers by REPLACING the window's desktop set. For a window on several
-    // desktops that would drop the ones it is not being carried to, so the
-    // carry takes the geometry apply alone and the desktops stay as they are.
+    // ...nor for a window on several desktops, whose desktop set a move would
+    // replace.
     void aMultiDesktopWindowIsCarriedButNeverParked()
     {
         PhosphorZones::Layout* destination = addLayout(3);
@@ -482,22 +481,19 @@ private Q_SLOTS:
     }
 
     // Restore: the record names a zone per desktop; the desktop the window
-    // is being placed onto takes its own zone and the others are seeded back
-    // into their stores, so switching to them after a restart finds the
-    // window placed. The registry knows which desktop that is (the effect
-    // stamps it before the resolve), and it is not necessarily the one the
-    // screen is showing.
+    // is being placed onto takes its own zone and the others it is still on
+    // are seeded back into their stores, so switching to them after a
+    // restart finds the window placed. The registry knows which desktops
+    // those are (the effect stamps them before the resolve), and the restore
+    // desktop is not necessarily the one the screen is showing. A desktop the
+    // record names but the window is no longer on is forgotten, not seeded
+    // (F263, F307).
     void restoreSeedsTheOtherDesktopsZones()
     {
-        PhosphorEngine::WindowRegistry registry;
-        registry.canonicalizeWindowId(kWindow);
-        PhosphorEngine::WindowMetadata meta;
-        meta.appId = QStringLiteral("app");
-        meta.title = QStringLiteral("t");
-        meta.virtualDesktop = 2;
-        registry.upsert(QStringLiteral("11111111-2222-3333-4444-555555555555"), meta);
-        m_engine->setWindowRegistry(&registry);
-        m_service->placementStore().record(multiDesktopRecord());
+        installRegistryFor({2, 3});
+        WindowPlacement rec = multiDesktopRecord();
+        rec.engines[WindowPlacement::snapEngineId()].zonesByDesktop.insert(3, {m_zoneIds[2]});
+        m_service->placementStore().record(rec);
 
         // The screen shows desktop 1; the window is restored onto desktop 2.
         // The context gate is asked about the desktop being restored ONTO.
@@ -512,21 +508,23 @@ private Q_SLOTS:
         QCOMPARE(result.zoneIds, QStringList{m_zoneIds[1]});
         QCOMPARE(result.virtualDesktop, 2);
         QCOMPARE(gatedDesktop, 2);
-        // Desktop 1's zone came back into desktop 1's store, under a
+        // Desktop 3's zone came back into desktop 3's store, under a
         // membership, so the restore desktop's commit lands in its own.
-        QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
+        // Desktop 1, which the window left, is neither seeded nor kept.
+        QCOMPARE(zonesOn(3, kWindow), QStringList{m_zoneIds[2]});
+        QVERIFY(zonesOn(1, kWindow).isEmpty());
+        QVERIFY(!persistedZonesByDesktop(kWindow).contains(1));
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         QVERIFY(m_engine->heldKeyForWindow(kWindow).has_value());
 
         // The commit the caller makes is pinned to the restore desktop, so
         // with the screen still showing desktop 1 it lands in desktop 2's
-        // store and leaves desktop 1's zone alone.
+        // store and leaves desktop 3's zone alone.
         m_engine->setCurrentDesktopForScreen(kScreen, 1);
         m_service->assignWindowToZone(kWindow, result.zoneIds.first(), kScreen, result.virtualDesktop);
         QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[1]});
-        QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
+        QCOMPARE(zonesOn(3, kWindow), QStringList{m_zoneIds[2]});
         m_engine->setShouldRestorePredicate({});
-        m_engine->setWindowRegistry(nullptr);
     }
 
     // The per-desktop restore decision. A record captured with the SNAPPED
@@ -547,14 +545,9 @@ private Q_SLOTS:
         m_service->placementStore().record(*captured);
         m_engine->forgetWindow(kWindow);
 
-        PhosphorEngine::WindowRegistry registry;
-        registry.canonicalizeWindowId(kWindow);
-        PhosphorEngine::WindowMetadata meta;
-        meta.appId = QStringLiteral("app");
-        meta.title = QStringLiteral("t");
-        meta.virtualDesktop = 2;
-        registry.upsert(QStringLiteral("11111111-2222-3333-4444-555555555555"), meta);
-        m_engine->setWindowRegistry(&registry);
+        // On desktops 2 and 1, with 2 first: this fixture has no desktop
+        // manager, so the restore desktop is the span's first.
+        installRegistryFor({2, 1});
 
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         PhosphorEngine::SnapResult result = m_engine->resolveWindowRestore(kWindow, kScreen, false);
@@ -576,7 +569,6 @@ private Q_SLOTS:
         QVERIFY2(result.shouldSnap, "the map names a zone on the restore desktop");
         QCOMPARE(result.zoneIds, QStringList{m_zoneIds[1]});
         QCOMPARE(result.virtualDesktop, 2);
-        m_engine->setWindowRegistry(nullptr);
     }
 
     // A restore whose registry span no longer covers a desktop the record
@@ -584,15 +576,7 @@ private Q_SLOTS:
     // placing a phantom the membership pass would only release again.
     void restoreSkipsDesktopsTheWindowIsNoLongerOn()
     {
-        PhosphorEngine::WindowRegistry registry;
-        registry.canonicalizeWindowId(kWindow);
-        PhosphorEngine::WindowMetadata meta;
-        meta.appId = QStringLiteral("app");
-        meta.title = QStringLiteral("t");
-        meta.virtualDesktop = 2;
-        meta.virtualDesktops = {2, 3};
-        registry.upsert(QStringLiteral("11111111-2222-3333-4444-555555555555"), meta);
-        m_engine->setWindowRegistry(&registry);
+        installRegistryFor({2, 3});
         WindowPlacement rec = multiDesktopRecord();
         rec.engines[WindowPlacement::snapEngineId()].zonesByDesktop.insert(3, {m_zoneIds[2]});
         m_service->placementStore().record(rec);
@@ -604,7 +588,45 @@ private Q_SLOTS:
         QVERIFY2(zonesOn(1, kWindow).isEmpty(), "desktop 1 is not in the window's span");
         QCOMPARE(zonesOn(3, kWindow), QStringList{m_zoneIds[2]});
         QVERIFY(!persistedZonesByDesktop(kWindow).contains(1));
-        m_engine->setWindowRegistry(nullptr);
+    }
+
+    // ...and a window on ONE desktop is a span of one, not unknown: restored
+    // from a {1, 2} record onto desktop 2 alone, it seeds nothing on desktop 1
+    // (F263).
+    void restoreOfASingleDesktopWindowSeedsNoOtherDesktop()
+    {
+        installRegistryFor({2});
+        m_service->placementStore().record(multiDesktopRecord());
+
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        const PhosphorEngine::SnapResult result = m_engine->resolveWindowRestore(kWindow, kScreen, false);
+        QVERIFY(result.shouldSnap);
+        QCOMPARE(result.zoneIds, QStringList{m_zoneIds[1]});
+        QVERIFY2(zonesOn(1, kWindow).isEmpty(), "the window is not on desktop 1");
+        QVERIFY(!persistedZonesByDesktop(kWindow).contains(1));
+    }
+
+    // The floated leg: a record floating with a zone only on desktop 1,
+    // restored onto desktop 2 alone, comes back floating, and the next
+    // membership pass carries nothing into a zone (a seeded phantom on
+    // desktop 1 was the stale key it carried from, F263).
+    void restoreOfASingleDesktopFloatIsNotCarriedIntoAZone()
+    {
+        installRegistryFor({2});
+        WindowPlacement rec = multiDesktopRecord();
+        rec.engines[WindowPlacement::snapEngineId()].state = WindowPlacement::stateFloating();
+        rec.engines[WindowPlacement::snapEngineId()].zonesByDesktop.remove(2);
+        m_service->placementStore().record(rec);
+        QVector<PhosphorEngine::ZoneAssignmentEntry> batch;
+        wireResnapCommit(&batch);
+
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        const PhosphorEngine::SnapResult result = m_engine->resolveWindowRestore(kWindow, kScreen, false);
+        QVERIFY(!result.shouldSnap);
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+
+        QVERIFY2(batch.isEmpty(), "a floating window must not be carried into a zone");
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
     }
 
     // Floating on a desktop the window was adopted into but never snapped on
@@ -676,7 +698,167 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
         QVERIFY2(resnapSpy.count() > 0, "back in snapping mode the switch re-applies the desktop's zone");
+        const auto reapplied =
+            PhosphorEngine::GeometryUtils::deserializeZoneAssignments(resnapSpy.last().at(0).toString(), nullptr);
+        QVERIFY2(!reapplied.isEmpty() && reapplied.first().restatement, "the re-apply is a re-statement (F461)");
         m_engine->setLiveModeResolver({});
+    }
+
+    // Discussion #1124: a snap committed on ANOTHER screen, as a keyboard move
+    // across outputs makes, added a membership there beside the one on the
+    // screen the window left. The old screen's stayed primary, so every read
+    // answered with the zone the window had left, and the membership pass took
+    // the pair for a multi-desktop window and re-applied that zone on each
+    // screen, throwing the window back across monitors. The window moves with
+    // the commit, and neither screen's pass re-applies anything.
+    void aSnapOnAnotherScreenMovesTheWindowThere()
+    {
+        snapOn(1, kWindow, m_zoneIds[2]);
+        m_engine->setCurrentDesktopForScreen(kScreen2, 1);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[0], kScreen2, 1);
+
+        QVERIFY(m_engine->heldKeyForWindow(kWindow).has_value());
+        QCOMPARE(m_engine->heldKeyForWindow(kWindow)->screenId, kScreen2);
+        QCOMPARE(m_service->screenForWindow(kWindow), kScreen2);
+        QCOMPARE(m_service->zoneForWindow(kWindow), m_zoneIds[0]);
+        // Nothing is left behind on the screen it left.
+        QVERIFY(zonesOn(1, kWindow).isEmpty());
+
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        QVERIFY(m_engine->reconcileDesktopMemberships(kScreen, spanOf(on({1}))).isEmpty());
+        QVERIFY(m_engine->reconcileDesktopMemberships(kScreen2, spanOf(on({1}))).isEmpty());
+        QCOMPARE(resnapSpy.count(), 0);
+    }
+
+    // A commit pinned to a desktop of the other screen that is NOT in view
+    // there lands in exactly that context. Re-homing onto the screen's
+    // current key first and then adding the pinned one left the window a
+    // member of both. The desktop it resides on is the pinned one, and the
+    // zone it left on the first screen is forgotten in the record too, or a
+    // restart would seed it back.
+    void aPinnedSnapOnAnotherScreenLandsInThatContextOnly()
+    {
+        snapOn(1, kWindow, m_zoneIds[2]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(persistedZonesByDesktop(kWindow).contains(1));
+        QVERIFY(persistedZonesByDesktop(kWindow).contains(2));
+
+        m_engine->setCurrentDesktopForScreen(kScreen2, 1);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[0], kScreen2, 2);
+
+        const auto held = m_engine->heldKeyForWindow(kWindow);
+        QVERIFY(held.has_value());
+        QCOMPARE(held->screenId, kScreen2);
+        QCOMPARE(held->desktop, 2);
+        if (SnapState* inView = static_cast<SnapState*>(m_engine->stateForScreen(kScreen2))) {
+            QVERIFY2(!m_engine->holdsWindowInState(kWindow, inView), "the desktop in view must not hold the window");
+        }
+        m_engine->setCurrentDesktopForScreen(kScreen2, 2);
+        SnapState* pinned = static_cast<SnapState*>(m_engine->stateForScreen(kScreen2));
+        QVERIFY(pinned);
+        QCOMPARE(pinned->zonesForWindow(kWindow), QStringList{m_zoneIds[0]});
+        QCOMPARE(pinned->desktopForWindow(kWindow), 2);
+        QVERIFY(zonesOn(1, kWindow).isEmpty());
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
+        QVERIFY2(persistedZonesByDesktop(kWindow).isEmpty(), "the zones left on the first screen must be forgotten");
+    }
+
+    // An all-activities window snapped on two desktops of one screen and moved
+    // by keyboard to the other screen: the per-desktop map is activity-blind,
+    // so a zone of the first screen surviving in it was adopted on the second
+    // screen at the next activity switch and the window bounced between zones.
+    void anActivitySwitchAfterAMoveAdoptsNothingFromTheScreenLeft()
+    {
+        snapOn(1, kWindow, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+
+        m_engine->setCurrentDesktopForScreen(kScreen2, 1);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[0], kScreen2, 1);
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        const QHash<int, QStringList> persisted = persistedZonesByDesktop(kWindow);
+        QVERIFY2(!persisted.value(1).contains(m_zoneIds[1]), "the first screen's desktop 1 zone must be forgotten");
+        QVERIFY2(!persisted.value(2).contains(m_zoneIds[1]), "the first screen's desktop 2 zone must be forgotten");
+
+        m_engine->setCurrentActivity(QStringLiteral("activity-y"));
+        m_engine->reconcileDesktopMemberships(kScreen2, spanOf(sticky()));
+        SnapState* there = static_cast<SnapState*>(m_engine->stateForScreen(kScreen2));
+        QVERIFY(!there || !there->zonesForWindow(kWindow).contains(m_zoneIds[1]));
+        m_engine->setCurrentActivity(QString());
+    }
+
+    // A re-key on the SAME screen (a refused cross-mode move recovered onto
+    // its source screen) keeps the window's other desktops there, zone and
+    // persisted entry alike: they are not on a screen it left.
+    void aSameScreenReKeyKeepsTheOtherDesktops()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        for (int desktop : {3, 4}) {
+            m_engine->setCurrentDesktopForScreen(kScreen, desktop);
+            m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+            snapOn(desktop, kWindow, m_zoneIds[desktop - 2]);
+        }
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QCOMPARE(persistedZonesByDesktop(kWindow).size(), 3);
+
+        // The primary moves onto desktop 2 with its zone; the other two stay.
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        QVERIFY(m_engine->migrateWindowToScreen(kWindow, kScreen));
+        QCOMPARE(zonesOn(2, kWindow).size(), 1);
+        int kept = 0;
+        for (int desktop : {1, 3, 4}) {
+            if (!zonesOn(desktop, kWindow).isEmpty()) {
+                ++kept;
+            }
+        }
+        QCOMPARE(kept, 2);
+        QCOMPARE(persistedZonesByDesktop(kWindow).size(), 3);
+    }
+
+    // The leave primitive: every membership off the kept screen goes with
+    // everything it held (zone, the last-used naming it, float bit, pre-float
+    // home, persisted entry), while the kept screen's stay untouched. It is
+    // silent: the caller decides what to announce.
+    void releaseWindowOffScreenKeepsOnlyTheKeptScreen()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        SnapState* onOne = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
+        onOne->restoreLastUsedZone(m_zoneIds[0], kScreen, QString(), 1);
+        onOne->addPreFloatZone(kWindow, {m_zoneIds[2]});
+        onOne->addPreFloatScreen(kWindow, kScreen);
+        // A floating membership on the other screen.
+        m_engine->setCurrentDesktopForScreen(kScreen2, 1);
+        SnapState* onOther = m_engine->stateForWindowOnScreen(kWindow, kScreen2, 1);
+        onOther->setFloatingOnScreen(kWindow, kScreen2, 1);
+        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+
+        QSignalSpy zoneSpy(m_service, &PhosphorPlacement::WindowTrackingService::windowZoneChanged);
+        m_engine->releaseWindowOffScreen(kWindow, kScreen2);
+
+        QVERIFY(zonesOn(1, kWindow).isEmpty());
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
+        QVERIFY(onOne->lastUsedZoneId().isEmpty());
+        QVERIFY(onOne->preFloatZones(kWindow).isEmpty());
+        QVERIFY(!persistedZonesByDesktop(kWindow).contains(1));
+        QVERIFY(!persistedZonesByDesktop(kWindow).contains(2));
+        QVERIFY(m_engine->holdsWindowInState(kWindow, onOther));
+        QVERIFY(onOther->isFloating(kWindow));
+        QCOMPARE(zoneSpy.count(), 0);
+
+        // Keeping nothing releases the rest, and the window is untracked.
+        m_engine->releaseWindowOffScreen(kWindow, QString());
+        QVERIFY(!m_engine->isWindowTracked(kWindow));
     }
 
     // A handoff to a tiling engine releases the CONTEXT it took the window
@@ -757,26 +939,22 @@ private Q_SLOTS:
     }
 
     // Removing a desktop renumbers every bare desktop number the service
-    // keeps, not only the persisted map: a pending restore queued across the
-    // removal must land on the desktop it was queued for.
-    void removingADesktopRenumbersPendingRestores()
+    // keeps, not only the persisted map: a resnap buffered across the removal
+    // must land on the desktop it was buffered for, and a row on the removed
+    // desktop falls back to 0, the all-desktops sentinel.
+    void removingADesktopRenumbersTheResnapBuffer()
     {
-        PhosphorEngine::PendingRestore onThree;
-        onThree.zoneIds = {m_zoneIds[0]};
-        onThree.screenId = kScreen;
-        onThree.virtualDesktop = 3;
-        PhosphorEngine::PendingRestore onTwo = onThree;
-        onTwo.virtualDesktop = 2;
-        m_service->setPendingRestoreQueues({{QStringLiteral("app"), {onThree, onTwo}}});
-        m_service->clearDirty();
+        snapOn(3, kWindow, m_zoneIds[0]);
+        snapOn(2, kOther, m_zoneIds[1]);
+        m_service->populateResnapBufferForAllScreens({}, {kScreen});
 
         m_engine->renumberDesktopsAfterRemoval(2);
-        const QList<PhosphorEngine::PendingRestore> queue =
-            m_service->pendingRestoreQueues().value(QStringLiteral("app"));
-        QCOMPARE(queue.size(), 2);
-        QCOMPARE(queue.at(0).virtualDesktop, 2);
-        QCOMPARE(queue.at(1).virtualDesktop, 0);
-        QVERIFY2(m_service->peekDirty() != 0, "the shift must mark the service dirty");
+        QHash<QString, int> desktopByWindow;
+        for (const PhosphorEngine::ResnapEntry& entry : m_service->takeResnapBuffer()) {
+            desktopByWindow.insert(entry.windowId, entry.virtualDesktop);
+        }
+        QCOMPARE(desktopByWindow.value(kWindow, -1), 2);
+        QCOMPARE(desktopByWindow.value(kOther, -1), 0);
     }
 
     // The close the daemon relays goes through the service, and has to reach
@@ -826,31 +1004,27 @@ private:
         return rec;
     }
 
+    /// A registry that knows kWindow on @p desktops (the first is its
+    /// virtualDesktop; one entry is a single-desktop window), installed on the
+    /// engine and cleared in cleanup().
+    void installRegistryFor(const QList<int>& desktops)
+    {
+        m_registry = std::make_unique<PhosphorEngine::WindowRegistry>();
+        m_registry->canonicalizeWindowId(kWindow);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.title = QStringLiteral("t");
+        meta.virtualDesktop = desktops.value(0);
+        if (desktops.size() > 1) {
+            meta.virtualDesktops = desktops;
+        }
+        m_registry->upsert(QStringLiteral("11111111-2222-3333-4444-555555555555"), meta);
+        m_engine->setWindowRegistry(m_registry.get());
+    }
+
     void installFullResolver()
     {
-        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
-        resolver.forWindow = [e = m_engine](const QString& id) {
-            return e->stateForWindow(id);
-        };
-        resolver.forWindowOnScreen = [e = m_engine](const QString& id, const QString& s, int desktop) {
-            return e->stateForWindowOnScreen(id, s, desktop);
-        };
-        resolver.forScreen = [e = m_engine](const QString& s) {
-            return static_cast<SnapState*>(e->stateForScreen(s));
-        };
-        resolver.globals = [e = m_engine]() {
-            return e->globalState();
-        };
-        resolver.allStates = [e = m_engine]() {
-            return e->allSnapStates();
-        };
-        resolver.forgetWindow = [e = m_engine](const QString& id) {
-            e->forgetWindow(id);
-        };
-        resolver.holdsWindow = [e = m_engine](const QString& id, const SnapState* state) {
-            return e->holdsWindowInState(id, state);
-        };
-        m_service->setSnapStateResolver(resolver);
+        m_service->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(m_engine));
     }
 
     /// A second layout in the registry, so a desktop can be given one of its
@@ -929,6 +1103,7 @@ private:
     StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;
     SnapEngine* m_engine = nullptr;
+    std::unique_ptr<PhosphorEngine::WindowRegistry> m_registry;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };

@@ -120,6 +120,10 @@ inline constexpr QLatin1String CaptionNormal("captionNormal");
 /// virtual desktops. Sent only when the window spans more than one desktop;
 /// the positional virtualDesktop arg stays the first entry for compatibility.
 inline constexpr QLatin1String VirtualDesktops("virtualDesktops");
+/// Full activity UUID list for a window on SEVERAL (but not all) activities.
+/// Sent only when the window is on more than one; the positional activity arg
+/// stays the first entry for compatibility (F426).
+inline constexpr QLatin1String Activities("activities");
 }
 
 /// Keys of the two scrolling tab-indicator maps that cross the daemon → KWin
@@ -391,7 +395,10 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       cannot express. The min sizes exist because a reclaim ADOPTS the window into
 //       a strip or layout and the adopting engine evaluates its oversized /
 //       float verdict exactly once from them, so passing 0,0 left an oversized
-//       window tiled for the session.
+//       window tiled for the session. The reclaim was later removed (a window
+//       is restored only on the output it opens on); restoreReason still gates
+//       sibling borrowing and placement rules, and the min sizes are accepted
+//       and ignored.
 //
 //       Why the handshake and not signature matching. Most of the above widens
 //       a signature, and Qt matches signal-hook signatures before demarshalling,
@@ -577,6 +584,54 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       the daemon lacks gets a D-Bus error and leaves the tile in the strip,
 //       and an old daemon emitting a signal the effect no longer connects
 //       simply goes unheard.
+//
+//       Also in v10, Tiling gains windowReannounced (s s i i): the same
+//       placement as windowOpened for a window that did not just open (a
+//       desktop-switch catch-scan, a cross-output re-add, an unminimize), so
+//       "Focus new windows" can focus genuine opens only. windowOpened now
+//       means a genuine open, and windowsOpenedBatch entries never take focus.
+//
+//       Also in v10, WindowTracking gains reportOutputSettle
+//       (a(ssssbiiiiiiiiiiibbbbssiiibiiii) -> a(sis)) and the parkDropped
+//       (s s) signal: the effect reports the windows a screen-change settle
+//       moved, with the state they had before their output went away, and the
+//       daemon answers each with a verdict (re-seat a window KWin returned
+//       untouched, float an evacuee in place, re-assert a placement KWin moved,
+//       or treat the crossing as the user's move). parkDropped tells the effect
+//       to forget its record of a window the daemon no longer keeps parked. An
+//       old daemon answers the call with an error and the effect replays every
+//       crossing as a move; an old effect never calls. WindowTracking also
+//       gains seedScreenDesktop (s i): the desktop an output shows as it is
+//       added, taken by the engines without a desktop switch. And
+//       windowCrossedScreens (s s s): the effect's notice that KWin moved a
+//       window across screens where a tiling engine runs, so the daemon drops
+//       what it held of the window on the screen left. An old daemon answers
+//       with an error, which the fire-and-forget call ignores.
+//
+//       Also in v10, WindowTracking.applyGeometryRequested gains a trailing
+//       purpose (siiiissb -> siiiissbi, PlacementPurpose): whether the
+//       placement is a user verb on the window or a re-statement of one it
+//       already has, which decides whether its maximize and fullscreen end. A
+//       receiver whose slot takes the old eight arguments still gets the signal
+//       (QtDBus delivers a longer signal to a shorter slot) and keeps the
+//       user-verb behaviour it always had. WindowTracking also gains
+//       fullscreenHandBackRequested (s): a user verb the daemon places no
+//       geometry for (a float with nothing to restore, a move to a tiling
+//       engine), on which the effect ends the window's own fullscreen. An old
+//       effect never connects it, and the window stays fullscreen as before.
+//
+//       Also in v10, Scrolling.scrollingScreensChanged gains isContextSwitch
+//       (b) and leavingToAutotile (as) (as -> asbas): whether a desktop or
+//       activity switch changed the set, and which screens left it for
+//       autotile, so the effect re-announces windows only on an engine flip
+//       inside the tiling union.
+//
+//       Also in v10, WindowTracking gains activeWindowScreenChanged (s s): the
+//       focused window moved to another screen without a new activation (a
+//       KWin, user or daemon move), so the screen every window shortcut acts
+//       on follows it. An old daemon answers with an error, which the
+//       fire-and-forget call ignores, and its shortcuts keep acting on the
+//       screen the window was last activated on.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

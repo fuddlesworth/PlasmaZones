@@ -72,10 +72,6 @@ public:
     {
         return {};
     }
-    const QHash<QString, QList<PhosphorEngine::PendingRestore>>& pendingRestoreQueues() const override
-    {
-        return m_pending;
-    }
     PhosphorEngine::WindowPlacementStore& placementStore() override
     {
         return m_store;
@@ -147,10 +143,6 @@ public:
     {
         return false;
     }
-    bool consumePendingAssignment(const QString&) override
-    {
-        return false;
-    }
     void updateLastUsedZone(const QString&, const QString&, const QString&, int) override
     {
     }
@@ -198,7 +190,6 @@ public:
     }
 
 private:
-    QHash<QString, QList<PhosphorEngine::PendingRestore>> m_pending;
     PhosphorEngine::WindowPlacementStore m_store;
 };
 
@@ -249,7 +240,7 @@ private Q_SLOTS:
     void swap_noAdjacentZone_emptyNeighbourEntryZone_movesToEmptyAcrossOutput();
     void move_autotileNeighbourOutput_defersInsteadOfSnapping();
     void swap_autotileNeighbourOutput_defersInsteadOfSnapping();
-    void focus_autotileNeighbourOutput_stillCrosses();
+    void focus_tilingNeighbourOutput_isLeftToTheEngine();
     void cycle_zoneSharedWithSiblingScreen_staysOnThisScreen();
     void cycle_oneOccupantPerMonitorSharedZone_reportsSingleWindow();
     void cycle_screenIdSkew_fallsBackToUnfilteredRing();
@@ -605,11 +596,11 @@ void TestSnapCrossSurface::swap_autotileNeighbourOutput_defersInsteadOfSnapping(
     QCOMPARE(result.reason, QStringLiteral("no_adjacent_zone"));
 }
 
-void TestSnapCrossSurface::focus_autotileNeighbourOutput_stillCrosses()
+void TestSnapCrossSurface::focus_tilingNeighbourOutput_isLeftToTheEngine()
 {
-    // FOCUS is NOT gated on the neighbour's mode: focus may cross to a window on
-    // an autotile screen. With the same autotile-neighbour provider set, the
-    // cross-output focus still lands on the entry-zone window.
+    // A tiling neighbour is never entered by the resolver, focus included: a
+    // window there that only remembers a snap zone is not the target. The
+    // engine hands the focus to the tiling engine (F422).
     FakeWindowTracking wts;
     wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
     wts.zoneGeo[key(QStringLiteral("z-b"), QStringLiteral("DP-2"))] = QRect(1920, 0, 960, 1080);
@@ -633,8 +624,8 @@ void TestSnapCrossSurface::focus_autotileNeighbourOutput_stillCrosses()
 
     const auto result =
         resolver.getFocusTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
-    QVERIFY(result.success); // focus crosses regardless of neighbour mode
-    QCOMPARE(result.windowIdToActivate, QStringLiteral("w2"));
+    QVERIFY(!result.success);
+    QCOMPARE(result.reason, QStringLiteral("no_adjacent_zone"));
 }
 
 void TestSnapCrossSurface::cycle_zoneSharedWithSiblingScreen_staysOnThisScreen()

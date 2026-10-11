@@ -25,15 +25,12 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
     // dispatch cannot produce an empty one, but this is public engine API and
     // an empty opening screen would defeat the predicate's same-screen bail
     // (empty compares unequal to every recorded screen).
-    // Every decline below is LOGGED. The deferring engine has already stood
-    // down by the time a claim runs, so a decline decides where the window
-    // spends the whole session (float on whatever monitor KWin opened it on,
-    // recoverable only by logging out). A silent one leaves the resulting
-    // login-restore strand with no evidence at all in the journal, which is
-    // exactly how one survived a shipped fix. The two record-shaped declines
-    // are qCDebug rather than qCInfo: they fire on every ordinary open (a
-    // brand-new window has no record to reclaim), so at info level they would
-    // bury the rare declines that actually explain a strand.
+    // The reopen contract: this claims only a FIFO record (another instance
+    // of the app) on another virtual screen of the OPENING output, in
+    // scrolling mode, for a window opening on a scrolling screen; never a
+    // record on another monitor, never the window's own record. Every decline
+    // is LOGGED; the ones that fire on every ordinary open (a brand-new window
+    // has no record) are debug so they cannot bury the rare ones.
     if (windowId.isEmpty() || openingScreenId.isEmpty() || !m_scrollingModeResolver || !m_windowTracker) {
         qCInfo(lcScrollEngine) << "claimCrossScreenReopen: declining" << windowId << "on" << openingScreenId
                                << "— preconditions unmet (id empty" << windowId.isEmpty() << "screen empty"
@@ -44,21 +41,27 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
     // First observation only, by MEMBERSHIP: a window this engine already
     // holds anywhere is an in-session move or re-announce, never a session
     // restore — yanking it back to the record's screen would undo the very
-    // move that re-announced it. Membership, not the raw reverse-map key
-    // (the rule windowOpened's defer gate documents): a phantom key left by
-    // a refused earlier open must not veto a legitimate claim.
+    // move that re-announced it. Membership, not the raw reverse-map key: a
+    // phantom key left by a refused earlier open must not veto a legitimate
+    // claim.
     if (const ScrollState* tracked = stateForWindow(windowId); tracked && tracked->containsWindow(windowId)) {
         qCDebug(lcScrollEngine) << "claimCrossScreenReopen: declining" << windowId
                                 << "— already held here, so this is an in-session re-announce, not a restore";
         return false;
     }
-    // Any verdict still standing for this window is from an EARLIER announce:
-    // the dispatch states the flag only after the claim round, which is the
-    // round this call is part of. A successful claim below re-enters
-    // windowOpened for the recorded home, and that re-entry reads the flag —
-    // so clear it here or the home open skips a defer gate it owed on the
-    // strength of a mark that describes a different announce.
-    m_crossScreenClaimsExhausted.remove(windowId);
+    // Same mode: the window opens on a screen this engine runs (F647).
+    if (!m_scrollingScreens.contains(openingScreenId)) {
+        qCDebug(lcScrollEngine) << "claimCrossScreenReopen: declining" << windowId << "— opening screen"
+                                << openingScreenId << "is not a scrolling screen";
+        return false;
+    }
+    // The window's own record is final: restored (or not) where it names,
+    // never stood in for by a sibling's.
+    if (const auto own = m_windowTracker->placementStore().peekExact(windowId); own && !own->engines.isEmpty()) {
+        qCDebug(lcScrollEngine) << "claimCrossScreenReopen: declining" << windowId
+                                << "— it has its own placement record";
+        return false;
+    }
     // Registry-aware appId, like autotile's twin and like every record
     // producer: parsing the frozen canonical string would look in the wrong
     // bucket after an Electron/CEF class mutation, and finds nothing at all
@@ -77,8 +80,9 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
         return false;
     }
     // peekForReclaim, not peek: the live-instance exclusion is what stops a
-    // fresh second instance being pulled onto its OPEN sibling's monitor on
-    // the strength of that sibling's live record. Non-consuming either way —
+    // fresh second instance being pulled onto its OPEN sibling's virtual
+    // screen on the strength of that sibling's live record, and it honours
+    // the open claim. Non-consuming either way —
     // consumption stays with windowOpened's own restore machinery (the strip
     // stash claim and takeForReopen), which this claim funnels the window
     // into by re-entering the open path with the RECORDED screen. Only a
@@ -88,7 +92,7 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
         windowId, appId, [&](const PhosphorEngine::WindowPlacement& p) {
             return PhosphorEngine::pendingCrossScreenManagedRestore(
                 p, PhosphorEngine::WindowPlacement::scrollingEngineId(), PhosphorEngine::WindowPlacement::stateTiled(),
-                openingScreenId, [this](const QString& rec, int desktop, const QString& activity) {
+                windowId, openingScreenId, [this](const QString& rec, int desktop, const QString& activity) {
                     return m_scrollingModeResolver(rec, desktop, activity);
                 });
         });
@@ -175,17 +179,10 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
 
 void ScrollEngine::noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
 {
-    if (windowId.isEmpty()) {
-        return;
-    }
-    // Set AND cleared per announce, so a mark can never outlive the announce
-    // it describes (see the interface contract).
-    const QString canonical = canonicalizeForLookup(windowId);
-    if (exhausted) {
-        m_crossScreenClaimsExhausted.insert(canonical);
-    } else {
-        m_crossScreenClaimsExhausted.remove(canonical);
-    }
+    // INERT, kept for ABI: the mark told the cross-screen defer gate to adopt
+    // instead of deferring again, and that gate is gone (the reopen contract).
+    Q_UNUSED(windowId)
+    Q_UNUSED(exhausted)
 }
 
 } // namespace PhosphorScrollEngine

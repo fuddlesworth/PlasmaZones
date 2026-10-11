@@ -274,21 +274,19 @@ private:
     /// from every showScrollingModeOsd arm that does NOT arm it, so a toggle
     /// followed by a reconcile cannot land a duplicate card a beat later.
     void stopScrollingOsdSettleTimer(const QString& screenId);
-    /// Destroy the per-screen strip-preview settle timers. An empty
-    /// @p screenId reaps all of them (stop()); a screen id reaps that
-    /// output's, including every virtual sub-screen of it (screenRemoved).
+    /// Destroy the per-screen strip-preview settle timers: every one when
+    /// @p screenId is empty, else that output's and its virtual screens'.
     void reapScrollingOsdSettleTimers(const QString& screenId = QString());
-    /// Reap the settle timers whose screen id satisfies @p pred.
-    ///
-    /// The screenId overload above is keyed on samePhysical, which is right
-    /// for an unplug and WRONG for a virtual-screen reconfigure: there the
-    /// physical output survives and only some vs:N ids go away, so a physical
-    /// match would reap the survivors too. Un-subdividing an output is
-    /// reachable with no unplug at all, and without this the timers of the
-    /// dropped sub-screens are never destroyed — one dead QTimer accumulates
-    /// per vs id ever seen, and an armed one can still fire for a screen that
-    /// no longer exists.
+    /// Reap the settle timers whose screen id satisfies @p pred. The overload
+    /// above matches by physical output, WRONG for a virtual-screen
+    /// reconfigure, where the output survives and only some vs:N ids go: the
+    /// dropped sub-screens' timers would accumulate and could still fire.
     void reapScrollingOsdSettleTimersWhere(const std::function<bool(const QString&)>& pred);
+    /// An output went away: park its windows, reap every engine's states on
+    /// it, release the parked windows' slots, drop its remembered orders.
+    void retireOutputPlacements(const QString& physicalScreenId);
+    /// The desktop an output shows as it comes (back), set without a switch.
+    void applyScreenDesktopSeed(const QString& screenId, int desktop);
     void clearHighlight();
 
     /**
@@ -513,11 +511,11 @@ private:
     void handleIncreaseMasterCount();
     void handleDecreaseMasterCount();
     void handleRetile();
-    /// The mode-toggle shortcut's handler (autotile_init.cpp): cycles the
-    /// cursor's screen Snapping → Tiling → Scrolling → Snapping, skipping
-    /// modes whose master switch is off, and carries the leaving mode's
-    /// window order and snap state across the flip.
+    /// The mode-toggle shortcut's handler (autotile_init.cpp): toggleScreenMode on the cursor's screen.
     void handleTilingModeToggle();
+    /// Cycles @p screenId Snapping → Tiling → Scrolling → Snapping (or flips snapping and autotile only for
+    /// @p snappingAutotilePair), skipping modes switched off, carrying window order and snap state across.
+    void toggleScreenMode(const QString& screenId, bool snappingAutotilePair);
     void handleSwapVirtualScreen(NavigationDirection direction);
     void handleRotateVirtualScreens(bool clockwise);
 
@@ -594,17 +592,16 @@ private:
      * (m_lastEngineOrders, deterministic re-entry) and only falls back to
      * the zone-ordered window list from WTS. filterEngineSeedOrder runs
      * before seeding: float is PER MODE, so a non-minimized window always
-     * seeds (a snap-mode float must never make it untileable here), and
+     * seeds (a snap-mode float must never make it untileable here),
      * minimized windows stay as positional placeholders except the
-     * user-floated-then-minimized case. See that function's contract — this
-     * summary previously claimed the opposite and is exactly what would lead
-     * a future fixer to reintroduce the untileable-by-mode-swap bug.
+     * user-floated-then-minimized case, and a window now on another screen
+     * or desktop is dropped. See that function's contract.
      * The result goes to the autotile engine's setInitialWindowOrder(). Used
      * by both per-screen toggle and global snapping→autotile transition.
-     *
-     * @param screenId Screen identifier
      */
     void seedAutotileOrderForScreen(const QString& screenId);
+    /// The seed filter's scope for (@p screenId, @p desktop), with the engines' view of where each window is.
+    SeedScope seedScopeFor(const QString& screenId, int desktop) const;
 
     /**
      * @brief Flip every autotile assignment to Snapping and restore each
@@ -911,7 +908,7 @@ private:
     // built via `PhosphorRules::ExclusionRules::excludePlacementRulesFrom` and
     // kept in lockstep with the store via the rulesChanged subscription wired
     // in init(). SnapEngine borrows a pointer into this set for isAppIdExcluded;
-    // the WindowTrackingAdaptor's pruneExcludedPendingRestores receives the
+    // the WindowTrackingAdaptor's pruneExcludedPlacements receives the
     // AppId patterns extracted from this same slice at refilter time. Held as a
     // member (stable address) so the bound RuleEvaluator's per-revision cache
     // stays valid across back-to-back resolves.
@@ -1358,33 +1355,19 @@ private:
     /** @brief Prune m_lastEngineOrders for old virtual screen IDs that no longer exist */
     void pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId);
     /**
-     * @brief Drop a closed window from every saved TILING-FAMILY order
-     * (autotile stack orders and scrolling column orders share
-     * m_lastEngineOrders).
+     * @brief Drop a window from every saved TILING-FAMILY order (autotile
+     * stack orders and scrolling column orders share m_lastEngineOrders):
+     * every one when it closed, or each one on a screen other than
+     * @p keepScreenId when it moved there (the window-left-screen hook).
      *
-     * Without this, a window that closes while the screen is in manual mode
-     * stays in m_lastEngineOrders. On the next manual→tiling toggle, the
-     * order seeding feeds the stale id back through setInitialWindowOrder;
-     * setActiveScreens replays it into the engine state and the retile
-     * places a phantom window. Match by instance id — saved entries are
-     * canonical "appId|instanceId" composites.
+     * Without this, the next manual→tiling toggle feeds the stale id back
+     * through setInitialWindowOrder and the retile places a phantom window,
+     * or pulls a moved one back onto the screen it left (F695). Match by
+     * instance id: saved entries are canonical "appId|instanceId" composites.
      */
-    void pruneEngineOrdersForWindow(const QString& instanceId);
-
-    /// Arm OSD suppression for @p count upcoming resnap feedback signals. ADDS
-    /// to the running count (never clobbers) so overlapping async resnap streams
-    /// accumulate instead of overwriting each other, and (re)starts the watchdog
-    /// so a primed feedback that never arrives can't leave the counter stuck. A
-    /// non-positive @p count is a no-op. See @ref m_suppressResnapOsd.
-    void armResnapOsdSuppression(int count);
+    void pruneEngineOrdersForWindow(const QString& instanceId, const QString& keepScreenId = QString());
 
     bool m_running = false;
-    int m_suppressResnapOsd = 0;
-    /// Bounds @ref m_suppressResnapOsd leakage: a resnap that produces zero
-    /// moves emits no feedback, so without this the count would stay armed and
-    /// suppress the next unrelated OSD. Reset to 0 on timeout; re-armed by
-    /// @ref armResnapOsdSuppression.
-    QTimer m_suppressResnapOsdWatchdog;
 
     /// Shutdown flag — set by `aboutToQuit`, `stop()`. Gates `shouldSuppressOsd()`.
     bool m_shuttingDown = false;

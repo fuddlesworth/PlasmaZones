@@ -3,23 +3,21 @@
 
 #include "snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "core/platform/logging.h"
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Snap-commit D-Bus slots — thin forwarders over SnapEngine.
-//
-// The full orchestration (clear floating, clear auto-snapped flag, consume
-// pending restore, assign to zone, update last-used tracking, emit state-
-// change signal) lives in SnapEngine::commitSnap / commitMultiZoneSnap /
-// uncommitSnap. These D-Bus entry points survive as the external contract,
-// but their bodies do only two things:
-//
-//   1. Validate and resolve the screen id
-//   2. Forward to the engine
+// Snap confirmations from the effect and external callers: each is checked by
+// validBusSnapTarget (busgate.cpp), then committed through the engine, which
+// owns the orchestration (clear floating and the auto-snapped flag, assign,
+// last-used tracking, the state-change signal). They confirm placements already
+// applied, so no policy gate.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId)
@@ -27,15 +25,13 @@ void SnapAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, 
     if (!validateWindowId(windowId, QStringLiteral("track window snap"))) {
         return;
     }
-    if (zoneId.isEmpty()) {
-        qCWarning(lcDbusWindow) << "Window snap: cannot track, empty zone ID";
+    // A live window, a known screen and a zone its layout holds (F459).
+    const std::optional<BusSnapTarget> target = validBusSnapTarget(windowId, {zoneId}, screenId);
+    if (!target) {
         return;
     }
-    if (!m_engine) {
-        return;
-    }
-    const QString resolvedScreen = resolveScreenForSnap(screenId, zoneId);
-    m_engine->commitSnap(windowId, zoneId, resolvedScreen);
+    m_engine->commitSnap(windowId, zoneId, target->screenId, PhosphorEngine::SnapIntent::UserInitiated,
+                         target->desktop);
 }
 
 void SnapAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenId)
@@ -43,15 +39,13 @@ void SnapAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringL
     if (!validateWindowId(windowId, QStringLiteral("track multi-zone window snap"))) {
         return;
     }
-    if (zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
-        qCWarning(lcDbusWindow) << "Multi-zone window snap: cannot track, empty zone IDs";
+    // Every member checked, not only the first (F459).
+    const std::optional<BusSnapTarget> target = validBusSnapTarget(windowId, zoneIds, screenId);
+    if (!target) {
         return;
     }
-    if (!m_engine) {
-        return;
-    }
-    const QString resolvedScreen = resolveScreenForSnap(screenId, zoneIds.first());
-    m_engine->commitMultiZoneSnap(windowId, zoneIds, resolvedScreen);
+    m_engine->commitMultiZoneSnap(windowId, zoneIds, target->screenId, PhosphorEngine::SnapIntent::UserInitiated,
+                                  target->desktop);
 }
 
 void SnapAdaptor::windowUnsnapped(const QString& windowId)
@@ -63,6 +57,17 @@ void SnapAdaptor::windowUnsnapped(const QString& windowId)
         return;
     }
     m_engine->uncommitSnap(windowId);
+    releaseSnapSlotIfFree(windowId);
+}
+
+void SnapAdaptor::releaseSnapSlotIfFree(const QString& windowId)
+{
+    // With no store holding a zone or the float bit for the window, the
+    // record's snap slot goes too, or a reopen would restore the zone just left.
+    if (m_adaptor && m_adaptor->service() && !m_engine->isFloating(windowId)
+        && WindowTrackingInternal::snapZoneScreen(m_engine, windowId, QString()).isEmpty()) {
+        m_adaptor->service()->releaseEngineSlot(windowId, PhosphorEngine::WindowPlacement::snapEngineId());
+    }
 }
 
 void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationList& entries)
@@ -75,13 +80,24 @@ void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationLi
         }
 
         if (entry.isRestore) {
-            // Window's zone exceeded the new layout — unsnap and clear pre-tile geometry
-            windowUnsnapped(entry.windowId);
-            if (m_adaptor) {
-                m_adaptor->clearPreTileGeometry(entry.windowId);
+            // Unsnap a live window and drop its float-back on that screen, as
+            // the engine's RestoreSentinel arm does; every screen's only when
+            // the screen cannot be resolved (F366).
+            if (!m_engine || !m_adaptor || !m_adaptor->service() || !m_adaptor->isRegistryTracked(entry.windowId)) {
+                continue;
             }
+            m_engine->uncommitSnap(entry.windowId);
+            const QString screen = m_adaptor->resolveBusScreen(entry.screenId, entry.windowId);
+            if (screen.isEmpty()) {
+                m_adaptor->service()->clearFreeGeometry(entry.windowId);
+            } else {
+                m_adaptor->service()->clearFreeGeometry(entry.windowId, screen);
+            }
+            releaseSnapSlotIfFree(entry.windowId);
         } else {
             windowSnapped(entry.windowId, entry.zoneId, entry.screenId);
+            // The snap-all confirmation, a user snap like any shortcut's.
+            recordSnapIntent(entry.windowId, true);
         }
     }
 }
@@ -100,11 +116,16 @@ void SnapAdaptor::recordSnapIntent(const QString& windowId, bool wasUserInitiate
 // ═══════════════════════════════════════════════════════════════════════════════
 // Snap-mode convenience D-Bus slots
 //
-// Moved from WindowTrackingAdaptor::convenience.cpp. These only call
-// SnapEngine and emit signals through the WTA relay (applyGeometryRequested).
+// They gate through admitBusSnap (busgate.cpp), record the free frame and the
+// intent, then commit and ask the effect for the geometry (applyGeometryRequested).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapAdaptor::moveWindowToZone(const QString& windowId, const QString& zoneId)
+{
+    moveWindowToZoneOnScreen(windowId, zoneId, QString());
+}
+
+void SnapAdaptor::moveWindowToZoneOnScreen(const QString& windowId, const QString& zoneId, const QString& screenHint)
 {
     if (!validateWindowId(windowId, QStringLiteral("moveWindowToZone"))) {
         return;
@@ -115,27 +136,24 @@ void SnapAdaptor::moveWindowToZone(const QString& windowId, const QString& zoneI
         return;
     }
 
-    if (!m_adaptor || !m_adaptor->service() || !m_engine) {
+    // Lands only where a keyboard snap could: a live window, a screen the
+    // daemon knows whose layout holds the zone, on the window's desktop, with
+    // snapping running there and switched on (admitBusSnap).
+    const std::optional<BusSnapTarget> target = admitBusSnap(windowId, {zoneId}, screenHint);
+    if (!target) {
         return;
     }
-
-    // Resolve screen for the target zone
-    QString screenId = resolveScreenForSnap(QString(), zoneId);
-
-    // Get zone geometry
-    QRect geo = m_adaptor->service()->zoneGeometry(zoneId, screenId);
+    const QString screenId = target->screenId;
+    const QRect geo = m_adaptor->service()->zoneGeometry(zoneId, screenId);
     if (!geo.isValid()) {
-        qCWarning(lcDbusWindow) << "moveWindowToZone: invalid geometry for zone:" << zoneId;
+        qCWarning(lcDbusWindow) << "moveWindowToZone: invalid geometry for zone" << zoneId << "on" << screenId;
         return;
     }
 
-    // Perform snap bookkeeping via SnapEngine
-    m_engine->commitSnap(windowId, zoneId, screenId);
-    m_adaptor->service()->recordSnapIntent(windowId, true);
-
-    // Request compositor to apply geometry
-    Q_EMIT m_adaptor->applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneId, screenId,
-                                             false);
+    // The keyboard snaps' tail: the free frame the window leaves, the commit on
+    // the desktop the window is on (not the one in view for a window on a
+    // hidden desktop, F179), the intent, and the apply as the user's verb.
+    m_engine->commitUserSnap(windowId, {zoneId}, screenId, geo, screenId, target->desktop);
 
     qCInfo(lcDbusWindow) << "moveWindowToZone:" << windowId << "-> zone" << zoneId << "on screen" << screenId;
 }
@@ -148,61 +166,94 @@ void SnapAdaptor::swapWindowsById(const QString& windowId1, const QString& windo
     if (!validateWindowId(windowId2, QStringLiteral("swapWindowsById (window2)"))) {
         return;
     }
-    if (windowId1 == windowId2) {
-        qCWarning(lcDbusWindow) << "swapWindowsById: cannot swap window with itself:" << windowId1;
-        return;
-    }
-
     if (!m_adaptor || !m_adaptor->service() || !m_engine) {
         return;
     }
 
     auto* svc = m_adaptor->service();
+    // Compared canonically: a class-mutated id names the same window (F340).
+    if (svc->canonicalizeForLookup(windowId1) == svc->canonicalizeForLookup(windowId2)) {
+        qCWarning(lcDbusWindow) << "swapWindowsById: cannot swap window with itself:" << windowId1;
+        return;
+    }
 
-    // Get each window's current zone
-    QString zoneId1 = svc->zoneForWindow(windowId1);
-    QString zoneId2 = svc->zoneForWindow(windowId2);
-
-    if (zoneId1.isEmpty() || zoneId2.isEmpty()) {
+    // Each window takes the other's whole span, in the context that span is
+    // held in, through the gate a single bus snap passes (F79, F179). A span in
+    // a store with no desktop identity lands on the window's own desktop.
+    const QStringList zones1 = svc->zonesForWindow(windowId1);
+    const QStringList zones2 = svc->zonesForWindow(windowId2);
+    if (zones1.isEmpty() || zones2.isEmpty()) {
         qCWarning(lcDbusWindow) << "swapWindowsById: one or both windows not snapped"
-                                << "w1:" << windowId1 << "zone:" << zoneId1 << "w2:" << windowId2 << "zone:" << zoneId2;
+                                << "w1:" << windowId1 << "zones:" << zones1 << "w2:" << windowId2 << "zones:" << zones2;
+        return;
+    }
+    PhosphorZones::LayoutRegistry* const layouts = m_adaptor->layoutRegistry();
+    const QString activity = layouts ? layouts->currentActivity() : QString();
+    const auto heldContext = [&](const QString& windowId) -> std::optional<PhosphorEngine::PlacementStateKey> {
+        const std::optional<PhosphorEngine::PlacementStateKey> key = m_engine->heldKeyForWindow(windowId);
+        if (!key) {
+            return PhosphorEngine::PlacementStateKey{svc->screenForWindow(windowId), 0, QString()};
+        }
+        // A commit pins the current activity's store, so a span held under
+        // another activity cannot be handed over.
+        if (!activity.isEmpty() && !key->activity.isEmpty() && key->activity != activity) {
+            qCInfo(lcDbusWindow) << "swapWindowsById refused:" << windowId << "is held on activity" << key->activity;
+            return std::nullopt;
+        }
+        return key;
+    };
+    const std::optional<PhosphorEngine::PlacementStateKey> held1 = heldContext(windowId1);
+    const std::optional<PhosphorEngine::PlacementStateKey> held2 = heldContext(windowId2);
+    if (!held1 || !held2 || held1->screenId.isEmpty() || held2->screenId.isEmpty()) {
+        return;
+    }
+    const std::optional<BusSnapTarget> target1 = admitBusSnap(windowId1, zones2, held2->screenId, held2->desktop);
+    const std::optional<BusSnapTarget> target2 = admitBusSnap(windowId2, zones1, held1->screenId, held1->desktop);
+    if (!target1 || !target2) {
         return;
     }
 
-    // Get screens for each window
-    QString screen1 = svc->screenForWindow(windowId1);
-    QString screen2 = svc->screenForWindow(windowId2);
-
-    // Get the OTHER window's zone geometry (for the swap)
-    QRect geo1 = svc->zoneGeometry(zoneId2, screen2); // window1 moves to zone2
-    QRect geo2 = svc->zoneGeometry(zoneId1, screen1); // window2 moves to zone1
-
+    const QRect geo1 = svc->resolveZoneGeometry(zones2, target1->screenId);
+    const QRect geo2 = svc->resolveZoneGeometry(zones1, target2->screenId);
     if (!geo1.isValid() || !geo2.isValid()) {
-        qCWarning(lcDbusWindow) << "swapWindowsById: invalid geometry for swap";
+        qCWarning(lcDbusWindow) << "swapWindowsById: invalid geometry:" << windowId1 << zones2 << "on"
+                                << target1->screenId << geo1 << "and" << windowId2 << zones1 << "on"
+                                << target2->screenId << geo2;
         return;
     }
 
-    // Update bookkeeping: window1 goes to zone2, window2 goes to zone1
-    m_engine->commitSnap(windowId1, zoneId2, screen2);
-    m_engine->commitSnap(windowId2, zoneId1, screen1);
+    const auto commit = [this](const QString& windowId, const QStringList& zones, const BusSnapTarget& target) {
+        if (zones.size() > 1) {
+            m_engine->commitMultiZoneSnap(windowId, zones, target.screenId, PhosphorEngine::SnapIntent::UserInitiated,
+                                          target.desktop);
+        } else {
+            m_engine->commitSnap(windowId, zones.first(), target.screenId, PhosphorEngine::SnapIntent::UserInitiated,
+                                 target.desktop);
+        }
+    };
+    commit(windowId1, zones2, *target1);
+    commit(windowId2, zones1, *target2);
+    recordSnapIntent(windowId1, true);
+    recordSnapIntent(windowId2, true);
 
     // Emit geometry requests for both
-    Q_EMIT m_adaptor->applyGeometryRequested(windowId1, geo1.x(), geo1.y(), geo1.width(), geo1.height(), zoneId2,
-                                             screen2, false);
-    Q_EMIT m_adaptor->applyGeometryRequested(windowId2, geo2.x(), geo2.y(), geo2.width(), geo2.height(), zoneId1,
-                                             screen1, false);
+    Q_EMIT m_adaptor->applyGeometryRequested(windowId1, geo1.x(), geo1.y(), geo1.width(), geo1.height(), zones2.first(),
+                                             target1->screenId, false,
+                                             static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+    Q_EMIT m_adaptor->applyGeometryRequested(windowId2, geo2.x(), geo2.y(), geo2.width(), geo2.height(), zones1.first(),
+                                             target2->screenId, false,
+                                             static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
 
-    qCInfo(lcDbusWindow) << "swapWindowsById:" << windowId1 << "<->" << windowId2 << "zones:" << zoneId1 << "<->"
-                         << zoneId2;
+    qCInfo(lcDbusWindow) << "swapWindowsById:" << windowId1 << "<->" << windowId2 << "zones:" << zones1 << "<->"
+                         << zones2;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Snap-mode float D-Bus slots
 //
-// Moved from WindowTrackingAdaptor::float.cpp. These call SnapEngine
-// float methods (snap-mode only — cross-mode routing remains on WTA
-// via setWindowFloatingForScreen / toggleFloatForWindow which route
-// to EITHER autotile or snap engine).
+// Snap-mode only, gated through admitBusFloat (busgate.cpp). The effect floats
+// through WindowTrackingAdaptor::setWindowFloatingForScreen, which routes to
+// whichever engine owns the screen.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapAdaptor::toggleFloatForWindow(const QString& windowId, const QString& screenId)
@@ -217,8 +268,9 @@ void SnapAdaptor::toggleFloatForWindow(const QString& windowId, const QString& s
         return;
     }
 
-    if (m_engine) {
-        m_engine->toggleWindowFloat(windowId, screenId);
+    const QString screen = admitBusFloat(windowId, screenId);
+    if (!screen.isEmpty()) {
+        m_engine->toggleWindowFloat(windowId, screen);
     }
 }
 
@@ -228,8 +280,10 @@ void SnapAdaptor::setWindowFloat(const QString& windowId, bool floating)
         return;
     }
 
-    if (m_engine) {
-        m_engine->setWindowFloat(windowId, floating);
+    // The window's live screen, not the last focused one (F28).
+    const QString screen = admitBusFloat(windowId, QString());
+    if (!screen.isEmpty()) {
+        m_engine->setWindowFloat(windowId, floating, screen);
     }
 }
 
@@ -246,9 +300,9 @@ PhosphorProtocol::UnfloatRestoreResult SnapAdaptor::calculateUnfloatRestore(cons
 
     UnfloatResult unfloat = m_engine->resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
-        // Mirror the live unfloat path (SnapEngine::unfloatToZone): when the window
-        // has no pre-float zone, honour the unfloatFallbackToZone setting so this
-        // D-Bus query stays consistent with the in-engine toggle behaviour.
+        // The unfloatFallbackToZone setting, as SnapEngine::unfloatToZone
+        // honours it. Unlike the live toggle this skips the SnapToZone rule
+        // tier, which that path consults first.
         unfloat = m_engine->resolveFallbackUnfloatGeometry(windowId, screenId);
     }
     if (!unfloat.found) {
@@ -303,14 +357,6 @@ bool SnapAdaptor::validateWindowId(const QString& windowId, const QString& opera
         return false;
     }
     return true;
-}
-
-QString SnapAdaptor::resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const
-{
-    if (!m_adaptor) {
-        return callerScreen;
-    }
-    return m_adaptor->resolveScreenForSnap(callerScreen, zoneId);
 }
 
 } // namespace PlasmaZones

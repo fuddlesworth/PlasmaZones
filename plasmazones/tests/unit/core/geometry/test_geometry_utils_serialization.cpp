@@ -25,6 +25,8 @@
 #include "core/utils/geometryutils.h"
 #include "core/types/types.h"
 
+#include <PhosphorEngine/GeometryUtils.h>
+
 using namespace PlasmaZones;
 
 class TestGeometryUtilsSerialization : public QObject
@@ -281,6 +283,7 @@ private Q_SLOTS:
         pinned.targetGeometry = QRect(10, 20, 300, 400);
         pinned.targetScreenId = QStringLiteral("DP-1");
         pinned.virtualDesktop = 2;
+        pinned.restatement = true;
 
         ZoneAssignmentEntry unpinned;
         unpinned.windowId = QStringLiteral("win-2");
@@ -300,10 +303,12 @@ private Q_SLOTS:
         QCOMPARE(parsed[0].targetGeometry, pinned.targetGeometry);
         QCOMPARE(parsed[0].targetScreenId, pinned.targetScreenId);
         QCOMPARE(parsed[0].virtualDesktop, 2);
-        // Unpinned entry: both optional keys are omitted on the wire and parse
-        // back to their defaults (no screen stamp, current desktop).
+        QVERIFY(parsed[0].restatement);
+        // Unpinned entry: the optional keys are omitted on the wire and parse
+        // back to their defaults (no screen stamp, current desktop, a placement).
         QCOMPARE(parsed[1].targetScreenId, QString());
         QCOMPARE(parsed[1].virtualDesktop, 0);
+        QVERIFY(!parsed[1].restatement);
         QCOMPARE(parsed[1].targetGeometry, unpinned.targetGeometry);
     }
 
@@ -326,6 +331,50 @@ private Q_SLOTS:
         QCOMPARE(parsed.size(), 1);
         QCOMPARE(parsed[0].windowId, QStringLiteral("w"));
         QCOMPARE(parsed[0].virtualDesktop, 0);
+    }
+
+    // A span is the primary followed by real zones, as the serializer writes
+    // it (F459).
+    void test_deserializeZoneAssignments_dropsAnEmptySpanMember()
+    {
+        const QString json = QStringLiteral(
+            "[{\"windowId\":\"w\",\"targetZoneId\":\"a\",\"targetZoneIds\":[\"a\",\"\"],"
+            "\"x\":0,\"y\":0,\"width\":1,\"height\":1}]");
+        QVERIFY(GeometryUtils::deserializeZoneAssignments(json, nullptr).isEmpty());
+    }
+
+    void test_deserializeZoneAssignments_dropsASpanThatDoesNotStartWithThePrimary()
+    {
+        const QString json = QStringLiteral(
+            "[{\"windowId\":\"w\",\"targetZoneId\":\"a\",\"targetZoneIds\":[\"b\",\"a\"],"
+            "\"x\":0,\"y\":0,\"width\":1,\"height\":1}]");
+        QVERIFY(GeometryUtils::deserializeZoneAssignments(json, nullptr).isEmpty());
+    }
+
+    // carryRectOntoArea: the same spot and size on another area (L14.3).
+    void test_carryRectOntoArea_sameSizeAreasTranslate()
+    {
+        QCOMPARE(PhosphorEngine::GeometryUtils::carryRectOntoArea(QRect(300, 200, 640, 480), QRect(0, 0, 1920, 1080),
+                                                                  QRect(1920, 0, 1920, 1080)),
+                 QRect(2220, 200, 640, 480));
+    }
+
+    void test_carryRectOntoArea_smallerTargetShrinksAndClamps()
+    {
+        const QRect r = PhosphorEngine::GeometryUtils::carryRectOntoArea(
+            QRect(1500, 800, 800, 600), QRect(0, 0, 1920, 1080), QRect(0, 0, 1280, 720));
+        QCOMPARE(r.size(), QSize(800, 600));
+        QVERIFY(QRect(0, 0, 1280, 720).contains(r));
+        const QRect big = PhosphorEngine::GeometryUtils::carryRectOntoArea(
+            QRect(0, 0, 1900, 1000), QRect(0, 0, 1920, 1080), QRect(0, 0, 1280, 720));
+        QCOMPARE(big, QRect(0, 0, 1280, 720));
+    }
+
+    void test_carryRectOntoArea_invalidSourceStartsAtTheTopLeft()
+    {
+        QCOMPARE(PhosphorEngine::GeometryUtils::carryRectOntoArea(QRect(500, 500, 300, 200), QRect(),
+                                                                  QRect(1920, 0, 1920, 1080)),
+                 QRect(1920, 0, 300, 200));
     }
 
     void test_deserializeZoneAssignments_malformedJson()

@@ -21,6 +21,7 @@
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/screenchangehandler.h"
 #include "handlers/snaphandler.h"
 
 namespace PlasmaZones {
@@ -252,6 +253,11 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // still get an item recreated and immediately torn down by
         // clearAllDecorations() — bounded, invisible churn that is cheaper than
         // suppressing the handler across the burst.
+        // The dead session's deferred applies (the tile and snap cascades, the
+        // screen-change cascade, the mid-gesture replay) all fire against a
+        // command stamp; moving every stamp on retires them before the
+        // teardown below hands the windows back (F405).
+        m_daemonGate.commandStamps.supersedeAll();
         m_tilingHandler->clearTiledTracking();
         // The scrolling set is a dead session's Mode discriminator: keeping
         // it would stamp Mode "scrolling" into rule verdicts resolved
@@ -275,9 +281,10 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // The tab-indicator model came from the daemon that just died, so
         // every pill it described belongs to a strip nothing owns now: drop
         // the handler's model, hover and cursor override with the painter's
-        // per-output state. GL-free on this D-Bus dispatch: the painter
-        // RETIRES the per-output textures and deletes them at its next
-        // GL-current point (the next paint, or releaseGl at teardown). The
+        // per-output state. The painter retires the per-output textures
+        // without GL, and clearScrollTabState then deletes them under a
+        // made-current context before it returns (left to releaseGl only at
+        // compositor teardown, when none can be made current). The
         // bring-up fetches a dying daemon may still answer are voided first,
         // so a late strips/overrides reply cannot re-seed what this clears.
         m_tilingHandler->voidInFlightScrollTabFetches();
@@ -345,6 +352,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // authoritatively repopulated on daemon-ready.
         m_navigationHandler->clearAllZoneState();
         m_navigationHandler->clearAllFloatingState();
+        // The evacuee parks died with the daemon: their records go too (F767).
+        m_screenChangeHandler->dropEvacueeRecords();
         // The placement caches above feed placement-scoped rule match inputs. A
         // SetOpacity rule keyed on IsSnapped/IsFloating/Zone caches its verdict
         // per (windowId, ruleSet revision) — neither moves here — so drop the
@@ -470,10 +479,6 @@ void PlasmaZonesEffect::initExistingWindowsAndInput()
         }
         setupWindowConnections(w);
     }
-
-    // The daemon disables KWin's Quick Tile via kwriteconfig6. We don't reserve electric borders
-    // here because that would turn on the edge effect visually; the daemon's config approach
-    // is the right way to prevent Quick Tile from activating.
 
     // Seed m_lastCursorOutput with the compositor's active screen. This ensures
     // the daemon has a valid cursor screen even if no mouse movement occurs after login.

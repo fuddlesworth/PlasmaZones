@@ -75,6 +75,10 @@ struct WindowMetadata
     std::optional<int> positionX{}; ///< frame left edge X in px
     std::optional<int> positionY{}; ///< frame top edge Y in px
     std::optional<QString> captionNormal{}; ///< title without the WM-added app-name suffix
+    /// Full activity list when the window is on SEVERAL (but not all)
+    /// activities; empty otherwise. When non-empty, activity equals the first
+    /// entry. Appended last (installed struct).
+    QStringList activities{};
 
     bool operator==(const WindowMetadata& other) const
     {
@@ -89,7 +93,7 @@ struct WindowMetadata
             && isModal == other.isModal && hasDecoration == other.hasDecoration && isResizable == other.isResizable
             && isMovable == other.isMovable && isMaximizable == other.isMaximizable && width == other.width
             && height == other.height && positionX == other.positionX && positionY == other.positionY
-            && captionNormal == other.captionNormal;
+            && captionNormal == other.captionNormal && activities == other.activities;
     }
     bool operator!=(const WindowMetadata& other) const
     {
@@ -108,6 +112,8 @@ public:
     void upsert(const QString& instanceId, const WindowMetadata& metadata);
     /// Remove metadata and canonical state, emitting windowDisappeared exactly
     /// once while the canonical mapping remains available to subscribers.
+    /// An upsert a subscriber makes during the emit is replayed after it and
+    /// keeps the instance's canonical mapping; inside clear() that replay is dropped.
     void remove(const QString& instanceId);
 
     std::optional<WindowMetadata> metadata(const QString& instanceId) const;
@@ -121,6 +127,7 @@ public:
         int virtualDesktop = 0;
         QList<int> virtualDesktops;
         QString activity;
+        QStringList activities; ///< full list when on several activities (appended last)
 
         /// Effective desktop for per-window mode resolution: the window's own
         /// desktop when known (virtualDesktop > 0), never the screen's current
@@ -139,13 +146,15 @@ public:
             return virtualDesktop > 0 ? virtualDesktop : screenCurrentDesktop;
         }
 
-        /// Effective activity: the window's own when known, else
-        /// @p currentActivity. No span analogue to effectiveDesktop's
-        /// current-context preference exists here — the metadata carries only
-        /// the window's first activity, not a list, so there is nothing to
-        /// prefer against.
+        /// Effective activity, the activity axis of effectiveDesktop: a window
+        /// on several activities resolves to @p currentActivity when that is
+        /// one of them, else its own (first) activity when known, else
+        /// @p currentActivity (F426).
         QString effectiveActivity(const QString& currentActivity) const
         {
+            if (activities.size() > 1 && activities.contains(currentActivity)) {
+                return currentActivity;
+            }
             return activity.isEmpty() ? currentActivity : activity;
         }
     };
@@ -161,11 +170,14 @@ public:
     /// window is unknown or the field was never delivered. Accepts either a
     /// bare instance id or a composite appId|instanceId window id.
     std::optional<bool> minimizedState(const QString& windowId) const override;
+    /// IWindowRegistry::fillsOutputState over the reported maximize and
+    /// fullscreen fields. Accepts a bare instance id or a composite id.
+    std::optional<bool> fillsOutputState(const QString& windowId) const override;
     std::optional<WindowDesktopContext> desktopContext(const QString& windowId) const override;
-    /// Every instance currently recorded under @p appId, in UNSPECIFIED order
-    /// (QMultiHash bucket order, not insertion or arrival order). Callers that
-    /// need a deterministic sequence — anything FIFO-shaped — must sort or
-    /// otherwise order the result themselves.
+    /// Every instance currently recorded under @p appId, most recently indexed
+    /// first (QMultiHash::values(key)). An appId change re-indexes the instance
+    /// at the head, so this is not arrival order: callers that need a FIFO
+    /// sequence must order the result themselves.
     QStringList instancesWithAppId(const QString& appId) const;
     bool contains(const QString& instanceId) const;
     int size() const;
@@ -199,10 +211,9 @@ private:
     QHash<QString, WindowMetadata> m_records;
     QMultiHash<QString, QString> m_appIdIndex;
     QHash<QString, QString> m_canonicalByInstance;
-    /// Instances currently inside remove()'s windowDisappeared emit. A
-    /// re-entrant remove() of the same instance is a no-op (exactly-once
-    /// signal), and a re-entrant upsert() is deferred into m_pendingUpserts
-    /// and replayed after the removal completes.
+    /// Instances currently inside remove()'s windowDisappeared emit. A re-entrant remove() of the same instance emits
+    /// nothing further and cancels any upsert queued for it during this emit. A re-entrant upsert() is deferred into
+    /// m_pendingUpserts and replayed after the removal completes.
     QSet<QString> m_disappearingInstances;
     QHash<QString, WindowMetadata> m_pendingUpserts;
     /// Depth counter, non-zero while clear() drives a removal loop: remove()

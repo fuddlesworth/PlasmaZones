@@ -3,7 +3,9 @@
 
 #include "plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
+#include "desktopvisibility.h"
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorRules/MatchTypes.h>
@@ -56,6 +58,67 @@ QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap() const
         }
     }
     return windowMap;
+}
+
+QVector<KWin::EffectWindow*> PlasmaZonesEffect::resolveDaemonWindowIds(const QStringList& windowIds,
+                                                                       bool admitFullscreen) const
+{
+    QVector<KWin::EffectWindow*> resolved(windowIds.size(), nullptr);
+    // A window an id names is claimed even when it is refused, so the
+    // app-id fallback below can never hand a refused window's entry, or any
+    // other entry, to it. The fallback's own picks claim too.
+    QSet<KWin::EffectWindow*> claimed;
+    QVector<int> misses;
+    for (int i = 0; i < windowIds.size(); ++i) {
+        if (windowIds.at(i).isEmpty()) {
+            continue;
+        }
+        // The UNFILTERED live set first. buildWindowMap drops every window
+        // shouldHandleWindow refuses (fullscreen, own keep-above,
+        // skip-switcher, an Exclude rule), and resolving against it alone
+        // let an entry naming such a window miss and fall back to a same-app
+        // sibling, which then took its rect.
+        if (KWin::EffectWindow* const w = findWindowByInstanceId(windowIds.at(i))) {
+            claimed.insert(w);
+            if (shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/admitFullscreen && w->isFullScreen())) {
+                resolved[i] = w;
+            } else {
+                qCDebug(lcEffect) << "resolveDaemonWindowIds: skipping a window this effect does not handle"
+                                  << windowIds.at(i);
+            }
+            continue;
+        }
+        misses.append(i);
+    }
+    if (misses.isEmpty()) {
+        return resolved;
+    }
+    // App-id fallback for single-instance apps (uuid drift across a KWin
+    // restart), counting only UNCLAIMED handled windows, so a stale entry can
+    // neither double-apply onto a claimed window nor trip the ambiguity bail
+    // against it.
+    const QHash<QString, KWin::EffectWindow*> handled = buildWindowMap();
+    for (const int i : std::as_const(misses)) {
+        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowIds.at(i));
+        KWin::EffectWindow* candidate = nullptr;
+        int matchCount = 0;
+        for (auto it = handled.constBegin(); it != handled.constEnd(); ++it) {
+            if (claimed.contains(it.value())) {
+                continue;
+            }
+            if (::PhosphorIdentity::WindowId::extractAppId(it.key()) == appId) {
+                candidate = it.value();
+                if (++matchCount > 1) {
+                    break;
+                }
+            }
+        }
+        if (matchCount == 1) {
+            resolved[i] = candidate;
+            claimed.insert(candidate);
+        }
+    }
+    return resolved;
 }
 
 QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback) const
@@ -164,12 +227,12 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
     m_navigationHandler->clearWindowZone(windowId);
 }
 
-PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
+PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w, const QString& screenOverride) const
 {
     const QString windowId = getWindowId(w);
     // Id-taking overload: the scroll override resolves off the window id this funnel holds.
     // IsFloating reads a tile held out for its own fullscreen as floating (the daemon's bit).
-    const QString screenId = getWindowScreenId(w, windowId);
+    const QString screenId = screenOverride.isEmpty() ? getWindowScreenId(w, windowId) : screenOverride;
     PhosphorRules::WindowQuery query = ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
                                                     m_tilingHandler->isTiledWindow(windowId), zoneForWindow(windowId));
     // Scroll-managed windows ride the same tile-request pipeline as autotile,
@@ -1001,6 +1064,7 @@ void PlasmaZonesEffect::logWindowDiagnostics(KWin::EffectWindow* w, const char* 
                           << "minimized:" << w->isMinimized() << "skipSwitcher:" << w->isSkipSwitcher()
                           << "keepAbove:" << w->keepAbove() << "ownKeepAbove:" << windowOwnKeepAbove(w)
                           << "hasDecoration:" << w->hasDecoration() << "onCurrentDesktop:" << w->isOnCurrentDesktop()
+                          << "onOwnOutputDesktop:" << isOnOwnOutputCurrentDesktop(w)
                           << "onCurrentActivity:" << w->isOnCurrentActivity()
                           << "onAllDesktops:" << w->isOnAllDesktops();
     qCDebug(lcEffectDiag) << "[window-diag]   geometry — frame:" << w->frameGeometry()
@@ -1027,22 +1091,22 @@ bool PlasmaZonesEffect::isDaemonReady(const char* methodName) const
 
 KWin::EffectWindow* PlasmaZonesEffect::getActiveWindow() const
 {
-    // Prefer KWin's active (focused) window when it is manageable and on current
-    // desktop. Skip a close-grabbed dying window here for the same reason the
+    // Prefer KWin's active (focused) window when it is manageable and on the
+    // desktop its own output shows. Skip a close-grabbed dying window here for the same reason the
     // fallback loop does — it must not become the navigation / snap-assist anchor.
     KWin::EffectWindow* active = KWin::effects->activeWindow();
-    if (active && !active->isDeleted() && active->isOnCurrentActivity() && active->isOnCurrentDesktop()
+    if (active && !active->isDeleted() && active->isOnCurrentActivity() && isOnOwnOutputCurrentDesktop(active)
         && !active->isMinimized() && shouldHandleWindow(active)) {
         return active;
     }
-    // Fallback: topmost manageable window on current desktop (e.g. when activeWindow() is
+    // Fallback: topmost manageable window on the desktop its own output shows (e.g. when activeWindow() is
     // null or refers to a dialog/utility we don't handle)
     const auto windows = KWin::effects->stackingOrder();
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         KWin::EffectWindow* w = *it;
         // Skip close-grabbed dying windows — a topmost close animation must
         // not become the navigation / snap-assist anchor.
-        if (w && !w->isDeleted() && w->isOnCurrentActivity() && w->isOnCurrentDesktop() && !w->isMinimized()
+        if (w && !w->isDeleted() && w->isOnCurrentActivity() && isOnOwnOutputCurrentDesktop(w) && !w->isMinimized()
             && shouldHandleWindow(w)) {
             return w;
         }

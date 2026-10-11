@@ -84,6 +84,7 @@ private Q_SLOTS:
     }
 
     void focusNewWindowsOverrideIsPerScreen();
+    void replacementTakesNoFocus();
     void alwaysCenterSingleColumnOverrideIsPerScreen();
     void centerShortColumnsOverrideIsPerScreen();
     void centerFocusedColumnOverrideIsPerScreen();
@@ -158,6 +159,28 @@ void TestScrollEngineBehaviour::focusNewWindowsOverrideIsPerScreen()
     engine->windowOpened(QStringLiteral("app|b1"), kS2, 0, 0);
     engine->windowOpened(QStringLiteral("app|b2"), kS2, 0, 0);
     QCOMPARE(activeWindowOn(engine, kS2), QStringLiteral("app|b2"));
+}
+
+void TestScrollEngineBehaviour::replacementTakesNoFocus()
+{
+    // "Focus new windows" focuses genuine opens only (F428): an open the
+    // adaptor marked as a re-placement joins the strip without becoming its
+    // active column, and the engine activates nothing to compensate.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->focusNewWindows = true;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+    engine->windowOpened(QStringLiteral("app|r1"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|r2"), kS1, 0, 0);
+    QCOMPARE(activeWindowOn(engine, kS1), QStringLiteral("app|r2"));
+
+    QSignalSpy activateSpy(engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+    engine->setOpenFocusEligible(false);
+    engine->windowOpened(QStringLiteral("app|r3"), kS1, 0, 0);
+    engine->setOpenFocusEligible(true);
+    QVERIFY(tiled(engine, kS1, QStringLiteral("app|r3")));
+    QCOMPARE(activeWindowOn(engine, kS1), QStringLiteral("app|r2"));
+    QCOMPARE(activateSpy.count(), 0);
 }
 
 void TestScrollEngineBehaviour::alwaysCenterSingleColumnOverrideIsPerScreen()

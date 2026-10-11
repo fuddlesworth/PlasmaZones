@@ -11,6 +11,8 @@
 
 #include <core/output.h>
 #include <effect/effecthandler.h>
+#include <virtualdesktops.h>
+#include <window.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -30,6 +32,7 @@
 #include <climits>
 
 #include "tilinghandler/tilinghandler.h"
+#include "handlers/screenchangehandler.h"
 #include "compositor/compositorclock.h"
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
@@ -111,7 +114,7 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output, con
     }
 
     // Build a screen ID that exactly matches the daemon's PhosphorScreens::ScreenIdentity::identifierFor().
-    // Uses shared ScreenIdUtils (compositor-common) for hex normalization and sysfs EDID
+    // Uses PhosphorIdentity::ScreenId for hex normalization and sysfs EDID
     // fallback, ensuring byte-identical output across daemon and compositor processes.
     //
     // Try QScreen::serialNumber() first (same source as daemon), then sysfs fallback.
@@ -297,9 +300,9 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w, const QStrin
         return QString();
     }
     // Engine-authoritative override for scroll-managed windows: the strip
-    // parks off-viewport columns and hidden tabs ENTIRELY outside their
-    // screen rect, so a parked frame's centre lands inside a NEIGHBOUR
-    // output's geometry and the position-derived resolution below would
+    // parks off-viewport columns and hidden tabs below every output, inside
+    // none, so a parked frame resolves to the nearest output, which can be a
+    // NEIGHBOUR, and the position-derived resolution below would
     // misattribute the window (wrong minimize routing, wrong close/float
     // record, wrong Mode stamp). Scroll windows change screens only through
     // engine-driven handoffs, which update the tracked screen first.
@@ -323,8 +326,52 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w, const QStrin
     // which agrees with the daemon per-output — the #724 bug was only the
     // window→output trust. (QScreen can't be used here: inside the compositor
     // QScreen::manufacturer() / model() are empty, so a QScreen-derived id
-    // degrades to "::serial".)
-    return resolveEffectiveScreenId(c, windowOutput(w));
+    // degrades to "::serial".) A window filling a split output answers the
+    // virtual screen it belongs to, not the one under the output's centre.
+    KWin::LogicalOutput* const output = windowOutput(w);
+    if (const QString filling = fillingWindowScreenId(w, windowId, output); !filling.isEmpty()) {
+        return filling;
+    }
+    return resolveEffectiveScreenId(c, output);
+}
+
+QString PlasmaZonesEffect::pendingWindowScreenId(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return QString();
+    }
+    const QString windowId = m_tilingHandler->hasScrollingScreens() ? getWindowId(w) : QString();
+    // A strip column's screen is the engine's, never its position (see the
+    // override in getWindowScreenId), in flight or not.
+    if (!windowId.isEmpty() && !m_tilingHandler->scrollTrackedScreenFor(windowId).isEmpty()) {
+        return getWindowScreenId(w, windowId);
+    }
+    // A window KWin has been asked to move that has not committed the move
+    // yet sits where its LAST acked configure put it. Reading that position
+    // after a newer request named another output answered the output the
+    // window is leaving: a held "move to output" key (or a move reversed
+    // inside one round trip) acks the intermediate output after the daemon
+    // already stored the final one, and the report repointed or unsnapped the
+    // window there. moveResizeGeometry is the geometry KWin last requested, so
+    // while its POSITION differs from the committed frame the request is
+    // where the window is going. A size-only difference is not a move (a
+    // client that commits a smaller size than it was asked for keeps one for
+    // good), and a user's own interactive move is the frame itself.
+    if (KWin::Window* const kw = w->window(); kw && KWin::effects && !w->isUserMove() && !w->isUserResize()) {
+        const QRectF pending = kw->moveResizeGeometry();
+        if (pending.isValid() && pending.topLeft().toPoint() != w->frameGeometry().topLeft().toPoint()) {
+            const QPointF cf = pending.center();
+            const QPoint c(qRound(cf.x()), qRound(cf.y()));
+            KWin::LogicalOutput* const output = KWin::effects->screenAt(c);
+            // KWin's move of a maximized window carries its restore rect.
+            if (const QString filling = fillingWindowScreenId(w, windowId, output ? output : windowOutput(w));
+                !filling.isEmpty()) {
+                return filling;
+            }
+            return resolveEffectiveScreenId(c, output ? output : windowOutput(w));
+        }
+    }
+    return getWindowScreenId(w, windowId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -680,11 +727,19 @@ void PlasmaZonesEffect::reresolveTrackedScreens()
         }
         const QString newScreenId = getWindowScreenId(window);
         if (!newScreenId.isEmpty()) {
+            const bool changed = it.value() != newScreenId;
             it.value() = newScreenId;
             // Also update the autotile handler's notified screen map
             // so slotWindowFrameGeometryChanged does not compare against
             // the stale pre-config-change screen ID.
             m_tilingHandler->updateNotifiedScreen(windowId, newScreenId);
+            // A split added or removed under the focused window changes the
+            // screen the daemon's shortcuts act on without any move: a
+            // removed split left it naming the dead virtual screen until
+            // the next activation.
+            if (changed) {
+                reportActiveWindowScreen(window, newScreenId);
+            }
         }
     }
 }
@@ -821,6 +876,25 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     m_idCaches.connectedPhysicalIdsValid = false;
     (void)connectedPhysicalIds();
     pruneToLiveScreens(m_lastScreenDesktop, m_idCaches.connectedPhysicalIds);
+    // The windows KWin returns to it wait for the settle's verdict.
+    m_screenChangeHandler->noteOutputAdded(output);
+    // The desktop it shows. KWin picks it with no desktop change, so nothing
+    // else reports it and the engines would lay the output out under the
+    // desktop they started on (F700). Sent as a seed, which the daemon takes
+    // without a desktop switch, on the connection ahead of the settle report.
+    if (!output->isPlaceholder()) {
+        const QString screenId = outputScreenId(output);
+        const KWin::VirtualDesktop* const vd = KWin::effects->currentDesktop(output);
+        if (vd && !screenId.isEmpty()) {
+            const int desktop = static_cast<int>(vd->x11DesktopNumber());
+            m_lastScreenDesktop.insert(screenId, desktop);
+            if (m_daemonGate.serviceRegistered) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("seedScreenDesktop"),
+                    {screenId, desktop});
+            }
+        }
+    }
 
     // Construct a bound clock for this output. Idempotent: if the same output
     // arrives twice (rare, but possible on some compositors' hotplug
@@ -878,6 +952,9 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     const auto recordedId = m_idCaches.screenIdByOutput.constFind(output);
     const QString removedScreenId =
         recordedId != m_idCaches.screenIdByOutput.constEnd() ? *recordedId : outputScreenId(output);
+    // Record the windows on it as they are, under that id: KWin moves them
+    // and restores their older state right after this signal (F709).
+    m_screenChangeHandler->captureEvacuees(output, removedScreenId);
     // Unplug twin of the onScreenAdded invalidation: KWin fires
     // screenRemoved BEFORE the per-window outputChanged cascade, and the
     // connected-output gate in scrollTrackedScreenFor exists for exactly

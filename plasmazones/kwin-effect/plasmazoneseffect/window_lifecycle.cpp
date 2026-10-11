@@ -121,28 +121,27 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowByInstanceId(const QString& win
     return nullptr;
 }
 
-bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId)
+bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId,
+                                              const QString& openerScreenId)
 {
     if (!w || w->isDeleted() || m_snapHandler->restoreCacheEmpty()) {
         return false;
     }
     const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-    // Single-shot semantics: takeRestore erases the entry on lookup, so any
-    // entry seen here is consumed regardless of which branch below runs (the
-    // entry has been considered for routing whether or not it was applied,
-    // so the next open of the same appId won't re-evaluate a dead entry).
-    // Sole caller is the deferred-routing dispatch
-    // (completeDeferredWindowRoutes) — every tileable window routes through
-    // the settle defer now, and the dispatch consumes the cache so a
-    // deferred window cannot leave its entry alive for a later same-app
-    // sibling to claim.
-    const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(appId);
-    if (!cached) {
-        return false;
-    }
-    const bool savedScreenNowAutotile =
-        !cached->screenId.isEmpty() && m_tilingHandler->isManagedScreen(cached->screenId);
-    if (cached->geometry.isValid() && !savedScreenNowAutotile) {
+    // Restores happen where the window opens: only the newest entry saved on
+    // the opener's OWN output (position-based, so a window KWin has not yet
+    // reassigned reads its real output), never one on another monitor, and
+    // nothing at all when the opener's screen is engine-managed (its engine
+    // places it) or the saved screen now is. Only the applied entry is
+    // consumed: entries for other outputs stay for an opener there. Sole
+    // caller is the deferred-routing dispatch (completeDeferredWindowRoutes),
+    // which decides this BEFORE any screen re-resolve.
+    const QString openerPhysicalId = outputScreenId(windowOutput(w));
+    const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(
+        appId, openerPhysicalId, m_tilingHandler->isManagedScreen(openerScreenId), [this](const QString& screenId) {
+            return m_tilingHandler->isManagedScreen(screenId);
+        });
+    if (cached) {
         qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached->geometry
                          << "screen:" << cached->screenId;
         // skipAnimation=true: teleport straight into the zone.
@@ -153,23 +152,19 @@ bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QStri
         // already reports the resolved zone — the surface-extent
         // open shader (bounce, fly-in) plays into the zone from
         // the first painted frame without any anchor pinning.
-        // A client that maps itself maximized (a browser restoring session
-        // state) and is instant-restored into a zone would otherwise keep
-        // KWin's maximize bit fighting the zone rect from its first frame.
-        m_tilingHandler->demoteMaximizeForSnapPlacement(w, cached->geometry);
-        applyWindowGeometry(w, cached->geometry, false, /*skipAnimation=*/true,
+        // A client that maps itself maximized or fullscreen (a browser
+        // restoring session state) keeps that state: the zone is seated as the
+        // rect it returns to, nothing moves, and the resolve that follows
+        // re-states the same zone (F560).
+        const PlacementStatement::Verdict verdict =
+            m_tilingHandler->preparePlacement(w, cached->geometry, PlacementStatement::Purpose::Restatement);
+        if (!verdict.apply) {
+            return false;
+        }
+        applyWindowGeometry(w, verdict.applyRect, false, /*skipAnimation=*/true,
                             PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
-                            /*demoteMaximizeOnDeferredReplay=*/true);
+                            PlacementStatement::Purpose::Restatement);
         return true;
-    }
-    if (savedScreenNowAutotile) {
-        qCDebug(lcEffect) << "Skipping instant snap restore for" << appId
-                          << "- saved screen now autotile:" << cached->screenId;
-    } else {
-        // Cached geometry is invalid (corrupt / zero-size persisted
-        // rect on a snap-mode screen).
-        qCDebug(lcEffect) << "Discarding instant snap restore entry for" << appId
-                          << "- geometry invalid:" << cached->geometry << "screen:" << cached->screenId;
     }
     return false;
 }
@@ -364,7 +359,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // strip member re-announced at effect bring-up arrives here and must
     // still reach the daemon — see the re-adoption contract in
     // floatcleanup.cpp.
-    m_tilingHandler->notifyWindowAdded(w, /*knownFreeFloating=*/true);
+    m_tilingHandler->notifyWindowAdded(w, /*knownFreeFloating=*/true, /*focusEligible=*/true);
 }
 
 void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
@@ -458,9 +453,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
         QPointF frozen = scrollVisualTranslationFor(closingWindowId, closingFrame);
         const QString corpseScreen = m_tilingHandler->scrollTrackedScreenFor(closingWindowId);
         if (!corpseScreen.isEmpty()) {
-            if (KWin::LogicalOutput* corpseOutput = outputForScreenId(corpseScreen)) {
-                frozen += m_stripViewAnimator->offsetFor(corpseOutput);
-            }
+            frozen += m_stripViewAnimator->offsetFor(m_tilingHandler->stripKeyFor(corpseScreen));
             // A scroll-managed corpse renders ABOVE the strip for the whole
             // close leg (niri renders closing windows on top the same way).
             // The engine reflows the survivors immediately on a close, so the
@@ -631,6 +624,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
         m_idCaches.windowIdReverse.remove(closedWindowId);
     }
     m_trackedScreenPerWindow.remove(w);
+    m_sizeOnlyFrames.remove(w);
     m_restoreSuppress.remove(w);
     // Drop any pending-but-not-yet-flushed frame geometry for the
     // closing window. The windowDeleted lambda in lifecycle_wiring.cpp
@@ -751,7 +745,7 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w, const QString&
                                                    QStringLiteral("windowClosed"), {windowId, kindInt, closeScreenId});
 }
 
-void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry)
+void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry, const QRect& newGeometry)
 {
     if (!w) {
         return;
@@ -765,7 +759,6 @@ void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& 
         return;
     }
 
-    const QRect newGeometry = w->frameGeometry().toRect();
     if (!oldGeometry.isValid() || newGeometry.width() <= 0 || newGeometry.height() <= 0) {
         return;
     }
@@ -813,8 +806,10 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // transient_for set but isPopupWindow false) leaked through an older
     // hand-maintained copy of this list — the shared predicate makes that
     // drift impossible.
-    // Fullscreen-on-a-scrolling-screen exception, mirroring the eligibility
-    // exemption: the strip keeps tiling a window through real fullscreen, so
+    // Fullscreen exception on a scrolling or a snapping screen
+    // (PlacementStatement::reportsFullscreenActivation): a snap key must act on
+    // the fullscreen window the user switched to (F522). On a scrolling screen,
+    // mirroring the eligibility exemption, the strip keeps tiling a window through real fullscreen, so
     // the daemon must keep hearing its focus — otherwise the scrolling verbs
     // (windowed fullscreen's own toggle first among them) act on whatever
     // window was reported active BEFORE the game went fullscreen. Seen
@@ -828,9 +823,11 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // a fullscreen dialog/splash/popup still cannot pin the daemon's focus
     // tracking. The residual accepted leak class is "fullscreen, no
     // explicit type, has a transient parent" — the intended target.
-    const bool fullscreenOnScrollingScreen =
-        w->isFullScreen() && m_tilingHandler->isScrollingScreen(getWindowScreenId(w));
-    if (isStructurallyUnmanageableWindowType(w, nullptr, /*exemptFullscreen=*/fullscreenOnScrollingScreen)) {
+    const QString activatedScreen = getWindowScreenId(w);
+    const bool fullscreenReported = w->isFullScreen()
+        && PlacementStatement::reportsFullscreenActivation(m_tilingHandler->isScrollingScreen(activatedScreen),
+                                                           m_tilingHandler->isManagedScreen(activatedScreen));
+    if (isStructurallyUnmanageableWindowType(w, nullptr, /*exemptFullscreen=*/fullscreenReported)) {
         return false;
     }
 
@@ -887,7 +884,11 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     }
 
     QString windowId = getWindowId(w);
-    QString screenId = getWindowScreenId(w);
+    // Where the window is going when a configure is still in flight: an
+    // activation landing between a move request and its ack (the bring-up
+    // re-notify after an effect reload, among others) otherwise reports the
+    // output the window is leaving.
+    QString screenId = pendingWindowScreenId(w);
 
     // Push the output's current desktop BEFORE the activation notifies. On a
     // virtual-desktop switch KWin activates the destination desktop's
@@ -928,6 +929,7 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     qCDebug(lcEffect) << "Notifying daemon: windowActivated" << windowId << "on screen" << screenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                    QStringLiteral("windowActivated"), {windowId, screenId});
+    m_lastReportedActiveWindow = w;
 
     // Notify the placement engines of the focus change so m_windowToScreen is
     // updated. NOT gated on isManagedScreen: the managed set tracks the
@@ -946,6 +948,33 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
                                                    QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                    QStringLiteral("notifyWindowFocused"));
     return true;
+}
+
+void PlasmaZonesEffect::reportActiveWindowScreen(KWin::EffectWindow* w, const QString& screenId)
+{
+    // The daemon's window shortcuts act on its focused window's screen
+    // (WindowTrackingAdaptor::lastActiveScreenName). That answer comes from an
+    // engine's record of the window where one holds it, and otherwise from the
+    // screen the last activation or this report named, so a move of the window
+    // (an output change, a virtual-screen crossing, a split added or removed
+    // under it, a daemon apply) has to be reported or the next snap-to-zone key
+    // puts the window back on the screen it left.
+    //
+    // Gated on the window this effect last REPORTED activated, not on KWin's
+    // active window: the daemon honours the report only for its own last
+    // activated window, and a dialog or other window the effect does not
+    // report can hold KWin's focus while its parent, still the daemon's
+    // focused window, moves.
+    if (!w || w->isDeleted() || w != m_lastReportedActiveWindow.data() || !m_daemonGate.serviceRegistered) {
+        return;
+    }
+    const QString screen = screenId.isEmpty() ? pendingWindowScreenId(w) : screenId;
+    if (screen.isEmpty()) {
+        return;
+    }
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("activeWindowScreenChanged"),
+        {getWindowId(w), screen}, QStringLiteral("activeWindowScreenChanged"));
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowByIdExact(const QString& windowId) const
@@ -971,8 +1000,14 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
         return exact;
     }
 
-    // Fallback: appId-based fuzzy match (for cross-session restore where
-    // the UUID portion changed but the appId is the same)
+    // The same INSTANCE under another app prefix comes next, and wins over
+    // any app match: the daemon addresses a window by its first-seen
+    // composite, which drifts from the effect's own after a class mutation
+    // (Electron/CEF) or an effect reload, and the app-id fallback would then
+    // miss the window or hand its request to a same-app sibling.
+    //
+    // Only then the app-id match (for cross-session restore where the UUID
+    // portion changed but the appId is the same).
     const QString targetAppId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
     KWin::EffectWindow* appMatch = nullptr;
     int matchCount = 0;
@@ -988,6 +1023,9 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
             continue;
         }
         const QString wId = getWindowId(w);
+        if (::PhosphorIdentity::WindowId::sameWindowInstance(wId, windowId)) {
+            return w;
+        }
         if (::PhosphorIdentity::WindowId::extractAppId(wId) == targetAppId) {
             appMatch = w;
             ++matchCount;
@@ -1002,14 +1040,15 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
 QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString& windowId) const
 {
     // Two cases:
-    //   1. Exact-instance match (`wId == windowId`): returns a single-
-    //      element vector with just that window — discards any appId
-    //      matches accumulated earlier in the stacking-order walk
-    //      because the instance id is the strictly stronger identifier.
-    //   2. Fuzzy appId match (no exact instance found): accumulates
-    //      every window that shares the composite's appId. Used by
-    //      autotile to disambiguate when multiple windows share an
-    //      appId (e.g. two Firefox instances) — see the header doc on
+    //   1. Instance match (the exact id, or the same instance under another
+    //      app prefix after a class drift): returns a single-element vector
+    //      with just that window — discards any appId matches accumulated
+    //      earlier in the stacking-order walk because the instance id is the
+    //      strictly stronger identifier.
+    //   2. Fuzzy appId match (no instance found): accumulates every window
+    //      that shares the composite's appId. Used by autotile to
+    //      disambiguate when multiple windows share an appId (e.g. two
+    //      Firefox instances) — see the header doc on
     //      `plasmazoneseffect.h::findAllWindowsById`.
     QVector<KWin::EffectWindow*> out;
     if (windowId.isEmpty()) {
@@ -1025,8 +1064,8 @@ QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString
             continue;
         }
         const QString wId = getWindowId(w);
-        if (wId == windowId) {
-            // Exact match — discard any appId matches accumulated from earlier
+        if (::PhosphorIdentity::WindowId::sameWindowInstance(wId, windowId)) {
+            // Instance match — discard any appId matches accumulated from earlier
             // windows in the stacking order. Without this clear, a second instance
             // of the same app (same appId) triggers the disambiguation path in
             // slotWindowsTileRequested, which can assign the wrong EffectWindow to

@@ -259,6 +259,17 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         }
     }
 
+    // An evacuee granted its parked place in this context while the context
+    // was out of view takes that place now, with its float bit.
+    if (!inserted) {
+        if (const auto place = takeGrantedParkedPlace(windowId, currentKeyForScreen(screenId), state)) {
+            inserted = state->addWindow(windowId, place->first);
+            if (inserted && place->second) {
+                state->setFloating(windowId, true);
+            }
+        }
+    }
+
     // Close/reopen restore takes precedence over the insert-position config: a
     // window closed while FLOATING reopens at its floated geometry, STILL
     // FLOATING — never inserted into the tile layout (marked floating in
@@ -425,8 +436,8 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         qCWarning(PhosphorTileEngine::lcTileEngine)
             << "insertWindow: state refused" << windowId << "on" << screenId << "- window left unmanaged";
         // windowOpened keys the reverse map before calling in here, so the
-        // sweep has to drop that key too — the same cleanup the defer gate and
-        // claimCrossScreenReopen run for their own refusals. ONLY this
+        // sweep has to drop that key too — the same cleanup
+        // claimCrossScreenReopen runs for its own refusal. ONLY this
         // context's membership: a window present on other desktops keeps its
         // tiles there, and the per-window caches below describe a window that
         // is still live, so they go only when no context is left.

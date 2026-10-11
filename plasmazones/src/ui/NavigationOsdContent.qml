@@ -97,7 +97,7 @@ Item {
         if (reason === "excluded") {
             // Shared by move/swap/push/snap/span: the focused window
             // is excluded by a rule or below the minimum size.
-            return i18n("This window is excluded from tiling");
+            return i18n("This window is excluded from snapping");
         }
         if (action === "move" || action === "focus" || action === "span") {
             // Layout-level failures are not a direction problem: telling

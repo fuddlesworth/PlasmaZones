@@ -4,7 +4,6 @@
 #include "controladaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
-#include "dbus/layoutadaptor/layoutadaptor.h"
 #include "compositorbridgeadaptor.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -12,7 +11,6 @@
 #include "core/platform/logging.h"
 #include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/ScreenIdentity.h>
 #include "core/platform/supportreport.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -25,9 +23,11 @@
 #include <QJsonArray>
 #include <QtConcurrent>
 
+#include <memory>
+
 namespace PlasmaZones {
 
-ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
+ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor,
                                PhosphorZones::LayoutRegistry* layoutManager,
                                PhosphorEngine::IPlacementEngine* autotileEngine,
                                PhosphorScreens::ScreenManager* screenManager, CompositorBridgeAdaptor* compositorBridge,
@@ -36,7 +36,6 @@ ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdap
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
     , m_snapAdaptor(snapAdaptor)
-    , m_layoutAdaptor(layoutAdaptor)
     , m_layoutManager(layoutManager)
     , m_autotileEngine(autotileEngine)
     , m_screenManager(screenManager)
@@ -48,31 +47,18 @@ ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdap
 
 void ControlAdaptor::snapWindowToZone(const QString& windowId, int zoneNumber, const QString& screenId)
 {
-    if (windowId.isEmpty() || zoneNumber < 1 || zoneNumber > 9) {
+    // Any zone the layout has (F85); a missing number is reported as not found.
+    if (windowId.isEmpty() || zoneNumber < 1) {
         qCWarning(lcDbusWindow) << "snapWindowToZone: invalid args windowId=" << windowId
                                 << "zoneNumber=" << zoneNumber;
         return;
     }
-    if (!m_layoutManager) {
-        return;
-    }
-
-    // Resolve zone from screen's current layout
-    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-    if (!layout) {
-        qCWarning(lcDbusWindow) << "snapWindowToZone: no layout for screen" << screenId;
-        return;
-    }
-
-    PhosphorZones::Zone* zone = layout->zoneByNumber(zoneNumber);
-    if (!zone) {
-        qCWarning(lcDbusWindow) << "snapWindowToZone: zone" << zoneNumber << "not found in layout" << layout->name();
-        return;
-    }
-
-    // Delegate to SnapAdaptor's moveWindowToZone convenience method
+    // The zone is resolved in the layout of the screen the call names, a
+    // screen id or a connector name (a split monitor's connector resolves to
+    // the virtual screen the window is in), or of the window's own screen when
+    // it names none (F22, F26), and snapped there through the bus gate.
     if (m_snapAdaptor) {
-        m_snapAdaptor->moveWindowToZone(windowId, zone->id().toString());
+        m_snapAdaptor->moveWindowToZoneNumberOnScreen(windowId, zoneNumber, screenId);
     }
 }
 
@@ -82,71 +68,26 @@ void ControlAdaptor::toggleAutotileForScreen(const QString& screenId)
         qCWarning(lcDbusWindow) << "toggleAutotileForScreen: empty screenId";
         return;
     }
-
-    // Determine current mode and toggle
-    bool isAutotile = m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId);
-    int newMode = isAutotile ? 0 : 1; // 0=Snapping, 1=Autotile
-
-    // Use the LayoutAdaptor's assignment system to toggle mode
-    // This is a simplified toggle — uses current desktop/activity context
-    qCInfo(lcDbusWindow) << "toggleAutotileForScreen:" << screenId << "from" << (isAutotile ? "autotile" : "snapping")
-                         << "to" << (newMode == 1 ? "autotile" : "snapping");
-
-    if (m_layoutAdaptor) {
-        // The toggle writes at the granularity that governs the screen RIGHT
-        // NOW. A screen whose current desktop (or desktop + activity) carries
-        // its own assignment is toggled in that context; a screen-level write
-        // there would be outranked by the narrower entry (a broader write
-        // never shadows a narrower one) and the toggle would do nothing
-        // visible. A screen with only a screen-level assignment, or none,
-        // keeps the screen-level toggle, which flips every desktop of it.
-        const QString resolvedScreenId = PhosphorScreens::ScreenIdentity::idForName(screenId);
-        const int desktop = m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(resolvedScreenId) : 0;
-        const QString activity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
-        int targetDesktop = 0;
-        QString targetActivity;
-        if (m_layoutManager && desktop > 0 && !activity.isEmpty()
-            && m_layoutManager->hasExplicitAssignment(resolvedScreenId, desktop, activity)) {
-            targetDesktop = desktop;
-            targetActivity = activity;
-        } else if (m_layoutManager && desktop > 0
-                   && m_layoutManager->hasExplicitAssignment(resolvedScreenId, desktop, QString())) {
-            targetDesktop = desktop;
-        } else if (m_layoutManager && !activity.isEmpty()
-                   && m_layoutManager->hasExplicitAssignment(resolvedScreenId, 0, activity)) {
-            targetActivity = activity;
-        }
-        // setAssignmentEntry(screenId, desktop, activity, mode, layout, algorithm)
-        //
-        // A bare mode switch has no layout arguments of its own, so the
-        // context's STORED slots ride along: the snapping layout and tiling
-        // algorithm the entry already carries (exactContextEntry reads the
-        // exact tuple's rule, never a cascade default) are written back with
-        // the new mode, and a round trip lands on the same layout it left.
-        // Written empty, a per-desktop entry lost its layout to the global
-        // default on the way back (the cascade has no wider level carrying it,
-        // unlike a screen-level entry). An unassigned context stays empty and
-        // resolves through the cascade. The scrolling template survives on
-        // its own: setAssignmentEntry seeds it from the stored entry.
-        //
-        // The apply (resnap, snap-zone restores, OSD) is the write's own:
-        // outside a settings-app save batch every single-context assignment
-        // write applies itself for its screen at once (LayoutAdaptor::
-        // stageOrApply), so an explicit apply here would run the pass twice.
-        // Inside a batch the batch's closing apply carries the screen.
-        PhosphorZones::AssignmentEntry stored;
-        if (m_layoutManager
-            && m_layoutManager->hasExplicitAssignment(resolvedScreenId, targetDesktop, targetActivity)) {
-            stored = m_layoutManager->exactContextEntry(resolvedScreenId, targetDesktop, targetActivity);
-        }
-        qCInfo(lcDbusWindow) << "toggleAutotileForScreen: writing context desktop=" << targetDesktop
-                             << "activity=" << targetActivity << "snapping=" << stored.snappingLayout
-                             << "tiling=" << stored.tilingAlgorithm;
-        m_layoutAdaptor->setAssignmentEntry(screenId, targetDesktop, targetActivity, newMode, stored.snappingLayout,
-                                            stored.tilingAlgorithm);
-    } else {
-        qCWarning(lcDbusWindow) << "toggleAutotileForScreen: LayoutAdaptor not available";
+    // A connector name or a split monitor's id resolves to the virtual screen
+    // in question (F22), and the switch itself is the mode-toggle shortcut's
+    // own code on that screen: its context, its remembered layout or
+    // algorithm, its feature gate and disabled-context notice (L13 Q1).
+    const QString resolved = m_wta ? m_wta->resolveBusScreen(screenId) : QString();
+    if (resolved.isEmpty()) {
+        qCWarning(lcDbusWindow) << "toggleAutotileForScreen: unknown screen" << screenId;
+        return;
     }
+    if (!m_modeToggle) {
+        qCWarning(lcDbusWindow) << "toggleAutotileForScreen: no mode toggle wired";
+        return;
+    }
+    qCInfo(lcDbusWindow) << "toggleAutotileForScreen:" << screenId << "->" << resolved;
+    m_modeToggle(resolved);
+}
+
+void ControlAdaptor::setModeToggleHandler(std::function<void(const QString& screenId)> handler)
+{
+    m_modeToggle = std::move(handler);
 }
 
 QString ControlAdaptor::getFullState()
@@ -205,7 +146,6 @@ void ControlAdaptor::detach()
 {
     m_wta = nullptr;
     m_snapAdaptor = nullptr;
-    m_layoutAdaptor = nullptr;
     m_layoutManager = nullptr;
     m_autotileEngine = nullptr;
     m_screenManager = nullptr;
@@ -213,6 +153,7 @@ void ControlAdaptor::detach()
     m_scrollEngine = nullptr;
     m_modeRouter = nullptr;
     m_shortcutCatalog = nullptr;
+    m_modeToggle = nullptr;
 }
 
 QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessage& message)
@@ -258,40 +199,36 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
         snapshot.bridgeCapabilities = m_compositorBridge->bridgeCapabilities();
     }
 
-    // Run blocking work (file I/O, journalctl) off the main thread.
-    // No parent — lifetime managed explicitly by the two signal handlers below.
-    // Parenting to `this` would cause Qt to auto-delete the watcher during ~QObject,
-    // racing with our destroyed handler's deleteLater.
+    // Run blocking work (file I/O, journalctl) off the main thread. No parent:
+    // the watcher has to outlive the adaptor while the thread runs, and then
+    // deletes itself.
     auto* watcher = new QFutureWatcher<QString>();
     m_reportWatcher = watcher;
-    // Use QPointer to detect adaptor destruction inside the finished handler,
-    // preventing writes to dangling `this` if the adaptor is destroyed while
-    // the future is still running but finishes after destruction starts.
-    QPointer<ControlAdaptor> guard(this);
-    connect(watcher, &QFutureWatcher<QString>::finished, this, [guard, message, watcher]() {
-        if (guard) {
-            QDBusConnection::sessionBus().send(message.createReply(watcher->result()));
-            guard->m_reportWatcher = nullptr;
-        }
+    // Set once the caller has its answer, so an adaptor destroyed between the
+    // reply and the watcher's deferred delete sends no second, Shutdown,
+    // reply (F181).
+    auto replied = std::make_shared<bool>(false);
+    // The context is `this`, so Qt drops this connection when the adaptor
+    // goes and the handler never runs against a dead adaptor.
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, message, watcher, replied]() {
+        QDBusConnection::sessionBus().send(message.createReply(watcher->result()));
+        *replied = true;
+        m_reportWatcher = nullptr;
         watcher->deleteLater();
     });
-    // If the adaptor is destroyed while the future is running, send an error reply
-    // so the D-Bus caller doesn't hang until timeout. Disconnect the finished signal
-    // first to prevent a double-reply race. Note: cancel() is a no-op on
-    // QtConcurrent::run futures but documents the intent.
-    // Use QPointer to guard the watcher — if the finished handler already ran and
-    // called deleteLater, the event loop may have destroyed the watcher before this
-    // destroyed handler fires, so we must check before touching it.
-    QPointer<QFutureWatcher<QString>> weakWatcher(watcher);
-    connect(this, &QObject::destroyed, watcher, [message, weakWatcher]() {
-        if (!weakWatcher)
-            return; // Already cleaned up by the finished handler
-        QObject::disconnect(weakWatcher, &QFutureWatcher<QString>::finished, nullptr, nullptr);
-        weakWatcher->cancel();
+    // The adaptor destroyed while the thread runs: answer Shutdown so the
+    // caller does not wait out its timeout. The context is the watcher, so a
+    // deleted watcher takes this connection with it. The disconnect stops a
+    // finished signal still queued from replying after the error.
+    connect(this, &QObject::destroyed, watcher, [message, watcher, replied]() {
+        if (*replied) {
+            return;
+        }
+        QObject::disconnect(watcher, &QFutureWatcher<QString>::finished, nullptr, nullptr);
         auto error = message.createErrorReply(QString(PhosphorProtocol::Service::Error::Shutdown),
                                               QStringLiteral("Daemon shutting down"));
         QDBusConnection::sessionBus().send(error);
-        weakWatcher->deleteLater();
+        watcher->deleteLater();
     });
     watcher->setFuture(QtConcurrent::run([snapshot = std::move(snapshot), sinceMinutes]() {
         return SupportReport::generateFromSnapshot(snapshot, sinceMinutes);

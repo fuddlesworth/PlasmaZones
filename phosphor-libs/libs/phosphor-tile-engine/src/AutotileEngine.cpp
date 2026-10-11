@@ -15,6 +15,7 @@
 
 // Project headers
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include "autotileengine/evacueepark_p.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>

@@ -36,41 +36,18 @@ namespace PhosphorEngine {
 
 class ICrossSurfaceResolver;
 
-/// Unified placement engine interface.
+/// Unified placement engine interface, implemented by all three engines (snap
+/// zone layouts, autotile algorithms, the scrolling strip) so the daemon
+/// dispatches every lifecycle event and navigation intent through one
+/// polymorphic call with no mode branches. Each method names a USER INTENT,
+/// which each engine fulfils in its own terms.
 ///
-/// ## Required vs Optional Methods
-///
-/// Methods are divided into two categories:
-///
-/// **REQUIRED (pure virtual, = 0):** Every engine MUST implement these.
-/// They represent the core contract: screen ownership, window lifecycle,
-/// float management, and navigation intents.
-///
-/// **OPTIONAL (have default no-op implementations):** Engines override
-/// only the capabilities they support. A snap engine ignores master
-/// operations; an autotile engine ignores per-screen config. The defaults
-/// are safe no-ops so the daemon can call any method without branching
-/// on engine type.
-///
-/// ## Design Rationale
-///
-/// All three engines — snap (manual zone layouts), autotile (automatic
-/// tiling algorithms), and scrolling (niri-style column strip) — implement
-/// this so the daemon can dispatch all window lifecycle events and user
-/// navigation intents through a single polymorphic call — zero mode
-/// branches.
-///
-/// Each method represents a USER INTENT, not a mode-specific
-/// implementation step. "Move focused window left" has different internal
-/// meaning in tile-swap mode vs. zone-snap mode, but the user's request
-/// is the same — the interface names the request and each engine fulfills
-/// it in its own terms.
-///
-/// The REQUIRED navigation intents are idempotent with respect to "no
-/// focused window" — each engine's implementation emits navigation
-/// feedback with a sensible reason code when there's nothing to act on,
-/// rather than erroring out. The OPTIONAL surface below does not share
-/// that promise: its defaults are deliberately silent no-ops.
+/// REQUIRED (pure virtual) methods are the core contract: screen ownership,
+/// window lifecycle, float management and navigation intents. The navigation
+/// intents are idempotent with respect to "no focused window": they emit
+/// navigation feedback with a reason code rather than erroring out.
+/// OPTIONAL methods have default no-ops, which are deliberately silent, so
+/// the daemon can call any of them without branching on engine type.
 class PHOSPHORENGINE_EXPORT IPlacementEngine
 {
 protected:
@@ -113,24 +90,20 @@ public:
         windowOpened(windowId, screenId, 0, 0);
     }
 
-    /// OPTIONAL: cross-screen session reclaim, the tiling-engine counterpart
-    /// of the snap engine's recorded-screen restore. Offered a window that
-    /// opened on @p openingScreenId — a screen this engine may not own — the
-    /// engine checks the unified placement store for ITS OWN managed slot
-    /// recorded on a DIFFERENT screen that is still in this engine's mode
-    /// (PhosphorEngine::pendingCrossScreenManagedRestore), and on a match
-    /// adopts the window into that recorded home screen (its retile then
-    /// physically moves the window there). KWin's session restore opens
-    /// windows on a nondeterministic output, so without this a whole strip's
-    /// windows strand floated on whatever monitor KWin picked at login.
-    /// Default false: an engine without a cross-screen restore story (snap
-    /// claims through resolveWindowRestore instead) never claims here.
+    /// OPTIONAL: the reopen claim, under the reopen contract (restores happen
+    /// where a window opens). Offered a window opening on @p openingScreenId,
+    /// an engine that RUNS that screen checks the placement store for a FIFO
+    /// record (another instance of the app) with ITS managed slot recorded on
+    /// another virtual screen of the SAME KWin output, still in its mode
+    /// (PhosphorEngine::pendingCrossScreenManagedRestore, the 6-argument
+    /// overload), and on a match adopts the window into that virtual screen.
+    /// Never a record on another output, and never the window's own record
+    /// (it is final: restored only where it names, else released). Default
+    /// false: snap restores through resolveWindowRestore instead.
     ///
-    /// Contract: self-gate on first observation by MEMBERSHIP (a held window
-    /// is an in-session move); decide via WindowPlacementStore::peekForReclaim,
-    /// never plain peek() (its live-instance exclusion stops a fresh second
-    /// instance being yanked onto its open sibling's monitor); return the REAL
-    /// adoption outcome verified by membership.
+    /// Contract: decline unless the opening screen is this engine's; gate on
+    /// first observation by MEMBERSHIP; decide via peekForReclaim, never
+    /// plain peek(); return the REAL adoption outcome, verified by membership.
     virtual bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth = 0,
                                         int minHeight = 0)
     {
@@ -141,11 +114,8 @@ public:
         return false;
     }
 
-    /// OPTIONAL: whether the claim round for THIS announce of @p windowId ran
-    /// and every claimCrossScreenReopen declined. A reciprocal defer gate
-    /// reads it and adopts rather than deferring again, leaving the window
-    /// with no engine. Stated either way on every announce reaching an arrival
-    /// engine, never sticky; a claim re-entering windowOpened clears it first.
+    /// INERT, kept for ABI: fed the removed cross-screen defer gates. Nothing
+    /// calls it and the in-tree overrides ignore it.
     virtual void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
     {
         Q_UNUSED(windowId)
@@ -158,28 +128,20 @@ public:
     /// empty when the engine does not hold it or holds it only in a
     /// background context.
     ///
-    /// This exists for the adaptor's post-reclaim ownership check: after a
-    /// cross-screen reclaim, the effect's already-queued arrival announce
-    /// still carries the ARRIVAL screen, and dispatching it would migrate
-    /// the window straight back. isWindowTracked cannot serve — its contract
-    /// is PER-ENGINE: ScrollEngine answers from the raw reverse-map key,
-    /// which a refused adoption can leave dangling, while SnapEngine and
-    /// AutotileEngine verify membership as well (a phantom key answers
-    /// false there — see AutotileEngine's override doc for why that engine
-    /// needed the stricter form). Callers wanting one uniform answer across
-    /// engines cannot get it from that predicate. isWindowManaged/isWindowTiled
-    /// cannot serve either — both exclude engine-floating windows, which a
-    /// reclaim can legitimately produce.
+    /// Read wherever the engine's own hold matters more than the window's
+    /// position: the daemon's seed filter and engine routing, the adaptors'
+    /// focus, close and screen-leave paths, and the tiling adaptor's arrival
+    /// dispatch, where after a claim onto another virtual screen the effect's
+    /// queued announce still carries the ARRIVAL screen. isWindowTracked cannot serve: its contract is PER-ENGINE
+    /// (ScrollEngine answers from a raw reverse-map key a refused adoption can
+    /// leave dangling; SnapEngine and AutotileEngine verify membership).
+    /// isWindowManaged/isWindowTiled cannot either: both exclude
+    /// engine-floating windows, which a claim can produce.
     ///
-    /// CURRENT-context only, and that restriction is what keeps the check
-    /// from suppressing repair. A reclaim's adoption always keys by the home
-    /// screen's current context, so a fresh reclaim is always visible here;
-    /// a hold in a BACKGROUND context (a mode flip preserves other-desktop
-    /// states and their keys) is never a fresh reclaim, and the announce
-    /// that would heal such a stale hold — the engines' own cross-screen
-    /// migration in windowOpened — must not be refused. A stale hold in the
-    /// CURRENT context is still indistinguishable from a fresh one here and
-    /// remains healed by windowFocused instead.
+    /// CURRENT-context only, so the check never suppresses repair: a claim's
+    /// adoption keys by the home screen's current context, while a stale
+    /// hold in a BACKGROUND context is healed by the very announce this
+    /// check would otherwise refuse.
     virtual QString heldScreenForWindow(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -187,34 +149,26 @@ public:
     }
 
     /// The (screen, desktop, activity) key of the state that genuinely holds
-    /// @p windowId, tiled or floating, in ANY context — or nullopt when no
-    /// state holds it. Membership-grade like heldScreenForWindow, but
-    /// deliberately NOT scoped to the screen's current context: this is the
-    /// query for "which desktop's stack still lists this window", which the
-    /// daemon's desktop-membership reconcile asks after the compositor
-    /// reports the window's desktop set changed. The holding state is
-    /// usually a BACKGROUND one by then (the user is looking at the desktop
-    /// the window arrived on), which is exactly the case the current-context
-    /// predicates answer empty for.
+    /// @p windowId, tiled or floating, in ANY context, or nullopt when none
+    /// does. Membership-grade like heldScreenForWindow but NOT scoped to the
+    /// screen's current context: the daemon's desktop-membership reconcile
+    /// asks "which desktop's stack still lists this window" after the
+    /// compositor reports a desktop-set change, when the holding state is
+    /// usually a BACKGROUND one the current-context predicates answer empty
+    /// for.
     ///
-    /// At most ONE key comes back: the window's PRIMARY membership (the one in
-    /// the context its screen is showing, else the first) when the state it
-    /// names genuinely holds the window, otherwise the first membership whose
-    /// state does. A window present on several desktops holds a membership
-    /// in each; ask the engine's membership pass for the rest. A caller must
-    /// not read nullopt as "no engine state mentions this window" — a
-    /// phantom membership left by a refused adoption answers nullopt too,
-    /// which is the safe direction here.
+    /// At most ONE key comes back: the PRIMARY membership (the one in the
+    /// context its screen shows, else the first) when its state genuinely
+    /// holds the window, otherwise the first membership whose state does. The
+    /// membership pass answers for a window's other desktops. nullopt is not
+    /// "no state mentions this window": a phantom membership left by a refused
+    /// adoption answers nullopt too, the safe direction here. ScrollEngine
+    /// answers nullopt during a drag-insert preview (the window is detached
+    /// from the strip until the drop or cancel).
     ///
-    /// ScrollEngine answers nullopt for the duration of a drag-insert
-    /// preview: the preview keeps the membership pointed at the target
-    /// context while the window is detached from the strip, so the
-    /// membership term fails until the drop or cancel.
-    ///
-    /// All three engines override it. Snapping takes part in the daemon's
-    /// desktop-membership reconcile as a membership engine (it holds no
-    /// stack, so a release there is a zone assignment dropped, not a gap
-    /// closed).
+    /// All three engines override it. Snapping takes part in the reconcile as
+    /// a membership engine: it holds no stack, so a release there is a zone
+    /// assignment dropped, not a gap closed.
     virtual std::optional<PlacementStateKey> heldKeyForWindow(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -224,7 +178,7 @@ public:
     /// Bracket a BURST of windowOpened calls delivered together (the
     /// adaptor's three dispatch loops: windowsOpenedBatch, the deferred-open
     /// flush, and the parked-open replay — daemon bring-up re-announce and
-    /// mode flips; a cross-screen reclaim's re-entry inherits the loop's
+    /// mode flips; a reopen claim's re-entry inherits the loop's
     /// bracket, while the snap facade's is deliberately UNBRACKETED since each
     /// resolveWindowRestore is its own D-Bus message). An engine that applies
     /// geometry per arrival may defer those applies until endArrivalBurst so
@@ -741,35 +695,20 @@ public:
     }
 
     /// The rect the dragged window would occupy if the live preview were
-    /// dropped now, in absolute px on @p screenId, for a caller that wants to
-    /// PAINT the drop target. Empty when no preview is live, no target has
-    /// been hit-tested yet, or the preview belongs to another screen.
-    ///
-    /// Measured in the layout's CURRENT view. A drop may additionally scroll
-    /// the view — the scroll engine focuses the dropped window, which can
-    /// re-anchor the strip — so this marks the place under the cursor that the
-    /// user is aiming at, not the screen position the window settles at once
-    /// any post-drop scroll finishes. Painting the post-scroll position would
-    /// move the indicator away from the cursor while the user is still
-    /// choosing, which is the worse of the two.
-    ///
-    /// Default empty, and that is the right answer for an engine that
-    /// restructures live: autotile's feedback IS its restructure, so painting
-    /// a second indicator over it would double-report the same thing. Only an
-    /// engine that defers structure to the drop (the scroll strip, per the
-    /// DETACH-ONCE contract above) has a target that is otherwise invisible.
-    ///
-    /// Mostly not clamped to the viewport — a join target's rect is where the
-    /// slot genuinely is — with two deliberate NEW-COLUMN exceptions, both
-    /// niri's insert-hint rules: a before-the-first slot is placed just
-    /// OUTSIDE the first column (its raw post-insert position coincides with
-    /// that column and would read as "replace this"), and any new-column
-    /// slot past a visible edge is clamped so at least half the rect stays
-    /// on screen. Without the clamp, the end slots of a FULL viewport
-    /// resolve entirely off screen and the overlay clips the indicator
-    /// away, leaving the drop that most needs feedback with none; the
-    /// half-in band at the edge marks "insert past this edge" without
-    /// pretending to be the slot's true position.
+    /// dropped now, in absolute px on @p screenId, for a caller that PAINTS
+    /// the drop target. Empty when no preview is live, nothing is hit-tested
+    /// yet, or the preview belongs to another screen. Measured in the CURRENT
+    /// view: it marks the place under the cursor the user aims at, not where
+    /// the window settles after any post-drop scroll (painting that would move
+    /// the indicator away from the cursor mid-choice). Default empty, which
+    /// is right for an engine that restructures live (autotile's feedback IS
+    /// its restructure); only one deferring structure to the drop (the strip,
+    /// per DETACH-ONCE above) has an otherwise invisible target. A join
+    /// target's rect is not clamped. Two NEW-COLUMN exceptions follow niri's
+    /// insert hints: a before-the-first slot sits just OUTSIDE the first
+    /// column (its raw position would read as "replace this"), and a slot past
+    /// a visible edge is clamped half on screen, so a FULL viewport's end
+    /// slots are not clipped away by the overlay.
     virtual QRect dragInsertIndicatorRect(const QString& screenId) const
     {
         Q_UNUSED(screenId)
@@ -834,16 +773,11 @@ public:
         return false;
     }
 
-    /// Return the screen this engine considers the window to be on, or empty
-    /// if the window isn't tracked by this engine.
-    ///
-    /// The daemon-side shortcut router consults this across engines to resolve
-    /// the active window's current screen for routing decisions (float, focus,
-    /// move). Without it, a cross-engine handoff (e.g. drag-insert from snap
-    /// into autotile) leaves the daemon's screenAssignments lookup empty
-    /// because the source engine has released its tracking, and the next
-    /// shortcut routes to whichever engine the cached focus screen pointed at
-    /// rather than the engine that now owns the window.
+    /// Return the screen this engine considers the window to be on (any
+    /// context), or empty if the window isn't tracked by this engine. The
+    /// daemon's shortcut router consults it across engines, so a cross-engine
+    /// handoff that emptied the source's tracking still routes the next
+    /// shortcut to the engine that now owns the window.
     virtual QString screenForTrackedWindow(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -1322,6 +1256,67 @@ public:
     /// manages this screen" — use isActiveOnScreen() for that check.
     virtual IPlacementState* stateForScreen(const QString& screenId) = 0;
     virtual const IPlacementState* stateForScreen(const QString& screenId) const = 0;
+
+    /// OPTIONAL: whether the opens dispatched next may take focus ("Focus new
+    /// windows"): true for a genuine open, false for a re-placement. The
+    /// tiling adaptor sets it around each dispatch. Appended last for ABI.
+    virtual void setOpenFocusEligible(bool eligible)
+    {
+        Q_UNUSED(eligible)
+    }
+
+    /// OPTIONAL: another engine just placed @p windowId on @p keepScreenId,
+    /// so a hold this engine keeps on any other screen (a background-desktop
+    /// tile or column) is stale memory: release it silently, durable slot
+    /// included. An empty @p keepScreenId releases every hold. Appended for ABI.
+    virtual void releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(keepScreenId)
+    }
+
+    // ── Evacuee park (OPTIONAL, appended for ABI) ──────────────────────────
+    // When KWin evacuates an output that disconnected, the daemon parks each
+    // engine's memory of the windows there and re-seats an untouched window
+    // when KWin returns it. Session-scoped: a daemon restart loses the park.
+
+    /// Copy every context of @p physicalScreenId (each of its virtual screens)
+    /// into the park, before the prune drops them. Returns the parked windows.
+    virtual QStringList parkOutput(const QString& physicalScreenId)
+    {
+        Q_UNUSED(physicalScreenId)
+        return {};
+    }
+    /// Re-seat @p windowId's contexts parked under @p parkedPhysicalId on
+    /// @p returnedPhysicalId as a re-statement (no focus, no last-used). A
+    /// context out of view is re-seated or granted to the engine's own arrival
+    /// path. True when anything was re-seated or granted.
+    virtual bool readoptParked(const QString& windowId, const QString& parkedPhysicalId,
+                               const QString& returnedPhysicalId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(parkedPhysicalId)
+        Q_UNUSED(returnedPhysicalId)
+        return false;
+    }
+    /// Forget @p windowId's parked contexts; an empty @p physicalScreenId, a
+    /// @p desktop of 0 or an empty @p activity matches every one.
+    virtual void dropParked(const QString& windowId, const QString& physicalScreenId, int desktop,
+                            const QString& activity)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(physicalScreenId)
+        Q_UNUSED(desktop)
+        Q_UNUSED(activity)
+    }
+    /// Whether @p windowId has a context parked under @p physicalScreenId
+    /// (any output when it is empty).
+    virtual bool hasParked(const QString& windowId, const QString& physicalScreenId) const
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(physicalScreenId)
+        return false;
+    }
 };
 
 } // namespace PhosphorEngine

@@ -743,9 +743,9 @@ void Daemon::reconcileActiveAssignments()
     // RuleStore::rulesChanged synchronously; reconciling per rule would run a
     // full updateEngineScreens + resnap + OSD pass over a half-written set.
     // They used to blanket-block the whole rule store for that, which also cut
-    // off rulesChanged's four OTHER consumers (exclude refilter, overlay
-    // refresh, Settings::onRuleStoreChanged, the RuleAdaptor D-Bus relay the
-    // effect invalidates its rule cache on). Suppressing only this one consumer
+    // off rulesChanged's OTHER consumers (exclude refilter, overlay refresh, the
+    // tab-colour broadcast, Settings::onRuleStoreChanged, the RuleAdaptor relay
+    // the effect invalidates its rule cache on). Suppressing only this one consumer
     // keeps the writers' invariant and lets the rest see the edit. Each writer
     // drives one explicit diffActiveAssignments (via its caller) once the set is
     // whole.
@@ -1295,11 +1295,11 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
             qCWarning(lcDaemon) << "seedAutotileOrderForScreen: no window registry —"
                                 << "minimized windows cannot be filtered for" << screenId;
         }
-        // Float is per mode: non-minimized entries always seed (a snap-mode
-        // float must not make the window untileable here). Minimized entries
-        // stay as positional placeholders, except user-floated-then-minimized
-        // ones. See filterEngineSeedOrder's doc for the rationale.
-        filterEngineSeedOrder(order, wts, registry, PhosphorEngine::WindowPlacement::autotileEngineId());
+        // Float is per mode, minimized entries stay as placeholders (except
+        // user-floated-then-minimized ones), and a window now on another
+        // screen or desktop is dropped. See filterEngineSeedOrder's doc.
+        filterEngineSeedOrder(order, wts, registry, PhosphorEngine::WindowPlacement::autotileEngineId(),
+                              seedScopeFor(screenId, orderKey.desktop));
     }
 
     if (!order.isEmpty()) {
@@ -1484,11 +1484,11 @@ void Daemon::processPendingGeometryUpdates()
     *conn = connect(
         m_layoutComputeService.get(), &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration, this,
         [this, pending, conn](const QString& screenId, const QUuid&, PhosphorZones::Layout*, uint64_t generation) {
-            // Shutdown guard, the async-completion idiom lifecycle.cpp's
-            // D-Bus replies use: stop() has already hidden the overlays and
-            // stopped the reapply timer, and restarting it here would push a
-            // geometry reapply at the effect against torn-down engine state
-            // up to 3s after shutdown began.
+            // Shutdown guard, the idiom the daemon's D-Bus replies use
+            // (bridge_watchdog.cpp, plasma_workspace.cpp): stop() has already
+            // hidden the overlays and stopped the reapply timer, and restarting
+            // it here would push a geometry reapply at the effect against
+            // torn-down engine state up to 3s after shutdown began.
             if (m_shuttingDown) {
                 return;
             }

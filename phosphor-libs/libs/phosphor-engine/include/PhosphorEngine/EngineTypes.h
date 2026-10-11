@@ -61,10 +61,18 @@ using TilingStateKey = PlacementStateKey;
 
 enum class SnapIntent {
     UserInitiated,
+    /// An automatic placement of a window that genuinely opened: may take
+    /// focus under "Focus new windows".
     AutoRestored,
+    /// The same automatic placement for a window that did NOT just open (a
+    /// restart or pending sweep, an unminimize, a desktop arrival). Identical
+    /// bookkeeping to AutoRestored, never takes focus. Appended for ABI.
+    AutoReplaced,
 };
 
-/// Coarse structural classification for the snap-restore consume gate.
+/// Coarse structural classification of a window, carried on the open and close
+/// wire calls and on the placement record. Nothing branches on it any more:
+/// the pending-restore consume gate it fed was removed with that queue.
 /// Wire/JSON encoding is `int`; `Unknown` is the permissive default.
 enum class WindowKind : int {
     Unknown = 0,
@@ -74,12 +82,8 @@ enum class WindowKind : int {
 
 /// Clamp an integer wire value to a valid WindowKind. Unknown wire values
 /// (out-of-range, future enum values from an older daemon) collapse to
-/// `Unknown` rather than producing an undefined enum. The close-capture
-/// consume gate (CloseCaptureContext::windowKind) refuses only when both
-/// sides are concrete and disagree, so `Unknown` is permissive — the
-/// safe-by-default policy. On the restore side the value is carried in the
-/// record for that gate; `SnapEngine::resolveWindowRestore` itself no longer
-/// branches on it. Centralised here so the persistence-layer call sites
+/// `Unknown` rather than producing an undefined enum. Centralised here so the
+/// persistence-layer call sites
 /// (`WindowTrackingAdaptor::windowClosed`, `SnapAdaptor::resolveWindowRestore`,
 /// `WindowPlacement::fromJson`) stay in lockstep when a new kind is added.
 inline WindowKind clampWindowKindFromWire(int wire)
@@ -97,15 +101,15 @@ inline WindowKind clampWindowKindFromWire(int wire)
 /// Why a snap restore is being resolved. Replaces the `isOpenPath` bool the
 /// Snap.resolveWindowRestore wire used to carry.
 ///
-/// The bool conflated FIVE drivers into "open / not open". The daemon-side gate
-/// that reads it is the cross-screen tile reclaim, which genuinely wants "is
-/// this an open", so it is `== Open` and nothing changed for it. What the bool
-/// could NOT express is the DesktopArrival re-drive. That is the continuation of
-/// an open whose window a RouteToDesktop rule sent to another desktop, so the
-/// effect parked it and re-drives once the desktop is shown. It is not a user
-/// action and not an open of its own: it must be eligible for the reclaim, which
-/// the bool permanently denied it, while retiring no reclaim credit, since the
-/// open pass that preceded it already spent this open's one credit.
+/// The bool conflated FIVE drivers into "open / not open". The daemon gates on
+/// it: the open claim and the appId FIFO serve a genuine Open (the two sweeps
+/// get the FIFO only for a window no engine ever captured), and every other
+/// reason is a re-entry of the window's own record. What the bool could NOT
+/// express is the DesktopArrival re-drive: the continuation of an open whose
+/// window a RouteToDesktop rule sent to another desktop, so the effect parked
+/// it and re-drives once the desktop is shown. It is not a user action and
+/// not an open of its own, so it never borrows a sibling's record, but it
+/// does run the screen routing a parked open still owes.
 ///
 /// A third gate reads it on the EFFECT side: the open-path setFrameGeometry
 /// shadow seed, which is what lets the daemon translate a bare RouteToScreen for
@@ -118,6 +122,9 @@ enum class RestoreReason : int {
     PendingSweep = 2, ///< the pending-restores sweep, once the daemon is ready
     DesktopArrival = 3, ///< re-drive after the daemon moved the window to another desktop
     DaemonRestartSweep = 4, ///< the bring-up stacking-restore sweep
+    /// re-apply the zone a window already holds in the context it arrived in;
+    /// places nothing new
+    DesktopReapply = 5,
 };
 
 /// Clamp an integer wire value to a valid RestoreReason. Mirrors
@@ -141,6 +148,8 @@ inline RestoreReason clampRestoreReasonFromWire(int wire)
         return RestoreReason::DesktopArrival;
     case static_cast<int>(RestoreReason::DaemonRestartSweep):
         return RestoreReason::DaemonRestartSweep;
+    case static_cast<int>(RestoreReason::DesktopReapply):
+        return RestoreReason::DesktopReapply;
     default:
         return RestoreReason::Open;
     }
@@ -154,17 +163,6 @@ struct ResnapEntry
     int virtualDesktop = 0;
 };
 
-struct PendingRestore
-{
-    QStringList zoneIds;
-    QString screenId;
-    int virtualDesktop = 0;
-    QString layoutId;
-    QList<int> zoneNumbers;
-    /// Closing window's kind; the consume gate refuses when both sides are concrete and disagree.
-    WindowKind windowKind = WindowKind::Unknown;
-};
-
 struct SnapResult
 {
     bool shouldSnap = false;
@@ -172,13 +170,11 @@ struct SnapResult
     QString zoneId;
     QStringList zoneIds;
     QString screenId;
-    /// Set (with shouldSnap false) when snap's resolve stood down because the
-    /// record homes the window TILED on another engine's screen — the signal
-    /// for the SnapAdaptor to offer the window to the tiling engines'
-    /// claimCrossScreenReopen, and for nothing else. Distinguished from a
-    /// plain no-snap so the reclaim runs ONLY on this verdict: an exclusion
-    /// refusal, a disabled context, or an ordinary no-match must not hand
-    /// the window to a reclaim the user's rules or gates already vetoed.
+    /// INERT, kept for ABI layout: snap's resolve once set it when it stood
+    /// down for a record that homed the window TILED on another engine's
+    /// screen, so the adaptor would offer the window to that engine's
+    /// cross-screen reclaim. The reopen contract removed both halves; nothing
+    /// sets or reads it now, and it stays false.
     bool deferredToTilingEngine = false;
     /// Target virtual desktop the snap should be committed in (1-based). 0 means
     /// "the window's current desktop" — the historical behaviour. Set non-zero only
@@ -223,6 +219,11 @@ struct ZoneAssignmentEntry
     /// instead of re-stamping whatever desktop is currently active (which
     /// corrupts off-desktop windows caught in a cross-desktop batch).
     int virtualDesktop = 0;
+    /// The entry re-states a placement the window already has (a carry to the
+    /// desktop it moved to, a re-apply, a gap reflow) rather than making one,
+    /// so the batch is relayed as action "restate": no Snap Assist, no
+    /// layout-switch animation.
+    bool restatement = false;
 };
 
 enum class StickyWindowHandling {
@@ -250,6 +251,9 @@ struct DesktopSpan
     bool sticky = false; ///< on every desktop
     QSet<int> desktops; ///< when !sticky: the desktops it occupies (a span such as {1,2})
     QString activity; ///< empty: every activity, or unknown
+    /// When the window is on several (but not all) activities, all of them;
+    /// empty otherwise. Appended last (installed struct, F426).
+    QStringList activities{};
 
     /// Whether the span reaches desktop @p desktop.
     bool coversDesktop(int desktop) const
@@ -257,10 +261,14 @@ struct DesktopSpan
         return known && (sticky || desktops.contains(desktop));
     }
     /// Whether the span reaches activity @p other. An empty activity on either
-    /// side means "every activity" and never mismatches.
+    /// side means "every activity" and never mismatches; a window on several
+    /// activities reaches each of them.
     bool coversActivity(const QString& other) const
     {
-        return activity.isEmpty() || other.isEmpty() || activity == other;
+        if (activity.isEmpty() || other.isEmpty()) {
+            return true;
+        }
+        return activities.size() > 1 ? activities.contains(other) : activity == other;
     }
     /// Whether the span reaches the context @p key names.
     bool coversKey(const PlacementStateKey& key) const

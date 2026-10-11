@@ -105,14 +105,17 @@ MembershipReconcileResult AutotileEngine::applyMembershipWork(const QString& scr
     MembershipReconcileResult result;
     bool touchedCurrent = false;
     for (const PendingMembership& entry : pending) {
+        // Adopt BEFORE releasing: adoptIntoContext reads the window's float
+        // from the contexts it still holds, and the one it is leaving is the
+        // one that knows (F1001).
+        if (entry.adopt && adoptIntoContext(entry.windowId, currentKey)) {
+            result.adopted.append({entry.windowId, currentKey});
+            touchedCurrent = true;
+        }
         for (const TilingStateKey& stale : entry.stale) {
             releaseMembership(entry.windowId, stale);
             result.released.append({entry.windowId, stale});
             touchedCurrent |= (stale == currentKey);
-        }
-        if (entry.adopt && adoptIntoContext(entry.windowId, currentKey)) {
-            result.adopted.append({entry.windowId, currentKey});
-            touchedCurrent = true;
         }
     }
     if (touchedCurrent) {
@@ -227,8 +230,9 @@ bool AutotileEngine::adoptIntoContext(const QString& windowId, const TilingState
     // tile while the daemon's per-window mirror still says "floating".
     // "Floating" is read from EVERY context the window holds, not the
     // primary: with no membership in the current context the primary falls
-    // back to the first-adopted desktop, which is not the one the user just
-    // left. A float the user made anywhere is the float they last saw.
+    // back to the first-adopted desktop. The caller adopts before it
+    // releases, so the context the window is leaving is still among them. A
+    // float the user made anywhere is the float they last saw.
     bool wasFloating = false;
     for (const TilingStateKey& held : m_states.membershipsForWindow(windowId)) {
         if (const PhosphorTiles::TilingState* heldState = m_states.stateForKey(held);

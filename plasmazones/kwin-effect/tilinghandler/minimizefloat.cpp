@@ -59,6 +59,31 @@ void TilingHandler::cancelPendingUnminimizeUnfloat(const QString& windowId)
     m_pendingUnminimizeUnfloat.cancel(windowId);
 }
 
+bool TilingHandler::removeMinimizeFloated(const QString& windowId)
+{
+    cancelPendingMinimizeFloat(windowId);
+    cancelPendingUnminimizeUnfloat(windowId);
+    m_minimizeFloatMarks.remove(windowId);
+    m_unfloatRetryAttempts.remove(windowId);
+    const bool owned = m_minimizeFloatedWindows.remove(windowId);
+    return m_unfloatInFlight.remove(windowId) > 0 || owned;
+}
+
+void TilingHandler::adoptMinimizeFloated(const QString& windowId, bool untiled)
+{
+    m_minimizeFloatedWindows.insert(windowId);
+    if (untiled) {
+        m_minimizeFloatMarks.markUntiled(windowId);
+    }
+}
+
+void TilingHandler::seedUnfloatRetryBudget(const QString& windowId, int attemptsUsed)
+{
+    if (attemptsUsed > m_unfloatRetryAttempts.value(windowId)) {
+        m_unfloatRetryAttempts.insert(windowId, attemptsUsed);
+    }
+}
+
 // Clears three things despite the name, which dates from when it held only the
 // first: the debounced minimize-float commits, the deferred unminimize-unfloat
 // timers (grace and retry alike), and the fullscreen-hold records (record,
@@ -197,7 +222,7 @@ void TilingHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
             return;
         }
         if (dispatchUnminimizeUnfloat(windowId, screenId)) {
-            notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/false);
+            notifyWindowAdded(safeWindow.data(), /*knownFreeFloating=*/false, /*focusEligible=*/false);
         }
     });
 }
@@ -213,10 +238,8 @@ void TilingHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const 
     if (!m_managedScreens.contains(screenId)) {
         return;
     }
-    // Same skip as the runtime minimize path: an already-floating window
-    // (user float, or another mode's minimize-float record) keeps its float
-    // and its owner — claiming it would make our unminimize path force-tile
-    // a window whose float we did not create.
+    // An own minimize-float is re-asserted, not re-claimed (the foreign-float
+    // skip is further down, after the snap adoption arm).
     // isMinimizeFloated, not the raw set: it also covers m_unfloatInFlight,
     // during which this handler still owns the float (tilinghandler.h states
     // the rule). A window that re-minimized while its screen was outside the
@@ -431,7 +454,7 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     if (m_pendingMinimizeFloat.contains(windowId)) {
         cancelPendingMinimizeFloat(windowId);
         qCDebug(lcEffect) << "Autotile: coalesced spurious minimize/unminimize cycle for" << windowId;
-        notifyWindowAdded(w, /*knownFreeFloating=*/false);
+        notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
         return;
     }
 
@@ -468,13 +491,13 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
                 // until the tile geometry lands (or the suppression's own
                 // deadline) so the restore appears once, in its tile.
                 m_effect->beginRestoreSuppression(w);
-                notifyWindowAdded(w, /*knownFreeFloating=*/false);
+                notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
             }
             return;
         }
         qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:"
                           << windowId;
-        notifyWindowAdded(w, /*knownFreeFloating=*/false);
+        notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
         return;
     }
     // A window claimed at batch-announce time was never tiled by us — it
@@ -502,7 +525,7 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
             // prior layout or prior screen), so withhold paints until the
             // tile geometry lands.
             m_effect->beginRestoreSuppression(w);
-            notifyWindowAdded(w, /*knownFreeFloating=*/false);
+            notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
         }
         return;
     }
@@ -575,7 +598,7 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
                          << currentScreenId;
 
         if (dispatchUnminimizeUnfloat(windowId, currentScreenId)) {
-            notifyWindowAdded(fw, /*knownFreeFloating=*/false);
+            notifyWindowAdded(fw, /*knownFreeFloating=*/false, /*focusEligible=*/false);
         }
     });
 }

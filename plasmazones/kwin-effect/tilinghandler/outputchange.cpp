@@ -8,6 +8,8 @@
 #include "tilinghandler.h"
 
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/desktopvisibility.h"
+#include "handlers/screenchangehandler.h"
 #include "handlers/snaphandler.h"
 #include "compositor/effectlogging.h"
 
@@ -31,10 +33,18 @@
 
 namespace PlasmaZones {
 
-void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
+void TilingHandler::updateNotifiedScreen(const QString& windowId, const QString& newScreenId)
+{
+    auto it = m_notifiedWindowScreens.find(windowId);
+    if (it != m_notifiedWindowScreens.end()) {
+        it.value() = newScreenId;
+    }
+}
+
+bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
 {
     if (!w || w->isDeleted()) {
-        return;
+        return false;
     }
 
     const QString windowId = m_effect->getWindowId(w);
@@ -46,7 +56,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // permanently, since the caller has already pre-written the tracked-screen
     // record and the detector never re-fires for the same physical move.
     if (m_outputChangeInFlight.contains(windowId)) {
-        return;
+        return false;
     }
     m_outputChangeInFlight.insert(windowId);
     const auto guard = qScopeGuard([this, windowId] {
@@ -61,7 +71,12 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // arrival IS the marker's expected echo, so consume the one-shot
         // UNCONDITIONALLY (an ineligible arrival — minimized, off-desktop,
         // unmanaged screen — still IS the echo; leaving the marker armed
-        // would swallow the window's next genuine outputChanged).
+        // would swallow the window's next genuine outputChanged). Its target
+        // matching where the window landed makes this the daemon's own move,
+        // which the daemon needs no notice of.
+        const auto marker = m_expectedOutputMove.constFind(windowId);
+        const bool daemonMove =
+            marker != m_expectedOutputMove.constEnd() && marker.value().targetScreenId == newScreenId;
         m_expectedOutputMove.remove(windowId);
         // Window not tracked — but if it moved TO an autotile screen, add
         // it. The daemon already placed it via handoffReceive; the
@@ -69,15 +84,22 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // daemon does not touch, and is a no-op daemon-side (insertWindow
         // rejects an already-tracked window).
         if (m_managedScreens.contains(newScreenId) && m_effect->shouldHandleWindow(w) && !w->isMinimized()
-            && w->isOnCurrentDesktop() && w->isOnCurrentActivity()) {
+            && isOnOwnOutputCurrentDesktop(w) && w->isOnCurrentActivity()) {
+            // KWin returned it to an output it was parked for: the settle
+            // re-seats it there, or announces it if the daemon does not.
+            if (m_effect->m_screenChangeHandler->holdsUnclassifiedRecord(w)) {
+                m_effect->m_screenChangeHandler->noteSkippedAnnounce(w);
+                return false;
+            }
             // knownFreeFloating only when the border state does NOT already
             // track the window as tiled: the handoffReceive that placed it has
             // its frame sitting in the destination zone rect, and passing true
             // would push that rect as the daemon's free/float-back geometry.
-            notifyWindowAdded(w, /*knownFreeFloating=*/!TilingStateHelpers::isTiledWindow(m_border, windowId));
+            notifyWindowAdded(w, /*knownFreeFloating=*/!TilingStateHelpers::isTiledWindow(m_border, windowId),
+                              /*focusEligible=*/false);
             m_effect->updateAllDecorations();
         }
-        return;
+        return !daemonMove;
     }
 
     const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
@@ -231,7 +253,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 m_centeredWaylandZones.remove(windowId);
             }
             m_effect->updateAllDecorations();
-            return;
+            return false;
         }
     }
 
@@ -308,7 +330,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 m_expectedOutputMove.erase(expIt);
             }
         }
-        return; // Same screen or unknown — no transfer needed
+        return false; // Same screen or unknown — no transfer needed
     }
 
     // A window still in a SCROLLING screen's tiled bucket belongs to that
@@ -347,7 +369,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // scroll transfer signal, and the same-screen drain above already
     // handles its disposal for scroll windows.
     if (inScrollStrip()) {
-        return;
+        return false;
     }
 
     const bool oldIsAutotile = m_managedScreens.contains(oldScreenId);
@@ -374,7 +396,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         if (m_notifiedWindowScreens.contains(windowId)) {
             m_notifiedWindowScreens[windowId] = newScreenId;
         }
-        return;
+        return true;
     }
 
     // A marker surviving to this point is SUPERSEDED: the marker-first
@@ -396,7 +418,8 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     }
 
     // The predicate mirrors the re-add condition below.
-    const bool willReAdd = newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
+    const bool willReAdd =
+        newIsAutotile && !w->isMinimized() && isOnOwnOutputCurrentDesktop(w) && w->isOnCurrentActivity();
 
     // Minimize-float ownership must SURVIVE the transfer: releaseWindowTracking's
     // cleanup wipes it wholesale, the window is alive and still floated
@@ -548,7 +571,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // frame now sits below the user's min-size threshold) or a pending
         // close can filter it locally — a no-op then, the daemon's tile path
         // owns any follow-up.
-        notifyWindowAdded(w, /*knownFreeFloating=*/false);
+        notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
     } else if (oldIsAutotile && !newIsAutotile) {
         // Autotile → snapping: restore the window's original (pre-snap/pre-tile)
         // SIZE after the drag ends.  The effect-side m_preTileGeometries may
@@ -746,6 +769,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     }
 
     m_effect->updateAllDecorations();
+    return true;
 }
 
 } // namespace PlasmaZones

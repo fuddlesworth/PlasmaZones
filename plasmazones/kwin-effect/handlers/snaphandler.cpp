@@ -49,7 +49,7 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
 {
     // An empty screenId is never a valid snap owner: the per-screen buckets are
     // keyed by screenId, so recording under "" would pollute the set with an
-    // entry that the per-screen cross-screen cleanup can never reclaim.
+    // entry that the per-screen cross-screen cleanup can never remove.
     // Callers route unresolved/float windows through clearWindowSnapped instead;
     // this guard is defensive depth for any path that slips an empty screen in.
     if (windowId.isEmpty() || screenId.isEmpty()) {
@@ -77,9 +77,9 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     TilingStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
     TilingStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
     m_restartSnapCandidates.remove(windowId);
-    // Placed by some route already — whether this restore or another — so the
-    // desktop-arrival park has nothing left to do.
-    cancelDesktopArrivalRestore(windowId);
+    // A zone apply in view lands and ends the park; one on a hidden desktop
+    // parks the window to re-apply its zone when the desktop is shown.
+    m_desktopArrivalParks.onZoneApplied(windowId, isOnOwnOutputCurrentDesktop(w) && w->isOnCurrentActivity());
 
     // Title-bar (borderless) state is driven entirely by rules through
     // the effect's reconcileRuleHiddenTitleBar → DecorationManager path; this
@@ -169,7 +169,7 @@ void SnapHandler::clearSnapTracking()
     // drive a restore against state that no longer matches. The bringup
     // stacking sweep re-announces every window anyway, which is the correct
     // retry for a window still waiting.
-    m_awaitingDesktopArrivalRestore.clear();
+    m_desktopArrivalParks.clear();
     m_openResolveInFlight.clear();
     ++m_openResolveEpoch; // strand the replies still out against the old daemon
     m_border.tiledWindowsByScreen.clear();
@@ -208,10 +208,8 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     }
 
     if (!m_effect->isDaemonReady("resolve window restore")) {
-        // No daemon means no snap-restore (and no autotile either — it
-        // needs the daemon too). Release first-frame suppression so the
-        // window is not held invisible waiting on a reposition that will
-        // never come.
+        // No daemon, no restore (autotile needs it too): release the first-frame
+        // suppression so the window is not held invisible for a reposition that never comes.
         m_effect->endRestoreSuppression(window);
         if (onComplete) {
             onComplete(false);
@@ -224,15 +222,11 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     QString screenId = m_effect->getWindowScreenId(window);
     bool sticky = m_effect->isWindowSticky(window);
 
-    // On a resolve miss (daemon found no zone) release first-frame
-    // suppression through the miss helper, which holds a window whose
-    // size-only reposition is still in flight — unless the caller says
-    // another path will reposition it (autotile screen), where the hold stays.
+    // On a miss, release the first-frame suppression through the miss helper (it holds a window whose size-only
+    // reposition is still in flight), unless the caller says another path repositions it (an autotile screen).
     const auto releaseSuppression = [this, safeWindow, releaseSuppressionOnMiss]() {
-        if (releaseSuppressionOnMiss) {
-            if (safeWindow) {
-                m_effect->releaseRestoreSuppressionOnMiss(safeWindow);
-            }
+        if (releaseSuppressionOnMiss && safeWindow) {
+            m_effect->releaseRestoreSuppressionOnMiss(safeWindow);
         }
     };
     const auto onMiss = [this, windowId, releaseSuppression]() {
@@ -240,21 +234,28 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
         releaseSuppression();
     };
 
-    // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain.
+    // A window under a user move is placed by its drop, so a restore asked for now (a sweep or desktop-arrival
+    // re-drive) takes the miss path: sent, it would reach the daemon after the drag began, its reply would defer
+    // behind the gesture, and the daemon would keep a zone the window never reached (F884).
+    if (window->isUserMove()) {
+        qCInfo(lcEffect) << "resolveWindowRestore skipped for" << windowId << ": it is being dragged";
+        onMiss();
+        if (onComplete) {
+            onComplete(false);
+        }
+        return;
+    }
+
+    // Single D-Bus call: the daemon runs the full appRule → persisted → emptyZone → lastZone chain.
+    // skipAnimation=true teleports into the zone (a morph from the spawn spot would drag the open shader with it).
+    // storePreSnap=false: the window already sits at its zone, which must not become its float-back.
     //
-    // skipAnimation=true: teleport straight into the resolved zone, or the
-    // morph tweens from the spawn position and drags the open shader with it.
-    //
-    // storePreSnap=false: the window is already at its zone position, so
-    // storing that frame as pre-tile would make the zone the float-back.
-    //
-    // Seed the daemon's frame-geometry shadow before the resolve, open path
-    // only: the daemon translates a bare RouteToScreen from that shadow, and a
-    // freshly opened window has no entry there, so the rule silently did
-    // nothing for it (confirmed live). Fire-and-forget is safe: both calls
-    // ride one D-Bus connection, whose message order is preserved.
+    // Seed the daemon's frame-geometry shadow before the resolve, open path only: the daemon translates a bare
+    // RouteToScreen from that shadow, and a freshly opened window has none, so the rule did nothing for it
+    // (confirmed live). Fire-and-forget is safe: both calls ride one D-Bus connection, which keeps message order.
+    // The free rect, so a window that maps maximized routes its restore rect (F575).
     if (isOpenPath) {
-        const QRect openGeo = window->frameGeometry().toRect();
+        const QRect openGeo = m_effect->freeGeometryForCapture(window, window->frameGeometry()).toRect();
         if (openGeo.isValid()) {
             PhosphorProtocol::ClientHelpers::fireAndForget(
                 m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setFrameGeometry"),
@@ -292,19 +293,16 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
             onComplete(*snapApplied);
         }
     };
-    // Client-declared minimum, the same value the tiling channel sends: on a
-    // cross-screen reclaim the adopting engine evaluates its oversized/float
-    // verdict once from this, and 0,0 left an oversized window tiled.
-    const QSize declaredMin = TilingHandler::declaredMinSize(window);
-    m_effect->tryAsyncSnapCall(
-        PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-        {windowId, screenId, sticky, kindInt, static_cast<int>(reason), declaredMin.width(), declaredMin.height()},
-        safeWindow, windowId, false, onMiss, markApplied,
-        /*skipAnimation=*/true, completeWithOutcome, releaseSuppression);
+    // The trailing minimum-size pair is pinned by the v9 protocol and ignored
+    // by the daemon: no engine adopts a window through this call any more.
+    m_effect->tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
+                               {windowId, screenId, sticky, kindInt, static_cast<int>(reason), 0, 0}, safeWindow,
+                               windowId, false, onMiss, markApplied,
+                               /*skipAnimation=*/true, completeWithOutcome, releaseSuppression);
 }
 
 void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
-                                              const QRectF& preCapturedGeometry)
+                                              const QRectF& preCapturedGeometry, bool overwrite)
 {
     if (!w || windowId.isEmpty()) {
         return;
@@ -346,19 +344,17 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
     // the ID used by later lookups.
     const QString screenId = m_effect->getWindowScreenId(w);
 
-    // Post the store directly with overwrite=false. The daemon's storePreTileGeometry
-    // enforces per-windowId idempotency — a second capture for the same runtime
-    // instance is a no-op. We deliberately skip the prior async hasPreTileGeometry
-    // pre-check: that path matched on appId too, so a stale cross-session entry from
-    // a prior window instance (keyed by appId) would block the fresh per-instance
-    // capture and freeze float-restore at ancient coordinates.
-    // qRound, not truncation: fractional-scale outputs leave sub-pixel
-    // residue in frameGeometry() (same convention as the toRect() geometry
-    // paths — see window_lifecycle.cpp).
-    PhosphorProtocol::ClientHelpers::fireAndForget(
-        m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-        {windowId, qRound(geom.x()), qRound(geom.y()), qRound(geom.width()), qRound(geom.height()), screenId, false},
-        QStringLiteral("storePreTileGeometry"));
+    // Post the store directly. Without @p overwrite the daemon keeps the first
+    // capture per runtime instance. No async hasPreTileGeometry pre-check: it
+    // matched on appId too, so a stale entry from a prior instance blocked the
+    // fresh capture and froze float-restore at ancient coordinates.
+    // qRound, not truncation: fractional-scale outputs leave sub-pixel residue
+    // in frameGeometry() (the toRect() convention, see window_lifecycle.cpp).
+    PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("storePreTileGeometry"),
+                                                   {windowId, qRound(geom.x()), qRound(geom.y()), qRound(geom.width()),
+                                                    qRound(geom.height()), screenId, overwrite},
+                                                   QStringLiteral("storePreTileGeometry"));
     qCInfo(lcEffect) << "Stored pre-tile geometry for window" << windowId << "geom=" << geom;
 }
 
@@ -714,10 +710,10 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
     // store's per-app FIFO on a path that is not an open.
     //
     // Tracked-ness MUST be checked, not resolved blindly:
-    // resolveWindowRestore consumes the single-shot FIFO pending-restore
-    // entry for the window's appId, and burning it on a window the daemon
-    // still owns robs a sibling window's restore. A failed query counts
-    // as tracked for the same reason.
+    // resolveWindowRestore claims a placement record for the window's
+    // appId, and spending it on a window the daemon still owns robs a
+    // sibling window's restore. A failed query counts as tracked for the
+    // same reason.
     if (window) {
         struct QueryJoin
         {
@@ -743,9 +739,8 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
                 return;
             }
             qCInfo(lcEffect) << "Snap: unminimized window is untracked by daemon — retrying restore:" << windowId;
-            // Unminimize, not an open. Without the distinction the daemon's
-            // cross-screen tile reclaim could TELEPORT the just-unminimized
-            // window to its recorded home monitor.
+            // Unminimize, not an open: the daemon restores the window only
+            // from its own record, and never onto another screen.
             callResolveWindowRestore(safeWindow.data(), nullptr, /*releaseSuppressionOnMiss=*/true,
                                      PhosphorEngine::RestoreReason::Unminimize);
         };
@@ -1043,22 +1038,16 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         m_effect->m_trackedScreenPerWindow[targetWindow] = screenId;
         m_effect->tilingHandler()->updateNotifiedScreen(m_effect->getWindowId(targetWindow), screenId);
     }
-    // AFTER the pre-snap capture (freeGeometryForCapture reads the maximize
-    // state to substitute the true free rect) and the pre-seed above (the
-    // demote's committed configure is exactly the async follow-up it covers),
-    // BEFORE the apply: a surviving KWin maximize fights the zone rect and
-    // arms a cross-screen restore. Deliberately UNGATED on isManagedScreen
-    // (the daemon_apply sites gate because their slots also carry float
-    // restores): this path always commits a zone placement and applies the
-    // rect unconditionally, the demote already skips engine-held claims
-    // internally, and gating only the demote would leave the maximize
-    // fighting the rect on managed screens — the defect it exists to fix.
-    m_effect->m_tilingHandler->demoteMaximizeForSnapPlacement(targetWindow, geometry);
+    // A pick is a user verb: after the pre-snap capture (which reads the
+    // maximize state) and the pre-seed above (which covers the hand-back's
+    // configure), before the apply. Ungated on isManagedScreen, since this
+    // path always applies a zone rect.
+    m_effect->m_tilingHandler->preparePlacement(targetWindow, geometry, PlacementStatement::Purpose::UserVerb);
     {
         const auto applyGuard = m_effect->geometryApplyScope();
         m_effect->applyWindowGeometry(targetWindow, geometry, false, false,
                                       PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
-                                      /*demoteMaximizeOnDeferredReplay=*/true);
+                                      PlacementStatement::Purpose::UserVerb);
     }
 
     if (m_effect->isDaemonReady("snap assist windowSnapped")) {
@@ -1285,9 +1274,9 @@ void SnapHandler::slotPendingRestoresAvailable()
         // Now iterate through all visible windows and restore untracked ones
         const auto windows = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* window : windows) {
-            // !isDeleted: a close-grabbed dying window would consume the
-            // single-shot FIFO pending-restore entry for its appId, robbing
-            // the app's next REAL window of its restore.
+            // !isDeleted: a close-grabbed dying window would claim a
+            // placement record for its appId, robbing the app's next REAL
+            // window of its restore.
             if (!window || window->isDeleted() || !m_effect->shouldHandleWindow(window)) {
                 continue;
             }
@@ -1306,8 +1295,8 @@ void SnapHandler::slotPendingRestoresAvailable()
 
             // Window is not tracked - try to restore it.
             // PendingSweep: the pending-restores sweep re-resolves
-            // already-open windows; it must not drive the cross-screen tile
-            // reclaim and move windows the user is looking at.
+            // already-open windows, so a window that left its recorded
+            // screen stays where the user put it and fires no placement rule.
             qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
             callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true,
                                      PhosphorEngine::RestoreReason::PendingSweep);
@@ -1315,7 +1304,7 @@ void SnapHandler::slotPendingRestoresAvailable()
     });
 }
 
-void SnapHandler::armDesktopArrivalRestore(const QString& windowId)
+void SnapHandler::armDesktopArrivalRestore(const QString& windowId, DesktopArrivalParks::Cause cause)
 {
     if (windowId.isEmpty()) {
         // The daemon has already moved this window off the visible desktop, so
@@ -1325,13 +1314,14 @@ void SnapHandler::armDesktopArrivalRestore(const QString& windowId)
         qCDebug(lcEffect) << "Desktop-arrival park skipped: empty window id";
         return;
     }
-    m_awaitingDesktopArrivalRestore.insert(windowId);
-    qCDebug(lcEffect) << "Parked for snap restore on desktop arrival:" << windowId;
+    m_desktopArrivalParks.arm(windowId, cause);
+    qCDebug(lcEffect) << "Parked for snap restore on desktop arrival:" << windowId
+                      << (cause == DesktopArrivalParks::Cause::OpenContinuation ? "(open)" : "(re-apply)");
 }
 
 void SnapHandler::slotDesktopChangedRestoreArrivals()
 {
-    if (m_awaitingDesktopArrivalRestore.isEmpty()) {
+    if (m_desktopArrivalParks.isEmpty()) {
         return;
     }
     if (!m_effect->isDaemonReady("desktop-arrival snap restore")) {
@@ -1351,17 +1341,16 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
             continue;
         }
         const QString id = m_effect->getWindowId(w);
-        if (m_awaitingDesktopArrivalRestore.contains(id)) {
+        if (m_desktopArrivalParks.contains(id)) {
             live.insert(id, w);
         }
     }
 
-    for (const QString& windowId : QSet<QString>(m_awaitingDesktopArrivalRestore)) {
+    for (const QString& windowId : m_desktopArrivalParks.ids()) {
         KWin::EffectWindow* window = live.value(windowId);
         if (!window) {
-            // Closed while parked, or its id changed under it. Either way no
-            // restore is possible and the entry is spent.
-            m_awaitingDesktopArrivalRestore.remove(windowId);
+            // Closed while parked, or its id changed under it: spent.
+            m_desktopArrivalParks.cancel(windowId);
             continue;
         }
         drainDesktopArrivalFor(windowId, window);
@@ -1370,7 +1359,7 @@ void SnapHandler::slotDesktopChangedRestoreArrivals()
 
 bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWindow* window)
 {
-    if (!window || !m_awaitingDesktopArrivalRestore.contains(windowId)) {
+    if (!window || !m_desktopArrivalParks.contains(windowId)) {
         return false;
     }
     // Measured against the window's OWN output, matching the arm in
@@ -1391,7 +1380,7 @@ bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWi
     if (!m_effect->shouldHandleWindow(window)) {
         // Never going to be placed by this handler, so the park is spent
         // rather than carried for a restore that cannot happen.
-        m_awaitingDesktopArrivalRestore.remove(windowId);
+        m_desktopArrivalParks.cancel(windowId);
         return false;
     }
     // Snap-mode screens only. A window that landed on a tiling or scrolling
@@ -1401,23 +1390,20 @@ bool SnapHandler::drainDesktopArrivalFor(const QString& windowId, KWin::EffectWi
     // engine is about to adopt. Spent, because that handler now owns it.
     const QString screenId = m_effect->getWindowScreenId(window);
     if (m_effect->tilingHandler()->isManagedScreen(screenId)) {
-        m_awaitingDesktopArrivalRestore.remove(windowId);
+        m_desktopArrivalParks.cancel(windowId);
         return false;
     }
 
-    // Spend the park BEFORE dispatching: the restore is a one-shot, and an
-    // entry left behind would re-drive on every later desktop switch — the
-    // repeated-float-restore failure the member's comment describes, just
-    // reached by a different route.
-    m_awaitingDesktopArrivalRestore.remove(windowId);
-
-    // DesktopArrival: not an open, so the daemon retires no reclaim credit for
-    // it — the open that parked this window already spent that. It IS still
-    // eligible for the cross-screen reclaim, which is the distinction the old
-    // bool could not make.
-    qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId;
+    // Spent BEFORE dispatching: an entry left behind would re-drive on every
+    // later desktop switch. An open's continuation runs the restore chain the
+    // open owes; any other move only re-applies the zone the window already
+    // holds there and places nothing new (F415).
+    const bool openContinuation = m_desktopArrivalParks.take(windowId) == DesktopArrivalParks::Cause::OpenContinuation;
+    qCInfo(lcEffect) << "Desktop arrival: re-driving snap restore for" << windowId << "on" << screenId
+                     << (openContinuation ? "(open)" : "(re-apply)");
     callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true,
-                             PhosphorEngine::RestoreReason::DesktopArrival);
+                             openContinuation ? PhosphorEngine::RestoreReason::DesktopArrival
+                                              : PhosphorEngine::RestoreReason::DesktopReapply);
     return true;
 }
 

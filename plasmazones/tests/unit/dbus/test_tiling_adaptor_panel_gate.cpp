@@ -14,6 +14,7 @@
 #include <QTest>
 #include <QCoreApplication>
 #include <QRegularExpression>
+#include <QSet>
 #include <QSignalSpy>
 #include <QObject>
 
@@ -95,14 +96,33 @@ public:
     {
         return claimsScreens;
     }
-    /// Windows the adaptor OFFERED to the cross-screen session reclaim, in
-    /// order. Recorded rather than acted on: the property under test is
-    /// whether the adaptor runs the claim round at all, and answering the
-    /// claim would additionally change which dispatch branch is taken.
+    /// Windows this engine answers as tracked, and the ones the adaptor closed
+    /// or released through it, in order.
+    QSet<QString> tracked;
+    QStringList closed;
+    bool isWindowTracked(const QString& windowId) const override
+    {
+        return tracked.contains(windowId);
+    }
+    /// Windows the adaptor OFFERED to the reopen claim, in order. Recorded
+    /// rather than acted on: the property under test is whether the adaptor
+    /// runs the claim round at all, and answering the claim would
+    /// additionally change which dispatch branch is taken.
     QStringList reclaimOffers;
+
+    /// The focus intent the adaptor stated, read at each open and claim as
+    /// "<id>=1" (may take focus) or "<id>=0" (re-placement), in order.
+    QStringList focusIntentAtOpen;
+    QStringList focusIntentAtClaim;
+    bool openFocusEligible = true;
+    void setOpenFocusEligible(bool eligible) override
+    {
+        openFocusEligible = eligible;
+    }
 
     void windowOpened(const QString& windowId, const QString&, int, int) override
     {
+        focusIntentAtOpen.append(windowId + (openFocusEligible ? QStringLiteral("=1") : QStringLiteral("=0")));
         dispatched.append(windowId);
         if (burstDepth == 0) {
             dispatchedOutsideBurst.append(windowId);
@@ -113,18 +133,9 @@ public:
     }
     bool claimCrossScreenReopen(const QString& windowId, const QString&, int, int) override
     {
+        focusIntentAtClaim.append(windowId + (openFocusEligible ? QStringLiteral("=1") : QStringLiteral("=0")));
         reclaimOffers.append(windowId);
         return false; // decline, so the arrival-screen dispatch still runs
-    }
-    /// The per-announce claims verdict the adaptor stated, as "<id>=1" or
-    /// "<id>=0", in order. The engines' defer gates read it to adopt rather
-    /// than defer a second time, so it must be stated on EVERY announce: true
-    /// when a claim round ran and declined, false when the round was
-    /// suppressed, which clears an earlier announce's mark.
-    QStringList claimsExhaustedNotes;
-    void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted) override
-    {
-        claimsExhaustedNotes.append(windowId + (exhausted ? QStringLiteral("=1") : QStringLiteral("=0")));
     }
     void beginArrivalBurst() override
     {
@@ -136,8 +147,10 @@ public:
     {
         --burstDepth;
     }
-    void windowClosed(const QString&) override
+    void windowClosed(const QString& windowId) override
     {
+        closed.append(windowId);
+        tracked.remove(windowId);
     }
     void windowFocused(const QString&, const QString&) override
     {
@@ -253,23 +266,86 @@ private Q_SLOTS:
     }
 
     // -------------------------------------------------------------------------
-    // The move-release one-shot (m_moveReleasedInstances).
+    // A live release no longer suppresses the next announce's claim round.
     //
-    // releaseWindowTracking drops a LIVE window from engine tracking WITHOUT
-    // capturing a placement, and the effect then re-announces it on the screen
-    // the user moved it to. That announce looks like a first observation to
-    // claimCrossScreenReopen, whose same-instance branch matches the window's
-    // own stale record — still tiled on the OLD screen — and yanks it back,
-    // silently undoing the move. The one-shot suppresses exactly that claim
-    // round and nothing else.
-    //
-    // The whole feature shipped untested, and its consumption sat behind a
-    // short-circuited `allowCrossScreenClaim &&`, so a rule-routed re-announce
-    // left the entry armed to spend itself on an unrelated later announce.
-    // Asserting only "the re-announce was not reclaimed" would pass against
-    // that; the third announce below is what pins the ONE in one-shot.
+    // The move-release one-shot existed because the claim could pull a moved
+    // window back to another output. The reopen contract makes the engines
+    // decline that themselves (their own record is final, and a claim never
+    // leaves the opening output), so the adaptor offers every announce, the
+    // re-announce after a release included, and the engine decides.
     // -------------------------------------------------------------------------
-    void testMoveReleaseSuppressesExactlyOneCrossScreenReclaim()
+    // F428 / F449 / F450: "Focus new windows" focuses genuine opens only. The
+    // adaptor states each entry's intent to the engines for the whole
+    // dispatch, the reopen claim included, and restores the default after.
+    // A genuine open queued behind the panel gate keeps its intent.
+    void testFocusIntentFollowsTheEntryPoint()
+    {
+        // Queued behind the panel gate, then flushed.
+        PhosphorScreens::ScreenManager mgr;
+        RecordingEngine gatedEngine;
+        QObject adaptorParent;
+        TilingAdaptor gated(&mgr, &adaptorParent);
+        gated.setLifecycleEngines({&gatedEngine});
+        gated.windowOpened(QStringLiteral("open|q"), QStringLiteral("HDMI-1"), 0, 0);
+        gated.windowReannounced(QStringLiteral("re|q"), QStringLiteral("HDMI-1"), 0, 0);
+        QVERIFY(emitPanelGeometryReady(mgr));
+        QCoreApplication::processEvents();
+        const QStringList queued{QStringLiteral("open|q=1"), QStringLiteral("re|q=0")};
+        QCOMPARE(gatedEngine.focusIntentAtOpen, queued);
+        QCOMPARE(gatedEngine.focusIntentAtClaim, queued);
+        QVERIFY2(gatedEngine.openFocusEligible, "the default must be restored after every dispatch");
+
+        // Immediate: a null screen manager never engages the gate.
+        RecordingEngine engine;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+        adaptor.windowOpened(QStringLiteral("open|i"), QStringLiteral("HDMI-1"), 0, 0);
+        adaptor.windowReannounced(QStringLiteral("re|i"), QStringLiteral("HDMI-1"), 0, 0);
+        PhosphorProtocol::WindowOpenedEntry batchEntry{QStringLiteral("batch|b"), QStringLiteral("HDMI-1"), 0, 0};
+        batchEntry.focusEligible = true; // an in-process caller's value must not leak through
+        adaptor.windowsOpenedBatch({batchEntry});
+        const QStringList immediate{QStringLiteral("open|i=1"), QStringLiteral("re|i=0"), QStringLiteral("batch|b=0")};
+        QCOMPARE(engine.focusIntentAtOpen, immediate);
+        QCOMPARE(engine.focusIntentAtClaim, immediate);
+        QVERIFY2(engine.openFocusEligible, "the default must be restored after every dispatch");
+    }
+
+    // F424 / F425: with per-desktop modes a multi-desktop window is held by
+    // autotile on one desktop and by scrolling on another at once. A close, a
+    // release or the destroyed-window backstop must reach EVERY engine that
+    // tracks it, or the other keeps a dead tile or column on its desktop.
+    void testCloseAndReleaseReachEveryTrackingEngine()
+    {
+        RecordingEngine autotile;
+        RecordingEngine scroll;
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&autotile, &scroll});
+
+        const QString closing = QStringLiteral("app|close");
+        autotile.tracked.insert(closing);
+        scroll.tracked.insert(closing);
+        adaptor.windowClosed(closing);
+        QCOMPARE(autotile.closed, QStringList{closing});
+        QCOMPARE(scroll.closed, QStringList{closing});
+
+        const QString released = QStringLiteral("app|release");
+        autotile.tracked.insert(released);
+        scroll.tracked.insert(released);
+        adaptor.releaseWindowTracking(released);
+        QCOMPARE(autotile.closed.last(), released);
+        QCOMPARE(scroll.closed.last(), released);
+
+        // No relay reached the adaptor (the window closed while its tiling
+        // desktop was out of view): the destroyed-window backstop closes it.
+        const QString unrelayed = QStringLiteral("app|unrelayed");
+        scroll.tracked.insert(unrelayed);
+        adaptor.onTrackedWindowDestroyed(unrelayed);
+        QCOMPARE(scroll.closed.last(), unrelayed);
+        QVERIFY2(!autotile.closed.contains(unrelayed), "an engine that never held the window is not told");
+    }
+
+    void testLiveReleaseDoesNotSuppressTheNextClaimRound()
     {
         RecordingEngine engine;
         QObject adaptorParent;
@@ -279,36 +355,15 @@ private Q_SLOTS:
         TilingAdaptor adaptor(nullptr, &adaptorParent);
         adaptor.setLifecycleEngines({&engine});
 
-        // Baseline: an ordinary open IS offered to the session reclaim.
         adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(engine.reclaimOffers, QStringList{QStringLiteral("kate|a")});
         QCOMPARE(engine.dispatched.size(), 1);
-        // The declined round is reported to the engine BEFORE the arrival
-        // dispatch, so its defer gate adopts instead of deferring again.
-        QCOMPARE(engine.claimsExhaustedNotes, QStringList{QStringLiteral("kate|a=1")});
 
-        // A live move release arms the one-shot; the re-announce skips the
-        // claim round and is adopted by the arrival screen's engine instead.
         adaptor.releaseWindowTracking(QStringLiteral("kate|a"));
-        adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-2"), 0, 0);
-        QCOMPARE(engine.reclaimOffers.size(), 1); // unchanged — suppressed
-        QCOMPARE(engine.dispatched.size(), 2); // but still dispatched
-        // Still STATED, as false: a suppressed round must clear the mark the
-        // previous announce set, or the gate spends a stale one.
-        QCOMPARE(engine.claimsExhaustedNotes.size(), 2);
-        QCOMPARE(engine.claimsExhaustedNotes.last(), QStringLiteral("kate|a=0"));
-
-        // ONE shot. The next announce for the same live window is offered
-        // again, or a single move would disarm the session reclaim for that
-        // window permanently.
         adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-2"), 0, 0);
         QCOMPARE(engine.reclaimOffers.size(), 2);
         QCOMPARE(engine.reclaimOffers.last(), QStringLiteral("kate|a"));
-        // And the verdict is re-armed with it: the round ran and declined
-        // again, so this announce states true where the suppressed one
-        // stated false. That is the last direction of the state machine.
-        QCOMPARE(engine.claimsExhaustedNotes.size(), 3);
-        QCOMPARE(engine.claimsExhaustedNotes.last(), QStringLiteral("kate|a=1"));
+        QCOMPARE(engine.dispatched.size(), 2);
     }
 
     // -------------------------------------------------------------------------

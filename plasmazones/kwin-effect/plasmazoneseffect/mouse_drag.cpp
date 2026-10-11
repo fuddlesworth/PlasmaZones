@@ -79,8 +79,9 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // windowFinishUserMovedResized wouldn't fire until ALL buttons are
             // released. forceEnd() gives immediate snap response on LMB release.
             //
-            // After forceEnd, applyWindowGeometry will defer (retry every 100 ms)
-            // until isUserMove() clears when the remaining buttons are released.
+            // After forceEnd, an apply that lands while KWin's move is still live
+            // (another button held) defers to one windowFinishUserMovedResized
+            // replay (applyWindowGeometry) and runs when the last button comes up.
             m_dragTracker->forceEnd(pos);
         } else if (modifiersChanged || buttonsChanged) {
             // Push modifier/button changes to daemon during drag immediately.
@@ -103,8 +104,8 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             const bool bypassed =
                 m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen
                 || m_dragBypassedForEngine;
-            const bool shouldForward =
-                bypassed || shouldForwardDragTicks() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;
+            const bool shouldForward = m_daemonGate.serviceRegistered
+                && (bypassed || shouldForwardDragTicks() || m_cachedZoneSelectorEnabled || !m_triggersLoaded);
             if (shouldForward) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("updateDragCursor"),

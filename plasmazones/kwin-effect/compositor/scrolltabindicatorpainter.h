@@ -5,13 +5,16 @@
 
 #include <QColor>
 #include <QFont>
+#include <QHash>
 #include <QImage>
 #include <QPoint>
 #include <QPointF>
 #include <QRect>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
+#include <functional>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -234,11 +237,17 @@ public:
     ScrollTabIndicatorPainter(const ScrollTabIndicatorPainter&) = delete;
     ScrollTabIndicatorPainter& operator=(const ScrollTabIndicatorPainter&) = delete;
 
-    /// Replace the model for @p output. Returns true when the model or the
-    /// style actually differed from what was last pushed (the caller damages
-    /// on that edge only); false is a verified no-op, so this is cheap to
-    /// call every frame with unchanged data.
-    bool setIndicators(KWin::LogicalOutput* output, const QVector<ScrollTabIndicator>& indicators,
+    /// The strip view offset the paint and hit-test apply to one strip's band,
+    /// by strip key.
+    using ViewOffsetFor = std::function<QPointF(const QString& strip)>;
+
+    /// Replace the model for @p strip (TilingHandler::stripKeyFor), drawn on
+    /// @p output. A virtual screen running scrolling is a strip of its own, so
+    /// two bands can share an output. Returns true when the model or the style
+    /// actually differed from what was last pushed (the caller damages on that
+    /// edge only); false is a verified no-op, so this is cheap to call every
+    /// frame with unchanged data.
+    bool setIndicators(const QString& strip, KWin::LogicalOutput* output, const QVector<ScrollTabIndicator>& indicators,
                        const ScrollTabIndicatorStyle& style);
 
     /// Set (or clear) hover on the pill containing @p pos. Returns true when
@@ -246,23 +255,23 @@ public:
     /// rects that lost and gained the hover are re-rasterised (texture
     /// sub-update), never the whole union.
     ///
-    /// @p pos is absolute logical, in the same space the pointer reports.
-    /// @p viewOffset must be the SAME offset paint() is given for this
-    /// output, because the pills are on screen shifted by it. The default is
-    /// the at-rest case (no scroll in flight); pass the live offset whenever
-    /// one exists or hover will latch onto the wrong pill mid-scroll.
+    /// @p pos is absolute logical, in the same space the pointer reports, over
+    /// every band on @p output. @p viewOffsetFor must answer the SAME offset
+    /// paint() is given for each strip, because the pills are on screen
+    /// shifted by it, or hover will latch onto the wrong pill mid-scroll; an
+    /// empty one is the at-rest case (no offset).
     /// @p hitWindowId, when given, receives the pill under @p pos (the same
     /// answer pillAt() would give) so a caller that needs both does one scan.
-    bool setHover(KWin::LogicalOutput* output, const QPointF& pos, const QPointF& viewOffset = QPointF(),
+    bool setHover(KWin::LogicalOutput* output, const QPointF& pos, const ViewOffsetFor& viewOffsetFor = {},
                   QString* hitWindowId = nullptr);
 
-    /// windowId of the pill under @p pos (absolute logical), empty if none.
-    /// @p viewOffset is the same offset the blit uses. When two indicator
-    /// rects overlap, the one drawn LAST (topmost) wins, matching the raster.
-    QString pillAt(KWin::LogicalOutput* output, const QPointF& pos, const QPointF& viewOffset) const;
+    /// windowId of the pill under @p pos (absolute logical) on any band of
+    /// @p output, empty if none. When two indicator rects overlap, the one
+    /// drawn LAST (topmost) wins, matching the raster.
+    QString pillAt(KWin::LogicalOutput* output, const QPointF& pos, const ViewOffsetFor& viewOffsetFor) const;
 
     /// The indicator whose tab run contains @p windowId, or nullptr when no
-    /// indicator on @p output draws that window as a tab.
+    /// indicator on any band of @p output draws that window as a tab.
     ///
     /// Answers from the MODEL rather than from the hit rects, and so do the
     /// two queries below it: a tab clipped away by a too-short indicator
@@ -289,14 +298,17 @@ public:
     /// @p delta is not -1/+1.
     QString neighbourPill(KWin::LogicalOutput* output, const QString& windowId, int delta) const;
 
-    /// Union of @p output's indicator rects, absolute logical and WITHOUT
-    /// the view offset. At rest the offset is zero, so this is exactly the
+    /// Union of @p strip's indicator rects, absolute logical and WITHOUT the
+    /// view offset. At rest the offset is zero, so this is exactly the
     /// on-screen rect and the right damage region; while a view leg is in
     /// flight the strip view spring's own repaint pump damages the whole
     /// output every frame (pack or no pack), so the shifted position needs
     /// no separate damage from the caller.
-    QRect boundsFor(KWin::LogicalOutput* output) const;
+    QRect boundsFor(const QString& strip) const;
+    /// The strip keys with a band on @p output.
+    QStringList stripsOn(KWin::LogicalOutput* output) const;
 
+    /// Whether any band on @p output has indicators.
     bool hasIndicators(KWin::LogicalOutput* output) const;
     /// True when ANY output currently has indicators. Used by the effect's
     /// isActive() predicate (the pills only exist while the effect is in the
@@ -314,7 +326,7 @@ public:
     bool paintedLastPass(KWin::LogicalOutput* output) const;
     /// Record whether the pass that just finished on @p output blitted.
     void notePassOutcome(KWin::LogicalOutput* output, bool painted);
-    /// Delete the textures retired by clearOutput()/clearAll() since the last
+    /// Delete the textures retired by the clears since the last
     /// GL-current point. paint() does this on its own; the effect also calls
     /// this right after each clear (under a made-current context) and at the
     /// top of paintScreen, because once the last indicator is gone the
@@ -322,8 +334,10 @@ public:
     /// again. Requires a current context.
     void drainRetiredTextures();
 
-    /// Drop @p output's model (output removed, or its strip is gone). Its
-    /// texture is retired, not deleted: GL-free, safe off-context.
+    /// Drop @p strip's model (its strip is gone). Its texture is retired, not
+    /// deleted: GL-free, safe off-context.
+    void clearStrip(const QString& strip);
+    /// Drop every band on @p output (the output was removed).
     void clearOutput(KWin::LogicalOutput* output);
 
     /// Drop every output's model. Textures are retired, not deleted:
@@ -337,7 +351,8 @@ public:
     /// re-rasterise on their next paint.
     void releaseGl();
 
-    /// Draw @p output's indicators translated by @p viewOffset (logical px).
+    /// Draw every band on @p output, each translated by its strip's offset
+    /// from @p viewOffsetFor (logical px).
     /// Called from the effect's paint pass with @p renderTarget /
     /// @p viewport current; the target's colour description drives the
     /// sRGB → output conversion so the pills match the windows on HDR and
@@ -360,15 +375,20 @@ public:
     /// must record that nothing is on screen. A @p clipRegion that misses the
     /// band entirely still returns true with no draw issued, because the
     /// pixels the last pass painted are untouched by this one.
+    /// With two bands on one output, true only when every band with
+    /// indicators stands on screen.
     bool paint(KWin::LogicalOutput* output, const KWin::RenderTarget& renderTarget,
-               const KWin::RenderViewport& viewport, const KWin::Region& clipRegion, const QPointF& viewOffset);
+               const KWin::RenderViewport& viewport, const KWin::Region& clipRegion,
+               const ViewOffsetFor& viewOffsetFor);
 
 private:
-    /// Everything the painter keeps for one output. The model half is plain
-    /// data; the texture half is GL-owned and only ever touched from paint()
-    /// / releaseGl() (clearOutput/clearAll move it to the graveyard).
-    struct PerOutput
+    /// Everything the painter keeps for one strip's band. The model half is
+    /// plain data; the texture half is GL-owned and only ever touched from
+    /// paint() / releaseGl() (the clears move it to the graveyard).
+    struct PerStrip
     {
+        /// The output the band is drawn on.
+        KWin::LogicalOutput* output = nullptr;
         QVector<ScrollTabIndicator> indicators;
         ScrollTabIndicatorStyle style;
         /// Flattened hit rects for every tab of every indicator, absolute
@@ -387,7 +407,7 @@ private:
         /// otherwise current; ignored (the full raster covers them) when
         /// `dirty` is set.
         QVector<QRect> hoverDirtyRects;
-        /// Whether the last completed pass blitted this output's pills.
+        /// Whether the last completed pass blitted this band's pills.
         bool paintedLastPass = false;
         std::unique_ptr<KWin::GLTexture> texture;
         /// Bounds and device-pixel ratio the live texture was rasterised
@@ -417,20 +437,25 @@ private:
         qreal failedScale = 0.0;
     };
 
-    PerOutput* find(KWin::LogicalOutput* output);
-    const PerOutput* find(KWin::LogicalOutput* output) const;
+    PerStrip* find(const QString& strip);
+    const PerStrip* find(const QString& strip) const;
 
     /// Recompute `hits` and `bounds` from the model, and drop a hover whose
     /// window is no longer on the strip.
-    static void rebuildLayout(PerOutput& entry);
+    static void rebuildLayout(PerStrip& entry);
     /// The indicator rect containing @p windowId's pill, or a null rect.
-    static QRect indicatorRectFor(const PerOutput& entry, const QString& windowId);
+    static QRect indicatorRectFor(const PerStrip& entry, const QString& windowId);
+    /// The pill of @p entry under @p pos, its view offset already removed.
+    static QString pillIn(const PerStrip& entry, const QPointF& local);
+    /// One band's draw (the body of paint()).
+    bool paintStrip(PerStrip& entry, const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                    const KWin::Region& clipRegion, const QPointF& viewOffset);
     /// Retire @p entry's texture to the graveyard (no GL call).
-    void retireTexture(PerOutput& entry);
+    void retireTexture(PerStrip& entry);
     /// Delete retired textures; requires a current context.
     void drainRetired();
 
-    std::unordered_map<KWin::LogicalOutput*, PerOutput> m_outputs;
+    std::unordered_map<QString, PerStrip> m_strips;
     /// Textures whose output/model was dropped off-context, awaiting the
     /// next GL-current point (paint() or releaseGl()) for deletion.
     std::vector<std::unique_ptr<KWin::GLTexture>> m_retiredTextures;

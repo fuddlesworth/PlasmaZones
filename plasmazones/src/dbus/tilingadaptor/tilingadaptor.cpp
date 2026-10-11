@@ -12,6 +12,8 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include <QScopeGuard>
+
 #include <algorithm>
 #include <utility>
 
@@ -120,14 +122,15 @@ PhosphorEngine::IPlacementEngine* TilingAdaptor::engineOwningScreen(const QStrin
     return m_lifecycleEngines.isEmpty() ? nullptr : m_lifecycleEngines.first();
 }
 
-PhosphorEngine::IPlacementEngine* TilingAdaptor::engineOwningWindow(const QString& windowId) const
+QVector<PhosphorEngine::IPlacementEngine*> TilingAdaptor::enginesTrackingWindow(const QString& windowId) const
 {
+    QVector<PhosphorEngine::IPlacementEngine*> engines;
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         if (engine->isWindowTracked(windowId)) {
-            return engine;
+            engines.append(engine);
         }
     }
-    return m_lifecycleEngines.isEmpty() ? nullptr : m_lifecycleEngines.first();
+    return engines;
 }
 
 void TilingAdaptor::setActiveLayouts(const QVariantMap& activeLayouts)
@@ -371,13 +374,47 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
         return;
     }
+    // An evacuee that could not float in place when its output went away
+    // (minimized, or out of view) floats now instead of tiling (F643), and one
+    // announced on the output it is parked for re-enters its parked place.
+    if (m_windowTrackingAdaptor) {
+        if (m_windowTrackingAdaptor->takeEvacueeFloatPending(entry.windowId, entry.screenId)) {
+            m_windowTrackingAdaptor->setWindowFloatingForScreen(entry.windowId, entry.screenId, true);
+            return;
+        }
+        if (m_windowTrackingAdaptor->readoptOnArrival(entry.windowId, entry.screenId)) {
+            return;
+        }
+    }
     // Claim this instance's placement record before any selector reads one, the
     // same reason the snap channel does it at the head of resolveWindowRestore.
     // The two open channels and every later re-drive must agree on WHICH record
-    // belongs to this window.
+    // belongs to this window. Screen-aware like the snap channel's: only a
+    // record the engine running the opening screen can restore on this output.
     if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
         auto* svc = m_windowTrackingAdaptor->service();
-        svc->placementStore().claimForOpen(entry.windowId, svc->currentAppIdFor(entry.windowId));
+        // The reopen contract's leave, ahead of the claim: a window whose OWN
+        // record names another screen (with a live slot) left it, so every
+        // engine slot of that record is released silently and the claim then
+        // finds a final own record (no sibling stands in). A record on an
+        // output that is not present now stays parked for its return.
+        if (const auto own = svc->placementStore().peekExact(entry.windowId); own
+            && PhosphorEngine::ownRecordLeftScreen(*own, entry.screenId)
+            && (!svc->screenManager() || svc->screenManager()->physicalScreenFor(own->screenId).isValid())) {
+            for (auto it = own->engines.constBegin(); it != own->engines.constEnd(); ++it) {
+                svc->releaseEngineSlot(entry.windowId, it.key());
+            }
+            qCInfo(lcDbusTiling) << "dispatchWindowOpened:" << entry.windowId << "left its recorded screen"
+                                 << own->screenId << "for" << entry.screenId << "— its slots are released";
+        }
+        QString openingEngineId;
+        for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+            if (engine->isActiveOnScreen(entry.screenId)) {
+                openingEngineId = engine->engineId();
+                break;
+            }
+        }
+        svc->claimPlacementForOpen(entry.windowId, entry.screenId, openingEngineId);
     }
 
     // Window-rule open routing (RouteToScreen / RouteToDesktop). The WTA owns the
@@ -400,7 +437,7 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
         }
     }
     // An explicit routing/placement directive outranks the
-    // remembered-placement reclaim — same precedence the snap facade
+    // remembered-placement claim — same precedence the snap facade
     // applies. Keyed on the directive MATCHING, not on a redirect actually
     // happening: a rule that pins the window to the screen it already opened
     // on (or to a disconnected one) still owns its monitor, and reading the
@@ -409,48 +446,51 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     dispatchOpenToClaimingEngine(routedEntry, /*allowPark=*/true, /*allowCrossScreenClaim=*/!ruleRouted);
 }
 
+void TilingAdaptor::setWindowTrackingAdaptor(WindowTrackingAdaptor* wta)
+{
+    // The old adaptor is left alone: the shutdown clear can run after it is
+    // gone, and the dispatcher below checks this adaptor's own lifetime.
+    m_windowTrackingAdaptor = wta;
+    if (!wta) {
+        return;
+    }
+    // A rule routing a window from a snapping screen onto a tiling one: the
+    // target's engine takes it as an open. No park and no cross-screen claim,
+    // since the rule owns where the window goes.
+    wta->setRoutedOpenDispatcher([self = QPointer<TilingAdaptor>(this)](const PhosphorProtocol::WindowOpenedEntry& e) {
+        if (self) {
+            self->dispatchOpenToClaimingEngine(e, /*allowPark=*/false, /*allowCrossScreenClaim=*/false);
+        }
+    });
+}
+
 void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
                                                  bool allowCrossScreenClaim)
 {
-    // Cross-screen session reclaim FIRST, before any arrival-screen claim:
-    // KWin's session restore opens windows on a nondeterministic output, so a
-    // window recorded TILED on engine E's screen routinely arrives announced
-    // on some other engine-managed screen. E pulls it home
-    // (claimCrossScreenReopen consults the unified placement store's recorded
-    // screen); handing it to the ARRIVAL screen's engine instead would tile
-    // it into a strip/layout it never belonged to, and the engines' own defer
-    // gates would still leave it stranded. Ordering, not just the gates,
-    // because the claim and the defer must agree no matter which engine the
-    // arrival loop below would have reached first. Arrivals on non-managed
-    // (snap-mode) screens never reach this dispatch at all — their reclaim
-    // runs off SnapAdaptor::resolveWindowRestore, which every open passes
-    // through. Suppressed (allowCrossScreenClaim=false) when a routing or
-    // placement DIRECTIVE MATCHED for this window — keyed on the match, not
-    // on a redirect having happened, so a rule pinning the window to the
-    // screen it already opened on still outranks the remembered placement
-    // (dispatchWindowOpened documents the same distinction).
-    //
-    // Move-release suppression: this announce can be the second half of a
-    // live release/re-announce pair (releaseWindowTracking then re-announce —
-    // m_moveReleasedInstances documents the yank-back this caused). Consume
-    // the one-shot and let the ARRIVAL screen's engine adopt the window where
-    // the user put it.
-    //
-    // Consumed UNCONDITIONALLY, ahead of the allowCrossScreenClaim test rather
-    // than behind it. This announce IS the release's re-announce whichever way
-    // the claim gate already stands, so it is what the one-shot was armed for;
-    // short-circuiting the remove() behind the gate left the entry armed on a
-    // rule-routed re-announce (allowCrossScreenClaim already false), and the
-    // window's NEXT announce — the effect re-announces a live window after a
-    // desktop or activity demotion, with no daemon-side close, see
-    // flushPendingWindowOpens — then spent the stale one-shot suppressing a
-    // reclaim that had nothing to do with the move.
-    if (m_moveReleasedInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(entry.windowId)) > 0
-        && allowCrossScreenClaim) {
-        qCInfo(lcDbusTiling) << "dispatchOpenToClaimingEngine:" << entry.windowId
-                             << "re-announced after a live move release — cross-screen reclaim suppressed";
-        allowCrossScreenClaim = false;
+    // "Focus new windows" focuses genuine opens only. State the entry's intent
+    // to every lifecycle engine for the length of this dispatch, at the HEAD so
+    // the reopen claim below (which re-enters windowOpened on the claiming
+    // engine) reads it too, and restore the default on every exit.
+    for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+        engine->setOpenFocusEligible(entry.focusEligible);
     }
+    const auto restoreFocusIntent = qScopeGuard([this] {
+        for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+            engine->setOpenFocusEligible(true);
+        }
+    });
+    // The reopen claim FIRST, before the arrival-screen dispatch: a window
+    // opening on one virtual screen of an output may restore into a FIFO
+    // record (another instance of the app) on another virtual screen of the
+    // SAME output, in the same mode (claimCrossScreenReopen; each engine
+    // declines unless it runs the opening screen). Never onto another output,
+    // never from the window's own record. Arrivals on snap-mode screens never
+    // reach this dispatch; SnapAdaptor::resolveWindowRestore restores them.
+    // Suppressed (allowCrossScreenClaim=false) when a routing or placement
+    // DIRECTIVE MATCHED for this window — keyed on the match, not on a
+    // redirect having happened, so a rule pinning the window to the screen it
+    // already opened on still outranks the remembered placement
+    // (dispatchWindowOpened documents the same distinction).
     if (allowCrossScreenClaim) {
         for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
             if (engine->claimCrossScreenReopen(entry.windowId, entry.screenId, qMax(0, entry.minWidth),
@@ -459,18 +499,15 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
                 return;
             }
         }
-        // Post-reclaim ownership check. A reclaim can also come from the
-        // OTHER channel (SnapAdaptor::resolveWindowRestore, which the effect
-        // drives FIRST for a snap-restore candidate and whose reply callback
-        // then sends this very announce), and that announce still carries
-        // the ARRIVAL screen — the reclaim's retile is queued and cannot
-        // have moved the window before the reply returns. Dispatching it
-        // would hand the window to the arrival screen's engine, whose
-        // windowOpened sees it as already tracked, skips its defer gate
-        // entirely, and MIGRATES it back: the reclaim silently undone.
+        // Post-claim ownership check. A claim onto another virtual screen
+        // leaves the effect's already-queued announces carrying the ARRIVAL
+        // screen (the claim's retile is queued and cannot have moved the
+        // window yet). Dispatching one would hand the window to the arrival
+        // screen's engine, whose windowOpened sees it as already tracked and
+        // MIGRATES it back: the claim silently undone.
         //
         // INSIDE the directive guard, with the claim it protects. When a
-        // routing directive matched, no reclaim ran, so there is nothing to
+        // routing directive matched, no claim ran, so there is nothing to
         // protect — and refusing the dispatch there would be actively wrong:
         // applyOpenRoutingForTiling has already emitted the output-move
         // marker, so the window physically moves to the routed screen while
@@ -490,7 +527,7 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
                 removeUnclaimedOpen(entry.windowId);
                 qCInfo(lcDbusTiling) << "dispatchOpenToClaimingEngine:" << entry.windowId << "announced on"
                                      << entry.screenId << "but already held on" << heldScreen
-                                     << "— ignoring the stale arrival (cross-screen reclaim already placed it)";
+                                     << "— ignoring the stale arrival (the reopen claim already placed it)";
                 return;
             }
         }
@@ -505,16 +542,14 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         if (engine->isActiveOnScreen(entry.screenId)) {
             removeUnclaimedOpen(entry.windowId);
-            // Stated for THIS announce either way, not only when the round
-            // ran: true when every claim above declined (a float rule, a
-            // context mismatch, an absent home screen), so the arrival
-            // engine's own defer gate adopts instead of standing down for the
-            // very record the claims just refused; false when the round was
-            // suppressed, which clears any mark an earlier announce of the
-            // same window left behind. The claim bodies clear it themselves
-            // for the home open they re-enter, which never reaches here.
-            engine->noteCrossScreenClaimsExhausted(entry.windowId, allowCrossScreenClaim);
             engine->windowOpened(entry.windowId, entry.screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
+            // The window is on this screen now, so what any other engine
+            // still holds for it elsewhere goes: a window moved while nothing
+            // reported the crossing (an effect reload) is announced here and
+            // nowhere else (F1000).
+            if (m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->releaseLeftScreens(entry.windowId, entry.screenId, engine);
+            }
             return;
         }
     }
@@ -655,15 +690,26 @@ void TilingAdaptor::flushPendingWindowOpens()
 
 void TilingAdaptor::windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
-    if (!ensurePipeline("windowOpened")) {
+    announceWindow("windowOpened", windowId, screenId, minWidth, minHeight, /*focusEligible=*/true);
+}
+
+void TilingAdaptor::windowReannounced(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
+{
+    announceWindow("windowReannounced", windowId, screenId, minWidth, minHeight, /*focusEligible=*/false);
+}
+
+void TilingAdaptor::announceWindow(const char* method, const QString& windowId, const QString& screenId, int minWidth,
+                                   int minHeight, bool focusEligible)
+{
+    if (!ensurePipeline(method)) {
         return;
     }
     if (windowId.isEmpty()) {
-        qCDebug(lcDbusTiling) << "windowOpened: empty window ID";
+        qCDebug(lcDbusTiling) << method << ": empty window ID";
         return;
     }
     if (screenId.isEmpty()) {
-        qCDebug(lcDbusTiling) << "windowOpened: empty screen ID for window" << windowId;
+        qCDebug(lcDbusTiling) << method << ": empty screen ID for window" << windowId;
         return;
     }
     // Non-blocking startup gate: if the first panel D-Bus query has not completed
@@ -671,15 +717,17 @@ void TilingAdaptor::windowOpened(const QString& windowId, const QString& screenI
     // against the unreserved full-screen rect (PhosphorScreens::ScreenManager's availability cache
     // is empty until the sensor windows and Plasma D-Bus panel query finish), and
     // the daemon would emit a visible correction a frame later. Flushing happens in
-    // flushPendingWindowOpens() when panelGeometryReady fires.
+    // flushPendingWindowOpens() when panelGeometryReady fires. The focus intent
+    // rides the queued entry, so a deferred genuine open still takes focus.
     PhosphorProtocol::WindowOpenedEntry entry{windowId, screenId, minWidth, minHeight};
+    entry.focusEligible = focusEligible;
     if (deferUntilPanelReady(1)) {
-        qCInfo(lcDbusTiling) << "windowOpened: deferring" << windowId
+        qCInfo(lcDbusTiling) << method << ": deferring" << windowId
                              << "until panel geometry ready (queue size=" << (m_pendingOpens.size() + 1) << ")";
         m_pendingOpens.append(entry);
         return;
     }
-    qCDebug(lcDbusTiling) << "windowOpened: windowId=" << windowId << "screen=" << screenId << "minSize=" << minWidth
+    qCDebug(lcDbusTiling) << method << ": windowId=" << windowId << "screen=" << screenId << "minSize=" << minWidth
                           << "x" << minHeight;
     dispatchWindowOpened(entry);
 }
@@ -690,17 +738,25 @@ void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
         return;
     }
 
-    // See windowOpened() above for the startup-race rationale. The batch path queues
+    // The batch is the daemon-ready / mode-flip RE-ANNOUNCE of windows already
+    // on screen, so no entry may take focus, whatever an in-process caller
+    // left in the off-wire field.
+    PhosphorProtocol::WindowOpenedList reannounced = entries;
+    for (auto& entry : reannounced) {
+        entry.focusEligible = false;
+    }
+
+    // See announceWindow() for the startup-race rationale. The batch path queues
     // all entries atomically so windows in the same batch retain their original order
     // when flushed.
-    if (deferUntilPanelReady(entries.size())) {
-        qCInfo(lcDbusTiling) << "windowsOpenedBatch: deferring" << entries.size()
+    if (deferUntilPanelReady(reannounced.size())) {
+        qCInfo(lcDbusTiling) << "windowsOpenedBatch: deferring" << reannounced.size()
                              << "windows until panel geometry ready";
-        m_pendingOpens.append(entries);
+        m_pendingOpens.append(reannounced);
         return;
     }
 
-    qCInfo(lcDbusTiling) << "windowsOpenedBatch: processing" << entries.size() << "windows";
+    qCInfo(lcDbusTiling) << "windowsOpenedBatch: processing" << reannounced.size() << "windows";
 
     // Burst bracket (IPlacementEngine::beginArrivalBurst): engines that
     // apply geometry per arrival defer to one apply per screen, so a
@@ -715,7 +771,7 @@ void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
     // as separate calls). Empty ids fall through to dispatchWindowOpened's
     // own validation.
     QSet<QString> seenWindowIds;
-    for (const auto& entry : entries) {
+    for (const auto& entry : std::as_const(reannounced)) {
         if (!entry.windowId.isEmpty() && seenWindowIds.contains(entry.windowId)) {
             qCDebug(lcDbusTiling) << "windowsOpenedBatch: dropping duplicate entry for" << entry.windowId;
             continue;
@@ -739,7 +795,7 @@ void TilingAdaptor::windowMinSizeUpdated(const QString& windowId, int minWidth, 
     }
     qCDebug(lcDbusTiling) << "windowMinSizeUpdated: windowId=" << windowId << "minSize=" << minWidth << "x"
                           << minHeight;
-    if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
+    for (PhosphorEngine::IPlacementEngine* engine : enginesTrackingWindow(windowId)) {
         engine->windowMinSizeUpdated(windowId, qMax(0, minWidth), qMax(0, minHeight));
     }
 }
@@ -769,10 +825,6 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     // currentTilesJson read after this close must not hand back a rect for
     // a window that no longer exists.
     forgetTileEntriesForWindow(windowId);
-    // A move-release one-shot for a window that closed instead of
-    // re-announcing dies with it — instance ids are unique, so the entry
-    // could never fire again, but the set must not accumulate corpses.
-    m_moveReleasedInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     if (!ensurePipeline("windowClosed")) {
         return;
     }
@@ -793,15 +845,15 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     // deliberately skips the close-only branches (minimize preserve, orphan
     // float-back fallback, sibling collapse), which stay with the
     // WindowTracking close where the authoritative screen is known. Hoisted
-    // ABOVE the ownership lookup on purpose: the funnel self-guards for
-    // untracked windows, and engineOwningWindow's first-engine fallback must
-    // stay free to change without silently disabling this capture. This
+    // ABOVE the engine closes on purpose: the funnel self-guards for
+    // untracked windows and must run while every engine still answers. This
     // method is a genuine close only — the drag-bypass tracking drop goes
-    // through releaseWindowTracking, which captures nothing.
+    // through releaseWindowTracking, which captures nothing. EVERY engine
+    // tracking the window closes it (see enginesTrackingWindow).
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->captureWindowPlacement(windowId);
     }
-    if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
+    for (PhosphorEngine::IPlacementEngine* engine : enginesTrackingWindow(windowId)) {
         engine->windowClosed(windowId);
     }
     if (!closingScreen.isEmpty()) {
@@ -819,7 +871,20 @@ void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
     forgetTileEntriesForWindow(windowId);
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
-    m_moveReleasedInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    // A window whose tiling desktop was out of view when it closed got no
+    // Tiling.windowClosed relay (the effect gates it on the close screen being
+    // managed NOW), so the background context would keep its tile or column
+    // until a daemon restart. Close it in every engine still tracking it; the
+    // WindowTracking close has already captured its placement.
+    if (!m_lifecycleEngines.isEmpty()) {
+        const QString closingScreen = trackedScreenForWindow(windowId);
+        for (PhosphorEngine::IPlacementEngine* engine : enginesTrackingWindow(windowId)) {
+            engine->windowClosed(windowId);
+        }
+        if (!closingScreen.isEmpty()) {
+            refreshFocusedWindow(closingScreen);
+        }
+    }
 }
 
 void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
@@ -844,8 +909,8 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
             ++it;
         }
     }
-    // The two OPEN QUEUES and the move-release one-shot set go with them.
-    // windowClosed drops all five together, and this prune is the backstop for
+    // The two OPEN QUEUES go with them. windowClosed drops all four
+    // together, and this prune is the backstop for
     // a window that never produced a destroy notification — so covering only
     // the two dedup maps left exactly the windows this function exists for
     // holding a queue slot.
@@ -860,22 +925,14 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
     m_pendingOpens.removeIf([&alive](const PhosphorProtocol::WindowOpenedEntry& entry) {
         return !alive.contains(PhosphorIdentity::WindowId::extractInstanceId(entry.windowId));
     });
-    // Already keyed by instance id, so it is compared against `alive` directly.
-    // A leaked entry can never fire (instance ids are unique to a window), but
-    // the set is otherwise unbounded across a session of drag-out floats and
-    // desktop moves whose windows die without a destroy notification.
-    m_moveReleasedInstances.removeIf([&alive](const QString& instanceId) {
-        return !alive.contains(instanceId);
-    });
 }
 
 void TilingAdaptor::releaseWindowTracking(const QString& windowId)
 {
-    releaseWindowTrackingVia(windowId, nullptr, /*armMoveExcuse=*/true);
+    releaseWindowTrackingVia(windowId, nullptr);
 }
 
-void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner,
-                                             bool armMoveExcuse)
+void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner)
 {
     if (windowId.isEmpty()) {
         qCDebug(lcDbusTiling) << "releaseWindowTracking: empty window ID";
@@ -899,32 +956,9 @@ void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEn
     // Released from tracking is gone from the engine's point of view, which
     // is the replay cache's point of view too.
     forgetTileEntriesForWindow(windowId);
-    // Arm the move-release one-shots BEFORE the pipeline gate, mirroring the
-    // bookkeeping above: the window is live and being moved, and its next
-    // announce must not be mistaken for a session restore (see
-    // m_moveReleasedInstances).
-    //
-    // TWO of them, armed together because the same announce is misread in two
-    // independent places and each excuse is consumed at a different moment:
-    // this one by the dispatch below (suppressing the cross-screen reclaim),
-    // the store's by the engine's takeForReopen (suppressing the
-    // reclaim-credit burn). A single flag consumed at the first moment would
-    // already be gone by the second — see markInstanceMovedLive.
-    //
-    // Only the ADAPTOR's is optional. Both are one-shots and both can go
-    // stale, but they differ in what a stale one costs. The adaptor's
-    // suppresses a cross-screen RECLAIM of the window itself, which a later
-    // unrelated open genuinely wants, so leaving it standing is a real loss.
-    // The store's suppresses a credit burn that would be taken from a SIBLING
-    // record of the same app that has not reopened yet, so leaving it standing
-    // spares that sibling rather than harming this window — the conservative
-    // direction. burnReclaimCredit's own consume is what ends it.
-    if (armMoveExcuse) {
-        m_moveReleasedInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-    }
-    if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-        m_windowTrackingAdaptor->service()->placementStore().markInstanceMovedLive(windowId);
-    }
+    // (No move-release excuse is armed for the re-announce: under the reopen
+    // contract a window's next announce on another screen is never pulled back,
+    // whatever its record says, so there is nothing to suppress.)
     if (!ensurePipeline("releaseWindowTracking")) {
         return;
     }
@@ -938,7 +972,9 @@ void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEn
     // here; a current-context release relays placementChanged → tilingChanged
     // → refreshFocusedWindow on its own, and a background one moves no focus.
     const QString releasingScreen = owner ? owner->screenForTrackedWindow(windowId) : trackedScreenForWindow(windowId);
-    if (PhosphorEngine::IPlacementEngine* engine = owner ? owner : engineOwningWindow(windowId)) {
+    const QVector<PhosphorEngine::IPlacementEngine*> releasing =
+        owner ? QVector<PhosphorEngine::IPlacementEngine*>{owner} : enginesTrackingWindow(windowId);
+    for (PhosphorEngine::IPlacementEngine* engine : releasing) {
         engine->windowClosed(windowId);
     }
     // A LIVE window released here gets no WindowTracking.windowClosed, so the
@@ -1022,7 +1058,6 @@ void TilingAdaptor::clearEngine()
     m_tileBatchesHeldForAnnounce.clear();
     m_unclaimedOpens.clear();
     m_pendingOpens.clear();
-    m_moveReleasedInstances.clear();
     m_lastFloatBroadcast.clear();
     m_lastScrollTabColorsRelay.clear();
     m_lastEnabledBroadcast.reset();

@@ -186,12 +186,12 @@ private Q_SLOTS:
                  "the exclusion is about liveness, not about siblings");
     }
 
-    // An open claim dies with its instance on BOTH close funnels. The prune
-    // backstop (a window that died without a close signal) reaches only
-    // markInstanceClosed, which used to leave the claim standing, so the
-    // record the dead window claimed stayed unpairable for every later
-    // same-app open. Pinned through peek() AND through take(), the two
-    // production readers of a claim.
+    // An open claim dies with its instance on every close funnel. The prune
+    // backstop (a window that died without a close signal) drops the claims
+    // of every instance missing from the alive set, and the inert close mark
+    // still releases its own, so the record a dead window claimed never stays
+    // unpairable for later same-app opens. Pinned through peek() AND through
+    // take(), the two production readers of a claim.
     void testClaim_releasedByMarkInstanceClosedAndClear()
     {
         WindowPlacementStore store;
@@ -201,10 +201,19 @@ private Q_SLOTS:
         // While the claim stands, another instance may not read that record.
         QVERIFY(!store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value());
 
-        // The claimer dies unobserved: the backstop funnel.
-        store.markInstanceClosed(QStringLiteral("app|claimer"), /*graceEligible=*/false);
+        // The claimer dies unobserved: the alive-set backstop. An alive set
+        // naming the claimer keeps the claim, one without it drops it.
+        QCOMPARE(store.releaseOpenClaimsExcept({QStringLiteral("claimer")}), 0);
+        QVERIFY(!store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value());
+        QCOMPARE(store.releaseOpenClaimsExcept({QStringLiteral("other")}), 1);
         QVERIFY2(store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value(),
                  "a dead claimer must not keep a record unpairable");
+
+        // The close mark releases the claim too, and reports no revoke.
+        QVERIFY(store.claimForOpen(QStringLiteral("app|claimer1"), QStringLiteral("app")).has_value());
+        QVERIFY(!store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value());
+        QVERIFY(!store.markInstanceClosed(QStringLiteral("app|claimer1")));
+        QVERIFY(store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value());
 
         // Same through clear(): the instance's own claim on a SIBLING's record
         // goes too, not only the claims naming the records clear() removes.
@@ -273,11 +282,10 @@ private Q_SLOTS:
     void testClaim_droppedByCollapseAndRemoveIf()
     {
         WindowPlacementStore store;
-        // A closed floating sibling (credit revoked so the collapse may prune
-        // it), claimed by an opener BEFORE the keeper is recorded: the bucket
-        // claim picks the newest record, and the keeper must not be it.
+        // A closed floating sibling, claimed by an opener BEFORE the keeper is
+        // recorded: the bucket claim picks the newest record, and the keeper
+        // must not be it.
         QVERIFY(store.record(floatingApp(QStringLiteral("app|sibling"), QRect(0, 0, 300, 200))));
-        store.markInstanceClosed(QStringLiteral("app|sibling"), /*graceEligible=*/false);
         const auto claimed = store.claimForOpen(QStringLiteral("app|claimer"), QStringLiteral("app"));
         QVERIFY(claimed.has_value());
         QCOMPARE(claimed->windowId, QStringLiteral("app|sibling"));
@@ -340,6 +348,140 @@ private Q_SLOTS:
         QVERIFY(store.take(QStringLiteral("app|w"), QStringLiteral("app")).has_value());
         QVERIFY(store.record(floatingApp(QStringLiteral("app|fresh"))));
         QVERIFY(store.peek(QStringLiteral("app|other"), QStringLiteral("app")).has_value());
+    }
+
+    // ── The reopen contract (restores happen only where a window opens) ──
+
+    static WindowPlacement snappedOn(const QString& windowId, const QString& screenId)
+    {
+        return makePlacement(windowId, QStringLiteral("app"), WindowPlacement::stateSnapped(),
+                             WindowPlacement::snapEngineId(), screenId);
+    }
+
+    // A window's OWN record is never a pending cross-screen restore: it is
+    // compared at the virtual-screen level, and another screen is a leave.
+    void testPendingCrossScreen_ownRecordNeverPending()
+    {
+        const auto own = snappedOn(QStringLiteral("app|w"), QStringLiteral("DP-1/vs:1"));
+        const auto allSnapping = [](const QString&, int, const QString&) {
+            return true;
+        };
+        QVERIFY(!PhosphorEngine::pendingCrossScreenSnapRestore(own, QStringLiteral("app|w"),
+                                                               QStringLiteral("DP-1/vs:0"), allSnapping));
+    }
+
+    // A FIFO record (another instance) is pending only on another virtual
+    // screen of the SAME output, and only when that screen runs the mode.
+    void testPendingCrossScreen_fifoSameOutputOtherVs()
+    {
+        const auto fifo = snappedOn(QStringLiteral("app|old"), QStringLiteral("DP-1/vs:1"));
+        const auto snapping = [](const QString&, int, const QString&) {
+            return true;
+        };
+        const auto notSnapping = [](const QString&, int, const QString&) {
+            return false;
+        };
+        QVERIFY(PhosphorEngine::pendingCrossScreenSnapRestore(fifo, QStringLiteral("app|new"),
+                                                              QStringLiteral("DP-1/vs:0"), snapping));
+        QVERIFY2(!PhosphorEngine::pendingCrossScreenSnapRestore(fifo, QStringLiteral("app|new"), QStringLiteral("DP-2"),
+                                                                snapping),
+                 "a record on another KWin output is never pulled");
+        QVERIFY2(!PhosphorEngine::pendingCrossScreenSnapRestore(fifo, QStringLiteral("app|new"),
+                                                                QStringLiteral("DP-1/vs:0"), notSnapping),
+                 "a record on a screen of another mode is never pulled");
+    }
+
+    void testOwnRecordLeftScreen_rows()
+    {
+        auto own = snappedOn(QStringLiteral("app|w"), QStringLiteral("DP-1/vs:1"));
+        QVERIFY(PhosphorEngine::ownRecordLeftScreen(own, QStringLiteral("DP-1/vs:0")));
+        QVERIFY(!PhosphorEngine::ownRecordLeftScreen(own, QStringLiteral("DP-1/vs:1")));
+        QVERIFY(!PhosphorEngine::ownRecordLeftScreen(own, QString()));
+        auto unscreened = own;
+        unscreened.screenId.clear();
+        QVERIFY(!PhosphorEngine::ownRecordLeftScreen(unscreened, QStringLiteral("DP-2")));
+        auto released = own;
+        released.engines[QString(WindowPlacement::snapEngineId())].state = QString(WindowPlacement::stateReleased());
+        QVERIFY2(!PhosphorEngine::ownRecordLeftScreen(released, QStringLiteral("DP-2")),
+                 "a record whose slots are all released is already a verdict");
+    }
+
+    // Two instances of one app reopen on two monitors: each claims the record
+    // of ITS monitor, whatever their order, instead of the first opener taking
+    // the newest record wherever it lives.
+    void testClaimForOpenOnOutput_eachInstanceKeepsItsMonitor()
+    {
+        WindowPlacementStore store;
+        QVERIFY(store.record(snappedOn(QStringLiteral("app|d1"), QStringLiteral("DP-1"))));
+        QVERIFY(store.record(snappedOn(QStringLiteral("app|d2"), QStringLiteral("DP-2"))));
+        const auto first =
+            store.claimForOpen(QStringLiteral("app|n1"), QStringLiteral("app"), QStringLiteral("DP-1"), {});
+        QVERIFY(first.has_value());
+        QCOMPARE(first->windowId, QStringLiteral("app|d1"));
+        const auto second =
+            store.claimForOpen(QStringLiteral("app|n2"), QStringLiteral("app"), QStringLiteral("DP-2"), {});
+        QVERIFY(second.has_value());
+        QCOMPARE(second->windowId, QStringLiteral("app|d2"));
+    }
+
+    void testClaimForOpenOnOutput_claimsNothingOffOutput()
+    {
+        WindowPlacementStore store;
+        QVERIFY(store.record(snappedOn(QStringLiteral("app|d2"), QStringLiteral("DP-2"))));
+        QVERIFY(!store.claimForOpen(QStringLiteral("app|n1"), QStringLiteral("app"), QStringLiteral("DP-1"), {})
+                     .has_value());
+        // Left untouched for an opener on its own output.
+        const auto there =
+            store.claimForOpen(QStringLiteral("app|n2"), QStringLiteral("app"), QStringLiteral("DP-2"), {});
+        QVERIFY(there.has_value());
+        QCOMPARE(there->windowId, QStringLiteral("app|d2"));
+    }
+
+    // The opening engine's predicate filters the siblings.
+    void testClaimForOpenOnOutput_restorablePredicateFilters()
+    {
+        WindowPlacementStore store;
+        QVERIFY(store.record(snappedOn(QStringLiteral("app|d1"), QStringLiteral("DP-1"))));
+        const auto never = [](const WindowPlacement&) {
+            return false;
+        };
+        QVERIFY(!store.claimForOpen(QStringLiteral("app|n1"), QStringLiteral("app"), QStringLiteral("DP-1"), never)
+                     .has_value());
+    }
+
+    // The window's own record is final under the contract: a captured own
+    // record with nothing restorable claims nothing, never a sibling's.
+    void testClaimForOpenOnOutput_ownSlotRecordIsFinal()
+    {
+        WindowPlacementStore store;
+        QVERIFY(store.record(snappedOn(QStringLiteral("app|sib"), QStringLiteral("DP-1"))));
+        WindowPlacement own;
+        own.windowId = QStringLiteral("app|w");
+        own.appId = QStringLiteral("app");
+        own.screenId = QStringLiteral("DP-1");
+        own.engines[QString(WindowPlacement::snapEngineId())].state = QString(WindowPlacement::stateReleased());
+        QVERIFY(store.record(own));
+        QVERIFY(!store.claimForOpen(QStringLiteral("app|w"), QStringLiteral("app"), QStringLiteral("DP-1"), {})
+                     .has_value());
+        // The sibling's record is still free for another opener.
+        QVERIFY(
+            store.claimForOpen(QStringLiteral("app|n"), QStringLiteral("app"), QStringLiteral("DP-1"), {}).has_value());
+    }
+
+    // A claimer that died without a close signal stops reserving its record.
+    void testReleaseOpenClaimsExcept_freesADeadClaimersRecord()
+    {
+        WindowPlacementStore store;
+        QVERIFY(store.record(snappedOn(QStringLiteral("app|d1"), QStringLiteral("DP-1"))));
+        QVERIFY(store.claimForOpen(QStringLiteral("app|dead"), QStringLiteral("app"), QStringLiteral("DP-1"), {})
+                    .has_value());
+        QVERIFY(!store.claimForOpen(QStringLiteral("app|n"), QStringLiteral("app"), QStringLiteral("DP-1"), {})
+                     .has_value());
+        QCOMPARE(store.releaseOpenClaimsExcept({QStringLiteral("n")}), 1);
+        const auto freed =
+            store.claimForOpen(QStringLiteral("app|n"), QStringLiteral("app"), QStringLiteral("DP-1"), {});
+        QVERIFY(freed.has_value());
+        QCOMPARE(freed->windowId, QStringLiteral("app|d1"));
     }
 };
 

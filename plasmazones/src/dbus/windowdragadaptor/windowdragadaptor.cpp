@@ -118,7 +118,9 @@ WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPo
                                      : PhosphorScreens::ScreenIdentity::findByIdOrName(result.physicalId);
     if (!result.qscreen) {
         result.qscreen = screenAtPoint(qRound(globalPos.x()), qRound(globalPos.y()));
-        if (result.qscreen) {
+        // An id the screen manager resolved stands: only a point it could not
+        // place takes the QScreen's.
+        if (result.qscreen && result.screenId.isEmpty()) {
             result.physicalId = PhosphorScreens::ScreenIdentity::identifierFor(result.qscreen);
             // Try virtual screen resolution before falling back to physical ID
             auto* mgr = m_screenManager;
@@ -360,6 +362,11 @@ void WindowDragAdaptor::setEngineInteractiveDragWindow(const QString& windowId)
     if (m_scrollEngine) {
         m_scrollEngine->setInteractiveDragWindow(windowId);
     }
+    // The tracking adaptor's settled-frame memory skips the dragged window the
+    // same way: its frames are where the user moves it, not a managed frame.
+    if (m_windowTracking) {
+        m_windowTracking->setInteractiveDragWindow(windowId);
+    }
 }
 
 void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenId)
@@ -461,11 +468,11 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
     // "the preview is gone, the settle finds nothing" — but the popup-only
     // arm below can BEGIN a fresh preview off a stored pick, which would
     // durably reorder the strip on a cancelled gesture. Gate on
-    // m_dragExternallyCancelled ONLY: m_snapCancelled is not just Escape —
-    // the policy-flip path sets it via cancelSnap while the drag-insert
-    // preview deliberately keeps working for the rest of the drag
-    // (drag.cpp's block-above-the-early-return note), so bailing on it here
-    // would float a legitimately previewed cross-screen insert at drop.
+    // m_dragExternallyCancelled ONLY: m_snapCancelled is Escape's latch, and
+    // a drag-insert preview the user began after it keeps working for the
+    // rest of the drag (drag.cpp's block-above-the-early-return note), so
+    // bailing on it here would float a legitimately previewed insert at
+    // drop.
     // Escape itself is covered anyway: cancelSnap already cancels the
     // previews and clears the stored pick, so neither arm below can fire.
     if (m_dragExternallyCancelled) {
@@ -686,7 +693,7 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         m_snapAssistPendingActivity.clear();
     }
 
-    // NOTE: This slot is now driven by WTA::windowClosedNotification (wired in
+    // NOTE: This slot is driven by WindowLifecycleRelay::windowClosed (wired in
     // daemon/signals.cpp), which is emitted at the END of WTA::windowClosed
     // after the canonical tracking-cleanup has already run. Re-invoking
     // m_windowTracking->windowClosed() here would re-enter WTA's slot, re-emit
@@ -978,6 +985,7 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     stopGraceExpiry();
     m_draggedWindowId.clear();
     m_originalGeometry = QRect();
+    m_originalFrameFillsOutput = false;
     m_currentZoneId.clear();
     m_currentZoneScreenId.clear();
     m_currentZoneGeometry = QRect();
@@ -1016,10 +1024,47 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // computeAndEmitSnapAssist consumes-and-clears the IDs after reading.
 }
 
-void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry)
+bool WindowDragAdaptor::windowFillsOutput(const QString& windowId) const
+{
+    const auto* registry =
+        m_windowTracking && m_windowTracking->service() ? m_windowTracking->service()->windowRegistry() : nullptr;
+    return registry && registry->fillsOutputState(windowId).value_or(false);
+}
+
+std::optional<QSize> WindowDragAdaptor::preSnapSizeFor(const QString& windowId, const QString& screenId) const
+{
+    auto* wts = m_windowTracking ? m_windowTracking->service() : nullptr;
+    if (!wts) {
+        return std::nullopt;
+    }
+    if (const auto here = wts->validatedUnmanagedGeometry(windowId, screenId)) {
+        return here->size();
+    }
+    const auto own = wts->placementStore().peekExact(windowId);
+    const QRect elsewhere = own ? own->anyFreeGeometry() : QRect();
+    if (!elsewhere.isValid()) {
+        return std::nullopt;
+    }
+    QSize size = elsewhere.size();
+    // An unresolvable screen answers an invalid rect, whose 0x0 size would
+    // bound the size to nothing.
+    const QRect available = wts->screenAvailableGeometry(screenId);
+    if (available.isValid() && !available.isEmpty()) {
+        size = size.boundedTo(available.size());
+    }
+    return size;
+}
+
+void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry,
+                                                bool fillsOutput)
 {
     // Store pre-snap geometry for restore on unsnap/float (first-only: overwrite=false).
     // Single float-back store: the unified placement record's shared free geometry.
+    // A drag that began maximized or fullscreen started from the output rect,
+    // not a free spot; the maximize edge already pushed the restore rect.
+    if (fillsOutput) {
+        return;
+    }
     if (m_windowTracking && m_windowTracking->service() && originalGeometry.isValid()) {
         QString screenId = effectiveScreenIdAt(originalGeometry.center().x(), originalGeometry.center().y());
         if (screenId.isEmpty()) {

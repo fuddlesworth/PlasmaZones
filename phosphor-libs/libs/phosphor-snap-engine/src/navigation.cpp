@@ -34,11 +34,22 @@ using PhosphorEngine::ZoneAssignmentEntry;
 
 void SnapEngine::resnapToNewLayout()
 {
+    resnapToNewLayout(ResnapFeedback::Report);
+}
+
+void SnapEngine::resnapToNewLayout(ResnapFeedback feedback)
+{
     qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resnapToNewLayout: calculating entries from previous layout buffer";
     QVector<ZoneAssignmentEntry> resnapEntries = calculateResnapFromPreviousLayout();
 
     if (resnapEntries.isEmpty()) {
-        PhosphorZones::Layout* layout = m_layoutManager->activeLayout();
+        // A layout switch that leaves nothing to move is not news: the
+        // switch's own OSD already answered the user (F489).
+        if (feedback == ResnapFeedback::Silent) {
+            qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resnapToNewLayout: nothing to resnap";
+            return;
+        }
+        PhosphorZones::Layout* layout = m_layoutManager ? m_layoutManager->activeLayout() : nullptr;
         if (!layout) {
             qCWarning(PhosphorSnapEngine::lcSnapEngine) << "resnapToNewLayout: no active layout";
             Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_active_layout"), QString(),
@@ -60,10 +71,19 @@ void SnapEngine::resnapToNewLayout()
 
 void SnapEngine::resnapCurrentAssignments(const QString& screenFilter, const QSet<QString>& onlyWindows)
 {
+    resnapCurrentAssignments(screenFilter, onlyWindows, ResnapFeedback::Report);
+}
+
+void SnapEngine::resnapCurrentAssignments(const QString& screenFilter, const QSet<QString>& onlyWindows,
+                                          ResnapFeedback feedback)
+{
     QVector<ZoneAssignmentEntry> entries = calculateResnapFromCurrentAssignments(screenFilter, onlyWindows);
 
     if (entries.isEmpty()) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "No windows to resnap from current assignments";
+        if (feedback == ResnapFeedback::Silent) {
+            return;
+        }
         Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"), QString(),
                                   QString(), screenFilter.isEmpty() ? m_lastActiveScreenId : screenFilter);
         return;

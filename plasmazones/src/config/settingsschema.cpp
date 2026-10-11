@@ -1067,9 +1067,9 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Keep the windows you float stacked above the windows snapped into zones. A rule that sets a "
                         "window layer takes precedence for the windows it matches.")},
         {CD::unfloatFallbackToZoneKey(), CD::snapUnfloatFallbackToZone(), QMetaType::Bool,
-         QStringLiteral("When you unfloat a window that was never snapped, snap it to a fallback zone instead of "
-                        "leaving it floating. The fallback is the last used zone, then the first empty one, then the "
-                        "first zone.")},
+         QStringLiteral("When you unfloat a window with no zone to return to on its monitor, snap it to a fallback "
+                        "zone instead of leaving it floating. The fallback is the last used zone, then the first "
+                        "empty one, then the first zone.")},
         {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool,
          QStringLiteral("Fill the first empty zone when a new window opens. When on, this overrides each layout's "
                         "individual auto-assign toggle and applies to every layout.")},

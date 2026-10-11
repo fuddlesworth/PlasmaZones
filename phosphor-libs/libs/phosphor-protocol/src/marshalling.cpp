@@ -127,6 +127,46 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, UnfloatRestoreResult& 
     return arg;
 }
 
+QDBusArgument& operator<<(QDBusArgument& arg, const OutputSettleRow& e)
+{
+    arg.beginStructure();
+    arg << e.windowId << e.outputUuid << e.screenId << e.sourceScreenId << e.sourceConnected << e.x << e.y << e.width
+        << e.height << e.baseX << e.baseY << e.baseWidth << e.baseHeight << e.moveResizeCount << e.maximizeMode
+        << e.quickTileMode << e.fullscreen << e.kwinOnly << e.placeableNow << e.hasS0 << e.s0Uuid << e.s0ScreenId
+        << e.s0MoveResizeCount << e.s0MaximizeMode << e.s0QuickTileMode << e.s0Fullscreen << e.s0X << e.s0Y << e.s0Width
+        << e.s0Height;
+    arg.endStructure();
+    return arg;
+}
+
+const QDBusArgument& operator>>(const QDBusArgument& arg, OutputSettleRow& e)
+{
+    arg.beginStructure();
+    arg >> e.windowId >> e.outputUuid >> e.screenId >> e.sourceScreenId >> e.sourceConnected >> e.x >> e.y >> e.width
+        >> e.height >> e.baseX >> e.baseY >> e.baseWidth >> e.baseHeight >> e.moveResizeCount >> e.maximizeMode
+        >> e.quickTileMode >> e.fullscreen >> e.kwinOnly >> e.placeableNow >> e.hasS0 >> e.s0Uuid >> e.s0ScreenId
+        >> e.s0MoveResizeCount >> e.s0MaximizeMode >> e.s0QuickTileMode >> e.s0Fullscreen >> e.s0X >> e.s0Y >> e.s0Width
+        >> e.s0Height;
+    arg.endStructure();
+    return arg;
+}
+
+QDBusArgument& operator<<(QDBusArgument& arg, const OutputSettleVerdict& e)
+{
+    arg.beginStructure();
+    arg << e.windowId << e.verdict << e.screenId;
+    arg.endStructure();
+    return arg;
+}
+
+const QDBusArgument& operator>>(const QDBusArgument& arg, OutputSettleVerdict& e)
+{
+    arg.beginStructure();
+    arg >> e.windowId >> e.verdict >> e.screenId;
+    arg.endStructure();
+    return arg;
+}
+
 QDBusArgument& operator<<(QDBusArgument& arg, const ZoneGeometryRect& e)
 {
     arg.beginStructure();
@@ -400,6 +440,10 @@ void registerWireTypes()
     P_REGISTER_DBUS_TYPE(WindowStateEntry);
     P_REGISTER_DBUS_TYPE(WindowStateList);
     P_REGISTER_DBUS_TYPE(UnfloatRestoreResult);
+    P_REGISTER_DBUS_TYPE(OutputSettleRow);
+    P_REGISTER_DBUS_TYPE(OutputSettleRowList);
+    P_REGISTER_DBUS_TYPE(OutputSettleVerdict);
+    P_REGISTER_DBUS_TYPE(OutputSettleVerdictList);
     P_REGISTER_DBUS_TYPE(ZoneGeometryRect);
     P_REGISTER_DBUS_TYPE(ZoneGeometryList);
     P_REGISTER_DBUS_TYPE(EmptyZoneEntry);

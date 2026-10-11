@@ -594,6 +594,15 @@ void VirtualDesktopManager::removeScreenDesktop(const QString& screenId)
     m_screenDesktops.remove(screenId);
 }
 
+void VirtualDesktopManager::seedScreenDesktop(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty() || desktop < 1) {
+        return;
+    }
+    m_screenDesktops.insert(screenId, desktop);
+    Q_EMIT screenDesktopSeeded(screenId, desktop);
+}
+
 void VirtualDesktopManager::clampScreenDesktopsToCount()
 {
     // Clamp only entries above the live count: KWin renumbers on desktop

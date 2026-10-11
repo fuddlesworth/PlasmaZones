@@ -6,7 +6,7 @@
  * @brief Unit tests for WindowTrackingService lifecycle: windowClosed and onLayoutChanged
  *
  * Tests cover:
- * 1. Window close -> pending zone persistence (P0 crash/data-loss)
+ * 1. Window close -> zone and float teardown
  * 2. Pre-snap geometry stable ID migration on close
  * 3. Pre-float zone conversion on close
  * 4. PhosphorZones::Layout change -> stale assignment removal and resnap buffer
@@ -39,6 +39,7 @@
 #include <PhosphorZones/Zone.h>
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/WindowPlacementBuilders.h"
 
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
@@ -103,40 +104,25 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Window Close -> Pending PhosphorZones::Zone Persistence
+    // P0: Window Close
     // =====================================================================
 
-    void testWindowClosed_persistsZoneToPending()
+    void testWindowClosed_unassignsSnappedWindow()
     {
-        QString windowId = QStringLiteral("firefox|12345");
-        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        // Close drops the window from its zone, on a physical screen and on a
+        // virtual one alike. A reopen restores from the placement store the
+        // adaptor's close capture feeds, so the service keeps nothing of its
+        // own for the closed window.
+        for (const QString& screen : {QStringLiteral("DP-1"), QStringLiteral("DP-1/vs:0")}) {
+            const QString windowId = QStringLiteral("firefox|12345");
+            m_service->assignWindowToZone(windowId, m_zoneIds[0], screen, 1);
+            QVERIFY(m_service->isWindowSnapped(windowId));
 
-        m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
-        QVERIFY(m_service->isWindowSnapped(windowId));
+            m_service->windowClosed(windowId);
 
-        m_service->windowClosed(windowId);
-
-        QVERIFY(!m_service->isWindowSnapped(windowId));
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        // Guard both derefs: a bare .first() on an empty queue/list is UB, not
-        // a test failure.
-        const auto queue = m_service->pendingRestoreQueues().value(appId);
-        QVERIFY(!queue.isEmpty());
-        QVERIFY(!queue.first().zoneIds.isEmpty());
-        QCOMPARE(queue.first().zoneIds.first(), m_zoneIds[0]);
-    }
-
-    void testWindowClosed_floatingWindowNotPersisted()
-    {
-        QString windowId = QStringLiteral("firefox|12345");
-        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-
-        m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
-        m_service->setWindowFloating(windowId, true);
-
-        m_service->windowClosed(windowId);
-
-        QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
+            QVERIFY(!m_service->isWindowSnapped(windowId));
+            QVERIFY(m_service->zoneForWindow(windowId).isEmpty());
+        }
     }
 
     // testWindowClosed_preTileGeometryConvertedToStableId removed: the per-engine
@@ -159,8 +145,9 @@ private Q_SLOTS:
 
         m_service->windowClosed(windowId);
 
-        // Float state and pre-float zones should be fully cleared on close —
-        // BOTH keys: the windowId-keyed runtime entry and the appId alias.
+        // Float state and pre-float zones should be fully cleared on close.
+        // The float set clears an appId entry too; the pre-float zone has
+        // only the windowId entry, since no alias is written.
         QVERIFY(!m_service->isWindowFloating(windowId));
         QVERIFY(!m_service->isWindowFloating(appId));
         QVERIFY(m_service->preFloatZone(windowId).isEmpty());
@@ -176,160 +163,6 @@ private Q_SLOTS:
         m_service->windowClosed(windowId);
 
         QVERIFY(spy.count() >= 1);
-    }
-
-    void testWindowClosed_skipsPendingRestoreWhenPredicateRejects()
-    {
-        // Discussion #461 item 2: a window closing on a monitor/desktop the
-        // user has disabled snapping for must not record a PendingRestore.
-        // Without the gate, the entry resurfaces when the same app reopens
-        // anywhere — yanking the window into a zone the user told us to
-        // leave alone. The predicate returns false for the disabled screen
-        // AND asserts the argument tuple so a future signature reshuffle
-        // (swapping screenId/desktop, etc.) trips this test rather than
-        // silently passing.
-        const QString disabledScreen = QStringLiteral("AOC:24B2W1G5:116");
-        int predicateCallCount = 0;
-        QString lastScreenId;
-        int lastDesktop = -1;
-        // RAII, not a trailing clear: every QVERIFY/QCOMPARE below RETURNS
-        // from the slot on failure, so a clear written at the end is skipped
-        // exactly when it matters — leaving the fixture-owned service holding a
-        // callback that captures this slot's locals by reference, to be invoked
-        // or destroyed after they are gone.
-        const auto clearPredicate = qScopeGuard([this] {
-            m_service->setShouldTrackPredicate({});
-        });
-        m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop) {
-            ++predicateCallCount;
-            lastScreenId = screenId;
-            lastDesktop = desktop;
-            return false;
-        });
-
-        const QString windowId = QStringLiteral("vesktop|deadbeef-0000-0000-0000-000000000001");
-        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-
-        // Plain snapped setup — predicate gate behaviour holds without
-        // depending on incidental float churn. Float-clearing on close has
-        // its own dedicated test (testWindowClosed_floatStateClearedOnClose).
-        m_service->assignWindowToZone(windowId, m_zoneIds[0], disabledScreen, 1);
-        QVERIFY(m_service->isWindowSnapped(windowId));
-
-        QSignalSpy stateSpy(m_service, &PhosphorPlacement::WindowTrackingService::stateChanged);
-        m_service->windowClosed(windowId);
-
-        // Predicate-argument contract: exactly one invocation, and the
-        // tuple it received matches what the placement library promised
-        // to pass (current screen, current desktop). Comparing fields
-        // individually gives a useful failure message — "Expected DP-1
-        // got DP-2" instead of "everyCallMatched was false".
-        QCOMPARE(predicateCallCount, 1);
-        QCOMPARE(lastScreenId, disabledScreen);
-        QCOMPARE(lastDesktop, 1);
-
-        // The rest of windowClosed's cleanup must still run even when the
-        // pending-restore write is suppressed: zone unassigned, floating
-        // state cleared (both windowId and appId keys), stateChanged
-        // emitted. A silent regression in any of these would leak just as
-        // badly as the original bug.
-        QVERIFY(!m_service->isWindowSnapped(windowId));
-        QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
-        QVERIFY(!m_service->isWindowFloating(windowId));
-        QVERIFY(!m_service->isWindowFloating(appId));
-        QVERIFY(stateSpy.count() >= 1);
-    }
-
-    void testWindowClosed_predicateAcceptsEnabledContext()
-    {
-        // Sanity counterpart: when the predicate accepts the closing context,
-        // the historical persist-on-close behavior is preserved. Same
-        // accumulator pattern — a regression that fires the predicate
-        // with the wrong tuple, or fires it more than once with mismatched
-        // arguments, is caught.
-        int predicateCallCount = 0;
-        QString lastScreenId;
-        int lastDesktop = -1;
-        // RAII, not a trailing clear: every QVERIFY/QCOMPARE below RETURNS
-        // from the slot on failure, so a clear written at the end is skipped
-        // exactly when it matters — leaving the fixture-owned service holding a
-        // callback that captures this slot's locals by reference, to be invoked
-        // or destroyed after they are gone.
-        const auto clearPredicate = qScopeGuard([this] {
-            m_service->setShouldTrackPredicate({});
-        });
-        m_service->setShouldTrackPredicate([&](const QString& screenId, int desktop) {
-            ++predicateCallCount;
-            lastScreenId = screenId;
-            lastDesktop = desktop;
-            return true;
-        });
-
-        const QString windowId = QStringLiteral("firefox|cafef00d-0000-0000-0000-000000000001");
-        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-
-        m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
-        m_service->windowClosed(windowId);
-
-        QCOMPARE(predicateCallCount, 1);
-        QCOMPARE(lastScreenId, QStringLiteral("DP-1"));
-        QCOMPARE(lastDesktop, 1);
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-    }
-
-    void testWindowClosed_persistsWhenPredicateUnset()
-    {
-        // Production daemons always wire a predicate via WTA, but unit tests
-        // and library consumers may construct WTS without one. The header's
-        // ShouldTrackPredicate contract promises "When unset, the service
-        // behaves as if every context is active." Lock that explicitly with
-        // a round-trip: install a rejecting predicate then clear it, and
-        // confirm the unset-equivalent persist-everything behaviour is
-        // restored. Catches a future bug where the setter only stores
-        // non-empty functions, or where clearing leaks the prior predicate.
-        // The clear here is the SUBJECT of this test, not teardown: it is the
-        // second half of the round-trip described above, so it must stay an
-        // explicit call. (The other predicate slots use a scope guard, because
-        // there the clear is genuinely cleanup that a failing assertion would
-        // otherwise skip.)
-        m_service->setShouldTrackPredicate([](const QString&, int) {
-            return false;
-        });
-        m_service->setShouldTrackPredicate({});
-
-        const QString windowId = QStringLiteral("alacritty|11112222-3333-4444-5555-666677778888");
-        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-
-        m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
-        m_service->windowClosed(windowId);
-
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-    }
-
-    void testWindowClosed_persistsZoneToPending_virtualScreen()
-    {
-        // Same as testWindowClosed_persistsZoneToPending but using a virtual screen ID.
-        // Verifies that the pending restore queue entry records the virtual screen ID
-        // rather than falling back to the physical screen ID.
-        const QString windowId = QStringLiteral("konsole|abcdef12-0000-0000-0000-000000000001");
-        const QString vsId = QStringLiteral("DP-1/vs:0");
-        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-
-        m_service->assignWindowToZone(windowId, m_zoneIds[1], vsId, 1);
-        QVERIFY(m_service->isWindowSnapped(windowId));
-        QCOMPARE(m_service->zoneForWindow(windowId), m_zoneIds[1]);
-
-        m_service->windowClosed(windowId);
-
-        QVERIFY(!m_service->isWindowSnapped(windowId));
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-
-        const auto& queue = m_service->pendingRestoreQueues().value(appId);
-        QVERIFY(!queue.isEmpty());
-
-        const auto& entry = queue.first();
-        QCOMPARE(entry.zoneIds.first(), m_zoneIds[1]);
-        QCOMPARE(entry.screenId, vsId);
     }
 
     // =====================================================================
@@ -351,6 +184,30 @@ private Q_SLOTS:
         m_service->onLayoutChanged();
 
         QVERIFY(!m_service->isWindowSnapped(windowId));
+    }
+
+    // A layout change on the desktop in view keeps the zone a window holds on
+    // another desktop, whose layout did not change (F829).
+    void otherDesktopKeepsItsZoneAcrossALayoutChange()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        const QString otherDesktop = QStringLiteral("app|other-desktop");
+        const QString inView = QStringLiteral("app|in-view");
+        QCOMPARE(m_layoutManager->currentVirtualDesktopForScreen(screen), 1);
+        m_service->assignWindowToZone(otherDesktop, m_zoneIds[0], screen, 2);
+        m_service->assignWindowToZone(inView, m_zoneIds[1], screen, 1);
+
+        PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(newLayout);
+        const QString newLayoutId = newLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([newLayoutId]() {
+            return newLayoutId;
+        });
+        m_layoutManager->setActiveLayout(newLayout);
+        m_service->onLayoutChanged();
+
+        QCOMPARE(m_service->zonesForWindow(otherDesktop), QStringList{m_zoneIds[0]});
+        QVERIFY(m_service->zonesForWindow(inView).isEmpty());
     }
 
     void testOnLayoutChanged_nonSnappingScreenKeepsAssignments()
@@ -416,15 +273,27 @@ private Q_SLOTS:
         QVERIFY(
             PhosphorLayout::LayoutId::isScrolling(m_layoutManager->assignmentIdForScreen(scrollingScreen, desktop)));
 
-        // Retire the layout m_zoneIds came from. This is what makes the test
-        // DISCRIMINATE rather than merely pass: for a non-snapping entry the
-        // cascade ignores the snappingLayout slot and falls back to an unrelated
-        // layout (exactly the hazard the production comment describes), and while
-        // that fallback was the fixture's own 3-zone layout the zone still
-        // existed, so the assignment survived with or without the skip. With it
-        // gone, any screen that actually reaches resolveLayoutForScreen prunes.
-        m_layoutManager->removeLayout(m_testLayout);
-        m_testLayout = nullptr;
+        // Point the cascade's fallback at newLayout. This is what makes the
+        // test DISCRIMINATE: for a non-snapping entry the cascade ignores the
+        // snappingLayout slot and falls back to the default layout (exactly
+        // the hazard the production comment describes), so a screen that
+        // reached resolveLayoutForScreen would prune. m_testLayout stays
+        // registered: its zone ids are live, and a dead id is pruned in every
+        // context whatever the mode (F431).
+        const QString newLayoutId = newLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([newLayoutId]() {
+            return newLayoutId;
+        });
+        // The engines run there LIVE: the prune asks the snap engine's live
+        // mode, and a configured tiling mode whose engine is off runs
+        // snapping (F112).
+        m_engine->setLiveModeResolver([autotileScreen, scrollingScreen](const QString& screenId) {
+            if (screenId == autotileScreen) {
+                return PhosphorZones::AssignmentEntry::Mode::Autotile;
+            }
+            return screenId == scrollingScreen ? PhosphorZones::AssignmentEntry::Mode::Scrolling
+                                               : PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
 
         m_service->onLayoutChanged();
 
@@ -433,28 +302,7 @@ private Q_SLOTS:
         // Control: the snapping screen still prunes, so the skip above is a
         // genuine mode discrimination rather than onLayoutChanged doing nothing.
         QVERIFY2(!m_service->isWindowSnapped(snappingWindow), "a snapping screen's stale assignment must be pruned");
-    }
-
-    void testOnLayoutChanged_resnapBufferPopulated()
-    {
-        QString window1 = QStringLiteral("app1|11111");
-        QString window2 = QStringLiteral("app2|22222");
-
-        m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 0);
-        m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
-
-        PhosphorZones::Layout* newLayout = createTestLayout(3, m_layoutManager);
-        m_layoutManager->addLayout(newLayout);
-        m_layoutManager->setActiveLayout(newLayout);
-        m_service->onLayoutChanged();
-
-        QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
-        // Two windows were assigned above, so the resnap buffer should contain
-        // entries for both (mapped to the new layout's zones by relative position).
-        // In headless mode zone geometry resolution may differ, but the buffer
-        // must still be populated with the window IDs that were snapped.
-        QVERIFY2(!resnap.isEmpty(), "Resnap buffer must contain entries for the previously-snapped windows");
-        QCOMPARE(resnap.size(), 2);
+        m_engine->setLiveModeResolver({});
     }
 
     void testResnapFromAutotileOrder_preClaimedZoneSkippedByPositionalFallback()
@@ -861,6 +709,34 @@ private Q_SLOTS:
                  QString(PhosphorEngine::WindowPlacement::stateFloating()));
     }
 
+    void testRecordFloatingClose_crossScreenForgetsStoredDesktopZones()
+    {
+        // A window snapped on DP-2 that closes floating on DP-1: the stored
+        // record keeps none of DP-2's per-desktop zones, which a reopen on
+        // DP-1 would otherwise read back or seed as phantoms (F282).
+        const QString windowId = QStringLiteral("kate|cross-close");
+        PhosphorEngine::WindowPlacement existing;
+        existing.windowId = windowId;
+        existing.appId = QStringLiteral("kate");
+        existing.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot snap;
+        snap.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        snap.zoneIds = QStringList{m_zoneIds[0]};
+        snap.zonesByDesktop.insert(1, QStringList{m_zoneIds[0]});
+        snap.zonesByDesktop.insert(2, QStringList{m_zoneIds[1]});
+        existing.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        QVERIFY(m_service->placementStore().record(existing));
+
+        m_service->recordFloatingClose(windowId, QStringLiteral("DP-1"), QRect(30, 40, 600, 400));
+
+        const auto rec = m_service->placementStore().peekExact(windowId);
+        QVERIFY(rec.has_value());
+        const PhosphorEngine::EngineSlot stored = rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        QCOMPARE(stored.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QVERIFY(stored.zoneIds.isEmpty());
+        QVERIFY(stored.zonesByDesktop.isEmpty());
+    }
+
     void testRecordFloatingClose_prefixMutationKeepsOwnEngineSlots()
     {
         // Closing floating after an appId-prefix mutation must merge into the
@@ -892,11 +768,11 @@ private Q_SLOTS:
         QCOMPARE(rec->freeGeometryFor(QStringLiteral("DP-1")), closeGeometry);
     }
 
-    void testRecordedSnapZones_appIdFallbackAfterRelogin()
+    void testRecordedSnapZones_neverAnswersASiblingsRecord()
     {
-        // After a relogin the window's uuid changes; the durable record stored under
-        // the OLD uuid must still resolve for a NEW same-app window via the appId
-        // bucket (the exact-uuid branch misses, the appId fallback hits).
+        // A window with no record of its own has no recorded zones, even when
+        // another instance of its app (here under an older uuid) was snapped.
+        // That zone describes where the other window was, not this one.
         const QString oldId = QStringLiteral("firefox|old-uuid");
         PhosphorEngine::WindowPlacement p;
         p.windowId = oldId;
@@ -907,8 +783,16 @@ private Q_SLOTS:
         p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
         m_service->placementStore().record(p);
 
-        const QString newId = QStringLiteral("firefox|new-uuid");
-        QCOMPARE(m_service->recordedSnapZones(newId), QStringList{m_zoneIds[1]});
+        QVERIFY(m_service->recordedSnapZones(QStringLiteral("firefox|new-uuid")).isEmpty());
+        QCOMPARE(m_service->recordedSnapZones(oldId), QStringList{m_zoneIds[1]});
+    }
+
+    void testRecordedSnapZones_neverAnswersALiveSiblingsZone()
+    {
+        // The live-store half of the same rule: a sibling snapped LIVE does
+        // not lend its zone to a record-less instance of the app.
+        m_service->assignWindowToZone(QStringLiteral("firefox|live"), m_zoneIds[0], QString(), 0);
+        QVERIFY(m_service->recordedSnapZones(QStringLiteral("firefox|other")).isEmpty());
     }
 
     void testResnapFromAutotileOrder_sameAppInstancesEachKeepOwnZone()
@@ -1014,25 +898,64 @@ private Q_SLOTS:
         QCOMPARE(b.targetZoneId, m_zoneIds[2]);
     }
 
-    void testOnLayoutChanged_floatingWindowsExcludedFromResnap()
+    void testLayoutSwitch_floatingWindowsExcludedFromResnap()
     {
         const QString floatedId = QStringLiteral("app|12345");
         // Non-floating CONTROL window: proves the resnap actually produced
         // entries, so the exclusion loop below cannot pass vacuously on an
         // empty list.
         const QString snappedId = QStringLiteral("app|control");
-        m_service->assignWindowToZone(floatedId, m_zoneIds[0], QString(), 0);
-        m_service->assignWindowToZone(snappedId, m_zoneIds[1], QString(), 0);
+        m_service->assignWindowToZone(floatedId, m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        m_service->assignWindowToZone(snappedId, m_zoneIds[1], QStringLiteral("DP-1"), 0);
         m_service->setWindowFloating(floatedId, true);
 
         PhosphorZones::Layout* newLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->setActiveLayout(newLayout);
-        m_service->onLayoutChanged();
+        m_service->populateResnapBufferForAllScreens();
 
         QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
         QCOMPARE(resnap.size(), 1);
         QCOMPARE(resnap.first().windowId, snappedId);
+    }
+
+    // The reopen claim reads the OPENING engine's mode, not only the output
+    // (F671). One monitor split into an autotile half and a snapping half:
+    // a snapped record (newer) on the snapping half and an autotile float
+    // with a free geometry (older) on the autotile half. An opener on the
+    // autotile half claims its float record rather than the newer snapped
+    // one; an opener on the snapping half then claims the snapped record.
+    void testClaimPlacementForOpen_modeAxis()
+    {
+        using PhosphorEngine::WindowPlacement;
+        const QString autotileHalf = QStringLiteral("DP-1/vs:0");
+        const QString snappingHalf = QStringLiteral("DP-1/vs:1");
+        const int desktop = m_layoutManager->currentVirtualDesktop();
+        PhosphorZones::AssignmentEntry autotileEntry;
+        autotileEntry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotileEntry.tilingAlgorithm = QStringLiteral("bsp");
+        m_layoutManager->setAssignmentEntryDirect(autotileHalf, desktop, QString(), autotileEntry);
+        QCOMPARE(m_layoutManager->modeForScreen(autotileHalf, desktop), PhosphorZones::AssignmentEntry::Autotile);
+
+        auto floated = PlasmaZones::TestHelpers::makePlacement(
+            QStringLiteral("app|k2"), QStringLiteral("app"), WindowPlacement::stateFloating(),
+            WindowPlacement::autotileEngineId(), autotileHalf, QRect(10, 10, 300, 200));
+        floated.virtualDesktop = desktop;
+        QVERIFY(m_service->placementStore().record(floated));
+        auto snapped = PlasmaZones::TestHelpers::makePlacement(QStringLiteral("app|k1"), QStringLiteral("app"),
+                                                               WindowPlacement::stateSnapped(),
+                                                               WindowPlacement::snapEngineId(), snappingHalf);
+        snapped.virtualDesktop = desktop;
+        QVERIFY(m_service->placementStore().record(snapped));
+
+        const auto onAutotile = m_service->claimPlacementForOpen(QStringLiteral("app|n1"), autotileHalf,
+                                                                 QString(WindowPlacement::autotileEngineId()));
+        QVERIFY(onAutotile.has_value());
+        QCOMPARE(onAutotile->windowId, QStringLiteral("app|k2"));
+        const auto onSnapping = m_service->claimPlacementForOpen(QStringLiteral("app|n2"), snappingHalf,
+                                                                 QString(WindowPlacement::snapEngineId()));
+        QVERIFY(onSnapping.has_value());
+        QCOMPARE(onSnapping->windowId, QStringLiteral("app|k1"));
     }
 
 private:

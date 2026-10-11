@@ -48,6 +48,7 @@ class LayoutRegistry;
 namespace PhosphorTileEngine {
 
 class AutotileConfig;
+struct TileEvacueePark;
 
 class NavigationController;
 class PerScreenConfigResolver;
@@ -631,17 +632,13 @@ public:
     // gap overrides so tiled windows honour context gap rules like snapping does.
     void setContextGapProvider(std::function<QVariantMap(const QString& screenId)> provider);
 
-    /// Scrolling-mode resolver for windowOpened's cross-screen tile-restore
-    /// defer term, invoked as (screenId, virtualDesktop, activity). Must
-    /// answer whether the RECORDED context resolves to Scrolling mode AND
-    /// the scroll engine is actually live on that screen: the CLAIMING side
-    /// (ScrollEngine::claimCrossScreenReopen) requires the recorded home in
-    /// its live screen set on top of the mode verdict, so a defer keyed on
-    /// mode alone would stand down for a window scroll then declines,
-    /// leaving it unmanaged. Only the daemon sees both engines, hence the
-    /// injection. Unset → this defer term is off; the snap term (which reads
-    /// this engine's own layout manager) is unaffected. Same
-    /// clear-before-destroy contract as setContextGapProvider.
+    /// INERT, kept for ABI: a scrolling-mode resolver invoked as (screenId,
+    /// virtualDesktop, activity). It fed windowOpened's cross-screen
+    /// tile-restore defer, which the reopen contract removed: a window
+    /// opening on an autotile screen is autotile's, and no engine defers a
+    /// window to another engine's restore on another screen. Nothing reads
+    /// the stored resolver and the daemon no longer wires it; a setter call
+    /// is harmless. Same clear-before-destroy contract as setContextGapProvider.
     void setScrollingModeResolver(
         std::function<bool(const QString& screenId, int desktop, const QString& activity)> resolver)
     {
@@ -1099,46 +1096,37 @@ public:
     // Window event handlers (public API for external notification)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /**
-     * @brief Notify the engine that a new window was added
-     *
-     * Called by Daemon when KWin reports a new window. Triggers retiling
-     * if autotile is enabled and window is tileable. A no-op when
-     * @p screenId names a screen this engine does not own — the claiming
-     * engine (scrolling/snap) handles the open instead.
-     *
-     * @param windowId Window identifier from KWin
-     * @param screenId Screen where the window appeared
-     * @param minWidth Window minimum width in pixels (0 if unconstrained)
-     * @param minHeight Window minimum height in pixels (0 if unconstrained)
-     */
+    /// A window KWin reported (minimum size 0 when unconstrained): retiles
+    /// when autotile is on and the window is tileable. A no-op on a screen this
+    /// engine does not own; the claiming engine handles that open.
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
-    /// Cross-screen session reclaim (see IPlacementEngine for the base
-    /// contract). This implementation: first-observation gate by TilingState
-    /// MEMBERSHIP; a shouldTileWindow precondition (autotile's open path
-    /// REFUSES untileable windows after keying, unlike scroll's, which
-    /// floats them — an optimistic claim would phantom-key the window);
-    /// decides via the store's live-instance-excluding peekForReclaim;
-    /// requires the recorded home in the LIVE autotile set, a matching home
-    /// context (recordContextMatchesLive) and a home open that would TILE the
-    /// window (a float is screen-local); returns the REAL adoption outcome.
+    /// The reopen claim (see IPlacementEngine for the contract): only a FIFO
+    /// record on another virtual screen of the opening output, in autotile
+    /// mode, for a window opening on an autotile screen; never a record on
+    /// another monitor and never the window's own. This implementation:
+    /// first-observation gate by TilingState MEMBERSHIP; a shouldTileWindow
+    /// precondition (the open path REFUSES untileable windows after keying);
+    /// the store's claim-honouring, live-excluding peekForReclaim; the home in
+    /// the LIVE autotile set, a matching home context and a home open that
+    /// would TILE the window; returns the REAL adoption outcome.
     bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
                                 int minHeight) override;
     void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted) override;
     QString heldScreenForWindow(const QString& windowId) const override;
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
 
-    /**
-     * @brief Update a window's minimum size at runtime
-     *
-     * Called when a window's minimum size changes after initial windowOpened.
-     * Triggers retiling if the new minimum differs from the stored value.
-     *
-     * @param windowId Window identifier from KWin
-     * @param minWidth New minimum width in pixels (0 if unconstrained)
-     * @param minHeight New minimum height in pixels (0 if unconstrained)
-     */
+    // Evacuee park (src/autotileengine/evacueepark.cpp; IPlacementEngine's contract). A context
+    // out of view is granted, and insertWindow seats the window there when it arrives.
+    QStringList parkOutput(const QString& physicalScreenId) override;
+    bool readoptParked(const QString& windowId, const QString& parkedPhysicalId,
+                       const QString& returnedPhysicalId) override;
+    void dropParked(const QString& windowId, const QString& physicalScreenId, int desktop,
+                    const QString& activity) override;
+    bool hasParked(const QString& windowId, const QString& physicalScreenId) const override;
+
+    /// A window's minimum size changed after windowOpened (0 when
+    /// unconstrained): retiles when it differs from the stored value.
     void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
     QSize windowMinimumSize(const QString& windowId) const override;
 
@@ -1419,7 +1407,6 @@ public:
     QRect lastManagedRect(const QString& rawWindowId) const override;
 
 private Q_SLOTS:
-    void onWindowZoneChanged(const QString& windowId, const QString& zoneId);
     void onWindowAdded(const QString& windowId);
     void onWindowRemoved(const QString& windowId);
     void onWindowFocused(const QString& windowId);
@@ -1810,7 +1797,7 @@ private:
     QSet<QString> m_autotileFloatedWindows;
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    /// See setScrollingModeResolver.
+    /// INERT, kept for ABI layout; see setScrollingModeResolver.
     std::function<bool(const QString& screenId, int desktop, const QString& activity)> m_scrollingModeResolver;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
@@ -1845,7 +1832,7 @@ private:
     // Alias for the type hoisted to AutotileEngineTypes.h.
     using MigrationArrival = ::PhosphorTileEngine::MigrationArrival;
     std::optional<MigrationArrival> m_migrationArrival;
-    /// Re-stated per announce by the dispatch (noteCrossScreenClaimsExhausted); read by the defer gate.
+    /// INERT, kept for ABI layout: the defer gate it fed is gone, and nothing writes or reads it.
     QSet<QString> m_crossScreenClaimsExhausted;
 
     /// The float state @p windowId must be inserted with: the live state it
@@ -2091,6 +2078,14 @@ private:
      * since the last event loop pass.
      */
     void processPendingRetiles();
+
+    /// readoptParked's grant to @p windowId on @p key (window-order index, float bit), taken once.
+    std::optional<std::pair<int, bool>> takeGrantedParkedPlace(const QString& windowId,
+                                                               const PhosphorEngine::TilingStateKey& key,
+                                                               const PhosphorTiles::TilingState* state);
+
+    // Appended last (installed header). Created by the first parkOutput.
+    std::unique_ptr<TileEvacueePark> m_evacueePark;
 };
 
 } // namespace PhosphorTileEngine

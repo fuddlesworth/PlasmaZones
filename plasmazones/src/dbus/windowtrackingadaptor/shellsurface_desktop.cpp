@@ -8,8 +8,8 @@
 // prompt attaches to the window whose process asked, so two reads that the
 // live (current-desktop) surfaces never needed: the window states of one
 // desktop, and the window behind a pid. Both answer from a small ledger
-// the registry mirror in shellsurface.cpp refreshes on every metadata push
-// (desktop, spanned desktops, sticky, pid, push order) and drops on close.
+// the registry mirror in shellsurface.cpp refreshes whenever a window's registry
+// record changes (desktop, spanned desktops, sticky, pid, change order) and drops on close.
 // The ledger is the only extra state; the states themselves come from
 // getAllWindowStates, so a row here is exactly a row there, filtered.
 // ═══════════════════════════════════════════════════════════════════════════════

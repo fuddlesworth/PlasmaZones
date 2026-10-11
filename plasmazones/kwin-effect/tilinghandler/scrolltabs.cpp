@@ -20,15 +20,11 @@
 // window state has no such hop, and the payload itself changes only on a
 // relayout, which is exactly when the strip moves.
 //
-// Screen ids and outputs. The model is keyed by the daemon's EFFECTIVE screen
-// id and the painter by KWin::LogicalOutput*, joined through
-// PlasmaZonesEffect::outputForScreenId, which matches on the PHYSICAL id and
-// so collapses every virtual-screen spelling of one monitor onto its output.
-// That is safe only because scrolling is assigned per physical screen (the
-// engine never emits a `vs:` spelling in a strip payload — see the scrolling
-// assignment rule in tiling.cpp), so exactly one payload per output exists
-// and setIndicators' replace-the-whole-model semantics cannot clobber a
-// sibling's pills.
+// The model is keyed by the daemon's effective screen id and the painter by
+// strip key (TilingHandler::stripKeyFor), so a virtual screen running
+// scrolling has a band of its own beside its siblings. Hover and input stay
+// per output: the paint pass and the pointer each draw or hit every band on
+// the output they are on.
 
 #include "tilinghandler.h"
 
@@ -355,29 +351,37 @@ void TilingHandler::unindexScrollTabScreen(const QString& screenId)
     }
 }
 
-void TilingHandler::damageScrollTabBand(KWin::LogicalOutput* out, const QRect& bounds) const
+void TilingHandler::damageScrollTabBand(const QString& strip, const QRect& bounds) const
 {
-    if (!out || !bounds.isValid() || !KWin::effects) {
+    if (strip.isEmpty() || !bounds.isValid() || !KWin::effects) {
         return;
     }
-    // The blit places the band at bounds + the view spring's offset (see
-    // ScrollTabIndicatorPainter::paint), so that is where the pixels change and
-    // that is what has to be damaged. offsetFor answers a null point on every
-    // path that is not animating, which makes this the plain bounds at rest.
-    // Guarded, unlike the hot hover path above it: this also runs from the
-    // retract arms (dropScrollTabScreen, the master-switch-off branch), which
-    // can fire while the effect is being torn down. A missing animator falls
-    // back to the unshifted bounds — the at-rest answer, and the only one
-    // available — rather than skipping the damage and leaving the band on
-    // screen.
+    // The blit places the band at bounds plus the strip's view offset (see
+    // ScrollTabIndicatorPainter::paint), so that is where the pixels change;
+    // offsetFor is a null point at rest. Guarded because the retract arms
+    // (dropScrollTabScreen, the master-switch-off branch) can run while the
+    // effect is torn down, and a missing animator falls back to the unshifted
+    // bounds, the at-rest answer, rather than leaving the band on screen.
     const QPointF viewOffset =
-        m_effect->m_stripViewAnimator ? m_effect->m_stripViewAnimator->offsetFor(out) : QPointF();
-    // toAlignedRect on the shifted RECT rather than translating by a rounded
-    // point: a fractional offset that lands the band across a logical pixel
-    // boundary needs BOTH edges covered, and rounding the offset first can
-    // shave the leading one.
+        m_effect->m_stripViewAnimator ? m_effect->m_stripViewAnimator->offsetFor(strip) : QPointF();
+    // toAlignedRect on the shifted RECT, not a rounded point: a fractional offset
+    // across a logical pixel boundary needs BOTH edges covered.
     const QRect damaged = QRectF(bounds).translated(viewOffset).toAlignedRect();
     KWin::effects->addRepaint(KWin::Rect(damaged));
+}
+
+ScrollTabIndicatorPainter::ViewOffsetFor TilingHandler::scrollTabViewOffsets() const
+{
+    return [animator = m_effect->m_stripViewAnimator.get()](const QString& strip) {
+        return animator ? animator->offsetFor(strip) : QPointF();
+    };
+}
+
+void TilingHandler::damageScrollTabOutput(KWin::LogicalOutput* out) const
+{
+    for (const QString& strip : m_effect->m_scrollTabPainter->stripsOn(out)) {
+        damageScrollTabBand(strip, m_effect->m_scrollTabPainter->boundsFor(strip));
+    }
 }
 
 void TilingHandler::dropScrollTabScreen(const QString& screenId)
@@ -386,26 +390,15 @@ void TilingHandler::dropScrollTabScreen(const QString& screenId)
     unindexScrollTabScreen(screenId);
     dropScrollTabColorsForUnindexed(indexedBefore);
     m_scrollTabPayloadByScreen.remove(screenId);
-    if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenId)) {
-        const QRect bounds = m_effect->m_scrollTabPainter->boundsFor(out);
-        m_effect->m_scrollTabPainter->clearOutput(out);
-        drainRetiredScrollTabTextures();
-        damageScrollTabBand(out, bounds);
-    }
-    // Compare by OUTPUT, not by raw id: the hover screen is recorded in the
-    // effect's own physical spelling while the daemon may name the screen in
-    // its effective spelling; both resolve to one output.
-    // Require a resolved output on both sides: outputForScreenId answers null
-    // for a screen already gone from effects->screens(), and two nulls compare
-    // equal, which would clear a hover belonging to an unrelated dead screen.
-    const auto* hoverOutput =
-        m_scrollTabHoverScreen.isEmpty() ? nullptr : m_effect->outputForScreenId(m_scrollTabHoverScreen);
-    if (hoverOutput && hoverOutput == m_effect->outputForScreenId(screenId)) {
-        m_scrollTabHoverScreen.clear();
-        // The pill under the parked pointer just vanished; the override must
-        // not outlive it (unless a press is still being held — see
-        // setScrollTabHoverCursor).
-        setScrollTabHoverCursor(false);
+    const QString strip = stripKeyFor(screenId);
+    const QRect bounds = m_effect->m_scrollTabPainter->boundsFor(strip);
+    m_effect->m_scrollTabPainter->clearStrip(strip);
+    drainRetiredScrollTabTextures();
+    damageScrollTabBand(strip, bounds);
+    // The pill under a parked pointer may have vanished while a sibling band on
+    // the output still holds one: re-evaluate rather than drop the hover.
+    if (KWin::effects) {
+        updateScrollTabHover(KWin::effects->cursorPos());
     }
 }
 
@@ -605,10 +598,11 @@ void TilingHandler::rebuildScrollTabIndicators(const QString& screenId)
         // engine still reserves the indicator's space when the switch is on
         // engine-side; the effect-side switch only governs the drawing, and
         // the two are the same setting, so they agree.
-        const QRect bounds = painter->boundsFor(out);
-        painter->clearOutput(out);
+        const QString strip = stripKeyFor(screenId);
+        const QRect bounds = painter->boundsFor(strip);
+        painter->clearStrip(strip);
         drainRetiredScrollTabTextures();
-        damageScrollTabBand(out, bounds);
+        damageScrollTabBand(strip, bounds);
         // The pills this screen showed are gone; a pointer parked over one
         // must not keep the hand or eat the next click.
         if (KWin::effects) {
@@ -729,10 +723,12 @@ void TilingHandler::rebuildScrollTabIndicators(const QString& screenId)
         indicators.append(indicator);
     }
 
-    const QRect before = painter->boundsFor(out);
-    const bool changed = painter->setIndicators(out, indicators, style);
+    const QString strip = stripKeyFor(screenId);
+    const QRect before = painter->boundsFor(strip);
+    const bool changed = painter->setIndicators(strip, out, indicators, style);
     if (changed && KWin::effects) {
-        const QRect after = painter->boundsFor(out);
+        const QRect after = painter->boundsFor(strip);
+        qCDebug(lcStripDiag) << "tab band" << strip << "bounds" << after;
         // Damage the union: the old rect must be repainted away and the new
         // one painted in, and the painter's own blit damages nothing. Only on
         // a real change: most rebuilds (a colour reply, a caption tick on
@@ -743,7 +739,7 @@ void TilingHandler::rebuildScrollTabIndicators(const QString& screenId)
             damage = damage.isValid() ? damage.united(after) : after;
         }
         if (damage.isValid()) {
-            damageScrollTabBand(out, damage);
+            damageScrollTabBand(strip, damage);
         }
         // A gesture ends by events stopping, so nothing else can retire the
         // tab wheel's walk anchor. Retire it here instead: if the anchor's
@@ -817,7 +813,7 @@ QString TilingHandler::scrollTabPillAt(const QPointF& pos) const
     }
     // The same offset the blit applies: a pill mid-leg is where it is DRAWN,
     // not where the engine resolved it.
-    const QString hit = painter->pillAt(out, pos, m_effect->m_stripViewAnimator->offsetFor(out));
+    const QString hit = painter->pillAt(out, pos, scrollTabViewOffsets());
     if (hit.isEmpty()) {
         return QString();
     }
@@ -948,7 +944,7 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
                 // this function: it is ctor-constructed and never reset.
                 ScrollTabIndicatorPainter* p = m_effect->m_scrollTabPainter.get();
                 if (p->setHover(prev, QPointF(-1.0e9, -1.0e9))) {
-                    damageScrollTabBand(prev, p->boundsFor(prev));
+                    damageScrollTabOutput(prev);
                 }
             }
         }
@@ -964,14 +960,14 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
     if (!m_scrollTabHoverScreen.isEmpty() && m_scrollTabHoverScreen != screenId) {
         if (KWin::LogicalOutput* prev = m_effect->outputForScreenId(m_scrollTabHoverScreen)) {
             if (painter->setHover(prev, QPointF(-1.0e9, -1.0e9))) {
-                damageScrollTabBand(prev, painter->boundsFor(prev));
+                damageScrollTabOutput(prev);
             }
         }
         m_scrollTabHoverScreen.clear();
     }
     bool overPill = false;
     if (out && painter->hasIndicators(out) && painter->paintedLastPass(out)) {
-        const QPointF viewOffset = m_effect->m_stripViewAnimator->offsetFor(out);
+        const ScrollTabIndicatorPainter::ViewOffsetFor viewOffsets = scrollTabViewOffsets();
         // A pill under a window stacked over the strip is drawn and then
         // overdrawn (see scrollTabPillAt); hover must not light it or take
         // the pointer. The test runs once here and feeds both the hover and
@@ -986,21 +982,25 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
         // setHover resolves no pill for a position outside them either way,
         // so skipping the probe off-band is behaviour-preserving. boundsFor
         // is offset-free while the pointer is in view space, hence the
-        // translate.
+        // translate, per band.
         // Inflated by one: pillAt's hit test is float-inclusive at the far
         // edges while QRect::contains is integer-exclusive, and both pos and
         // viewOffset round through toPoint() — without the slack a pointer
         // on the outer sub-pixel row of the band could resolve a hit with
         // the occlusion probe skipped. Over-covering by a pixel only runs
         // the probe once more; under-covering lights an occluded pill.
-        const QRect band = painter->boundsFor(out).translated(viewOffset.toPoint()).adjusted(-1, -1, 1, 1);
-        const bool nearBand = band.isValid() && band.contains(pos.toPoint());
+        bool nearBand = false;
+        for (const QString& strip : painter->stripsOn(out)) {
+            const QRect band =
+                painter->boundsFor(strip).translated(viewOffsets(strip).toPoint()).adjusted(-1, -1, 1, 1);
+            nearBand = nearBand || (band.isValid() && band.contains(pos.toPoint()));
+        }
         const QPointF hoverPos = (nearBand && scrollTabPillOccludedAt(pos, out)) ? QPointF(-1.0e9, -1.0e9) : pos;
         // One hit scan answers both the hover update and "is the pointer over
         // a pill": setHover reports the pill it resolved.
         QString hit;
-        if (painter->setHover(out, hoverPos, viewOffset, &hit)) {
-            damageScrollTabBand(out, painter->boundsFor(out));
+        if (painter->setHover(out, hoverPos, viewOffsets, &hit)) {
+            damageScrollTabOutput(out);
         }
         overPill = !hit.isEmpty();
     } else if (out) {
@@ -1010,7 +1010,7 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
         // until the next motion. Clear it now; setHover on an output with no
         // entry returns false, so this is free in the common case.
         if (painter->setHover(out, QPointF(-1.0e9, -1.0e9))) {
-            damageScrollTabBand(out, painter->boundsFor(out));
+            damageScrollTabOutput(out);
         }
     }
     m_scrollTabHoverScreen = overPill ? screenId : QString();
@@ -1100,7 +1100,7 @@ void TilingHandler::noteScrollTabOutputRemoved(KWin::LogicalOutput* output, cons
     if (!output) {
         return;
     }
-    // Compare against the id the caller resolved BEFORE it cleared the
+    // Compare against the spelling the caller read BEFORE it cleared the
     // screen-id cache (onScreenRemoved's documented order): outputScreenId
     // caches every resolve, so resolving here would re-insert the entry the
     // handler just purged, spelled for the post-unplug world rather than for

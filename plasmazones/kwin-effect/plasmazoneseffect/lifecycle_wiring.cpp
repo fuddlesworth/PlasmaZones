@@ -552,8 +552,8 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // Snap restores for windows the daemon relocated to a desktop that was not
     // in view (a RouteToDesktop rule, or the move-to-desktop shortcut). The
     // autotile/scrolling equivalent rides slotScreensChanged's desktop-return
-    // catch-scan; snapping has no membership set to sweep against, so its arm
-    // carries an explicit park list and this is where it is drained.
+    // catch-scan; the effect holds no snap membership to sweep (the daemon
+    // carries a moved window's zone itself), so its arm drains a park list here.
     //
     // Queued, not run inline. Two other desktopChanged handlers feed the daemon
     // the state this restore is resolved against, and both land in a LATER event
@@ -567,9 +567,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         QMetaObject::invokeMethod(
             this,
             [this]() {
-                if (m_snapHandler) {
-                    m_snapHandler->slotDesktopChangedRestoreArrivals();
-                }
+                m_snapHandler->slotDesktopChangedRestoreArrivals();
             },
             Qt::QueuedConnection);
     });
@@ -581,9 +579,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         QMetaObject::invokeMethod(
             this,
             [this]() {
-                if (m_snapHandler) {
-                    m_snapHandler->slotDesktopChangedRestoreArrivals();
-                }
+                m_snapHandler->slotDesktopChangedRestoreArrivals();
             },
             Qt::QueuedConnection);
     });
@@ -897,6 +893,9 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             m_scrollOfferedColumn.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
+        m_sizeOnlyFrames.remove(w);
+        // Its settle records and deferred crossing, keyed by the same pointer.
+        m_screenChangeHandler->forgetWindow(w);
         // The corpse's frozen strip displacement dies with it. This is THE
         // remover, not a backstop: the entry exists precisely so the corpse
         // paints displaced until this moment, and the pointer keying makes
@@ -904,12 +903,18 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // EffectWindow address inheriting a dead corpse's offset would draw a
         // brand-new window a pan away).
         m_scrollCorpseFreeze.remove(w);
-        // Desktop-set stamp, same raw-pointer keying and the same two reasons
-        // as the tracked screen above: keep the hash bounded, and stop a reused
+        // Context stamp, same raw-pointer keying and the same two reasons as
+        // the tracked screen above: keep the hash bounded, and stop a reused
         // address from inheriting a dead window's desktop set (which would make
-        // the arrival arm misread the new window's first desktop edit).
-        m_trackedDesktopsPerWindow.remove(w);
-        m_preStickyDesktopsPerWindow.remove(w);
+        // the handler misread the new window's first desktop edit).
+        m_contextStampPerWindow.remove(w);
+        // A window that dies mid-resize has nothing left to settle.
+        if (m_resizeHold.window == w) {
+            disconnect(m_resizeHold.ackWatch);
+            const quint64 generation = m_resizeHold.generation + 1;
+            m_resizeHold = ResizeHold{};
+            m_resizeHold.generation = generation;
+        }
         // Wired-window guard. The connections themselves die with the window, so
         // this is address-reuse safety, not connection hygiene: a stale entry
         // would make setupWindowConnections REFUSE to wire a new window that
@@ -922,6 +927,8 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // make the next defer for a recycled address disconnect a replay that
         // belongs to the new window.
         m_deferredGeometryReplay.remove(w);
+        // Command stamp: bounded, and a recycled address starts with no stamp.
+        m_daemonGate.commandStamps.forget(w);
         // Spurious-minimize-pair stamp — raw-pointer-keyed like its
         // siblings below, so erase here both to stay bounded and so a
         // reused address can't inherit a stale stamp that would swallow
@@ -944,6 +951,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // bogus morph on the new window's first resize).
         m_shaderManager.m_preMaximizeFrame.remove(w);
         m_shaderManager.m_pendingMaximizeMorph.remove(w);
+        m_shaderManager.m_monocleEchoOwed.remove(w);
         // Drop the queued-expiry guard for this raw pointer. KWin reuses
         // EffectWindow heap addresses freely, so a stale entry surviving
         // past windowDeleted would cause the next window allocated at the
@@ -1004,14 +1012,10 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // Discussion #527 follow-up: latch the screen-change flag the instant KWin
     // tells us an output appeared or disappeared. KWin fires screenAdded /
     // screenRemoved BEFORE the per-window outputChanged signals it emits for
-    // windows it reassigns as part of the layout change, so this beats the
-    // race where outputChanged would reach the autotile-delegation guard in
-    // window_connections.cpp without isScreenChangeInProgress() set — and
-    // when KWin shifts a remaining monitor's x-offset on the second add
-    // (DPMS wake of a dual-monitor setup), oldScreenStillConnected returns
-    // true and is no help on its own. slotScreenLayoutChanged sets the same
-    // pending flag + debounce that virtualScreenGeometryChanged eventually
-    // would, so the existing settle path is unchanged once it catches up.
+    // the windows it moves, so every one of those crossings is deferred to
+    // the settle (window_output_connections.cpp). Connected AFTER
+    // onScreenAdded / onScreenRemoved above on purpose: the evacuee records
+    // and the returned-output note are written before the baseline is taken.
     connect(KWin::effects, &KWin::EffectsHandler::screenAdded, m_screenChangeHandler.get(),
             &ScreenChangeHandler::slotScreenLayoutChanged);
     connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, m_screenChangeHandler.get(),
@@ -1045,7 +1049,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     //     stacking order, so the walk answers exactly as before and the set
     //     can only change once windowDeleted has removed it;
     //   • desktopChanged and currentActivityChanged, because the gate is scoped
-    //     to the CURRENT desktop and a fullscreen window parked elsewhere must
+    //     to the desktop each output shows and a fullscreen window parked elsewhere must
     //     not strip the desktop being looked at;
     //   • screenAdded / screenRemoved / virtualScreenGeometryChanged, because a
     //     layout change re-resolves which output a window sits on and can

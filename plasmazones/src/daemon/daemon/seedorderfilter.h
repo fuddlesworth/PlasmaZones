@@ -3,16 +3,46 @@
 
 #pragma once
 
+#include <QList>
+#include <QRect>
 #include <QStringList>
 
+#include <functional>
+
 namespace PhosphorEngine {
+class IPlacementEngine;
 class WindowRegistry;
 }
 namespace PhosphorPlacement {
 class WindowTrackingService;
 }
+namespace PhosphorScreens {
+class ScreenManager;
+}
 
 namespace PlasmaZones {
+
+/// The context a seed is for, and where each window in the order is now. A
+/// saved order names every window that was in the context when it left the
+/// engine, including windows that have since moved to another screen or
+/// desktop: seeding those would tile them back onto a screen they left
+/// (F695). An empty @c screenId or a @c desktop below 1 skips that check.
+struct SeedScope
+{
+    QString screenId;
+    int desktop = 0;
+    /// The screen a window is on now, empty when unknown (kept).
+    std::function<QString(const QString& windowId)> screenOf;
+};
+
+/// Where @p windowId is now, as a seed judges it: the screen a tiling engine
+/// holds it on in view, else snap's tracked screen, else the screen under
+/// its last known frame. The engines answer first because a maximized
+/// window's frame on a split monitor centres on the wrong virtual screen
+/// (F715).
+QString seedWindowScreen(const QString& windowId, const QList<const PhosphorEngine::IPlacementEngine*>& tilingEngines,
+                         const PhosphorEngine::IPlacementEngine* snap, const QRect& frame,
+                         const PhosphorScreens::ScreenManager* screens);
 
 /**
  * @brief Filter a tiling-family seed order's entries against live window state.
@@ -49,10 +79,15 @@ namespace PlasmaZones {
  * seeding after a scrolling float must not admit it just because its snap
  * slot happens to be clean.
  *
+ * Every window, minimized or not, is first held to @p scope: one now on
+ * another screen (compared at the virtual screen level), or on desktops that
+ * do not include the seeded one, is dropped.
+ *
  * Extracted from Daemon::seedAutotileOrderForScreen so the predicate is unit
  * testable without a full daemon.
  */
 void filterEngineSeedOrder(QStringList& order, PhosphorPlacement::WindowTrackingService* wts,
-                           const PhosphorEngine::WindowRegistry* registry, const QString& targetEngineId);
+                           const PhosphorEngine::WindowRegistry* registry, const QString& targetEngineId,
+                           const SeedScope& scope);
 
 } // namespace PlasmaZones

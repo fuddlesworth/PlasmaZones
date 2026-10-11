@@ -119,6 +119,12 @@ struct WindowOpenedEntry
     QString screenId;
     int minWidth = 0;
     int minHeight = 0;
+    /// NOT on the wire (the marshalling carries the four fields above): the
+    /// daemon stamps it from the method the entry arrived through, so it
+    /// survives the panel-gate queue and the parked-open retry. True only for
+    /// Tiling.windowOpened, a genuine open that may take focus; a re-announce
+    /// (windowsOpenedBatch) or re-placement (windowReannounced) never does.
+    bool focusEligible = false;
 };
 
 using WindowOpenedList = QList<WindowOpenedEntry>;
@@ -170,8 +176,125 @@ struct UnfloatRestoreResult
     }
 };
 
+/// One window in the effect's output-settle report, sent when a screen change
+/// settles that added or removed an output or deferred a crossing:
+/// (ssssbiiiiiiiiiiibbbbssiiibiiii). What KWin did to the window since the
+/// debounce began, and the state it had before an output it was on went away
+/// (S0), which the daemon compares to tell a window KWin returned untouched
+/// from one the user touched.
+struct OutputSettleRow
+{
+    QString windowId;
+    /// KWin's uuid of the output the window is on now (moveResizeOutput).
+    QString outputUuid;
+    /// The PlasmaZones physical id of that output.
+    QString screenId;
+    /// The PlasmaZones physical id of the output it was on when the debounce began.
+    QString sourceScreenId;
+    /// Whether that output is still connected.
+    bool sourceConnected = true;
+    int x = 0, y = 0, width = 0, height = 0; ///< moveResizeGeometry now
+    int baseX = 0, baseY = 0, baseWidth = 0, baseHeight = 0; ///< the frame when the debounce began
+    int moveResizeCount = 0; ///< interactiveMoveResizeCount now
+    int maximizeMode = 0;
+    int quickTileMode = 0;
+    bool fullscreen = false;
+    /// Only KWin moved it: no interactive move or resize since the baseline.
+    bool kwinOnly = true;
+    /// On the desktop its own output shows and the current activity, and not minimized.
+    bool placeableNow = true;
+    /// The fields below carry S0, the state when its output went away.
+    bool hasS0 = false;
+    QString s0Uuid;
+    QString s0ScreenId;
+    int s0MoveResizeCount = 0;
+    int s0MaximizeMode = 0;
+    int s0QuickTileMode = 0;
+    bool s0Fullscreen = false;
+    int s0X = 0, s0Y = 0, s0Width = 0, s0Height = 0;
+
+    QRect geometry() const
+    {
+        return QRect(x, y, width, height);
+    }
+    QRect baseline() const
+    {
+        return QRect(baseX, baseY, baseWidth, baseHeight);
+    }
+    /// Whether the window's KWin state now equals S0 (false without one).
+    bool stateEqualsS0() const
+    {
+        return hasS0 && moveResizeCount == s0MoveResizeCount && maximizeMode == s0MaximizeMode
+            && quickTileMode == s0QuickTileMode && fullscreen == s0Fullscreen;
+    }
+    QString validationError() const
+    {
+        if (windowId.isEmpty()) {
+            return QStringLiteral("OutputSettleRow: empty windowId");
+        }
+        if (screenId.isEmpty()) {
+            return QStringLiteral("OutputSettleRow: empty screenId (windowId=%1)").arg(windowId);
+        }
+        return QString();
+    }
+};
+
+using OutputSettleRowList = QList<OutputSettleRow>;
+
+/// The daemon's answer for one OutputSettleRow: (sis).
+struct OutputSettleVerdict
+{
+    enum Kind : int {
+        None = 0, ///< nothing to do; the effect replays a deferred crossing as a move
+        Readopt = 1, ///< re-seated in its parked place on the output it returned to
+        EvacueeFloat = 2, ///< an evacuee: adopted floating where KWin put it
+        Reassert = 3, ///< the daemon re-asserted its placement after KWin moved it
+        UserMove = 4, ///< touched: the crossing is the user's move
+    };
+    QString windowId;
+    int verdict = None;
+    /// The screen the verdict placed the window on, when it placed it.
+    QString screenId;
+
+    QString validationError() const
+    {
+        if (windowId.isEmpty()) {
+            return QStringLiteral("OutputSettleVerdict: empty windowId");
+        }
+        if (verdict < None || verdict > UserMove) {
+            return QStringLiteral("OutputSettleVerdict: unknown verdict %1 (windowId=%2)").arg(verdict).arg(windowId);
+        }
+        return QString();
+    }
+};
+
+using OutputSettleVerdictList = QList<OutputSettleVerdict>;
+
+/// Why the daemon asks the compositor to place a window, carried by
+/// WindowTracking.applyGeometryRequested. A UserVerb places the window a user
+/// action is about (a snap key, a drop, Meta+F, a routed open): its maximize and
+/// fullscreen end. A Restatement re-states a placement the window already has
+/// (a zone re-applied, a swap partner, a minimize return, a remembered float
+/// spot): a maximized or fullscreen window keeps that state.
+enum class PlacementPurpose : int {
+    UserVerb = 0,
+    Restatement = 1,
+};
+
+/// Clamp an integer wire value to a PlacementPurpose. An unknown value is a
+/// UserVerb, the arm every placement took before the purpose existed.
+inline PlacementPurpose clampPlacementPurposeFromWire(int wire)
+{
+    return wire == static_cast<int>(PlacementPurpose::Restatement) ? PlacementPurpose::Restatement
+                                                                   : PlacementPurpose::UserVerb;
+}
+
 } // namespace PhosphorProtocol
 
+Q_DECLARE_METATYPE(PhosphorProtocol::OutputSettleRow)
+Q_DECLARE_METATYPE(PhosphorProtocol::OutputSettleRowList)
+Q_DECLARE_METATYPE(PhosphorProtocol::OutputSettleVerdict)
+Q_DECLARE_METATYPE(PhosphorProtocol::OutputSettleVerdictList)
 Q_DECLARE_METATYPE(PhosphorProtocol::WindowGeometryEntry)
 Q_DECLARE_METATYPE(PhosphorProtocol::WindowGeometryList)
 Q_DECLARE_METATYPE(PhosphorProtocol::SnapConfirmationEntry)

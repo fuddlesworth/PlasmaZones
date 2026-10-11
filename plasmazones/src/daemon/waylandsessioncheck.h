@@ -21,7 +21,7 @@ namespace PlasmaZones {
 //     WAYLAND_DISPLAY the guard did nothing, Qt's wayland QPA failed to create
 //     a wl_display, the xcb fallback also failed, and QGuiApplication's
 //     constructor called qFatal() → SIGABRT → core dump (see the crash analysis
-//     and queryPlasmaWorkspaceState() in daemon.cpp).
+//     and queryPlasmaWorkspaceState() in daemon/plasma_workspace.cpp).
 //
 // Returns an empty QString when no path can be formed — a relative or empty
 // display name with no XDG_RUNTIME_DIR — which means there is no Wayland

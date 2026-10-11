@@ -12,18 +12,16 @@
  * handoff guard):
  *
  * 1. e2eDeterministicUnfloatAcrossMonitors: the acceptance scenario for the entire
- *    effort. Snap on B, float, migrate to A → the window reports A, the pre-float still
- *    names B (preserved), and an unfloat (on A or back on B) restores the window to its
- *    remembered home zone on B (cross-monitor restore is allowed).
- * 2. unfloatRestoresToHomeZoneRegardlessOfDriverScreen: SnapEngine::setWindowFloat(
- *    id, false, A) restores the window to its home zone on B — the restore resolves
- *    against the pre-float home screen regardless of the driver screen.
+ *    effort. Snap on B, float, migrate to A → the window reports A and has forgotten
+ *    its home on B, so no unfloat (on A or back on B) throws it back into B's zone.
+ * 2. unfloatDrivenFromAnotherMonitorRefusesTheHome: SnapEngine::setWindowFloat(
+ *    id, false, A) refuses a home on B and keeps the window floating.
  * 3. perMonitorSnapIndependence: two windows snapped on two monitors keep independent
  *    per-screen state; floating one does not disturb the other, and same-index zones on
  *    different monitors do not collide.
- * 4. migrationMovesAllPerWindowFields: SnapState::migrateWindowTo carries zone, screen,
- *    desktop, floating bit, pre-float zone/screen and the auto-snap flag to the
- *    destination store and leaves none behind in the source.
+ * 4. migrationMovesEveryFieldButTheZone: a cross-monitor migrate carries the screen,
+ *    floating bit and auto-snap flag to the destination store, re-stamps the desktop,
+ *    drops the zone and the pre-float home, and leaves nothing behind in the source.
  * 5. pruneRemovedScreenDropsOnlyThatMonitor: a physically removed output's stores
  *    (including its virtual sub-screens) are reclaimed; the other monitor and the
  *    global holder survive.
@@ -46,7 +44,9 @@
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
 #include "core/utils/utils.h"
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -111,8 +111,8 @@ private Q_SLOTS:
     //
     // A window snapped on monitor B, floated, then re-homed to monitor A via the
     // migration analogue of the activation/drift path must never teleport back to
-    // B's zone when unfloated on A — and must still restore B's zone when unfloated
-    // back on B. This is the end-to-end determinism the entire effort exists for.
+    // B's zone when unfloated on A. It forgot that home when it moved, so moving
+    // back to B does not bring it back either.
     // =====================================================================
     void e2eDeterministicUnfloatAcrossMonitors()
     {
@@ -139,40 +139,29 @@ private Q_SLOTS:
         QCOMPARE(m_service->screenForWindow(windowId), monitorA);
         QCOMPARE(m_engine->screenForTrackedWindow(windowId), monitorA);
 
-        // (b) The pre-float home zone/screen still name B (behaviour A: preserved).
-        QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
-        QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
+        // (b) The pre-float home on B is forgotten, and the window still floats.
+        QVERIFY(m_service->preFloatZones(windowId).isEmpty());
+        QVERIFY(m_service->preFloatScreen(windowId).isEmpty());
+        QVERIFY(m_service->isWindowFloating(windowId));
 
-        // (c) Cross-monitor restore is ALLOWED: unfloating while on A returns the
-        // window to its remembered home zone on B (resolved against the pre-float
-        // home screen), regardless of the current monitor.
-        UnfloatResult onA = m_engine->resolveUnfloatGeometry(windowId, monitorA);
-        if (QGuiApplication::screens().size() > 0) {
-            QVERIFY2(onA.found, "cross-monitor unfloat restores the window to its home zone");
-            QCOMPARE(onA.zoneIds, QStringList{m_zoneIds[0]});
-        }
+        // (c) Unfloating while on A finds no home to throw it back to.
+        QVERIFY(!m_engine->resolveUnfloatGeometry(windowId, monitorA).found);
 
-        // (d) Migrating back to B and unfloating there also restores the original B zone.
+        // (d) Nor does migrating back to B bring the forgotten home back.
         QVERIFY(m_engine->migrateWindowToScreen(windowId, monitorB));
         QCOMPARE(m_service->screenForWindow(windowId), monitorB);
-        UnfloatResult onB = m_engine->resolveUnfloatGeometry(windowId, monitorB);
-        if (QGuiApplication::screens().size() > 0) {
-            QVERIFY2(onB.found, "unfloat back on the original monitor must restore the pre-float zone");
-            QCOMPARE(onB.zoneIds, QStringList{m_zoneIds[0]});
-        }
-        // The pre-float bookkeeping still names B regardless of screen availability.
-        QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
+        QVERIFY(!m_engine->resolveUnfloatGeometry(windowId, monitorB).found);
     }
 
     // =====================================================================
-    // Test 2 (Discussion #724 follow-up): unfloat restores to the HOME zone.
+    // Test 2: an unfloat driven from another monitor refuses the home.
     //
-    // Cross-monitor restore is allowed, so an unfloat returns the window to its
-    // remembered home zone (zone0 on B) regardless of the screen the unfloat is
-    // driven with — driving setWindowFloat(id, false, A) restores it to B's zone
-    // rather than leaving it floating in limbo.
+    // The screen setWindowFloat is driven with is where the window is. A home
+    // on another monitor is stale there, so driving setWindowFloat(id, false, A)
+    // with the home on B keeps the window floating (the fallback setting is
+    // off), and never throws it back to B.
     // =====================================================================
-    void unfloatRestoresToHomeZoneRegardlessOfDriverScreen()
+    void unfloatDrivenFromAnotherMonitorRefusesTheHome()
     {
         installFullResolver();
 
@@ -186,21 +175,20 @@ private Q_SLOTS:
         m_service->setWindowFloating(windowId, true);
         QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
 
-        // Drive the unfloat with a different screen (A). The restore resolves against
-        // the pre-float home screen B, so the window returns to its home zone. The
-        // snap commit needs a real QScreen for the zone geometry, so gate on it.
+        // Drive the unfloat with a different screen (A): refused, still floating.
         QSignalSpy applySpy(m_engine, &SnapEngine::applyGeometryRequested);
         m_engine->setWindowFloat(windowId, false, monitorA);
+        QCOMPARE(applySpy.count(), 0);
+        QVERIFY(!m_service->isWindowSnapped(windowId));
+        QVERIFY(m_service->isWindowFloating(windowId));
 
+        // Driven from B, the monitor it floated on, the home restores. The snap
+        // commit needs a real QScreen for the zone geometry, so gate on it.
+        m_engine->setWindowFloat(windowId, false, monitorB);
         if (QGuiApplication::screens().size() > 0) {
-            QVERIFY2(applySpy.count() >= 1, "unfloat must restore the window to its home zone");
-            // Pin WHICH zone the restore targeted: the applyGeometryRequested zoneId
-            // arg (index 5) must be the home zone (zone0), not an empty string (the
-            // effect's float-restore discriminator). Asserting the re-snap alone would
-            // pass even if it landed on the wrong zone.
+            QCOMPARE(applySpy.count(), 1);
             QCOMPARE(applySpy.at(0).at(5).toString(), m_zoneIds[0]);
             QVERIFY(m_service->isWindowSnapped(windowId));
-            QVERIFY(!m_service->isWindowFloating(windowId));
         }
     }
 
@@ -270,15 +258,15 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // Test 4 (Discussion #724): migration moves EVERY per-window field.
+    // Test 4 (Discussion #724): migration moves every per-window field but the zone.
     //
-    // SnapState::migrateWindowTo must carry the window's zone assignment, live
-    // screen (rewritten to the destination), desktop, floating bit, pre-float
-    // zone/screen and auto-snap flag onto the destination store and leave the
-    // source store holding none of them. The engine's migrateWindowToScreen is the
-    // driver; this asserts the underlying move's completeness.
+    // A cross-monitor migrate carries the live screen (rewritten to the
+    // destination), the floating bit and auto-snap flag onto the destination
+    // store, and re-stamps the desktop to the destination key's. The zone and
+    // the pre-float home stay behind, dropped: both name the source screen's
+    // layout. The source store holds none of them afterwards.
     // =====================================================================
-    void migrationMovesAllPerWindowFields()
+    void migrationMovesEveryFieldButTheZone()
     {
         const QString windowId = QStringLiteral("kate|55555555-0000-0000-0000-000000000005");
         const QString monitorA = QStringLiteral("DP-1");
@@ -306,15 +294,16 @@ private Q_SLOTS:
         QVERIFY(stateB != stateA);
         QCOMPARE(stateB->screenId(), monitorB);
 
-        // Every per-window field is now on B's store.
-        QCOMPARE(stateB->zonesForWindow(windowId), QStringList{m_zoneIds[1]});
+        // Every per-window field but the zone is now on B's store, on B's desktop.
+        QVERIFY(stateB->zonesForWindow(windowId).isEmpty());
         QCOMPARE(stateB->screenForWindow(windowId), monitorB); // live screen rewritten to destination
-        QCOMPARE(stateB->desktopForWindow(windowId), desktop);
+        QCOMPARE(stateB->desktopForWindow(windowId), m_engine->heldKeyForWindow(windowId)->desktop);
+        QVERIFY(stateB->desktopForWindow(windowId) != desktop);
         QVERIFY(stateB->isFloating(windowId));
         QVERIFY(stateB->isAutoSnapped(windowId));
-        // Pre-float rides along UNCHANGED (names the source's home context).
-        QCOMPARE(stateB->preFloatZones(windowId), QStringList{m_zoneIds[2]});
-        QCOMPARE(stateB->preFloatScreen(windowId), homeScreen);
+        // The pre-float home is forgotten, not carried.
+        QVERIFY(stateB->preFloatZones(windowId).isEmpty());
+        QVERIFY(stateB->preFloatScreen(windowId).isEmpty());
 
         // The source store retains none of them.
         QVERIFY(stateA->zonesForWindow(windowId).isEmpty());
@@ -436,6 +425,214 @@ private Q_SLOTS:
         QCOMPARE(m_engine->allSnapStates().size(), before - 1);
     }
 
+    // A handoff release clears the last-used zone of the store it unassigns
+    // from, and only that one: another screen's store running the same layout
+    // keeps its own last-used of the same zone id. The clear is persisted
+    // (F167): it used to sweep every store and leave the save unmarked.
+    void handoffReleaseClearsOnlyItsOwnStoresLastUsed()
+    {
+        installFullResolver();
+        const QString screenA = QStringLiteral("DP-1");
+        const QString screenB = QStringLiteral("DP-2");
+        const QString w = QStringLiteral("app|handoff-lastused");
+        m_engine->setCurrentDesktopForScreen(screenA, 1);
+        m_engine->setCurrentDesktopForScreen(screenB, 1);
+        m_service->assignWindowToZone(w, m_zoneIds[0], screenA, 1);
+        auto* onA = static_cast<SnapState*>(m_engine->stateForScreen(screenA));
+        onA->restoreLastUsedZone(m_zoneIds[0], screenA, QString(), 1);
+        SnapState* onB = m_engine->stateForWindowOnScreen(QStringLiteral("app|on-b"), screenB);
+        QVERIFY(onB && onB != onA);
+        onB->restoreLastUsedZone(m_zoneIds[0], screenB, QString(), 1);
+        (void)m_service->takeDirty();
+
+        m_engine->handoffRelease(w);
+
+        QVERIFY(onA->lastUsedZoneId().isEmpty());
+        QCOMPARE(onB->lastUsedZoneId(), m_zoneIds[0]);
+        QVERIFY(m_service->peekDirty() & PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone);
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // An unplugged output's zones are released store by store, every desktop's
+    // with the record's per-desktop map (F108), with no windowZoneChanged for
+    // autotile to untile a window on (F254), and the window is announced once
+    // as moved off the screen (F427).
+    void pruneRemovedScreenReleasesEveryDesktopAndAnnouncesOnce()
+    {
+        installFullResolver();
+        const QString w = QStringLiteral("app|unplugged-snapped");
+        const QString gone = QStringLiteral("DP-1");
+        m_engine->setCurrentDesktopForScreen(gone, 1);
+        m_service->assignWindowToZone(w, m_zoneIds[0], gone, 1);
+        m_engine->setCurrentDesktopForScreen(gone, 2);
+        m_engine->stateForWindowOnScreen(w, gone, 2)->assignWindowToZone(w, m_zoneIds[1], gone, 2);
+        m_service->placementStore().record(*m_engine->capturePlacement(w));
+        const auto before = m_service->placementStore().peekExact(w);
+        QVERIFY(before.has_value());
+        QCOMPARE(before->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).zonesByDesktop.size(), 2);
+
+        QSignalSpy zoneSpy(m_service, &PhosphorPlacement::WindowTrackingService::windowZoneChanged);
+        QSignalSpy stateSpy(m_engine, &SnapEngine::windowSnapStateChanged);
+        m_engine->pruneStatesForRemovedScreen(gone);
+
+        QCOMPARE(zoneSpy.count(), 0);
+        QCOMPARE(stateSpy.count(), 1);
+        const auto entry = stateSpy.first().at(1).value<PhosphorProtocol::WindowStateEntry>();
+        QCOMPARE(entry.windowId, w);
+        QCOMPARE(entry.changeType, QStringLiteral("screen_changed"));
+        QCOMPARE(entry.screenId, gone);
+        QVERIFY(entry.zoneId.isEmpty());
+        const auto after = m_service->placementStore().peekExact(w);
+        QVERIFY(after.has_value());
+        QVERIFY(after->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).zonesByDesktop.isEmpty());
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // The chrome re-apply on an effect reload re-states only zones snap
+    // places in view: a zone held for a desktop not shown would pull its
+    // window into a zone it is not in (F104). It is a re-statement, never a
+    // user verb's apply, so a maximized window keeps its maximize (F490).
+    void reapplyAppearanceSkipsABackgroundDesktop()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        const QString hidden = QStringLiteral("app|on-desktop-1");
+        const QString shown = QStringLiteral("app|on-desktop-2");
+        m_layoutManager->assignLayout(screen, 1, QString(), m_testLayout);
+        m_layoutManager->assignLayout(screen, 2, QString(), m_testLayout);
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+        m_service->assignWindowToZone(hidden, m_zoneIds[0], screen, 1);
+        m_engine->setCurrentDesktopForScreen(screen, 2);
+        m_service->assignWindowToZone(shown, m_zoneIds[1], screen, 2);
+
+        QSignalSpy spy(m_engine, &SnapEngine::restatementGeometryRequested);
+        QSignalSpy userVerbSpy(m_engine, &SnapEngine::applyGeometryRequested);
+        m_engine->reapplyManagedWindowAppearance();
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), shown);
+        QCOMPARE(userVerbSpy.count(), 0);
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // ...and neither is the zone snap remembers on a screen a tiling engine
+    // runs now.
+    void reapplyAppearanceSkipsATilingScreen()
+    {
+        installFullResolver();
+        const QString snapping = QStringLiteral("DP-1");
+        const QString tiling = QStringLiteral("HDMI-1");
+        const QString kept = QStringLiteral("app|on-snapping");
+        const QString frozen = QStringLiteral("app|on-tiling");
+        m_layoutManager->assignLayout(snapping, 1, QString(), m_testLayout);
+        m_layoutManager->assignLayout(tiling, 1, QString(), m_testLayout);
+        m_engine->setCurrentDesktopForScreen(snapping, 1);
+        m_engine->setCurrentDesktopForScreen(tiling, 1);
+        m_service->assignWindowToZone(kept, m_zoneIds[0], snapping, 1);
+        m_service->assignWindowToZone(frozen, m_zoneIds[0], tiling, 1);
+        m_engine->setLiveModeResolver([tiling](const QString& screenId) {
+            return screenId == tiling ? PhosphorZones::AssignmentEntry::Mode::Autotile
+                                      : PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
+
+        QSignalSpy spy(m_engine, &SnapEngine::restatementGeometryRequested);
+        m_engine->reapplyManagedWindowAppearance();
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), kept);
+        m_engine->setLiveModeResolver({});
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // The last-used zone records what the user snapped, on the desktop in
+    // view. A re-statement of a zone the window already holds is not a user
+    // snap (F456); a user's first snap of an auto-restored window is (F209);
+    // a commit pinned to a desktop the screen does not show writes nothing
+    // into the shown desktop's store (F409); an unminimize puts a window back
+    // without counting as a snap (F484).
+    void lastUsedZoneRecordsOnlyUserSnapsInView()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+        const auto lastUsed = [this, &screen]() {
+            return static_cast<SnapState*>(m_engine->stateForScreen(screen))->lastUsedZoneId();
+        };
+        const QString a = QStringLiteral("app|last-a");
+        const QString b = QStringLiteral("app|last-b");
+
+        m_engine->commitSnap(a, m_zoneIds[0], screen);
+        QCOMPARE(lastUsed(), m_zoneIds[0]);
+        m_engine->commitSnap(b, m_zoneIds[1], screen);
+        QCOMPARE(lastUsed(), m_zoneIds[1]);
+        QCOMPARE(static_cast<SnapState*>(m_engine->stateForScreen(screen))->zonesForWindow(a),
+                 QStringList{m_zoneIds[0]});
+        m_engine->commitSnap(a, m_zoneIds[0], screen);
+        QCOMPARE(lastUsed(), m_zoneIds[1]); // a re-statement (F456)
+
+        const QString restored = QStringLiteral("app|last-restored");
+        m_engine->commitSnap(restored, m_zoneIds[2], screen, PhosphorEngine::SnapIntent::AutoRestored);
+        m_service->markAsAutoSnapped(restored);
+        m_engine->commitSnap(restored, m_zoneIds[0], screen);
+        QCOMPARE(lastUsed(), m_zoneIds[0]); // the user's first snap of it (F209)
+
+        m_engine->commitSnap(QStringLiteral("app|last-pinned"), m_zoneIds[2], screen,
+                             PhosphorEngine::SnapIntent::UserInitiated, 2);
+        QCOMPARE(lastUsed(), m_zoneIds[0]); // pinned to desktop 2 (F409)
+
+        m_service->markSuspensionFloat(b);
+        m_engine->setWindowFloat(b, true, screen);
+        m_engine->setWindowFloat(b, false, screen);
+        QCOMPARE(m_engine->zoneForWindow(b), m_zoneIds[1]);
+        QCOMPARE(lastUsed(), m_zoneIds[0]); // an unminimize (F484)
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // Reapply re-applies the zones the focused screen's windows hold in the
+    // context in view (F398). It replayed the layout-switch buffer, which is
+    // empty outside a switch, so the verb answered no_windows_to_resnap. A
+    // window held only on a desktop not in view stays where it is (F430).
+    void reapplyLayoutReappliesTheZonesInView()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        const QString shown = QStringLiteral("app|reapply-shown");
+        const QString hidden = QStringLiteral("app|reapply-hidden");
+        m_engine->setCurrentDesktopForScreen(screen, 2);
+        m_service->assignWindowToZone(hidden, m_zoneIds[0], screen, 2);
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+        m_service->assignWindowToZone(shown, m_zoneIds[1], screen, 1);
+
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        m_engine->reapplyLayout(PhosphorEngine::NavigationContext{QString(), screen});
+        QCOMPARE(resnapSpy.count(), 1);
+        const QVector<PhosphorEngine::ZoneAssignmentEntry> entries =
+            PhosphorEngine::GeometryUtils::deserializeZoneAssignments(resnapSpy.first().at(0).toString(), nullptr);
+        QCOMPARE(entries.size(), 1);
+        QCOMPARE(entries.first().windowId, shown);
+        QCOMPARE(entries.first().targetZoneId, m_zoneIds[1]);
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // Nothing held in view: the verb reports it and emits no batch, because an
+    // empty window set means every window downstream.
+    void reapplyLayoutWithNothingInViewReportsIt()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        m_engine->setCurrentDesktopForScreen(screen, 2);
+        m_service->assignWindowToZone(QStringLiteral("app|reapply-hidden"), m_zoneIds[0], screen, 2);
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        QSignalSpy feedbackSpy(m_engine, &SnapEngine::navigationFeedback);
+        m_engine->reapplyLayout(PhosphorEngine::NavigationContext{QString(), screen});
+        QCOMPARE(resnapSpy.count(), 0);
+        QCOMPARE(feedbackSpy.count(), 1);
+        QCOMPARE(feedbackSpy.first().at(2).toString(), QStringLiteral("no_windows_to_resnap"));
+        m_service->setSnapState(m_engine->snapState());
+    }
+
 private:
     /// Install the FULL per-key resolver so the WTS facade and the engine agree on
     /// the same per-(screen,desktop,activity) stores (the default single-store
@@ -444,26 +641,7 @@ private:
     /// daemon injects and the one testLastUsedZoneIsPerScreen uses.
     void installFullResolver()
     {
-        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
-        resolver.forWindow = [e = m_engine](const QString& id) {
-            return e->stateForWindow(id);
-        };
-        resolver.forWindowOnScreen = [e = m_engine](const QString& id, const QString& s, int desktop) {
-            return e->stateForWindowOnScreen(id, s, desktop);
-        };
-        resolver.forScreen = [e = m_engine](const QString& s) {
-            return static_cast<SnapState*>(e->stateForScreen(s));
-        };
-        resolver.globals = [e = m_engine]() {
-            return e->globalState();
-        };
-        resolver.allStates = [e = m_engine]() {
-            return e->allSnapStates();
-        };
-        resolver.forgetWindow = [e = m_engine](const QString& id) {
-            e->forgetWindow(id);
-        };
-        m_service->setSnapStateResolver(resolver);
+        m_service->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(m_engine));
     }
 
     std::unique_ptr<IsolatedConfigGuard> m_guard;

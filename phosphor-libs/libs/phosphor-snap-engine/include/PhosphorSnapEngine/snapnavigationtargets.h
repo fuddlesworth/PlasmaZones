@@ -52,12 +52,13 @@ struct SpanTargetResult
     bool grew = false;
 };
 
-/// True when @p storedScreen still resolves on the live screen set: a
-/// physical id must be connected; a virtual id additionally needs its backing
-/// physical output present AND continued membership in @p mgr's effective
-/// screen list (guards against stale ids after a config removal). Shared by
-/// the resolver's stored-screen preference and SnapEngine's resolveNavScreen
-/// so the validation rule lives in one place.
+/// True when @p storedScreen still resolves on the live screen set, judged by
+/// @p mgr: a physical id must be a screen it tracks, and a virtual id must be
+/// in its effective screen list (which also drops a stale id after a config
+/// removal). With no manager wired, a physical id is checked against Qt's
+/// screen list and a virtual id is never valid. Shared by the resolver's
+/// stored-screen preference and SnapEngine's resolveNavScreen so the
+/// validation rule lives in one place.
 PHOSPHORSNAPENGINE_EXPORT bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& storedScreen);
 
 /// The edge a neighbour surface is entered from when crossing in @p direction:
@@ -151,17 +152,25 @@ public:
     /// Reports whether a neighbour OUTPUT is owned by a TILING engine — autotile
     /// or scrolling, i.e. anything that is not Snapping — evaluated in the
     /// engine's current (desktop, activity) context, which the resolver itself
-    /// lacks. When set, the MOVE and SWAP cross-output paths skip a tiling
-    /// neighbour (deferring to the engine's cross-mode handoff) instead of
-    /// snapping the window onto a tiled screen. May be empty, in which case no
-    /// gating happens and every neighbour is treated as snap-mode (the
-    /// pre-provider behaviour). The FOCUS cross-output path is never gated
-    /// here, but landing still requires a snap-tracked occupant in the
-    /// neighbour's entry zone (tiled windows are not in windowsInZone), so
-    /// focus toward a tiling output collapses to no_adjacent_zone instead of
-    /// crossing.
+    /// lacks. A tiling neighbour is never entered here: focus, move and swap
+    /// report no crossing and the engine hands them to that engine. Empty, no
+    /// gating happens and every neighbour is treated as snap-mode.
     using NeighbourTilingFn = std::function<bool(const QString& screenId)>;
     void setNeighbourTilingProvider(NeighbourTilingFn fn);
+
+    /// Why the landing context refuses @p windowId: "excluded" (an exclusion
+    /// rule applies there), "disabled" (snapping is off there) or empty. Asked
+    /// by the cross-output move and swap legs, never by focus, so focus still
+    /// crosses into a disabled monitor. Unset refuses nothing.
+    using LandingRefusalFn = std::function<QString(const QString& windowId, const QString& screenId)>;
+    void setLandingRefusalProvider(LandingRefusalFn fn);
+
+    /// The windows snapped in a zone on a screen in the context it shows, once
+    /// each, without @p excludeWindowId. Unset, the resolver falls back to the
+    /// screen-filtered windowsInZone, which spans every desktop.
+    using ZoneOccupantsFn =
+        std::function<QStringList(const QString& zoneId, const QString& screenId, const QString& excludeWindowId)>;
+    void setZoneOccupantsProvider(ZoneOccupantsFn fn);
 
     PhosphorProtocol::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
                                                               const QString& screenId);
@@ -230,12 +239,14 @@ private:
     /// non-success MoveTargetResult when there's no neighbour output / entry
     /// zone. Shared by the move and focus paths; the caller emits feedback so
     /// the move/focus tag stays correct.
-    /// @param requireSnapNeighbour when true (move/swap), a tiling-mode neighbour
-    /// output yields a non-success result so the caller defers to the cross-mode
-    /// handoff; when false (focus), the neighbour's mode is not gated.
-    PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& currentZoneId, const QString& direction,
-                                                              const QString& sourceScreenId,
-                                                              bool requireSnapNeighbour) const;
+    /// A tiling neighbour is never entered here; the engine hands focus, move
+    /// and swap to that engine.
+    /// @param landsWindow true for a move: the landing refusal is asked for
+    /// @p windowId, "disabled" answering reason "landing_disabled" on the
+    /// neighbour, silently, and "excluded" reporting itself. False for focus.
+    PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& windowId, const QString& currentZoneId,
+                                                              const QString& direction, const QString& sourceScreenId,
+                                                              bool landsWindow) const;
 
     /// Cross-output swap target on a no-adjacent-zone boundary: the focused
     /// window (@p windowId, in @p currentZoneId on @p sourceScreenId) crosses to
@@ -249,6 +260,16 @@ private:
                                                              const QString& direction,
                                                              const QString& sourceScreenId) const;
 
+    /// @p windowId's stored screen when it is still connected, else @p screenId:
+    /// the daemon's assignment beats an effect-reported output that same-model
+    /// monitors can confuse, but not a dead output after standby.
+    QString storedScreenOr(const QString& windowId, const QString& screenId) const;
+
+    /// The zone next to @p windowId in @p direction: past its whole span when it
+    /// holds several zones, never one of its own.
+    QString adjacentZoneFor(const QString& windowId, const QString& currentZoneId, const QString& direction,
+                            const QString& screenId) const;
+
     /// Windows snapped to @p zoneId whose stored screen is @p screenName, in
     /// windowsInZone() iteration order.
     /// windowsInZone() is screen-agnostic — the same zone UUID is shared by
@@ -261,7 +282,10 @@ private:
     /// A window snapped to @p zoneId whose stored screen is @p screenName, or
     /// empty if none (first in windowsInZoneOnScreen() order — deterministic per
     /// process, not a visual ordering).
-    QString firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName) const;
+    QString firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName,
+                                      const QString& excludeWindowId) const;
+    /// The provider's occupants when set, else windowsInZoneOnScreen without @p excludeWindowId.
+    QStringList zoneOccupants(const QString& zoneId, const QString& screenName, const QString& excludeWindowId) const;
 
     PhosphorEngine::IWindowTrackingService* m_service = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
@@ -269,6 +293,8 @@ private:
     PhosphorEngine::ICrossSurfaceResolver* m_crossSurface = nullptr;
     FeedbackFn m_feedback;
     NeighbourTilingFn m_neighbourIsTiling;
+    LandingRefusalFn m_landingRefusal;
+    ZoneOccupantsFn m_zoneOccupants;
 };
 
 } // namespace PhosphorSnapEngine

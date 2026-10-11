@@ -18,7 +18,6 @@
 
 namespace PhosphorSnapEngine {
 
-using PhosphorEngine::PendingRestore;
 using PhosphorEngine::SnapResult;
 using PhosphorEngine::StickyWindowHandling;
 

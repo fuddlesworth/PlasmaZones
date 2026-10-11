@@ -148,14 +148,6 @@ public:
     {
         return false;
     }
-    bool consumePendingAssignment(const QString&) override
-    {
-        return false;
-    }
-    const QHash<QString, QList<PhosphorEngine::PendingRestore>>& pendingRestoreQueues() const override
-    {
-        return m_pendingRestores;
-    }
     void updateLastUsedZone(const QString&, const QString&, const QString&, int) override
     {
     }
@@ -222,7 +214,6 @@ public:
     }
 
 private:
-    QHash<QString, QList<PhosphorEngine::PendingRestore>> m_pendingRestores;
     PhosphorEngine::WindowPlacementStore m_store;
 };
 

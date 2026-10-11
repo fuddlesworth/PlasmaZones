@@ -431,6 +431,16 @@ private Q_SLOTS:
         QTest::newRow("teardown/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::Teardown) << true;
         QTest::newRow("teardown/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::Teardown) << true;
         QTest::newRow("teardown/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::Teardown) << true;
+
+        // An evacuee keeps KWin's state: no claim releases (the ledgers are scrubbed bare).
+        QTest::newRow("evacuation/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::Evacuation) << false;
+        QTest::newRow("evacuation/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::Evacuation) << false;
+        QTest::newRow("evacuation/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::Evacuation) << false;
+
+        // A snap placement handed every claim back already, at its own rect.
+        QTest::newRow("snapPlacement/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::SnapPlacement) << false;
+        QTest::newRow("snapPlacement/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::SnapPlacement) << false;
+        QTest::newRow("snapPlacement/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::SnapPlacement) << false;
     }
 
     void claimReleaseTable()
@@ -521,6 +531,35 @@ private Q_SLOTS:
         QFETCH(QSize, column);
         QFETCH(bool, carries);
         QCOMPARE(mayCarryCommittedSize(declaredRect, columnAnswered, committed, column), carries);
+    }
+
+    // The engine flip inside the tiling union (F231, F286, F1004): only a
+    // screen that stays in the union while it changes engine is re-announced.
+    void engineFlip_autotileToScrolling()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QCOMPARE(engineFlipScreens({}, s, s, false, {}), s);
+    }
+    void engineFlip_scrollingToAutotile()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QCOMPARE(engineFlipScreens(s, {}, s, false, s), s);
+    }
+    void engineFlip_scrollingToSnapping()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QVERIFY(engineFlipScreens(s, {}, s, false, {}).isEmpty());
+    }
+    void engineFlip_contextSwitchFlipsNothing()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QVERIFY(engineFlipScreens(s, {}, s, true, s).isEmpty());
+        QVERIFY(engineFlipScreens({}, s, s, true, {}).isEmpty());
+    }
+    void engineFlip_snappingToScrollingIsNotManaged()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QVERIFY(engineFlipScreens({}, s, {}, false, {}).isEmpty());
     }
 };
 

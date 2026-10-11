@@ -95,14 +95,19 @@ MembershipReconcileResult ScrollEngine::applyMembershipWork(const QString& scree
     }
     bool touchedCurrent = false;
     for (const PendingMembership& entry : pending) {
+        // Adopt BEFORE releasing: adoptIntoContext reads the float, the min
+        // size and the FloatRestore from the contexts the window still holds,
+        // and the one it is leaving is the one that knows (F1001). The release
+        // then finds it still floating where it was adopted and keeps the
+        // float mirror.
+        if (entry.adopt && adoptIntoContext(entry.windowId, currentKey)) {
+            result.adopted.append({entry.windowId, currentKey});
+            touchedCurrent = true;
+        }
         for (const PlacementStateKey& stale : entry.stale) {
             releaseMembership(entry.windowId, stale);
             result.released.append({entry.windowId, stale});
             touchedCurrent |= (stale == currentKey);
-        }
-        if (entry.adopt && adoptIntoContext(entry.windowId, currentKey)) {
-            result.adopted.append({entry.windowId, currentKey});
-            touchedCurrent = true;
         }
     }
     if (touchedCurrent) {
@@ -329,8 +334,9 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
     // The window's float state is per store; the daemon's mirror is per
     // window. A float that lived only on the released desktop has to be
     // withdrawn from the mirror, or the effect keeps float chrome on a window
-    // that is a tile everywhere it still lives. Answered from the membership
-    // in view: if the window still floats there, nothing changed.
+    // that is a tile everywhere it still lives. A floating arrival the
+    // membership pass adopted keeps it, because the adopt ran first and the
+    // window still floats in the context it was adopted into.
     bool stillFloating = false;
     for (const PlacementStateKey& other : m_states.membershipsForWindow(windowId)) {
         if (const ScrollState* s = m_states.stateForKey(other); s && s->isFloating(windowId)) {
@@ -351,8 +357,9 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
         m_forceEmitScreens.insert(key.screenId);
         scheduleRetileForScreen(key.screenId);
     }
-    // placementChanged is the sole producer of the strip's dirty mark. A
-    // release on a background desktop mutates persisted structure just as a
+    // placementChanged is this engine's only way to mark DirtyScrollStrips
+    // (the tracking service's scheduleSaveState, DirtyAll, also sets that
+    // bit). A release on a background desktop mutates persisted structure just as a
     // close does, and a save landing before that desktop's next batch would
     // otherwise persist the column the window just left.
     Q_EMIT placementChanged(key.screenId);

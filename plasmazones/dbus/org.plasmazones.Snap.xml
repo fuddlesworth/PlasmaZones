@@ -14,23 +14,23 @@ SPDX-License-Identifier: GPL-3.0-or-later
              ═══════════════════════════════════════════════════════════════════════════ -->
 
         <method name="windowSnapped">
-            <annotation name="org.gtk.GDBus.DocString" value="Confirm a single-zone snap from the compositor effect."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Confirm a single-zone snap. Refused for a window that is gone, an unknown screen, or a zone that screen's layout lacks."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="zoneId" type="s" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
         </method>
         <method name="windowSnappedMultiZone">
-            <annotation name="org.gtk.GDBus.DocString" value="Confirm a multi-zone (zone-span) snap from the compositor effect."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Confirm a multi-zone (zone-span) snap, checked like windowSnapped for every zone."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="zoneIds" type="as" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
         </method>
         <method name="windowUnsnapped">
-            <annotation name="org.gtk.GDBus.DocString" value="Confirm an unsnap from the compositor effect."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Confirm an unsnap. A window left with no zone and no float also forgets its snapped zone for the next time it opens."/>
             <arg name="windowId" type="s" direction="in"/>
         </method>
         <method name="windowsSnappedBatch">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch snap confirmations (rotate/resnap/snap-all completion)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Confirm the effect's snap-all placement. An isRestore entry unsnaps the window and drops its float-back on that screen."/>
             <arg name="entries" type="a(sssb)" direction="in">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::SnapConfirmationList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, zoneId, screenId, isRestore)."/>
@@ -88,13 +88,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient)."/>
             </arg>
             <arg name="restoreReason" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Why this resolve is running (0=Open, 1=Unminimize, 2=PendingSweep, 3=DesktopArrival, 4=DaemonRestartSweep). Open covers a genuine window open, including a session restore and a deferred-routing flush. The others re-resolve windows that are already open and on screen. Gates the cross-screen tile reclaim, which must never move a window the user is already looking at, and the cross-desktop session restore. Replaces the older isOpenPath bool, which could not distinguish the desktop-arrival re-drive from a user action."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Why this resolve is running (0=Open, 1=Unminimize, 2=PendingSweep, 3=DesktopArrival, 4=DaemonRestartSweep). Open covers a genuine window open, including a session restore and a deferred-routing flush. The others re-resolve windows that are already open and on screen. Gates the open claim, the FIFO record match (open only, plus a sweep of a window no engine ever captured) and the cross-desktop session restore. Replaces the older isOpenPath bool, which could not distinguish the desktop-arrival re-drive from a user action."/>
             </arg>
             <arg name="minWidth" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Client-declared minimum width, or 0 when unknown. Used only by the cross-screen tile reclaim, whose adopting engine evaluates its oversized/float verdict once from these."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Client-declared minimum width. Accepted and ignored: the cross-screen tile reclaim it sized was removed."/>
             </arg>
             <arg name="minHeight" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Client-declared minimum height, or 0 when unknown."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Client-declared minimum height. Accepted and ignored."/>
             </arg>
             <arg name="snapX" type="i" direction="out"/>
             <arg name="snapY" type="i" direction="out"/>
@@ -111,13 +111,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Resnap all windows from the previous layout to the current layout."/>
         </method>
         <method name="resnapCurrentAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Resnap windows to their current zone assignments."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Resnap windows to their current zone assignments, only on screens that snap and that are not disabled."/>
             <arg name="screenFilter" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="When non-empty, only resnap windows on this screen."/>
             </arg>
         </method>
         <method name="resnapFromAutotileOrder">
-            <annotation name="org.gtk.GDBus.DocString" value="Resnap windows from autotile to manual zones using the explicit autotile window order."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Resnap windows from autotile to manual zones using the explicit autotile window order. Only on a screen that snaps and is not disabled, and only for live windows that are not excluded there."/>
             <arg name="autotileWindowOrder" type="as" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
         </method>
@@ -135,7 +135,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="screenId" type="s" direction="in"/>
         </method>
         <method name="handleBatchedResnap">
-            <annotation name="org.gtk.GDBus.DocString" value="Process a batch of resnap entries (JSON payload) and emit the resulting WindowTracking.applyGeometriesBatch."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Process a batch of resnap entries (JSON payload) and emit the resulting WindowTracking.applyGeometriesBatch. An entry a snap shortcut could not make is dropped."/>
             <arg name="resnapData" type="s" direction="in"/>
         </method>
 
@@ -156,7 +156,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="pushToEmptyZone">
             <annotation name="org.gtk.GDBus.DocString" value="Push the focused window to the first empty zone."/>
             <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen to resolve layout/geometry for (empty = active layout)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="A named screen is the target, using its layout for the desktop it shows. Empty acts like the shortcut: the focused window's own screen when it is snapped, else the cursor's, else the last active one."/>
             </arg>
         </method>
         <method name="restoreWindowSize">
@@ -169,12 +169,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="snapToZoneByNumber">
             <annotation name="org.gtk.GDBus.DocString" value="Snap the focused window to a zone by its number."/>
             <arg name="zoneNumber" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Zone number (1-9)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Zone number, 1-based; 1-9 when no screen is named."/>
             </arg>
-            <arg name="screenId" type="s" direction="in"/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="A named screen is the target, using its layout for the desktop it shows. Empty acts like the shortcut: the focused window's own screen when it is snapped, else the cursor's, else the last active one."/>
+            </arg>
         </method>
         <method name="rotateWindowsInLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Rotate windows in the layout for a screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Rotate windows in the layout for a screen. Screens that tile or scroll, and disabled ones, are left alone."/>
             <arg name="clockwise" type="b" direction="in"/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to rotate on (empty = all screens)."/>
@@ -195,7 +197,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="zoneId" type="s" direction="in"/>
         </method>
         <method name="swapWindowsById">
-            <annotation name="org.gtk.GDBus.DocString" value="Swap two specific windows by ID."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Swap two snapped windows by ID. Each takes the other's whole span, in the context that span is held in, and the swap is refused where a snap shortcut could not make it."/>
             <arg name="windowId1" type="s" direction="in"/>
             <arg name="windowId2" type="s" direction="in"/>
         </method>
@@ -205,12 +207,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
              ═══════════════════════════════════════════════════════════════════════════ -->
 
         <method name="toggleFloatForWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven float toggle for snap-mode screens."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Toggle a window between floating and its zone on a snapping screen. Refused where the float shortcut could not act. An empty screen means the window's own."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
         </method>
         <method name="setWindowFloat">
-            <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state directly (snap mode)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Float or unfloat a window on the snapping screen it is on. Refused where the float shortcut could not act."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="floating" type="b" direction="in"/>
         </method>
@@ -224,7 +226,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="windowUnsnappedForFloat">
-            <annotation name="org.gtk.GDBus.DocString" value="Unsnap a window for floating: saves its zone so unfloat can restore it."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Unsnap a window and keep its zone as the pre-float home. It does not float the window, so call setWindowFloat(true) after it."/>
             <arg name="windowId" type="s" direction="in"/>
         </method>
     </interface>

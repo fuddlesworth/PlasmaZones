@@ -22,7 +22,6 @@ namespace PlasmaZones {
 
 class WindowTrackingAdaptor;
 class SnapAdaptor;
-class LayoutAdaptor;
 class CompositorBridgeAdaptor;
 class ScreenModeRouter;
 
@@ -51,7 +50,7 @@ class PLASMAZONES_EXPORT ControlAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Control")
 
 public:
-    explicit ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
+    explicit ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor,
                             PhosphorZones::LayoutRegistry* layoutManager,
                             PhosphorEngine::IPlacementEngine* autotileEngine,
                             PhosphorScreens::ScreenManager* screenManager, CompositorBridgeAdaptor* compositorBridge,
@@ -78,24 +77,22 @@ public Q_SLOTS:
     /**
      * @brief Snap a window to a specific zone in a layout
      * @param windowId Window to snap
-     * @param zoneNumber PhosphorZones::Zone number (1-indexed)
-     * @param screenId Screen for geometry resolution (empty = primary)
-     * @note Resolves the zone from the screen's current layout
+     * @param zoneNumber Zone number (1-based; any number the layout has)
+     * @param screenId Screen to snap on, a screen id or connector name; empty
+     *        means the screen the window is on
+     * @note Refused unless a keyboard snap could make the same move
      */
     void snapWindowToZone(const QString& windowId, int zoneNumber, const QString& screenId);
 
     /**
-     * @brief Toggle autotile mode for a screen
-     * @param screenId Screen to toggle
-     * @note Switches between snapping mode and autotile mode
-     * @note Mode-only verb by contract: it writes an EMPTY snapping layout
-     *       and an EMPTY tiling algorithm into the screen's current-context
-     *       entry, so any layout or algorithm that context had pinned is
-     *       cleared and the toggled mode falls back to the cascade / global
-     *       default. Only the scrolling template survives, because
-     *       setAssignmentEntry seeds it from the stored entry. Callers that
-     *       need the stored slots preserved must read them first and pass
-     *       them back through setAssignmentEntry themselves.
+     * @brief Switch a screen between snapping and autotile, the way the
+     *        mode-toggle shortcut does on that screen
+     * @param screenId Screen id or connector name; a split monitor's id
+     *        resolves to the virtual screen the cursor is in
+     * @note Runs the handler setModeToggleHandler installs: the screen's
+     *       current desktop and activity, the layout or algorithm it had
+     *       before, no switch into a mode that is turned off, and the
+     *       disabled-context notice. A scrolling screen goes to autotile.
      */
     void toggleAutotileForScreen(const QString& screenId);
 
@@ -154,6 +151,10 @@ public:
     /// core library this adaptor ships in, so the daemon hands the read in
     /// as a callable rather than a type. Cleared by detach().
     void setShortcutCatalogProvider(std::function<QVariantList()> provider);
+    /// The mode switch toggleAutotileForScreen runs on a resolved screen: the
+    /// daemon's toggleScreenMode, which this library cannot name. Cleared by
+    /// detach().
+    void setModeToggleHandler(std::function<void(const QString& screenId)> handler);
     /// Relay for ShortcutManager::cheatsheetModelChanged: emits
     /// shortcutsChanged on the bus. Not a slot on purpose, so it is not a
     /// D-Bus method.
@@ -162,7 +163,6 @@ public:
 private:
     WindowTrackingAdaptor* m_wta;
     SnapAdaptor* m_snapAdaptor;
-    LayoutAdaptor* m_layoutAdaptor;
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorEngine::IPlacementEngine* m_autotileEngine;
     PhosphorScreens::ScreenManager* m_screenManager;
@@ -171,6 +171,7 @@ private:
     const ScreenModeRouter* m_modeRouter;
     QPointer<QFutureWatcher<QString>> m_reportWatcher;
     std::function<QVariantList()> m_shortcutCatalog;
+    std::function<void(const QString& screenId)> m_modeToggle;
 };
 
 } // namespace PlasmaZones

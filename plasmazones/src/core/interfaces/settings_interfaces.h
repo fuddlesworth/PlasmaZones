@@ -351,7 +351,7 @@ public:
     // The per-application / per-class exclusion lists (excludedApplications,
     // excludedWindowClasses) retired in v4 — the legacy QStringList settings
     // folded into Application-subject Exclude Rules, and all consumers
-    // (snap-engine, KWin effect, WTA pending-restore prune) now route through
+    // (snap-engine, KWin effect, WTA placement prune) now route through
     // PhosphorRules::ExclusionRules over the unified rule store.
 
     virtual bool excludeTransientWindows() const = 0;
@@ -835,9 +835,14 @@ inline bool renumberDisabledDesktopEntries(QStringList& entries, int removedDesk
  * @return true if any entries were removed.
  *
  * Composite key format: "screenId/activityUuid". Malformed entries are also removed.
+ * An empty @p validActivityIds removes nothing: there is always one activity, so
+ * an empty set means the activity service is unavailable (F423).
  */
 inline bool pruneDisabledActivityEntries(QStringList& entries, const QSet<QString>& validActivityIds)
 {
+    if (validActivityIds.isEmpty()) {
+        return false;
+    }
     const int before = entries.size();
     entries.removeIf([&validActivityIds](const QString& entry) {
         // Composite key format: "screenId/activityUuid". Virtual screen IDs

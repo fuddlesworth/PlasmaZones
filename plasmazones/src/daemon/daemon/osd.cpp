@@ -227,19 +227,6 @@ void Daemon::clearHighlight()
     }
 }
 
-void Daemon::armResnapOsdSuppression(int count)
-{
-    if (count <= 0) {
-        return;
-    }
-    // ADD, never clobber: overlapping async resnap streams each pre-arm before
-    // emitting, and their feedbacks drain this counter one-by-one. Overwriting
-    // would drop a concurrent stream's outstanding count (one OSD wrongly shown,
-    // a later one wrongly suppressed). The watchdog floors a stuck count.
-    m_suppressResnapOsd += count;
-    m_suppressResnapOsdWatchdog.start();
-}
-
 bool Daemon::globalOsdSuppressed() const
 {
     if (m_shuttingDown) {
@@ -983,10 +970,10 @@ void Daemon::syncModeFromAssignments()
             // assignment. Without this, PhosphorZones::LayoutRegistry::activeLayout() returns the
             // previous desktop's layout, causing zone detection, overlay, and
             // onLayoutChanged to operate on the wrong zones.
-            // Block activeLayoutChanged to prevent resnap buffer corruption.
-            // Desktop switches and KCM saves both route through here — neither
-            // should trigger resnap via the global active layout signal. KCM saves
-            // use populateResnapBufferForAllScreens() + resnapToNewLayout()
+            // Block activeLayoutChanged: desktop switches and KCM saves both
+            // route through here, and neither should prune or resnap through
+            // the global active layout signal. KCM saves use
+            // populateResnapBufferForAllScreens() + resnapToNewLayout()
             // (per-screen, independent of global active layout) instead.
             // Scrolling short-circuits the same way autotile does: the
             // "scrolling:" sentinel is not a manual layout, so

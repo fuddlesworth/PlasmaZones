@@ -4,13 +4,12 @@
 // The store's on-disk shape: enumeration, serialize, deserialize and size.
 // Split out of WindowPlacementStore.cpp, which crossed the file-size ceiling
 // when record() gained the per-desktop zone merge. Pure I/O over the record
-// list, sharing nothing with the reclaim, claim and release machinery there
-// but the members.
+// list, sharing nothing with the claim and release machinery there but the
+// members.
 
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorIdentity/WindowId.h>
 
-#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLatin1Char>
@@ -45,19 +44,6 @@ QJsonObject WindowPlacementStore::serialize(const std::function<bool(const Windo
             if (keep && !keep(p)) {
                 continue;
             }
-            // Reclaim credit is DERIVED at save time when the probe is wired
-            // (header contract): live windows persist as restore evidence, a
-            // close within the shutdown grace still counts (the logout save),
-            // and everything else — the cross-session graveyard included,
-            // whatever its in-memory credit says — persists credit-less.
-            if (m_liveInstanceProbe) {
-                WindowPlacement stamped = p;
-                stamped.reclaimEligible = m_liveInstanceProbe(p.windowId)
-                    || (p.closedAtMsecs > 0
-                        && QDateTime::currentMSecsSinceEpoch() - p.closedAtMsecs <= ShutdownCloseGraceMs);
-                arr.append(stamped.toJson());
-                continue;
-            }
             arr.append(p.toJson());
         }
         if (!arr.isEmpty()) {
@@ -81,9 +67,6 @@ void WindowPlacementStore::deserialize(const QJsonObject& obj)
     // Every claim named a record in the store being replaced.
     m_openPairing.clear();
     m_claimedBy.clear();
-    // Likewise the in-flight move excuses: they describe this session's moves,
-    // and both deserialize callers are startup-time (see the note above).
-    m_movedLiveInstances.clear();
     QList<WindowPlacement> loaded;
     // Persisted ARRAY positions, keyed per (bucket, instance) — NOT a global
     // index into the flattened list: a renamed duplicate persisted under an

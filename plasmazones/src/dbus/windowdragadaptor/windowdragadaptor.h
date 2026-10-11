@@ -306,9 +306,8 @@ public Q_SLOTS:
 public:
     /**
      * Called when a window is closed during or after a drag operation.
-     * Connected to WindowTrackingAdaptor::windowClosedNotification — the
-     * canonical close path also tears down drag state when the closing
-     * window was in flight.
+     * Connected to WindowLifecycleRelay::windowClosed, so the canonical close
+     * path also tears down drag state when the closing window was in flight.
      *
      * Declared as a public plain member function (NOT under Q_SLOTS):
      * QDBusAbstractAdaptor's runtime introspection exposes every PUBLIC
@@ -690,6 +689,9 @@ private:
     // structural compare, so new fields are picked up automatically.
     PhosphorProtocol::DragPolicy m_currentDragPolicy;
     QRect m_originalGeometry;
+    /// Whether the window filled its output (maximized or fullscreen) when the
+    /// drag began: its original frame is then the output, never a float-back.
+    bool m_originalFrameFillsOutput = false;
 
     // Pending snap-path drag awaiting first activation. Populated by
     // beginDrag on the snap path instead of immediately running the full
@@ -1030,7 +1032,13 @@ private:
     // captured pre-snap geometry to prevent race conditions in
     // dragStopped() — the in-flight value may have already been
     // overwritten by the snap commit by the time this runs.
-    void tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry);
+    void tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry, bool fillsOutput);
+    /// The registry's fills-output verdict for @p windowId, false when unknown.
+    bool windowFillsOutput(const QString& windowId) const;
+    /// The pre-snap size a drag-out restores on @p screenId: the float-back
+    /// there, else the size of the window's float-back on another monitor,
+    /// bounded to this one. The position stays screen-local; only the size travels.
+    std::optional<QSize> preSnapSizeFor(const QString& windowId, const QString& screenId) const;
 
 private Q_SLOTS:
     /**

@@ -69,15 +69,17 @@ public:
     }
 };
 
-/// Minimal zone-adjacency resolver: no adjacent zone on any output (forces the
-/// no_adjacent_zone boundary), no first-in-direction zone.
+/// Minimal zone-adjacency resolver: no adjacent zone on any output unless
+/// @c adjacent names one (empty forces the no_adjacent_zone boundary), no
+/// first-in-direction zone.
 class FakeAdjacencyQueries : public PhosphorSnapEngine::IZoneAdjacencyResolver
 {
 public:
     QString getAdjacentZone(const QString&, const QString&, const QString&) const override
     {
-        return QString();
+        return adjacent;
     }
+    QString adjacent;
     QString getFirstZoneInDirection(const QString&, const QString&) const override
     {
         return QString();
@@ -686,6 +688,38 @@ private Q_SLOTS:
         QCOMPARE(snap->windowsOnScreenAndDesktop(QStringLiteral("DP-1"), 0), QStringList{f});
 
         m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
+    }
+
+    // An in-surface swap places the focused window as the user's verb and its
+    // partner as a re-statement: the key is not about the partner, so a
+    // maximized partner keeps its maximize (F547).
+    void testSwap_partnerIsAppliedAsARestatement()
+    {
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        FakeAdjacencyQueries adj;
+        adj.adjacent = m_zoneIds.at(1);
+        m_engine->setZoneAdjacencyResolver(&adj);
+        const QString focused = QStringLiteral("appA:win:1");
+        const QString partner = QStringLiteral("appB:win:1");
+        SnapState* snap = m_engine->snapState();
+        snap->assignWindowToZone(focused, m_zoneIds.at(0), QStringLiteral("DP-1"), 0);
+        snap->assignWindowToZone(partner, m_zoneIds.at(1), QStringLiteral("DP-1"), 0);
+        QSignalSpy userVerb(m_engine, &SnapEngine::applyGeometryRequested);
+        QSignalSpy restatement(m_engine, &SnapEngine::restatementGeometryRequested);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = focused;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->swapFocusedInDirection(QStringLiteral("right"), ctx);
+
+        QCOMPARE(userVerb.count(), 1);
+        QCOMPARE(userVerb.first().at(0).toString(), focused);
+        QCOMPARE(restatement.count(), 1);
+        QCOMPARE(restatement.first().at(0).toString(), partner);
         m_engine->setZoneAdjacencyResolver(nullptr);
     }
 

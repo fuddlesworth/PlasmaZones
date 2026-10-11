@@ -77,6 +77,7 @@ class ZoneDetector;
 namespace PlasmaZones {
 
 enum class DisabledReason;
+struct SeedScope;
 class Settings;
 class OverlayService;
 

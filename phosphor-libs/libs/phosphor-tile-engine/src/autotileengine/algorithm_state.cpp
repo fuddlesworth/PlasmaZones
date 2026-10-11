@@ -753,6 +753,12 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
 
 void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
+    // An empty list is the activity service going away, not every activity
+    // being removed: pruning against it would drop every activity's tiling
+    // state for good (F423).
+    if (validActivities.isEmpty()) {
+        return;
+    }
     const QSet<QString> valid(validActivities.begin(), validActivities.end());
     m_dirtyBackgroundContexts.removeIf([&valid](const TilingStateKey& key) {
         return !key.activity.isEmpty() && !valid.contains(key.activity);

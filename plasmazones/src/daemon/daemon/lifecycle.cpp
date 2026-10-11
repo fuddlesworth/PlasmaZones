@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): the Daemon start/stop lifecycle. stop()
-// is one long, ORDERED teardown whose clear-before-reset contracts reference
-// each other in sequence; splitting it by subsystem would break the
-// top-to-bottom readability that makes the ordering auditable.
+// The Daemon start/stop lifecycle. stop() is one long, ORDERED teardown whose
+// clear-before-reset contracts reference each other in sequence, so it stays
+// whole here rather than split by subsystem. The bridge watchdog's timeout arm
+// lives in bridge_watchdog.cpp and the plasma-workspace.target probe in
+// plasma_workspace.cpp.
 
 #include "daemon/daemon.h"
 #include "helpers.h"
@@ -16,17 +17,11 @@
 #include <QtConcurrent>
 #include <QScreen>
 #include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusObjectPath>
 #include <QDBusPendingCall>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
 #include <QDBusError>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QPluginLoader>
-#include <QRegularExpression>
 #include <QSet>
 #include <QThread>
 #include <array>
@@ -99,7 +94,6 @@
 #include "core/interfaces/shaderregistry.h"
 #include "common/screenidresolver.h"
 #include "common/layoutbundlebuilder.h"
-#include "phosphor_i18n.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
 #include "dbus/overlayadaptor.h"
@@ -116,44 +110,6 @@
 #include "dbus/ruleadaptor.h"
 
 namespace PlasmaZones {
-
-namespace {
-// Grace period (ms) for the KWin effect to register as a compositor bridge
-// after daemon startup. Comfortably longer than a healthy effect takes to
-// register (sub-second once KWin and the daemon's D-Bus name are both up),
-// even when the daemon starts before KWin during login — so a timeout means
-// a genuine failure, not a race.
-constexpr int BRIDGE_WATCHDOG_TIMEOUT_MS = 20000;
-
-// Locate the installed PlasmaZones KWin effect plugin and read the KWin
-// version embedded in its plugin interface ID. The KWin effect is a compiled
-// C++ plugin; KWin bakes its exact version into the IID it accepts
-// (EffectPluginFactory_iid = "org.kde.kwin.EffectPluginFactory" + the KWin
-// version string), and silently rejects any plugin built against a different
-// KWin. metaData() reads only the static metadata section — no dlopen — so it
-// works even on the version-mismatched plugin KWin itself refuses to load.
-// `installed` is set to whether the plugin file was found at all. Returns the
-// KWin version the effect was built against, or empty when the plugin is
-// missing or its IID is not a recognizable KWin effect IID.
-QString probeEffectKWinVersion(bool& installed)
-{
-    static const QLatin1String iidPrefix("org.kde.kwin.EffectPluginFactory");
-    const QString effectRelPath = QStringLiteral("kwin/effects/plugins/kwin_effect_plasmazones.so");
-
-    installed = false;
-    const QStringList libraryPaths = QCoreApplication::libraryPaths();
-    for (const QString& base : libraryPaths) {
-        const QString candidate = base + QLatin1Char('/') + effectRelPath;
-        if (!QFile::exists(candidate)) {
-            continue;
-        }
-        installed = true;
-        const QString iid = QPluginLoader(candidate).metaData().value(QLatin1String("IID")).toString();
-        return iid.startsWith(iidPrefix) ? iid.mid(iidPrefix.size()) : QString();
-    }
-    return QString();
-}
-} // anonymous namespace
 
 void Daemon::start()
 {
@@ -179,10 +135,11 @@ void Daemon::start()
     // Note what this does NOT fix: stop() also unregisters the D-Bus object and the
     // service name, and re-registering them lives in init(), not here, so a restarted
     // daemon has no bus presence and nothing it publishes reaches the effect regardless.
-    // The same asymmetry covers the autotile shortcuts: their grabs survive stop() while
-    // their handler connections died with the engine, and initializeAutotile() re-runs
-    // from start() below but wires handlers only when m_autotileEngine exists, which
-    // after a no-init stop() it does not. With no bus presence nothing they trigger
+    // The autotile shortcuts are the same: stop() releases every grab (unregisterShortcuts)
+    // and severs the Daemon-side handler connections (the shortcut-manager sweep); start()
+    // re-grabs them all, but initializeAutotile() rewires the autotile handlers only when
+    // m_autotileEngine exists (retile is wired regardless), which after a no-init stop() it
+    // does not. With no bus presence nothing they trigger
     // reaches anyone, so wiring them here would repair a limb of a cycle that is
     // degraded by design. The re-arm exists so the daemon's own state is consistent
     // after the cycle, not because the cycle restores service.
@@ -242,17 +199,17 @@ void Daemon::start()
 
     finalizeStartup();
 
-    // Migrate window screen assignments from physical to virtual IDs.
-    // Must run AFTER finalizeStartup() which loads WTA state — otherwise
-    // the migration finds no windows to migrate.
+    // Migrate window screen assignments from physical to virtual IDs, over the
+    // placements the adaptor's constructor loaded. Nothing reloads the store
+    // after this, so the migration is not discarded (F479).
     migrateStartupScreenAssignments();
 
-    // Intentionally last: the algorithmChanged handler (signals.cpp) and showDesktopSwitchOsd
-    // (osd.cpp) both gate on !m_running to suppress OSD/feedback during startup. finalizeStartup()
-    // calls m_autotileEngine->loadState() which synchronously emits algorithmChanged, and
-    // KWin/Plasma can deliver desktop/activity-change signals during the same window. Setting
-    // m_running before finalizeStartup() returns would let those handlers fire and double-queue
-    // (or leak past) the startup OSD that finalizeStartup() is responsible for.
+    // Intentionally last: the algorithmChanged handler (autotile_init.cpp) and showDesktopSwitchOsd
+    // (osd.cpp) both gate on !m_running to suppress OSD/feedback during startup, while layouts
+    // and algorithms are being assigned, and KWin/Plasma can deliver
+    // desktop/activity-change signals during the same window. Setting m_running before
+    // finalizeStartup() returns would let those handlers fire and double-queue (or leak past)
+    // the startup OSD that finalizeStartup() is responsible for.
     m_running = true;
     // NOTE: daemonReady() is emitted by finalizeStartup() — do NOT emit again here.
 
@@ -264,124 +221,6 @@ void Daemon::start()
     }
 }
 
-void Daemon::warnCompositorBridgeMissing()
-{
-    // Stay silent during shutdown. The watchdog may still be armed when the
-    // session ends, and a warning/notification raised on the way out is just
-    // noise — mirrors the OSD suppression gated on m_running/m_shuttingDown.
-    if (m_shuttingDown) {
-        return;
-    }
-
-    // Re-check: the watchdog is stopped on bridgeRegistered, but a registration
-    // landing in the same event-loop turn as the timeout could still reach
-    // here. Treat a registered bridge as success and stay silent.
-    if (!m_compositorBridge || m_compositorBridge->isBridgeRegistered()) {
-        return;
-    }
-
-    // Inspect the installed effect plugin (synchronous, cheap). The most common
-    // silent failure is a stale effect build whose IID no longer matches the
-    // running KWin, so KWin's effect loader rejects it without surfacing an
-    // error and the effect never registers.
-    bool effectInstalled = false;
-    const QString effectKWinVersion = probeEffectKWinVersion(effectInstalled);
-
-    if (!effectInstalled) {
-        emitBridgeMissingWarning(
-            PhosphorI18n::tr("The PlasmaZones KWin effect plugin is not installed where KWin can find it. "
-                             "Reinstall PlasmaZones."));
-        return;
-    }
-    if (effectKWinVersion.isEmpty()) {
-        // Plugin present but its IID is not a recognizable KWin effect IID —
-        // nothing specific to report, fall back to the generic guidance.
-        emitBridgeMissingWarning(QString());
-        return;
-    }
-
-    // Compare the effect's build-time KWin version against the running KWin.
-    // supportInformation() is the only reliable D-Bus source for KWin's
-    // version; query it asynchronously so this degraded startup path never
-    // blocks the daemon's event loop (mirrors the fire-and-forget notification
-    // call in emitBridgeMissingWarning).
-    QDBusMessage req =
-        QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
-                                       QStringLiteral("org.kde.KWin"), QStringLiteral("supportInformation"));
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(req, 3000), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, effectKWinVersion](QDBusPendingCallWatcher* call) {
-                call->deleteLater();
-
-                // The 3s round-trip widens the window in which a late effect
-                // registration can land; stay silent if shutdown began or the
-                // bridge registered after all.
-                if (m_shuttingDown || (m_compositorBridge && m_compositorBridge->isBridgeRegistered())) {
-                    return;
-                }
-
-                QString diagnosis;
-                const QDBusPendingReply<QString> reply = *call;
-                if (!reply.isError()) {
-                    const QRegularExpressionMatch match =
-                        QRegularExpression(QStringLiteral("KWin version:\\s*(\\S+)")).match(reply.value());
-                    if (match.hasMatch()) {
-                        const QString runningKWinVersion = match.captured(1);
-                        if (runningKWinVersion != effectKWinVersion) {
-                            diagnosis = PhosphorI18n::tr(
-                                            "The PlasmaZones KWin effect was built for KWin %1 but "
-                                            "KWin %2 is running, so KWin will not load it. Rebuild and "
-                                            "reinstall PlasmaZones against the running KWin.")
-                                            .arg(effectKWinVersion, runningKWinVersion);
-                        }
-                    }
-                }
-                emitBridgeMissingWarning(diagnosis);
-            });
-}
-
-void Daemon::emitBridgeMissingWarning(const QString& diagnosis)
-{
-    if (diagnosis.isEmpty()) {
-        qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
-                            << "s of startup — the PlasmaZones KWin effect is not running or"
-                            << "failed to register. Window dragging, keyboard shortcuts, and"
-                            << "snapping will not work. Enable the PlasmaZones effect in System"
-                            << "Settings > Desktop Effects, then restart the Plasma session so"
-                            << "KWin loads it.";
-    } else {
-        qCWarning(lcDaemon) << "Compositor bridge did not register within" << (BRIDGE_WATCHDOG_TIMEOUT_MS / 1000)
-                            << "s of startup — window control is dead." << diagnosis;
-    }
-
-    const QString body = diagnosis.isEmpty()
-        ? PhosphorI18n::tr(
-              "The PlasmaZones KWin effect has not registered with the daemon, so window "
-              "dragging and shortcuts will not work. Make sure it is enabled in System "
-              "Settings > Desktop Effects, then restart the Plasma session.")
-        : diagnosis;
-
-    // Raise a desktop notification via the freedesktop spec so the user sees
-    // the problem without having to read the journal. A direct method call
-    // (rather than QDBusInterface) keeps this off the main thread's critical
-    // path: QDBusInterface's constructor does a blocking Introspect round-trip,
-    // whereas createMethodCall + asyncCall is genuinely fire-and-forget. A
-    // missing notification server just makes the async call error out, which
-    // is fine. Mirrors the createMethodCall pattern used elsewhere in daemon.
-    QDBusMessage notify = QDBusMessage::createMethodCall(
-        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("/org/freedesktop/Notifications"),
-        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("Notify"));
-    notify << QStringLiteral("PlasmaZones") // app_name
-           << 0u // replaces_id
-           << QStringLiteral("plasmazones") // app_icon
-           << PhosphorI18n::tr("Window manager integration is inactive") // summary
-           << body // body
-           << QStringList() // actions
-           << QVariantMap() // hints
-           << -1; // timeout (server default)
-    QDBusConnection::sessionBus().asyncCall(notify);
-}
-
 void Daemon::stop()
 {
     m_shuttingDown = true;
@@ -390,9 +229,9 @@ void Daemon::stop()
     // (the engine is cleared below; a late fire would be a wasted no-op).
     m_gapResnapTimer.stop();
 
-    // The bridge watchdog is double-guarded (m_shuttingDown + registered
-    // re-check) so a late fire is harmless, but every other piece of this
-    // teardown severs explicitly rather than relying on an invariant.
+    // A late watchdog fire is harmless (it returns on m_shuttingDown), but
+    // every other piece of this teardown severs explicitly rather than
+    // relying on an invariant.
     m_bridgeWatchdogTimer.stop();
 
     // The preview-notify debounce and the resnap-suppression watchdog are
@@ -401,7 +240,6 @@ void Daemon::stop()
     // are severed here with the other timers rather than left to fire into
     // an unregistered adaptor.
     m_previewNotifyTimer.stop();
-    m_suppressResnapOsdWatchdog.stop();
 
     // Both wired in init (init_adaptors.cpp), so init-origin teardown that
     // belongs on this side of the m_running gate: the geometry-reapply
@@ -435,8 +273,8 @@ void Daemon::stop()
     // reason as the provider lambdas and QML statics below: both are wired from init()
     // (init_adaptors.cpp / init_engines.cpp), which runs before start(), so an
     // init-without-start teardown (test fixture, early-fail init, double-stop) would
-    // otherwise reach member destruction with the adaptor still holding a pointer to the
-    // about-to-die ShortcutManager / AutotileEngine. Both setters are null-safe and
+    // otherwise reach member destruction with the adaptor still holding pointers to the
+    // about-to-die engines and ShortcutManager. The setters are null-safe and
     // idempotent, so running this on an already-stopped daemon costs nothing.
     if (m_windowDragAdaptor) {
         // Cancel a live preview BEFORE dropping the engine borrows. The
@@ -451,27 +289,6 @@ void Daemon::stop()
         m_windowDragAdaptor->setShortcutRegistrar(nullptr);
     }
 
-    // Drop the layout-manager provider lambdas FIRST, before the m_running
-    // gate. They capture `this` and dereference m_settings, which is declared
-    // after m_layoutManager and so is destroyed BEFORE it; a cascade query
-    // during ~LayoutRegistry that hit a still-installed lambda would
-    // dereference freed memory. The providers are installed in init(), which
-    // runs before m_running is set in start(), so clearing them must not be
-    // gated or the init-without-start paths (test fixtures, early-fail
-    // constructors, double-stop) keep the UAF. Clearing is idempotent.
-    if (m_layoutManager) {
-        m_layoutManager->setDefaultLayoutIdProvider({});
-        m_layoutManager->setDefaultAutotileAlgorithmProvider({});
-        m_layoutManager->setTiledWindowCountProvider({});
-        m_layoutManager->setScreenOrientationProvider({});
-        m_layoutManager->setColorSchemeProvider({});
-        m_layoutManager->setCurrentVirtualDesktopProvider({});
-        m_layoutManager->setSnappingPreferredProvider({});
-        m_layoutManager->setDefaultAssignmentSuppressedProvider({});
-        m_layoutManager->setDefaultScrollingTemplateProvider({});
-        m_layoutManager->setScrollingTemplateStore(nullptr);
-    }
-
     // Null the QML static registry / manager pointers BEFORE the m_running
     // gate. These three statics are published unconditionally from
     // `setupAnimationProfiles()` in the ctor — which runs before `init()`
@@ -479,7 +296,7 @@ void Daemon::stop()
     // early-fail init paths) still has them pinned to the about-to-die
     // members, so the clear must run on every teardown path, not just the
     // post-start one. Same "borrowed-pointer + late member destruction"
-    // window as the provider lambdas above. The setDefault*(nullptr)
+    // window as the provider lambdas below. The setDefault*(nullptr)
     // calls are unconditionally null-safe.
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
     PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
@@ -492,14 +309,16 @@ void Daemon::stop()
     // comment below names. NOTE the deliberate asymmetry this creates for a stop() → start()
     // cycle: nothing rebuilds the loader, nor the m_ruleStoreWatcher reset beside it below (both
     // are ctor-only), so live reload of `plasmazones/curves` and of rules.json does not survive
-    // the cycle — the curve seeds and the low-precedence tag DO survive so inheritance keeps
-    // resolving, rules.json is still re-read by an explicit load() (D-Bus reloadRules), and a
-    // restarted daemon has no bus presence anyway (see the partition-shedding rationale above).
+    // the cycle. The profile seeds and the low-precedence tag survive, but the named curves do
+    // not: the loader's destructor unregisters every curve it registered (the bundled set too),
+    // so a curve named after the cycle resolves to the library default. Nothing re-reads
+    // rules.json either (stop() detaches the RuleAdaptor), and a restarted daemon has no bus
+    // presence (see the profile-partition note after the m_running gate).
     m_rawJsonProfiles.clear();
 
-    // Stop the publish coalescing trampoline before resetting the loaders — the timer is a member
-    // QTimer, so its `timeout` slot would otherwise still fire on the next event-loop tick after
-    // m_settings (its data source) has been destroyed.
+    // Stop the publish coalescing trampoline before resetting the loaders, so a publish queued
+    // before stop() cannot run after it and write m_profileRegistry once the QML statics above
+    // are unhooked.
     m_animationPublishTimer.stop();
     m_animationPublishPending = false;
 
@@ -594,23 +413,16 @@ void Daemon::stop()
     // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
     // SnapAdaptor, TilingAdaptor, AutotileAdaptor, ScrollingAdaptor) all
     // ship destructors that don't
-    // deref any borrowed pointer — most are `= default` / empty-body
-    // (no member access), and the two outliers do only self-cleanup
-    // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
-    // line body, and WindowTrackingAdaptor's `~WindowTrackingAdaptor`
-    // calls `m_service->setShouldTrackPredicate({})` on its Qt-child
-    // m_service to clear a captured-this lambda before the child
-    // tears down (see Pass-3 commit c4e3c5125). The substantive
+    // deref any borrowed pointer — they are `= default` or empty-body
+    // (no member access); DBusScreenAdaptor's out-of-line body does
+    // nothing. The substantive
     // safety claim is "no borrowed-pointer deref runs in any of their
     // destructors" — confirmed by inspecting each header + cpp pair,
-    // not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
-    // method dispatch to them before we begin tearing down, and Qt's
-    // sender-destruction auto-disconnect cleans up signal wiring when the
-    // borrowed sender (m_layoutManager, etc.) is destroyed during member
-    // destruction. Adding detach() to those eleven would require null-guarding
-    // every slot body (they currently rely on the "borrowed pointer is
-    // always valid" invariant), which is a larger refactor than the
-    // defense-in-depth buys. If a future adaptor grows a dtor body that
+    // not header alone. Their borrowed pointers are still severed below
+    // (the engine adaptors' clearEngine, and the WTA's, WDA's,
+    // TilingAdaptor's and SnapAdaptor's late-bound borrows), with the bus
+    // already unregistered above; none of them needs a detach() for its
+    // DESTRUCTOR. If a future adaptor grows a dtor body that
     // derefs a borrowed member, add detach() to it AND wire the call here
     // — same pattern as these four.
     if (m_settingsAdaptor) {
@@ -695,13 +507,36 @@ void Daemon::stop()
     // installed while member destruction frees what they deref. Each is a null-safe
     // idempotent clear, so running them on a never-inited daemon is a no-op.
 
-    // The shutdown save runs FIRST, while every borrow below is still wired:
-    // its re-capture reads the engines, predicates and context resolver, and
-    // with those severed it captured nothing. Running-path only; its guard
+    // The shutdown save runs before any borrow it reads is severed: its
+    // re-capture reads the engines, predicates and context resolver, and the
+    // zone rects it compares a frame with resolve context gaps through the
+    // layout-manager providers below (F343). Running-path only; its guard
     // blocks the later saves this teardown schedules, and nothing below
     // mutates placement.
     if (m_running && m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->saveStateOnShutdown();
+    }
+
+    // Drop the layout-manager provider lambdas right after that save, still
+    // above the m_running gate. They capture `this` and dereference
+    // m_settings, which is declared after m_layoutManager and so is destroyed
+    // BEFORE it; a cascade query during ~LayoutRegistry that hit a
+    // still-installed lambda would dereference freed memory. The providers
+    // are installed in init(), which runs before m_running is set in start(),
+    // so clearing them must not be gated or the init-without-start paths
+    // (test fixtures, early-fail constructors, double-stop) keep the UAF.
+    // Clearing is idempotent.
+    if (m_layoutManager) {
+        m_layoutManager->setDefaultLayoutIdProvider({});
+        m_layoutManager->setDefaultAutotileAlgorithmProvider({});
+        m_layoutManager->setTiledWindowCountProvider({});
+        m_layoutManager->setScreenOrientationProvider({});
+        m_layoutManager->setColorSchemeProvider({});
+        m_layoutManager->setCurrentVirtualDesktopProvider({});
+        m_layoutManager->setSnappingPreferredProvider({});
+        m_layoutManager->setDefaultAssignmentSuppressedProvider({});
+        m_layoutManager->setDefaultScrollingTemplateProvider({});
+        m_layoutManager->setScrollingTemplateStore(nullptr);
     }
 
     // Clear adaptor engine pointers BEFORE destroying the engines. Adaptors are Qt
@@ -726,8 +561,9 @@ void Daemon::stop()
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr, nullptr);
     }
 
-    // Clear the late-bound WTS float / mode callbacks that capture `this`, so
-    // the "every `this`-capturing predicate is cleared" contract stays grep-discoverable.
+    // Clear the late-bound WTS float / mode callbacks. All but the tiled predicate reach `this`
+    // (directly or through the routing inputs); that one holds only QPointers and goes with
+    // them, so the clear-before-teardown contract stays grep-discoverable.
     if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
         auto* wts = m_windowTrackingAdaptor->service();
         wts->setEngineFloatResolver({});
@@ -763,12 +599,6 @@ void Daemon::stop()
         // overlay service outlives this teardown.
         m_overlayService->setActiveDragWindowId({});
     }
-    // Same clear-before-teardown contract as the overlay block above: the
-    // picker's axis provider captures `this` and reads m_scrollEngine, which
-    // is reset below.
-    if (m_unifiedLayoutController) {
-        m_unifiedLayoutController->setStripAxisProvider({});
-    }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
     // Explicit symmetric clear across all three borrowers — SnapAdaptor's
@@ -785,10 +615,9 @@ void Daemon::stop()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setContextResolver(nullptr);
         // m_screenModeRouter is destroyed on the running path below; null its
-        // WTA borrow before that reset so any D-Bus call landing in the gap
-        // between this teardown and the bus unregister can't deref
-        // a freed router pointer. SnapAdaptor's clearEngine() does
-        // the symmetric clear (snapadaptor.cpp).
+        // WTA borrow before that reset so nothing later in this teardown
+        // derefs a freed router (the bus is already unregistered above).
+        // SnapAdaptor holds no router.
         m_windowTrackingAdaptor->setScreenModeRouter(nullptr);
     }
     if (m_tilingAdaptor) {
@@ -820,13 +649,10 @@ void Daemon::stop()
         // closure null-checks the router, but clearing it here keeps the
         // teardown grep-discoverable like every other late-bound borrow.
         concreteSnap->setLiveModeResolver({});
-        // Same contract for the tile-defer liveness resolver, which captures
-        // QPointers to both tiling engines.
-        concreteSnap->setTilingEngineLiveResolver({});
-        // The window-registry borrow belongs here too. Member order means the
-        // registry outlives the engines, so nothing can deref it in the
-        // teardown gap; this is the grep-discoverable contract, and it matches
-        // the clear the tiling adaptor's identically-named borrow gets above.
+        // The window-registry borrow, cleared in every engine block. Member
+        // order already makes the registry outlive the engines. The engine-settings
+        // borrow (setEngineSettings refuses null) and snap's autotile borrow die
+        // with the engines just below.
         concreteSnap->setWindowRegistry(nullptr);
         // The navigation-state provider and cross-surface resolver: raw borrows too.
         concreteSnap->setNavigationStateProvider(nullptr);
@@ -835,8 +661,8 @@ void Daemon::stop()
         concreteSnap->setPersistenceDelegate({}, {});
     }
 
-    // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
-    // its restore-position evaluator) before the store is destroyed. Same
+    // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (read by
+    // every per-window rule resolver) before the store is destroyed. Same
     // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setRuleStore(nullptr);
@@ -853,36 +679,27 @@ void Daemon::stop()
     // Clear the autotile context-gap provider, which captures `this` (Daemon, via
     // m_layoutManager / currentDesktopForScreen / currentActivity). No live deref
     // can occur today — m_autotileEngine is destroyed on the running path below
-    // while `this` is still alive — but clearing it keeps the "every
-    // `this`-capturing closure is cleared before teardown" contract complete and
-    // grep-discoverable, exactly like the SnapEngine exclude-rule borrow above.
+    // while `this` is still alive — but clearing it keeps the engine-side clears
+    // complete and grep-discoverable (ScrollingAdaptor's step and gate providers
+    // stay installed on purpose: its scroll slots refuse once clearEngine nulls
+    // the engine), exactly like the SnapEngine exclude-rule borrow above.
     // `m_autotileEngine` is base-typed `PlacementEngineBase*`;
     // setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
-        concreteAutotile->setScrollingModeResolver({});
         // The cross-surface resolver borrow all three engines took (enginefactory.cpp).
         concreteAutotile->setCrossSurfaceResolver(nullptr);
         concreteAutotile->setPersistenceDelegate({}, {});
+        concreteAutotile->setWindowRegistry(nullptr);
     }
     // Scroll twin of the clear above: every closure below captures Daemon `this`
     // (init_engines.cpp) under the same clear-before-destroy contract.
     if (auto* concreteScroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
         concreteScroll->setContextGapProvider({});
-        concreteScroll->setSnappingModeResolver({});
         concreteScroll->setScrollingModeResolver({});
-        concreteScroll->setAutotileModeResolver({});
         concreteScroll->setCrossSurfaceResolver(nullptr);
         concreteScroll->setPersistenceDelegate({}, {});
-    }
-
-    // Sever the snap adaptor's cross-screen reclaim hook BEFORE the engines
-    // it captures raw pointers to are destroyed — same clear-before-destroy
-    // contract as the engine closures above. (The adaptor itself is deleted
-    // in initCoreAdaptors' preamble on a re-cycle, but stop() must not leave
-    // a hook that could dangle if a late D-Bus call raced teardown.)
-    if (m_snapAdaptor) {
-        m_snapAdaptor->setCrossScreenTileReclaim({});
+        concreteScroll->setWindowRegistry(nullptr);
     }
 
     // Everything ABOVE this gate is init/ctor-origin teardown that must run on
@@ -890,11 +707,13 @@ void Daemon::stop()
     // detaches, the D-Bus unregister, the loader resets, the QML-static
     // null-outs, the shader-registry teardown, and the borrow-severing clears
     // just above — all of which either sever a BORROWED pointer a member
-    // destructor would otherwise deref, or are idempotent no-ops. Everything
-    // BELOW is start()-origin (the persistent sender reconnects, the state
-    // save, and the engine/resolver member RESETS established during a running
-    // session); running those without a prior start() could touch half-wired
-    // state. Hence the gate sits here.
+    // destructor would otherwise deref, or are idempotent no-ops (the
+    // window-tracking shutdown save above runs only when m_running, ahead of
+    // the provider clears it reads). Everything BELOW is start()-origin (the
+    // persistent sender reconnects, the layout and settings save, and the
+    // engine/resolver member RESETS established during a running session);
+    // running those without a prior start() could touch half-wired state.
+    // Hence the gate sits here.
     if (!m_running) {
         return;
     }
@@ -909,11 +728,13 @@ void Daemon::stop()
     // teardownIdleConnections(): every connection these senders hold on
     // `this` is made in per-start code, so severing them is exactly undone
     // by the next start(). This sweep covers the connectScreenSignals /
-    // connectDesktopActivity / connectShortcutSignals connections in
-    // start.cpp; the connectLayoutSignals / connectOverlaySignals connections
-    // (whose sender m_layoutManager is mixed and must not be blanket-severed)
-    // are instead tracked in m_restartScopedConnections and cleared at the
-    // top of connectLayoutSignals(), and the WTA-to-drag-adaptor fan-out uses
+    // connectDesktopActivity connections (start.cpp) and
+    // connectShortcutSignals' (shortcuts_wiring.cpp). m_restartScopedConnections
+    // carries the connectLayoutSignals / connectOverlaySignals connections on
+    // long-lived senders: m_layoutManager and m_scrollingTemplateStore rely on
+    // that list alone, and m_overlayService and the WTA are swept here as
+    // well. Their unified-controller connections die with the controller each
+    // start() rebuilds, and the WTA-to-drag-adaptor fan-out uses
     // Qt::UniqueConnection. The two schemes are complementary, not
     // alternatives — this one owns the persistent-sender sweep, that one owns
     // the mixed-sender and non-daemon-receiver connections.
@@ -941,8 +762,9 @@ void Daemon::stop()
     // (m_layoutManager, m_scrollingTemplateStore) are ctor-owned and keep
     // emitting, so a store mutation between stop() and the next start() would
     // run updateEngineScreens on a stopped daemon. Severing here makes the
-    // teardown symmetric with every other per-start list; the clear in
-    // connectLayoutSignals stays, because init() can re-run without a stop().
+    // teardown symmetric with every other per-start list. The clear at the top
+    // of connectLayoutSignals is a belt: every start() that fills the list sets
+    // m_running, so the next stop() severs it here.
     for (const QMetaObject::Connection& conn : std::as_const(m_restartScopedConnections)) {
         disconnect(conn);
     }
@@ -950,19 +772,22 @@ void Daemon::stop()
 
     // Per-session change-gate state: a stale tiled-count entry would make the
     // first placementChanged of the next init/start cycle read as "unchanged"
-    // and silently skip its save trigger.
+    // and skip its count-rule re-resolve (the save trigger is a separate,
+    // ungated connection).
     m_lastTiledCountByScreen.clear();
     // Sibling latch, same per-session shape (its queued single-shot also
     // gates on m_shuttingDown, so this is symmetry rather than a live fix).
     m_reconcileAssignmentsPending = false;
     // Its colour-scheme twin, same shape and same reasoning.
     m_colorSchemeRefreshPending = false;
+    // And the tab-colour broadcast latch, same shape (its single shot gates on m_shuttingDown).
+    m_scrollTabColorsBroadcastPending = false;
     // Per-session restore staging: entries computed against the pre-stop
     // window set must not feed a post-restart KCM apply with dead geometry.
     m_pendingSnapFloatRestores.clear();
     // The derived engine sets are only read while the recompute latch is held,
     // and the next cycle's first recompute rewrites them before any read — but
-    // they are per-session change-gate state like the two above, and leaving
+    // they are per-session change-gate state like the state above, and leaving
     // them out was an asymmetry in a block whose whole purpose is that reset.
     m_derivedAutotileScreens.clear();
     m_derivedScrollingScreens.clear();
@@ -1003,16 +828,15 @@ void Daemon::stop()
     // Its own prunes keep it bounded: a closed window drops out of every order
     // (pruneEngineOrdersForWindow), and a removed desktop or activity drops its
     // contexts (pruneContextMapsForDesktop / pruneContextMapsForActivities).
-    // Screen ids are pruned only on a virtual-screen RECONFIGURE
+    // Screen ids are pruned on a virtual-screen RECONFIGURE
     // (pruneEngineOrdersForRemovedScreens, which keeps the new VS id set plus
-    // the bare physical id). A physical unplug deliberately keeps the screen's
-    // orders, so a replug re-enters with the order it left with.
+    // the bare physical id), and an output that goes away loses its orders in
+    // retireOutputPlacements: its windows are parked by the engines instead,
+    // and a replayed order would tile windows that have moved on.
 
-    // Per-session OSD gates. A resnap armed just before the stop leaves its
-    // outstanding count behind, and the screen-removal cooldown deadline can
-    // still be in the future — either one carried into the next start()
-    // swallows the first OSD of the new session.
-    m_suppressResnapOsd = 0;
+    // Per-session OSD gate. The screen-removal cooldown deadline can still be
+    // in the future, and carried into the next start() it swallows the first
+    // OSD of the new session.
     m_screensSettlingUntil = {};
 
     // Release the shortcut grabs and the Portal session with the connections:
@@ -1044,11 +868,12 @@ void Daemon::stop()
     // also reached only from the ctor-origin setup.
     //
     // `m_curveLoader` is reset ABOVE the m_running gate so its destructor runs
-    // NOW (issuing its own `clearOwner(ownerTag)` and tearing down the
-    // QFileSystemWatcher) rather than in the `~Daemon` body, where it would
-    // fire path-change signals into a half-destroyed object. What it owns is
-    // CURVES, not profiles, so its teardown costs the cycle live curve reload
-    // and nothing else — and it is the only sender of `curvesChanged`, so after
+    // NOW (unregistering every curve it loaded under its owner tag from the
+    // CurveRegistry, and tearing down the QFileSystemWatcher) rather than in the
+    // `~Daemon` body, where it would fire path-change signals into a
+    // half-destroyed object. What it owns is CURVES, not profiles, so the cycle
+    // loses every named file curve and their live reload, and nothing else —
+    // and it is the only sender of `curvesChanged`, so after
     // a cycle nothing re-parses the timing tree against a reloaded registry
     // either. The raw-JSON snapshot is cleared alongside because it caches
     // curve-resolved profiles, not because any destructor drops matching
@@ -1073,7 +898,7 @@ void Daemon::stop()
         m_overlayService->hideCheatsheet();
         // The zone selector has the same no-way-out problem: OverlayService
         // outlives stop(), the drag adaptor's engine borrows are already
-        // nulled and the bus unregisters below, so no drag-end can ever hide
+        // nulled and the bus is already unregistered, so no drag-end can ever hide
         // a selector left showing — and the latched m_zoneSelectorVisible
         // would make showZoneSelector's entry guard refuse every show for
         // the whole next session.
@@ -1089,14 +914,14 @@ void Daemon::stop()
         m_overlayService->clearAllScrollDropIndicatorOverrides();
     }
 
-    // Save state. The window-tracking state was saved at the top of this
-    // function, before the engine borrows were severed.
+    // Save state. The window-tracking state was saved above the running gate,
+    // before the engine borrows and layout providers were severed.
     m_layoutManager->saveLayouts();
     m_layoutManager->saveAssignments();
     m_settings->save();
 
     // Autotile per-window restore state is included in WTA's saveStateOnShutdown()
-    // (run at the top of stop(), with the engines still wired). No separate save.
+    // (run above the running gate, with the engines still wired). No separate save.
     //
     // Do NOT call setAutotileScreens({}) here — it emits windowsReleased
     // which clears WTS floating state and restarts the save timer, potentially
@@ -1113,14 +938,12 @@ void Daemon::stop()
     m_screenModeAdapter.reset();
     m_workspaceStateAdapter.reset();
 
-    // Destroy the router. Engines below outlive it so any in-flight
-    // navigatorForShortcut path completes with the engine pointers it
-    // already captured before the router went away.
+    // Destroy the router before the engines: it holds raw borrows of every engine (screenmoderouter.h).
     m_screenModeRouter.reset();
 
     // Destroy engines now (during stop(), before Qt child destruction order).
-    // Their exclude-rule / rule-store / context-gap borrows were severed
-    // above the running gate.
+    // Their exclude-rule and context-gap borrows were severed above the running
+    // gate (the rule-store borrow severed there is the WTA's).
     m_snapEngine.reset();
     m_autotileEngine.reset();
     // Drop the strip-state provider FIRST, and only now: once the engine is
@@ -1137,143 +960,14 @@ void Daemon::stop()
     // All three engines borrowed m_crossSurfaceResolver (injected at construction).
     // They are destroyed immediately above, so the borrow is already dead;
     // reset the resolver here too so the teardown order is explicit and
-    // grep-discoverable — matching the exclude-rule / window-rule borrow
+    // grep-discoverable — matching the exclude-rule and context-gap borrow
     // severing above — and survives a future member-declaration reorder.
     m_crossSurfaceResolver.reset();
 
-    // Provider lambdas already cleared at the top of stop() (before the
-    // m_running gate) so this point requires no further teardown.
+    // Provider lambdas were already cleared after the shutdown save (above the
+    // m_running gate), so this point requires no further teardown.
 
     m_running = false;
-}
-
-void Daemon::queryPlasmaWorkspaceState()
-{
-    // Query the user-bus systemd for `plasma-workspace.target`'s ActiveState
-    // to distinguish a real Plasma session from a phantom plasma-restore session.
-    //
-    // During user-logout → SDDM handoff, systemd may respawn the daemon into a
-    // transient "phantom" state: a stray `kwin_wayland` from a fallback session-
-    // restore mechanism briefly publishes a fresh `wayland-N` socket inside the
-    // still-dying `user@.service`, and `Restart=on-failure` schedules a daemon
-    // retry after Qt's wayland QPA aborts on the vanished `wl_display`. The
-    // phantom daemon fires welcome OSDs against an output about to be unbound.
-    //
-    // Why this signal works: `plasma-workspace.target` is only flipped to `active`
-    // by `startplasma-wayland`'s orchestration after SDDM hands off. The phantom
-    // has no `startplasma-wayland` leader, so the target stays inactive — a signal
-    // the phantom cannot fake. logind's `User.State` stays `active` whenever
-    // `user@.service` is up (can't distinguish phantom from real), and the
-    // wayland-socket existence probe passes during the phantom.
-    //
-    // Fail-open on all D-Bus errors: `m_plasmaWorkspaceActive` defaults to `true`,
-    // so non-systemd setups and headless tests aren't accidentally silenced.
-    QDBusConnection sessionBus = QDBusConnection::sessionBus();
-    if (!sessionBus.isConnected()) {
-        qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: session bus unavailable, leaving m_plasmaWorkspaceActive=true";
-        return;
-    }
-
-    QDBusMessage subscribeMsg = QDBusMessage::createMethodCall(
-        QStringLiteral("org.freedesktop.systemd1"), QStringLiteral("/org/freedesktop/systemd1"),
-        QStringLiteral("org.freedesktop.systemd1.Manager"), QStringLiteral("Subscribe"));
-    auto* subscribeWatcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(subscribeMsg), this);
-    connect(subscribeWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<> reply = *w;
-        if (reply.isError()) {
-            qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: Subscribe failed:" << reply.error().message()
-                              << "— PropertiesChanged signals may not arrive";
-        }
-    });
-
-    QDBusMessage getUnitMsg = QDBusMessage::createMethodCall(
-        QStringLiteral("org.freedesktop.systemd1"), QStringLiteral("/org/freedesktop/systemd1"),
-        QStringLiteral("org.freedesktop.systemd1.Manager"), QStringLiteral("GetUnit"));
-    getUnitMsg << QStringLiteral("plasma-workspace.target");
-    auto* getUnitWatcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(getUnitMsg), this);
-    connect(getUnitWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        // A stop() may have landed between the async call and this reply; do not
-        // continue into fetchPlasmaWorkspaceActiveState (which installs the
-        // PropertiesChanged subscription) after shutdown began.
-        if (m_shuttingDown) {
-            return;
-        }
-        QDBusPendingReply<QDBusObjectPath> reply = *w;
-        if (reply.isError()) {
-            qCInfo(lcDaemon) << "queryPlasmaWorkspaceState: GetUnit('plasma-workspace.target') failed:"
-                             << reply.error().message() << "— leaving fail-open (target not loaded)";
-            return;
-        }
-        m_plasmaWorkspaceTargetPath = reply.value().path();
-        if (m_plasmaWorkspaceTargetPath.isEmpty()) {
-            return;
-        }
-        fetchPlasmaWorkspaceActiveState();
-    });
-}
-
-void Daemon::fetchPlasmaWorkspaceActiveState()
-{
-    QDBusConnection sessionBus = QDBusConnection::sessionBus();
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
-                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
-    msg << QStringLiteral("org.freedesktop.systemd1.Unit") << QStringLiteral("ActiveState");
-    auto* watcher = new QDBusPendingCallWatcher(sessionBus.asyncCall(msg), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        if (m_shuttingDown) {
-            return;
-        }
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isError()) {
-            qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: ActiveState Get failed:" << reply.error().message();
-            return;
-        }
-        const QString state = reply.value().toString();
-        m_plasmaWorkspaceActive = (state == QLatin1String("active"));
-        qCInfo(lcDaemon) << "plasma-workspace.target ActiveState at startup:" << state
-                         << "plasmaWorkspaceActive=" << m_plasmaWorkspaceActive
-                         << "path=" << m_plasmaWorkspaceTargetPath;
-
-        QDBusConnection bus = QDBusConnection::sessionBus();
-        // Disconnect first: a stop() -> start() cycle re-runs this whole query,
-        // and QDBusConnectionPrivate appends identical signal hooks without
-        // deduping, so without this the slot would fire once per registration
-        // per signal. Harmless (the handler is idempotent) but wasteful.
-        bus.disconnect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
-                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
-                       SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));
-        const bool ok =
-            bus.connect(QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
-                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
-                        SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));
-        if (!ok) {
-            qCWarning(lcDaemon) << "queryPlasmaWorkspaceState: failed to subscribe to Unit PropertiesChanged on"
-                                << m_plasmaWorkspaceTargetPath;
-        }
-    });
-}
-
-void Daemon::onPlasmaWorkspaceTargetPropertiesChanged(const QString& interfaceName,
-                                                      const QVariantMap& changedProperties,
-                                                      const QStringList& /*invalidatedProperties*/)
-{
-    if (interfaceName != QLatin1String("org.freedesktop.systemd1.Unit")) {
-        return;
-    }
-    const auto it = changedProperties.constFind(QStringLiteral("ActiveState"));
-    if (it == changedProperties.constEnd()) {
-        return;
-    }
-    const QString state = it->toString();
-    const bool nowActive = (state == QLatin1String("active"));
-    if (m_plasmaWorkspaceActive != nowActive) {
-        qCInfo(lcDaemon) << "plasma-workspace.target state changed:" << state;
-    }
-    m_plasmaWorkspaceActive = nowActive;
 }
 
 } // namespace PlasmaZones

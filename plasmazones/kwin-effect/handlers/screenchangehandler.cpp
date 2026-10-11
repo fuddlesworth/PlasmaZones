@@ -3,12 +3,13 @@
 
 #include "screenchangehandler.h"
 #include "tilinghandler/tilinghandler.h"
+#include "handlers/snaphandler.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
-#include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -73,6 +74,11 @@ void ScreenChangeHandler::stop()
     // turn — without this guard it would fire a stray D-Bus call between
     // stop() and this handler's destruction.
     m_stopped = true;
+    m_evacueeRecords.clear();
+    m_settleBaseline.clear();
+    m_deferredCrossings.clear();
+    m_skippedAnnounces.clear();
+    m_outputSetChanged = false;
 }
 
 void ScreenChangeHandler::slotScreenGeometryChanged()
@@ -96,6 +102,9 @@ void ScreenChangeHandler::slotScreenGeometryChanged()
         return;
     }
 
+    if (!m_pendingScreenChange) {
+        takeBaseline();
+    }
     m_pendingScreenChange = true;
     m_screenChangeDebounce.start(); // Restart timer (debounce)
 
@@ -132,6 +141,11 @@ void ScreenChangeHandler::applyScreenGeometryChange()
         m_effect->fetchAllVirtualScreenConfigs();
     }
 
+    // The settle runs whatever the size did: a 1080p monitor sleeping onto
+    // KWin's 1080p placeholder, or an unplug and replug inside one debounce,
+    // leaves the size unchanged and still moved windows (F749).
+    sendSettleReport();
+
     if (!sizeChanged) {
         // Even when physical size is unchanged, virtual screen split ratio changes
         // require window repositioning. Only proceed if VS configs exist; otherwise
@@ -160,12 +174,15 @@ void ScreenChangeHandler::slotScreenLayoutChanged()
     // virtualScreenGeometryChanged — which the geometry-debounce slot above
     // listens for — fires later in the same cascade, leaving a window where
     // outputChanged can be processed with no screen-change flag set. The
-    // guard in PlasmaZonesEffect's outputChanged lambda (window_lifecycle.cpp)
-    // depends on isScreenChangeInProgress() to recognize involuntary moves
-    // when oldScreenStillConnected is true (DPMS-wake layout shift onto a
-    // monitor that simply moved to a new x-offset rather than disappearing),
-    // so latch the flag at the earliest point KWin tells us anything is
-    // happening to the output set.
+    // output arm (window_output_connections.cpp) defers every crossing while
+    // isScreenChangeInProgress(), and the baseline the settle compares
+    // against has to be taken before KWin moves anything, so both start at
+    // the earliest point KWin tells us anything is happening to the output
+    // set.
+    if (!m_pendingScreenChange) {
+        takeBaseline();
+    }
+    m_outputSetChanged = true;
     m_pendingScreenChange = true;
     m_screenChangeDebounce.start();
 
@@ -222,6 +239,10 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
                     self->fetchAndApplyWindowGeometries();
                 }
             });
+        } else {
+            // A crossing deferred while this reapply was in flight has no
+            // settle of its own left to replay it.
+            self->replayDeferredCrossings();
         }
     });
 }
@@ -234,32 +255,17 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
     }
     qCInfo(lcScreenChange) << "Applying geometries to" << geometries.size() << "windows";
 
-    // Single pass: map by full window ID and by appId for fallback
-    QHash<QString, KWin::EffectWindow*> windowByFullId;
-    QHash<QString, KWin::EffectWindow*> windowByAppId;
-    const auto windows = KWin::effects->stackingOrder();
-    for (KWin::EffectWindow* w : windows) {
-        // isDeleted: a dying sibling must not claim the insert-if-absent
-        // appId slot — the apply loop's own isDeleted guard would then
-        // silently drop the live window's reapply.
-        if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
-            continue;
-        }
-        QString fullId = m_effect->getWindowId(w);
-        QString appId = ::PhosphorIdentity::WindowId::extractAppId(fullId);
-        windowByFullId.insert(fullId, w);
-        if (!windowByAppId.contains(appId)) {
-            windowByAppId.insert(appId, w);
-        }
-    }
-
     struct ApplyEntry
     {
         QPointer<KWin::EffectWindow> window;
         QRect geometry;
+        quint64 commandStamp = 0; ///< see WindowCommandStamps
+        QString screenId; ///< the daemon's answer for the zone's screen
     };
     QVector<ApplyEntry> toApply;
 
+    QVector<const PhosphorProtocol::WindowGeometryEntry*> valid;
+    QStringList validIds;
     for (const auto& entry : geometries) {
         if (entry.windowId.isEmpty()) {
             qCDebug(lcScreenChange) << "Skipping geometry entry with empty windowId";
@@ -269,29 +275,61 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             qCDebug(lcScreenChange) << "Skipping geometry entry with invalid size for" << entry.windowId;
             continue;
         }
+        valid.append(&entry);
+        validIds.append(entry.windowId);
+    }
 
-        KWin::EffectWindow* window = windowByFullId.value(entry.windowId);
-        if (!window) {
-            window = windowByAppId.value(::PhosphorIdentity::WindowId::extractAppId(entry.windowId));
-        }
-        if (window && m_effect->shouldHandleWindow(window)) {
+    // The effect's shared batch resolve: an entry naming a live window gets
+    // that window or nothing, and only an entry naming no live window falls
+    // back to the ONE unclaimed window of its app. The old first-seen app map
+    // handed a stale entry to whichever same-app window it met first.
+    const QVector<KWin::EffectWindow*> resolved = m_effect->resolveDaemonWindowIds(validIds, /*admitFullscreen=*/true);
+    for (int i = 0; i < valid.size(); ++i) {
+        const auto& entry = *valid.at(i);
+        KWin::EffectWindow* const window = resolved.at(i);
+        if (window) {
             const QString winScreenId = m_effect->getWindowScreenId(window);
             if (m_effect->m_tilingHandler->isManagedScreen(winScreenId)) {
                 qCDebug(lcScreenChange) << "Skipping autotile-managed window" << entry.windowId << "on screen"
                                         << winScreenId;
                 continue;
             }
+            // A zone on another output is never applied from here: a window
+            // KWin moved off its zone's output was classified at the settle
+            // (an evacuee floats where it is, a user move unsnaps it), and
+            // putting it back is the daemon's verdict, not a resnap (F616).
+            if (!entry.screenId.isEmpty()
+                && m_effect->outputForScreenId(entry.screenId) != m_effect->windowOutput(window)) {
+                qCDebug(lcScreenChange) << "Skipping" << entry.windowId << "whose zone is on" << entry.screenId;
+                continue;
+            }
+            // A window on a desktop or activity not in view would not ack the
+            // configure: its zone is re-applied when that desktop is shown.
+            if (!isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity()) {
+                m_effect->snapHandler()->armDesktopArrivalRestore(entry.windowId,
+                                                                  DesktopArrivalParks::Cause::ReapplyOnly);
+                continue;
+            }
             QRect newGeometry = entry.toRect();
             QRectF currentWindowGeometry = window->frameGeometry();
             if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
-                toApply.append({QPointer<KWin::EffectWindow>(window), newGeometry});
+                // Bumped only for an entry this pass will actually apply: a
+                // skipped window keeps whatever command it already has pending.
+                toApply.append({QPointer<KWin::EffectWindow>(window), newGeometry,
+                                m_effect->m_daemonGate.commandStamps.bump(window), entry.screenId});
             }
         }
     }
 
     m_effect->applyStaggeredOrImmediate(toApply.size(), [this, toApply](int i) {
         const ApplyEntry& e = toApply[i];
-        if (e.window && !e.window->isDeleted() && m_effect->shouldHandleWindow(e.window)) {
+        // A newer command for the window since this pass scheduled it (a daemon
+        // batch, a keyboard move, a float) wins over this resnap.
+        // A fullscreen window was admitted at build time for the re-statement
+        // that keeps it, so it is admitted here too.
+        if (e.window && !e.window->isDeleted()
+            && m_effect->shouldHandleWindow(e.window, nullptr, /*exemptFullscreen=*/e.window->isFullScreen())
+            && m_effect->m_daemonGate.commandStamps.isCurrent(e.window.data(), e.commandStamp)) {
             // Re-check at apply time (mirrors the build-time guard above): the
             // window's screen can flip to autotile during the stagger interval,
             // and a snap-path applyWindowGeometry would then fight the autotile
@@ -301,14 +339,25 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             }
             qCInfo(lcScreenChange) << "Repositioning window" << m_effect->getWindowId(e.window) << "to" << e.geometry;
             // A monitor reconnect can hand back a window the session left
-            // KWin-maximized; placing its zone rect without dropping that
-            // state re-arms the cross-screen restore the demote exists for.
-            m_effect->m_tilingHandler->demoteMaximizeForSnapPlacement(e.window, e.geometry);
+            // KWin-maximized; placing its zone rect without the placement
+            // statement re-arms the cross-screen restore it exists for.
+            const PlacementStatement::Verdict verdict = m_effect->m_tilingHandler->preparePlacement(
+                e.window, e.geometry, PlacementStatement::Purpose::Restatement);
+            if (!verdict.apply) {
+                return; // a maximized or fullscreen window keeps it, the zone seated (F509)
+            }
+            // Pre-seed and bracket, the pair every daemon-driven apply carries:
+            // the configure's frame change is asynchronous (F294).
+            if (!e.screenId.isEmpty()) {
+                m_effect->m_trackedScreenPerWindow[e.window] = e.screenId;
+                m_effect->m_tilingHandler->updateNotifiedScreen(m_effect->getWindowId(e.window), e.screenId);
+            }
+            const auto applyGuard = m_effect->geometryApplyScope();
             // Resolution-change resnap: the effect-local twin of the daemon's
             // "resnap" action, which daemon_apply.cpp routes to WindowLayoutSwitch.
-            m_effect->applyWindowGeometry(e.window, e.geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                          PhosphorAnimation::ProfilePaths::WindowLayoutSwitch, QRectF(), QRectF(),
-                                          /*demoteMaximizeOnDeferredReplay=*/true);
+            m_effect->applyWindowGeometry(e.window, verdict.applyRect, /*allowDuringDrag=*/false,
+                                          /*skipAnimation=*/false, PhosphorAnimation::ProfilePaths::WindowLayoutSwitch,
+                                          QRectF(), QRectF(), PlacementStatement::Purpose::Restatement);
         }
     });
 }

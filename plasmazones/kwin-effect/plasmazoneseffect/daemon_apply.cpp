@@ -53,6 +53,23 @@ void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& acti
                                                    {success, action, reason, sourceZoneId, targetZoneId, screenId});
 }
 
+void PlasmaZonesEffect::slotFullscreenHandBackRequested(const QString& windowId)
+{
+    // A user verb the daemon placed no geometry for (a float with no
+    // float-back, a move to a tiling engine whose tile batch would bail on a
+    // fullscreen surface): the window leaves its own fullscreen where KWin's
+    // restore rect has it (F546, F526, F551). A windowed-fullscreen member's
+    // fullscreen is the strip's, and a minimized window has nothing to show.
+    KWin::EffectWindow* w = findWindowByIdExact(windowId);
+    KWin::Window* kw = w && !w->isDeleted() ? w->window() : nullptr;
+    if (!kw || !kw->isRequestedFullScreen() || w->isMinimized() || m_windowedFullscreenWindows.contains(windowId)) {
+        return;
+    }
+    qCInfo(lcEffect) << "Ending the fullscreen of" << windowId << "for a user verb with no placement";
+    const auto applyGuard = geometryApplyScope();
+    m_tilingHandler->applyFullScreenSuppressed(kw, false);
+}
+
 void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
 {
     // Showing-desktop guard: this activation is daemon-relayed (snap engine
@@ -62,7 +79,11 @@ void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
         qCDebug(lcEffect) << "slotActivateWindowRequested: dropped during show desktop" << windowId;
         return;
     }
-    KWin::EffectWindow* w = findWindowById(windowId);
+    // Instance-exact, like the desktop-move slot below: activation is about
+    // one window, and the app-id fallback would activate a same-app SIBLING,
+    // possibly on another desktop or activity, when the named window closed
+    // inside the round trip.
+    KWin::EffectWindow* w = findWindowByInstanceId(windowId);
     if (w) {
         KWin::effects->activateWindow(w);
     } else {
@@ -103,8 +124,15 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // it is actually on (returning at the engine's already-placed guards
     // when the residence is already right). The concrete case: a user who
     // removed a virtual desktop has rules naming one that no longer exists.
-    const auto placeWhereItIs = [this, w]() {
-        m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+    // An open's own continuation (a RouteToDesktop rule, asked for inside the
+    // open's resolve) still owes the window its first placement; any other
+    // move only re-applies the zone it holds where it lands (F415).
+    const auto parkCause = [this, w]() {
+        return m_snapHandler->openResolveInFlight(getWindowId(w)) ? DesktopArrivalParks::Cause::OpenContinuation
+                                                                  : DesktopArrivalParks::Cause::ReapplyOnly;
+    };
+    const auto placeWhereItIs = [this, w, parkCause]() {
+        m_snapHandler->armDesktopArrivalRestore(getWindowId(w), parkCause());
         m_snapHandler->slotDesktopChangedRestoreArrivals();
     };
 
@@ -130,21 +158,11 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // The window has just left the desktop on screen, so nothing will place it
     // until the user goes to where it went. On a tiling or scrolling screen that
     // handler's desktop-return catch-scan re-announces it; snapping has no such
-    // sweep, so park it for SnapHandler to re-drive on arrival.
-    //
-    // Keyed on the target not being in view rather than on WHY the move
-    // happened: a RouteToDesktop rule on the open path and a cross-mode handoff
-    // both land here, and the rule case leaves the window unplaced. Parking is a
-    // no-op for a window that turns out to need nothing (the resolve answers
-    // no-snap), so covering both is cheaper than distinguishing them.
-    //
-    // That breadth is safe for the move-to-next/prev-desktop shortcut too, which
-    // is the other producer of this signal. Its re-snap branch emits
-    // applyGeometryRequested with a zone immediately after this move, and that
-    // slot calls markWindowSnapped, which cancels the park — signals on one
-    // D-Bus connection keep their order, so the cancel always follows this arm.
-    // Its no-equivalent-zone fallback branch emits no geometry and leaves the
-    // window genuinely unplaced, which is precisely the case the park is for.
+    // sweep, so park it for SnapHandler to re-drive on arrival. The cause decides
+    // what the arrival may do: an open's continuation runs the open's restore
+    // chain, every other producer (the desktop shortcut, a cross-mode handoff,
+    // the shell's move) only re-applies the zone the window holds there, so a
+    // window the shortcut left unsnapped is not auto-snapped on arrival (F415).
     //
     // Measured against the window's OWN output, not the global current desktop.
     // Under per-output virtual desktops (Plasma 6.7) those differ, and the
@@ -157,7 +175,7 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         KWin::VirtualDesktop* const shownHere =
             out ? KWin::effects->currentDesktop(out) : KWin::effects->currentDesktop();
         if (shownHere != target) {
-            m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
+            m_snapHandler->armDesktopArrivalRestore(getWindowId(w), parkCause());
         }
     }
 }
@@ -175,103 +193,11 @@ void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, co
     m_tilingHandler->markExpectedOutputMove(windowId, targetScreenId, sourceScreenId);
 }
 
-void PlasmaZonesEffect::applySizeOnlyRestore(KWin::EffectWindow* w, const QString& liveWindowId,
-                                             const QString& screenId, const QSize& size, bool freshOpen)
-{
-    // Guarded like every window entry point here; the deref below is first.
-    if (!w || w->isDeleted()) {
-        return;
-    }
-    // Integer-aligned like every other frame compare in this file: on a
-    // fractional output the qreal frame carries sub-pixel residue.
-    const QRect frameInt = w->frameGeometry().toRect();
-    // Which producer this is decides where the restored size lands, and it
-    // is read from the effect's own bookkeeping, not inferred from the
-    // suppression entry: paintWindow erases a past-deadline entry on the
-    // first paint that reaches the window, so a desktop-arrival re-drive
-    // raced its own first paint for the answer. The open-path producer
-    // (a first-placement resolve or a tiling announce in flight) keeps the
-    // CENTRE: KWin placed the larger, app-inherited size, and a fresh window
-    // whose top-left is kept ends up parked in the upper-left corner of the
-    // spot KWin chose for it. The drag-out unsnap keeps the top-left: the
-    // user just dropped the window there and the shrink must not walk it
-    // away from the pointer.
-    const bool openPath =
-        m_snapHandler->hasOpenResolveInFlight(liveWindowId) || m_tilingHandler->announceInFlight(liveWindowId);
-    QRect geo(frameInt.topLeft(), size);
-    if (openPath) {
-        geo.moveCenter(frameInt.center());
-        // Clamped into the work area of the output the daemon named (its
-        // authoritative answer), else the output under the window's centre;
-        // never KWin's own w->screen(), which can name the wrong one of two
-        // identical outputs (Discussion #724). A window placed against an
-        // edge does not recentre off-screen.
-        KWin::LogicalOutput* out = outputForScreenId(screenId);
-        if (!out) {
-            out = windowOutput(w);
-        }
-        QRect work;
-        if (out) {
-            work = KWin::effects->clientArea(KWin::MaximizeArea, out).toRect();
-        }
-        if (work.isValid()) {
-            geo.moveLeft(qMax(work.left(), qMin(geo.left(), work.right() - size.width() + 1)));
-            geo.moveTop(qMax(work.top(), qMin(geo.top(), work.bottom() - size.height() + 1)));
-        }
-    }
-    qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << liveWindowId << "requested" << size
-                     << "at" << geo.topLeft() << (openPath ? "(open path)" : "(drag-out)");
-    if (freshOpen && frameInt.size() == geo.size()) {
-        // Explicit, rather than applyWindowGeometry's own at-target bail:
-        // that bail releases the suppression, which the float signal that
-        // follows this apply, or the resolve reply, releases in order. (The
-        // hold matters on Wayland, where the configure is asynchronous; an
-        // XWayland moveResize settles synchronously inside the apply.)
-        qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only restore already at size for" << liveWindowId;
-        return;
-    }
-    if (w->isMinimized()) {
-        // Same reason as the float-restore path: a moveResize while
-        // minimized poisons what KWin restores to on unminimize.
-        qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only restore skipped, window minimized:" << liveWindowId;
-        return;
-    }
-    // A window that mapped maximized (or is going fullscreen) keeps its
-    // frame whatever size is asked; nothing on this path unmaximizes, unlike
-    // a zone commit's demote. The free size lands when the user restores it.
-    // Like the two skips above, the first-frame suppression is left to its
-    // owners (resolve reply, announce reply, paint deadline).
-    if (KWin::Window* kw = w->window();
-        kw && (kw->requestedMaximizeMode() != KWin::MaximizeRestore || kw->isRequestedFullScreen())) {
-        qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only restore skipped, window maximized:" << liveWindowId;
-        return;
-    }
-    // Pre-seed the tracked screen from the daemon's authoritative answer, as
-    // the full-rect arm does: the configure's frame change is asynchronous
-    // and the bracket below covers only the synchronous one.
-    if (!screenId.isEmpty()) {
-        m_trackedScreenPerWindow[w] = screenId;
-        m_tilingHandler->updateNotifiedScreen(liveWindowId, screenId);
-    }
-    const auto applyGuard = geometryApplyScope();
-    applyWindowGeometry(w, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/freshOpen,
-                        PhosphorAnimation::ProfilePaths::WindowPlaceOut);
-    // The entry may be past its deadline (a window parked off-desktop keeps
-    // its entry on purpose), and paintWindow erases such an entry on the next
-    // paint: re-arm so the teleport just stamped is held to its settle, not
-    // painted at the spawn frame until the client acks.
-    if (freshOpen) {
-        refreshRestoreSuppressionDeadline(w);
-    }
-}
-
-// slotToggleWindowFloatRequested removed — the daemon now handles float-toggle
-// locally against its active-window + frame-geometry shadow and emits
-// applyGeometryRequested directly. See SnapAdaptor::toggleFloatForWindow.
-
 void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height,
-                                                   const QString& zoneId, const QString& screenId, bool sizeOnly)
+                                                   const QString& zoneId, const QString& screenId, bool sizeOnly,
+                                                   int purposeWire)
 {
+    const PhosphorProtocol::PlacementPurpose purpose = PhosphorProtocol::clampPlacementPurposeFromWire(purposeWire);
     // Magnitude bound BEFORE either QRect construction below. QRect's
     // x/y/w/h constructor computes `x + w - 1`, which is signed overflow and
     // undefined for a garbled payload — and it happens inside the constructor,
@@ -316,7 +242,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // window has painted, so it is a teleport: an animated move would play
     // over the open shader from a spot the user never saw. An apply that
     // lands after the suppression was released (deadline expired, or a late
-    // reclaim-declined float default) animates instead, which is right for
+    // float default) animates instead, which is right for
     // a window already visible.
     const bool freshOpen = m_restoreSuppress.contains(w);
 
@@ -383,28 +309,12 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     }
     qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "(live:" << liveWindowId << ") geo:" << geometry
                      << "zoneId:" << zoneId << "screen:" << screenId << "floating:" << isWindowFloating(liveWindowId)
-                     << "currentFrame:" << w->frameGeometry();
-    // Store pre-snap geometry before first snap (idempotent — skips if already stored).
-    // The daemon handles windowSnapped/recordSnapIntent internally, but only the effect
-    // knows the window's current frame geometry for pre-tile storage.
-    //
-    // ONLY when the window is actually MOVING into the zone: a window already at
-    // the target geometry has no meaningful pre-snap rect to capture (its current
-    // frame IS the zone). Without this guard, a re-apply of the zone geometry for
-    // an already-snapped window — e.g. reapplyWindowAppearance() re-emitting each
-    // snapped window's geometry on daemon reconnect — would store the ZONE rect as
-    // the pre-tile geometry, clobbering the real pre-snap position the window
-    // floats back to (Meta+F then teleports it to the zone instead of its float
-    // spot). The idempotent daemon-side check normally protects this, but on a
-    // daemon restart the reapply can race ahead of the disk-persisted pre-tile
-    // load; the move-check makes it robust regardless of ordering.
-    if (!skipGeometry && !zoneId.isEmpty() && w->frameGeometry().toRect() != geometry) {
-        // Capture frame geometry synchronously BEFORE applyWindowGeometry moves the window.
-        // ensurePreSnapGeometryStored is async (D-Bus hasPreTileGeometry check) — without
-        // pre-capturing, the callback would read the post-move geometry instead of the
-        // original free-floating position.
-        m_snapHandler->ensurePreSnapGeometryStored(w, liveWindowId, w->frameGeometry());
-    }
+                     << "currentFrame:" << w->frameGeometry()
+                     << "restatement:" << (purpose == PhosphorProtocol::PlacementPurpose::Restatement);
+    // No pre-snap capture here: every daemon zone apply follows its commit, so
+    // the window is already in a zone and the daemon refuses its frame. The
+    // daemon records the free frame itself before the commit
+    // (SnapEngine::recordFreeFrameBeforeUserSnap).
 
     // Empty zoneId = float-restore (daemon placing the window back at its pre-snap geometry, e.g.
     // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The
@@ -419,17 +329,30 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         if (!screenId.isEmpty()) {
             m_trackedScreenPerWindow[w] = screenId;
             m_tilingHandler->updateNotifiedScreen(liveWindowId, screenId);
+            // A daemon move of its own focused window, reported now: a
+            // virtual-screen move fires no outputChanged to report it later.
+            reportActiveWindowScreen(w, screenId);
         }
-        // Genuine snap commit only (same trio the tracking discriminator
-        // below tests): a float-restore places FREE geometry, where KWin's
-        // maximize is the user's business, and an autotile-managed screen's
-        // maximize belongs to TilingHandler's own ledgers. After the
-        // pre-seed above, whose coverage the demote's committed configure
-        // rides; before the bracketed apply.
-        const bool demoteForSnap =
-            !zoneId.isEmpty() && !screenId.isEmpty() && !m_tilingHandler->isManagedScreen(screenId);
-        if (demoteForSnap) {
-            m_tilingHandler->demoteMaximizeForSnapPlacement(w, geometry);
+        // The placement statement, on a snapping screen only: a tiling
+        // engine's maximize belongs to TilingHandler's own ledgers. A zone
+        // commit and a user verb's free apply (the float toggle, Restore:
+        // the window lands at its float-back, not maximized, F582) take it; a
+        // re-stated free spot leaves a maximize to the user. After the
+        // pre-seed above, whose coverage its committed configure rides;
+        // before the bracketed apply.
+        std::optional<PlacementStatement::Purpose> statement;
+        bool keptState = false;
+        QRect applyRect = geometry;
+        if (!screenId.isEmpty() && !m_tilingHandler->isManagedScreen(screenId)
+            && (!zoneId.isEmpty() || purpose == PhosphorProtocol::PlacementPurpose::UserVerb)) {
+            statement = purpose == PhosphorProtocol::PlacementPurpose::Restatement
+                ? PlacementStatement::Purpose::Restatement
+                : PlacementStatement::Purpose::UserVerb;
+            // A re-statement keeps a maximize or fullscreen and moves nothing:
+            // the zone is now the rect it returns to (F490, F547, F560).
+            const PlacementStatement::Verdict verdict = m_tilingHandler->preparePlacement(w, geometry, *statement);
+            keptState = !verdict.apply;
+            applyRect = verdict.applyRect;
         }
         const auto applyGuard = geometryApplyScope();
         // A float-position restore on a fresh open teleports like the
@@ -437,10 +360,13 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         // rect is the "KDE opened it, then we moved it" read the suppression
         // exists to hide. A zone commit keeps its morph (not an open-path
         // producer on this slot).
-        applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/zoneId.isEmpty() && freshOpen,
-                            zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
-                                             : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
-                            QRectF(), QRectF(), /*demoteMaximizeOnDeferredReplay=*/demoteForSnap);
+        if (!keptState) {
+            applyWindowGeometry(w, applyRect, /*allowDuringDrag=*/false,
+                                /*skipAnimation=*/zoneId.isEmpty() && freshOpen,
+                                zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
+                                                 : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
+                                QRectF(), QRectF(), statement);
+        }
     }
     // Track snapping's own border set (mirrors how autotile records at its
     // tile-apply) using a discriminator analogous to the batch path
@@ -449,7 +375,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // single-window path uses the empty zoneId as the float discriminator, since it
     // is only reached for explicit snap commits (which legitimately un-float) and
     // float-restores (which arrive with an empty zoneId). A window can never land in
-    // both the snap and autotile border sets:
+    // both the snap and autotile border sets (preparePlacement untracked a window the
+    // tiling side still held):
     //   - empty zoneId         → float-restore: leave snapping's set
     //   - empty/autotile screen → autotile-managed or unresolved: leave the set
     //                             (TilingHandler tracks autotile-screen windows)
@@ -479,33 +406,25 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         return;
     }
 
-    QHash<QString, KWin::EffectWindow*> windowMap = buildWindowMap();
-
     struct PendingApply
     {
         QPointer<KWin::EffectWindow> window;
         QRect geometry;
         QString screenId; ///< daemon-authoritative target screen (empty = no override)
+        quint64 commandStamp = 0; ///< this entry's WindowCommandStamps stamp
     };
     QVector<PendingApply> pending;
 
-    // Two-pass resolution with a claim set. Exact uuid matches claim their
-    // window first; the appId fallback then resolves only entries whose
-    // window no exact entry claimed, and skips already-claimed windows.
-    // Without the claim set, a batch carrying BOTH a stale-uuid entry and
-    // the live-uuid entry for the same app resolved both onto the one live
-    // window — a double apply where the losing entry's (often empty)
-    // screenId then wiped the snap tracking the winner just marked.
-    QSet<KWin::EffectWindow*> claimedWindows;
-    QVector<const PhosphorProtocol::WindowGeometryEntry*> needFallback;
-    const auto appendPending = [&pending, &claimedWindows](const auto& entry, KWin::EffectWindow* window) {
-        claimedWindows.insert(window);
-        PendingApply p;
-        p.window = QPointer<KWin::EffectWindow>(window);
-        p.geometry = entry.toRect();
-        p.screenId = entry.screenId;
-        pending.append(p);
-    };
+    // Resolution goes through resolveDaemonWindowIds: an entry naming a live
+    // window gets that window (or nothing, when this effect does not handle
+    // it), and only an entry naming no live window falls back to its app,
+    // counting unclaimed windows only. Without the claim set, a batch
+    // carrying BOTH a stale-uuid entry and the live-uuid entry for the same
+    // app resolved both onto the one live window — a double apply where the
+    // losing entry's (often empty) screenId then wiped the snap tracking the
+    // winner just marked.
+    QVector<const PhosphorProtocol::WindowGeometryEntry*> valid;
+    QStringList validIds;
     for (const auto& entry : geometries) {
         // validationError() BEFORE the size test and before any toRect(): it
         // bounds the magnitudes, and the QRect construction inside toRect()
@@ -521,33 +440,20 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                                 << entry.width << "x" << entry.height;
             continue;
         }
-        if (KWin::EffectWindow* window = windowMap.value(entry.windowId)) {
-            appendPending(entry, window);
-        } else {
-            needFallback.append(&entry);
-        }
+        valid.append(&entry);
+        validIds.append(entry.windowId);
     }
-    for (const auto* entryPtr : needFallback) {
-        const auto& entry = *entryPtr;
-        // appId fallback for single-instance apps (uuid drift across a KWin
-        // restart), counting only UNCLAIMED windows so a stale sibling entry
-        // can neither double-apply onto a claimed window nor trip the
-        // ambiguity bail against it.
-        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(entry.windowId);
-        KWin::EffectWindow* candidate = nullptr;
-        int matchCount = 0;
-        for (auto it = windowMap.constBegin(); it != windowMap.constEnd(); ++it) {
-            if (claimedWindows.contains(it.value())) {
-                continue;
-            }
-            if (::PhosphorIdentity::WindowId::extractAppId(it.key()) == appId) {
-                candidate = it.value();
-                if (++matchCount > 1)
-                    break;
-            }
-        }
-        if (matchCount == 1) {
-            appendPending(entry, candidate);
+    const QVector<KWin::EffectWindow*> resolved = resolveDaemonWindowIds(validIds, /*admitFullscreen=*/true);
+    for (int i = 0; i < valid.size(); ++i) {
+        if (KWin::EffectWindow* const window = resolved.at(i)) {
+            PendingApply p;
+            p.window = QPointer<KWin::EffectWindow>(window);
+            p.geometry = valid.at(i)->toRect();
+            p.screenId = valid.at(i)->screenId;
+            // Scheduling is the command: an older entry still pending for this
+            // window, from any cascade, is superseded from here on.
+            p.commandStamp = m_daemonGate.commandStamps.bump(window);
+            pending.append(p);
         }
     }
 
@@ -566,33 +472,14 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     // would race that clear and store the zone geometry as pre-tile,
     // corrupting the restore path on subsequent mode transitions.
 
-    // Capture stacking order before applying geometries (moveResize raises on Wayland)
-    const auto allWindows = KWin::effects->stackingOrder();
-    QVector<QPointer<KWin::EffectWindow>> savedStack;
-    for (KWin::EffectWindow* w : allWindows) {
-        savedStack.append(QPointer<KWin::EffectWindow>(w));
-    }
-
     // Map the daemon's action string to a shader-tree ProfilePath. "resnap" is a layout
     // change (different layout or autotile recompute) — semantically a layout switch. "rotate"
     // moves windows between existing zones in the same layout — a snap-in. Everything else
-    // ("vs_reconfigure" via the adaptor relay, "snap_all" via the effect-local path, and any
-    // future daemon-emitted string) defaults to WindowPlaceIn.
+    // ("restate" for a carry, re-apply or gap reflow, "vs_reconfigure" via the adaptor relay,
+    // "snap_all" via the effect-local path, and any future string) defaults to WindowPlaceIn.
     const QString batchProfilePath = (action == QLatin1String("resnap"))
         ? PhosphorAnimation::ProfilePaths::WindowLayoutSwitch
         : PhosphorAnimation::ProfilePaths::WindowPlaceIn;
-
-    // Per-screen supersession epoch (see m_daemonGate.batchGenByScreen): bump and
-    // snapshot each target screen's counter so this cascade's still-queued
-    // ticks self-cancel if a newer batch lands on the same screen. Float/
-    // restore entries (empty screenId) are independent and never guarded.
-    QHash<QString, uint64_t> genByScreen;
-    for (const auto& p : pending) {
-        if (p.screenId.isEmpty() || genByScreen.contains(p.screenId)) {
-            continue;
-        }
-        genByScreen.insert(p.screenId, ++m_daemonGate.batchGenByScreen[p.screenId]);
-    }
 
     // The per-window motion resolve happens inside this callable, at FIRE
     // time, so a motion-tree refetch landing part-way through a cascade
@@ -604,16 +491,16 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     // than anything incorrect.
     applyStaggeredOrImmediate(
         pending.size(),
-        [this, pending, batchProfilePath, genByScreen](int i) {
+        [this, pending, batchProfilePath](int i) {
             const auto& p = pending[i];
-            // Drop this apply if a newer daemon batch has superseded this
-            // window's screen: a later-firing tick of this (older) cascade would
-            // otherwise clobber the newer batch's position and strand the window
-            // in a stale zone. Only observable with cascade stagger enabled,
-            // where the per-window moves spread across timer ticks. Empty
-            // screenId (float/restore) is independent and always applies.
-            if (!p.screenId.isEmpty()
-                && m_daemonGate.batchGenByScreen.value(p.screenId) != genByScreen.value(p.screenId)) {
+            // Drop this apply if any newer command for THIS window has landed
+            // since it was scheduled (a later batch carrying it, a keyboard
+            // move, a float, a drag end): a later-firing tick of this older
+            // cascade would otherwise put the stale rect back over it. Per
+            // window, so a newer batch that does not carry the window leaves
+            // its entry alone. Only observable with cascade stagger enabled.
+            if (p.window && !m_daemonGate.commandStamps.isCurrent(p.window.data(), p.commandStamp)) {
+                qCDebug(lcEffect) << "Batch apply superseded by a newer command for" << getWindowId(p.window.data());
                 return;
             }
             // isDeleted too, not just destruction: close-shader grabs (which
@@ -635,6 +522,8 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             if (!p.screenId.isEmpty()) {
                 m_trackedScreenPerWindow[p.window] = p.screenId;
                 m_tilingHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
+                // Same report as the single-window apply.
+                reportActiveWindowScreen(p.window, p.screenId);
             }
             const auto guard = geometryApplyScope();
             // Minimized guard for float/restore entries (empty screenId), the
@@ -646,17 +535,29 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // genuinely un-snaps the window regardless of visibility.
             const bool skipMinimizedRestore = p.screenId.isEmpty() && p.window->isMinimized();
             if (!skipMinimizedRestore) {
-                // Snap placements only (the discriminator below): a non-empty
-                // authoritative screenId that is not autotile-managed marks a
-                // real zone commit, and a surviving KWin maximize would fight
-                // its rect and arm a cross-screen restore.
-                const bool demoteForSnap = !p.screenId.isEmpty() && !m_tilingHandler->isManagedScreen(p.screenId);
-                if (demoteForSnap) {
-                    m_tilingHandler->demoteMaximizeForSnapPlacement(p.window, p.geometry);
+                // The placement statement on a snapping screen. Every batch
+                // entry re-states (no batch producer is the subject of a user
+                // verb), so a maximized or fullscreen window keeps that state
+                // and the rect becomes the one it returns to (F509, F547). A
+                // float/restore entry (empty screenId) is judged on the screen
+                // its rect lies on, and keeps a maximize the same way (F548).
+                const QString target = p.screenId.isEmpty()
+                    ? resolveEffectiveScreenId(p.geometry.center(), KWin::effects->screenAt(p.geometry.center()))
+                    : p.screenId;
+                std::optional<PlacementStatement::Purpose> statement;
+                bool keptState = false;
+                QRect applyRect = p.geometry;
+                if (!target.isEmpty() && !m_tilingHandler->isManagedScreen(target)) {
+                    statement = PlacementStatement::Purpose::Restatement;
+                    const PlacementStatement::Verdict verdict =
+                        m_tilingHandler->preparePlacement(p.window, p.geometry, *statement);
+                    keptState = !verdict.apply;
+                    applyRect = verdict.applyRect;
                 }
-                applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
-                                    /*skipAnimation=*/false, batchProfilePath, QRectF(), QRectF(),
-                                    /*demoteMaximizeOnDeferredReplay=*/demoteForSnap);
+                if (!keptState) {
+                    applyWindowGeometry(p.window, applyRect, /*allowDuringDrag=*/false,
+                                        /*skipAnimation=*/false, batchProfilePath, QRectF(), QRectF(), statement);
+                }
             }
             // Snapping owns its border set (mirrors autotile). The daemon
             // supplies a non-empty authoritative screenId only for real
@@ -688,39 +589,18 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 m_snapHandler->markWindowSnapped(batchWid, p.screenId);
             }
         },
-        [this, savedStack, action, genByScreen]() {
-            // Restore z-order after all geometries applied — but skip it when a
-            // newer batch has superseded every screen this one targeted. The
-            // superseding cascade captured and re-asserts the current stacking
-            // order itself; replaying this batch's stale savedStack would
-            // shuffle windows into a pre-supersession order. Snap-assist below
-            // stays unconditional: for the non-resnap batches (rotate,
-            // vs_reconfigure, snap_all) it is a no-op, and a superseded resnap
-            // is still safe because the superseding resnap re-evaluates snap
-            // assist itself.
-            bool fullySuperseded = !genByScreen.isEmpty();
-            for (auto it = genByScreen.constBegin(); it != genByScreen.constEnd(); ++it) {
-                if (m_daemonGate.batchGenByScreen.value(it.key()) == it.value()) {
-                    fullySuperseded = false;
-                    break;
-                }
-            }
-            auto* ws = fullySuperseded ? nullptr : KWin::Workspace::self();
-            if (ws) {
-                for (const auto& wPtr : savedStack) {
-                    if (wPtr && !wPtr->isDeleted()) {
-                        KWin::Window* kw = wPtr->window();
-                        if (kw) {
-                            ws->raiseWindow(kw);
-                        }
-                    }
-                }
-            }
+        [this, action]() {
+            // No z-order restore: a snap batch has no overlap group and KWin's
+            // moveResize does not raise, so replaying the stacking order from
+            // the batch's arrival could only bury a window the user raised
+            // during the cascade (F329).
+            //
             // Show snap assist after resnap if applicable.
             //
-            // A resnap is a bulk operation (autotile→snap toggle, rotate,
-            // vs-reconfigure) — not a per-window snap — so the continuation is
-            // anchored to the active window: snap assist shows ONLY if the
+            // A resnap follows a layout switch or a mode toggle; rotate,
+            // vs_reconfigure and restate carry their own actions and show
+            // none. It is a bulk operation, not a per-window snap, so the
+            // continuation is anchored to the active window: snap assist shows ONLY if the
             // resnap actually placed the active window in a zone. Passing its
             // windowId as the anchor makes showContinuationIfNeeded gate on
             // "this window is snapped", which also guarantees at least one
@@ -881,9 +761,9 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // Invalidate any stale instant-restore entry for this app. The snap
         // restore cache (SnapHandler) is a single-shot latency cache populated at
         // daemon-ready from the daemon's pending restores. Once a window
-        // floats, its saved zone no longer applies: windowClosed() will NOT
-        // persist a PendingRestore for a floating window (it should reopen
-        // floating). But a stale cache entry would still "Instant snap restore"
+        // floats, its saved zone no longer applies: the close capture records
+        // a floating window as floating (it should reopen floating). But a
+        // stale cache entry would still "Instant snap restore"
         // the reopened window into its old zone WITHOUT a daemon commit
         // (resolveWindowRestore finds nothing), leaving a ghost — visually
         // snapped but untracked. Dropping the entry makes the reopen take the
@@ -937,6 +817,12 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
     // path's invalidation when a float toggle emits both signals — see
     // flushPendingRuleInvalidations), so no separate invalidate call is needed.
     m_navigationHandler->setWindowZone(liveWindowId, state.zoneId);
+    // A window KWin moved to another screen, or one whose zone a layout change
+    // removed, is no longer snapped: a snapped mark left behind keeps its snap
+    // decoration and has a later minimize floated as a snap suspension (F328).
+    if (state.changeType == QLatin1String("screen_changed") || state.changeType == QLatin1String("unsnapped")) {
+        m_snapHandler->clearWindowSnapped(liveWindowId);
+    }
 }
 
 void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
@@ -1093,7 +979,7 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
         // Normalize X11 "resourceName resourceClass" to just resourceClass
         // (lowercased), matching the canonical form `normalizeAppId` produces
         // for every other appId entry point — getWindowId, rule evaluators,
-        // pending-restore prune patterns. An inline first-space split would
+        // placement prune patterns. An inline first-space split would
         // drift in two ways: (1) a three-token resource string like
         // "foo bar baz" yields "bar baz" here but "baz" through
         // normalizeAppId; (2) case is preserved here but lowercased

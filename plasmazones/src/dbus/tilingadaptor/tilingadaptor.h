@@ -79,11 +79,9 @@ public:
 
     /// Wire the WindowTrackingAdaptor (post-construction, to break the
     /// construction-order cycle) so the tiling open path can resolve
-    /// RouteToScreen / RouteToDesktop rules. Pass nullptr on shutdown.
-    void setWindowTrackingAdaptor(WindowTrackingAdaptor* wta)
-    {
-        m_windowTrackingAdaptor = wta;
-    }
+    /// RouteToScreen / RouteToDesktop rules, and a window the snap open path
+    /// routes onto a tiling screen reaches its engine. Pass nullptr on shutdown.
+    void setWindowTrackingAdaptor(WindowTrackingAdaptor* wta);
 
     /// Set the ordered list of engines sharing this interface's lifecycle
     /// pipeline (primary first — it is the fallback when no engine claims a
@@ -325,8 +323,9 @@ public Q_SLOTS:
     /**
      * @brief Notify the engine that a window was opened
      *
-     * Called by KWin effect when a new window is added. Routes the window
+     * Called by KWin effect when a window genuinely opens. Routes the window
      * to whichever pipeline engine owns the (possibly rule-routed) screen.
+     * The only announce that may take focus ("Focus new windows").
      *
      * @param windowId Window identifier from KWin
      * @param screenId Screen where the window appeared
@@ -334,6 +333,15 @@ public Q_SLOTS:
      * @param minHeight Window minimum height in pixels (0 if unconstrained)
      */
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight);
+
+    /**
+     * @brief Hand an already-shown window (back) to the tiling engines
+     *
+     * Same placement as windowOpened, for a window that did not just open: a
+     * desktop-switch catch-scan, a cross-output re-add, an unminimize. A
+     * re-placement never takes focus, so KWin's own pick stands.
+     */
+    void windowReannounced(const QString& windowId, const QString& screenId, int minWidth, int minHeight);
 
     /**
      * @brief Batch window-opened notifications
@@ -646,6 +654,11 @@ private:
      * invoke the engine identically.
      */
     void dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEntry& entry);
+    /// Shared body of windowOpened and windowReannounced: validation, the
+    /// panel-geometry deferral and the dispatch, with the entry stamped with
+    /// @p focusEligible ("Focus new windows" applies to genuine opens only).
+    void announceWindow(const char* method, const QString& windowId, const QString& screenId, int minWidth,
+                        int minHeight, bool focusEligible);
 
     /**
      * @brief Decide whether an incoming windowOpened must be deferred
@@ -675,10 +688,12 @@ private:
     /// The pipeline engine whose live set claims @p screenId, else the
     /// primary (first) engine — screen-keyed dispatch for open/focus.
     PhosphorEngine::IPlacementEngine* engineOwningScreen(const QString& screenId) const;
-    /// The pipeline engine tracking @p windowId, else the primary —
-    /// window-keyed dispatch for close/min-size (the window may have left
-    /// its opening screen).
-    PhosphorEngine::IPlacementEngine* engineOwningWindow(const QString& windowId) const;
+    /// EVERY pipeline engine tracking @p windowId, in any context, primary
+    /// first: window-keyed dispatch for close, release and min-size. With
+    /// per-desktop modes a multi-desktop window is held by autotile on one
+    /// desktop and by scrolling on another at once, and a close or release
+    /// through only the first left the other's tile or column behind.
+    QVector<PhosphorEngine::IPlacementEngine*> enginesTrackingWindow(const QString& windowId) const;
 
     /// Engines sharing the lifecycle pipeline, primary first (see
     /// setLifecycleEngines). Interface-only borrows.
@@ -757,10 +772,10 @@ private:
     /// order and master assignment. Rule routing is baked into the parked
     /// entry's screenId so its side effects run once. Entries are dropped
     /// on close and on clearEngine.
-    /// A parked open carries its reclaim eligibility with it: routing is
+    /// A parked open carries its claim eligibility with it: routing is
     /// baked into the parked entry's screenId and is not re-run on retry, so
     /// without the flag a rule-routed entry took the retry path's default
-    /// and was offered to the cross-screen reclaim after all — the rule won
+    /// and was offered to the reopen claim after all — the rule won
     /// on the first dispatch and lost on the retry.
     struct ParkedOpen
     {
@@ -768,37 +783,6 @@ private:
         bool allowCrossScreenClaim = true;
     };
     QList<ParkedOpen> m_unclaimedOpens;
-    /// Instance ids of LIVE windows released via releaseWindowTracking. The
-    /// case that motivated it is the effect's cross-screen MOVE transfer
-    /// (release on the old screen, then re-announce on the new one), but the
-    /// effect calls releaseWindowTracking from every live tracking drop —
-    /// the drag-bypass revert, the float cleanup, and the desktop/activity
-    /// demotion handlers as well as the output transfer — so the one-shot
-    /// arms on all of them. That is the intended reading rather than an
-    /// over-reach: every one of those is the user (or a rule) deliberately
-    /// moving a LIVE window, and none is a session restore, so none of them
-    /// wants the next announce reclaimed back to a remembered home.
-    ///
-    /// The daemon's own desktop-membership reconcile is the one caller that
-    /// does NOT arm this, and it is the exception that shows what the
-    /// justification above rests on: every effect caller re-announces the
-    /// window in the same breath, so the excuse is consumed immediately. The
-    /// reconcile has no such pairing, and an excuse left standing is spent by
-    /// whatever announce comes next.
-    /// The re-announce looks like a first
-    /// observation to claimCrossScreenReopen, whose same-instance branch then
-    /// matches the window's own stale record (still tiled on the OLD screen —
-    /// releaseWindowTracking deliberately captures nothing) and reclaims the
-    /// window straight back, silently undoing the user's move-to-screen
-    /// shortcut / script / rule. One-shot: consumed by the window's next
-    /// dispatch, which skips the claim round so the ARRIVAL screen's engine
-    /// adopts it — exactly what a move means. A genuine session restore never
-    /// passes through releaseWindowTracking, and a daemon restart clears the
-    /// set, so the reclaim's real audiences are untouched. Entries die with
-    /// the window (windowClosed / onTrackedWindowDestroyed), are swept by
-    /// pruneStaleFloatBroadcasts for a window that produced neither, and go
-    /// wholesale at clearEngine.
-    QSet<QString> m_moveReleasedInstances;
     void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
                                       bool allowCrossScreenClaim = true);
     void removeUnclaimedOpen(const QString& windowId);
@@ -831,25 +815,16 @@ private:
     /// Shared body of releaseWindowTracking, with the two engine-dependent
     /// steps parameterised.
     ///
-    /// @param owner The engine to release from, or nullptr to resolve it by
-    ///        window id. Naming it matters when the CALLER already knows: the
-    ///        id-based resolution runs isWindowTracked, whose contract is
-    ///        per-engine (ScrollEngine answers off the raw reverse-map key, so
-    ///        a phantom entry can win), and falls back to the first lifecycle
-    ///        engine when nothing answers. A caller that identified the holder
-    ///        through the membership-grade heldKeyForWindow must not have that
-    ///        answer re-derived by a weaker predicate. The screen read for the
-    ///        focus refresh is taken from the same engine for the same reason.
-    /// @param armMoveExcuse Whether to arm the adaptor's move-release
-    ///        one-shot. True for the effect's live-move callers, which
-    ///        re-announce the window immediately afterwards and would
-    ///        otherwise have that announce read as a session restore. FALSE
-    ///        for the desktop reconcile: nothing is guaranteed to re-announce,
-    ///        and an unconsumed one-shot is spent by a later unrelated
-    ///        announce, suppressing a legitimate cross-screen reclaim. The
-    ///        placement store's own move marker is armed either way — that one
-    ///        is consumed by takeForReopen and is load-bearing on both paths.
-    void releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner, bool armMoveExcuse);
+    /// @param owner The engine to release from, or nullptr to release from
+    ///        every engine tracking the window (enginesTrackingWindow). Naming
+    ///        it matters when the CALLER already knows: the id-based
+    ///        resolution runs isWindowTracked, whose contract is per-engine
+    ///        (ScrollEngine answers off the raw reverse-map key, so a phantom
+    ///        entry can win). A caller that identified the holder through the
+    ///        membership-grade heldKeyForWindow must not have that answer
+    ///        re-derived by a weaker predicate. The screen read for the focus
+    ///        refresh is taken from the same engine for the same reason.
+    void releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner);
     /// Per-screen map state that follows the managed set: every screen the
     /// coalesced announce dropped loses its retained batch and, if it had a
     /// broadcast focus, announces the empty one; every announced screen is
@@ -890,14 +865,17 @@ public:
 
     /**
      * @brief Unconditional per-window teardown, driven by the in-process
-     * WindowTrackingAdaptor::windowClosedNotification signal.
+     * WindowLifecycleRelay::windowClosed notice.
      *
      * The D-Bus windowClosed relay is gated effect-side on the close screen
      * still being engine-managed, so a window floated on a managed screen
      * whose screen later left the managed set never reaches windowClosed here
      * and its m_lastFloatBroadcast and m_lastScrollTabColorsRelay entries
      * (and any parked open) leaked for the process — suppressing the first
-     * genuine float broadcast or tab-colour relay of a reused id.
+     * genuine float broadcast or tab-colour relay of a reused id. The same
+     * gate skips the relay for a window that closes while its tiling
+     * desktop is out of view, so this also closes it in every engine that
+     * still tracks it (a no-op after a relay).
      * Plain method, NOT a slot: it must not become a D-Bus surface. It runs
      * AFTER the WTS teardown (the signal's contract), so it uses only the raw
      * id — shadowWindowId may no longer resolve a mutated-class canonical
@@ -913,7 +891,7 @@ public:
      * Swept in the INSTANCE-id key space: the maps hold both raw and
      * canonical composites (see windowClosed's dual removal), and only the
      * instance component survives a class rename. Plain method, not a slot.
-     * List payload matching the stalePruned signal's marshallable shape.
+     * List payload matching WindowLifecycleRelay::stalePruned.
      */
     void pruneStaleFloatBroadcasts(const QStringList& aliveInstances);
 };

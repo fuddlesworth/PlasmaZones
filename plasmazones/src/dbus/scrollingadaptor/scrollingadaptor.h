@@ -193,6 +193,9 @@ public:
     /// a daemon that forgot the install cannot ship an ungated wheel. The
     /// daemon installs it in the same pass that creates the adaptor.
     void setContextGateProvider(std::function<bool(const QString& screenId)> provider);
+    /// Whether a screen runs autotile right now, read when a screen leaves the
+    /// scrolling set. The daemon installs it beside the context gate.
+    void setAutotileScreenResolver(std::function<bool(const QString& screenId)> resolver);
 
 public Q_SLOTS:
     /**
@@ -591,8 +594,11 @@ Q_SIGNALS:
     /**
      * @brief Emitted when the set of screens using the scrolling engine changes
      * @param screenIds List of screen IDs currently in scrolling mode
+     * @param isContextSwitch A desktop or activity switch changed the set
+     * @param leavingToAutotile Screens that left the set and run autotile now
      */
-    void scrollingScreensChanged(const QStringList& screenIds);
+    void scrollingScreensChanged(const QStringList& screenIds, bool isContextSwitch,
+                                 const QStringList& leavingToAutotile);
 
     /// The identity of the strip @p screenId shows changed (desktop switch,
     /// activity switch, sticky-pin release). A pin ACQUIRE does not announce:
@@ -655,6 +661,8 @@ private:
     std::function<int()> m_viewScrollStep;
     /// The per-context disable gate (setContextGateProvider).
     std::function<bool(const QString&)> m_contextGated;
+    /// Whether a screen runs autotile (setAutotileScreenResolver).
+    std::function<bool(const QString&)> m_isAutotileScreen;
     /// The shared entry guard for the screen-scoped verbs: no engine, empty
     /// screen id, engine not active there, or the context gate refusing.
     /// Order is load-bearing; the definition says why, and why scrollView and

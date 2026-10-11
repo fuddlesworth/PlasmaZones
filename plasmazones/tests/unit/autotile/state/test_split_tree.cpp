@@ -3,6 +3,7 @@
 
 #include <QTest>
 #include <QRect>
+#include <QRegularExpression>
 #include <QVector>
 
 #include <PhosphorTiles/SplitTree.h>
@@ -590,6 +591,24 @@ private Q_SLOTS:
         algo->prepareTilingState(&state);
         QVERIFY(state.splitTree() != nullptr);
         QCOMPARE(state.splitTree()->leafCount(), 3);
+    }
+
+    // A floating window is never in the split tree, so removing it must not
+    // ask the tree to drop it (which warned "window not found" on every
+    // release of a floating window) and leaves the tiled leaves alone (F1002).
+    void testRemoveFloatingWindowLeavesTheTreeAlone()
+    {
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        state.addWindow(QStringLiteral("win1"));
+        state.addWindow(QStringLiteral("win2"));
+        state.addWindow(QStringLiteral("win3"));
+        QVERIFY(state.splitTree() != nullptr);
+        state.setFloating(QStringLiteral("win3"), true);
+        QCOMPARE(state.splitTree()->leafCount(), 2);
+
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("window not found")));
+        QVERIFY(state.removeWindow(QStringLiteral("win3")));
+        QCOMPARE(state.splitTree()->leafCount(), 2);
     }
 
     void testAlgo_prepareTilingState_skipsIfTreeExists()

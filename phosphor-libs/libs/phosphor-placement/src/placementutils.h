@@ -13,8 +13,6 @@
 
 namespace PhosphorPlacement {
 
-inline constexpr QLatin1String kZoneSelectorIdPrefix{"zone-selector:"};
-
 /// The KWin desktop-filter rule shared by every desktop-scoped placement query:
 /// a filter of 0 (or negative) disables filtering entirely, and a window desktop
 /// of 0 means "on all desktops" (sticky) and passes every filter; otherwise the
@@ -23,6 +21,13 @@ inline constexpr QLatin1String kZoneSelectorIdPrefix{"zone-selector:"};
 inline bool desktopMatchesFilter(int windowDesktop, int desktopFilter)
 {
     return desktopFilter <= 0 || windowDesktop == 0 || windowDesktop == desktopFilter;
+}
+
+/// Whether a store keyed under @p keyActivity belongs to the activity in view.
+/// An empty key activity (no activities, a keyless walk) is every activity's.
+inline bool activityInView(const QString& keyActivity, const QString& currentActivity)
+{
+    return keyActivity.isEmpty() || keyActivity == currentActivity;
 }
 
 inline std::optional<QUuid> parseUuid(const QString& str)

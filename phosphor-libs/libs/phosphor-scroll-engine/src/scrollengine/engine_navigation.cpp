@@ -175,8 +175,9 @@ void ScrollEngine::focusInDirectionResolved(const QString& direction, const Phos
         }
         applyLayout(screen, true);
         // Focus is PERSISTED state: serializeStripState writes focusedWindow
-        // and viewAnchor, and the only thing that marks DirtyScrollStrips is
-        // the daemon's placementChanged connection. Without this emit a pure
+        // and viewAnchor, and placementChanged is this engine's only way to
+        // mark DirtyScrollStrips (the tracking service's scheduleSaveState,
+        // DirtyAll, also sets that bit). Without this emit a pure
         // focus walk (which moves both the active column and the view anchor)
         // never reaches the save, so the strip restores scrolled to whatever
         // column was focused before the walk. The move/tab/width verbs all
@@ -1041,8 +1042,8 @@ void ScrollEngine::cycleFocus(bool forward, const PhosphorEngine::NavigationCont
         idx = (idx + (forward ? 1 : -1) + order.size()) % order.size();
         if (!state->strip().isWindowMinimized(order.at(idx)) && state->strip().focusWindow(order.at(idx), params)) {
             applyLayout(screen, true);
-            // Focus and view anchor are persisted, and placementChanged is the
-            // only producer of DirtyScrollStrips — same reason as
+            // Focus and view anchor are persisted, and placementChanged is this
+            // engine's only way to mark DirtyScrollStrips — same reason as
             // focusInDirection. This is the last focus-mutating verb; every
             // other one already emits.
             Q_EMIT placementChanged(screen);

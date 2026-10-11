@@ -105,6 +105,48 @@ private Q_SLOTS:
         QCOMPARE(changed.size(), 0);
     }
 
+    // fillsOutputState: engaged true when maximize OR fullscreen is on, engaged
+    // false once either is known and neither is on, unknown otherwise. The snap
+    // engine skips recording such a window's frame as a float-back.
+    void fillsOutputState_combinesMaximizeAndFullscreen()
+    {
+        WindowRegistry reg;
+        QVERIFY(!reg.fillsOutputState(QStringLiteral("missing")).has_value());
+
+        PhosphorEngine::WindowMetadata meta = make(QStringLiteral("firefox"));
+        reg.upsert(QStringLiteral("u1"), meta);
+        QVERIFY(!reg.fillsOutputState(QStringLiteral("u1")).has_value());
+
+        // One state known off, the other unknown: not an answer (F141).
+        meta.isMaximized = false;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QVERIFY(!reg.fillsOutputState(QStringLiteral("u1")).has_value());
+
+        meta.isFullscreen = false;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u1")), std::optional<bool>(false));
+
+        meta.isFullscreen = true;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u1")), std::optional<bool>(true));
+
+        meta.isFullscreen = false;
+        meta.isMaximized = true;
+        reg.upsert(QStringLiteral("u1"), meta);
+        // A composite id resolves to the same instance record.
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("firefox|u1")), std::optional<bool>(true));
+
+        // Either state known on is an answer whatever the other one is (F47).
+        PhosphorEngine::WindowMetadata fullscreenOnly = make(QStringLiteral("firefox"));
+        fullscreenOnly.isFullscreen = true;
+        reg.upsert(QStringLiteral("u2"), fullscreenOnly);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u2")), std::optional<bool>(true));
+        PhosphorEngine::WindowMetadata maximizedOnly = make(QStringLiteral("firefox"));
+        maximizedOnly.isMaximized = true;
+        reg.upsert(QStringLiteral("u3"), maximizedOnly);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u3")), std::optional<bool>(true));
+    }
+
     void upsert_rejectsEmptyInstanceId()
     {
         WindowRegistry reg;
@@ -189,7 +231,7 @@ private Q_SLOTS:
         reg.upsert(QStringLiteral("u3"), make(QStringLiteral("kate")));
 
         auto firefox = reg.instancesWithAppId(QStringLiteral("firefox"));
-        std::sort(firefox.begin(), firefox.end()); // QMultiHash::values is unordered
+        std::sort(firefox.begin(), firefox.end()); // most recently indexed first; sort for a stable compare
         QCOMPARE(firefox, (QStringList{QStringLiteral("u1"), QStringLiteral("u2")}));
 
         QCOMPARE(reg.instancesWithAppId(QStringLiteral("kate")), QStringList{QStringLiteral("u3")});
@@ -316,7 +358,7 @@ private Q_SLOTS:
         // Scoped to the re-UPSERT shape deliberately. A subscriber that seeds
         // a canonical for an instance that had NONE takes the
         // postEmit != canonical branch instead, which skips this retirement
-        // entirely and lets the fresh mapping live — that is a re-announce,
+        // entirely and lets the fresh mapping live — a defensive shape,
         // covered by remove_subscriberReseededCanonical_survivesRemoval, and
         // it is not what this gate governs. (A subscriber calling
         // canonicalizeWindowId for an instance that still HAS its mapping
@@ -410,13 +452,14 @@ private Q_SLOTS:
         WindowRegistry reg;
         const QString instanceId = QStringLiteral("reseed-instance");
         const QString freshCanonical = QStringLiteral("fresh|reseed-instance");
-        // A record WITHOUT a canonical mapping: the effect's metadata push
-        // seeds the canonical, but a record can arrive through other
-        // notifications first.
+        // A defensive row. Production never builds this shape, a record
+        // WITHOUT a canonical mapping: WindowTrackingAdaptor::setWindowMetadata
+        // seeds the canonical before its upsert. The row pins the registry's
+        // own contract for a caller that does not.
         reg.upsert(instanceId, make(QStringLiteral("old")));
         connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString&) {
-            // A re-announce racing the close seeds a fresh canonical for the
-            // same instance while the removal is in flight.
+            // A subscriber gives the instance its FIRST canonical while the
+            // removal is in flight.
             reg.canonicalizeWindowId(freshCanonical);
         });
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
@@ -822,6 +865,90 @@ private Q_SLOTS:
         reg->pruneStaleInstances({QStringLiteral("alive-1")});
 
         QVERIFY(reg.isNull());
+    }
+
+    // The desktops a window is on, as the restore and resnap readers take
+    // them: the span when it covers several, else its one desktop, and no
+    // answer for a window on all desktops or one never reported.
+    void desktopSet_answersTheWindowsDesktops()
+    {
+        PhosphorEngine::WindowDesktopContext one;
+        one.virtualDesktop = 2;
+        QCOMPARE(one.desktopSet(), std::optional<QSet<int>>(QSet<int>{2}));
+
+        PhosphorEngine::WindowDesktopContext span;
+        span.virtualDesktop = 1;
+        span.virtualDesktops = {1, 3};
+        QCOMPARE(span.desktopSet(), std::optional<QSet<int>>(QSet<int>{1, 3}));
+
+        PhosphorEngine::WindowDesktopContext sticky;
+        sticky.virtualDesktop = 2;
+        sticky.sticky = true;
+        QVERIFY(!sticky.desktopSet().has_value());
+
+        PhosphorEngine::WindowDesktopContext unknown;
+        QVERIFY(!unknown.desktopSet().has_value());
+
+        WindowRegistry reg;
+        WindowMetadata meta = make(QStringLiteral("kate"));
+        meta.virtualDesktop = 3;
+        reg.upsert(QStringLiteral("on-three"), meta);
+        const auto context = reg.desktopContext(QStringLiteral("kate|on-three"));
+        QVERIFY(context.has_value());
+        QCOMPARE(context->desktopSet(), std::optional<QSet<int>>(QSet<int>{3}));
+    }
+
+    // desktopContext hands over every desktop field of the record, and
+    // minimizedState answers only once a state was reported (F821).
+    void desktopContextCarriesEveryField()
+    {
+        WindowRegistry reg;
+        WindowMetadata meta = make(QStringLiteral("kate"));
+        meta.virtualDesktop = 2;
+        meta.virtualDesktops = {2, 3};
+        meta.isSticky = true;
+        meta.activity = QStringLiteral("a");
+        reg.upsert(QStringLiteral("every"), meta);
+        const auto context = reg.desktopContext(QStringLiteral("kate|every"));
+        QVERIFY(context.has_value());
+        QCOMPARE(context->virtualDesktop, 2);
+        QCOMPARE(context->virtualDesktops, (QList<int>{2, 3}));
+        QCOMPARE(context->sticky, std::optional<bool>(true));
+        QCOMPARE(context->activity, QStringLiteral("a"));
+        QVERIFY(!reg.desktopContext(QStringLiteral("kate|unknown")).has_value());
+
+        QVERIFY(!reg.minimizedState(QStringLiteral("kate|every")).has_value());
+        meta.isMinimized = true;
+        reg.upsert(QStringLiteral("every"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|every")), std::optional<bool>(true));
+        meta.isMinimized = false;
+        reg.upsert(QStringLiteral("every"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|every")), std::optional<bool>(false));
+    }
+
+    // An unreported minimize state is unknown for both id forms, and the
+    // bool accessor collapses it to false (F832).
+    void minimizedState_unreportedIsUnknownForEveryIdForm()
+    {
+        WindowRegistry reg;
+        WindowMetadata meta = make(QStringLiteral("kate"));
+        reg.upsert(QStringLiteral("u1"), meta);
+        QVERIFY(!reg.minimizedState(QStringLiteral("u1")).has_value());
+        QVERIFY(!reg.minimizedState(QStringLiteral("kate|u1")).has_value());
+        QVERIFY(!reg.isMinimized(QStringLiteral("u1")));
+        QVERIFY(!reg.isMinimized(QStringLiteral("kate|u1")));
+
+        meta.isMinimized = true;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("u1")), std::optional<bool>(true));
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|u1")), std::optional<bool>(true));
+        meta.isMinimized = false;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("u1")), std::optional<bool>(false));
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|u1")), std::optional<bool>(false));
+
+        QVERIFY(!reg.minimizedState(QStringLiteral("unknown")).has_value());
+        QVERIFY(!reg.minimizedState(QStringLiteral("kate|unknown")).has_value());
     }
 };
 

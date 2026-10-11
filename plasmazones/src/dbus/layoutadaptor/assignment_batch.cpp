@@ -16,6 +16,7 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <QScreen>
 #include <QSet>
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -146,14 +147,15 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
     }
 
     m_layoutManager->setAllScreenAssignments(parsedAssignments);
-    // Update global active layout for the primary screen so zone overlay/drag see the new layout
-    // immediately (same as assignLayoutToScreen). KCM Save uses this path.
+    // The primary screen's layout becomes the global active one so the zone
+    // overlay and drag follow it. Its assignments wait for the closing
+    // applyAssignmentChanges, so the active layout does too (F724).
     QScreen* primary = Utils::primaryScreen();
     if (primary) {
         PhosphorZones::Layout* primaryLayout =
             m_layoutManager->resolveLayoutForScreen(PhosphorScreens::ScreenIdentity::identifierFor(primary));
         if (primaryLayout) {
-            m_layoutManager->setActiveLayout(primaryLayout);
+            m_pendingActiveLayout = primaryLayout;
         }
     }
 
@@ -316,4 +318,78 @@ void LayoutAdaptor::setAllCombinedAssignments(const QVariantMap& assignments)
     m_layoutManager->setAllCombinedAssignments(parsed);
     qCInfo(lcDbusLayout) << "Batch set" << parsed.size() << "combined assignments";
 }
+
+void LayoutAdaptor::setSaveBatchMode(bool enabled)
+{
+    m_suppressScreenLayoutSignal = enabled;
+}
+
+void LayoutAdaptor::clearSaveBatchMode()
+{
+    // Self-healing counterpart to setSaveBatchMode(true). The XML calls the pair
+    // "always paired", but nothing enforced it: a settings app that crashes
+    // between the two calls, or any session peer calling the setter directly,
+    // muted screenLayoutChanged for the daemon's whole remaining lifetime. Since
+    // applyAssignmentChanges is the close of every legitimate batch, releasing
+    // the flag there bounds the damage to one batch without changing the
+    // behaviour of a well-behaved client, which sets it back to false itself.
+    m_suppressScreenLayoutSignal = false;
+}
+
+void LayoutAdaptor::applyAssignmentChanges()
+{
+    // Drains the CLIENT's buffer only — the set accumulated by this adaptor's
+    // own assignment slots since the last apply. Nothing else writes it.
+    //
+    // Release the batch suppression FIRST, above the empty-buffer return: a
+    // client that called setSaveBatchMode(true) and then died before staging
+    // anything is exactly the case this release exists for, and it stages
+    // nothing, so releasing after the return would never fire for it.
+    clearSaveBatchMode();
+    if (m_changedScreenIds.isEmpty()) {
+        // Nothing was staged, so there is nothing to apply. The early return
+        // matters because downstream an EMPTY set means "every screen"
+        // (populateResnapBufferForAllScreens skips its include filter, and the
+        // OSD loop treats empty as match-all). Without this, a bus peer calling
+        // applyAssignmentChanges with no preceding mutation would force a full
+        // resnap of every window plus a per-screen OSD.
+        flushPendingActiveLayout();
+        return;
+    }
+    QSet<QString> changed = std::move(m_changedScreenIds);
+    m_changedScreenIds.clear();
+    applyAssignmentChangesFor(changed);
+    flushPendingActiveLayout();
+}
+
+void LayoutAdaptor::applyAssignmentChangesFor(const QSet<QString>& screenIds)
+{
+    if (screenIds.isEmpty()) {
+        return;
+    }
+    // Signal is typed as QStringList for D-Bus compatibility (QSet is not
+    // marshallable). Receivers that need set semantics convert back.
+    Q_EMIT assignmentChangesApplied(QStringList(screenIds.begin(), screenIds.end()));
+}
+
+void LayoutAdaptor::setActiveLayoutAtApply(PhosphorZones::Layout* layout)
+{
+    // Inside a save batch the global active layout lands at the close, after
+    // the apply resnapped the windows out of the zones they hold. Set at once,
+    // its change pruned those zones first and the apply had nothing to carry
+    // (F724).
+    if (m_suppressScreenLayoutSignal) {
+        m_pendingActiveLayout = layout;
+        return;
+    }
+    m_layoutManager->setActiveLayout(layout);
+}
+
+void LayoutAdaptor::flushPendingActiveLayout()
+{
+    if (PhosphorZones::Layout* layout = std::exchange(m_pendingActiveLayout, nullptr).data()) {
+        m_layoutManager->setActiveLayout(layout);
+    }
+}
+
 } // namespace PlasmaZones

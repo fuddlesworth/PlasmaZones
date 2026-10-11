@@ -687,7 +687,7 @@
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="137"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="611"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="598"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="127"/>
@@ -1222,37 +1222,37 @@
         <translation>წინა პლანზე გადმოტანა</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="703"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="710"/>
         <source>Cancel Zone Overlay</source>
         <translation>ზონის გადადების გაუქმება</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="762"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="769"/>
         <source>Layout Picker: Move Left</source>
         <translation>განლაგების ამომრჩევი: მარცხნივ გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="766"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="773"/>
         <source>Layout Picker: Move Right</source>
         <translation>განლაგების ამომრჩევი: მარჯვნივ გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="770"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="777"/>
         <source>Layout Picker: Move Up</source>
         <translation>განლაგების ამომრჩევი: მაღლა გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="774"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="781"/>
         <source>Layout Picker: Move Down</source>
         <translation>განლაგების ამომრჩევი: დაბლა გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="778"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="785"/>
         <source>Layout Picker: Confirm</source>
         <translation>განლაგების ამომრჩევი: დადასტურება</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="779"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="786"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
         <translation>განლაგების ამომრჩევი: დადასტურება (ციფრული კლავიატურის Enter)</translation>
     </message>
@@ -1448,44 +1448,44 @@
         <translation>ამ ეკრანის გაზომვა ვერ მოხერხდა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="355"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="342"/>
         <source>Layout Locked</source>
         <translation>განლაგება დაბლოკილია</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="369"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="356"/>
         <source>Layout Unlocked</source>
         <translation>განლაგება განბლოკილია</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="445"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="432"/>
         <source>Disabled on this monitor</source>
         <translation>ამ მონიტორზე გათიშულია</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="456"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="443"/>
         <source>Desktop %1</source>
         <translation>სამუშაო მაგიდა %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="458"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="469"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="445"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="456"/>
         <source>Disabled on %1</source>
         <translation>%1-ზე გათიშულია</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="467"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="454"/>
         <source>Disabled on this activity</source>
         <translation>ამ აქტივობაზე გათიშულია</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="497"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="484"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="580"/>
         <source>No layout assigned</source>
         <translation>განლაგება მინიჭებული არაა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="664"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="651"/>
         <location filename=".qml-stubs/plasmazones/src/ui/LayoutOsdContent.qml.cpp" line="355"/>
         <source>Column template — %1</source>
         <comment>OSD caption, %1 is the template name</comment>
@@ -1507,7 +1507,7 @@
         <translation>განლაგების სერვისი ინიციალიზებული არაა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="328"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="315"/>
         <source>Layout: %1</source>
         <translation>განლაგება: %1</translation>
     </message>
@@ -1636,7 +1636,7 @@
         <translation>სამიზნე ეკრანის სახელი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="730"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="717"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="294"/>
         <source>Tiling: %1</source>
         <translation>ფილებად დაწყობა: %1</translation>
@@ -1718,22 +1718,22 @@
         <translation>ზონის ნომერი, სულ ცოტა, 1-ს უნდა უდრიდეს</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="292"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="82"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation>PlasmaZones-ის KWin-ის ეფექტის დამატება იქ არ არის დაყენებული, სადაც მას KWin იპოვის. თავიდან დააყენეთ PlasmaZones.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="331"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="121"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin.</source>
         <translation>PlasmaZones-ის KWin-ის ეფექტი აგებულია KWin %1-ისთვის, მაგრამ გაშვებულია KWin %2, ამიტომ KWin მას არ ჩატვირთავს. თავიდან ააგეთ და დააყენეთ PlasmaZones გაშვებული KWin-ისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="358"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="148"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation>PlasmaZones-ის KWin-ის ეფექტი დემონთან არ დარეგისტრირდა, ამიტომ ფანჯრების გადათრევა და მალსახმობები არ იმუშავებს. დარწმუნდით, რომ ის ჩართულია აქ: სისტემის პარამეტრები &gt; სამუშაო მაგიდის ეფექტები, შემდეგ თავიდან გაუშვით Plasma-ის სესია.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="377"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="167"/>
         <source>Window manager integration is inactive</source>
         <translation>ფანჯრების მმართველთან ინტეგრაცია არააქტიურია</translation>
     </message>
@@ -14657,7 +14657,7 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="276"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="188"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="183"/>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="328"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="339"/>
         <source>(missing: %1)</source>
         <comment>@info item missing</comment>
         <translation>(აკლია: %1)</translation>
@@ -19794,8 +19794,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
-        <source>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
-        <translation>როცა ისეთ ფანჯარას ხდით მოტივტივედან, რომელიც არასდროს ყოფილა მიმაგრებული, მიამაგრეთ ის სათადარიგო ზონას (ბოლოს გამოყენებული, შემდეგ პირველი ცარიელი, შემდეგ პირველი ზონა) მისი მოტივტივედ დატოვების ნაცვლად.</translation>
+        <source>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
+        <oldsource>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
+        <translation type="unfinished">როცა ისეთ ფანჯარას ხდით მოტივტივედან, რომელიც არასდროს ყოფილა მიმაგრებული, მიამაგრეთ ის სათადარიგო ზონას (ბოლოს გამოყენებული, შემდეგ პირველი ცარიელი, შემდეგ პირველი ზონა) მისი მოტივტივედ დატოვების ნაცვლად.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="153"/>
@@ -20561,19 +20562,19 @@
         <translation>ხელით</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="98"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="109"/>
         <source>None</source>
         <comment>@item:inlistbox</comment>
         <translation>არცერთი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="99"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="110"/>
         <source>Select…</source>
         <comment>@action:button</comment>
         <translation>არჩევა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="103"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="114"/>
         <source>Choose from the categorized list</source>
         <comment>@info:tooltip</comment>
         <translation>აირჩიეთ კატეგორიებად დაყოფილი სიიდან</translation>
@@ -20811,7 +20812,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/shared/ShaderErrorBanner.qml.cpp" line="92"/>
-        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="312"/>
+        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="310"/>
         <source>Shader error details</source>
         <comment>@info:whatsthis</comment>
         <translation>შეიდერის შეცდომის დეტალები</translation>
@@ -20916,8 +20917,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="100"/>
-        <source>This window is excluded from tiling</source>
-        <translation>ეს ფანჯარა ფილირებიდან გამორიცხულია</translation>
+        <source>This window is excluded from snapping</source>
+        <oldsource>This window is excluded from tiling</oldsource>
+        <translation type="unfinished">ეს ფანჯარა ფილირებიდან გამორიცხულია</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="116"/>
@@ -21411,12 +21413,12 @@
         <translation>მოკლე უკუკავშირი კლავიატურით შესრულებული ფანჯრისა და განლაგების ქმედებებისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="170"/>
+        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="168"/>
         <source>Zone overlay</source>
         <translation>ზონის გადადება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="314"/>
+        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="312"/>
         <source>Shader error</source>
         <translation>შეიდერის შეცდომა</translation>
     </message>

@@ -85,12 +85,12 @@ void SnapEngine::seedPersistedDesktopZones(const QString& windowId, const Phosph
     // is not; the membership pass would only release it again, and until it
     // ran the zone counted a phantom occupant. A known, narrower span drops
     // the persisted entry with the seed, so a later capture does not revive
-    // it. Sticky, or unknown, seeds everything the record names.
+    // it. Sticky, or unknown, seeds everything the record names. A window on
+    // one desktop is a span of one, not unknown (F263).
     std::optional<QSet<int>> presentOn;
     if (m_windowRegistry) {
-        if (const auto ctx = m_windowRegistry->desktopContext(windowId);
-            ctx && !ctx->sticky.value_or(false) && !ctx->virtualDesktops.isEmpty()) {
-            presentOn = QSet<int>(ctx->virtualDesktops.cbegin(), ctx->virtualDesktops.cend());
+        if (const auto ctx = m_windowRegistry->desktopContext(windowId)) {
+            presentOn = ctx->desktopSet();
         }
     }
     for (auto it = slot.zonesByDesktop.constBegin(); it != slot.zonesByDesktop.constEnd(); ++it) {
@@ -204,20 +204,14 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
     // that belongs to the layout it came from — the "ghost layout" of
     // discussion #1104, reached by KWin's own move-to-desktop shortcut and by
     // a drop in the desktop overview. PlasmaZones' own cross-desktop move
-    // (tryCrossDesktopMove) answers this by landing the window in the
-    // positionally-equivalent zone of the destination desktop's layout; this
-    // is the same answer for the moves it does not drive. Collected here and
+    // (tryCrossDesktopMove) answers this by keeping the zones the window holds
+    // on the destination desktop, else landing it in the positionally-
+    // equivalent zone of that desktop's layout; this is the same answer for
+    // the moves it does not drive (planCarry skips a destination that holds
+    // the window's own zone without applying it, F754). Collected here and
     // emitted as ONE batch after the loop, since the commit it goes through
     // mutates the very stores this loop walks.
     QVector<PhosphorEngine::ZoneAssignmentEntry> carried;
-    // The windows whose carry may also be PARKED for the effect's
-    // desktop-arrival restore. The park is asked for over
-    // windowDesktopMoveRequested, and the effect answers that with
-    // windowToDesktops(w, {target}), which REPLACES the window's desktop set —
-    // a true no-op only while the window names one desktop. For a window
-    // present on several, asking would silently drop the others, so it takes
-    // the geometry apply alone and keeps its desktops.
-    QSet<QString> parkable;
     // Planned before the release below wipes the zones it reads. Fills
     // @p carriedFrom with the context the snap was taken from when the window
     // stays snapped, and leaves it default for the float-back, which is a
@@ -226,6 +220,11 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         [this, &screenId](const PendingMembership& entry,
                           PlacementStateKey& carriedFrom) -> std::optional<PhosphorEngine::ZoneAssignmentEntry> {
         if (!m_layoutManager || !m_windowTracker) {
+            return std::nullopt;
+        }
+        // Snapping switched off, or a window snapping leaves alone, carries
+        // nothing: the carry is a placement like any other (F445).
+        if (snappingSwitchedOff() || isWindowExcluded(entry.windowId, screenId)) {
             return std::nullopt;
         }
         // A FLOATED window carries nothing. It keeps its own free geometry, so
@@ -281,6 +280,12 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                 != PhosphorZones::AssignmentEntry::Mode::Snapping) {
                 continue; // tiling or scrolling owns the arrival on that desktop
             }
+            // A desktop the user disabled snapping on, or one running no
+            // layout, takes nothing, like a desktop another mode owns (F445).
+            if ((m_shouldRestorePredicate && !m_shouldRestorePredicate(screenId, desktop))
+                || !m_layoutManager->layoutForScreen(screenId, desktop, currentActivity())) {
+                continue;
+            }
             snappingDestination = true;
             // A shared layout yields the same zone id and the window does not
             // move at all; a different layout yields the slot in the same
@@ -297,6 +302,8 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             // The destination desktop, not the one in view: the commit pins
             // the assignment to the context the window moved to.
             assign.virtualDesktop = desktop;
+            // The window's own slot carried along: a re-statement (F461).
+            assign.restatement = true;
             carriedFrom = source;
             return assign;
         }
@@ -319,6 +326,7 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         restore.targetZoneId = PhosphorEngine::RestoreSentinel;
         restore.targetGeometry = *freeGeometry;
         restore.targetScreenId = screenId;
+        restore.restatement = true;
         return restore;
     };
     for (const PendingMembership& entry : pending) {
@@ -334,13 +342,6 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             && assign->virtualDesktop == currentKey.desktop;
         if (assign) {
             carried.append(*assign);
-            // One desktop in the span means the move the park is asked for
-            // names the desktop the window is already on, and nothing else.
-            // The staleness that got us here is a desktop the span dropped,
-            // so the source is never counted here.
-            if (entry.span.desktops.size() == 1) {
-                parkable.insert(entry.windowId);
-            }
         }
         for (const PlacementStateKey& stale : entry.stale) {
             if (SnapState* state = m_states.stateForKey(stale)) {
@@ -375,6 +376,21 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: released" << entry.windowId << "from desktop"
                                  << stale.desktop << "of" << stale.screenId << "— its span no longer covers it";
         }
+        // Carried nowhere, not adopted here, and left with no snap membership
+        // on this screen: the window moved to a desktop snap does not hold it
+        // on, so the record's snap slot goes too. A single-desktop window's
+        // zone lives in the flat slot, which the per-desktop forget above
+        // never touches, and a later snapping pass on the desktop it moved to
+        // would read it back as that desktop's zone (F624).
+        if (!assign && !entry.adopt && !entry.stale.isEmpty() && m_windowTracker) {
+            const QString screen = entry.stale.first().screenId;
+            const QList<PlacementStateKey> left = m_states.membershipsForWindow(entry.windowId);
+            if (std::none_of(left.cbegin(), left.cend(), [&screen](const PlacementStateKey& key) {
+                    return key.screenId == screen;
+                })) {
+                m_windowTracker->releaseEngineSlot(entry.windowId, engineId());
+            }
+        }
         if (entry.adopt) {
             // Membership, plus the zone the durable record remembers for this
             // desktop, if any. An unsnapped window on this desktop stays
@@ -386,7 +402,7 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             // below rather than waiting for the user to snap it again.
             SnapState* state = ensureStateForKey(currentKey);
             m_states.addMembership(entry.windowId, currentKey);
-            if (state && m_windowTracker && !carriedIntoCurrentContext
+            if (state && m_windowTracker && !carriedIntoCurrentContext && snapsInContext(currentKey)
                 && state->zonesForWindow(entry.windowId).isEmpty()) {
                 if (const auto rec = m_windowTracker->placementStore().peekExact(entry.windowId)) {
                     const QStringList remembered = rec->slotFor(engineId()).zonesByDesktop.value(currentKey.desktop);
@@ -446,33 +462,10 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                 qCDebug(lcSnapEngine) << "reconcileDesktopMemberships: capturePlacement miss for" << entry.windowId
                                       << "— placement-store desktop not updated to" << entry.virtualDesktop;
             }
-            if (entry.virtualDesktop == currentKey.desktop) {
-                continue;
-            }
-            if (!parkable.contains(entry.windowId)) {
-                // On several desktops, so the move the park rides would pin it
-                // to one of them (see `parkable`). It keeps its desktops and
-                // takes the geometry apply alone, which is what every carry
-                // did before the park existed.
-                qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: not parking" << entry.windowId
-                                     << "— it is on more than one desktop, and the park is asked for as a move that"
-                                     << "would pin it to one";
-                continue;
-            }
-            // The window went to a desktop nobody is looking at, where the
-            // compositor suspends its client: it never acks the configure, and
-            // a resize that asks for MORE room than the window has is dropped
-            // for good (KWin does not re-send it when the desktop comes back).
-            // So park it for the effect's desktop-arrival restore, which
-            // re-drives the placement the moment the desktop is shown and finds
-            // the record this pass has just written. Emitted AFTER the batch
-            // above, because the geometry apply cancels a park it finds; on one
-            // D-Bus connection the two keep that order. The move itself asks
-            // for the desktop the window is already on, which is how the effect
-            // learns it has a window to park.
-            qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: parking" << entry.windowId
-                                 << "for a placement retry when desktop" << entry.virtualDesktop << "is shown";
-            Q_EMIT windowDesktopMoveRequested(entry.windowId, entry.virtualDesktop);
+            // A carry onto a desktop nobody is looking at needs no park request:
+            // the effect parks a window whose zone apply lands on a hidden
+            // desktop and re-applies the zone when it is shown, and a move
+            // request would have pinned a window on several desktops to one.
         }
     }
 
@@ -491,11 +484,18 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
     // snapping, and re-committing them here would fight the tiling engine's
     // own placement on every desktop switch (seen live: the window bounced
     // between its tile and its old zone).
+    // Not with snapping switched off or disabled in this context (F445), and
+    // only zones the layout this context runs now holds: a hidden desktop's
+    // layout may have changed since the window was snapped there (F982).
     QSet<QString> reapply;
-    if (const SnapState* currentState = isActiveOnScreen(screenId) ? m_states.stateForKey(currentKey) : nullptr) {
+    if (const SnapState* currentState =
+            isActiveOnScreen(screenId) && snapsInContext(currentKey) ? m_states.stateForKey(currentKey) : nullptr) {
         for (const QString& windowId : m_states.trackedWindowIds()) {
+            const QStringList zones = currentState->zonesForWindow(windowId);
             if (m_states.hasMembership(windowId, currentKey) && m_states.membershipsForWindow(windowId).size() > 1
-                && !currentState->zonesForWindow(windowId).isEmpty()) {
+                && !zones.isEmpty()
+                && PhosphorZones::LayoutUtils::contextLayoutHoldsZones(
+                    m_layoutManager, currentKey.screenId, currentKey.desktop, currentKey.activity, zones)) {
                 reapply.insert(windowId);
             }
         }
@@ -506,7 +506,13 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: re-applying" << reapply.size() << "window(s) on"
                              << screenId << "for desktop" << currentKey.desktop
                              << "— multi-desktop windows are snapped here";
-        resnapCurrentAssignments(screenId, reapply);
+        // A re-statement batch: no "nothing to resnap" OSD on a desktop
+        // switch, no Snap Assist (F461).
+        QVector<PhosphorEngine::ZoneAssignmentEntry> entries = calculateResnapFromCurrentAssignments(screenId, reapply);
+        for (PhosphorEngine::ZoneAssignmentEntry& entry : entries) {
+            entry.restatement = true;
+        }
+        emitBatchedResnap(entries);
     }
     return result;
 }

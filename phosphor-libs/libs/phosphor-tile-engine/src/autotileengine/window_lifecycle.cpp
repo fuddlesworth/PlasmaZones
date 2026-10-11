@@ -49,16 +49,15 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
         return false;
     }
     const QString windowId = canonicalizeWindowId(rawWindowId);
+    // The reopen contract: this claims only a FIFO record (another instance
+    // of the app) on another virtual screen of the OPENING output, in this
+    // engine's mode, for a window opening on one of this engine's screens.
+    // Never a record on another monitor, never the window's own record.
     // openingScreenId validated here, at the library boundary: the adaptor's
     // dispatch cannot produce an empty one, but this is public engine API
     // and an empty opening screen would defeat the predicate's same-screen
-    // bail (empty compares unequal to every recorded screen).
-    // Every decline below is LOGGED, for the reason the scroll twin spells
-    // out: the deferring engine has already stood down, so a decline decides
-    // where the window spends the session, and a silent one leaves the
-    // resulting login-restore strand with no journal evidence. Same info/debug
-    // split as the twin — the declines that fire on every ordinary open are
-    // debug so they cannot bury the rare ones that explain a strand.
+    // bail (empty compares unequal to every recorded screen). Every decline
+    // is logged; the ones that fire on every ordinary open are debug.
     if (openingScreenId.isEmpty() || !m_windowTracker || !m_layoutManager) {
         qCInfo(PhosphorTileEngine::lcTileEngine)
             << "claimCrossScreenReopen: declining" << windowId << "on" << openingScreenId
@@ -69,8 +68,8 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
     // First observation only: a window this engine tracks anywhere is an
     // in-session move or re-announce, never a session restore — yanking it
     // back to the record's screen would undo the very move that re-announced
-    // it. Membership, not the raw reverse-map key, for the same phantom-key
-    // reason windowOpened's defer gate documents.
+    // it. Membership, not the raw reverse-map key: a REFUSED first open
+    // leaves a phantom key (windowOpened keys before onWindowAdded can refuse).
     const PhosphorTiles::TilingState* state = m_states.forWindow(windowId);
     if (state && state->containsWindow(windowId)) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
@@ -78,18 +77,25 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
             << "— already held here, so this is an in-session re-announce, not a restore";
         return false;
     }
-    // Any verdict still standing for this window is from an EARLIER announce:
-    // the dispatch states the flag only after the claim round, which is the
-    // round this call is part of. A successful claim below re-enters
-    // windowOpened for the recorded home, and that re-entry reads the flag —
-    // so clear it here or the home open skips a defer gate it owed on the
-    // strength of a mark that describes a different announce.
-    m_crossScreenClaimsExhausted.remove(windowId);
+    // Same mode: the window opens on a screen this engine runs (F647). A
+    // window opening on another engine's screen is that engine's.
+    if (!isActiveOnScreen(openingScreenId)) {
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "claimCrossScreenReopen: declining" << windowId << "— opening screen" << openingScreenId
+            << "is not an autotile screen";
+        return false;
+    }
+    // The window's own record is final: restored (or not) where it names,
+    // never stood in for by a sibling's.
+    if (const auto own = m_windowTracker->placementStore().peekExact(windowId); own && !own->engines.isEmpty()) {
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "claimCrossScreenReopen: declining" << windowId << "— it has its own placement record";
+        return false;
+    }
     const QString appId = currentAppIdFor(windowId);
     if (!PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
-        // Logged for the same reason the scroll twin logs it: the deferring
-        // engine has already stood down, so a silent decline here strands the
-        // window on whatever monitor it opened on for the session.
+        // Logged at info: a decline here means no sibling record can ever
+        // match this window, which explains a reopen that restored nothing.
         qCInfo(PhosphorTileEngine::lcTileEngine).nospace()
             << "claimCrossScreenReopen: declining " << windowId << " — no stable appId: " << appId
             << " (its placement records cannot be matched)";
@@ -109,18 +115,18 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
         return false;
     }
     // peekForReclaim, not peek: the live-instance exclusion is what stops a
-    // fresh second instance being pulled onto its OPEN sibling's monitor on
-    // the strength of that sibling's live record. Non-consuming either way —
-    // consumption stays with windowOpened's own restore machinery, which
-    // this claim funnels the window into by re-entering the open path with
-    // the RECORDED screen. Only a TILED slot earns the pull — an
-    // autotile-floating record is screen-local, matching snap's float
-    // doctrine.
+    // fresh second instance being pulled onto its OPEN sibling's virtual
+    // screen on the strength of that sibling's live record, and it honours the
+    // open claim, so this reads the record the claim reserved. Non-consuming
+    // either way: consumption stays with windowOpened's own restore machinery,
+    // which this claim funnels the window into by re-entering the open path
+    // with the RECORDED screen. Only a TILED slot earns the pull; an
+    // autotile-floating record is screen-local, matching snap's float doctrine.
     const auto pending = m_windowTracker->placementStore().peekForReclaim(
         windowId, appId, [&](const PhosphorEngine::WindowPlacement& p) {
             return PhosphorEngine::pendingCrossScreenManagedRestore(
                 p, PhosphorEngine::WindowPlacement::autotileEngineId(), PhosphorEngine::WindowPlacement::stateTiled(),
-                openingScreenId, [&](const QString& rec, int desktop, const QString& activity) {
+                windowId, openingScreenId, [&](const QString& rec, int desktop, const QString& activity) {
                     return m_layoutManager->modeForScreen(rec, desktop, activity)
                         == PhosphorZones::AssignmentEntry::Mode::Autotile;
                 });
@@ -184,7 +190,7 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
         // The phantom key the refused open leaves must not outlive the
         // failed claim: isWindowTracked would keep answering true for a
         // window this engine does not hold. The shared sweep is the whole
-        // drop set, so this path and the defer gate's cannot drift — a
+        // drop set, so this path and the other refusals cannot drift — a
         // float marker left behind would re-float the window at the next
         // mode transition, and a pending focus entry would have applyTiling
         // activate a window another engine owns.
@@ -258,104 +264,11 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "windowOpened:" << windowId << "screen=" << screenId << "minSize=" << minWidth << "x" << minHeight;
 
-    // Cross-engine coordination: the reciprocal of SnapEngine's
-    // recorded-screen ownership gate AND of the scroll engine's
-    // claimCrossScreenReopen. On FIRST observation, a window carrying a
-    // record that homes it on ANOTHER engine's screen — a SNAPPED snap slot
-    // on a snapping-mode screen, or a TILED scrolling slot on a
-    // scrolling-mode screen — belongs to that engine's cross-screen restore;
-    // it only landed on this autotile screen because KWin's session restore
-    // placed it here. Autotile must NOT track or tile it, or two engines
-    // would claim the same window. Bail BEFORE m_states is set so autotile
-    // leaves no trace. The peek does NOT consume the record — the owning
-    // engine's restore is the consumer. A record whose recorded screen is
-    // THIS screen fails both terms (the predicate's same-screen bail), so
-    // autotile keeps the window — the screen's own mode owns it.
-    //
-    // Restricted to windows NOT already autotile-tracked: a window autotile
-    // already manages (re-emitted on a runtime screen/desktop move, or
-    // explicitly handed off) is autotile's — its other-engine slots are then
-    // frozen cross-mode memory, not a pending restore. Deferring such a
-    // window would both yank a live tile and strand a ghost in its current
-    // TilingState (the cross-screen cleanup below is skipped on an early
-    // return). Only a first-observation open — the login/session-restore
-    // case — races the other engines, and that is the only case this guard
-    // fires for.
-    //
-    // Membership, not the raw reverse-map key: a REFUSED first open leaves
-    // a phantom key (windowOpened keys before onWindowAdded can refuse), and
-    // hasWindow alone would then skip the defer while autotile manages
-    // nothing — the exact race this guard exists to prevent.
-    const PhosphorTiles::TilingState* deferState = m_states.forWindow(windowId);
-    const bool trackedInState = deferState && deferState->containsWindow(windowId);
-    // The dispatch already ran every engine's claim for THIS announce and all
-    // declined: the record's engine has answered, so this gate must adopt
-    // rather than defer to it a second time (noteCrossScreenClaimsExhausted).
-    // Read, not consumed: the dispatch re-states the flag before every
-    // announce, so it always describes the one in progress.
-    const bool claimsExhausted = m_crossScreenClaimsExhausted.contains(windowId);
-    if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && !trackedInState && !claimsExhausted) {
-        const QString appId = currentAppIdFor(windowId);
-        if (PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
-            // Shared predicate with the other engines' reciprocal gates
-            // (SnapEngine::resolveWindowRestore, ScrollEngine::windowOpened /
-            // claimCrossScreenReopen) — every engine runs
-            // PhosphorEngine::pendingCrossScreenManagedRestore over the same
-            // record fields, so a window is never both deferred-and-claimed or
-            // both-skipped. The snap term keeps its snappingPreferred() gate
-            // (a disabled snap engine never claims, so deferring to it would
-            // strand the window); the scrolling term carries no such toggle —
-            // a scrolling-mode home screen implies a live scroll engine.
-            const auto crossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
-                if (m_layoutManager->snappingPreferred()
-                    && PhosphorEngine::pendingCrossScreenSnapRestore(
-                        p, screenId, [&](const QString& rec, int desktop, const QString& activity) {
-                            return m_layoutManager->modeForScreen(rec, desktop, activity)
-                                == PhosphorZones::AssignmentEntry::Mode::Snapping;
-                        })) {
-                    return true;
-                }
-                // The scrolling term asks the daemon-injected resolver, which
-                // answers mode AND scroll-engine liveness on that screen: the
-                // claiming side requires both, so a defer keyed on mode alone
-                // would stand down for a window scroll then declines.
-                return m_scrollingModeResolver
-                    && PhosphorEngine::pendingCrossScreenManagedRestore(
-                           p, PhosphorEngine::WindowPlacement::scrollingEngineId(),
-                           PhosphorEngine::WindowPlacement::stateTiled(), screenId,
-                           [&](const QString& rec, int desktop, const QString& activity) {
-                               return m_scrollingModeResolver(rec, desktop, activity);
-                           });
-            };
-            // peekForReclaim, matching the CLAIMING side's lookup exactly: a
-            // plain peek would see a LIVE sibling's record that the claim's
-            // live-instance exclusion rejects, so this gate would defer to an
-            // engine that then declines — the both-skipped strand.
-            if (m_windowTracker->placementStore().peekForReclaim(windowId, appId, crossRestorePending).has_value()) {
-                qCInfo(PhosphorTileEngine::lcTileEngine)
-                    << "windowOpened:" << windowId << "on autotile screen" << screenId
-                    << "defers — carries a cross-screen restore for another engine";
-                // A refused-first-open phantom key (the very case the
-                // membership gate exists for) must not survive the defer:
-                // isWindowTracked would keep answering true for a window
-                // snap is about to own, misrouting the daemon's float and
-                // cross-screen handoff dispatch.
-                // The other per-window caches follow the key: a refused
-                // earlier open already stored a min size here, and
-                // windowMinimumSize would keep answering an
-                // autotile-screen-capped value for a window snap now owns.
-                // Pending seeds go too, like every other drop path (cap
-                // rejection, close, handoffRelease). A strict pending order
-                // that still names this window keeps its timeout re-arming
-                // for the whole session, waiting on a window snap now owns —
-                // the strict seed skips minimized entries without removing
-                // them. The shared sweep carries all of it, so this path
-                // cannot drift from the other refusal arms.
-                sweepPhantomTracking(windowId);
-                return;
-            }
-        }
-    }
+    // A window opening here is this engine's, whatever its placement record
+    // says about another screen: under the reopen contract no engine defers a
+    // window to another engine's cross-screen restore, and the window is never
+    // pulled to another monitor. (The adaptor's open dispatch releases the
+    // slots of a window whose own record names another screen first.)
 
     // If the window is already tracked on a DIFFERENT screen (e.g., dragged from
     // VS2 to VS1), remove it from the old screen's PhosphorTiles::TilingState first. Without this,
@@ -534,17 +447,10 @@ void AutotileEngine::dropClosedWindowFromDragPreview(const QString& windowId)
 
 void AutotileEngine::noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
 {
-    if (windowId.isEmpty()) {
-        return;
-    }
-    // Set AND cleared per announce, so a mark can never outlive the announce
-    // it describes (see the interface contract).
-    const QString canonical = canonicalizeWindowId(windowId);
-    if (exhausted) {
-        m_crossScreenClaimsExhausted.insert(canonical);
-    } else {
-        m_crossScreenClaimsExhausted.remove(canonical);
-    }
+    // INERT, kept for ABI: the mark told the cross-screen defer gate to adopt
+    // instead of deferring again, and that gate is gone (the reopen contract).
+    Q_UNUSED(windowId)
+    Q_UNUSED(exhausted)
 }
 
 void AutotileEngine::windowClosed(const QString& rawWindowId)
@@ -560,7 +466,6 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     dropClosedWindowFromDragPreview(windowId);
 
     m_autotileFloatedWindows.remove(windowId);
-    m_crossScreenClaimsExhausted.remove(windowId);
     // Min-size cleanup must not depend on tracking: a window released from
     // tracking (autotile toggle-off, orphaned VS) and later closed would hit
     // onWindowRemoved's empty-stored-key early return and keep its entry for
@@ -680,7 +585,7 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
             m_autotileFloatedWindows.remove(windowId);
             m_lastAppliedTileRect.remove(windowId);
             // Pending seeds and focus follow the same obligation every other
-            // drop path carries (removeWindow, handoffRelease, the defer gate,
+            // drop path carries (removeWindow, handoffRelease,
             // claimCrossScreenReopen). Without the focus purge, the autotile
             // screen's next applyTiling drains an entry naming a window that
             // now lives on another monitor and emits activateWindowRequested
@@ -916,8 +821,8 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
         qCDebug(PhosphorTileEngine::lcTileEngine) << "onWindowAdded: skipping" << windowId << "screen=" << screenId
                                                   << "isAutotile=" << isAutotileScreen(screenId);
         // windowOpened keys the reverse map BEFORE calling in here, so this
-        // return has to sweep that key exactly as the defer gate and
-        // claimCrossScreenReopen sweep theirs — otherwise isWindowTracked
+        // return has to sweep that key exactly as claimCrossScreenReopen
+        // sweeps its own — otherwise isWindowTracked
         // answers true for a window no TilingState holds, the daemon's float
         // dispatch skips the adoption handoff, and setWindowFloat writes into a
         // state that ignores it. That is the #1028 stranding, reached through
@@ -932,6 +837,19 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
             const PhosphorTiles::TilingState* held = m_states.stateForKey(*heldKey);
             if (!held || !held->containsWindow(windowId)) {
                 sweepPhantomTracking(windowId);
+            }
+        }
+        // A window the membership reconcile already adopted here as a FLOAT
+        // (its own desktop edit pushed the metadata first) takes this return,
+        // because shouldTileWindow refuses a current-context float. It is still
+        // an arrival the user is looking at, focused like a floating open
+        // (F583). isAutotileScreen first, so no state is made for a screen
+        // another engine owns.
+        if (isAutotileScreen(screenId) && openFocusEligible() && m_config && m_config->focusNewWindows) {
+            if (const PhosphorTiles::TilingState* current = m_states.stateForKey(currentKeyForScreen(screenId));
+                current && current->containsWindow(windowId)) {
+                requestPostRetileFocus(screenId, windowId);
+                scheduleRetileForScreen(screenId);
             }
         }
         return;
@@ -961,11 +879,22 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
         emitInsertFloatStateSync(windowId, screenId);
     }
 
-    if (inserted && m_config && m_config->focusNewWindows) {
+    // A re-placement (a daemon-restart re-announce, a catch-scan or unminimize
+    // re-add) never takes focus: "Focus new windows" focuses genuine opens only.
+    // A window the membership reconcile already adopted into this context (its
+    // own desktop or activity edit pushed the metadata first) is held here, not
+    // inserted, and is still an arrival the user is looking at (F583). Only the
+    // effect's in-view arrival sends an eligible open for a held window.
+    const bool adoptedArrival = !inserted && state && state->containsWindow(windowId);
+    if ((inserted || adoptedArrival) && openFocusEligible() && m_config && m_config->focusNewWindows) {
         // Defer focus until after applyTiling emits windowsTiled. The KWin effect's
         // onComplete raises windows in tiling order; emitting focus before retile
         // causes the raise loop to bury the new window behind existing ones.
         m_pendingFocusByScreen.insert(screenId, windowId);
+        if (adoptedArrival) {
+            // The adopt's own retile may already have run.
+            scheduleRetileForScreen(screenId);
+        }
     }
 
     // Replay a focus notification that arrived before this window was tracked (see

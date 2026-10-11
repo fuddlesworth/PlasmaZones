@@ -6,6 +6,7 @@
 #include <phosphorsnapengine_export.h>
 
 #include <QString>
+#include <QStringList>
 
 namespace PhosphorSnapEngine {
 
@@ -53,6 +54,25 @@ public:
      * @return Zone ID of the edge zone, or empty string if none exists
      */
     virtual QString getFirstZoneInDirection(const QString& direction, const QString& screenId) const = 0;
+
+    /**
+     * @brief The zone next to the span @p zoneIds (their union) in @p direction,
+     *        never one of them.
+     *
+     * Appended. The default answers getAdjacentZone(zoneIds.first(), ...), the
+     * pre-span behaviour.
+     */
+    virtual QString getAdjacentZoneOutside(const QStringList& zoneIds, const QString& direction,
+                                           const QString& screenId) const;
+
+    /**
+     * @brief getFirstZoneInDirection on @p desktop's layout (<= 0: the desktop
+     *        the screen shows).
+     *
+     * Appended. The default ignores @p desktop.
+     */
+    virtual QString getFirstZoneInDirectionOnDesktop(const QString& direction, const QString& screenId,
+                                                     int desktop) const;
 
     IZoneAdjacencyResolver(const IZoneAdjacencyResolver&) = delete;
     IZoneAdjacencyResolver& operator=(const IZoneAdjacencyResolver&) = delete;

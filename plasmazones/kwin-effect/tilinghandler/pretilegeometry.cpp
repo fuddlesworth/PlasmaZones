@@ -16,6 +16,7 @@
 #include "pretiledecisions.h"
 #include "handlers/snaphandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "compositor/effectlogging.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -32,6 +33,9 @@
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QScopeGuard>
+
+#include <algorithm>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -235,7 +239,7 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // window's tracking, so a re-resolve of a parked (off-canvas) frame
                 // can positionally land on a neighbouring output — skipping the
                 // restore and stranding the window at its parked rect.
-                if (!safeW->isOnCurrentDesktop() || !safeW->isOnCurrentActivity()
+                if (!isOnOwnOutputCurrentDesktop(safeW.data()) || !safeW->isOnCurrentActivity()
                     || m_notifiedWindows.contains(windowId) || m_managedScreens.contains(capturedScreenId)
                     || m_effect->isWindowMarkedSnapped(windowId) || m_effect->isWindowFloating(windowId)
                     || safeW->isUserMove() || safeW->isUserResize()) {
@@ -274,8 +278,8 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 }
 
                 // Suppress the VS-crossing detectors across the synchronous
-                // frameGeometryChanged this apply emits — same rationale as the
-                // local-bucket restore path in slotScreensChanged.
+                // frameGeometryChanged this apply emits, for the reason given
+                // in applyFreeGeometryRestore.
                 // Save/restore, not set/clear: a clearing guard nested inside an outer
                 // apply would hand the outer scope back an un-flagged window.
                 const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
@@ -287,15 +291,14 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // the maximize-area rect and defeats the restore (discussion #461).
                 //
                 // Through the ledger when the ledger owns the bit, so membership
-                // and the bit move TOGETHER — the same shape the two sibling
-                // pre-tile restores in screenschanged.cpp use, and for the reason
-                // stated there: a bare clear strips a column-maximize member's bit
+                // and the bit move TOGETHER, the same shape applyFreeGeometryRestore
+                // uses and for the reason stated there: a bare clear strips a column-maximize member's bit
                 // while leaving the effect recorded as still holding it, which is
                 // the exact split m_maximizedToEdgesWindows' contract forbids.
                 if (m_maximizedToEdgesWindows.contains(windowId)) {
                     releaseMaximizedToEdges(windowId, safeW);
                     // REQUESTED maximize, matching releaseMaximizedToEdges and
-                    // the twin in screenschanged.cpp. The committed bit lags a
+                    // applyFreeGeometryRestore. The committed bit lags a
                     // client round-trip on Wayland in both directions, so a
                     // maximize requested but not yet committed would read as
                     // "not maximized" and skip the clear, letting KWin
@@ -321,7 +324,7 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                     // The gesture terms are REDUNDANT in this file: the
                     // enclosing lambda already returns early on the same pair
                     // above. They are kept so this arm reads identically to
-                    // its twin in screenschanged.cpp, where they are live.
+                    // applyFreeGeometryRestore, where they are live.
                     // Do not treat this as the place that guard lives.
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
@@ -344,6 +347,68 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 qCInfo(lcEffect) << "Desktop switch: restored pre-snap geometry from daemon for orphaned window"
                                  << windowId;
             });
+}
+
+void TilingHandler::applyFreeGeometryRestore(KWin::EffectWindow* w, const QString& windowId, const QRectF& rect)
+{
+    // applyWindowGeometry's moveResize, and the maximize clear below, emit
+    // windowFrameGeometryChanged synchronously. Suppress the VS-crossing
+    // detectors (autotile slotWindowFrameGeometryChanged and the snapping
+    // windowFrameGeometryChanged handler) so a same-screen restore is not
+    // mistaken for a virtual-screen crossing, as the retile path does
+    // (tiling.cpp). Save/restore, not set/clear (nesting-safe).
+    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+    m_effect->m_daemonGate.inGeometryApply = true;
+    const auto geomGuard = qScopeGuard([this, prevInApply] {
+        m_effect->m_daemonGate.inGeometryApply = prevInApply;
+    });
+    // Clear any lingering KWin maximize flag first: a still-maximized window
+    // makes KWin re-assert the maximize-area rect and defeat the restore, which
+    // the tile-request path clears for the same reason (discussion #461).
+    //
+    // Through the ledger when the ledger owns the bit, so membership and the
+    // bit move TOGETHER. A bare clear would strip a column-maximize member's
+    // bit while leaving the effect recorded as still holding it, which is the
+    // exact split m_maximizedToEdgesWindows' contract forbids.
+    //
+    // The GUARD is what earns its place here, not the call behind it. Every
+    // caller has already called releaseMaximizedToEdges for this window, so
+    // membership survives to here in exactly one case: that call SKIPPED a
+    // still-fullscreen window and retained the entry on purpose. Re-calling it
+    // skips again for the same reason, making the then-branch a no-op.
+    // Deleting the condition and keeping only the else-branch would hand that
+    // retained member the bare clear the paragraph above forbids, so keep the
+    // test even though the call inside it does nothing.
+    if (m_maximizedToEdgesWindows.contains(windowId)) {
+        releaseMaximizedToEdges(windowId, w);
+    } else if (KWin::Window* kw = w->window(); kw && kw->requestedMaximizeMode() != KWin::MaximizeRestore
+               && !kw->isRequestedFullScreen() && !w->isUserMove() && !w->isUserResize()) {
+        // REQUESTED bits on both axes, never the committed ones. On Wayland
+        // the committed bit trails a client round-trip, and the windowed
+        // fullscreen caller runs one loop body after
+        // releaseWindowedFullscreenState called setFullScreen(false), inside
+        // the exit gap where the requested bit already reads false and the
+        // committed one is still true. Testing isFullScreen() made the clear
+        // certain to skip for that population, so KWin re-asserted the
+        // maximize-area rect over the restore (discussion #461). The
+        // requested fullscreen term also keeps a window whose fullscreen is
+        // requested but not yet committed from being moveResized down to its
+        // restore rect while presenting, since maximize() has no fullscreen
+        // conditional, and the gesture pair keeps it from snapping under the
+        // user's pointer. This arm holds no ledger, so a skip here is
+        // permanent rather than deferred.
+        applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
+    }
+    // Snap-out: leaving tile-managed sizing.
+    m_effect->applyWindowGeometry(w, rect.toRect(), /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                  PhosphorAnimation::ProfilePaths::WindowPlaceOut);
+    // Re-seed the tracked screen: the bracket above suppressed the
+    // VS-crossing detectors whose early return sits BEFORE their tracker
+    // write, and applyWindowGeometry does not self-seed. The restore can
+    // legitimately land in a different virtual screen than the tiled rect,
+    // and a stale entry makes the next genuine geometry change read as a
+    // spurious crossing.
+    m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
 }
 
 QRectF TilingHandler::preTileRestoreRectFor(const QString& windowId, const QString& screenId,
@@ -407,34 +472,127 @@ void TilingHandler::savePreTileForDesktopMove(const QString& windowId)
     QString bucketScreenId;
     const QRectF rect = findPreTileGeometry(windowId, &bucketScreenId);
     if (rect.isValid()) {
-        m_savedPreTileForDesktopMove[windowId] = {bucketScreenId, rect};
+        m_desktopMoveStash.stash(windowId, bucketScreenId, rect);
         qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "bucket"
                           << bucketScreenId << "rect=" << rect;
     }
+    // A window leaving at its tile frame is owed its free placement where it
+    // lands, rect or not; a floated tile is already at its own spot (F364).
+    m_desktopMoveStash.setOwed(windowId, TilingStateHelpers::isTiledWindow(m_border, windowId));
 }
 
 void TilingHandler::restorePreTileForDesktopMove(const QString& windowId, const QString& screenId)
 {
-    auto savedIt = m_savedPreTileForDesktopMove.find(windowId);
-    if (savedIt == m_savedPreTileForDesktopMove.end()) {
+    // Only applied when the source monitor matches the destination: saved
+    // rects are in absolute coordinates of the source monitor and would land
+    // off-target after a cross-desktop + cross-screen move. Consumed either
+    // way, so a much later re-add on the original screen cannot restore a
+    // session-old position (DesktopMoveStash::consumeForManagedArrival).
+    if (const std::optional<QRectF> rect = m_desktopMoveStash.consumeForManagedArrival(windowId, screenId)) {
+        m_preTileGeometries[screenId][windowId] = *rect;
+    }
+}
+
+void TilingHandler::payOwedFreePlacement(KWin::EffectWindow* w, const QString& windowId, const QString& screenId)
+{
+    if (!w || w->isDeleted() || !m_desktopMoveStash.isOwed(windowId)) {
         return;
     }
-    // Only apply when the source screen matches the destination — saved rects
-    // are in absolute coordinates of the source monitor and would land
-    // off-target on a different screen after a cross-desktop + cross-screen
-    // move. Consumed either way: a rect that cannot be applied here has no
-    // later consumer, and leaving it behind would let a much later re-add on
-    // the original screen restore a rect from a session-old position.
-    // PHYSICAL ids: a virtual-screen re-key names the same output and the same
-    // coordinate space, so its rect is still applicable. Only a genuine
-    // monitor boundary invalidates the origin.
-    if (PhosphorIdentity::VirtualScreenId::samePhysical(savedIt.value().first, screenId)) {
-        m_preTileGeometries[screenId][windowId] = savedIt.value().second;
-    } else {
-        qCDebug(lcEffect) << "Desktop move: dropping cross-screen pre-autotile rect for" << windowId
-                          << "source=" << savedIt.value().first << "dest=" << screenId;
+    // A window the snap side snapped into a zone on the way, or parked to
+    // re-apply one on arrival, is placed by its zone (F414). The stash stays
+    // for a later move back onto a tiling desktop.
+    if (m_effect->isWindowMarkedSnapped(windowId)
+        || (m_effect->m_snapHandler && m_effect->m_snapHandler->holdsDesktopArrivalPark(windowId))) {
+        m_desktopMoveStash.setOwed(windowId, false);
+        return;
     }
-    m_savedPreTileForDesktopMove.erase(savedIt);
+    // Hidden or presenting: still owed, paid when it is next in view.
+    if (w->isMinimized() || w->isFullScreen()) {
+        return;
+    }
+    // Still on another desktop or activity, where its tile frame belongs to
+    // that layout (the pass-2 rule). An empty activity set is "every
+    // activity" only when the session has activities at all.
+    const bool everyActivity =
+        w->activities().isEmpty() && KWin::effects && !KWin::effects->currentActivity().isEmpty();
+    if (w->isOnAllDesktops() || w->desktops().size() > 1 || everyActivity || w->activities().size() > 1) {
+        m_desktopMoveStash.setOwed(windowId, false);
+        return;
+    }
+    bool owed = false;
+    std::optional<QRectF> target = m_desktopMoveStash.takeOwedPlacement(windowId, screenId, &owed);
+    if (!owed) {
+        return;
+    }
+    if (!target && KWin::effects) {
+        // No rect from this monitor. A frame on no output at all (a strip
+        // column parked off the viewport) is brought onto the window's own
+        // output at its size, centred in the work area (F364).
+        const QRect frame = w->frameGeometry().toRect();
+        const QList<KWin::LogicalOutput*> outputs = KWin::effects->screens();
+        const bool onAnOutput = std::any_of(outputs.cbegin(), outputs.cend(), [&frame](const auto* output) {
+            return output && QRect(output->geometry()).intersects(frame);
+        });
+        KWin::LogicalOutput* const output = onAnOutput ? nullptr : m_effect->windowOutput(w);
+        if (output) {
+            const QRect area = KWin::effects->clientArea(KWin::MaximizeArea, output).toRect();
+            QRect rect(QPoint(), frame.size().boundedTo(area.size()));
+            rect.moveCenter(area.center());
+            target = QRectF(rect);
+        }
+    }
+    if (target) {
+        qCInfo(lcEffect) << "Desktop move: free placement for" << windowId << "on" << screenId << *target;
+        applyFreeGeometryRestore(w, windowId, *target);
+    }
+}
+
+void TilingHandler::noteFreeGeometryAfterGesture(KWin::EffectWindow* w, bool resized)
+{
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    const QString screenId = m_effect->getWindowScreenId(w);
+    const QRectF free = m_effect->freeGeometryForCapture(w, QRectF(w->frameGeometry()));
+    if (windowId.isEmpty() || screenId.isEmpty() || !free.isValid()) {
+        return;
+    }
+    // A window that left a tiling desktop and was then placed by hand: its
+    // stash follows the hand, and no free placement is owed any more (F334).
+    if (!m_notifiedWindows.contains(windowId) && !m_effect->isWindowMarkedSnapped(windowId)) {
+        m_desktopMoveStash.noteHandPlacement(windowId, screenId, free);
+    }
+    // A floating tile resized by hand: the size it floats back to follows, as
+    // the daemon's record already does. A move rewrites neither (F369).
+    if (resized && m_notifiedWindows.contains(windowId) && m_effect->isWindowFloating(windowId)
+        && m_managedScreens.contains(screenId)) {
+        // One entry per window across all buckets, the same re-home
+        // saveAndRecordPreTileGeometry makes.
+        for (auto bucket = m_preTileGeometries.begin(); bucket != m_preTileGeometries.end();) {
+            bucket->remove(windowId);
+            bucket = bucket->isEmpty() ? m_preTileGeometries.erase(bucket) : std::next(bucket);
+        }
+        m_preTileGeometries[screenId][windowId] = free;
+    }
+}
+
+void TilingHandler::payOwedFreePlacementsInView(const QList<KWin::EffectWindow*>& windows)
+{
+    for (KWin::EffectWindow* w : windows) {
+        if (!w || w->isDeleted() || !isOnOwnOutputCurrentDesktop(w) || !w->isOnCurrentActivity()) {
+            continue;
+        }
+        const QString windowId = m_effect->getWindowId(w);
+        if (!m_desktopMoveStash.isOwed(windowId) || m_notifiedWindows.contains(windowId)
+            || m_savedNotifiedForDesktopReturn.contains(windowId)) {
+            continue;
+        }
+        const QString screenId = m_effect->getWindowScreenId(w);
+        if (!m_managedScreens.contains(screenId)) {
+            payOwedFreePlacement(w, windowId, screenId);
+        }
+    }
 }
 
 } // namespace PlasmaZones

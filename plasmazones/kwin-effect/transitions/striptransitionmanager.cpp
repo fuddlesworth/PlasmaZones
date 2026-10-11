@@ -58,8 +58,8 @@ StripTransitionManager::~StripTransitionManager()
     // is the explicit-cleanup path while the compositor is live.
 }
 
-void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params,
-                                       int viewDelta, PhosphorProtocol::ScrollAxis axis)
+void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QString& strip, const QString& effectId,
+                                       const QVariantMap& params, int viewDelta, PhosphorProtocol::ScrollAxis axis)
 {
     if (!output) {
         return;
@@ -98,7 +98,7 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
             // entry and every later tick finds none. The spring can still be
             // live at that moment, which is why isAnimatingOn is the first
             // term rather than holdsAfterSettle on its own.
-            const bool wasPresenting = m_effect->m_stripViewAnimator->isAnimatingOn(output)
+            const bool wasPresenting = m_effect->m_stripViewAnimator->isAnimatingOn(it->second.strip)
                 || it->second.motion.holdsAfterSettle(passClockMs());
             // notifyLeg fires from the D-Bus batch path, off the paint
             // thread; the erase frees the entry's capture texture.
@@ -119,16 +119,17 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     // leg is about to start rather than a retarget of a running one — and
     // axisFor() still reports the axis the spring was built on, which is the
     // only moment the two can be compared.
-    const bool springLive = m_effect->m_stripViewAnimator->isAnimatingOn(output);
+    const bool springLive = m_effect->m_stripViewAnimator->isAnimatingOn(strip);
     // An axis FLIP is a fresh leg, not a retarget: applyBatchDelta is about to
     // cancel the spring and zero its accumulator rather than retarget it, so
     // the sampler's baseline (measured along the old axis) has nothing left to
     // be compensated against and the next sample would read the discontinuity
     // as velocity.
-    const bool axisFlipped = axis != m_effect->m_stripViewAnimator->axisFor(output);
+    const bool axisFlipped = axis != m_effect->m_stripViewAnimator->axisFor(strip);
     if (it == m_active.end()) {
         OutputStripPass pass;
         pass.effectId = effectId;
+        pass.strip = strip;
         TransitionPass::translatePackParams(eff, params, pass.customParams, pass.customColors);
         m_active.emplace(output, std::move(pass));
         return;
@@ -143,7 +144,7 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     // for this case too: the batch steps the committed value with no time
     // passing either way.
     const bool settleFadeOpen = pass.motion.holdsAfterSettle(passClockMs());
-    if ((!springLive && !settleFadeOpen) || axisFlipped || pass.effectId != effectId) {
+    if ((!springLive && !settleFadeOpen) || axisFlipped || pass.effectId != effectId || pass.strip != strip) {
         // Fresh leg on a stale armed entry (spring cleared outside the
         // paint bracket: animations toggled, teardown races), an AXIS FLIP,
         // or a pack SWAP mid-flight — in every case the new pass must not
@@ -162,6 +163,7 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     // Params re-translated either way so a settings change mid-scroll
     // applies on the next frame.
     pass.effectId = effectId;
+    pass.strip = strip;
     TransitionPass::translatePackParams(eff, params, pass.customParams, pass.customColors);
 }
 
@@ -177,7 +179,8 @@ bool StripTransitionManager::isRunning() const
     // from the pass clock or it can permit scanout for a frame paintOutput then takes.
     const qint64 nowMs = passClockMs();
     for (const auto& entry : m_active) {
-        if (m_effect->m_stripViewAnimator->isAnimatingOn(entry.first) || entry.second.motion.holdsAfterSettle(nowMs)) {
+        if (m_effect->m_stripViewAnimator->isAnimatingOn(entry.second.strip)
+            || entry.second.motion.holdsAfterSettle(nowMs)) {
             return true;
         }
     }
@@ -204,7 +207,7 @@ bool StripTransitionManager::isRunningForOutput(KWin::LogicalOutput* screen) con
     // than the pin, which by that monotonicity errs safe: the mask is set for a pass that may
     // not paint.
     const qint64 nowMs = passClockMs();
-    return m_effect->m_stripViewAnimator->isAnimatingOn(screen) || it->second.motion.holdsAfterSettle(nowMs);
+    return m_effect->m_stripViewAnimator->isAnimatingOn(it->second.strip) || it->second.motion.holdsAfterSettle(nowMs);
 }
 
 bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
@@ -245,7 +248,7 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // read, which made passClockMs's own "every liveness decision in this class" untrue of
     // the most consequential one.
     const qint64 nowMs = passClockMs();
-    const bool springLive = m_effect->m_stripViewAnimator->isAnimatingOn(screen);
+    const bool springLive = m_effect->m_stripViewAnimator->isAnimatingOn(pass->strip);
     if (!springLive && !pass->motion.holdsAfterSettle(nowMs)) {
         // Settled with the fade closed (or killed while idle) — fall
         // through to the normal scene THIS frame; reapSettled frees the
@@ -661,7 +664,7 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // The shader pass stays ONE-DIMENSIONAL on purpose, so it takes the signed
     // scalar along the strip's own axis rather than the resolved point. Which
     // way that axis points reaches the shader as a separate uniform.
-    const qreal offsetLogical = m_effect->m_stripViewAnimator->offsetAlongAxis(screen);
+    const qreal offsetLogical = m_effect->m_stripViewAnimator->offsetAlongAxis(pass->strip);
     const qreal velocityLogical =
         springLive ? pass->motion.sampleLive(offsetLogical, nowMs) : pass->motion.sampleSettleFade(nowMs);
     if (!springLive) {
@@ -677,11 +680,9 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // height — dividing by width there would hand a pack a figure scaled by
     // the aspect ratio, so a tuned displacement would be visibly wrong rather
     // than merely rotated.
-    // Taken from the animator, which already holds the axis per OUTPUT and is
-    // the same source the paint translation uses. Going through a screen id
-    // would need a reverse lookup the effect's map does not provide, and would
-    // be a second source of one fact.
-    const bool vertical = m_effect->m_stripViewAnimator->axisFor(screen) == PhosphorProtocol::ScrollAxis::Vertical;
+    // Taken from the animator's stamp for the strip this pass was armed for,
+    // the same source the paint translation uses.
+    const bool vertical = m_effect->m_stripViewAnimator->axisFor(pass->strip) == PhosphorProtocol::ScrollAxis::Vertical;
     const float deviceAlong = vertical ? float(deviceSize.height() > 0 ? deviceSize.height() : 1)
                                        : float(deviceSize.width() > 0 ? deviceSize.width() : 1);
 
@@ -949,8 +950,8 @@ void StripTransitionManager::updateCursorHiding()
     // callers that run this decided from that same value.
     const qint64 nowMs = passClockMs();
     for (const auto& entry : m_active) {
-        const bool live =
-            m_effect->m_stripViewAnimator->isAnimatingOn(entry.first) || entry.second.motion.holdsAfterSettle(nowMs);
+        const bool live = m_effect->m_stripViewAnimator->isAnimatingOn(entry.second.strip)
+            || entry.second.motion.holdsAfterSettle(nowMs);
         if (live && cursorOnOutput(entry.first)) {
             return; // a live pass still paints the cursor itself
         }
@@ -1000,7 +1001,8 @@ void StripTransitionManager::reapSettled()
     // frame that does the reaping always arrives.
     const qint64 nowMs = passClockMs();
     for (auto it = m_active.begin(); it != m_active.end();) {
-        if (!m_effect->m_stripViewAnimator->isAnimatingOn(it->first) && !it->second.motion.holdsAfterSettle(nowMs)) {
+        if (!m_effect->m_stripViewAnimator->isAnimatingOn(it->second.strip)
+            && !it->second.motion.holdsAfterSettle(nowMs)) {
             // The settle frame itself needed no repaint — paintOutput
             // returned false and the normal scene painted in that same frame
             // — so this is pure resource hygiene. The erase frees an
@@ -1053,6 +1055,16 @@ void StripTransitionManager::outputRemoved(KWin::LogicalOutput* screen)
     ensureGlContextCurrent();
     m_active.erase(it);
     updateCursorHiding();
+}
+
+void StripTransitionManager::stripRemoved(const QString& strip)
+{
+    for (const auto& [output, pass] : m_active) {
+        if (pass.strip == strip) {
+            outputRemoved(output); // erases this entry, so stop here
+            return;
+        }
+    }
 }
 
 void StripTransitionManager::reset()

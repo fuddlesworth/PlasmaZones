@@ -11,17 +11,17 @@
 #include "daemon/overlayservice.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
-// Complete type needed for the windowClosedNotification / stalePruned PMF
-// connects below (TilingAdaptor::onTrackedWindowDestroyed /
-// pruneStaleFloatBroadcasts) — daemon.h forward declares TilingAdaptor only.
+// Complete types needed for the WindowLifecycleRelay PMF connects below
+// (TilingAdaptor::onTrackedWindowDestroyed / pruneStaleFloatBroadcasts) —
+// daemon.h forward declares TilingAdaptor only.
 #include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
+#include "dbus/windowtrackingadaptor/lifecyclerelay.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
-#include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -220,9 +220,9 @@ void Daemon::connectLayoutSignals()
                 if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
-                // Suppress during startup. Mirrors the algorithmChanged gate above.
-                // `loadState()` from finalizeStartup() synchronously emits
-                // `layoutApplied` per screen as layouts get assigned, and
+                // Suppress during startup. Mirrors the algorithmChanged gate (autotile_init.cpp).
+                // A `layoutApplied` emitted while startup assigns layouts would
+                // otherwise show alongside the startup OSD, and
                 // finalizeStartup() is the authoritative startup-OSD path
                 // (it calls `showOsdForAllScreens`). Letting this handler also
                 // fire double-queues a show on every screen: the first OSD
@@ -292,10 +292,10 @@ void Daemon::connectLayoutSignals()
                 if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
-                // Suppress during startup. Mirrors the algorithmChanged and
-                // layoutApplied gates above. `loadState()` from finalizeStartup()
-                // synchronously emits `autotileApplied` per screen as layouts get
-                // assigned for autotile-mode entries, and finalizeStartup() is the
+                // Suppress during startup. Mirrors the algorithmChanged gate (autotile_init.cpp)
+                // and the layoutApplied gate above. An `autotileApplied` emitted while
+                // startup assigns autotile-mode entries would otherwise show
+                // alongside the startup OSD, and finalizeStartup() is the
                 // authoritative startup-OSD path (it calls `showOsdForAllScreens`).
                 // Without this gate, autotile users would hit the same first-OSD
                 // double-queue that the layoutApplied gate fixes for snap-mode
@@ -465,17 +465,8 @@ void Daemon::connectOverlaySignals()
         m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
         [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
                const QString& targetZoneId, const QString& screenId) {
-            // Suppress resnap OSD when triggered by a mode/layout change
-            // (layout switch OSD already provides feedback). "resnap" only:
-            // every armResnapOsdSuppression site pairs with a SnapAdaptor
-            // resnap producer, and the only "retile" feedback reaching this
-            // relay is the user's own scrolling Retile / Resnap press, which
-            // an outstanding count must not eat (and then mis-count against
-            // the resnap it was armed for).
-            if (m_suppressResnapOsd > 0 && action == QLatin1String("resnap")) {
-                m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
-                return;
-            }
+            // A layout switch's resnap is silent at its source (F489), so every
+            // feedback reaching here is the user's own.
             if (navigationOsdAllowed(screenId)) {
                 m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenId);
             }
@@ -511,7 +502,7 @@ void Daemon::connectOverlaySignals()
         // PMF slot, so Qt::UniqueConnection is available here (unlike the
         // lambda connections above) and keeps a restart from fanning each
         // close out twice.
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_windowDragAdaptor,
+        connect(m_windowTrackingAdaptor->lifecycleRelay(), &WindowLifecycleRelay::windowClosed, m_windowDragAdaptor,
                 &WindowDragAdaptor::handleWindowClosed, Qt::UniqueConnection);
     }
     if (m_tilingAdaptor) {
@@ -520,36 +511,24 @@ void Daemon::connectOverlaySignals()
         // being engine-managed, so this in-process hook is the unconditional
         // teardown for the dedup cache and any parked open. PMF +
         // UniqueConnection for the same restart-stacking reason as above.
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_tilingAdaptor,
+        connect(m_windowTrackingAdaptor->lifecycleRelay(), &WindowLifecycleRelay::windowClosed, m_tilingAdaptor,
                 &TilingAdaptor::onTrackedWindowDestroyed, Qt::UniqueConnection);
         // And the prune-path backstop for windows that die without any close
         // signal (instance-id key space; see the signal doc).
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::stalePruned, m_tilingAdaptor,
+        connect(m_windowTrackingAdaptor->lifecycleRelay(), &WindowLifecycleRelay::stalePruned, m_tilingAdaptor,
                 &TilingAdaptor::pruneStaleFloatBroadcasts, Qt::UniqueConnection);
     }
 }
 
 void Daemon::finalizeStartup()
 {
-    // Restore autotile state from previous session (window order, algorithm, split ratio)
-    // Defers actual retiling until windows are announced by KWin effect
-    if (m_autotileEngine) {
-        m_autotileEngine->loadState();
-    }
-
-    // Now that AutotileEngine::loadState has restored autotile placement records,
-    // re-run the exclusion-rule prune so any loaded WindowPlacement records for apps
-    // an Exclude or ExcludePlacement rule covers are dropped from the unified
-    // store. The init-prologue priming call (init_engines.cpp's
-    // setExcludeRuleSet/setRules/prune sequence, run
-    // synchronously before the rulesChanged subscription wires) already pruned what
-    // was loaded then; this re-run covers records that landed during the later
-    // autotile load. Patterns derive from the unified Rule store via
-    // PhosphorRules::ExclusionRules; the WTA prune removeIf's the placement store.
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-            PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
-    }
+    // No second load here. The adaptor's constructor loaded the session, and
+    // the engines keep no state of their own to load: the autotile engine's
+    // loadState only re-ran that whole load, which replaced the placement
+    // store and set the active layout back to the previous session's after
+    // start() had synced it to the focused screen (F479). The last-used zone
+    // and user-snapped classes it used to recover are held until the snap
+    // store is wired (F236).
 
     // Signal that daemon is fully initialized and ready for queries
     if (m_layoutAdaptor) {
@@ -676,15 +655,11 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
         if (floating) {
             m_windowTrackingAdaptor->setWindowFloating(windowId, true);
             m_autotileEngine->markModeSpecificFloated(windowId);
-            // Clear stale snap-mode pre-float state ONLY when the pre-float data
-            // is for the SAME screen (autotile re-float on the same screen).
-            // When the window crosses from a snap VS (e.g. vs:0) to an autotile VS
-            // (e.g. vs:1), the pre-float data for vs:0 must be preserved — it's
-            // needed to restore the snap zone when the window returns to vs:0.
-            const QString preFloatScreen = wts->preFloatScreen(windowId);
-            if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-                wts->clearPreFloatZone(windowId);
-            }
+            // The snap-mode pre-float home goes, whatever screen it names. On
+            // this screen it is stale. On another one the window has moved away
+            // from it, and a window that moves forgets the zone it floated from:
+            // keeping it threw the window back across on the next unfloat there.
+            wts->clearPreFloatZone(windowId);
         } else {
             // The window's snap-mode float (if any) already lives in its placement
             // record's snap slot — captured at the mode-switch snapshot / save time —
@@ -767,12 +742,8 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);
         m_autotileEngine->markModeSpecificFloated(windowId);
-        // Mirror syncAutotileFloatState's cross-VS pre-float preservation so
-        // zone-restore on return to the snap VS still works.
-        const QString preFloatScreen = wts->preFloatScreen(windowId);
-        if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-            wts->clearPreFloatZone(windowId);
-        }
+        // The snap-mode pre-float home goes, as in syncAutotileFloatState.
+        wts->clearPreFloatZone(windowId);
     } else {
         // Snap-mode float persists in the placement record's snap slot (single
         // source of truth); nothing to save into a parallel set here.
@@ -816,10 +787,8 @@ void Daemon::syncScrollFloatStatePassive(const QString& windowId, bool floating,
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);
         m_scrollEngine->markModeSpecificFloated(windowId);
-        const QString preFloatScreen = wts->preFloatScreen(windowId);
-        if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-            wts->clearPreFloatZone(windowId);
-        }
+        // The snap-mode pre-float home goes, as in syncAutotileFloatState.
+        wts->clearPreFloatZone(windowId);
     } else {
         m_windowTrackingAdaptor->setWindowFloating(windowId, false);
         // A release-time hold clear (announceReleasedFullscreenHolds) arrives
@@ -860,11 +829,8 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
         wts->setWindowFloating(windowId, true);
         m_windowTrackingAdaptor->relayWindowFloatingChanged(windowId, true, screenId);
         m_autotileEngine->markModeSpecificFloated(windowId);
-        // Same cross-VS preservation logic as the single-window handler
-        const QString preFloatScreen = wts->preFloatScreen(windowId);
-        if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-            wts->clearPreFloatZone(windowId);
-        }
+        // The snap-mode pre-float home goes, as in the single-window handler.
+        wts->clearPreFloatZone(windowId);
     }
     if (!windowIds.isEmpty() && navigationOsdAllowed(screenId)) {
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), QStringLiteral("overflow"), QString(),

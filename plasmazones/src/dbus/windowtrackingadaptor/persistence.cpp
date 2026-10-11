@@ -3,11 +3,13 @@
 
 #include "windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
+#include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include <QScreen>
@@ -70,13 +72,8 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
     if (!validateWindowId(windowId, QStringLiteral("clear pre-tile geometry"))) {
         return;
     }
-    // Single float-back store: clear the record's shared free geometry.
-    // Deliberately the ALL-SCREENS form, unlike the consume-once restore
-    // paths: this method's one production caller is the layout-change unsnap
-    // (a zone the window occupied no longer exists), where the remembered
-    // pre-tile frame as a whole is obsolete — a per-screen clear would leave
-    // other monitors restoring a position captured under a layout that is
-    // gone.
+    // No in-tree caller; external contract surface. Clears every screen's
+    // float-back, unlike the consume-once restore paths.
     m_service->clearFreeGeometry(windowId);
 }
 
@@ -165,11 +162,24 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
 
 PhosphorProtocol::WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeometries()
 {
+    // A geometry re-apply is a placement: none with snapping switched off,
+    // none in a context the user disabled (F445).
+    if (m_settings && !m_settings->snappingEnabled()) {
+        return {};
+    }
     QHash<QString, QRect> geometries = m_service->updatedWindowGeometries();
     PhosphorProtocol::WindowGeometryList result;
     result.reserve(geometries.size());
+    const QString activity = m_layoutManager->currentActivity();
     for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
-        result.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value()));
+        const QString screenId = m_service->screenForWindow(it.key());
+        if (isPersistedContextDisabled(screenId, currentDesktopForScreen(screenId), activity)) {
+            continue;
+        }
+        // The screen the zone is on, so the effect re-applies only a window
+        // that is on that output (F616): a window KWin moved off it is the
+        // settle's to classify, not this pass's to pull back.
+        result.append(PhosphorProtocol::WindowGeometryEntry::fromRect(it.key(), it.value(), screenId));
     }
     qCDebug(lcDbusWindow) << "Returning updated geometries for" << result.size() << "windows";
     return result;
@@ -193,10 +203,9 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
     // guards saveState, loadState and the engine restore path so all four
     // paths can never drift.
     //
-    // The gate keys on the record screen's CURRENT desktop, the same
-    // two-argument check saveState and loadState apply; the record's own
-    // activity is deliberately not part of it (isPersistedContextDisabled
-    // asks about the screen and desktop only).
+    // The gate keys on the record screen's CURRENT desktop and the CURRENT
+    // activity: the opener lands in the activity in view, so a record from
+    // another activity must not teleport it into a context disabled here.
     //
     // One ARRAY per appId, newest record first: the effect takes the first
     // entry whose window it cannot see, so on a daemon-only restart (where
@@ -208,7 +217,7 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
         for (const auto& target : it.value()) {
             // Per-output virtual desktops (#648): gate each record on ITS screen's desktop.
             const int desktop = currentDesktopForScreen(target.screenId);
-            if (isPersistedContextDisabled(target.screenId, desktop)) {
+            if (isPersistedContextDisabled(target.screenId, desktop, m_layoutManager->currentActivity())) {
                 qCDebug(lcDbusWindow) << "getPendingRestoreGeometries: skipping" << it.key()
                                       << "— disabled context on screen" << target.screenId;
                 continue;
@@ -233,18 +242,54 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
 
 void WindowTrackingAdaptor::onLayoutChanged()
 {
-    // Delegate to service
-    m_service->onLayoutChanged();
+    // Mid-removal the layoutsChanged that closes it moves the windows, then
+    // prunes; pruning here first would unsnap them before they move.
+    if (!m_layoutRemovalPending) {
+        relayZonePrune(m_service->pruneStaleZoneAssignments());
+    }
 
     // After layout becomes available, check if we have placement records to
-    // restore. The unified WindowPlacementStore is the source of truth (the legacy
-    // m_pendingRestoreQueues is in-session-only and empty at startup).
+    // restore. The unified WindowPlacementStore is the only restore source.
     if (m_service->placementStore().size() > 0) {
         m_hasPendingRestores = true;
         qCDebug(lcDbusWindow) << "Layout available with" << m_service->placementStore().size()
                               << "placement records, checking if panel geometry is ready";
         tryEmitPendingRestoresAvailable();
     }
+}
+
+void WindowTrackingAdaptor::relayZonePrune(const PhosphorPlacement::WindowTrackingService::ZonePruneResult& result)
+{
+    // The effect clears its snapped mark on "unsnapped" (F328): a window the
+    // prune left in no zone kept its snap decoration, and a later minimize
+    // floated it as a snap suspension.
+    for (const PhosphorEngine::ZoneAssignmentEntry& entry : result.unsnapped) {
+        Q_EMIT windowStateChanged(entry.windowId,
+                                  PhosphorProtocol::WindowStateEntry{entry.windowId, QString(), entry.targetScreenId,
+                                                                     false, QStringLiteral("unsnapped"), QStringList{},
+                                                                     false});
+    }
+    // A span that kept some zones moves to them. The batch commits through
+    // the engine as a re-statement, which states "snapped" with the new
+    // primary (F442).
+    if (!result.narrowed.isEmpty() && m_cachedSnapEngine) {
+        m_cachedSnapEngine->emitBatchedResnap(result.narrowed);
+    }
+}
+
+void WindowTrackingAdaptor::resnapScreensToTheirLayouts(const QSet<QString>& excludeScreens,
+                                                        const QSet<QString>& screens, int desktop)
+{
+    if (!m_service || !m_cachedSnapEngine) {
+        return;
+    }
+    m_service->populateResnapBufferForAllScreens(excludeScreens, screens, desktop);
+    // Synchronous: the batch commits through the adaptor's direct connection,
+    // so the prune below sees the new zones and removes only what the switch
+    // could not carry, such as a window past the new layout's zone count
+    // with no float spot to go to (F475).
+    m_cachedSnapEngine->resnapToNewLayout(PhosphorSnapEngine::SnapEngine::ResnapFeedback::Silent);
+    relayZonePrune(m_service->pruneStaleZoneAssignments());
 }
 
 void WindowTrackingAdaptor::onPanelGeometryReady()

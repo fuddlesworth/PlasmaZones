@@ -19,6 +19,8 @@
  *     window.
  */
 
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QTest>
 #include <QVariantMap>
 #include <memory>
@@ -39,6 +41,20 @@
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+
+/// Echoes an a{sv} map over the session bus, so a test can hand the adaptor
+/// the snapshot as the effect's push really delivers it: a nested list comes
+/// back as a QDBusArgument, not a QVariantList.
+class SnapshotEcho : public QObject
+{
+    Q_OBJECT
+
+public Q_SLOTS:
+    QVariantMap echoMap(const QVariantMap& map) const
+    {
+        return map;
+    }
+};
 
 class TestWtaShellDesktop : public QObject
 {
@@ -189,6 +205,34 @@ private Q_SLOTS:
         QCOMPARE(ids(m_wta->getWindowStatesForDesktop(QString(), 4)), QStringList{windowId(InstanceA)});
         m_wta->setWindowSticky(windowId(InstanceB), true);
         QCOMPARE(ids(m_wta->getWindowStatesForDesktop(QString(), 4)), everywhere);
+    }
+
+    // The span list as it arrives over the bus is a QDBusArgument, which a
+    // plain toList() read as empty, so a window on desktops 2 and 3 counted
+    // as desktop 2 only and no context ever learned it spans 3 (F1003).
+    void statesForDesktop_spanSurvivesTheBus()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected()) {
+            QSKIP("No session bus available for a wire round-trip");
+        }
+        SnapshotEcho echo;
+        const QString path = QStringLiteral("/test/wtashelldesktop/echo");
+        QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+        QVariantMap spanned = snapshot();
+        spanned.insert(QString(Key::VirtualDesktops), QVariantList{2, 3});
+        QDBusMessage call =
+            QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoMap"));
+        call << spanned;
+        const QDBusMessage reply = bus.call(call);
+        bus.unregisterObject(path);
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        const QVariantMap delivered = qdbus_cast<QVariantMap>(reply.arguments().value(0));
+        QVERIFY(delivered.value(QString(Key::VirtualDesktops)).canConvert<QDBusArgument>());
+
+        push(InstanceC, 300, 2, delivered);
+        track(InstanceC);
+        QCOMPARE(ids(m_wta->getWindowStatesForDesktop(QString(), 3)), QStringList{windowId(InstanceC)});
     }
 
     void statesForDesktop_dropsUnregisteredAndFiltersScreen()

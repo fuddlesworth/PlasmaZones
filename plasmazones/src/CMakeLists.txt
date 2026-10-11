@@ -173,6 +173,12 @@ set(plasmazones_core_SRCS
     # snapnavigationtargets moved to phosphor-libs/libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/lifecycle.cpp
+    dbus/windowtrackingadaptor/activation.cpp
+    dbus/windowtrackingadaptor/prune.cpp
+    dbus/windowtrackingadaptor/evacuees.cpp
+    dbus/windowtrackingadaptor/screenleave.cpp
+    dbus/windowtrackingadaptor/evacueeledger.h
+    dbus/windowtrackingadaptor/lifecyclerelay.h
     dbus/windowtrackingadaptor/queries.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
     dbus/windowtrackingadaptor/rules.cpp
@@ -213,6 +219,7 @@ set(plasmazones_core_SRCS
     dbus/tilingadaptor/desktopreconcile.cpp
     dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
+    dbus/snapadaptor/busgate.cpp
     dbus/snapadaptor/commit.cpp
     dbus/snapadaptor/snaprestore.cpp
     dbus/snapadaptor/navigation.cpp
@@ -541,6 +548,7 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/shortcutmanager_catalog.cpp
     daemon/controllers/shortcutmanager_ids.h
     daemon/daemon/start.cpp
+    daemon/daemon/evacuees.cpp
     daemon/daemon/shortcuts_wiring.cpp
     daemon/daemon/autotile_init.cpp
     daemon/daemon/scrolling_init.cpp
@@ -554,12 +562,16 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/init_assignment_apply.cpp
     daemon/daemon/init_dbus_service.cpp
     daemon/daemon/lifecycle.cpp
+    daemon/daemon/bridge_watchdog.cpp
+    daemon/daemon/plasma_workspace.cpp
     daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
     daemon/daemon/engine_release.cpp
     daemon/daemon/seedorderfilter.cpp
     daemon/daemon/seedorderfilter.h
+    daemon/daemon/enginerouting.cpp
+    daemon/daemon/enginerouting.h
     daemon/daemon/osd.cpp
     daemon/daemon/cheatsheet.cpp
     daemon/daemon/stripzones.h

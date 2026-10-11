@@ -4,6 +4,8 @@
 #pragma once
 
 #include "compositor/deferredwindowcommits.h"
+#include "handlers/desktoparrivalparks.h"
+#include "handlers/instantrestoredecisions.h"
 
 #include <PhosphorCompositor/TilingState.h>
 #include <PhosphorEngine/EngineTypes.h>
@@ -35,19 +37,6 @@ using PhosphorCompositor::BorderState;
 namespace TilingStateHelpers = PhosphorCompositor::TilingStateHelpers;
 
 class PlasmaZonesEffect;
-
-/// Pre-computed snap restore target for a pending app (appId → geometry + saved
-/// screen). Fetched once from the daemon on ready; consumed single-shot by the
-/// deferred-route dispatch (PlasmaZonesEffect::tryInstantSnapRestore) for instant
-/// teleport (no D-Bus round-trip visible flash). The screenId lets the effect tell "cached saved zone is on
-/// snap-mode screen X" from "current KWin placement is autotile screen Y" — we
-/// trust the saved screen, not the placement, so cross-VS / cross-monitor
-/// restores work.
-struct CachedSnapRestore
-{
-    QRect geometry;
-    QString screenId;
-};
 
 /**
  * @brief Handles snapping integration for PlasmaZones.
@@ -101,18 +90,20 @@ public:
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
     // ── Snap restore cache (instant snap-restore-on-open latency cache) ──
-    // Populated from the daemon's pending restores on daemon-ready; consumed
-    // single-shot by tryInstantSnapRestore for flash-free teleport, and
-    // dropped for an app whenever a zone restore applies (markWindowSnapped):
-    // the record it was built from is then bound to a live window, and a
-    // later same-app open would otherwise teleport into that window's zone.
+    // Populated from the daemon's pending restores on daemon-ready (every
+    // record per app, newest first); an opener takes only the entry its own
+    // output may apply (InstantRestoreDecisions::pickEntry), leaving the rest
+    // for openers elsewhere. Dropped for a whole app whenever a zone restore
+    // applies (markWindowSnapped): the record it was built from is then bound
+    // to a live window, and a later same-app open would otherwise teleport
+    // into that window's zone.
     void clearRestoreCache()
     {
         m_restoreCache.clear();
     }
     void cacheRestore(const QString& appId, const CachedSnapRestore& entry)
     {
-        m_restoreCache.insert(appId, entry);
+        m_restoreCache[appId].append(entry);
     }
     bool restoreCacheEmpty() const
     {
@@ -120,23 +111,36 @@ public:
     }
     int restoreCacheSize() const
     {
-        return m_restoreCache.size();
+        int n = 0;
+        for (const auto& list : m_restoreCache) {
+            n += list.size();
+        }
+        return n;
     }
     void invalidateRestore(const QString& appId)
     {
         m_restoreCache.remove(appId);
     }
-    /// Look up and REMOVE the restore entry for @p appId (single-shot consume).
-    /// Returns nullopt if none. The entry is erased on lookup regardless of
-    /// whether the caller ends up applying it.
-    std::optional<CachedSnapRestore> takeRestore(const QString& appId)
+    /// Take (and REMOVE) the entry an opener on @p openerPhysicalId may apply
+    /// for @p appId, per InstantRestoreDecisions::pickEntry. Only that entry is
+    /// consumed; nullopt (and nothing consumed) when none qualifies.
+    std::optional<CachedSnapRestore> takeRestore(const QString& appId, const QString& openerPhysicalId,
+                                                 bool openerManaged,
+                                                 const std::function<bool(const QString&)>& isManagedScreen)
     {
         auto it = m_restoreCache.find(appId);
         if (it == m_restoreCache.end()) {
             return std::nullopt;
         }
-        const CachedSnapRestore entry = it.value();
-        m_restoreCache.erase(it);
+        const int picked =
+            InstantRestoreDecisions::pickEntry(it.value(), openerPhysicalId, openerManaged, isManagedScreen);
+        if (picked < 0) {
+            return std::nullopt;
+        }
+        const CachedSnapRestore entry = it.value().takeAt(picked);
+        if (it.value().isEmpty()) {
+            m_restoreCache.erase(it);
+        }
         return entry;
     }
 
@@ -153,10 +157,10 @@ public:
     /// still reposition it on a miss (the autotile-screen path tiles it via
     /// onComplete) — there the suppression must hold through that reposition.
     /// @p reason says WHY this resolve is running. It is threaded to the daemon,
-    /// which gates the cross-screen tile reclaim and the per-open reclaim-credit
-    /// burn on it: an unminimize must never teleport a window across monitors,
-    /// while the desktop-arrival re-drive DOES want the reclaim (but not the
-    /// burn), which is the distinction the old isOpenPath bool could not make.
+    /// which lets only a genuine open borrow a sibling's record or fire a
+    /// placement rule on a window that left its screen, while the
+    /// desktop-arrival re-drive still runs the screen routing its parked open
+    /// owes, which is the distinction the old isOpenPath bool could not make.
     /// It defaults to Open so the deferred-routing flush call sites, which
     /// pass neither trailing argument, keep the open-path semantics they rely on
     /// — including the frame-geometry shadow seed that RouteToScreen needs.
@@ -167,7 +171,7 @@ public:
     /// Store a window's pre-snap (free-float) geometry with the daemon before a
     /// snap commit, so a later float toggle restores the original position.
     void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
-                                     const QRectF& preCapturedGeometry = QRectF());
+                                     const QRectF& preCapturedGeometry = QRectF(), bool overwrite = false);
     /// Send the one-way cancelSnap D-Bus call (drag cancelled by Escape or an
     /// external event). The daemon discards the in-flight snap.
     void callCancelSnap();
@@ -295,29 +299,42 @@ public Q_SLOTS:
                                                int height);
     void slotPendingRestoresAvailable();
     /// Re-drive the snap restore for windows parked by armDesktopArrivalRestore
-    /// that the just-arrived desktop has brought into view. Connected to KWin's
-    /// desktopChanged.
+    /// that the just-arrived desktop has brought into view. Connected (queued)
+    /// to KWin's desktopChanged and currentActivityChanged.
     ///
     /// The snapping counterpart of the autotile desktop-return catch-scan in
-    /// TilingHandler::slotScreensChanged: snapping has no membership set the
-    /// effect can consult, so where the catch-scan can safely re-announce
-    /// anything it does not already track, this arm carries its own list.
+    /// TilingHandler::slotScreensChanged. The effect holds no snap membership
+    /// of its own (the daemon keeps it per screen, desktop and activity and
+    /// carries a moved window's zone itself), so this drains only the windows
+    /// armDesktopArrivalRestore parked, never a sweep of the desktop shown.
     void slotDesktopChangedRestoreArrivals();
     void slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
                              const PhosphorProtocol::EmptyZoneList& emptyZones);
 
 public:
     /// Park @p windowId for a snap restore once the desktop it was just moved to
-    /// comes into view. Called from PlasmaZonesEffect::slotWindowDesktopMoveRequested
-    /// after the move, and ONLY when the target desktop is not the one on screen —
-    /// a window moved onto the visible desktop needs no deferral.
-    void armDesktopArrivalRestore(const QString& windowId);
+    /// comes into view, for @p cause (see DesktopArrivalParks). Called from
+    /// PlasmaZonesEffect::slotWindowDesktopMoveRequested when the target desktop
+    /// is not the one on screen.
+    void armDesktopArrivalRestore(const QString& windowId, DesktopArrivalParks::Cause cause);
 
-    /// Drop @p windowId from the desktop-arrival park (window closed, or the
-    /// daemon placed it by another route).
+    /// Drop @p windowId from the desktop-arrival park when it closes
+    /// (SnapHandler::onWindowClosed, the one caller).
     void cancelDesktopArrivalRestore(const QString& windowId)
     {
-        m_awaitingDesktopArrivalRestore.remove(windowId);
+        m_desktopArrivalParks.cancel(windowId);
+    }
+    bool holdsDesktopArrivalPark(const QString& windowId) const
+    {
+        return m_desktopArrivalParks.contains(windowId);
+    }
+
+    /// Whether a first-placement resolve (an open, a pending sweep, a desktop
+    /// arrival) is out for @p windowId: a desktop move asked for inside it is
+    /// the open's own continuation.
+    bool openResolveInFlight(const QString& windowId) const
+    {
+        return m_openResolveInFlight.contains(windowId);
     }
 
     /// Drain ONE window's desktop-arrival park, if it has one and has arrived.
@@ -326,6 +343,21 @@ public:
     /// than racing this one — two placement answers for a single window resolve
     /// in D-Bus reply order, which is nobody's intent.
     bool drainDesktopArrivalFor(const QString& windowId, KWin::EffectWindow* window);
+
+    /// A parked window that became present on every desktop is in view now.
+    /// An open's continuation still owes the window its placement and is
+    /// drained. Any other park is cancelled: the window never moved, so it
+    /// owes no re-apply, and leaving the park would let the next unrelated
+    /// desktop switch spend it (F295, F415).
+    void settleDesktopArrivalOnEverywhere(const QString& windowId, KWin::EffectWindow* window)
+    {
+        const std::optional<DesktopArrivalParks::Cause> cause = m_desktopArrivalParks.causeOf(windowId);
+        if (cause == DesktopArrivalParks::Cause::OpenContinuation) {
+            drainDesktopArrivalFor(windowId, window);
+        } else if (cause) {
+            m_desktopArrivalParks.cancel(windowId);
+        }
+    }
 
 private:
     void cancelPendingMinimizeFloat(const QString& windowId)
@@ -364,7 +396,7 @@ private:
     BorderState m_border;
     // Single-shot instant-restore latency cache (appId → saved zone geometry +
     // screen), populated on daemon-ready and consumed on window-open.
-    QHash<QString, CachedSnapRestore> m_restoreCache;
+    QHash<QString, QList<CachedSnapRestore>> m_restoreCache;
     // Snap-mode windows floated because they were minimized (mirrors
     // TilingHandler::m_minimizeFloatedWindows). Removed on unminimize / close.
     // Deliberately NOT cleared on daemon restart, unlike the autotile twin
@@ -402,7 +434,7 @@ private:
     // fires every time the user changes desktop it would re-drive the float
     // restore continually and drag each floated window back to its recorded
     // position, undoing any move the user had made since.
-    QSet<QString> m_awaitingDesktopArrivalRestore;
+    DesktopArrivalParks m_desktopArrivalParks;
     // Windows whose first-placement resolve has been dispatched and not yet
     // answered (see hasOpenResolveInFlight). Decremented by every reply arm,
     // erased on close and on daemon loss.

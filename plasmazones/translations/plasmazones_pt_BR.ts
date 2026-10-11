@@ -687,7 +687,7 @@
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="137"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="611"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="598"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="127"/>
@@ -1222,37 +1222,37 @@
         <translation>Trazer para a frente de tudo</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="703"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="710"/>
         <source>Cancel Zone Overlay</source>
         <translation>Cancelar a sobreposição de zonas</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="762"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="769"/>
         <source>Layout Picker: Move Left</source>
         <translation>Seletor de layouts: mover para a esquerda</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="766"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="773"/>
         <source>Layout Picker: Move Right</source>
         <translation>Seletor de layouts: mover para a direita</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="770"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="777"/>
         <source>Layout Picker: Move Up</source>
         <translation>Seletor de layouts: mover para cima</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="774"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="781"/>
         <source>Layout Picker: Move Down</source>
         <translation>Seletor de layouts: mover para baixo</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="778"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="785"/>
         <source>Layout Picker: Confirm</source>
         <translation>Seletor de layouts: confirmar</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="779"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="786"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
         <translation>Seletor de layouts: confirmar (Enter do teclado numérico)</translation>
     </message>
@@ -1448,44 +1448,44 @@
         <translation>Não foi possível medir esta tela</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="355"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="342"/>
         <source>Layout Locked</source>
         <translation>Layout bloqueado</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="369"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="356"/>
         <source>Layout Unlocked</source>
         <translation>Layout desbloqueado</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="445"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="432"/>
         <source>Disabled on this monitor</source>
         <translation>Desativado neste monitor</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="456"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="443"/>
         <source>Desktop %1</source>
         <translation>Área de trabalho %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="458"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="469"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="445"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="456"/>
         <source>Disabled on %1</source>
         <translation>Desativado em %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="467"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="454"/>
         <source>Disabled on this activity</source>
         <translation>Desativado nesta atividade</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="497"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="484"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="580"/>
         <source>No layout assigned</source>
         <translation>Nenhum layout atribuído</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="664"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="651"/>
         <location filename=".qml-stubs/plasmazones/src/ui/LayoutOsdContent.qml.cpp" line="355"/>
         <source>Column template — %1</source>
         <comment>OSD caption, %1 is the template name</comment>
@@ -1507,7 +1507,7 @@
         <translation>Serviço de layouts não inicializado</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="328"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="315"/>
         <source>Layout: %1</source>
         <translation>Layout: %1</translation>
     </message>
@@ -1636,7 +1636,7 @@
         <translation>Nome da tela de destino</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="730"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="717"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="294"/>
         <source>Tiling: %1</source>
         <translation>Ladrilhamento: %1</translation>
@@ -1718,22 +1718,22 @@
         <translation>O número da zona precisa ser no mínimo 1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="292"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="82"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation>O plugin de efeito do PlasmaZones para o KWin não está instalado onde o KWin possa encontrá-lo. Reinstale o PlasmaZones.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="331"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="121"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin.</source>
         <translation>O efeito do PlasmaZones para o KWin foi compilado para o KWin %1, mas o KWin %2 está em execução, então ele não será carregado. Recompile e reinstale o PlasmaZones para a versão do KWin em execução.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="358"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="148"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation>O efeito do PlasmaZones para o KWin não se registrou no serviço, então arrastar janelas e os atalhos não vão funcionar. Verifique se ele está ativado em Configurações do sistema &gt; Efeitos da área de trabalho e reinicie a sessão do Plasma.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="377"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="167"/>
         <source>Window manager integration is inactive</source>
         <translation>A integração com o gerenciador de janelas está inativa</translation>
     </message>
@@ -14657,7 +14657,7 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="276"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="188"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="183"/>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="328"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="339"/>
         <source>(missing: %1)</source>
         <comment>@info item missing</comment>
         <translation>(ausente: %1)</translation>
@@ -19794,8 +19794,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
-        <source>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
-        <translation>Quando você tira uma janela nunca encaixada do estado flutuante, ela é encaixada em uma zona alternativa (a última usada, depois a primeira vazia, depois a primeira zona) em vez de continuar flutuando.</translation>
+        <source>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
+        <oldsource>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
+        <translation type="unfinished">Quando você tira uma janela nunca encaixada do estado flutuante, ela é encaixada em uma zona alternativa (a última usada, depois a primeira vazia, depois a primeira zona) em vez de continuar flutuando.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="153"/>
@@ -20561,19 +20562,19 @@
         <translation>Manual</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="98"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="109"/>
         <source>None</source>
         <comment>@item:inlistbox</comment>
         <translation>Nenhum</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="99"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="110"/>
         <source>Select…</source>
         <comment>@action:button</comment>
         <translation>Selecionar…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="103"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="114"/>
         <source>Choose from the categorized list</source>
         <comment>@info:tooltip</comment>
         <translation>Escolha na lista por categoria</translation>
@@ -20811,7 +20812,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/shared/ShaderErrorBanner.qml.cpp" line="92"/>
-        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="312"/>
+        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="310"/>
         <source>Shader error details</source>
         <comment>@info:whatsthis</comment>
         <translation>Detalhes do erro do shader</translation>
@@ -20916,8 +20917,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="100"/>
-        <source>This window is excluded from tiling</source>
-        <translation>Esta janela está excluída do ladrilhamento</translation>
+        <source>This window is excluded from snapping</source>
+        <oldsource>This window is excluded from tiling</oldsource>
+        <translation type="unfinished">Esta janela está excluída do ladrilhamento</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="116"/>
@@ -21411,12 +21413,12 @@
         <translation>Um retorno rápido para as ações de janela e layout feitas pelo teclado</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="170"/>
+        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="168"/>
         <source>Zone overlay</source>
         <translation>Sobreposição de zonas</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="314"/>
+        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="312"/>
         <source>Shader error</source>
         <translation>Erro do shader</translation>
     </message>

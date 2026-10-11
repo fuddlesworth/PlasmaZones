@@ -154,6 +154,12 @@ add_test(NAME test_snap_engine_restore COMMAND test_snap_engine_restore)
 add_executable(test_snap_restore_layout_context core/snap/test_snap_restore_layout_context.cpp helpers/SnapEngineTestFixture.h)
 target_link_libraries(test_snap_restore_layout_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_restore_layout_context COMMAND test_snap_restore_layout_context)
+# The reopen contract on the snap engine: a window is restored only on the
+# screen it opens on, and a window that left its recorded screen is released.
+add_executable(test_snap_engine_reopen_contract core/snap/test_snap_engine_reopen_contract.cpp
+               helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_engine_reopen_contract PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_engine_reopen_contract COMMAND test_snap_engine_reopen_contract)
 # Free-size restore on the float terminals (#1106). Its own target because
 # test_snap_engine_restore sits inside the 1150-line grace band. Needs the
 # FakePhysicalScreenSource: the screen-containment gate and the size clamp only
@@ -178,6 +184,14 @@ add_executable(test_snap_per_monitor core/snap/test_snap_per_monitor.cpp)
 target_link_libraries(test_snap_per_monitor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_per_monitor COMMAND test_snap_per_monitor)
 
+# The snap walks read the (screen, desktop, activity) each store is filed
+# under (F127): another activity's window is not resnapped, counted, seeded
+# or pruned in the activity in view.
+add_executable(test_wts_activity_scope core/windowtracking/test_wts_activity_scope.cpp)
+target_link_libraries(test_wts_activity_scope PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wts_activity_scope COMMAND test_wts_activity_scope)
+
 # The snap engine's per-desktop membership arm: adoption grants a store of
 # its own on the desktop in view, the persisted per-desktop zone map, and the
 # close / release / restore paths over every member store. Same fixture shape
@@ -185,6 +199,25 @@ add_test(NAME test_snap_per_monitor COMMAND test_snap_per_monitor)
 add_executable(test_snap_desktop_membership core/snap/test_snap_desktop_membership.cpp)
 target_link_libraries(test_snap_desktop_membership PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_desktop_membership COMMAND test_snap_desktop_membership)
+
+# The engine's system placements obey what the user switched off (F445) and
+# the re-apply puts back only zones the layout in view holds (F982).
+add_executable(test_snap_carry_gates core/snap/test_snap_carry_gates.cpp)
+target_link_libraries(test_snap_carry_gates PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorRules::PhosphorRules)
+add_test(NAME test_snap_carry_gates COMMAND test_snap_carry_gates)
+
+# What a window leaving a desktop or activity takes with it: the record's
+# snap slot on a move to a desktop snap does not run, and the desktop and
+# activity prunes of a window still open there.
+add_executable(test_snap_desktop_leave core/snap/test_snap_desktop_leave.cpp)
+target_link_libraries(test_snap_desktop_leave PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_desktop_leave COMMAND test_snap_desktop_leave)
+
+# The snap evacuee park: parkOutput, the prune's float announcements, readoptParked.
+add_executable(test_snap_evacuee_park core/snap/test_snap_evacuee_park.cpp)
+target_link_libraries(test_snap_evacuee_park PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_evacuee_park COMMAND test_snap_evacuee_park)
 
 # resolveFallbackUnfloatGeometry on-success coverage. QTEST_MAIN (not GUILESS) so a
 # QGuiApplication + offscreen primary screen exists and zoneGeometry() resolves —
@@ -705,6 +738,17 @@ add_executable(test_autotile_seed_filter
 target_include_directories(test_autotile_seed_filter PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
 target_link_libraries(test_autotile_seed_filter PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_autotile_seed_filter COMMAND test_autotile_seed_filter)
+
+# Which engine owns a window (EngineRouting::windowEngineMode), the resolution
+# the float reader / writer, the autotile-mode predicate and the synthesized
+# slot id share. Compiles the daemon source directly, like the seed filter.
+add_executable(test_engine_routing
+    daemon/test_engine_routing.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/daemon/enginerouting.cpp
+)
+target_include_directories(test_engine_routing PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_engine_routing PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_engine_routing COMMAND test_engine_routing)
 
 # Cheatsheet family compression: compiles the daemon source directly because
 # ShortcutManager lives in the plasmazonesd executable, not plasmazones_core.
@@ -1252,6 +1296,14 @@ target_link_libraries(test_scroll_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_scroll_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_scroll_decisions COMMAND test_scroll_decisions)
 
+# Pure-logic test for the scrolling strip keys (tilinghandler/stripkeys.h): a
+# virtual screen is a strip of its own, two spellings of one monitor share one,
+# and a strip's edges are its own screen's rect. Same header-only reach.
+add_executable(test_strip_keys ui/effect/test_strip_keys.cpp)
+target_link_libraries(test_strip_keys PRIVATE Qt6::Test Qt6::Core PhosphorIdentity::PhosphorIdentity)
+target_include_directories(test_strip_keys PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_strip_keys COMMAND test_strip_keys)
+
 # Pure-logic test for the desktop-switch pre-autotile restore decision
 # (tilinghandler/pretiledecisions.h) — the truth table over
 # (local rect, rect's bucket screen, tracked-ness, windowed fullscreen),
@@ -1261,6 +1313,76 @@ add_executable(test_pretile_decisions ui/effect/test_pretile_decisions.cpp)
 target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_pretile_decisions COMMAND test_pretile_decisions)
+
+# Pure-logic test for the instant snap-restore pick
+# (handlers/instantrestoredecisions.h): an opener applies only the newest
+# entry saved on its own output, never one on another monitor, and nothing
+# on an engine-managed screen. Same header-only reach.
+add_executable(test_instant_restore_decisions ui/effect/test_instant_restore_decisions.cpp)
+target_link_libraries(test_instant_restore_decisions PRIVATE Qt6::Test Qt6::Core PhosphorIdentity::PhosphorIdentity)
+target_include_directories(test_instant_restore_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_instant_restore_decisions COMMAND test_instant_restore_decisions)
+
+# Pure-logic test for the end of an interactive resize
+# (plasmazoneseffect/gestureenddecisions.h): when the client has committed the
+# size it was dragged to, what a held resize crossed, and when the
+# neighbour-reflow report is sent. Same header-only reach.
+add_executable(test_gesture_end_decisions ui/effect/test_gesture_end_decisions.cpp)
+target_link_libraries(test_gesture_end_decisions PRIVATE Qt6::Test Qt6::Core PhosphorIdentity::PhosphorIdentity)
+target_include_directories(test_gesture_end_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_gesture_end_decisions COMMAND test_gesture_end_decisions)
+
+# Pure-logic test for the screen of a window filling a split output
+# (plasmazoneseffect/windowscreendecisions.h): engine, then restore rect, then
+# the last stamp, and only a live virtual screen. Same header-only reach.
+add_executable(test_window_screen_decisions ui/effect/test_window_screen_decisions.cpp)
+target_link_libraries(test_window_screen_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_window_screen_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_window_screen_decisions COMMAND test_window_screen_decisions)
+
+# The effect's per-window command stamps (plasmazoneseffect/effect_state.h): a
+# daemon loss supersedes every deferred apply at once. Header-only reach.
+add_executable(test_command_stamps ui/effect/test_command_stamps.cpp)
+target_link_libraries(test_command_stamps PRIVATE Qt6::Test Qt6::Core PhosphorCompositor::PhosphorCompositor)
+target_include_directories(test_command_stamps PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_command_stamps COMMAND test_command_stamps)
+
+# Pure-logic test for a tile batch's overlap restack
+# (tilinghandler/stackdecisions.h): each group at its lowest member's slot,
+# every other window kept where it is. Same header-only reach.
+add_executable(test_stack_decisions ui/effect/test_stack_decisions.cpp)
+target_link_libraries(test_stack_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_stack_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_stack_decisions COMMAND test_stack_decisions)
+
+# The effect's pure placement-statement decisions (placementstatement.h).
+add_executable(test_placement_statement ui/effect/test_placement_statement.cpp)
+target_link_libraries(test_placement_statement PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_placement_statement PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_placement_statement COMMAND test_placement_statement)
+
+# The effect's untile-diff jurisdiction (untiledecisions.h).
+add_executable(test_untile_decisions ui/effect/test_untile_decisions.cpp)
+target_link_libraries(test_untile_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_untile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_untile_decisions COMMAND test_untile_decisions)
+
+# Pure-logic test for the drag-policy transition
+# (plasmazoneseffect/dragpolicytransition.h): the bypass latch, the tile
+# suspend versus untrack, the float on reaching a float-on-drag engine, and
+# the keyboard grab following the daemon's answer. Same header-only reach.
+add_executable(test_drag_policy_transition ui/effect/test_drag_policy_transition.cpp)
+target_link_libraries(test_drag_policy_transition PRIVATE Qt6::Test Qt6::Core PhosphorProtocol::PhosphorProtocol)
+target_include_directories(test_drag_policy_transition PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_drag_policy_transition COMMAND test_drag_policy_transition)
+
+# Pure-logic test for the window flag edges (plasmazoneseffect/windowflagedges.h):
+# which flags push to the daemon, drop the cached verdicts, and run the
+# flags-settle eviction. Same header-only reach.
+add_executable(test_window_flag_edges ui/effect/test_window_flag_edges.cpp)
+target_link_libraries(test_window_flag_edges PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_window_flag_edges PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_window_flag_edges COMMAND test_window_flag_edges)
 
 # Pure-logic test for the minimize-float qualifiers
 # (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
@@ -1365,6 +1487,14 @@ target_link_libraries(test_wta_rule_context PRIVATE Qt6::Test Qt6::Core Qt6::DBu
                       PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_rule_context COMMAND test_wta_rule_context)
 
+# The disabled-context gates on the snap restore paths ask about the current
+# activity (F480).
+add_executable(test_wta_activity_gate dbus/test_wta_activity_gate.cpp)
+target_link_libraries(test_wta_activity_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorEngine::PhosphorEngine
+                      PhosphorZones::PhosphorZones PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_activity_gate COMMAND test_wta_activity_gate)
+
 add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
@@ -1373,6 +1503,71 @@ target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/p
 target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                                                       PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_wta_capture_guards COMMAND test_wta_capture_guards)
+
+# The float-back refusal model at its three writers (recordFreeGeometry,
+# recordFloatingClose, captureWindowPlacement). Same FakePhysicalScreenSource
+# compile-in as the capture guards.
+add_executable(test_wta_float_back_model dbus/test_wta_float_back_model.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_float_back_model PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_float_back_model PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_float_back_model COMMAND test_wta_float_back_model)
+
+# The free frame a user snap leaves, recorded through the snap engine's helper
+# at every daemon-driven snap. Same fixture and compile-in as the float-back
+# model.
+add_executable(test_wta_presnap_capture dbus/test_wta_presnap_capture.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_presnap_capture PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_presnap_capture PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_presnap_capture COMMAND test_wta_presnap_capture)
+
+# The snap keyboard verbs on two outputs and several desktops: the float-back
+# fixture with a desktop manager, real zone adjacency and scripted neighbours.
+add_executable(test_wta_snap_navigation dbus/test_wta_snap_navigation.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_snap_navigation PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_snap_navigation PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorEngine::PhosphorEngine
+                      PhosphorZones::PhosphorZones PhosphorWorkspaces::PhosphorWorkspaces
+                      PhosphorRules::PhosphorRules)
+add_test(NAME test_wta_snap_navigation COMMAND test_wta_snap_navigation)
+
+# Snap focus stepping onto the next desktop at a layout edge. Same fixture.
+add_executable(test_wta_snap_desktop_nav dbus/test_wta_snap_desktop_nav.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_snap_desktop_nav PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_snap_desktop_nav PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorEngine::PhosphorEngine
+                      PhosphorZones::PhosphorZones PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_snap_desktop_nav COMMAND test_wta_snap_desktop_nav)
+
+# The bus boundary of the effect's reports: unknown screens held until they
+# arrive, split monitors resolved, metadata normalised. Same fixture.
+add_executable(test_wta_bus_boundary dbus/test_wta_bus_boundary.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_bus_boundary PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_bus_boundary PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_bus_boundary COMMAND test_wta_bus_boundary)
+
+# The bus snap gate: a D-Bus snap of one window lands only where a keyboard
+# snap could. Same fixture.
+add_executable(test_snap_adaptor_gates dbus/test_snap_adaptor_gates.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_snap_adaptor_gates PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_snap_adaptor_gates PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_adaptor_gates COMMAND test_snap_adaptor_gates)
+
+# The reopen contract through TilingAdaptor's open dispatch: a window is placed
+# where it announces, never pulled back to its own record's screen. Same
+# FakePhysicalScreenSource compile-in and scroll-engine link as the capture
+# guards, which it mirrors.
+add_executable(test_reopen_same_screen dbus/test_reopen_same_screen.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_reopen_same_screen PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_reopen_same_screen PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                      PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_reopen_same_screen COMMAND test_reopen_same_screen)
 
 # WindowTrackingAdaptor windowScreenChanged tests — the stored-screen
 # comparison that keeps or drops a snap when the compositor reports a window
@@ -1388,6 +1583,63 @@ target_link_libraries(test_wta_screen_changed PRIVATE Qt6::Test Qt6::Core Qt6::D
                       PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_screen_changed COMMAND test_wta_screen_changed)
 
+# The stale-zone prune: its triggers (an active-layout switch, an edit of any
+# layout, a layout added or removed), the store it prunes in, and the
+# "unsnapped" states and re-statement batch it relays (F363, F328, F442).
+add_executable(test_wta_zone_prune dbus/test_wta_zone_prune.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_zone_prune PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_zone_prune PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_zone_prune COMMAND test_wta_zone_prune)
+
+# The layout-switch helper every switch caller runs: populate the switched
+# screens, resnap silently, prune and relay what did not fit (F474, F475,
+# F489).
+add_executable(test_wta_layout_switch dbus/test_wta_layout_switch.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_layout_switch PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_layout_switch PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_layout_switch COMMAND test_wta_layout_switch)
+
+# The desktop-arrival restore: the held-zone arm (F493), the re-apply reason
+# that places nothing new (F415), the arrival screen's own rules (F332).
+add_executable(test_wta_desktop_arrival dbus/test_wta_desktop_arrival.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_desktop_arrival PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_desktop_arrival PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_desktop_arrival COMMAND test_wta_desktop_arrival)
+
+# releaseLeftScreens, the drop-on-leave primitive every cross-screen move runs,
+# and the daemon-driven move sites that call it. Same fixture and links.
+add_executable(test_wta_drop_on_leave dbus/test_wta_drop_on_leave.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_drop_on_leave PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_drop_on_leave PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_drop_on_leave COMMAND test_wta_drop_on_leave)
+
+# The evacuee ledger: reportOutputSettle's verdicts for a window KWin moved off
+# an output that went away and back. Same shared fixture as the two above.
+add_executable(test_wta_evacuees dbus/test_wta_evacuees.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_evacuees PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_evacuees PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_evacuees COMMAND test_wta_evacuees)
+
 add_executable(test_wta_reactive_metadata dbus/test_wta_reactive_metadata.cpp)
 target_link_libraries(test_wta_reactive_metadata PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)
@@ -1396,7 +1648,8 @@ add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)
 # activateWindow / getWindowMetadata / moveWindowToDesktop / getUrgentWindows
 # and the windowMetadataChanged / windowUrgencyChanged registry mirror.
 add_executable(test_wta_shell_surface dbus/test_wta_shell_surface.cpp)
-target_link_libraries(test_wta_shell_surface PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+target_link_libraries(test_wta_shell_surface PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_shell_surface COMMAND test_wta_shell_surface)
 
 # The per-desktop reads of the same surface (shellsurface_desktop.cpp):
@@ -1567,6 +1820,16 @@ target_include_directories(test_windowdrag_cancel_sweeps PRIVATE ${CMAKE_SOURCE_
 target_link_libraries(test_windowdrag_cancel_sweeps PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                                                             PhosphorTileEngine::PhosphorTileEngine)
 add_test(NAME test_windowdrag_cancel_sweeps COMMAND test_windowdrag_cancel_sweeps)
+
+# A drag ending on another monitor than the one snap holds the window on:
+# the pending and dead arms through dragEndedOnScreen, an activated drop
+# through its cross-screen block. Two snapping outputs on a fake source.
+add_executable(test_windowdrag_cross_screen dbus/test_windowdrag_cross_screen.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_windowdrag_cross_screen PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_windowdrag_cross_screen PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                           PhosphorSnapEngine::PhosphorSnapEngine)
+add_test(NAME test_windowdrag_cross_screen COMMAND test_windowdrag_cross_screen)
 
 # The shell's drop proxy on WindowDragAdaptor (registerDropProxy /
 # unregisterDropProxy, dropproxy.h): strict parsing and hit-testing of the
@@ -2395,6 +2658,8 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench" TIMEOUT 900)
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
 #   test_strip_view_animator: StripViewAnimator per-output view-spring behaviour
 #   test_strip_motion_sampler: StripMotionSampler distance/speed sampling
+#   test_window_context_edge: the desktop handler's edit classification
+#   test_desktop_move_stash: the free geometry a desktop move carries
 #   test_exact_trigger_match: trigger-set exact-match resolution
 #   test_scroll_behaviour_parse: scrolling behaviour token parsing
 #   test_scroll_tab_layout: tab-indicator layout geometry (declared ~300
@@ -2449,10 +2714,26 @@ add_test(NAME test_scroll_behaviour_parse COMMAND test_scroll_behaviour_parse)
 # StripMotionSampler is header-only plain numbers (no KWin types at all), so
 # the suite includes it straight from the effect tree and drives it with a
 # hand-rolled clock — the same shape as test_strip_view_animator above.
+# The desktop-arrival park's cause bookkeeping (desktoparrivalparks.h, F415).
+add_executable(test_desktop_arrival_parks compositor-common/test_desktop_arrival_parks.cpp)
+target_include_directories(test_desktop_arrival_parks PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+target_link_libraries(test_desktop_arrival_parks PRIVATE Qt6::Test)
+add_test(NAME test_desktop_arrival_parks COMMAND test_desktop_arrival_parks)
+
 add_executable(test_strip_motion_sampler compositor-common/test_strip_motion_sampler.cpp)
 target_include_directories(test_strip_motion_sampler PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 target_link_libraries(test_strip_motion_sampler PRIVATE Qt6::Test)
 add_test(NAME test_strip_motion_sampler COMMAND test_strip_motion_sampler)
+
+add_executable(test_window_context_edge compositor-common/test_window_context_edge.cpp)
+target_include_directories(test_window_context_edge PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+target_link_libraries(test_window_context_edge PRIVATE Qt6::Test)
+add_test(NAME test_window_context_edge COMMAND test_window_context_edge)
+
+add_executable(test_desktop_move_stash compositor-common/test_desktop_move_stash.cpp)
+target_include_directories(test_desktop_move_stash PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+target_link_libraries(test_desktop_move_stash PRIVATE Qt6::Test PhosphorIdentity::PhosphorIdentity)
+add_test(NAME test_desktop_move_stash COMMAND test_desktop_move_stash)
 
 # The pure half of the screen-level passes' helpers (transitionpasspure.h):
 # the on-screen format to alpha-capable capture format table the strip pass

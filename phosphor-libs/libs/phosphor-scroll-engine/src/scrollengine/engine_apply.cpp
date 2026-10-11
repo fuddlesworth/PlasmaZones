@@ -82,8 +82,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // anything that slides the layout under a stationary cursor afterwards is
     // what killed the live-restructure design (see drag_preview.cpp's header).
     // Re-applying the centering policy on an incidental pass mid-drag would do
-    // exactly that. screensMatch, not ==, so a virtual-screen id spelling
-    // difference cannot fail the guard open.
+    // exactly that. screensMatch, not ==, so a connector-name / EDID-id
+    // spelling of the same physical screen cannot fail the guard open (a
+    // virtual-screen id still has to match exactly).
     const bool dragPreviewSteersView = m_dragInsertPreview
         && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
     // This apply belongs to the edge auto-scroll heartbeat: the view motion is
@@ -153,8 +154,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     if (!dragPreviewSteersView) {
         state->strip().updateViewForFocus(params);
     }
-    // The anchor is PERSISTED state (serializeStripState) and
-    // placementChanged is the only producer of DirtyScrollStrips. The
+    // The anchor is PERSISTED state (serializeStripState). placementChanged
+    // is this engine's only way to mark DirtyScrollStrips (the tracking
+    // service's scheduleSaveState, DirtyAll, also sets that bit). The
     // focus-moving verbs all emit it themselves, but the re-anchor here also
     // fires on retile-ONLY entry points (work-area change, a settings flip, a
     // scheduled retile), which have no emit of their own — so without this a
@@ -202,8 +204,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // still holds something", because both return to the strip through
         // paths that consume no blueprint entry.
         // screensMatch, not ==, for the reason the preview guard at the top of
-        // this function states: a virtual-screen id spelling difference must
-        // not fail the test OPEN and reset a cursor the drag is still holding
+        // this function states: a connector-name / EDID-id spelling difference
+        // must not fail the test OPEN and reset a cursor the drag is still holding
         // a window out of. The CONTEXT is compared too, because the preview
         // captured one at begin: a preview detached on another desktop of this
         // same screen says nothing about whether THIS context's strip is
@@ -469,9 +471,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // the outgoing tab and the effect cross-fades one into the other.
         //
         // Derived from m_lastAppliedRect rather than a remembered hidden-set:
-        // that map is already swept by every path that drops a window
-        // (close, float, handoff, drag), so this cannot strand a pairing
-        // against a window that is no longer a tile.
+        // it is read only for this batch's tiles, and every path that makes a
+        // window a tile again (unfloat, handoff, drag) drops its entry, so this
+        // cannot pair against a rect from before the window left the strip.
         //
         // The pairing needs BOTH halves to be genuine, which is what keeps it
         // to real switches: a tile that is hidden now but was on screen last

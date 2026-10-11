@@ -48,7 +48,7 @@ QSet<int> desktopSetOf(const PhosphorEngine::WindowMetadata& meta)
 bool sameContextFields(const PhosphorEngine::WindowMetadata& a, const PhosphorEngine::WindowMetadata& b)
 {
     return a.virtualDesktop == b.virtualDesktop && a.virtualDesktops == b.virtualDesktops && a.activity == b.activity
-        && a.isSticky == b.isSticky;
+        && a.activities == b.activities && a.isSticky == b.isSticky;
 }
 } // namespace
 
@@ -57,6 +57,7 @@ PhosphorEngine::DesktopSpan TilingAdaptor::spanFor(const PhosphorEngine::WindowM
 {
     PhosphorEngine::DesktopSpan span;
     span.activity = meta.activity;
+    span.activities = meta.activities;
     // The effect stamps the on-all-desktops bit into the same metadata push
     // that carries the desktop set, so the two are one snapshot. The
     // service's own sticky report (setWindowSticky) is the fallback for a
@@ -123,10 +124,9 @@ void TilingAdaptor::applyMembershipResult(PhosphorEngine::IPlacementEngine* engi
     }
     // Windows that lost EVERY context in this engine. For a lifecycle engine
     // that is a full release and carries the pipeline bookkeeping the engine
-    // cannot do itself: the replay cache, the float-relay dedup, the parked
-    // opens, and the move excuses that keep the next announce from being
-    // read as a session restore. The engine's own windowClosed is a no-op
-    // by then, so the bookkeeping is the whole point.
+    // cannot do itself: the replay cache, the float-relay dedup and the
+    // parked opens. The engine's own windowClosed is a no-op by then, so the
+    // bookkeeping is the whole point.
     QSet<QString> fullyReleased;
     for (const auto& [windowId, key] : result.released) {
         if (lifecycleEngine && !engine->heldKeyForWindow(windowId)) {
@@ -157,12 +157,10 @@ void TilingAdaptor::applyMembershipResult(PhosphorEngine::IPlacementEngine* engi
             qCInfo(lcDbusTiling) << "reconcileWindowMembership: window" << windowId
                                  << "holds no context in its engine any more — releasing it from the pipeline";
             // Released through the engine that ANSWERED, not by re-resolving
-            // the id: engineOwningWindow decides on isWindowTracked, which is
-            // not the same predicate across engines. The adaptor's move excuse
-            // stays unarmed: every other caller is the effect immediately
-            // before a re-announce; this one has no such pairing, and an
-            // unconsumed excuse is spent by a later unrelated announce.
-            releaseWindowTrackingVia(windowId, engine, /*armMoveExcuse=*/false);
+            // the id: enginesTrackingWindow decides on isWindowTracked, which
+            // is not the same predicate across engines, and the other engine
+            // may legitimately still hold the window on another desktop.
+            releaseWindowTrackingVia(windowId, engine);
         }
     }
 }
@@ -184,9 +182,11 @@ void TilingAdaptor::reconcileWindowMembership(const QString& windowId, const Pho
     // when the span covers it, and releases the contexts the span no longer
     // covers — desktop AND activity, the two axes of the key a window moves
     // along. The screen is the third component and deliberately not part of
-    // it: a window does not leave a screen the way it leaves a desktop, and
-    // the effect relays an output transfer with its own release. Memberships
-    // under a screen's sticky pin are left to the engine's unpin migration.
+    // it: an output move is released elsewhere, by the effect's relay for an
+    // in-view hold and by IPlacementEngine::releaseWindowOffScreen (the snap
+    // commit, a free window's screen change, the drop) for a background one.
+    // Memberships under a screen's sticky pin are left to the engine's unpin
+    // migration.
     for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
         applyMembershipResult(engine, /*lifecycleEngine=*/true, engine->reconcileWindowMemberships(windowId, spanOf));
     }
@@ -198,6 +198,12 @@ void TilingAdaptor::reconcileWindowMembership(const QString& windowId, const Pho
     // the desktop the window is really on.
     for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_membershipEngines)) {
         applyMembershipResult(engine, /*lifecycleEngine=*/false, engine->reconcileWindowMemberships(windowId, spanOf));
+    }
+    // A window parked for an output that went away keeps no context on a
+    // desktop or activity it left while away: KWin still returns it, and the
+    // re-seat must not put it back where it no longer is.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->dropParkedOutsideSpan(windowId, span);
     }
 }
 

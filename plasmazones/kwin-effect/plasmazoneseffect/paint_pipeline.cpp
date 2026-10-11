@@ -403,7 +403,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
             // its output at once — so the output it belongs to IS its region,
             // and identity answers what an intersection would have to
             // approximate.
-            if (!touchesThisOutput && m_stripViewAnimator->isAnimatingOn(data.screen)) {
+            if (!touchesThisOutput && m_stripViewAnimator->isAnimatingOnOutput(data.screen)) {
                 touchesThisOutput = true;
             }
             if (!touchesThisOutput) {
@@ -1501,9 +1501,12 @@ KWinCompat::PaintResult PlasmaZonesEffect::paintWindow(const KWin::RenderTarget&
 }
 
 bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                                        KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                        KWin::EffectWindow* w, int mask, const KWin::Region& fullDeviceRegion,
                                         KWin::WindowPaintData& data)
 {
+    // A column on a virtual-screen strip draws inside that virtual screen only.
+    // The tab pills keep the full region: they draw every band on the output.
+    const KWin::Region deviceRegion = scrollStripPaintRegion(w, viewport, fullDeviceRegion);
     // Scrolling-strip boundary clip. A strip column legitimately straddles
     // its screen's edge (centering the active column pushes both neighbours
     // across it). In default clamp mode the engine clamps BOTH edges
@@ -1548,12 +1551,9 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         // file applies.
         //
         // `w` IS TREATED AS NULLABLE THROUGHOUT THIS FUNCTION, here included.
-        // Both scroll predicates and getWindowId tolerate a null window, so
-        // the guard is not there to stop a crash — it is there so every use of
-        // `w` in this function reads the same way, rather than leaving the
-        // reader to check three callee contracts to find out which uses are
-        // load-bearing. The shared derivation below spells it `w ? ... : ...`
-        // for the same reason.
+        // Every callee tolerates a null window, so the guard is there so each
+        // use of `w` reads the same way, not to stop a crash; the shared
+        // derivation below spells it `w ? ... : ...` for the same reason.
         if (const KWin::LogicalOutput* managed = w ? scrollManagedOutputFor(w) : nullptr;
             managed && managed != m_currentPassOutput) {
             // Culled, not failed: there is nothing to paint for this window in
@@ -1705,7 +1705,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         // the failure arms exist to stop. m_scrollTabPainted is deliberately left
         // alone, so a later good pass still blits.
         if (blitTabsAfterThisWindow && !m_scrollTabPainted && !m_currentPassPaintFailed) {
-            paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
+            paintScrollTabIndicators(renderTarget, viewport, fullDeviceRegion);
         }
     });
     // Second trigger: the anchor's paint alone is not reliable. The scene culls a
@@ -1717,7 +1717,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
     // guard's failure term too, since this is the same raw GL on the same lost context.
     if (!m_capturingSnapshot && !m_directPaintCapture && w && m_scrollTabPaintAnchor && !m_scrollTabPainted
         && m_scrollTabAboveAnchor.contains(w) && !m_currentPassPaintFailed) {
-        paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
+        paintScrollTabIndicators(renderTarget, viewport, fullDeviceRegion);
     }
 
     // Read the cached per-frame clock pinned by prePaintScreen. Multiple
@@ -1819,51 +1819,27 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
             // overlap.
             QRectF animatedFrame;
             ShaderTransition* st = m_shaderManager.findTransition(w);
-            const bool shaderOwnsGeometry = st && st->cached && st->cached->iFromRectLoc >= 0;
-            if (shaderOwnsGeometry && st->fromGeometry.isValid() && st->toGeometry.isValid() && st->durationMs > 0) {
-                // Same progress the draw will use, via the shared SSOT.
-                // stepCurve=false: paintWindow owns the stateful curve's single
-                // per-frame step, so this read must not advance it. The reverse
-                // flip is applied here, as paintWindow does.
-                bool stActive = false;
-                qreal t = timeDrivenProgress(*st, frameNowMs, /*stepCurve=*/false, stActive);
-                // Honour `active`: an installed-but-expired leg (elapsed past
-                // durationMs, not held) paints no shader this frame and the window
-                // sits at its rest rect. Lerping its 0-progress would snap the pane
-                // back to fromGeometry — the PRE-maximize rect — on the expiry
-                // frame. Leaving animatedFrame invalid falls back to the rest-rect
-                // capture, which is where the draw actually is.
-                if (stActive) {
-                    if (st->reverse) {
-                        t = 1.0 - t;
-                    }
-                    // Mirror the pack's OWN split: POSITION takes the raw t (the
-                    // overshoot IS the bounce, and it is where the eye reads it),
-                    // SIZE takes the clamped t. That is exactly what window-morph
-                    // does — `mix(iFromRect.xy, iToRect.xy, t)` alongside
-                    // `mix(iFromRect.zw, iToRect.zw, tc)` — because extrapolating an
-                    // EXTENT is nonsense at a large ratio (a maximize computes a
-                    // negative width) while extrapolating a POSITION is the feature.
-                    // Lerping both axes with the raw t, as this briefly did, fixed
-                    // the position and broke the size.
-                    //
-                    // CAVEAT, and it is real: one hard-coded lerp shape cannot track
-                    // five packs that each choose their own. `fold` eases its rect
-                    // through a smoothstep, `ripple-snap` squares a time-compressed
-                    // progress, and `flow` / `phosphor-stream` stagger it PER VERTEX —
-                    // there is no single rect to predict for those. The predictor
-                    // approximates for everything except window-morph, and always has.
-                    // Making it exact needs the rect curve to come from the pack (a
-                    // metadata field), not from a guess here. The cost of being wrong
-                    // is bounded: the frost pane samples a slightly-off scene slice.
-                    // It does not corrupt the draw.
-                    const qreal tc = qBound(0.0, t, 1.0);
-                    const QRectF& f = st->fromGeometry;
-                    const QRectF& g = st->toGeometry;
-                    animatedFrame = QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
-                                           qMax(1.0, f.width() + (g.width() - f.width()) * tc),
-                                           qMax(1.0, f.height() + (g.height() - f.height()) * tc));
-                }
+            if (st) {
+                // Same progress the draw will use, via the shared SSOT
+                // (predictedMorphRect over timeDrivenProgress, stepCurve=false:
+                // paintWindow owns the stateful curve's single per-frame step).
+                // It honours `active`: an installed-but-expired leg paints no
+                // shader this frame and the window sits at its rest rect, so
+                // lerping its 0-progress would snap the pane back to the
+                // PRE-maximize rect on the expiry frame; an invalid result falls
+                // back to the rest-rect capture, which is where the draw is.
+                //
+                // CAVEAT, and it is real: one hard-coded lerp shape cannot track
+                // five packs that each choose their own. `fold` eases its rect
+                // through a smoothstep, `ripple-snap` squares a time-compressed
+                // progress, and `flow` / `phosphor-stream` stagger it PER VERTEX —
+                // there is no single rect to predict for those. The predictor
+                // approximates for everything except window-morph, and always has.
+                // Making it exact needs the rect curve to come from the pack (a
+                // metadata field), not from a guess here. The cost of being wrong
+                // is bounded: the frost pane samples a slightly-off scene slice.
+                // It does not corrupt the draw.
+                animatedFrame = predictedMorphRect(*st, frameNowMs);
             }
             if (!animatedFrame.isValid()) {
                 // No morph owns the geometry (or it is a durationMs == 0 morph
@@ -1892,7 +1868,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
             // predictor pinned at the destination for the whole leg. It would
             // also centre by the size a geometry leg is still interpolating,
             // where the draw centres by the committed one.
-            if (KWin::LogicalOutput* scrollOut = scrollManagedOutputFor(w)) {
+            if (scrollManagedOutputFor(w)) {
                 if (!animatedFrame.isValid()) {
                     animatedFrame = w->frameGeometry();
                 }
@@ -1902,7 +1878,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
                     const QPoint translation = scrollVisualTranslationFor(*vit, w->frameGeometry());
                     animatedFrame.translate(translation.x(), translation.y());
                 }
-                animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));
+                animatedFrame.translate(scrollViewOffsetFor(w));
             }
             // No m_scrollCorpseFreeze arm here on purpose: this whole block is
             // gated on !w->isDeleted(), and freeze entries exist only for the
@@ -2003,7 +1979,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         // view, so the strip sliding underneath it is not something it can
         // double-count — unlike the animator transform above, which describes
         // the same motion the shader is already drawing.
-        if (KWin::LogicalOutput* managed = w ? scrollManagedOutputFor(w) : nullptr) {
+        if (w && scrollManagedOutputFor(w)) {
             // A parked column is committed below the union of all outputs, so
             // relocate the drawing to where it really sits on the strip BEFORE
             // the view offset goes on. The two together put it exactly where a
@@ -2019,7 +1995,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
                 const QPoint translation = scrollVisualTranslationFor(*vit, w->frameGeometry());
                 data += QPointF(translation.x(), translation.y());
             }
-            const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed);
+            const QPointF viewOffset = scrollViewOffsetFor(w);
             if (!viewOffset.isNull()) {
                 data += viewOffset;
             }
@@ -2138,12 +2114,9 @@ void PlasmaZonesEffect::paintScrollTabIndicators(const KWin::RenderTarget& rende
     // paint so a re-entrant trigger during the blit (none exists, but the
     // latch is what makes that true) cannot double it.
     m_scrollTabPainted = true;
-    // The SAME offset the columns take in the transform block above, read in
-    // the same paint pass: that is the entire reason the pills are drawn here
-    // rather than by the daemon — they move on exactly the frame the windows
-    // do, for a view leg, an edge auto-scroll tick, or anything else that
-    // slides the strip.
-    const QPointF viewOffset = m_stripViewAnimator->offsetFor(out);
+    // Each band takes its strip's offset, the SAME one its columns take in the
+    // transform block above in the same pass: that is why the pills are drawn
+    // here rather than by the daemon, moving on exactly the frame the windows do.
     // Clip to the WALK's region, not the trigger window's. KWin hands each
     // paintWindow the damage intersected with that window's own bounds, so a
     // trigger-bounded clip would cut every pill outside the anchor column
@@ -2158,7 +2131,8 @@ void PlasmaZonesEffect::paintScrollTabIndicators(const KWin::RenderTarget& rende
     // because the painter can refuse (a latched raster failure) and the pass
     // outcome must then say "nothing on screen" or pill input would answer
     // for invisible pills.
-    m_scrollTabBlitIssued = m_scrollTabPainter->paint(out, renderTarget, viewport, clip, viewOffset);
+    m_scrollTabBlitIssued =
+        m_scrollTabPainter->paint(out, renderTarget, viewport, clip, m_tilingHandler->scrollTabViewOffsets());
 }
 
 } // namespace PlasmaZones

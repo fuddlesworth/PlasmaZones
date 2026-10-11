@@ -127,11 +127,8 @@ void Daemon::connectScreenSignals()
                 // is non-null here.
                 m_overlayService->handleScreenAdded(screen.qscreen);
                 // Recalculate zone geometries for all effective screen IDs on this physical screen.
-                // Note: VS cache restoration on screen re-add is no longer needed —
-                // PhosphorScreens::ScreenManager::onScreenRemoved no longer wipes m_virtualConfigs, so
-                // the entry survives a disconnect and is reused as-is when the screen
-                // comes back. Settings is the source of truth and pushes updates via
-                // refreshVirtualConfigs() in response to its own change signal.
+                // No VS cache restore is needed: ScreenManager keeps m_virtualConfigs across a
+                // disconnect, and Settings pushes updates through refreshVirtualConfigs().
                 const QString physId = screen.identifier;
                 const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
                 const QString activity = currentActivity();
@@ -145,6 +142,11 @@ void Daemon::connectScreenSignals()
                             GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
                     }
                 }
+                // Re-admit the output to the tiling engines now (F765): its
+                // returning windows are classified against its mode, and the
+                // effect's seed only pins its desktop (applyScreenDesktopSeed).
+                updateEngineScreens();
+                updateLayoutFilter();
                 // Record the new screen's resolved assignment so a later
                 // (unrelated) rule edit doesn't diff it as a change and
                 // spuriously resnap it — the screen-add path lays it out here.
@@ -196,23 +198,9 @@ void Daemon::connectScreenSignals()
                     m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(removedScreenId);
                 }
 
-                // All three engines need the explicit whole-output reap:
-                // snap's per-(screen,desktop,activity) stores are created
-                // lazily on placement, and the two tiling engines'
-                // updateEngineScreens sweep only reaps CURRENT-context
-                // states, so sibling-context states (other desktops or
-                // activities) of the removed output would leak and
-                // resurface ghost tiles on replug. Each engine matches
-                // every virtual sub-screen of the removed physical id.
-                if (m_snapEngine) {
-                    m_snapEngine->pruneStatesForRemovedScreen(removedScreenId);
-                }
-                if (m_autotileEngine) {
-                    m_autotileEngine->pruneStatesForRemovedScreen(removedScreenId);
-                }
-                if (m_scrollEngine) {
-                    m_scrollEngine->pruneStatesForRemovedScreen(removedScreenId);
-                }
+                // Park the output's windows, then reap every engine's states
+                // on it (see retireOutputPlacements).
+                retireOutputPlacements(removedScreenId);
 
                 // The removed output's strip-preview settle timers, including
                 // every virtual sub-screen of it. Without this they are only
@@ -458,6 +446,10 @@ void Daemon::connectDesktopActivity()
                 diffActiveAssignments();
             });
 
+    // The desktop an output shows as it comes (back): a seed, not a switch.
+    connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopSeeded, this,
+            &Daemon::applyScreenDesktopSeed);
+
     // A desktop was removed and we know WHICH position it held, so the engines'
     // per-desktop state can be corrected properly rather than swept by count.
     // Runs ahead of desktopCountChanged (see desktopRemovedAt's doc), and once
@@ -658,6 +650,10 @@ void Daemon::connectDesktopActivity()
                 return;
             }
             const QStringList activities = m_activityManager->activities();
+            // Empty is the activity service going away: KDE always has one (F423).
+            if (activities.isEmpty()) {
+                return;
+            }
             const QSet<QString> validSet(activities.begin(), activities.end());
 
             // Prune both per-mode disabled-activity lists.
@@ -991,32 +987,6 @@ void Daemon::pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId)
     // shutdown, and an armed one goes on to fire for a screen that no longer
     // exists.
     reapScrollingOsdSettleTimersWhere(droppedSubScreen);
-}
-
-void Daemon::pruneEngineOrdersForWindow(const QString& instanceId)
-{
-    if (instanceId.isEmpty() || m_lastEngineOrders.isEmpty()) {
-        return;
-    }
-    for (auto it = m_lastEngineOrders.begin(); it != m_lastEngineOrders.end();) {
-        QStringList& order = it.value();
-        const int before = order.size();
-        order.erase(std::remove_if(order.begin(), order.end(),
-                                   [&instanceId](const QString& wid) {
-                                       return PhosphorIdentity::WindowId::extractInstanceId(wid) == instanceId;
-                                   }),
-                    order.end());
-        if (order.isEmpty()) {
-            it = m_lastEngineOrders.erase(it);
-        } else {
-            if (order.size() != before) {
-                qCDebug(lcDaemon) << "Pruned closed window" << instanceId
-                                  << "from saved autotile order for screen=" << it.key().screenId
-                                  << "desktop=" << it.key().desktop;
-            }
-            ++it;
-        }
-    }
 }
 
 void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)

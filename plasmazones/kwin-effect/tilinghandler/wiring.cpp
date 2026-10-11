@@ -60,7 +60,7 @@ void TilingHandler::connectSignals()
                    SLOT(slotWindowFloatingChanged(QString, bool, QString)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
-                   SLOT(slotScrollingScreensChanged(QStringList)));
+                   SLOT(slotScrollingScreensChanged(QStringList, bool, QStringList)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("stripContextChanged"), this,
                    SLOT(slotStripContextChanged(QString, QString, QString)));
@@ -106,7 +106,7 @@ void TilingHandler::connectSignals()
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
-                SLOT(slotScrollingScreensChanged(QStringList)));
+                SLOT(slotScrollingScreensChanged(QStringList, bool, QStringList)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("stripContextChanged"), this,
@@ -284,10 +284,10 @@ void TilingHandler::loadSettings()
     fetchScrollTabStrips();
 }
 
-// Scrolling screen subset — the Mode-stamp discriminator only, no
-// lifecycle transitions to run, so the reply handling is a guarded
-// plain assignment. Dispatched from loadSettings; a failed Get re-dispatches
-// itself while the retry budget lasts.
+// Scrolling screen subset — a bring-up load: announceFlipped=false, so the
+// reply sets the Mode stamp input and runs no engine flip. Dispatched from
+// loadSettings; a failed Get re-dispatches itself while the retry budget
+// lasts.
 void TilingHandler::fetchScrollingScreens()
 {
     QDBusMessage scrollMsg =
@@ -319,12 +319,13 @@ void TilingHandler::fetchScrollingScreens()
                     // same rule-cache invalidate + border sweep as a live
                     // signal, or a Mode "scrolling" rule verdict memoised
                     // before the reply landed would stick.
-                    // announceFlipped=false: this is a BRING-UP load, which is
-                    // exactly the case the contract reserves it for. The
-                    // managed-screens reply owns the re-announce, and letting
-                    // this one flip too bumped the per-screen stagger epoch
-                    // mid-flight, voiding the tile batch the daemon had already
-                    // started delivering and leaving the screen half-tiled.
+                    // announceFlipped=false: the managed-screens reply owns the
+                    // bring-up re-announce, and letting this one flip too bumped
+                    // the per-screen stagger epoch mid-flight, voiding the tile
+                    // batch the daemon had started delivering and leaving the
+                    // screen half-tiled. The guards above make it land only on
+                    // the set as it stood at dispatch (setScrollingScreens'
+                    // DEPENDENCY note says what that leaves unreleased).
                     setScrollingScreens(QSet<QString>(screens.cbegin(), screens.cend()),
                                         /*announceFlipped=*/false);
                     qCInfo(lcEffect) << "Loaded scrolling screens:" << m_scrollingScreens;

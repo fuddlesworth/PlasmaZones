@@ -30,6 +30,8 @@
 #include <QTest>
 #include <memory>
 
+#include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorProtocol/DragTypes.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -302,6 +304,45 @@ private Q_SLOTS:
         QVERIFY(outcome.zoneId.isEmpty());
     }
 
+    // A drag that began maximized started from the output rect, which is no
+    // free spot: its drop into a zone records no float-back (F473; the
+    // maximize edge pushes the real restore rect). The same drop of a window
+    // that began free records the frame it started from.
+    void adaptor_dragThatStartedMaximizedRecordsNoOutputSizedFloatBack()
+    {
+        Fixture f;
+        QVERIFY(f.screen);
+        const QRect screenGeom = f.screen->geometry();
+        const QString zone0 = f.layout->zones().at(0)->id().toString();
+        f.adaptor->registerDropProxy(f.screenId, proxyJson(QRect(20, 20, 100, 90), {{zone0, QRect(20, 20, 100, 90)}}));
+        const QPoint inCell = screenGeom.topLeft() + QPoint(60, 60);
+        const int ctrl = static_cast<int>(Qt::ControlModifier);
+        const auto dropFrom = [&](const QString& instance, bool maximized, const QRect& frame) {
+            PhosphorEngine::WindowMetadata meta;
+            meta.appId = QStringLiteral("app");
+            meta.isMaximized = maximized;
+            meta.isFullscreen = false;
+            meta.isMinimized = false;
+            f.registry.upsert(instance, meta);
+            const QString windowId = QStringLiteral("app|") + instance;
+            f.registry.canonicalizeWindowId(windowId);
+            f.adaptor->beginDrag(windowId, frame.x(), frame.y(), frame.width(), frame.height(), f.screenId, 0);
+            f.adaptor->updateDragCursor(windowId, inCell.x(), inCell.y(), ctrl, 0);
+            const PhosphorProtocol::DragOutcome outcome =
+                f.adaptor->endDrag(windowId, inCell.x(), inCell.y(), ctrl, 0, false);
+            const auto rec = f.wta->service()->placementStore().peekExact(windowId);
+            return std::make_pair(outcome.action, rec ? rec->freeGeometryByScreen.values() : QList<QRect>());
+        };
+
+        const auto maxed = dropFrom(QStringLiteral("maxed"), true, screenGeom);
+        QCOMPARE(maxed.first, PhosphorProtocol::DragOutcome::ApplySnap);
+        QVERIFY2(maxed.second.isEmpty(), "a drag that began maximized recorded the output rect");
+        const QRect free(screenGeom.x() + 400, screenGeom.y() + 300, 300, 200);
+        const auto freed = dropFrom(QStringLiteral("free"), false, free);
+        QCOMPARE(freed.first, PhosphorProtocol::DragOutcome::ApplySnap);
+        QCOMPARE(freed.second, QList<QRect>{free});
+    }
+
 private:
     /// A snap-only drag adaptor on the offscreen platform's screen: no
     /// engines, no screen manager (the adaptor falls back to the QScreen
@@ -320,6 +361,7 @@ private:
             settings.setZoneSpanEnabled(false);
 
             wta = new WindowTrackingAdaptor(layoutManager, &detector, nullptr, &settings, nullptr, nullptr, &parent);
+            wta->setWindowRegistry(&registry);
             snapEngine = new PhosphorSnapEngine::SnapEngine(layoutManager, wta->service(), &detector, nullptr, nullptr);
             snapEngine->setEngineSettings(&settings);
             wta->service()->setSnapState(snapEngine->snapState());
@@ -346,6 +388,7 @@ private:
         }
 
         IsolatedConfigGuard guard;
+        PhosphorEngine::WindowRegistry registry; // outlives the parent-owned adaptors
         QObject parent;
         RecordingOverlay overlay;
         StubZoneDetector detector;

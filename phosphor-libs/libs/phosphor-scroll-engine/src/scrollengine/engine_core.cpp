@@ -9,11 +9,11 @@
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "enginelimits.h"
+#include "evacueepark_p.h"
 #include "scrollenginelogging.h"
 
-#include <algorithm>
-
 #include <QMetaObject>
+#include <algorithm>
 
 namespace PhosphorScrollEngine {
 

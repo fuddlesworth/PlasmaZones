@@ -419,7 +419,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // across the two paths.
     //
     // Caller-owned memoisation slot, the applyWindowGeometry pattern
-    // (drag_snap.cpp): when the gate builds the WindowQuery for its rule
+    // (window_geometry_apply.cpp): when the gate builds the WindowQuery for its rule
     // probes, the resolver pass below reuses it instead of walking the ~30
     // KWin accessors a second time per animated event.
     std::optional<PhosphorRules::WindowQuery> sharedQuery;
@@ -792,7 +792,7 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
                                     // provider is warm before the first transition needs it.
                                     scheduleEffectAudioSync();
                                     // It can also assign or clear any suppression-owning pack
-                                    // (`desktop.peek`, `window.minimize`, `window.maximize`);
+                                    // (`desktop.peek`, `window.minimize`, placeIn / placeOut for maximize);
                                     // keep KWin's own stock effects unloaded exactly while
                                     // ours owns the event.
                                     syncStockEffectSuppression();

@@ -160,6 +160,96 @@ private Q_SLOTS:
         QCOMPARE(m_service->zonesForWindow(rightWin).first(), m_zoneIds[2]);
     }
 
+    // A window whose zone is not in its virtual screen's layout loses the
+    // zone and its pre-float home, but it is a live window: its float-back
+    // rects (one per monitor) and its sticky flag stay (F441).
+    void testMigrateToVirtual_prunedWindowKeepsItsFreeGeometryAndStickyFlag()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
+        const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
+        PhosphorZones::Layout* vsLayout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(vsLayout);
+        for (const QString& vs : virtualIds) {
+            m_layoutManager->assignLayout(vs, m_layoutManager->currentVirtualDesktop(), QString(), vsLayout);
+        }
+
+        const QString w = QStringLiteral("konsole|pruned");
+        const QRect elsewhere(10, 10, 400, 300);
+        m_service->assignWindowToZone(w, m_zoneIds[0], physId, 1);
+        m_service->setWindowSticky(w, true);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = w;
+        rec.appId = QStringLiteral("konsole");
+        rec.screenId = physId;
+        rec.freeGeometryByScreen.insert(QStringLiteral("HDMI-1"), elsewhere);
+        QVERIFY(m_service->placementStore().record(rec));
+
+        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, &mgr);
+
+        QVERIFY2(m_service->zonesForWindow(w).isEmpty(), "the zone is not in the virtual screen's layout");
+        const auto after = m_service->placementStore().peekExact(w);
+        QVERIFY(after.has_value());
+        QCOMPARE(after->freeGeometryByScreen.value(QStringLiteral("HDMI-1")), elsewhere);
+        QVERIFY(m_service->isWindowSticky(w));
+    }
+
+    // A last-used zone recorded on desktop 2 is judged against desktop 2's
+    // layout, not the one the desktop in view runs, so a reconfigure keeps it
+    // (F162).
+    void testMigrateToVirtual_backgroundDesktopKeepsItsLastUsedZone()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
+        const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
+        const QString vs0 = virtualIds.first();
+        PhosphorZones::Layout* other = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(other);
+        m_layoutManager->assignLayout(vs0, 2, QString(), other);
+        const QString zone = other->zones().first()->id().toString();
+        m_snapState->restoreLastUsedZone(zone, vs0, QStringLiteral("konsole"), 2);
+
+        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, &mgr);
+
+        QCOMPARE(m_snapState->lastUsedZoneId(), zone);
+    }
+
+    // A desktop running autotile keeps its snap memory frozen: its last-used
+    // zone is not judged against the default layout the cascade answers there
+    // (F162).
+    void testMigrateToVirtual_tilingDesktopKeepsItsFrozenLastUsedZone()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
+        const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
+        const QString vs0 = virtualIds.first();
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        entry.tilingAlgorithm = QStringLiteral("bsp");
+        m_layoutManager->setAssignmentEntryDirect(vs0, 2, QString(), entry);
+        const QString frozen = QUuid::createUuid().toString();
+        m_snapState->restoreLastUsedZone(frozen, vs0, QStringLiteral("konsole"), 2);
+
+        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, &mgr);
+
+        QCOMPARE(m_snapState->lastUsedZoneId(), frozen);
+    }
+
     // Guard clause: a null manager refuses the migration. The virtual list is
     // deliberately NON-EMPTY so the null-manager conjunct is the only reason
     // the call can return early — with both falsy the test would pass under a

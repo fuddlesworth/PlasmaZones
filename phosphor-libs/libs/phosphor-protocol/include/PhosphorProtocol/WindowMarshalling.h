@@ -25,6 +25,10 @@ PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const Wind
 PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, WindowStateEntry& e);
 PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const UnfloatRestoreResult& e);
 PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, UnfloatRestoreResult& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const OutputSettleRow& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, OutputSettleRow& e);
+PHOSPHORPROTOCOL_EXPORT QDBusArgument& operator<<(QDBusArgument& arg, const OutputSettleVerdict& e);
+PHOSPHORPROTOCOL_EXPORT const QDBusArgument& operator>>(const QDBusArgument& arg, OutputSettleVerdict& e);
 
 static_assert(PhosphorDBus::HasDBusStreaming<WindowGeometryEntry>::value,
               "WindowGeometryEntry missing QDBusArgument operators");
@@ -36,5 +40,9 @@ static_assert(PhosphorDBus::HasDBusStreaming<WindowStateEntry>::value,
               "WindowStateEntry missing QDBusArgument operators");
 static_assert(PhosphorDBus::HasDBusStreaming<UnfloatRestoreResult>::value,
               "UnfloatRestoreResult missing QDBusArgument operators");
+static_assert(PhosphorDBus::HasDBusStreaming<OutputSettleRow>::value,
+              "OutputSettleRow missing QDBusArgument operators");
+static_assert(PhosphorDBus::HasDBusStreaming<OutputSettleVerdict>::value,
+              "OutputSettleVerdict missing QDBusArgument operators");
 
 } // namespace PhosphorProtocol

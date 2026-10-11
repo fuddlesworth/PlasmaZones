@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <QSet>
 #include <QSize>
+#include <QString>
 #include <QtGlobal>
 
 /// Pure decision logic for the scroll-managed window mechanisms in
@@ -316,6 +318,15 @@ enum class ClaimScope {
     /// Engine disable, daemon loss, daemon bring-up, effect unload. Every
     /// claim answers, and the ORDER matters (see claimReleaseOrder).
     Teardown,
+    /// KWin moved the window off an output that disconnected. Its claims are
+    /// scrubbed from the ledgers without touching KWin's state: a maximized or
+    /// fullscreen evacuee stays that way, so KWin can still return it as it
+    /// was when the output comes back.
+    Evacuation,
+    /// A placement on a snapping screen took the window: preparePlacement has
+    /// already handed every claim back, anchored at the placement rect, so the
+    /// untrack it runs releases none.
+    SnapPlacement,
 };
 
 /// Whether @p claim releases on @p scope.
@@ -347,6 +358,13 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
         return claim != Claim::WindowedFullscreen;
     case ClaimScope::Teardown:
         return true;
+    case ClaimScope::Evacuation:
+        // No claim releases: a release restores KWin's state, and an evacuee
+        // keeps it. The caller scrubs the ledgers bare instead.
+        return false;
+    case ClaimScope::SnapPlacement:
+        // Released already, by the placement, at the placement's rect.
+        return false;
     }
     return false;
 }
@@ -383,6 +401,23 @@ inline constexpr int claimReleaseOrder(Claim claim)
 inline constexpr bool claimRetainsOnFullscreenSkip(Claim claim)
 {
     return claim != Claim::WindowedFullscreen;
+}
+
+/// The screens a scrolling-set change flips between engines inside the tiling
+/// union, whose windows the effect re-announces: a screen entering the strip
+/// from autotile (still in the managed set), or leaving it for autotile (the
+/// daemon names those, because the managed set that says so lands after this
+/// change). A desktop or activity switch flips nothing: the engines already
+/// hold the context entered, and the switch's own announce places its windows
+/// (F231, F286, F1004).
+inline QSet<QString> engineFlipScreens(const QSet<QString>& oldSet, const QSet<QString>& newSet,
+                                       const QSet<QString>& managed, bool isContextSwitch,
+                                       const QSet<QString>& leavingToAutotile)
+{
+    if (isContextSwitch) {
+        return {};
+    }
+    return ((newSet - oldSet) & managed) + ((oldSet - newSet) & leavingToAutotile);
 }
 
 } // namespace PlasmaZones::ScrollDecisions

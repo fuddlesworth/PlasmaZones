@@ -44,6 +44,14 @@ public:
                                   QObject* parent = nullptr);
     ~ZoneDetectionAdaptor() override = default;
 
+    /// The zone next to the union of a span in @p direction, never a member.
+    /// Not a slot: the D-Bus contract stays as it is.
+    QString getAdjacentZoneOutside(const QStringList& zoneIds, const QString& direction,
+                                   const QString& screenId) const override;
+    /// The edge zone of @p desktop's layout. Not a slot either.
+    QString getFirstZoneInDirectionOnDesktop(const QString& direction, const QString& screenId,
+                                             int desktop) const override;
+
 public Q_SLOTS:
     // PhosphorZones::Zone detection for cursor position
     QString detectZoneAtPosition(int x, int y);
@@ -126,6 +134,8 @@ private:
     /// drag pipeline and the overlay layer — external clients otherwise see
     /// zones on a screen the daemon itself treats as zoneless.
     PhosphorZones::Layout* resolveActiveLayoutForScreen(const QString& screenId) const;
+    /// The zone of @p layout at its edge in @p direction, on @p resolvedId's geometry.
+    QString firstZoneOfLayout(PhosphorZones::Layout* layout, const QString& direction, const QString& resolvedId) const;
 
     PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP)
     PhosphorZones::LayoutRegistry* m_layoutManager; // Interface type (DIP)

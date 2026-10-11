@@ -82,10 +82,10 @@ void WindowRegistry::remove(const QString& instanceId)
     m_disappearingInstances.remove(instanceId);
     const bool hasPendingUpsert = m_pendingUpserts.contains(instanceId);
     const WindowMetadata pendingMetadata = m_pendingUpserts.take(instanceId);
-    // Retire the mapping only if it still is the pre-emit one: a synchronous
-    // subscriber may have re-seeded a FRESH canonical for this instance during
-    // the emit (a re-announce racing the close), and clobbering that with a
-    // blind remove would strip the next lifecycle's identity translation.
+    // Retire the mapping only if it still is the pre-emit one. An instance that had a canonical keeps it through the
+    // emit (canonicalizeWindowId never re-seeds one), and a re-announce racing the close is the pending-upsert replay
+    // below. The test matters only for an instance that gained its FIRST canonical from a subscriber during the emit,
+    // and that mapping is kept: a blind remove would strip the next lifecycle's identity translation.
     const QString postEmit = m_canonicalByInstance.value(instanceId);
     if (postEmit == canonical) {
         m_canonicalByInstance.remove(instanceId);
@@ -121,7 +121,8 @@ std::optional<WindowRegistry::WindowContext> WindowRegistry::windowContext(const
     if (it == m_records.constEnd()) {
         return std::nullopt;
     }
-    return WindowContext{it.value().virtualDesktop, it.value().virtualDesktops, it.value().activity};
+    return WindowContext{it.value().virtualDesktop, it.value().virtualDesktops, it.value().activity,
+                         it.value().activities};
 }
 
 QString WindowRegistry::appIdFor(const QString& instanceId) const
@@ -145,6 +146,24 @@ std::optional<bool> WindowRegistry::minimizedState(const QString& windowId) cons
     return it->isMinimized;
 }
 
+std::optional<bool> WindowRegistry::fillsOutputState(const QString& windowId) const
+{
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const auto it = m_records.constFind(instanceId);
+    if (it == m_records.constEnd()) {
+        return std::nullopt;
+    }
+    if (it->isMaximized.value_or(false) || it->isFullscreen.value_or(false)) {
+        return true;
+    }
+    // Off only when BOTH are known off: an unknown maximize next to a known
+    // fullscreen=false may well be on (F141).
+    if (it->isMaximized.has_value() && it->isFullscreen.has_value()) {
+        return false;
+    }
+    return std::nullopt;
+}
+
 std::optional<WindowDesktopContext> WindowRegistry::desktopContext(const QString& windowId) const
 {
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
@@ -152,7 +171,7 @@ std::optional<WindowDesktopContext> WindowRegistry::desktopContext(const QString
     if (it == m_records.constEnd()) {
         return std::nullopt;
     }
-    return WindowDesktopContext{it->virtualDesktop, it->virtualDesktops, it->isSticky, it->activity};
+    return WindowDesktopContext{it->virtualDesktop, it->virtualDesktops, it->isSticky, it->activity, it->activities};
 }
 
 QStringList WindowRegistry::instancesWithAppId(const QString& appId) const
