@@ -286,10 +286,10 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     }
     for (const QString& screenId : affectedScreens) {
         scheduleRetileForScreen(screenId);
-        // The strip structure mutated durably (a column may have closed) and
-        // placementChanged is the sole producer of DirtyScrollStrips — the
-        // prune path is exactly the no-windowClosed case, so nothing else
-        // marks the save.
+        // The strip structure mutated durably (a column may have closed).
+        // placementChanged is this engine's only way to mark DirtyScrollStrips;
+        // the tracking service's scheduleSaveState (DirtyAll) also sets that
+        // bit, but a prune is not a windowClosed whose DirtyAll covers it.
         Q_EMIT placementChanged(screenId);
     }
     return pruned;
