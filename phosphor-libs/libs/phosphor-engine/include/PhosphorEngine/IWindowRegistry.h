@@ -104,9 +104,11 @@ public:
 
     /// The desktop set and activity last reported for @p windowId (bare
     /// instance id or composite `appId|instanceId`), or nullopt when the
-    /// window is unknown. Default reports unknown, like minimizedState, so a
-    /// registry-less engine or a test fake falls back to the screen's current
-    /// context rather than inventing one.
+    /// window is unknown. Default reports unknown, like minimizedState.
+    /// Consumers then treat the window's desktops as unknown instead of
+    /// inventing them: the snap restore, for one, takes the record's own desktop
+    /// when it names a zone there, else the screen's, and the persisted-zone
+    /// seed drops none of the desktops the record names.
     virtual std::optional<WindowDesktopContext> desktopContext(const QString& windowId) const
     {
         Q_UNUSED(windowId)

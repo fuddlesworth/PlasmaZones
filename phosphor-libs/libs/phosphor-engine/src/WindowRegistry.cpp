@@ -82,10 +82,10 @@ void WindowRegistry::remove(const QString& instanceId)
     m_disappearingInstances.remove(instanceId);
     const bool hasPendingUpsert = m_pendingUpserts.contains(instanceId);
     const WindowMetadata pendingMetadata = m_pendingUpserts.take(instanceId);
-    // Retire the mapping only if it still is the pre-emit one: a synchronous
-    // subscriber may have re-seeded a FRESH canonical for this instance during
-    // the emit (a re-announce racing the close), and clobbering that with a
-    // blind remove would strip the next lifecycle's identity translation.
+    // Retire the mapping only if it still is the pre-emit one. An instance that had a canonical keeps it through the
+    // emit (canonicalizeWindowId never re-seeds one), and a re-announce racing the close is the pending-upsert replay
+    // below. The test matters only for an instance that gained its FIRST canonical from a subscriber during the emit,
+    // and that mapping is kept: a blind remove would strip the next lifecycle's identity translation.
     const QString postEmit = m_canonicalByInstance.value(instanceId);
     if (postEmit == canonical) {
         m_canonicalByInstance.remove(instanceId);

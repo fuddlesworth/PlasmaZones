@@ -231,7 +231,7 @@ private Q_SLOTS:
         reg.upsert(QStringLiteral("u3"), make(QStringLiteral("kate")));
 
         auto firefox = reg.instancesWithAppId(QStringLiteral("firefox"));
-        std::sort(firefox.begin(), firefox.end()); // QMultiHash::values is unordered
+        std::sort(firefox.begin(), firefox.end()); // most recently indexed first; sort for a stable compare
         QCOMPARE(firefox, (QStringList{QStringLiteral("u1"), QStringLiteral("u2")}));
 
         QCOMPARE(reg.instancesWithAppId(QStringLiteral("kate")), QStringList{QStringLiteral("u3")});
@@ -358,7 +358,7 @@ private Q_SLOTS:
         // Scoped to the re-UPSERT shape deliberately. A subscriber that seeds
         // a canonical for an instance that had NONE takes the
         // postEmit != canonical branch instead, which skips this retirement
-        // entirely and lets the fresh mapping live — that is a re-announce,
+        // entirely and lets the fresh mapping live — a defensive shape,
         // covered by remove_subscriberReseededCanonical_survivesRemoval, and
         // it is not what this gate governs. (A subscriber calling
         // canonicalizeWindowId for an instance that still HAS its mapping
@@ -452,13 +452,14 @@ private Q_SLOTS:
         WindowRegistry reg;
         const QString instanceId = QStringLiteral("reseed-instance");
         const QString freshCanonical = QStringLiteral("fresh|reseed-instance");
-        // A record WITHOUT a canonical mapping: the effect's metadata push
-        // seeds the canonical, but a record can arrive through other
-        // notifications first.
+        // A defensive row. Production never builds this shape, a record
+        // WITHOUT a canonical mapping: WindowTrackingAdaptor::setWindowMetadata
+        // seeds the canonical before its upsert. The row pins the registry's
+        // own contract for a caller that does not.
         reg.upsert(instanceId, make(QStringLiteral("old")));
         connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString&) {
-            // A re-announce racing the close seeds a fresh canonical for the
-            // same instance while the removal is in flight.
+            // A subscriber gives the instance its FIRST canonical while the
+            // removal is in flight.
             reg.canonicalizeWindowId(freshCanonical);
         });
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
@@ -923,6 +924,31 @@ private Q_SLOTS:
         meta.isMinimized = false;
         reg.upsert(QStringLiteral("every"), meta);
         QCOMPARE(reg.minimizedState(QStringLiteral("kate|every")), std::optional<bool>(false));
+    }
+
+    // An unreported minimize state is unknown for both id forms, and the
+    // bool accessor collapses it to false (F832).
+    void minimizedState_unreportedIsUnknownForEveryIdForm()
+    {
+        WindowRegistry reg;
+        WindowMetadata meta = make(QStringLiteral("kate"));
+        reg.upsert(QStringLiteral("u1"), meta);
+        QVERIFY(!reg.minimizedState(QStringLiteral("u1")).has_value());
+        QVERIFY(!reg.minimizedState(QStringLiteral("kate|u1")).has_value());
+        QVERIFY(!reg.isMinimized(QStringLiteral("u1")));
+        QVERIFY(!reg.isMinimized(QStringLiteral("kate|u1")));
+
+        meta.isMinimized = true;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("u1")), std::optional<bool>(true));
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|u1")), std::optional<bool>(true));
+        meta.isMinimized = false;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("u1")), std::optional<bool>(false));
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|u1")), std::optional<bool>(false));
+
+        QVERIFY(!reg.minimizedState(QStringLiteral("unknown")).has_value());
+        QVERIFY(!reg.minimizedState(QStringLiteral("kate|unknown")).has_value());
     }
 };
 

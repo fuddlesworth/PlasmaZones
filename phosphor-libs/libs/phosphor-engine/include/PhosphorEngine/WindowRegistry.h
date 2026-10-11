@@ -112,6 +112,8 @@ public:
     void upsert(const QString& instanceId, const WindowMetadata& metadata);
     /// Remove metadata and canonical state, emitting windowDisappeared exactly
     /// once while the canonical mapping remains available to subscribers.
+    /// An upsert a subscriber makes during the emit is replayed after it and
+    /// keeps the instance's canonical mapping; inside clear() that replay is dropped.
     void remove(const QString& instanceId);
 
     std::optional<WindowMetadata> metadata(const QString& instanceId) const;
@@ -172,10 +174,10 @@ public:
     /// fullscreen fields. Accepts a bare instance id or a composite id.
     std::optional<bool> fillsOutputState(const QString& windowId) const override;
     std::optional<WindowDesktopContext> desktopContext(const QString& windowId) const override;
-    /// Every instance currently recorded under @p appId, in UNSPECIFIED order
-    /// (QMultiHash bucket order, not insertion or arrival order). Callers that
-    /// need a deterministic sequence — anything FIFO-shaped — must sort or
-    /// otherwise order the result themselves.
+    /// Every instance currently recorded under @p appId, most recently indexed
+    /// first (QMultiHash::values(key)). An appId change re-indexes the instance
+    /// at the head, so this is not arrival order: callers that need a FIFO
+    /// sequence must order the result themselves.
     QStringList instancesWithAppId(const QString& appId) const;
     bool contains(const QString& instanceId) const;
     int size() const;
@@ -209,10 +211,9 @@ private:
     QHash<QString, WindowMetadata> m_records;
     QMultiHash<QString, QString> m_appIdIndex;
     QHash<QString, QString> m_canonicalByInstance;
-    /// Instances currently inside remove()'s windowDisappeared emit. A
-    /// re-entrant remove() of the same instance is a no-op (exactly-once
-    /// signal), and a re-entrant upsert() is deferred into m_pendingUpserts
-    /// and replayed after the removal completes.
+    /// Instances currently inside remove()'s windowDisappeared emit. A re-entrant remove() of the same instance emits
+    /// nothing further and cancels any upsert queued for it during this emit. A re-entrant upsert() is deferred into
+    /// m_pendingUpserts and replayed after the removal completes.
     QSet<QString> m_disappearingInstances;
     QHash<QString, WindowMetadata> m_pendingUpserts;
     /// Depth counter, non-zero while clear() drives a removal loop: remove()
