@@ -207,6 +207,11 @@ SnapStateResolver snapStateResolverFor(PhosphorSnapEngine::SnapEngine* engine)
                    const PhosphorSnapEngine::SnapState* state) -> std::optional<PhosphorEngine::PlacementStateKey> {
         return e ? e->keyForState(state) : std::nullopt;
     };
+    r.rekeyToRecordedScreens = [e = QPointer(engine)](const QString& physicalScreenId) {
+        if (e) {
+            e->rekeyMembershipsToRecordedScreens(physicalScreenId);
+        }
+    };
     return r;
 }
 

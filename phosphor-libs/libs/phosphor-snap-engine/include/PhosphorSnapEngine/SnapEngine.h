@@ -540,22 +540,16 @@ public:
     /// enumerations (occupied zones, snapped/floating windows, flat-map views).
     QList<SnapState*> allSnapStates() const;
 
-    /// Resolve-or-register the state @p windowId's data belongs in for a write
-    /// on @p screenId, and return it. With @p desktop pinned (>= 1) that is the
-    /// store for (screen, desktop, activity), created and granted a membership
-    /// on first use: a commit that names a desktop other than the one the
-    /// screen is showing (a RouteToDesktop rule, a cross-desktop move, a
-    /// restore onto a background desktop) has to land in THAT desktop's store,
-    /// or the membership pass reads the store's key as the assignment's
-    /// desktop and releases it on the next switch. In the daemon every zone
-    /// commit is pinned, since commitSnap resolves the screen's current
-    /// desktop when the caller names none, and that pin equals the key in
-    /// view (both are fed from the same per-output desktop push). Unpinned
-    /// (0: the float / residence writes, and every commit in a fixture
-    /// without a desktop manager), an already-tracked window keeps its
-    /// primary store and a first placement derives the key from the screen's
-    /// current context. A screenless call resolves to the global holder.
-    /// Public so the WTS facade routes its screen-carrying writes here.
+    /// Resolve-or-register the state @p windowId's data belongs in for a write on @p screenId, and return it. With
+    /// @p desktop pinned (>= 1) that is the store for (screen, desktop, activity), created and granted a membership
+    /// on first use: a commit that names a desktop other than the one the screen is showing (a RouteToDesktop rule, a
+    /// cross-desktop move, a restore onto a background desktop) has to land in THAT desktop's store, or the
+    /// membership pass reads the store's key as the assignment's desktop and releases it on the next switch. In the
+    /// daemon every zone commit is pinned, since commitSnap resolves the screen's current desktop when the caller
+    /// names none, and that pin equals the key in view (both are fed from the same per-output desktop push).
+    /// Unpinned (0: the float / residence writes, and every commit in a fixture without a desktop manager), an
+    /// already-tracked window keeps its primary store and a first placement derives the key from the screen's current
+    /// context. A screenless call resolves to the global holder. Public so the WTS facade routes its writes here.
     SnapState* stateForWindowOnScreen(const QString& windowId, const QString& screenId, int desktop = 0);
 
     /// Drop every membership @p windowId holds AND its data in each member
@@ -577,6 +571,11 @@ public:
     /// and residence move, re-stamped to the destination key's desktop. A
     /// same-screen move only re-keys. True when it moved.
     bool migrateWindowToScreen(const QString& windowId, const QString& newScreenId);
+    /// After a split or un-split of @p physicalScreenId rewrote the stores' screen values, re-file each membership
+    /// on the monitor under the key for the screen its store records (else its pre-float screen), desktop, activity
+    /// and zone kept. Releases nothing (F105): left on the old key, the next pinned commit on the new id read as a
+    /// move off the monitor and released the window's other desktops. Reached through the WTS resolver seam.
+    void rekeyMembershipsToRecordedScreens(const QString& physicalScreenId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Current-context feed (ScreenContextTracker)

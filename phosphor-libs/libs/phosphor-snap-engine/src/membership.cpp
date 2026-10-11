@@ -29,6 +29,7 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -971,6 +972,61 @@ MembershipReconcileResult SnapEngine::reconcileWindowMemberships(const QString& 
         }
     }
     return applyMembershipWork(screenId, currentKey, pending, canonical);
+}
+
+void SnapEngine::rekeyMembershipsToRecordedScreens(const QString& physicalScreenId)
+{
+    if (physicalScreenId.isEmpty()) {
+        return;
+    }
+    const QString prefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
+    const auto onMonitor = [&](const QString& screenId) {
+        return screenId == physicalScreenId || screenId.startsWith(prefix);
+    };
+    // A split or an un-split rewrites the screen VALUES in place and leaves
+    // each store filed under the monitor's old id. Left there, the next
+    // pinned commit on the new id reads as a move off the monitor
+    // (stateForWindowOnScreen's cross-screen arm) and releases the window's
+    // other desktops (F105). Each membership moves to the key for the screen
+    // its store records, desktop and activity kept, with the zone carried
+    // verbatim: nothing is released, and the caller's prune judges the zones
+    // afterwards. Collected first, because ensureStateForKey creates stores.
+    struct Rekey
+    {
+        QString windowId;
+        PlacementStateKey from;
+        PlacementStateKey to;
+    };
+    QList<Rekey> moves;
+    m_states.forEachMembership([&](const QString& windowId, const PlacementStateKey& key) {
+        if (!onMonitor(key.screenId)) {
+            return;
+        }
+        const SnapState* state = m_states.stateForKey(key);
+        if (!state) {
+            return;
+        }
+        QString recorded = state->screenForWindow(windowId);
+        if (recorded.isEmpty()) {
+            recorded = state->preFloatScreen(windowId);
+        }
+        if (!recorded.isEmpty() && recorded != key.screenId && onMonitor(recorded)) {
+            moves.append({windowId, key, PlacementStateKey{recorded, key.desktop, key.activity}});
+        }
+    });
+    for (const Rekey& move : moves) {
+        SnapState* from = m_states.stateForKey(move.from);
+        SnapState* to = ensureStateForKey(move.to);
+        if (!from || !to) {
+            continue;
+        }
+        from->migrateWindowTo(to, move.windowId, move.to.screenId);
+        m_states.migrate(move.windowId, move.from, move.to);
+    }
+    if (!moves.isEmpty()) {
+        qCInfo(lcSnapEngine) << "rekeyMembershipsToRecordedScreens:" << moves.size() << "membership(s) re-filed on"
+                             << physicalScreenId;
+    }
 }
 
 } // namespace PhosphorSnapEngine

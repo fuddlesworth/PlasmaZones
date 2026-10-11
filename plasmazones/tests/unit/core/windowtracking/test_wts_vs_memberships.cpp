@@ -3,7 +3,8 @@
 
 /**
  * @file test_wts_vs_memberships.cpp
- * @brief A virtual-screen change judges each zone by its own store's context (F533, F566).
+ * @brief A virtual-screen change judges each zone by its own store's context (F533, F566)
+ *        and re-files each store under the screen it records (F105).
  *
  * The prunes after a split or a reconfigure used to judge every membership by
  * the layout of the desktop in view, skip a window by its routed float bit,
@@ -247,7 +248,91 @@ private Q_SLOTS:
         }
     }
 
+    // A window snapped before the split is filed under the store for the
+    // virtual screen its zone lies in, desktop kept, not left on the
+    // monitor's key (F105).
+    void vsMigration_rekeysToTheVirtualScreensStore()
+    {
+        show(1);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[0], kPhys, 1);
+        const QStringList vsIds = split();
+        shareTheLayout(vsIds, m_testLayout);
+
+        m_service->migrateScreenAssignmentsToVirtual(kPhys, vsIds, m_manager.get());
+
+        SnapState* store = storeFor(kVs0, 1);
+        QVERIFY2(store, "the left half's desktop 1 store exists");
+        QVERIFY(m_engine->holdsWindowInState(kWindow, store));
+        QCOMPARE(store->zonesForWindow(kWindow), QStringList{m_zoneIds[0]});
+        QCOMPARE(store->screenForWindow(kWindow), kVs0);
+        const SnapState* old = storeFor(kPhys, 1);
+        QVERIFY2(!old || !m_engine->holdsWindowInState(kWindow, old), "the monitor's key no longer holds it");
+    }
+
+    // A window on desktops 1 and 2 of the monitor, snapped in a left-half
+    // zone on each. After the split a move on desktop 1 is a move within the
+    // left half and leaves desktop 2's zone alone; filed under the monitor's
+    // key it read as a move off the monitor and released desktop 2 (F105).
+    void vsMigration_moveKeepsOtherDesktop()
+    {
+        PhosphorZones::Layout* quarters = createTestLayout(4, m_layoutManager);
+        m_layoutManager->addLayout(quarters);
+        const QString first = quarters->zones().at(0)->id().toString();
+        const QString second = quarters->zones().at(1)->id().toString();
+        for (int desktop : {1, 2}) {
+            m_layoutManager->assignLayout(kPhys, desktop, QString(), quarters);
+        }
+        holdOnDesktopsOneAndTwo(kPhys, first, second);
+        show(1);
+        const QStringList vsIds = split();
+        shareTheLayout(vsIds, quarters);
+        m_service->migrateScreenAssignmentsToVirtual(kPhys, vsIds, m_manager.get());
+
+        m_service->assignWindowToZone(kWindow, second, kVs0, 1);
+
+        SnapState* desktopOne = storeFor(kVs0, 1);
+        QVERIFY(desktopOne);
+        QCOMPARE(desktopOne->zonesForWindow(kWindow), QStringList{second});
+        SnapState* desktopTwo = storeFor(kVs0, 2);
+        QVERIFY2(desktopTwo, "desktop 2's store moved to the left half");
+        QVERIFY2(m_engine->holdsWindowInState(kWindow, desktopTwo), "desktop 2 keeps its membership");
+        QCOMPARE(desktopTwo->zonesForWindow(kWindow), QStringList{second});
+    }
+
+    // A window floated from a zone before the split moves with its float and
+    // the home its unfloat returns to, re-pointed at the left half.
+    void vsMigration_floatingWindowKeepsPreFloatHome()
+    {
+        show(1);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[0], kPhys, 1);
+        SnapState* before = storeFor(kPhys, 1);
+        QVERIFY(before);
+        before->unsnapForFloat(kWindow);
+        before->setFloating(kWindow, true);
+        const QStringList vsIds = split();
+        shareTheLayout(vsIds, m_testLayout);
+
+        m_service->migrateScreenAssignmentsToVirtual(kPhys, vsIds, m_manager.get());
+
+        SnapState* store = storeFor(kVs0, 1);
+        QVERIFY(store);
+        QVERIFY(m_engine->holdsWindowInState(kWindow, store));
+        QVERIFY(store->isFloating(kWindow));
+        QCOMPARE(store->preFloatZones(kWindow), QStringList{m_zoneIds[0]});
+        QCOMPARE(store->preFloatScreen(kWindow), kVs0);
+    }
+
 private:
+    /// Every desktop-1 and desktop-2 context of both halves runs @p layout.
+    void shareTheLayout(const QStringList& vsIds, PhosphorZones::Layout* layout)
+    {
+        for (const QString& vs : vsIds) {
+            for (int desktop : {1, 2}) {
+                m_layoutManager->assignLayout(vs, desktop, QString(), layout);
+            }
+        }
+    }
+
     /// Split DP-1 50/50 side by side and answer the virtual ids.
     QStringList split()
     {

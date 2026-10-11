@@ -77,6 +77,12 @@ struct SnapStateResolver
     /// The (screen, desktop, activity) key @p state is filed under; nullopt for
     /// the global holder, an unknown store or an unwired resolver.
     std::function<std::optional<PhosphorEngine::PlacementStateKey>(const PhosphorSnapEngine::SnapState* state)> keyFor;
+    /// Re-file every membership on a monitor under the key for the screen its
+    /// store records (SnapEngine::rekeyMembershipsToRecordedScreens). The
+    /// virtual-screen migrations call it after rewriting the screen values and
+    /// before their prune. Unset (the single-store convenience) is a no-op: one
+    /// store has no key to move.
+    std::function<void(const QString& physicalScreenId)> rekeyToRecordedScreens;
 };
 
 /// The full resolver over @p engine's stores, every member wired. Each one

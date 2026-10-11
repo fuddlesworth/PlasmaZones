@@ -154,13 +154,14 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     bool anyStateMigrated = false;
     // Rewrite each per-screen store's OWN live-screen map in place. A window's
     // screen VALUE moves from the physical id (or an old virtual id) to the new
-    // virtual sub-screen its zone falls in; the store the window lives in is
-    // unchanged (per-window lookups key off the screen value + the reverse map, so
-    // a now-stale store key is benign and self-heals on the next genuine
-    // cross-monitor migration). Pushing the aggregated union onto the global holder
-    // instead would strand duplicate stale entries in every other store. The zone
-    // lookup reads the SAME store's zone map — a window's zones live alongside its
-    // screen entry, so no cross-store union is needed.
+    // virtual sub-screen its zone falls in, and the snap engine then re-files the
+    // window under the store for its new screen (F105, rekeyToRecordedScreens
+    // below): left on the physical key, the next commit there read as a move off
+    // the monitor and released the window's other desktops. Pushing the
+    // aggregated union onto the global holder instead would strand duplicate
+    // stale entries in every other store. The zone lookup reads the SAME store's
+    // zone map — a window's zones live alongside its screen entry, so no
+    // cross-store union is needed.
     for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
         QHash<QString, QString> assigns = state->screenAssignments();
         const QHash<QString, QStringList>& stateZones = state->zoneAssignments();
@@ -348,6 +349,13 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
     }
 
+    // Each store's key follows the screen values rewritten above before the
+    // prune judges the zones in it, so the prune and every later commit see
+    // the window filed under its virtual screen (F105).
+    if (m_snapResolver.rekeyToRecordedScreens) {
+        m_snapResolver.rekeyToRecordedScreens(physicalScreenId);
+    }
+
     // Validate each migrated window's zone assignment against its new
     // virtual-screen layout. Migration above moved the window's *screen*
     // onto a VS id, but its *zone* ids still reference the pre-subdivision
@@ -498,6 +506,12 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     // key is never persisted and the stale virtual key reloads on restart.
     if (freeGeoRemapped > 0) {
         anyStateMigrated = true;
+    }
+
+    // The stores filed under a virtual id move back under the physical one,
+    // like the ToVirtual sibling's re-key (F105).
+    if (m_snapResolver.rekeyToRecordedScreens) {
+        m_snapResolver.rekeyToRecordedScreens(physicalScreenId);
     }
 
     // Validate zone assignments against the physical screen's layout.

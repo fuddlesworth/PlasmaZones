@@ -173,6 +173,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Removing the desktop you are on keeps the monitor's layout**: removing the virtual desktop a monitor was showing left PlasmaZones arranging that monitor for the desktop the session started on, until the next desktop switch there. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **A window maximized in one direction does not reopen stretched**: a window maximized only vertically or only horizontally could have that tall or wide frame remembered as its floating size and position, and came back that way. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **Minimizing a window on a scrolling monitor no longer shows a floating message**: minimizing or restoring a column showed Floating and then Tiled. Floating a column from the shell's placement map, or dragging it out of the strip, now leaves it where it is, the way it works on an autotile monitor, and Meta+F still sends it back to where it last floated. A window on two desktops of one monitor also keeps its place on the other desktop when it is minimized. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **Splitting a monitor keeps a window's zones on its other desktops**: splitting a monitor into virtual screens, or removing the split, made a window shown on several desktops forget the zones it held on the other desktops. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 
 ## [3.4.19] - 2026-09-21
 
