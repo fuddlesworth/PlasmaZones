@@ -743,9 +743,9 @@ void Daemon::reconcileActiveAssignments()
     // RuleStore::rulesChanged synchronously; reconciling per rule would run a
     // full updateEngineScreens + resnap + OSD pass over a half-written set.
     // They used to blanket-block the whole rule store for that, which also cut
-    // off rulesChanged's four OTHER consumers (exclude refilter, overlay
-    // refresh, Settings::onRuleStoreChanged, the RuleAdaptor D-Bus relay the
-    // effect invalidates its rule cache on). Suppressing only this one consumer
+    // off rulesChanged's OTHER consumers (exclude refilter, overlay refresh, the
+    // tab-colour broadcast, Settings::onRuleStoreChanged, the RuleAdaptor relay
+    // the effect invalidates its rule cache on). Suppressing only this one consumer
     // keeps the writers' invariant and lets the rest see the edit. Each writer
     // drives one explicit diffActiveAssignments (via its caller) once the set is
     // whole.
