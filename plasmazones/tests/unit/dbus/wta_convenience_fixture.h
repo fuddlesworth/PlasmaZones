@@ -6,8 +6,8 @@
 /**
  * @file wta_convenience_fixture.h
  * @brief Shared fixture for the WindowTrackingAdaptor convenience-surface
- *        tests, split across test_wta_convenience.cpp (window-state and
- *        float-restore surface), test_wta_routing.cpp (open routing and
+ *        tests, split across test_wta_convenience.cpp (window-state, float and
+ *        float-restore surface, focus reports), test_wta_routing.cpp (open routing and
  *        cross-mode handoff), test_wta_screen_changed.cpp (the screen-report
  *        keep/unsnap arm) and test_compositor_bridge.cpp to stay under the
  *        file-size ceiling. Plain

@@ -46,6 +46,8 @@ public:
     QStringList handoffReleased; ///< windowIds handed off
     QList<HandoffContext> received; ///< handoffReceive contexts, in order
     bool refuseReceive = false; ///< handoffReceive records the context but adopts nothing
+    QList<QPair<QString, QString>> resized; ///< (windowId, screenId) per onWindowResized call
+    QList<QSet<QString>> pruned; ///< the alive set of each pruneStaleWindows call
 
     QString engineId() const override
     {
@@ -97,6 +99,16 @@ public:
         if (!refuseReceive) {
             heldScreen.insert(ctx.windowId, ctx.toScreenId);
         }
+    }
+
+    void onWindowResized(const QString& windowId, const QRect&, const QRect&, const QString& screenId) override
+    {
+        resized.append({windowId, screenId});
+    }
+    int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override
+    {
+        pruned.append(aliveWindowIds);
+        return PhosphorEngine::PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
     }
 
     bool isActiveOnScreen(const QString& screenId) const override

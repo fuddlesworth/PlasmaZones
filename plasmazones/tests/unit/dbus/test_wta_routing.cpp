@@ -637,7 +637,8 @@ private Q_SLOTS:
     // signal, and it must reach the two open-path pending maps as well: their
     // normal clears are the next frame report and windowClosed, neither of
     // which arrives for such a window. Driven through the observable the maps
-    // feed, the open route's size translation.
+    // feed, the open route's size translation. The last leg pins the first of
+    // those normal clears: a frame report supersedes a pending rect (F853).
     void testPruneStaleWindows_dropsThePendingOpenMaps()
     {
         PhosphorScreens::FakePhysicalScreenSource fake;
@@ -708,6 +709,15 @@ private Q_SLOTS:
         QVERIFY(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")));
         QVERIFY(after.count() >= 1);
         QCOMPARE(QSize(after.last().at(3).toInt(), after.last().at(4).toInt()), QSize(960, 1040));
+
+        // The open path asks for a float position, then the effect reports
+        // where the window is: the route translates the reported frame.
+        Q_EMIT snap->geometryRestoreRequested(w, QRect(100, 100, 880, 640), QStringLiteral("DP-1"));
+        wta->setFrameGeometry(w, 200, 150, 700, 500);
+        QSignalSpy reported(wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        QVERIFY(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")));
+        QVERIFY(reported.count() >= 1);
+        QCOMPARE(QSize(reported.last().at(3).toInt(), reported.last().at(4).toInt()), QSize(700, 500));
     }
 
     // A rule carrying BOTH SnapToZone and RouteToScreen is still moved by

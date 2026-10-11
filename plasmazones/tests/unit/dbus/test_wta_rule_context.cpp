@@ -524,6 +524,19 @@ private Q_SLOTS:
         QCOMPARE(registry->metadata(QStringLiteral("past-1"))->virtualDesktop, 0);
     }
 
+    // A screen's desktop report within the count reaches the desktop manager
+    // (F857). A manager that was never started answers a count of one (its
+    // KWin read is off), so the report names desktop 1, which the screen had
+    // no entry for yet.
+    void testScreenDesktopChanged_forwardsToTheDesktopManager()
+    {
+        QSignalSpy switched(m_desktopManager, &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopChanged);
+        m_wta->screenDesktopChanged(m_screenId, 1);
+        QCOMPARE(switched.count(), 1);
+        QCOMPARE(switched.first().at(0).toString(), m_screenId);
+        QCOMPARE(switched.first().at(1).toInt(), 1);
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;

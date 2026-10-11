@@ -81,7 +81,9 @@ public:
 
 struct GateFixture : FloatBackFixture
 {
-    GateFixture()
+    /// @p vdm (optional, not owned) as for FloatBackFixture.
+    explicit GateFixture(PhosphorWorkspaces::VirtualDesktopManager* vdm = nullptr)
+        : FloatBackFixture(vdm)
     {
         adaptor = new SnapAdaptor(snap.get(), wta, &settings, &parent);
         adaptor->setContextResolver(&resolver);
@@ -281,6 +283,32 @@ private Q_SLOTS:
         f.control()->snapWindowToZone(w, 1, kRight);
         QCOMPARE(applies.count(), 1);
         QCOMPARE(applies.first().at(6).toString(), vs1);
+    }
+
+    // A window snapped on one output and snapped by number onto the other
+    // moves there: no store on the output it left keeps it (F154). The desktop
+    // manager is what pins the commit to the destination's desktop, and only a
+    // pinned commit re-homes a window onto another screen.
+    void controlMovesASnappedWindowOntoTheNamedScreen()
+    {
+        PhosphorWorkspaces::VirtualDesktopManager vdm;
+        vdm.updateScreenDesktop(kLeft, 1);
+        vdm.updateScreenDesktop(kRight, 1);
+        GateFixture f(&vdm);
+        const QString w = f.registerOn(QStringLiteral("moved-1"), 1);
+        const auto leftStore = [snap = f.snap.get()] {
+            return static_cast<const PhosphorSnapEngine::SnapState*>(snap->stateForScreen(kLeft));
+        };
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        QVERIFY(f.snap->holdsWindowInState(w, leftStore()));
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.control()->snapWindowToZone(w, 1, kRight);
+        QCOMPARE(applies.count(), 1);
+        QCOMPARE(applies.first().at(6).toString(), kRight);
+        QCOMPARE(applies.first().at(5).toString(), f.layout->zoneByNumber(1)->id().toString());
+        QCOMPARE(applies.first().at(8).toInt(), static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+        QCOMPARE(f.snap->screenForTrackedWindow(w), kRight);
+        QVERIFY2(!f.snap->holdsWindowInState(w, leftStore()), "the output it left must not keep the window");
     }
 
     // No screen named: the window's own (F26).
