@@ -1,28 +1,23 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Resnap, snap-all, and resolution change geometry calculations.
-// Part of WindowTrackingService — split from windowtrackingservice.cpp for SRP.
+// The resnap buffer, the autotile seed order, the work-area re-apply and the instant-restore cache.
+// Part of WindowTrackingService, split from WindowTrackingService.cpp by concern.
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include "placementutils.h"
-#include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorEngine/WindowRegistry.h>
-#include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorIdentity/WindowId.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include "placementlogging.h"
-#include <QScreen>
 #include <QSet>
-#include <QUuid>
 #include <algorithm>
 #include <tuple>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorPlacement {
 
@@ -35,21 +30,12 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     QVector<ResnapEntry> newBuffer;
     QSet<QString> addedIds;
 
-    // Build per-screen zone position maps: for each screen, resolve the CURRENT
-    // layout and build zoneId → position mapping. This captures the OLD state
-    // before the KCM's new assignments take effect on the daemon.
-    // (At this point, PhosphorZones::LayoutRegistry already has the new assignments from the KCM's
-    // D-Bus calls, so resolveLayoutForScreen returns the NEW layout. But the
-    // window zone assignments in WTS still reference zone IDs from the OLD layout.)
-    //
-    // Since zone IDs from the old layout may not exist in the new layout,
-    // we need to find each window's POSITION in the old layout. The old layout
-    // is the one whose zone IDs match the window's zone assignments.
-    // We look up each zone ID in ALL loaded layouts to find the position.
-
-    // Build a global zoneId → position map merged across all layouts; see
-    // `PhosphorZones::LayoutUtils::buildGlobalZonePositionMap` for why the
-    // merge is unambiguous (zone UUIDs are unique across layouts).
+    // One zoneId → position map over every loaded layout. Every switch caller
+    // (the quick-layout keys and picker, the KCM apply, a return to snapping)
+    // has assigned the NEW layout by now while the windows' zone ids still name
+    // the OLD one, so each window's position is read from whichever layout holds
+    // its zone; see buildGlobalZonePositionMap for why the merge is unambiguous
+    // (zone UUIDs are unique across layouts).
     const QHash<QString, int> globalZoneIdToPosition =
         PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts());
 
@@ -73,22 +59,20 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
             return;
         if (screenId.isEmpty())
             return;
-        // Skip windows on excluded screens (e.g. autotile screens)
+        // Skip windows on excluded screens (the screens a tiling engine runs)
         if (excludeScreens.contains(screenId))
             return;
         // When include-filter is set, only process windows on the specified screens
         if (!includeScreens.isEmpty() && !includeScreens.contains(screenId))
             return;
-        // Desktop filter: a per-desktop layout change should resnap only the
-        // windows on that desktop. virtualDesktop==0 means sticky / unknown
-        // (visible on every desktop) so include those regardless of the filter.
-        // Under Plasma 6.7 per-output virtual desktops (#648) the "current desktop"
-        // is per-screen, so when filtering (desktopFilter > 0) compare each window
-        // against ITS screen's current desktop rather than the single global value
-        // the caller passed. Fall back to that value both when no VDM is wired AND
-        // when the VDM does not know the screen's desktop (returns <= 0) — without
-        // the second fallback, an unknown screen desktop would exclude every
-        // non-sticky window on that screen from the resnap.
+        // Desktop filter: a per-desktop layout change resnaps only the windows on
+        // that desktop. virtualDesktop==0 means sticky / unknown (visible on every
+        // desktop), so those pass whatever the filter. Under per-output virtual
+        // desktops (#648) each window is compared against ITS screen's current
+        // desktop, not the single value the caller passed. The VDM always answers
+        // one (a screen it has no entry for reads the global desktop), so the
+        // caller's value stands in only with no VDM wired, or a VDM double that
+        // answers nothing.
         if (desktopFilter > 0 && virtualDesktop != 0) {
             int screenDesktop = screenDesktopMemo.value(screenId, 0);
             if (screenDesktop <= 0) {
@@ -126,8 +110,8 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         newBuffer.append(entry);
     };
 
-    // 1. Live snap assignments — this session's snaps (retained while a window is
-    // autotiled, which is why the non-restart autotile→snap swap finds them here).
+    // 1. Live snap assignments: this session's snaps, kept while the window's screen
+    // tiles, so a return to snapping in the same session finds them here.
     // Per-state visitation: each window's screen/desktop come from the store that
     // owns it, never from a cross-store flat-map join.
     // Another activity's store is not in view: its zone ids belong to the
@@ -142,11 +126,12 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
 
     // 2. Restart-robustness: a window snapped in a PRIOR session and then autotiled
     // has its snap zones only in the durable WindowPlacement record — the live
-    // snap store map above is cold after a daemon restart. Without this pass an
-    // autotile→snapping swap right after a restart resnaps nothing (empty buffer →
-    // no applyGeometriesBatch → the effect never marks the windows snapped, so the
-    // per-mode snap border / title-bar appearance is never applied). Mirrors the
-    // live-or-durable fallback in recordedSnapZones().
+    // snap store map above is cold after a daemon restart. Without this pass a
+    // layout switch, a KCM apply or a scrolling→snapping return right after a
+    // restart resnaps nothing (empty buffer, no applyGeometriesBatch, so the effect
+    // never marks the windows snapped and the snap border / title-bar appearance is
+    // never applied). The per-screen autotile→snapping toggle does not come here;
+    // it resnaps through calculateResnapFromAutotileOrder over recordedSnapZones.
     for (const PhosphorEngine::WindowPlacement& rec : m_placementStore.records()) {
         // Canonical, matching what addCandidate inserts — see its own note.
         if (addedIds.contains(canonicalizeForLookup(rec.windowId)))
@@ -168,7 +153,8 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped())
             continue;
         // A multi-desktop record answers for the desktop its screen shows,
-        // stamped with that desktop so the filter above keeps it.
+        // stamped with that desktop so the filter above keeps it. `shown` is 0
+        // only with no VDM wired, where the record's own desktop stands.
         int desktop = rec.virtualDesktop;
         const int shown = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(rec.screenId) : 0;
         if (!snapSlot.zonesByDesktop.isEmpty() && shown > 0)

@@ -298,6 +298,143 @@ private Q_SLOTS:
         service.setSnapState(nullptr);
     }
 
+    // ── populate's guards (F828): each row pins one, so deleting it fails the row ──
+
+    /// One snapped record of the window @p windowId on @p screen, zones @p zones.
+    static PhosphorEngine::WindowPlacement snappedRecord(const QString& windowId, const QString& screen,
+                                                         const QStringList& zones)
+    {
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = windowId;
+        rec.appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        rec.screenId = screen;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = zones;
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        return rec;
+    }
+
+    static QStringList bufferIds(PhosphorPlacement::WindowTrackingService& service)
+    {
+        QStringList ids;
+        for (const PhosphorEngine::ResnapEntry& e : service.takeResnapBuffer()) {
+            ids.append(e.windowId);
+        }
+        return ids;
+    }
+
+    // A record of a window that is gone gives no row: a dead id in the batch is
+    // resolved by the compositor onto a live window of the same app.
+    void populate_deadRecordIsSkipped()
+    {
+        SnapState state(QString(), nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, nullptr);
+        service.setSnapState(&state);
+        service.setWindowRegistry(&registry);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        registry.upsert(QStringLiteral("live"), meta);
+        service.placementStore().record(
+            snappedRecord(QStringLiteral("app|dead"), QStringLiteral("DP-1"), {m_zoneIds[0]}));
+        service.placementStore().record(
+            snappedRecord(QStringLiteral("app|live"), QStringLiteral("DP-1"), {m_zoneIds[1]}));
+
+        service.populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+        QCOMPARE(bufferIds(service), QStringList{QStringLiteral("app|live")});
+        service.setSnapState(nullptr);
+    }
+
+    // A window whose class changed is one row: the live store holds it under its
+    // first-seen canonical key and its record under the current composite.
+    void populate_canonicalSkewContributesOneRow()
+    {
+        SnapState state(QString(), nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, nullptr);
+        service.setSnapState(&state);
+        service.setWindowRegistry(&registry);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("new");
+        registry.upsert(QStringLiteral("u"), meta);
+        QCOMPARE(registry.canonicalizeWindowId(QStringLiteral("old|u")), QStringLiteral("old|u"));
+        state.assignWindowToZone(QStringLiteral("old|u"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        service.placementStore().record(snappedRecord(QStringLiteral("new|u"), QStringLiteral("DP-1"), {m_zoneIds[0]}));
+
+        service.populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+        QCOMPARE(bufferIds(service).size(), 1);
+        service.setSnapState(nullptr);
+    }
+
+    // A record whose snap slot floats gives no row, even with zones left in it.
+    void populate_floatingDurableSlotIsSkipped()
+    {
+        PhosphorEngine::WindowPlacement rec =
+            snappedRecord(QStringLiteral("app|f"), QStringLiteral("DP-1"), {m_zoneIds[0]});
+        rec.engines[PhosphorEngine::WindowPlacement::snapEngineId()].state =
+            PhosphorEngine::WindowPlacement::stateFloating();
+        m_service->placementStore().record(rec);
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+        QVERIFY(bufferIds(*m_service).isEmpty());
+    }
+
+    // A window on desktops 1 and 2 is resnapped from the zone it holds on the
+    // desktop its screen shows, stamped with that desktop.
+    void populate_multiDesktopRecordTakesTheShownDesktop()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        PhosphorWorkspaces::VirtualDesktopManager vdm;
+        vdm.updateScreenDesktop(screen, 2);
+        SnapState state(QString(), nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, &vdm);
+        service.setSnapState(&state);
+        service.setWindowRegistry(&registry);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.virtualDesktops = {1, 2};
+        registry.upsert(QStringLiteral("multi"), meta);
+        PhosphorEngine::WindowPlacement rec = snappedRecord(QStringLiteral("app|multi"), screen, {m_zoneIds[0]});
+        rec.virtualDesktop = 1;
+        rec.engines[PhosphorEngine::WindowPlacement::snapEngineId()].zonesByDesktop = {{1, {m_zoneIds[0]}},
+                                                                                       {2, {m_zoneIds[1]}}};
+        service.placementStore().record(rec);
+
+        service.populateResnapBufferForAllScreens({}, {screen});
+        const QVector<PhosphorEngine::ResnapEntry> buffer = service.takeResnapBuffer();
+        QCOMPARE(buffer.size(), 1);
+        QCOMPARE(buffer.first().zonePosition, 2);
+        QCOMPARE(buffer.first().virtualDesktop, 2);
+        service.setSnapState(nullptr);
+    }
+
+    // A window on a screen a tiling engine runs is left out.
+    void populate_excludedScreenIsSkipped()
+    {
+        m_service->assignWindowToZone(QStringLiteral("app|left"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        m_service->assignWindowToZone(QStringLiteral("app|right"), m_zoneIds[0], QStringLiteral("DP-2"), 0);
+        m_service->populateResnapBufferForAllScreens({QStringLiteral("DP-2")});
+        QCOMPARE(bufferIds(*m_service), QStringList{QStringLiteral("app|left")});
+    }
+
+    // The snap store's own float bit decides, not the routed float resolver
+    // (which answers for whatever engine runs the window's screen now).
+    void populate_readsSnapsOwnFloatBit()
+    {
+        SnapState* state = m_engine->snapState();
+        state->assignWindowToZone(QStringLiteral("app|snapfloat"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        state->setFloating(QStringLiteral("app|snapfloat"), true);
+        state->assignWindowToZone(QStringLiteral("app|routedfloat"), m_zoneIds[1], QStringLiteral("DP-1"), 0);
+        QVERIFY(!state->zonesForWindow(QStringLiteral("app|snapfloat")).isEmpty());
+        m_service->setEngineFloatResolver([](const QString& windowId) {
+            return windowId == QStringLiteral("app|routedfloat");
+        });
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+        QCOMPARE(bufferIds(*m_service), QStringList{QStringLiteral("app|routedfloat")});
+        m_service->setEngineFloatResolver({});
+    }
+
     // Regression (#layout-leak): a per-desktop layout change must resnap only
     // the windows on that desktop. Without the desktop filter, assigning a
     // layout to desktop 2 pulled desktop 1's windows into desktop 2's zones —

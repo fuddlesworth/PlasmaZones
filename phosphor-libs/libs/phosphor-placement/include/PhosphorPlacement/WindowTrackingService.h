@@ -22,9 +22,7 @@
 #include <PhosphorPlacement/IGeometryResolver.h>
 #include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorPlacement/SnapStateResolver.h>
-#include <PhosphorProtocol/WindowTypes.h>
 #include <PhosphorProtocol/ZoneTypes.h>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 #include <QHash>
 #include <QObject>
@@ -662,7 +660,7 @@ public:
      * @param includeScreens When non-empty, only process windows on these
      *        screens. Only memberships of the activity in view are taken.
      * @param desktopFilter When > 0, only windows on their screen's current
-     *        desktop (this value when the screen's is unknown); sticky windows
+     *        desktop (this value when no desktop manager answers); sticky windows
      *        (virtualDesktop==0) always pass.
      */
     void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {},
