@@ -779,26 +779,20 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
     // it (the success-path re-arm only runs when the predicate answers), so a
     // dead id's entry would sit in the map for the rest of the session.
     m_scrollClipLossReported.remove(windowId);
-    // The commanded-rect entry dies with the tracking too: the cross-output
-    // transfer path otherwise leaves the OLD screen's rect behind, and once
-    // the window is re-announced onto another scrolling screen the
-    // counter-assert could fight one legitimate position with it before the
-    // first batch overwrites it. The parked paint hint goes with it for the
-    // same reason (inert off a scrolling output, but a stale relocation the
-    // moment the window returns to one).
-    //
-    // The relocation drop pairs with damage, like every other remover: it
-    // changes where the paint path draws the window. Not all of this funnel's
-    // callers are mid-drag (where KWin damages continuously and the gap would
-    // be invisible) — the cross-mode output handoff and the move-to-another-
-    // desktop path both reach here with a live window and nothing else
-    // scheduling a frame, so the last presented frame would keep the column at
-    // its dead strip position. Pairing here rather than at the call sites
-    // covers every caller at once.
-    m_effect->m_scrollCommandedRects.remove(windowId);
-    m_effect->m_scrollOfferedColumn.remove(windowId);
-    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
-        KWin::effects->addRepaintFull();
+    // The strip companions die with the tracking too: the cross-output transfer
+    // otherwise leaves the OLD screen's commanded rect behind for the
+    // counter-assert to fight a legitimate position with once the window is
+    // re-announced onto another strip, and the parked paint hint is a stale
+    // relocation the moment the window returns to one. The relocation drop
+    // repaints here rather than at the call sites: the cross-mode output
+    // handoff and the move to another desktop reach this funnel with a live
+    // window and nothing else scheduling a frame, so the last presented frame
+    // would keep the column at its dead strip position.
+    dropScrollCompanions(windowId);
+    // An evacuee's monocle claim, parked for its return, survives only its own
+    // scrub and re-seat (Evacuation); a close or a real move drops it (F685).
+    if (scope != ScrollDecisions::ClaimScope::Evacuation) {
+        m_evacueeMonocleClaims.remove(windowId);
     }
     // Windowed fullscreen dies with the tracking: this funnel serves the
     // close path (where slotWindowClosed already removed the membership,
@@ -851,9 +845,9 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
     // Every screen, not just the one passed. On a cross-output transfer the
     // caller passes the OLD screen, so the destination's saved order kept the
     // id, and other screens' orders can hold it from an earlier session. The
-    // replay resolves by exact id and skips misses, so a residue was inert —
-    // but it was also unbounded across a session, growing one dead id per
-    // screen per transfer.
+    // replay raises only a window still on that screen's desktop and activity
+    // in view, so a residue cannot raise it elsewhere (F722); the sweep keeps
+    // the map bounded, one dead id per screen per transfer otherwise.
     for (auto orderIt = m_savedAutotileStackingOrder.begin(); orderIt != m_savedAutotileStackingOrder.end();
          ++orderIt) {
         orderIt.value().removeAll(windowId);
@@ -1183,16 +1177,14 @@ void TilingHandler::clearPerSessionDaemonState()
     m_effect->m_scrollCommandedRects.clear();
     m_effect->m_scrollOfferedColumn.clear();
     m_effect->m_lastReportedMinSize.clear();
-    // The announced-epoch memo is per-session for the same reason as its
-    // neighbours: it records what a PARTICULAR daemon said. Note this is
-    // symmetry and bookkeeping, not a repair — the epoch is derived from a
-    // seeded-at-zero hash of the context key, so a restarted daemon announces
-    // the SAME value for the same strip and a retained entry would compare
-    // equal rather than firing a spurious retire. Cleared because every other
-    // daemon-published map here is, and because a screen whose context moved
-    // while the daemon was down should be treated as a first epoch rather than
-    // compared against a memo from a session that is gone.
+    // The announced-epoch memo is per-session for the same reason as its neighbours: it records what a
+    // PARTICULAR daemon said. Symmetry and bookkeeping, not a repair: the epoch is a seeded-at-zero hash of the
+    // context key, so a restarted daemon announces the SAME value for the same strip and a retained entry would
+    // compare equal rather than firing a spurious retire. Cleared because every other daemon-published map here
+    // is, and because a screen whose context moved while the daemon was down is a first epoch, not one to
+    // compare against a memo from a session that is gone.
     m_stripEpochByScreen.clear();
+    m_stripScreenRectAtBatch.clear(); // goes with the commanded rects above (F815)
     // The tab-indicator model, colour verdicts and paint overrides describe
     // the dead session's strips. Without this drain the painter could keep
     // blitting pills for columns the new daemon never laid out: the replay
@@ -1246,11 +1238,10 @@ void TilingHandler::clearPerSessionDaemonState()
     // batches by the per-screen term.
     ++m_tileStaggerGeneration;
     m_tileStaggerGenByScreen.clear();
-    // Daemon-owned cross-output move markers belong to the dead session. A
-    // stale one-shot armed before the restart (windowOutputMoveExpected fired,
-    // matching outputChanged not yet seen) would swallow the next genuine
-    // outputChanged for that window — taking the bookkeeping-only path and
-    // skipping the real transfer. Clear it like every other per-session map.
+    m_switchAnnounce = {}; // switches owed an announce by the dead session (F793)
+    // Daemon-owned cross-output move markers belong to the dead session. A stale one-shot armed before the
+    // restart (windowOutputMoveExpected fired, matching outputChanged not yet seen) would swallow the window's
+    // next genuine outputChanged, taking the bookkeeping-only path and skipping the real transfer.
     m_expectedOutputMove.clear();
     // In-flight debounced minimize→float commits and minimize-float records
     // belong to the dead daemon session — a timer firing now would issue a
@@ -1268,6 +1259,7 @@ void TilingHandler::clearPerSessionDaemonState()
     m_unfloatInFlight.clear();
     m_unfloatRetryAttempts.clear();
     m_minimizeFloatMarks.clear();
+    m_evacueeMonocleClaims.clear(); // the daemon's evacuee park is per session (F685)
     // Routes deferred against the dead daemon session and their provenance
     // markers must not survive into the new one: a stale m_pendingFreshWindows
     // entry silently upgrades a later re-add to knownFreeFloating=true, which

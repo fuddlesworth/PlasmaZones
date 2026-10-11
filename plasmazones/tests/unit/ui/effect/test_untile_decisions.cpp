@@ -5,6 +5,7 @@
 
 #include "tilinghandler/untiledecisions.h"
 
+using PlasmaZones::UntileDecisions::SwitchAnnounceLedger;
 using PlasmaZones::UntileDecisions::untilesOnBatchScreen;
 
 /**
@@ -56,6 +57,48 @@ private Q_SLOTS:
     void anotherActivityIsNotUntiled()
     {
         QVERIFY(!untilesOnBatchScreen(true, true, /*onCurrentActivity=*/false, false, false));
+    }
+
+    // An output the effect saw switch is owed until the daemon's announce
+    // (F793): a batch processed meanwhile was built for the context it left.
+    void switchLedger_noteThenOwed()
+    {
+        SwitchAnnounceLedger ledger;
+        ledger.noteSwitch(QStringLiteral("DP-1"));
+        QVERIFY(ledger.isOwed(QStringLiteral("DP-1")));
+    }
+
+    // The announce settles every owed output and hands them back, so the
+    // switch voids only their applies (F213), and reports that an edge was seen.
+    void switchLedger_settleClears()
+    {
+        SwitchAnnounceLedger ledger;
+        ledger.noteSwitch(QStringLiteral("DP-1"));
+        bool sawEdge = false;
+        QCOMPARE(ledger.settle(&sawEdge), (QSet<QString>{QStringLiteral("DP-1")}));
+        QVERIFY(sawEdge);
+        QVERIFY(!ledger.isOwed(QStringLiteral("DP-1")));
+        QVERIFY(ledger.settle(&sawEdge).isEmpty());
+        QVERIFY(!sawEdge);
+    }
+
+    // A switch on one output leaves another output's batches their say.
+    void switchLedger_otherOutputNotOwed()
+    {
+        SwitchAnnounceLedger ledger;
+        ledger.noteSwitch(QStringLiteral("DP-1"));
+        QVERIFY(!ledger.isOwed(QStringLiteral("HDMI-A-1")));
+    }
+
+    // A switch on an output with no managed screen owes nothing, but the
+    // announce it causes still voids no other output's cascade (F213).
+    void switchLedger_edgeWithoutOwedOutput()
+    {
+        SwitchAnnounceLedger ledger;
+        ledger.noteEdge();
+        bool sawEdge = false;
+        QVERIFY(ledger.settle(&sawEdge).isEmpty());
+        QVERIFY(sawEdge);
     }
 };
 

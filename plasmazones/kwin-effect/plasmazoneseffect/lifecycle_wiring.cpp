@@ -693,6 +693,9 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
                     return;
                 }
                 lastActivity = newActivity;
+                // Every output's context switched: a tile batch for the old one
+                // must not untile the new one's tiles (F793).
+                m_tilingHandler->noteContextSwitched(QString());
                 const auto outputs = KWin::effects->screens();
                 for (KWin::LogicalOutput* out : outputs) {
                     if (!out) {

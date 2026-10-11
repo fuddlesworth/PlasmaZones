@@ -18,7 +18,8 @@
 //    epochs cleared only at the successor's bring-up (clearPerSessionDaemonState);
 //  - the effect's own bookkeeping the managed set gates: tiled membership
 //    (clearTiledTracking) and the autotile centring targets
-//    (dropCenteringTarget, clearCenteringTargetsForTeardown).
+//    (dropCenteringTarget, clearCenteringTargetsForTeardown), and the
+//    per-window scroll companions every untrack sheds (dropScrollCompanions).
 //
 // The shared hazard: the managed set, the scrolling set and the active
 // layouts arrive on independent D-Bus signals with no ordering guarantee
@@ -65,8 +66,10 @@ void TilingHandler::clearTiledTracking()
     m_border.tiledWindowsByScreen.clear();
     // The tile cascade's completion (untile diff, raises, decorations) checks
     // only the global epoch, so a teardown bumps it here too; the successor's
-    // bring-up bumps it again, harmlessly (F405).
+    // bring-up bumps it again, harmlessly (F405). No announce of the dead
+    // session will settle a switch the effect saw, so the ledger goes too.
     ++m_tileStaggerGeneration;
+    m_switchAnnounce = {};
     // The screen set belongs to the daemon session that published it. Both
     // callers (daemon loss, effect teardown) mean that session is gone, and
     // keeping the set let stale membership answer isManagedScreen until the
@@ -140,6 +143,11 @@ void TilingHandler::setWheelViewTriggers(const QVector<PhosphorCompositor::Parse
 bool TilingHandler::isManagedScreen(const QString& screenId) const
 {
     return m_managedScreens.contains(screenId);
+}
+
+bool TilingHandler::scrollTabInterceptionHeld() const
+{
+    return m_scrollTabCursorOverridden;
 }
 
 void TilingHandler::slotScrollEffectBehaviourChanged(const QVariantMap& behaviour)
@@ -644,40 +652,40 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             // and the bring-up reply normally lands on an empty set; see the
             // DEPENDENCY note above), which is why this is noted rather than
             // handled here.
-            m_effect->m_scrollOfferedColumn.remove(wid);
+            //
             // The other two per-window scroll companions go with it, the way
             // the teardown funnels shed all three together. Leaving
             // them behind lets a flip BACK to scrolling, before the new
             // engine's first batch, re-arm the dead session's park relocation
             // and counter-assert a rect the strip no longer owns. The
             // relocation is a paint input, so its removal carries damage.
-            m_effect->m_scrollCommandedRects.remove(wid);
-            if (m_effect->m_scrollVisualDelta.remove(wid) > 0 && KWin::effects) {
-                KWin::effects->addRepaintFull();
-            }
+            dropScrollCompanions(wid);
             if (m_effect->m_windowedFullscreenWindows.contains(wid)) {
                 forgetWindowedFullscreen(wid);
                 windowedFsLeavingScrolling.append(wid);
             }
             // The column mirror leaves with the strip for the same reason,
-            // and is deferred past the managed-set write below on the same
+            // and is deferred past the scrolling-set write below on the same
             // split: releaseMaximizedToEdges moveResizes, and doing that while
             // m_scrollingScreens still names this screen would re-enter the
             // scrolling paths for a screen that is mid-flip. The destination
-            // engine's first batch releases any window it TILES, but one it
-            // floats (over maxWindows, excluded, minimize-floated) never gets
-            // an entry — which is exactly the case this loop exists for.
+            // engine's first batch releases any window it TILES. A window it
+            // floats (over maxWindows, excluded, minimize-floated) never gets a
+            // batch entry, which is exactly the case this loop exists for.
             //
             // Monocle membership qualifies on its own, not only alongside a
             // maximize-to-edges claim. The claim table releases all three on a
             // mode flip, and a monocle-only member here would otherwise not be
             // collected at all — this loop is the payer for a mode flip that
-            // leaves the engine running (the bulk restoreAll* drains only run
-            // on disable or teardown), and both its release calls are no-ops
+            // leaves the engine running (the bulk restoreAll* drains run only
+            // on disable, teardown and daemon bring-up), and both its release calls are no-ops
             // for a non-member, so widening the predicate costs nothing.
             if (m_maximizedToEdgesWindows.contains(wid) || m_monocleMaximizedWindows.contains(wid)) {
                 maximizeClaimsLeavingScrolling.append(it.key());
             }
+        }
+        for (const QString& screenId : leavingScrolling) {
+            m_stripScreenRectAtBatch.remove(screenId); // no strip left to have moved under (F815)
         }
     }
 
@@ -867,6 +875,21 @@ void TilingHandler::dropCenteringTarget(const QString& windowId)
 {
     m_tileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
+}
+
+bool TilingHandler::dropScrollCompanions(const QString& windowId, bool damage)
+{
+    // The counter-assert rect, the offered column and the park relocation go
+    // together, as every untrack and strip exit sheds them. The relocation is
+    // a paint input, so its removal repaints unless the caller batches its own
+    // damage (it gets the answer back for that).
+    m_effect->m_scrollCommandedRects.remove(windowId);
+    m_effect->m_scrollOfferedColumn.remove(windowId);
+    const bool droppedRelocation = m_effect->m_scrollVisualDelta.remove(windowId) > 0;
+    if (droppedRelocation && damage && KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
+    return droppedRelocation;
 }
 
 void TilingHandler::clearActiveLayoutsForTeardown()

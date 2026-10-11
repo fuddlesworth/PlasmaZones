@@ -309,10 +309,11 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                            && kw->requestedMaximizeMode() != KWin::MaximizeRestore && !kw->isRequestedFullScreen()
                            && !kw->isFullScreen() && !safeW->isUserMove() && !safeW->isUserResize()) {
                     // The fullscreen and gesture pair every sibling maximize
-                    // write in this tree carries: maximize() has no fullscreen
-                    // conditional and would moveResize a presenting surface
-                    // down to its restore rect, and mid-gesture it snaps the
-                    // window under the user's pointer.
+                    // write in this tree carries: on X11 a MaximizeRestore on a
+                    // fullscreen window still moveResizes it to its restore
+                    // rect (Wayland ignores maximize() while fullscreen is
+                    // requested), and mid-gesture it snaps the window under the
+                    // user's pointer.
                     //
                     // Unlike releaseMaximizedToEdges, which skips on the same
                     // conditions and RETAINS membership so a later arm pays
@@ -393,8 +394,8 @@ void TilingHandler::applyFreeGeometryRestore(KWin::EffectWindow* w, const QStrin
         // maximize-area rect over the restore (discussion #461). The
         // requested fullscreen term also keeps a window whose fullscreen is
         // requested but not yet committed from being moveResized down to its
-        // restore rect while presenting, since maximize() has no fullscreen
-        // conditional, and the gesture pair keeps it from snapping under the
+        // restore rect while presenting (X11 runs MaximizeRestore on a
+        // fullscreen window), and the gesture pair keeps it from snapping under the
         // user's pointer. This arm holds no ledger, so a skip here is
         // permanent rather than deferred.
         applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
@@ -422,8 +423,13 @@ QRectF TilingHandler::preTileRestoreRectFor(const QString& windowId, const QStri
     // PHYSICAL ids: virtual screens subdivide ONE output and share its
     // coordinate space, so a VS re-key leaves the rect perfectly applicable —
     // that is the case the all-bucket reader policy exists for. What decides
-    // the question is the coordinate space, which is the OUTPUT.
+    // the question is the coordinate space, which is the OUTPUT as it is now:
+    // an output that moved since the capture degrades the rect like another
+    // output's, so the PHYSICAL geometry is passed, never a virtual screen's
+    // part of it (that would degrade a VS re-key) (F807).
     const bool sameOutput = PhosphorIdentity::VirtualScreenId::samePhysical(bucketScreenId, screenId);
+    const KWin::LogicalOutput* const output = m_effect->outputForScreenId(screenId);
+    const QRectF outputGeometry = output ? QRectF(QRect(output->geometry())) : QRectF();
     if (!sameOutput) {
         qCDebug(lcEffect) << "Pre-autotile restore for" << windowId << "has a rect from" << bucketScreenId
                           << "but sits on" << screenId << "— restoring size only";
@@ -440,7 +446,7 @@ QRectF TilingHandler::preTileRestoreRectFor(const QString& windowId, const QStri
     // already does for the same reason ("size is coordinate-space-independent,
     // so any bucket's rect is safe"), and it is the strictly better half of
     // the rect to keep.
-    return PlasmaZones::PreTileDecisions::applicablePreTileRect(saved, sameOutput, currentFrame);
+    return PlasmaZones::PreTileDecisions::applicablePreTileRect(saved, sameOutput, currentFrame, outputGeometry);
 }
 
 QRectF TilingHandler::findPreTileGeometry(const QString& windowId, QString* bucketScreenId) const
@@ -523,6 +529,15 @@ void TilingHandler::payOwedFreePlacement(KWin::EffectWindow* w, const QString& w
     std::optional<QRectF> target = m_desktopMoveStash.takeOwedPlacement(windowId, screenId, &owed);
     if (!owed) {
         return;
+    }
+    // The stash is this monitor's, but from before the monitor moved if its
+    // centre is off it now: then it keeps its size only (F807).
+    if (target) {
+        const KWin::LogicalOutput* const output = m_effect->outputForScreenId(screenId);
+        const QRectF placed = PlasmaZones::PreTileDecisions::applicablePreTileRect(
+            *target, /*sameOutput=*/true, QRectF(w->frameGeometry()),
+            output ? QRectF(QRect(output->geometry())) : QRectF());
+        target = placed.isValid() ? std::optional<QRectF>(placed) : std::nullopt;
     }
     if (!target && KWin::effects) {
         // No rect from this monitor. A frame on no output at all (a strip

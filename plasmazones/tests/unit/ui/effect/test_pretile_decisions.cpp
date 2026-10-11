@@ -69,6 +69,35 @@ private Q_SLOTS:
         QVERIFY(!applicablePreTileRect(QRectF(4000, 1284, 800, 628), /*sameOutput=*/false, QRectF()).isValid());
     }
 
+    // The output moved since the capture (F807): it now sits at x=3440, so a
+    // rect taken at x=1320 is from where it used to be and would move the
+    // window onto the other monitor. Only the size survives, at the live
+    // position.
+    void rect_sameOutputMovedAway_keepsSizeDropsOrigin()
+    {
+        const QRectF saved(1320, 386, 800, 628);
+        const QRectF live(3448, 8, 2562, 1384);
+        const QRectF output(3440, 0, 2560, 1440);
+        const QRectF got = applicablePreTileRect(saved, /*sameOutput=*/true, live, output);
+        QCOMPARE(got.topLeft(), live.topLeft());
+        QCOMPARE(got.size(), saved.size());
+    }
+
+    // An output that did not move still holds the rect's centre: applied whole.
+    void rect_sameOutputStillInside_appliedWhole()
+    {
+        const QRectF saved(1320, 386, 800, 628);
+        const QRectF output(0, 0, 3440, 1440);
+        QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/true, QRectF(8, 8, 2562, 1384), output), saved);
+    }
+
+    // A caller with no output geometry gets the same-output answer as before.
+    void rect_noOutputGeometry_appliedWhole()
+    {
+        const QRectF saved(1320, 386, 800, 628);
+        QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/true, QRectF(8, 8, 2562, 1384), QRectF()), saved);
+    }
+
     // ── announceMatchesReportedDesktops ────────────────────────
     // The managed-set announce is asynchronous; KWin's desktopChanged is not.
 

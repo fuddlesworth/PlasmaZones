@@ -233,8 +233,11 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w, c
     // Id-taking overload: the scroll override resolves off the window id this funnel holds.
     // IsFloating reads a tile held out for its own fullscreen as floating (the daemon's bit).
     const QString screenId = screenOverride.isEmpty() ? getWindowScreenId(w, windowId) : screenOverride;
-    PhosphorRules::WindowQuery query = ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
-                                                    m_tilingHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    // A tile is neither snapped nor in a zone, whatever snap mirror a later re-seed left (F488).
+    const bool tiled = m_tilingHandler->isTiledWindow(windowId);
+    PhosphorRules::WindowQuery query =
+        ruleQueryFor(w, screenId, isWindowFloating(windowId), !tiled && isWindowSnapped(windowId), tiled,
+                     tiled ? QString() : zoneForWindow(windowId));
     // Scroll-managed windows ride the same tile-request pipeline as autotile,
     // so ruleQueryFor derives "tiling" from the tiled bit; re-stamp from the
     // per-screen engine discriminator so a `Mode Equals "scrolling"` window

@@ -174,6 +174,18 @@ inline MaximizeAction resolveMaximizeToEdgesAction(bool flagOnWire, bool inSet, 
     return (!inSet || !kwinMaximized) ? MaximizeAction::Apply : MaximizeAction::None;
 }
 
+/// Whether a maximize Apply arm that is about to call maximize() takes the
+/// claim (F680). Only for a window KWin will maximize, or one already at
+/// MaximizeFull (the adopt case): KWin refuses a window that cannot be
+/// maximized, and a claim over a bit it never holds kept the counter-assert
+/// exempt for good while the decision resolved Apply on every batch anyway.
+/// An arm that skips the call (fullscreen, a gesture) takes the claim as it
+/// always did, so a later batch or the gesture end can pay it.
+inline constexpr bool takesMaximizeMembership(bool maximizable, bool alreadyFull)
+{
+    return maximizable || alreadyFull;
+}
+
 /// The counter-assert burst budget for scroll-managed X11 windows an
 /// EXTERNAL mover relocated: RATE-LIMITED to @p maxPerWindow counters per
 /// rolling window of @p windowMs, re-armed by every fresh batch command
@@ -348,7 +360,8 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
         // Monocle is EXCLUDED, and documented at its site: re-driving a
         // maximize restore from a passive float signal has not been shown
         // safe against the monocle batch that owns that membership. The
-        // other two have no such owner on this channel.
+        // other two have no such owner on this channel. passiveFloatScope
+        // sends a float on a scrolling screen to StripExit instead.
         return claim != Claim::MonocleMaximize;
     case ClaimScope::ModeFlip:
         return true;
@@ -368,6 +381,17 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
         return false;
     }
     return false;
+}
+
+/// The scope the passive float channel releases under (F723). On a scrolling
+/// screen a float ends every claim (StripExit): a strip runs no monocle batch
+/// that could own the membership, so a monocle member left over from an
+/// autotile Monocle context has nothing else to hand its bit back. Anywhere
+/// else the monocle membership stays with the autotile monocle batch
+/// (PassiveFloat).
+inline constexpr ClaimScope passiveFloatScope(bool onScrollingScreen)
+{
+    return onScrollingScreen ? ClaimScope::StripExit : ClaimScope::PassiveFloat;
 }
 
 /// Teardown release order, lowest first.

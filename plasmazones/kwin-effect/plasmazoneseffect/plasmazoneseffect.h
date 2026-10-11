@@ -368,6 +368,10 @@ private:
     /// that rejected the bridge handshake.
     void continueDaemonReadySetup();
 
+    /// Refetch the instant-restore cache (getPendingRestoreGeometries): at bring-up, and on a settings or
+    /// rules change, which can turn the zone restore off and empty it.
+    void refreshRestoreCache();
+
 public:
     /**
      * @brief Compose the window's composite runtime identifier.
@@ -2879,19 +2883,16 @@ private:
     /// from m_ruleWindowLayerSnapshots: reconcileRuleWindowLayer skips flagged
     /// windows entirely, so the two owners never trade flags mid-hold.
     QHash<QString, WindowLayerSnapshot> m_windowedFsLayerSnapshots;
-    /// Last minimum size reported to the daemon per managed window. KWin
-    /// exposes Window::minSize with no change signal, so the batch consumer
-    /// polls it per applied entry and re-reports through
-    /// Tiling.windowMinSizeUpdated when it moved — clients that set their
-    /// size hints after mapping (Wine games pin theirs to the configured
-    /// resolution once up) otherwise leave the engine modelling a column
-    /// the clamped real frame can never match. Seeded at announce (rolled
-    /// back on a failed BATCH announce; the single-window error arm relies
-    /// on the re-announce re-seeding instead). Dropped on close and the
-    /// deleted backstop, written by TilingHandler::reportMinSizeIfChanged
-    /// (the batch poll and the centring pass), and cleared wholesale
-    /// on daemon loss AND at bring-up (drainDeadSessionState). NOT dropped by
-    /// cleanupAutotileTracking — the re-announce re-seeds it inline.
+    /// Last minimum size reported to the daemon per managed window. KWin exposes Window::minSize with no change
+    /// signal, so the batch consumer polls it per applied entry and re-reports through Tiling.windowMinSizeUpdated
+    /// when it moved: clients that set their size hints after mapping (Wine games pin theirs to the configured
+    /// resolution once up) otherwise leave the engine modelling a column the clamped real frame can never match.
+    /// Seeded at announce (rolled back on a failed BATCH announce; the single-window error arm relies on the
+    /// re-announce re-seeding instead). Dropped on close and the deleted backstop, written by
+    /// TilingHandler::reportMinSizeIfChanged (the batch poll and the centring pass), and cleared wholesale on
+    /// daemon loss AND at bring-up (drainDeadSessionState). NOT dropped by cleanupAutotileTracking: the tile
+    /// apply re-reports it past this cache whenever the window enters a screen's tiling, because the engines
+    /// drop their copy on a float, an unminimize and a handoff (F911).
     QHash<QString, QSize> m_lastReportedMinSize;
     /// Per scroll-managed X11 window, and per Wayland one while its column is
     /// maximized to the edges: the rect the last batch commanded, so an
@@ -3877,12 +3878,11 @@ private:
     void fetchAllRulesOnce();
 
 private Q_SLOTS:
-    /// D-Bus signal handler for `Rules.rulesChanged`. Re-arms the
-    /// debounce timer rather than refetching the full ruleset on every
-    /// signal — the daemon emits one signal per per-rule mutation, so a
-    /// 50-rule batch edit would otherwise drive 50 full-ruleset fetches
-    /// and parses. A 50ms single-shot debounce coalesces the burst into a
-    /// single fetch at the trailing edge.
+    /// D-Bus signal handler for `Rules.rulesChanged`. Re-arms a 50ms single-shot
+    /// debounce rather than refetching the full ruleset per signal (the daemon
+    /// emits one per per-rule mutation, so a batch edit would drive one full
+    /// fetch and parse each). The restore cache is refetched at once, since a
+    /// saved rule can refuse the zone restore (refreshRestoreCache).
     void slotRulesChanged();
 };
 

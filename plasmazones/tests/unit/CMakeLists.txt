@@ -1398,6 +1398,12 @@ target_link_libraries(test_untile_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_untile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_untile_decisions COMMAND test_untile_decisions)
 
+# The effect's centring-pass witness (centringdecisions.h).
+add_executable(test_centring_decisions ui/effect/test_centring_decisions.cpp)
+target_link_libraries(test_centring_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_centring_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_centring_decisions COMMAND test_centring_decisions)
+
 # Pure-logic test for the drag-policy transition
 # (plasmazoneseffect/dragpolicytransition.h): the bypass latch, the tile
 # suspend versus untrack, the float on reaching a float-on-drag engine, and

@@ -153,9 +153,9 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     if (!m_dragTracker->isDragging() && output) {
         m_tilingHandler->handleCursorMoved(pos, effectiveScreenId);
         // Snapping FFM runs alongside autotile FFM. The two are disjoint: autotile FFM
-        // bails when the cursor screen is not an autotile screen, and snapping FFM only
-        // acts on windows in the snap tiled set (which live on snapping-mode screens), so
-        // at most one of them activates a window for any given cursor position.
+        // bails when the cursor screen is not an autotile screen, and snapping FFM bails
+        // when it is one (a tiling or scrolling screen), so at most one of them activates
+        // a window for any given cursor position.
         m_snapHandler->handleCursorMoved(pos, effectiveScreenId);
     }
 }

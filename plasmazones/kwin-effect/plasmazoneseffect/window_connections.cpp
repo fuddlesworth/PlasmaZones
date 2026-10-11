@@ -18,6 +18,7 @@
 #include "tilinghandler/tilinghandler.h"
 #include "compositor/windowanimator.h"
 #include "handlers/dragtracker.h"
+#include "handlers/screenchangehandler.h"
 
 namespace PlasmaZones {
 
@@ -631,7 +632,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     const auto colIt = m_scrollOfferedColumn.constFind(scrollId);
                     const bool haveOffer = colIt != m_scrollOfferedColumn.constEnd();
                     const QRect offered = haveOffer ? *colIt : QRect();
-                    if (haveOffer && scrollManagedOutputFor(safeW.data())) {
+                    // Not while the outputs change or the strip's output has moved
+                    // since its batch: the offer is in the old coordinates (F815).
+                    if (haveOffer && scrollManagedOutputFor(safeW.data())
+                        && !m_screenChangeHandler->isScreenChangeInProgress()
+                        && !m_tilingHandler->stripOutputMovedSinceBatch(
+                            m_tilingHandler->scrollTrackedScreenFor(scrollId))) {
                         const QRect live = safeW->frameGeometry().toRect();
                         if (live.size() != offered.size() && !live.size().isEmpty()) {
                             // Same centring as the strip apply and the paint

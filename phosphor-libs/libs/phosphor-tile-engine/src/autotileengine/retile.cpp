@@ -431,11 +431,11 @@ void AutotileEngine::retileScreen(const QString& screenId)
         for (const QString& wid : unfloated) {
             state->setFloating(wid, false);
             // The min-size entry is deliberately KEPT: the window is
-            // re-entering the tiled set on the same screen and no re-report
-            // path exists for a live window (windowOpened and
-            // windowMinSizeUpdated both stay silent here), so dropping the
-            // clamp laid the recovered window out unconstrained for the rest
-            // of the session.
+            // re-entering the tiled set on the same screen, and the effect
+            // re-reports a declared minimum only once the tile batch this
+            // retile emits lands (forced when a window enters a screen's
+            // tiling, F911), so dropping the clamp here would lay this pass
+            // out unconstrained.
         }
     }
 

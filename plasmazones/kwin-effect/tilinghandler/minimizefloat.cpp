@@ -84,6 +84,21 @@ void TilingHandler::seedUnfloatRetryBudget(const QString& windowId, int attempts
     }
 }
 
+int TilingHandler::unfloatRetryBudgetUsed(const QString& windowId) const
+{
+    return m_unfloatRetryAttempts.value(windowId);
+}
+
+bool TilingHandler::hasPendingUnminimizeUnfloat(const QString& windowId) const
+{
+    return m_pendingUnminimizeUnfloat.contains(windowId);
+}
+
+bool TilingHandler::hasUnfloatInFlight(const QString& windowId) const
+{
+    return m_unfloatInFlight.contains(windowId);
+}
+
 // Clears three things despite the name, which dates from when it held only the
 // first: the debounced minimize-float commits, the deferred unminimize-unfloat
 // timers (grace and retry alike), and the fullscreen-hold records (record,

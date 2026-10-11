@@ -574,6 +574,43 @@ private Q_SLOTS:
     {
         QVERIFY(nonEmptyIdSet(QStringList{QString()}).isEmpty());
     }
+
+    // A maximize Apply arm takes the claim only for a window KWin will
+    // maximize, or one already held at MaximizeFull (F680). The arms used to
+    // take it unconditionally.
+    void takesMaximizeMembership_refusedNotMaximized_false()
+    {
+        QVERIFY(!takesMaximizeMembership(/*maximizable=*/false, /*alreadyFull=*/false));
+    }
+    void takesMaximizeMembership_alreadyFull_true()
+    {
+        QVERIFY(takesMaximizeMembership(/*maximizable=*/false, /*alreadyFull=*/true));
+    }
+    void takesMaximizeMembership_maximizable_true()
+    {
+        QVERIFY(takesMaximizeMembership(/*maximizable=*/true, /*alreadyFull=*/false));
+    }
+
+    // The passive float channel on a scrolling screen releases every claim,
+    // monocle included: no strip batch owns a monocle membership (F723).
+    void passiveFloatScope_scrollingReleasesMonocle()
+    {
+        const ClaimScope scope = passiveFloatScope(/*onScrollingScreen=*/true);
+        QCOMPARE(static_cast<int>(scope), static_cast<int>(ClaimScope::StripExit));
+        QVERIFY(claimReleasesOn(Claim::MonocleMaximize, scope));
+        QVERIFY(claimReleasesOn(Claim::WindowedFullscreen, scope));
+        QVERIFY(claimReleasesOn(Claim::MaximizedToEdges, scope));
+    }
+    // Off a strip the autotile monocle batch owns the membership, so the
+    // passive float leaves it (the PassiveFloat blank stays).
+    void passiveFloatScope_autotileKeepsMonocle()
+    {
+        const ClaimScope scope = passiveFloatScope(/*onScrollingScreen=*/false);
+        QCOMPARE(static_cast<int>(scope), static_cast<int>(ClaimScope::PassiveFloat));
+        QVERIFY(!claimReleasesOn(Claim::MonocleMaximize, scope));
+        QVERIFY(claimReleasesOn(Claim::WindowedFullscreen, scope));
+        QVERIFY(claimReleasesOn(Claim::MaximizedToEdges, scope));
+    }
 };
 
 QTEST_APPLESS_MAIN(TestScrollDecisions)

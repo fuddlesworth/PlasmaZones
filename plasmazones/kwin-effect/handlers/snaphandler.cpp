@@ -363,30 +363,30 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
     if (!m_focusFollowsMouse) {
         return;
     }
+    // A tiling or scrolling screen's focus follows the tiling handler's FFM,
+    // even over a window the snap side still marks from an earlier snapping
+    // context (F488). Same unguarded deref as the pre-snap capture.
+    if (m_effect->tilingHandler()->isManagedScreen(screenId)) {
+        return;
+    }
 
-    // Pause FFM entirely during show-desktop/peek. Peeked windows are hidden
-    // from the scene but keep their frameGeometry, so the scan below would
-    // find one under the cursor and activateWindow() would synchronously
+    // Pause FFM entirely during show-desktop/peek. Peeked windows are hidden from the scene but keep their
+    // frameGeometry, so the scan below would find one under the cursor and activateWindow() would synchronously
     // cancel the peek (mirrors the autotile FFM guard).
     if (PlasmaZonesEffect::isShowingDesktop()) {
         return;
     }
 
-    // Pause FFM whenever the active window is NOT snapped into a zone. Any
-    // non-snapped active window — a popup/dialog/excluded app, a window the user
-    // deliberately floated, or a free window they simply have not snapped — is
-    // one the user is working in on top of the snap stack; wandering the cursor
-    // over a snapped window beneath it must not steal its focus. FFM resumes
-    // (follows the cursor between snapped windows) once a snapped window is
-    // active. Scoped to the cursor's screen (mirrors TilingHandler::
-    // handleCursorMoved, discussion #461 + follow-up): a window active on another
-    // monitor must not freeze FFM on the monitor the cursor is on. The daemon's
-    // own passthrough overlay surface never counts as the kind of active window
-    // worth protecting; the interactive editor DOES (it is not a passthrough
-    // overlay, so it falls through to the not-snapped pause below and keeps
-    // focus). (Autotile pauses on the same principle — floated/popup/under-
-    // min-size — but everything else there is tiled, so it has no never-managed
-    // "free" case; snap does, hence the single not-snapped predicate.)
+    // Pause FFM whenever the active window is NOT snapped into a zone. Any non-snapped active window (a
+    // popup/dialog/excluded app, a window the user deliberately floated, or a free window they simply have not
+    // snapped) is one the user is working in on top of the snap stack; wandering the cursor over a snapped window
+    // beneath it must not steal its focus. FFM resumes (follows the cursor between snapped windows) once a snapped
+    // window is active. Scoped to the cursor's screen (mirrors TilingHandler::handleCursorMoved, discussion #461 +
+    // follow-up): a window active on another monitor must not freeze FFM on the monitor the cursor is on. The
+    // daemon's own passthrough overlay surface never counts as the kind of active window worth protecting; the
+    // interactive editor DOES (it is not a passthrough overlay, so it falls through to the not-snapped pause below
+    // and keeps focus). (Autotile pauses on the same principle, floated/popup/under-min-size, but everything else
+    // there is tiled, so it has no never-managed "free" case; snap does, hence the single not-snapped predicate.)
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
         // Cheap overlay-class check first, then the heavier screen resolution
         // (mirrors the autotile guard's predicate ordering).

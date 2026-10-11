@@ -153,17 +153,12 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // Same untrack outcome as the arm below, so the per-session
             // scroll companions go here too rather than being left
             // behind by this early exit.
-            m_effect->m_scrollCommandedRects.remove(windowId);
-            m_effect->m_scrollOfferedColumn.remove(windowId);
-            if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
-                KWin::effects->addRepaintFull();
-            }
+            dropScrollCompanions(windowId);
             // The centring targets go with them, for the same reason the
             // arm below sheds them: a stale target consumed against the
             // fullscreen frame change would raw-moveResize the window to
             // its old zone and clamp it onto that zone's output.
-            m_tileTargetZones.remove(windowId);
-            m_centeredWaylandZones.remove(windowId);
+            dropCenteringTarget(windowId);
             // The tiled FACT goes too. This screen has left the managed set,
             // but TilingStateHelpers would still record the window as tiled, so
             // the IsTiled rule field stays true and a tiled-scoped border or
@@ -199,19 +194,14 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // Drop stale zone-centering tracking so a later
         // frameGeometryChanged does not re-snap the window into an
         // old autotile zone.
-        m_tileTargetZones.remove(windowId);
-        m_centeredWaylandZones.remove(windowId);
+        dropCenteringTarget(windowId);
         // The per-session scroll companions go with the untrack too,
         // exactly as the genuine-toggle arm below does it. This arm
         // reaches the same untracked outcome, so leaving them behind
         // means the counter-assert can re-arm against a rect from the
         // session that just ended, and a relocation from a dead strip
         // survives into the next one.
-        m_effect->m_scrollCommandedRects.remove(windowId);
-        m_effect->m_scrollOfferedColumn.remove(windowId);
-        if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
-            KWin::effects->addRepaintFull();
-        }
+        dropScrollCompanions(windowId);
         // Apply the pre-autotile geometry — the ONLY thing that
         // un-tiles the window, since the daemon does not resnap on a
         // desktop switch. m_preTileGeometries is read non-
@@ -344,9 +334,7 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     bool anyVisualDeltaDropped = false;
     for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
         clearWindowTiledAllScreens(wid);
-        m_effect->m_scrollCommandedRects.remove(wid);
-        m_effect->m_scrollOfferedColumn.remove(wid);
-        anyVisualDeltaDropped = (m_effect->m_scrollVisualDelta.remove(wid) > 0) || anyVisualDeltaDropped;
+        anyVisualDeltaDropped = dropScrollCompanions(wid, /*damage=*/false) || anyVisualDeltaDropped;
     }
     if (anyVisualDeltaDropped && KWin::effects) {
         KWin::effects->addRepaintFull();
@@ -580,12 +568,6 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
                     return;
                 }
                 const PhosphorProtocol::PreTileGeometryList entries = reply.value();
-                QHash<QString, QHash<QString, int>> entryCounts;
-                for (const auto& entry : entries) {
-                    if (added.contains(entry.screenId) && entry.width > 0 && entry.height > 0) {
-                        ++entryCounts[entry.appId][entry.screenId];
-                    }
-                }
                 // One model for the pointer in this lambda. The loop below
                 // guards KWin::effects before calling screenAt(), so reading
                 // stackingOrder() off it unguarded here left the two lines
@@ -603,8 +585,8 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
                 for (const auto& entry : entries) {
                     const QString stableId = entry.appId;
                     QRectF geom = QRectF(entry.toRect());
-                    if (geom.width() <= 0 || geom.height() <= 0 || !added.contains(entry.screenId)
-                        || entryCounts.value(stableId).value(entry.screenId) != 1) {
+                    if (entry.windowId.isEmpty() || geom.width() <= 0 || geom.height() <= 0
+                        || !added.contains(entry.screenId)) {
                         continue;
                     }
                     // Origin validation, not just extents. These rects
@@ -618,32 +600,24 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
                             << "Ignoring daemon pre-tile geometry off every output for" << stableId << ":" << geom;
                         continue;
                     }
-                    // Find all windows on added screens matching this stableId.
-                    // If multiple windows share the same stableId (e.g., 3 Dolphin instances),
-                    // the daemon's single geometry is ambiguous — skip the override entirely.
+                    // The entry names its window (F627): apply it to that live
+                    // window only, on the screen the record names. Instance
+                    // ids, since a class rename changes the appId half.
+                    const QString entryInstance = ::PhosphorIdentity::WindowId::extractInstanceId(entry.windowId);
                     KWin::EffectWindow* matchedWindow = nullptr;
-                    bool ambiguous = false;
                     for (KWin::EffectWindow* ew : allWindows) {
-                        // isDeleted: a dying same-app window must not
-                        // consume the geometry override or trip the
-                        // ambiguous-skip, robbing the live window.
+                        // isDeleted: a dying window must not consume the
+                        // geometry override.
                         if (!ew || ew->isDeleted() || !m_effect->shouldHandleWindow(ew))
                             continue;
-                        if (::PhosphorIdentity::WindowId::extractAppId(m_effect->getWindowId(ew)) != stableId)
+                        if (::PhosphorIdentity::WindowId::extractInstanceId(m_effect->getWindowId(ew)) != entryInstance)
                             continue;
                         if (m_effect->getWindowScreenId(ew) != entry.screenId)
                             continue;
-                        if (matchedWindow) {
-                            ambiguous = true;
-                            break;
-                        }
                         matchedWindow = ew;
+                        break;
                     }
-                    if (ambiguous || !matchedWindow) {
-                        if (ambiguous) {
-                            qCDebug(lcEffect) << "Skipping daemon geometry override for ambiguous stableId" << stableId
-                                              << "(multiple live windows match)";
-                        }
+                    if (!matchedWindow) {
                         continue;
                     }
                     {
@@ -679,6 +653,36 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
                     }
                 }
             });
+}
+
+void TilingHandler::noteContextSwitched(const QString& physicalScreenId)
+{
+    // Called for every desktop switch the effect reports to the daemon (the
+    // report is what makes the daemon switch and announce), and for an activity
+    // switch with an empty id (every output).
+    //
+    // A batch the daemon emitted for the context an output just left can still
+    // be processed before the switch's announce (only batches resolved after
+    // the switch are held behind it). The output is owed an announce: such a
+    // batch skips its untile diff, which would untile the incoming context's
+    // tiles (F793), and the outgoing context's staggered applies there are
+    // cancelled, on that output only (F213). Only an output with a managed
+    // screen is owed: one with none may never be announced, and has no batch to
+    // guard. Residual: an activity switch carries no stamp, so an older
+    // desktop-only announce accepted after it settles the ledger early, as does
+    // a set-change announce the daemon sent before it read the report; the
+    // in-flight half is still cancelled here.
+    if (!m_effect->m_daemonGate.serviceRegistered) {
+        return;
+    }
+    m_switchAnnounce.noteEdge();
+    for (const QString& screenId : std::as_const(m_managedScreens)) {
+        const QString physical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+        if (physicalScreenId.isEmpty() || physical == physicalScreenId) {
+            ++m_tileStaggerGenByScreen[screenId];
+            m_switchAnnounce.noteSwitch(physical);
+        }
+    }
 }
 
 void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch,
@@ -775,8 +779,25 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     // batch). Only REMOVED screens' pending applies are genuinely stale;
     // screens that remain or join keep their in-flight batch — for a joiner
     // that batch IS the mode flip's own retile.
+    //
+    // A switch the effect saw (noteContextSwitched) voids only the switched
+    // outputs' screens: another output's cascade is still its own (F213). The
+    // global bump stays for a switch announce the effect saw no edge for (the
+    // daemon's bring-up re-announce). Every accepted announce settles the
+    // ledger, a set change too, so an owed output cannot outlive the daemon's
+    // next word and keep skipping its untile diffs. After the staleness gate,
+    // so a dropped announce settles nothing.
+    bool sawEdge = false;
+    const QSet<QString> switched = m_switchAnnounce.settle(&sawEdge);
     if (isDesktopSwitch) {
-        ++m_tileStaggerGeneration;
+        if (!sawEdge) {
+            ++m_tileStaggerGeneration;
+        }
+        for (const QString& screenId : m_managedScreens + newScreens) {
+            if (switched.contains(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId))) {
+                ++m_tileStaggerGenByScreen[screenId];
+            }
+        }
     } else {
         for (const QString& screenId : removed) {
             ++m_tileStaggerGenByScreen[screenId];

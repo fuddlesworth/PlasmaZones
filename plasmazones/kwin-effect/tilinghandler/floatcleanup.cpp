@@ -6,7 +6,8 @@
 //
 // Split out of state.cpp by concern. These answer one question between them:
 // which windows the engine is allowed to own, and what has to be undone when it
-// stops owning one. The eligibility predicate is the gate on the way in; the two
+// stops owning one. The eligibility predicate is the gate on the way in (beside
+// it the tile batch's same-app candidate walk, fuzzyTileCandidates); the two
 // float paths are the way out, one for the active channel and one for the
 // passive WindowTracking broadcast; markWindowTiled and its clears are the
 // membership those paths maintain. Membership changes flip the IsTiled rule
@@ -19,6 +20,8 @@
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "plasmazoneseffect/desktopvisibility.h"
 #include "compositor/effectlogging.h"
+
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 #include <effect/effectwindow.h>
 #include <window.h>
@@ -98,6 +101,35 @@ bool TilingHandler::isInOwnFullscreen(KWin::EffectWindow* w, const QString& wind
     }
     const KWin::Window* const kw = w->window();
     return w->isFullScreen() || (kw && kw->isRequestedFullScreen());
+}
+
+QVector<KWin::EffectWindow*> TilingHandler::fuzzyTileCandidates(const QString& windowId,
+                                                                const QString& targetScreenId) const
+{
+    // Every same-app window could stand for a stale entry, so the walk is
+    // scoped to where the entry can plausibly be: its target output, on the
+    // desktop and activity that output is showing. Unscoped, the zip paired
+    // windows by a global top-left order across monitors and desktops, and
+    // the nearest-centre pick tied across desktops. A window in its OWN
+    // fullscreen hold is never a candidate either: re-keying a launcher's
+    // stale entry to the held game left the game's apply inert and the
+    // launcher out of the batch, so it lost its tiled tracking.
+    QVector<KWin::EffectWindow*> out;
+    const QString targetOutput = ::PhosphorIdentity::VirtualScreenId::extractPhysicalId(targetScreenId);
+    const QVector<KWin::EffectWindow*> all = m_effect->findAllWindowsById(windowId);
+    for (KWin::EffectWindow* c : all) {
+        if (!c || !isOnOwnOutputCurrentDesktop(c) || !c->isOnCurrentActivity()) {
+            continue;
+        }
+        if (::PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_effect->getWindowScreenId(c)) != targetOutput) {
+            continue;
+        }
+        if (isInOwnFullscreen(c, m_effect->getWindowId(c), false)) {
+            continue;
+        }
+        out.append(c);
+    }
+    return out;
 }
 
 bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized) const
@@ -481,9 +513,20 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // pending in a cascade (or a mid-drag replay) must not land on the floater.
     KWin::EffectWindow* const liveWindow = m_effect->findWindowByIdExact(windowId);
     m_effect->m_daemonGate.commandStamps.bump(liveWindow);
-    // A floating window is free to move itself — stop countering.
-    m_effect->m_scrollCommandedRects.remove(windowId);
-    m_effect->m_scrollOfferedColumn.remove(windowId);
+    // A floating window is free to move itself — stop countering. The
+    // parked-column paint hint goes too, with a sharper failure. A floating
+    // window is never a parked column, but the float leaves the entry behind:
+    // floatWindowInternal takes the window OUT of the strip, so the batch its
+    // own relayout emits does not contain it, and the per-entry write in
+    // slotWindowsTileRequested never runs to clear it. The orphan is inert
+    // only while BOTH halves of scrollManagedOutputFor stay shut, and a later
+    // snap on another screen reopens both: the snap adds tiled membership, and
+    // scrollTrackedScreenFor falls back to m_notifiedWindowScreens — which this
+    // cleanup does not clear — so it answers with the OLD scrolling screen. The
+    // paint pass for the window's real output then skips it as belonging
+    // elsewhere, and the window is simply not drawn. The removal repaints (the
+    // float paths have no guaranteed follow-up geometry apply).
+    dropScrollCompanions(windowId);
     // Guarded like slotWindowFloatingChanged's unfloat write: the handler is
     // destroyed before this one during effect teardown, and the cache dies
     // with it.
@@ -502,25 +545,7 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // old zone rect. slotWindowsTileRequested no longer clears these
     // globally (it can't without wiping sibling-VS state), so the float
     // path has to clean up after itself.
-    m_tileTargetZones.remove(windowId);
-    m_centeredWaylandZones.remove(windowId);
-    // And the parked-column paint hint, for the same reason and with a
-    // sharper failure. A floating window is never a parked column, but the
-    // float leaves the entry behind: floatWindowInternal takes the window OUT
-    // of the strip, so the batch its own relayout emits does not contain it,
-    // and the per-entry write in slotWindowsTileRequested never runs to clear
-    // it. The orphan is inert only while BOTH halves of scrollManagedOutputFor
-    // stay shut, and a later snap on another screen reopens both: the snap
-    // adds tiled membership, and scrollTrackedScreenFor falls back to
-    // m_notifiedWindowScreens — which this cleanup does not clear — so it
-    // answers with the OLD scrolling screen. The paint pass for the window's
-    // real output then skips it as belonging elsewhere, and the window is
-    // simply not drawn. The removal changes where the paint path draws the
-    // window, so it pairs with damage per m_scrollVisualDelta's contract (the
-    // float paths have no guaranteed follow-up geometry apply).
-    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
-        KWin::effects->addRepaintFull();
-    }
+    dropCenteringTarget(windowId);
     // Geometry first, then the decoration funnel — the order every sibling
     // exit path uses: the monocle unmaximize is a geometry change, and
     // resolving the chain after it means the resolve sees the window's
@@ -559,10 +584,10 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // Deliberately EXCLUDES applyFloatCleanup's setWindowFloating: the passive
     // slot performs that write itself (daemon_apply.cpp, immediately before
     // this call), so repeating it here would only re-drive an idempotent
-    // setter. unmaximizeMonocleWindow is excluded too, but on different
-    // grounds — nothing on this channel covers it, and re-driving a maximize
-    // restore from a passive float signal has not been shown safe against the
-    // monocle batch that owns that membership. The tiled-membership clear IS
+    // setter. Monocle is released only for a window on a scrolling screen
+    // (passiveFloatScope, F723): elsewhere the autotile monocle batch owns that
+    // membership, and re-driving a maximize restore from a passive float
+    // signal has not been shown safe against it. The tiled-membership clear IS
     // performed below: no caller on this channel does it, and a floating
     // window left recorded as tiled keeps the tiled appearance scope.
     //
@@ -576,10 +601,10 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // it protects is cheap and the next such path would be silent.) releaseWindowedFullscreenState is idempotent and
     // deliberately does not consult the membership hash, so re-driving it
     // off the snapshot is safe.
-    // PassiveFloat is the scope whose blank is a genuine DECISION rather than
-    // an accident: monocle is excluded, for the reason spelled out above. The
-    // funnel carries the membership-OR-snapshot guard this site argued for,
-    // and the clear-in-flight drop that used to sit beside it.
+    // PassiveFloat's monocle blank is a DECISION for autotile screens, for the
+    // reason above; a strip has no monocle batch, so there the shed takes
+    // StripExit. The funnel carries the membership-OR-snapshot guard this site
+    // argued for, and the clear-in-flight drop that used to sit beside it.
     //
     // The column mirror DOES answer to this scope, unlike monocle. The
     // exclusion reasoning above does not carry to it: monocle is refused
@@ -589,11 +614,19 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // held, the window stays KWin-maximized as a floater for the session —
     // this channel's whole reason for existing is that the active funnel
     // never runs for its producers.
+    // Read before the tiled-membership clear below: the screen the strip
+    // placed the window on, else where it sits.
+    KWin::EffectWindow* const live = m_effect->findWindowByIdExact(windowId);
+    QString shedScreen = m_notifiedWindowScreens.value(windowId);
+    if (shedScreen.isEmpty() && live) {
+        shedScreen = m_effect->getWindowScreenId(live);
+    }
     const ClaimReleaseResult claims =
-        releaseAllClaims(windowId, m_effect->findWindowByIdExact(windowId), ScrollDecisions::ClaimScope::PassiveFloat);
-    // A floating window is free to move itself — stop countering.
-    m_effect->m_scrollCommandedRects.remove(windowId);
-    m_effect->m_scrollOfferedColumn.remove(windowId);
+        releaseAllClaims(windowId, live, ScrollDecisions::passiveFloatScope(isScrollingScreen(shedScreen)));
+    // A floating window is free to move itself — stop countering. The
+    // relocation drop repaints: unlike the active channel this path has no
+    // follow-up geometry apply guaranteed to damage.
+    dropScrollCompanions(windowId);
     // A floating window is no longer tile-managed on any screen, and this
     // channel has no other writer of that fact (the passive slot's own
     // clearWindowSnapped covers the SNAP facts only). Left standing, IsTiled
@@ -604,18 +637,10 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // below, per reconcileDecorationOnPlacementFlip's flip-facts-first
     // contract.
     clearWindowTiledAllScreens(windowId);
-    // Same rationale as applyFloatCleanup for all three: a stale target
-    // re-triggers centering on the next frameGeometryChanged, and a stale
-    // relocation-delta entry makes a later snap on another screen paint the window
-    // at the dead strip position (or not at all).
-    m_tileTargetZones.remove(windowId);
-    m_centeredWaylandZones.remove(windowId);
-    // The removal changes where the paint path draws the window (relocated
-    // position → nothing), and unlike the active channel this path has no
-    // follow-up geometry apply guaranteed to damage — so pair it.
-    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
-        KWin::effects->addRepaintFull();
-    }
+    // Same rationale as applyFloatCleanup: a stale target re-triggers
+    // centering on the next frameGeometryChanged, as a stale relocation (shed
+    // above) paints a later snap on another screen at the dead strip position.
+    dropCenteringTarget(windowId);
     // Decoration re-drive: the sibling exit paths (the self-exit arms, the
     // active channel's applyFloatCleanup) all re-resolve chrome on this
     // transition, and shouldDecorateWindow's fullscreen reject lifts the
@@ -646,6 +671,15 @@ void TilingHandler::markWindowTiled(const QString& screenId, const QString& wind
     // Re-resolve only on the false→true transition: a window already tiled on
     // another screen stays tiled, so re-adding it changes no rule outcome.
     if (!wasTiled) {
+        // A tile is not snapped: drop the effect's snap mirror (border mark and
+        // zone cache) a snapping-era membership left behind, so IsSnapped / Zone
+        // rules and snap focus-follows-mouse stop treating the tile as snapped.
+        // The daemon keeps its frozen memory, and the return resnap re-seeds the
+        // mirror (F488, snap_memory_model). Only when there is a mirror to drop:
+        // the clear re-resolves the decoration at once.
+        if (m_effect->isWindowMarkedSnapped(windowId) || m_effect->isWindowSnapped(windowId)) {
+            m_effect->m_snapHandler->clearWindowSnapped(windowId);
+        }
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }
 }
@@ -661,8 +695,7 @@ void TilingHandler::suspendTileForSnapDrag(const QString& windowId)
     // them if the drop lets the tile go (settleSuspendedTileAfterDrop).
     KWin::EffectWindow* const live = m_effect->findWindowByIdExact(windowId);
     m_effect->m_daemonGate.commandStamps.bump(live);
-    m_tileTargetZones.remove(windowId);
-    m_centeredWaylandZones.remove(windowId);
+    dropCenteringTarget(windowId);
     m_effect->m_scrollCommandedRects.remove(windowId);
     clearWindowTiledAllScreens(windowId);
     m_effect->reconcileDecorationOnPlacementFlip(windowId);

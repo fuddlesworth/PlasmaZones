@@ -8,6 +8,7 @@
 // Split out of tiling.cpp, which keeps the tile batch pipeline.
 
 #include "tilinghandler.h"
+#include "centringdecisions.h"
 #include "scrolldecisions.h"
 #include "handlers/dragtracker.h"
 #include "handlers/screenchangehandler.h"
@@ -125,9 +126,18 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         && (!w->isWaylandClient()
             || (kwCounter && m_maximizedToEdgesWindows.contains(windowId)
                 && kwCounter->requestedMaximizeMode() == KWin::MaximizeFull));
+    // Only while the strip apply that armed the rect is still the window's
+    // latest command: a snap or float command issued since (a cross-mode move
+    // before the strip's release lands) owns the window now (F71). Nor while
+    // the outputs are changing or the strip's output has moved since its
+    // batch: the rect is in the old coordinates, and the next batch re-arms
+    // it in the new ones (F815).
     if (externallyMovable && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()) {
         const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
         if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(scrollTrackedScreenFor(windowId))
+            && m_effect->m_daemonGate.commandStamps.isCurrent(w, cit->commandStamp)
+            && !m_effect->m_screenChangeHandler->isScreenChangeInProgress()
+            && !stripOutputMovedSinceBatch(scrollTrackedScreenFor(windowId))
             && !(m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
                  && windowId == m_effect->m_dragTracker->draggedWindowId())) {
             const QRect actual = w->frameGeometry().toRect();
@@ -309,12 +319,13 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         // apply and every refusing or oversized commit keep it at the zone
         // origin. Containment rather than equality on purpose: a centred
         // origin also sits inside the zone, and an entry armed by an older
-        // batch must not read a window this pass centred as moved away. An
-        // origin outside the zone means another command owns the window now.
-        // The centred stamp goes too, or the redundant-apply skip in
-        // slotWindowsTileRequested would honour it if the window is tiled into
-        // the same zone again.
-        if (!QRectF(targetZone).adjusted(-1.0, -1.0, 1.0, 1.0).contains(commandedRect.topLeft())) {
+        // batch must not read a window this pass centred as moved away. The
+        // far edges are excluded: a gapless neighbour zone starts exactly
+        // there (CentringDecisions::commandStillInTile). An origin outside the
+        // zone means another command owns the window now. The centred stamp
+        // goes too, or the redundant-apply skip in slotWindowsTileRequested
+        // would honour it if the window is tiled into the same zone again.
+        if (!CentringDecisions::commandStillInTile(QRectF(targetZone), commandedRect.topLeft())) {
             qCDebug(lcEffect) << "Autotile centering: target superseded for" << windowId
                               << "commanded=" << commandedRect << "target=" << targetZone << "- dropping";
             m_tileTargetZones.erase(it);
@@ -516,7 +527,7 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     kw->moveResize(centered);
 }
 
-void TilingHandler::reportMinSizeIfChanged(const QString& windowId, const QSize& declared)
+void TilingHandler::reportMinSizeIfChanged(const QString& windowId, const QSize& declared, bool force)
 {
     // The ONE writer of windowMinSizeUpdated after announce, shared by the
     // batch's change poll and the centring pass. It always sends the whole
@@ -524,9 +535,10 @@ void TilingHandler::reportMinSizeIfChanged(const QString& windowId, const QSize&
     // re-tiles on any change: a centring pass that sent only the oversized
     // axis (0 in the other) flipped the stored minimum against the batch's
     // full pair on every round, and each flip re-tiled, re-applied and
-    // re-centred the window, for as long as it stayed oversized.
+    // re-centred the window, for as long as it stayed oversized. @p force
+    // skips the change gate when the engine may have dropped its copy (F911).
     const auto lastIt = m_effect->m_lastReportedMinSize.constFind(windowId);
-    if (lastIt != m_effect->m_lastReportedMinSize.constEnd() && *lastIt == declared) {
+    if (!force && lastIt != m_effect->m_lastReportedMinSize.constEnd() && *lastIt == declared) {
         return;
     }
     // Gate like every other call in this handler: with no daemon registered
@@ -562,6 +574,17 @@ void TilingHandler::reportMinSizeIfChanged(const QString& windowId, const QSize&
             m_effect->m_lastReportedMinSize.remove(windowId);
         }
     });
+}
+
+bool TilingHandler::stripOutputMovedSinceBatch(const QString& screenId) const
+{
+    // KWin translates the windows of an output that moves outside any apply,
+    // so both re-asserts see frame changes then. The commanded and offered
+    // rects describe the strip where the batch put it; re-asserting them would
+    // put the windows where the output used to be until the daemon's next
+    // pass. No snapshot (no strip batch yet) reads as not moved.
+    const auto it = m_stripScreenRectAtBatch.constFind(screenId);
+    return it != m_stripScreenRectAtBatch.constEnd() && *it != stripScreenRect(screenId);
 }
 
 } // namespace PlasmaZones

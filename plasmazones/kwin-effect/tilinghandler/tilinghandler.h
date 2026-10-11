@@ -26,6 +26,7 @@
 // ClaimScope is part of releaseAllClaims' signature; the header is pure and
 // header-only, so this costs nothing beyond the enum.
 #include "scrolldecisions.h"
+#include "untiledecisions.h"
 #include "plasmazoneseffect/placementstatement.h"
 
 #include <PhosphorCompositor/TilingState.h>
@@ -213,19 +214,10 @@ public:
     /// per-WINDOW cap on daemon unfloat attempts, and it must survive the
     /// ownership hop or a persistently-refused unfloat ping-ponging between
     /// handlers resets to a fresh budget on every bounce.
-    int unfloatRetryBudgetUsed(const QString& windowId) const
-    {
-        return m_unfloatRetryAttempts.value(windowId);
-    }
+    int unfloatRetryBudgetUsed(const QString& windowId) const;
     void seedUnfloatRetryBudget(const QString& windowId, int attemptsUsed);
-    bool hasPendingUnminimizeUnfloat(const QString& windowId) const
-    {
-        return m_pendingUnminimizeUnfloat.contains(windowId);
-    }
-    bool hasUnfloatInFlight(const QString& windowId) const
-    {
-        return m_unfloatInFlight.contains(windowId);
-    }
+    bool hasPendingUnminimizeUnfloat(const QString& windowId) const;
+    bool hasUnfloatInFlight(const QString& windowId) const;
     void clearDesktopMoveStash(const QString& windowId) ///< a destroyed window's stash (only destruction may)
     {
         m_desktopMoveStash.forget(windowId);
@@ -541,10 +533,9 @@ public:
     void endFullscreenOfArrivingTile(const QString& windowId, KWin::EffectWindow* w, const QString& screenId,
                                      const QRect& tile);
 
-    /// Arm the clear-in-flight marker and dispatch Scrolling.
-    /// clearWindowedFullscreen reply-gated: the error arm drops the marker
-    /// so a lost clear (whose flag-off echo will never arrive) cannot latch
-    /// the adopt guard for the session.
+    /// Arm the clear-in-flight marker and dispatch Scrolling.clearWindowedFullscreen reply-gated: the error arm
+    /// drops the marker so the next batch re-adopts toward the daemon's surviving flag instead of spending its
+    /// single refusal.
     void dispatchWindowedFullscreenClear(const QString& windowId);
     /// Shed half of applyFloatCleanup for the WindowTracking float channel
     /// (PlasmaZonesEffect::slotWindowFloatingChanged), whose floats never reach this handler's slot and so never
@@ -710,10 +701,9 @@ public:
     void noteScrollTabRelease(const QPointF& pos);
     /// Whether the pill interception is currently held — the effect's
     /// pointer hooks consult this to know the events are theirs to route.
-    bool scrollTabInterceptionHeld() const
-    {
-        return m_scrollTabCursorOverridden;
-    }
+    bool scrollTabInterceptionHeld() const;
+    /// Whether @p screenId's strip moved or resized since its last batch, its rects then being stale (F815).
+    bool stripOutputMovedSinceBatch(const QString& screenId) const;
     /// Void the bring-up strips/overrides fetches still in flight, for the
     /// daemon-loss edge only (a late reply from the dead session must not
     /// re-seed the model after clearScrollTabState). Bring-up needs no call:
@@ -738,6 +728,7 @@ public:
     /// the caller: a resolve at unplug time can collapse a suffixed id when identical monitors go away together,
     /// and here it would also re-populate the cache entry the caller just purged.
     void noteScrollTabOutputRemoved(KWin::LogicalOutput* output, const QString& removedScreenId);
+    void noteContextSwitched(const QString& physicalScreenId); ///< a reported desktop switch; empty: all (activity)
     /// Delete the painter's retired textures under a made-current context;
     /// called after every clearOutput() so a strip that went away does not
     /// hold its texture until the next paint pass (which may never come once
@@ -940,6 +931,8 @@ public:
     /// answer do not come through here. The tile batch records its own target after its apply when an ack is
     /// coming; a tile deferred to a gesture's end records none.
     void dropCenteringTarget(const QString& windowId);
+    /// Drop @p windowId's three per-window scroll companions; true when a park relocation went (state.cpp).
+    bool dropScrollCompanions(const QString& windowId, bool damage = true);
 
     /// The set this discriminator actually answers over.
     ///
@@ -999,9 +992,9 @@ public:
     // title-bar / opacity rule. markWindowTiled only invalidates on a genuine
     // not-tiled→tiled transition (its own single-owner sweep runs after the
     // wasTiled read, so a cross-screen transfer of an already-tiled window
-    // does NOT invalidate here — IsTiled never flipped, and the per-batch
-    // invalidation in slotWindowsTileRequested covers the ScreenId field
-    // change); a same-screen re-assert is likewise a no-op.
+    // does NOT invalidate here — IsTiled never flipped, and the tile apply
+    // re-resolves a cross-screen placement once its frame lands there through
+    // m_ruleScreenOwed); a same-screen re-assert is likewise a no-op.
     void markWindowTiled(const QString& screenId, const QString& windowId);
     void clearWindowTiledAllScreens(const QString& windowId);
     void clearWindowTiledOnScreen(const QString& screenId, const QString& windowId);
@@ -1010,14 +1003,14 @@ public:
 
     // Set a window to re-activate after the next autotile raise loop completes.
     // Used by slotDaemonReady() to preserve focus of non-tiled windows (e.g. KCM).
-    void setPendingReactivateWindow(KWin::EffectWindow* w)
-    {
-        m_pendingReactivateWindow = w;
-    }
+    void setPendingReactivateWindow(KWin::EffectWindow* w);
 
     /// Record a daemon-initiated cross-output move so the next outputChanged
     /// for @p windowId to @p targetScreenId updates bookkeeping only. See
-    /// m_expectedOutputMove.
+    /// m_expectedOutputMove. An untracked window the daemon has already landed
+    /// on a managed @p targetScreenId is tracked at once instead
+    /// (adoptsDaemonArrival); one still waiting for its tile apply is tracked
+    /// by that apply (F718, F736).
     ///
     /// @p sourceScreenId is the screen the daemon moved the window off, and is
     /// authoritative whenever it is non-empty: a daemon arm
@@ -1025,15 +1018,9 @@ public:
     /// tiles, so by now m_notifiedWindowScreens names the DESTINATION.
     ///
     /// An empty source falls back to the notified screen. That is correct for
-    /// the arm sites that fire ahead of any placement work, and it is what an
-    /// older daemon that does not put the source on the wire produces — in
-    /// which case the fallback is blind for a post-handoff arm exactly as
-    /// described above, and stillTiledOnSource degrades to always-false.
-    void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId, const QString& sourceScreenId)
-    {
-        const QString source = sourceScreenId.isEmpty() ? m_notifiedWindowScreens.value(windowId) : sourceScreenId;
-        m_expectedOutputMove.insert(windowId, ExpectedOutputMove{targetScreenId, source});
-    }
+    /// the arm sites that fire ahead of any placement work, which are the only
+    /// senders of an empty source (the engines' relayed markers).
+    void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId, const QString& sourceScreenId);
     /// The strip key for a scrolling screen id (StripKeys::stripKey over the output it resolves to).
     QString stripKeyFor(const QString& screenId) const;
     /// The rect a strip's edges are measured against (StripKeys::screenRect), invalid with no output.
@@ -1175,12 +1162,12 @@ private:
     /// whole loop, which this helper's own bracket nests inside.
     void applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode);
 
-    /// Whether @p windowId is still a live tile on a SCROLLING screen, the
-    /// single predicate every maximize-to-edges write gates on. The screen is
-    /// the strip's notified one, falling back to the window's current output,
-    /// so a window mid-way through a cross-screen move answers for the strip
-    /// that placed it. @p w may be null, in which case only the notified
-    /// record can answer.
+    /// Whether @p windowId is still a live tile on a SCROLLING screen: the gate reconcileMaximizeAfterGesture,
+    /// cancelAxisOnlyMaximize and the toggle reply's refusal write-back use. The batch arm gates on the entry's
+    /// own screen instead, and the interception and the toggle's press re-dispatch spell the same three steps
+    /// out because they need the screen. The screen is the strip's notified one, falling back to the window's
+    /// current output, so a window mid-way through a cross-screen move answers for the strip that placed it.
+    /// @p w may be null, in which case only the notified record can answer.
     bool isScrollTiledWindow(const QString& windowId, KWin::EffectWindow* w) const;
 
     /// Scrolling.toggleMaximizeToEdges for @p windowId's column on @p screenId.
@@ -1365,6 +1352,9 @@ private:
     /// The effect-side half of an announce: track @p w on @p screenId and
     /// file its pre-tile geometry. Returns whether a spawn marker was consumed.
     bool trackWithoutAnnounce(KWin::EffectWindow* w, const QString& screenId, bool knownFreeFloating);
+    /// Track a window the daemon placed on @p screenId without announcing it, when it sits there already and passes
+    /// the untracked arrival branch's eligibility test (outputchange.cpp). Returns whether it did.
+    bool adoptsDaemonArrival(KWin::EffectWindow* w, const QString& screenId);
     /// An evacuee's claims, dropped from the ledgers with KWin's state left as
     /// it is (ClaimScope::Evacuation releases none of them).
     void scrubClaimsForEvacuation(const QString& windowId, KWin::EffectWindow* w);
@@ -1429,7 +1419,7 @@ private:
      * segfaults when the backing QWindow is null (discussion #511).
      */
     static QSize declaredMinSize(KWin::EffectWindow* w);
-    void reportMinSizeIfChanged(const QString& windowId, const QSize& declared); ///< see framecentering.cpp
+    void reportMinSizeIfChanged(const QString& windowId, const QSize& declared, bool force = false);
 
     // ═══════════════════════════════════════════════════════════════════
     // Member variables
@@ -1506,7 +1496,7 @@ private:
     /// Evict the cached colour verdict of every window in @p indexedBefore
     /// that the reverse index no longer names (it stopped being a tab), so a
     /// later re-tab re-queries instead of painting a verdict the daemon's
-    /// strip-gated title relay could not have refreshed meanwhile.
+    /// strip-gated record relay could not have refreshed meanwhile.
     void dropScrollTabColorsForUnindexed(const QList<QString>& indexedBefore);
     /// Damage @p bounds of @p strip's band WHERE IT IS DRAWN, shifted by that
     /// strip's live view offset. The painter stores the band offset-free (the
@@ -1724,6 +1714,7 @@ private:
     /// re-deriving identity from KWin's current desktop is wrong on any
     /// sticky-pinned screen.
     QHash<QString, QString> m_stripEpochByScreen;
+    QHash<QString, QRect> m_stripScreenRectAtBatch; ///< each strip screen's rect at its last batch (F815)
     /// Set by applyScrollEffectBehaviour on every apply (before its change
     /// gate, the m_activeLayoutsSeeded shape: an identical map is still a real
     /// map, and the daemon's first publish is legitimately all-empty on a
@@ -1825,9 +1816,8 @@ private:
     /// Windows whose clearWindowedFullscreen is dispatched and unechoed —
     /// the m_unfloatInFlight idiom for the fullscreen-exit reconcile. A batch
     /// emitted before the daemon processed the clear can still carry
-    /// flag=true; the adopt arm skips members so it cannot re-fullscreen the
-    /// window against the user's exit, and the first flag-off batch entry
-    /// consumes the marker (a lost clear therefore cannot latch it).
+    /// flag=true: the batch refuses one stale flag=true adopt for a marker holder (consuming the marker), a
+    /// flag-off entry consumes it too, and the reply's error arm drops it early (dispatchWindowedFullscreenClear).
     QSet<QString> m_windowedFsClearInFlight;
     /// A dispatched toggleMaximizeToEdges whose reply has not arrived.
     ///
@@ -1917,15 +1907,15 @@ private:
     /// grace) and revalidated at fire time; a re-minimize during the grace
     /// cancels it, leaving the window minimize-floated as before.
     DeferredWindowCommits m_pendingUnminimizeUnfloat{this};
-    /// Global stagger epoch, bumped on a desktop switch (slotScreensChanged), on
-    /// daemon loss (clearTiledTracking) and at the successor's bring-up, to cancel
-    /// EVERY in-flight staggered apply. Plain managed-set changes must not bump
-    /// it: a mode toggle's own managedScreensChanged lands in the same burst as
-    /// its tile batch, and a blanket bump voided that batch after its first
-    /// synchronous entry (screen sat half-tiled until a manual float/unfloat).
-    /// Non-desktop invalidation is per-screen: removed screens in
+    /// Global stagger epoch, bumped on daemon loss (clearTiledTracking), at the successor's bring-up, and on a
+    /// switch announce with no effect-side switch owed, to cancel EVERY in-flight staggered apply. A switch the
+    /// effect saw bumps only the switched outputs' screens (m_tileStaggerGenByScreen, noteContextSwitched).
+    /// Plain managed-set changes must not bump it: a mode toggle's own managedScreensChanged lands in the same
+    /// burst as its tile batch, and a blanket bump voided that batch after its first synchronous entry (screen
+    /// sat half-tiled until a manual float/unfloat). Non-desktop invalidation is per-screen: removed screens in
     /// slotScreensChanged, flipped screens in setScrollingScreens.
     uint64_t m_tileStaggerGeneration = 0;
+    UntileDecisions::SwitchAnnounceLedger m_switchAnnounce; ///< outputs whose context switch is not announced yet
     /// Per-screen stagger generation. A retile bumps only its own screen(s), so a
     /// newer batch for the SAME screen supersedes an earlier one while a batch for
     /// a DIFFERENT screen leaves it untouched. Without this, the destination batch
@@ -1951,6 +1941,9 @@ private:
     /// in slotWindowFullScreenChanged then call unmaximizeMonocleWindow with the gesture flags clear and pay
     /// the debt instead.
     QSet<QString> m_monocleRestoreOwed;
+    /// Monocle claims an evacuee held when its output went away, taken back by the first monocle batch after its
+    /// return (F685); dropped by a close or a real move (cleanupAutotileTracking) and at bring-up.
+    QSet<QString> m_evacueeMonocleClaims;
     /// Windows whose KWin maximize bit this handler holds because the
     /// scrolling engine says their column is maximized. An OWNERSHIP LEDGER
     /// on the same terms as m_monocleMaximizedWindows: membership is shed

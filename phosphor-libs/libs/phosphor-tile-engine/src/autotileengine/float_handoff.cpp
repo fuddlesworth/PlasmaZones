@@ -278,7 +278,7 @@ void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const
     // Same staleness policy as setWindowFloat's unfloat arm: the window's
     // min size may have changed while floating, and a stale entry can
     // inflate enforceMinSizes past the user's split ratio. The effect
-    // re-discovers and re-reports a live one on the next retile.
+    // re-reports a live one when the window is tiled again.
     if (!isNowFloating) {
         m_windowMinSizes.remove(windowId);
     }

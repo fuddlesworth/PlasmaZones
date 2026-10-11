@@ -194,6 +194,9 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
     if (m_daemonGate.serviceRegistered) {
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("screenDesktopChanged"), {screenId, desktop});
+        // The daemon switches this output's context and announces it; a batch
+        // for the context it left must not untile the incoming one (F793).
+        m_tilingHandler->noteContextSwitched(screenId);
     }
 }
 

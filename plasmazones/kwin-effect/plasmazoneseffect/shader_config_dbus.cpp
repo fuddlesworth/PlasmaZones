@@ -803,12 +803,12 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
 
 void PlasmaZonesEffect::slotRulesChanged()
 {
-    // Coalesce burst signals: the daemon emits one `rulesChanged` per per-rule
-    // mutation, so a 50-rule batch edit would otherwise drive 50 sequential
-    // `getAllRules` round-trips + JSON parses + filter walks. The timer is a
-    // single-shot 50ms debounce (set up in the constructor); each call here
-    // re-arms it, so only the trailing edge of the burst triggers a refresh.
+    // Coalesce burst signals (one `rulesChanged` per per-rule mutation) behind a
+    // re-armed 50ms single-shot debounce, so a batch edit drives one getAllRules
+    // fetch. The restore cache refetches now: a saved rule can refuse the zone
+    // restore (SetRestoreToZoneOnLogin), and the daemon then answers "{}" (F703).
     m_animationRulesRefreshDebounce.start();
+    refreshRestoreCache();
 }
 
 void PlasmaZonesEffect::loadRuleAnimationsFromDbus()

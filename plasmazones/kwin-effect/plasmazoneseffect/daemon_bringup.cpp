@@ -395,6 +395,89 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // once all async D-Bus replies have arrived.
 }
 
+void PlasmaZonesEffect::refreshRestoreCache()
+{
+    // The instant-restore cache (pending restore geometries) for slotWindowAdded.
+    // Fetched at bring-up, and again on a settings or rules change, which can
+    // turn the zone restore off: the daemon then answers "{}" and the cache
+    // empties. Fire-and-forget: windows that open before the reply arrives
+    // fall back to the normal async restore path.
+    auto* geoWatcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("getPendingRestoreGeometries")),
+        this);
+    connect(geoWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QString> reply = *w;
+        // Both failure modes were silent. Neither is fatal — windows fall
+        // back to the async restore path — but the fallback shows as a
+        // visible flash on every window that opens meanwhile, which
+        // is exactly the symptom someone would come looking for.
+        if (!reply.isValid()) {
+            qCWarning(lcEffect) << "getPendingRestoreGeometries failed:" << reply.error().message()
+                                << "— windows opening now fall back to the async restore";
+            return;
+        }
+        QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
+        if (!doc.isObject()) {
+            qCWarning(lcEffect) << "getPendingRestoreGeometries returned a non-object payload — ignoring";
+            return;
+        }
+        QJsonObject obj = doc.object();
+        m_snapHandler->clearRestoreCache();
+        // An entry built from a record whose window is STILL OPEN is that
+        // window's own placement, not a pending restore, and the daemon
+        // cannot always tell: on a daemon-only restart this reply is
+        // built before the effect re-announces the windows, so every
+        // record reads as dead there. The effect can tell. Keyed by
+        // instance id, since the daemon's record id is the registry's
+        // canonical composite and may differ in prefix from the live one.
+        // Handled windows only, like processDaemonReadyWindowState's alive walk: a surface the
+        // effect never manages can hold no record, and an id-less one
+        // ("" from a window with no backing KWin::Window) must not read
+        // as the instance of a malformed record.
+        QSet<QString> liveInstances;
+        const auto liveWindows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* lw : liveWindows) {
+            if (!lw || lw->isDeleted() || !shouldHandleWindow(lw)) {
+                continue;
+            }
+            const QString liveId = ::PhosphorIdentity::WindowId::extractInstanceId(getWindowId(lw));
+            if (!liveId.isEmpty()) {
+                liveInstances.insert(liveId);
+            }
+        }
+        // One array per app, newest record first: every entry whose window
+        // is not visible is cached, in order, so each opener takes the
+        // newest one saved on its OWN output (a live sibling's record at
+        // the head, from a daemon-only restart, is skipped here).
+        for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+            const QJsonArray entries = it.value().toArray();
+            for (const QJsonValue& entry : entries) {
+                const QJsonObject geo = entry.toObject();
+                const QString recordWindowId = geo[QLatin1String("windowId")].toString();
+                if (!recordWindowId.isEmpty()
+                    && liveInstances.contains(::PhosphorIdentity::WindowId::extractInstanceId(recordWindowId))) {
+                    qCDebug(lcEffect) << "Skipping instant-restore entry for" << it.key() << ": its window"
+                                      << recordWindowId << "is still open";
+                    continue;
+                }
+                // gw/gh, not w/h — `w` would shadow the lambda's watcher
+                // parameter above.
+                const int gx = geo[QLatin1String("x")].toInt();
+                const int gy = geo[QLatin1String("y")].toInt();
+                const int gw = geo[QLatin1String("width")].toInt();
+                const int gh = geo[QLatin1String("height")].toInt();
+                const QString savedScreen = geo[QLatin1String("screenId")].toString();
+                if (gw > 0 && gh > 0) {
+                    m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(gx, gy, gw, gh), savedScreen});
+                }
+            }
+        }
+        qCDebug(lcEffect) << "Cached" << m_snapHandler->restoreCacheSize() << "pending restore geometries";
+    });
+}
+
 void PlasmaZonesEffect::processDaemonReadyWindowState()
 {
     if (m_daemonGate.readyWindowStateProcessed) {
@@ -456,84 +539,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
 
     // Fetch pre-computed pending restore geometries so slotWindowAdded can
     // teleport windows to their zone immediately (no D-Bus round-trip flash).
-    // Fire-and-forget: the cache is populated asynchronously. Windows that open
-    // before the reply arrives fall back to the normal async restore path.
-    {
-        auto* geoWatcher = new QDBusPendingCallWatcher(
-            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
-                                                       QStringLiteral("getPendingRestoreGeometries")),
-            this);
-        connect(geoWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            QDBusPendingReply<QString> reply = *w;
-            // Both failure modes were silent. Neither is fatal — windows fall
-            // back to the async restore path — but the fallback shows as a
-            // visible flash on every window that opens during bringup, which
-            // is exactly the symptom someone would come looking for.
-            if (!reply.isValid()) {
-                qCWarning(lcEffect) << "getPendingRestoreGeometries failed at bringup:" << reply.error().message()
-                                    << "— windows opening now fall back to the async restore";
-                return;
-            }
-            QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
-            if (!doc.isObject()) {
-                qCWarning(lcEffect) << "getPendingRestoreGeometries returned a non-object payload — ignoring";
-                return;
-            }
-            QJsonObject obj = doc.object();
-            m_snapHandler->clearRestoreCache();
-            // An entry built from a record whose window is STILL OPEN is that
-            // window's own placement, not a pending restore, and the daemon
-            // cannot always tell: on a daemon-only restart this reply is
-            // built before the effect re-announces the windows, so every
-            // record reads as dead there. The effect can tell. Keyed by
-            // instance id, since the daemon's record id is the registry's
-            // canonical composite and may differ in prefix from the live one.
-            // Handled windows only, like the alive walk above: a surface the
-            // effect never manages can hold no record, and an id-less one
-            // ("" from a window with no backing KWin::Window) must not read
-            // as the instance of a malformed record.
-            QSet<QString> liveInstances;
-            const auto liveWindows = KWin::effects->stackingOrder();
-            for (KWin::EffectWindow* lw : liveWindows) {
-                if (!lw || lw->isDeleted() || !shouldHandleWindow(lw)) {
-                    continue;
-                }
-                const QString liveId = ::PhosphorIdentity::WindowId::extractInstanceId(getWindowId(lw));
-                if (!liveId.isEmpty()) {
-                    liveInstances.insert(liveId);
-                }
-            }
-            // One array per app, newest record first: every entry whose window
-            // is not visible is cached, in order, so each opener takes the
-            // newest one saved on its OWN output (a live sibling's record at
-            // the head, from a daemon-only restart, is skipped here).
-            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                const QJsonArray entries = it.value().toArray();
-                for (const QJsonValue& entry : entries) {
-                    const QJsonObject geo = entry.toObject();
-                    const QString recordWindowId = geo[QLatin1String("windowId")].toString();
-                    if (!recordWindowId.isEmpty()
-                        && liveInstances.contains(::PhosphorIdentity::WindowId::extractInstanceId(recordWindowId))) {
-                        qCDebug(lcEffect) << "Skipping instant-restore entry for" << it.key() << ": its window"
-                                          << recordWindowId << "is still open";
-                        continue;
-                    }
-                    // gw/gh, not w/h — `w` would shadow the lambda's watcher
-                    // parameter above.
-                    const int gx = geo[QLatin1String("x")].toInt();
-                    const int gy = geo[QLatin1String("y")].toInt();
-                    const int gw = geo[QLatin1String("width")].toInt();
-                    const int gh = geo[QLatin1String("height")].toInt();
-                    const QString savedScreen = geo[QLatin1String("screenId")].toString();
-                    if (gw > 0 && gh > 0) {
-                        m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(gx, gy, gw, gh), savedScreen});
-                    }
-                }
-            }
-            qCDebug(lcEffect) << "Cached" << m_snapHandler->restoreCacheSize() << "pending restore geometries";
-        });
-    }
+    refreshRestoreCache();
 
     // Restore snap state for all untracked windows.
     // pendingRestoresAvailable may have fired BEFORE daemonReady, causing

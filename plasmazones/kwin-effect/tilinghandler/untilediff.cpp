@@ -54,21 +54,14 @@ void TilingHandler::untileWindowsLeftOnScreen(const QString& screenId, const QSe
         // Every untiled window drops its per-screen tiled tracking,
         // minimized/unresolvable or not.
         clearWindowTiledOnScreen(screenId, wid);
-        // The parked-column paint hint dies with the tiled tracking: a window
-        // in a SUPERSEDED batch's entry never reached the per-entry write, and
-        // a window this batch no longer carries would otherwise keep the
-        // previous batch's strip position. The removal changes where the paint
-        // path draws the window, so it pairs with damage.
-        if (m_effect->m_scrollVisualDelta.remove(wid) > 0 && KWin::effects) {
-            KWin::effects->addRepaintFull();
-        }
-        // The other two strip companions go with it, as the teardown funnels
-        // shed all three: a window untiled by a rule change otherwise kept the
-        // column it was last OFFERED, and on re-tile the apply read
-        // columnUnchanged against that stale offer and skipped offering the
-        // column. Neither is a paint input, so no damage.
-        m_effect->m_scrollCommandedRects.remove(wid);
-        m_effect->m_scrollOfferedColumn.remove(wid);
+        // The strip companions die with the tiled tracking, as the teardown
+        // funnels shed them: a window in a SUPERSEDED batch's entry never
+        // reached the per-entry write, so a window this batch no longer carries
+        // would otherwise keep the previous batch's park position, and a window
+        // untiled by a rule change kept the column it was last OFFERED (on
+        // re-tile the apply read columnUnchanged against that stale offer and
+        // skipped offering the column).
+        dropScrollCompanions(wid);
         if (!win || win->isMinimized()) {
             // A minimized (or vanished) window is left to its own funnel.
             // Minimizing a tile floats it, and that float's cleanup
@@ -83,8 +76,7 @@ void TilingHandler::untileWindowsLeftOnScreen(const QString& screenId, const QSe
         // rule change dropping the window from the layout) must not leave a
         // stale centering target that teleport-centers the window on its next
         // frameGeometryChanged.
-        m_tileTargetZones.remove(wid);
-        m_centeredWaylandZones.remove(wid);
+        dropCenteringTarget(wid);
         // The one strip exit with no other release owner (float, close,
         // cross-output transfer, mode/screen change and teardown all have
         // theirs): every claim the window held goes, windowed fullscreen,

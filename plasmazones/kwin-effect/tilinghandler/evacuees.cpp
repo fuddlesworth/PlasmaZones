@@ -62,8 +62,14 @@ void TilingHandler::adoptEvacuee(KWin::EffectWindow* w, const QString& screenId)
     const QString windowId = m_effect->getWindowId(w);
     // No release relay for the output it left: the daemon parked and pruned
     // that output, and a release now would retile its dead tiles over the
-    // other evacuees (F617).
+    // other evacuees (F617). A monocle claim is read first, since the funnel
+    // scrubs it bare: KWin keeps the maximize, and the first monocle batch after
+    // the window's return takes the claim back (F685, evacuee_keeps_kwin_state).
+    const bool heldMonocle = m_monocleMaximizedWindows.contains(windowId);
     cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::Evacuation);
+    if (heldMonocle) {
+        m_evacueeMonocleClaims.insert(windowId);
+    }
     // The daemon floated it in place on a tiling destination. Tracked here so
     // the destination's engine owns it, and never announced: an announce
     // would insert it as a tile and reflow the windows already there (F642).

@@ -207,12 +207,12 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             }
             // Daemon-driven geometry applies must not be mistaken for user
             // moves (symmetric with the frameGeometryChanged VS-crossing
-            // handler below). This matters for the scrolling engine: parked
-            // columns sit ENTIRELY outside the screen rect, so on a
-            // multi-head layout the parked frame's centre can land on the
-            // neighbouring output — KWin fires outputChanged and, without
-            // this guard, the parked window would be handed to the other
-            // screen's engine mid-apply.
+            // handler below): the apply's own pre-seed and bookkeeping place
+            // the window. A parked strip column whose frame centre lands on
+            // the neighbouring output is not what this guards: the screen
+            // answers from the engine for a strip tile (above), so that hop
+            // reads as no crossing either way. The tile apply tracks a daemon
+            // arrival this hides itself (TilingHandler::adoptsDaemonArrival).
             if (m_daemonGate.inGeometryApply) {
                 return;
             }

@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Signal slot handlers for TilingHandler, from BOTH sources: the daemon's D-Bus
-// broadcasts (enabled state, per-window floating state) and KWin's own
-// per-window compositor signals (maximized state, fullscreen state).
+// broadcasts (enabled state, per-window floating state, and the engine's focus
+// request) and KWin's own per-window compositor signals (maximized state,
+// fullscreen state).
 // Part of TilingHandler — split from tilinghandler.cpp for SRP.
 
 #include "tilinghandler.h"
@@ -36,6 +37,50 @@ namespace PlasmaZones {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Daemon D-Bus signal slot handlers
 // ═══════════════════════════════════════════════════════════════════════════════
+
+void TilingHandler::slotFocusWindowRequested(const QString& windowId)
+{
+    // Showing-desktop guard (see isShowingDesktop's doc): the engines emit
+    // this after a verb, on an arrival and after a relayout that carries a
+    // requested focus, and activating a hidden window cancels a peek. A request
+    // dropped here is not recorded and not re-sent later, which is accepted:
+    // the peek outranks it.
+    if (PlasmaZonesEffect::isShowingDesktop()) {
+        qCDebug(lcEffect) << "Autotile: focus request dropped during show desktop:" << windowId;
+        return;
+    }
+    // By instance: the engine names the window it focused, and the app-id
+    // fallback would activate a same-app sibling when that window's id has
+    // drifted or it closed inside the round trip.
+    KWin::EffectWindow* w = m_effect->findWindowByInstanceId(windowId);
+    if (!w) {
+        qCDebug(lcEffect) << "Autotile: window not found for focus request:" << windowId;
+        return;
+    }
+
+    // Engine-driven activation on a scrolling screen usually means the
+    // strip just scrolled — pause FFM until the cursor moves deliberately,
+    // or a pointer twitch immediately re-focuses whatever column slid
+    // under it and undoes this activation.
+    if (isScrollingScreen(m_effect->getWindowScreenId(w))) {
+        suppressFfmUntilCursorMoves();
+    }
+    // Re-key to the EFFECT's id for the window we actually resolved, not the
+    // daemon's spelling. The instance resolve matches across an app-prefix
+    // drift, so the two can differ — and the only consumer (the restack arm
+    // of a later batch) resolves with findWindowByIdExact, which would then
+    // miss and silently skip the raise. Every resolve site in the tile batch
+    // (tiling.cpp) re-keys for the same reason.
+    m_pendingAutotileFocusWindowId = m_effect->getWindowId(w);
+    if (KWin::effects) {
+        KWin::effects->activateWindow(w);
+    }
+}
+
+void TilingHandler::setPendingReactivateWindow(KWin::EffectWindow* w)
+{
+    m_pendingReactivateWindow = w;
+}
 
 void TilingHandler::slotEnabledChanged(bool enabled)
 {
@@ -115,8 +160,9 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
     // spelling instead, leaving the live entry answering "floating" to every
     // reader (FFM pause, pre-tile capture guard, the desktop-switch and
     // fullscreen-exit skips) for the rest of the session — and this slot is
-    // the ONLY writer for an autotile unfloat (the WindowTracking relay
-    // deliberately excludes AutotileEngine::windowFloatingChanged). The
+    // the only Tiling-channel writer for an autotile unfloat (the WindowTracking
+    // relay carries it too, through syncAutotileFloatState and
+    // WindowTrackingAdaptor::setWindowFloating). The
     // pending-focus stamp uses the live id too: its consumer resolves via
     // findWindowByIdExact, which refuses the fuzzy fallback.
     // Resolved ONCE and reused by both branches below. Re-resolving with the
@@ -275,8 +321,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // transition too: a stale zone-centering target consumed against
         // the fullscreen ack's frame change would moveResize against the
         // fullscreen geometry (the exact hazard that cleanup documents).
-        m_tileTargetZones.remove(windowId);
-        m_centeredWaylandZones.remove(windowId);
+        dropCenteringTarget(windowId);
         // The offered column goes with them, for the reason the monocle arm in
         // the batch apply spells out: the entry describes the last column this
         // window was offered as a PLAIN strip tile, and it stops being one for
@@ -383,9 +428,9 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             qCInfo(lcEffect) << "Windowed-fullscreen window left fullscreen on its own:" << windowId;
             // In-flight marker + reply-gated dispatch: an already-emitted
             // batch still carrying flag=true must not re-adopt against this
-            // exit (the batch arm's flag-off echo consumes the marker), and
-            // the helper drops the marker on a failed clear so it cannot
-            // latch for the session.
+            // exit (a batch entry consumes the marker: the refused stale
+            // adopt or the flag-off echo), and the helper drops the marker
+            // on a failed clear so the next batch re-adopts.
             dispatchWindowedFullscreenClear(windowId);
             m_effect->updateAllDecorations();
         } else {
@@ -630,8 +675,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // right after being tiled must not have the fullscreen frame change
     // consume a stale centering target and moveResize against the fullscreen
     // geometry (same cleanup applyFloatCleanup performs).
-    m_tileTargetZones.remove(windowId);
-    m_centeredWaylandZones.remove(windowId);
+    dropCenteringTarget(windowId);
     // The per-session scroll companions go too. The membership clear above
     // makes them inert for as long as the window stays fullscreen (the paint
     // path resolves the scroll output through that membership), but the EXIT
@@ -640,11 +684,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // least the round trip of the reapply request the exit dispatches, and
     // indefinitely when the daemon gate is closed. The float exits shed the
     // same pair for the same reason.
-    m_effect->m_scrollCommandedRects.remove(windowId);
-    m_effect->m_scrollOfferedColumn.remove(windowId);
-    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
-        KWin::effects->addRepaintFull();
-    }
+    dropScrollCompanions(windowId);
     // A strip tile entering its OWN fullscreen (a client F11, a video going
     // fullscreen — NOT the windowed-fullscreen feature, whose members returned
     // above) must actually COVER its output.

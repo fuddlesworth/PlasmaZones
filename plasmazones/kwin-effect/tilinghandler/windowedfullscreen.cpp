@@ -57,10 +57,10 @@ bool TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
         m_monocleRestoreOwed.remove(windowId);
         return false;
     }
-    // KWin's maximize() has NO fullscreen conditional: called on a
-    // still-fullscreen window it takes both "no longer maximized" branches
-    // and moveResizes to geometryRestore, shrinking a fullscreen game or
-    // video out of its presentation. Skip on the REQUESTED bit alone, not on
+    // KWin's X11 maximize(Restore) has no fullscreen conditional: called on a
+    // still-fullscreen window it moveResizes to geometryRestore, shrinking a
+    // fullscreen game or video out of its presentation. Wayland ignores
+    // maximize() while fullscreen is requested. Skip on the REQUESTED bit alone, not on
     // the union with the committed one.
     //
     // The union looked safer and was not. This project is Wayland-only, where
@@ -274,8 +274,8 @@ void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
     // The return leaves no maximized-to-edges claim behind it. A window in
     // BOTH ledgers is unreachable: the column arm inserts only on a scrolling
     // screen and the monocle arm only under a tiling algorithm, the modes are
-    // exclusive per screen, and a screen change routes through the release of
-    // whichever claim the window held before it can acquire the other. So
+    // exclusive per screen, and a tile batch on a non-scrolling screen releases
+    // (autotile) or hands over (monocle) a column claim before either arm runs. So
     // when this arm fires, owesMaximizedToEdges was false or already paid.
     if (owesMonocle && m_monocleRestoreOwed.contains(windowId)) {
         unmaximizeMonocleWindow(windowId);
@@ -713,20 +713,13 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         if (!w || w->isDeleted() || !kw) {
             return;
         }
-        // RE-RUN the two gates the interception took before dispatching. A
-        // full round trip separates them, and the window can have floated out
-        // of the strip, been untracked, or moved to a non-scrolling screen in
-        // between. Without these the bit gets written from column membership
-        // for a window that is no longer a column member, so a user who floats
-        // a window and maximizes it mid-flight has it silently un-maximized.
-        if (!isTiledWindow(windowId)) {
-            return;
-        }
-        QString replyScreenId = m_notifiedWindowScreens.value(windowId);
-        if (replyScreenId.isEmpty()) {
-            replyScreenId = m_effect->getWindowScreenId(w);
-        }
-        if (!isScrollingScreen(replyScreenId)) {
+        // RE-RUN the interception's gate before writing. A full round trip
+        // separates them, and the window can have floated out of the strip,
+        // been untracked, or moved to a non-scrolling screen in between.
+        // Without it the bit gets written from column membership for a window
+        // that is no longer a column member, so a user who floats a window and
+        // maximizes it mid-flight has it silently un-maximized.
+        if (!isScrollTiledWindow(windowId, w)) {
             return;
         }
         const KWin::MaximizeMode engineState =
@@ -735,9 +728,9 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
             return;
         }
         // Fullscreen and gesture guards, the pair every sibling maximize write
-        // in this file carries: maximize() has no fullscreen conditional and
-        // would moveResize a presenting surface down to its restore rect, and
-        // mid-gesture it snaps the window under the user's pointer.
+        // in this file carries: the restore direction would moveResize an X11
+        // fullscreen window to its restore rect, and mid-gesture either
+        // direction snaps the window under the user's pointer.
         if (kw->isRequestedFullScreen() || w->isUserMove() || w->isUserResize()) {
             return;
         }
@@ -787,9 +780,9 @@ bool TilingHandler::releaseMaximizedToEdges(const QString& windowId, KWin::Effec
         return false;
     }
     // Fullscreen guard, for the reason unmaximizeMonocleWindow spells out:
-    // maximize() has no fullscreen conditional, so on a still-fullscreen
-    // window it moveResizes down to geometryRestore and shrinks a presenting
-    // surface. Reachable here because windowed fullscreen and column
+    // on X11 a MaximizeRestore on a fullscreen window still moveResizes it to
+    // geometryRestore and shrinks a presenting surface (Wayland ignores it
+    // while fullscreen is requested). Reachable here because windowed fullscreen and column
     // maximize are deliberately NOT exclusive.
     //
     // MEMBERSHIP IS RETAINED ON THIS ARM, the monocle ledger's choice rather
@@ -1066,8 +1059,8 @@ void TilingHandler::restoreAllMonocleMaximized()
             continue;
         }
         // Fullscreen members are skipped for the reason spelled out in
-        // unmaximizeMonocleWindow: maximize() has no fullscreen conditional
-        // and would moveResize a presenting surface down to its restore rect.
+        // unmaximizeMonocleWindow: an X11 MaximizeRestore would moveResize a
+        // presenting surface down to its restore rect.
         if (kw->isRequestedFullScreen()) {
             m_monocleMaximizedWindows.insert(wid);
             continue;
@@ -1208,15 +1201,14 @@ void TilingHandler::dispatchWindowedFullscreenClear(const QString& windowId)
     // Arm the in-flight marker: a batch the daemon emitted BEFORE
     // processing this clear can still carry flag=true (cross-direction
     // D-Bus has no ordering guarantee), and its adopt arm would
-    // re-fullscreen the window the user just exited. The batch arm's
-    // flag-off echo consumes the marker on success.
+    // re-fullscreen the window the user just exited. The batch consumes the
+    // marker on the flag-off echo or on the one stale adopt it refuses.
     //
     // Reply-gated, NOT fireAndForget: on a LOST clear the daemon keeps its
-    // flag true, so every subsequent batch entry carries flag=true and the
-    // flag-off echo never arrives — the marker would latch and refuse
-    // re-adoption for the rest of the session. The error arm drops it so
-    // the next batch can adopt again (the daemon's flag surviving an error
-    // is exactly the state re-adoption reconciles).
+    // flag true, and the error arm drops the marker so the next batch
+    // re-adopts toward that flag rather than spending the marker's one
+    // refusal on it (the daemon's flag surviving an error is exactly the
+    // state re-adoption reconciles).
     m_windowedFsClearInFlight.insert(windowId);
     QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(
         PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("clearWindowedFullscreen"), {windowId});

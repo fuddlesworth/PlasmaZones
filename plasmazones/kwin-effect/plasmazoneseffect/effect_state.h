@@ -147,6 +147,7 @@ struct ScrollCommandedRect
     QRect rect;
     qint64 burstStartMs = 0;
     int burstCount = 0;
+    quint64 commandStamp = 0; ///< the stamp of the strip apply that recorded this rect (WindowCommandStamps)
 };
 
 /// Minimize-shader stamp: the time and generation of the transition a minimize
