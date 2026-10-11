@@ -33,6 +33,14 @@
 
 namespace PlasmaZones {
 
+void TilingHandler::updateNotifiedScreen(const QString& windowId, const QString& newScreenId)
+{
+    auto it = m_notifiedWindowScreens.find(windowId);
+    if (it != m_notifiedWindowScreens.end()) {
+        it.value() = newScreenId;
+    }
+}
+
 bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
 {
     if (!w || w->isDeleted()) {

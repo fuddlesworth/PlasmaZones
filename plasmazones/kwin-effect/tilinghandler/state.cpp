@@ -1,29 +1,37 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Per-session screen and behaviour state for TilingHandler: which screens the
-// daemon manages, which of those run the scrolling engine, the active layout
-// per screen, the daemon-resolved scroll behaviours (the focus-follows-mouse,
-// straddler-crop and strip-axis screen sets, plus the per-WINDOW set naming
-// what the focus-follows-mouse scroll cap refuses), and the focus-follows-mouse
-// and wheel-focus settings. The chord that reads the wheel settings lives in
-// wheelchord.cpp.
+// Screen and behaviour state for TilingHandler, most of it published BY the
+// daemon and consumed by the effect: which screens the daemon manages, which
+// of those run the scrolling engine, the active layout per screen, and the
+// daemon-resolved scroll behaviours (the focus-follows-mouse, straddler-crop
+// and strip-axis screen sets, plus the per-WINDOW set naming what the
+// focus-follows-mouse scroll cap refuses). That state is per-session and is
+// dropped on daemon loss.
 //
-// What unites this file is that every member here is published BY the daemon
-// and consumed by the effect, so all of it is per-session and all of it is
-// dropped on daemon loss. That is also the shared hazard: the managed set, the
-// scrolling set and the active layouts arrive on independent D-Bus signals with
-// no ordering guarantee between them, so any predicate reading two of them can
-// see a transient disagreement. Where that matters the reader takes the raw set
-// deliberately rather than an intersection.
+// Other state lives here because its writers sit beside those sets, and it
+// keeps other lifetimes:
+//  - the focus-follows-mouse and wheel-focus settings, mirrored from the
+//    daemon's settings fetch and kept across a daemon loss;
+//  - the strip epochs (slotStripContextChanged) and the strip-scoped state an
+//    epoch change retires (retireStripScopedState, dropStripMotion), the
+//    epochs cleared only at the successor's bring-up (clearPerSessionDaemonState);
+//  - the effect's own bookkeeping the managed set gates: tiled membership
+//    (clearTiledTracking) and the autotile centring targets
+//    (dropCenteringTarget, clearCenteringTargetsForTeardown).
 //
-// Four concerns were split out of this file: monocle and windowed-fullscreen
-// ownership (windowedfullscreen.cpp), pre-tile geometry (pretilegeometry.cpp),
+// The shared hazard: the managed set, the scrolling set and the active
+// layouts arrive on independent D-Bus signals with no ordering guarantee
+// between them, so any predicate reading two of them can see a transient
+// disagreement. isScrollingScreen and scrollingScreenIntersection answer over
+// the intersection for that reason; hasScrollingScreens and
+// scrollTrackedScreenFor read the raw scrolling set deliberately.
+//
+// Split out of this file: monocle and windowed-fullscreen ownership
+// (windowedfullscreen.cpp), pre-tile geometry (pretilegeometry.cpp),
 // eligibility plus float shed (floatcleanup.cpp), and the wheel-chord dispatch
-// with the native-fullscreen release both user-verb sites run before their verb
-// (wheelchord.cpp). The wheel SETTINGS stay here, because they are published by
-// the daemon like everything else in this file; only the chord that reads them
-// moved.
+// (wheelchord.cpp). The wheel SETTINGS stay here with the other daemon-fed
+// state; only the chord that reads them moved.
 
 #include "tilinghandler.h"
 #include "scrolldecisions.h"
@@ -60,10 +68,11 @@ void TilingHandler::clearTiledTracking()
     // bring-up bumps it again, harmlessly (F405).
     ++m_tileStaggerGeneration;
     // The screen set belongs to the daemon session that published it. Both
-    // callers (daemon loss, effect teardown) mean that session is gone —
-    // keeping the set let stale membership answer isAutotileScreen until the
-    // next bringup reply, and left the bringup's fresh-set replacement with
-    // no removed-screen delta to act on.
+    // callers (daemon loss, effect teardown) mean that session is gone, and
+    // keeping the set let stale membership answer isManagedScreen until the
+    // next bring-up reply. With it cleared the bring-up starts from an empty
+    // set, so every published screen reads as added; the removed-screen work
+    // is done by the teardown's own restores.
     //
     // This write takes the named teardown exemption from the
     // scrollingScreenIntersection snapshot/compare/invalidate contract (see
@@ -75,22 +84,13 @@ void TilingHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;
     if (ffmOffEverywhere()) {
-        // handleCursorMoved bails before the suppression latch while FFM is
-        // off everywhere, so a latch set just before the setting was turned
-        // off would survive with a long-stale anchor and swallow the first
-        // move after it is turned back on. The latch is shared across both
-        // modes, so it clears only when NO screen can focus-follow — which is
-        // the ffmOffEverywhere predicate, per-screen scrolling membership
-        // included.
-        m_ffmSuppressPending = false;
-    }
-}
-
-void TilingHandler::setScrollingFocusFollowsMouse(bool enabled)
-{
-    m_scrollingFocusFollowsMouse = enabled;
-    if (ffmOffEverywhere()) {
-        // Same shared-latch reasoning as setFocusFollowsMouse.
+        // handleCursorMoved disarms the suppression latch at its
+        // off-everywhere bail, but only on the next pointer move, so a latch
+        // set just before the setting was turned off would keep its anchor
+        // through a stretch with no pointer motion and swallow the first move
+        // after FFM is turned back on. The latch is shared across both modes,
+        // so it clears only when NO screen can focus-follow, which is the
+        // ffmOffEverywhere predicate, per-screen scrolling membership included.
         m_ffmSuppressPending = false;
     }
 }
@@ -102,8 +102,10 @@ void TilingHandler::setWheelFocusEnabled(bool enabled)
     }
     m_wheelFocusEnabled = enabled;
     // Nothing to re-register. The chords are matched per axis event in
-    // ScrollOverhangInputFilter, which re-reads this flag every tick, so
-    // turning the setting off stops the very next event being claimed.
+    // handleWheelChord, reached from ScrollOverhangInputFilter and, while the
+    // tab-pill interception is held, from PlasmaZonesEffect::pointerAxis; it
+    // re-reads this flag on every event, so turning the setting off stops the
+    // very next event being claimed.
 }
 
 void TilingHandler::setWheelFocusInverted(bool inverted)
@@ -158,14 +160,16 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // Boundary validation, mirroring slotActiveLayoutsChanged: this map
     // crosses D-Bus from another process, and every key of it decides
     // compositor behaviour (focus stealing, forced composition, which way the
-    // strip slides). An a{sv} value arrives
-    // either already demarshalled (the property Get path, which qdbus_cast
-    // unwraps) or still wrapped in a QDBusVariant (a signal delivered without
-    // a registered argument type) — unwrap one level before the type test, or
-    // every live update silently clears all three sets. Empty screen ids are
-    // dropped: no window resolves to one, and they only defeat the change
-    // gate below. A wire regression is warned about rather than being
-    // indistinguishable from a legitimately-off session.
+    // strip slides). An a{sv} value arrives either already demarshalled (the
+    // property Get path, which qdbus_cast unwraps) or still wrapped in a
+    // QDBusVariant (a signal delivered without a registered argument type).
+    // parseIdList unwraps one level before its type test; without that every
+    // live update would read as malformed: focus-follows-mouse and crop would
+    // fall to empty, the axis would freeze at its last good membership, and
+    // each apply would log a warning. Empty screen ids are dropped: no window
+    // resolves to one, and they only defeat the change gate below. A wire
+    // regression is warned about rather than being indistinguishable from a
+    // legitimately-off session.
     //
     // The return is OPTIONAL so the three keys can take different directions
     // on a MALFORMED value (as opposed to an absent one, which is a legitimate
@@ -214,12 +218,12 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // global setting there.
     m_scrollEffectBehaviourSeeded = true;
     m_scrollFocusFollowsMouseScreens = ffm;
-    // One of the five ffmOffEverywhere sites: this write is what can
-    // take the LAST focus-follows-mouse screen away while both globals were
-    // already off, and handleCursorMoved's bail (the latch's only other
-    // disarm) sits behind the very predicate that just went true — so a latch
-    // armed by an engine-driven strip move would survive here with a stale
-    // anchor and swallow the first move after the rule turns FFM back on.
+    // This write can take the LAST focus-follows-mouse screen away while the
+    // autotile global was already off. handleCursorMoved would disarm the
+    // latch on the next pointer move, but a latch armed by an engine-driven
+    // strip move with no pointer motion since would keep its stale anchor and
+    // swallow the first move after the rule turns FFM back on, so it is
+    // cleared here.
     if (ffmOffEverywhere()) {
         m_ffmSuppressPending = false;
     }
@@ -227,8 +231,8 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // axis-only change on the floor — which is exactly what a monitor rotation
     // produces when the crop membership happens not to move, and it would
     // leave the effect sliding the strip along the old axis with no batch
-    // coming to correct it. (Only crop is painted state — the repaint below
-    // explains why the axis half is not a painting concern.)
+    // coming to correct it. (The repaint below is for crop; the axis half takes
+    // it defensively.)
     const bool cropChanged = crop != m_scrollCropStraddlerScreens;
     const bool axisChanged = verticalAxis != m_scrollVerticalAxisScreens;
     if (!cropChanged && !axisChanged) {
@@ -242,18 +246,18 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     m_scrollVerticalAxisScreens = verticalAxis;
     // An axis flip landing MID-LEG must cancel that screen's view spring and
     // armed strip pass, the setScrollingScreens teardown shape: the painted
-    // axis lives in StripViewAnimator's per-strip stamp, which only
-    // applyBatchDelta rewrites — and it early-returns on a ZERO delta, so
-    // the flip's own re-layout batch (a reflow, not a scroll) never
-    // restamps it. Without this the stale leg keeps sliding the strip along
+    // axis lives in StripViewAnimator's per-strip stamp, which only its two
+    // delta entry points (applyBatchDelta, applyImmediateDelta) rewrite, and
+    // both return early on a ZERO delta, so the flip's own re-layout batch (a
+    // reflow, not a scroll) never restamps it. Without this the stale leg keeps sliding the strip along
     // the axis the screen no longer has until the next genuine scroll.
     for (const QString& flippedScreen : axisFlipped) {
         dropStripMotion(flippedScreen);
     }
-    // Crop is PAINTED state: a screen that just started (or stopped) cropping
-    // has stale pixels on it, and nothing else will revisit them, since the
-    // strip's geometry did not necessarily move and no tile batch is
-    // guaranteed.
+    // The crop set gates blocksDirectScanout, which KWin re-evaluates only on
+    // a composited frame, so a change repaints to take effect without waiting
+    // for incidental damage (the strip's geometry did not necessarily move and
+    // no tile batch is guaranteed). The paint clip does not read it.
     //
     // The axis set is NOT read by the paint path — StripViewAnimator holds the
     // per-strip stamp that offsetFor and the shader pass answer from. It is
@@ -306,6 +310,26 @@ void TilingHandler::applyScrollFocusScrollBlockedWindows(const QStringList& wind
     // is.
 }
 
+void TilingHandler::clearScrollingScreensForTeardown()
+{
+    ++m_scrollingScreensGeneration;
+    m_scrollingScreens.clear();
+    // The behaviour sets belong to the same dead session, and all of
+    // them outlive it if they are not cleared here: a stale crop entry
+    // keeps forcing composition session-wide, a stale
+    // focus-follows-mouse entry answers for a screen the new daemon may
+    // not run the scrolling engine on at all, a stale vertical-axis
+    // entry answers Vertical for a screen the new daemon may lay out
+    // horizontally, and the scroll-cap block list — which arrives on
+    // its own property and is keyed by window rather than by screen —
+    // would keep refusing focus for windows whose strip is gone.
+    clearScrollEffectBehaviourForTeardown();
+    // The wheel chords need no teardown of their own. They are matched
+    // per event against the (now empty) scrolling-screen set rather than
+    // registered with the compositor, so a dead session simply stops
+    // matching and every axis event passes straight through.
+}
+
 void TilingHandler::clearScrollEffectBehaviourForTeardown()
 {
     // Bumped for the same reason both sibling teardowns bump theirs: a Get
@@ -341,9 +365,8 @@ void TilingHandler::clearScrollEffectBehaviourForTeardown()
         return;
     }
     m_scrollCropStraddlerScreens.clear();
-    // Painted state, so the same bookend the live apply takes: the clip stops
-    // cutting on every screen that was cropping, and nothing else repaints
-    // those outputs.
+    // The same bookend the live apply takes: blocksDirectScanout reads this
+    // set and is re-evaluated only on a composited frame.
     if (KWin::effects) {
         KWin::effects->addRepaintFull();
     }
@@ -483,12 +506,13 @@ void TilingHandler::retireStripScopedState(const QString& screenId)
     // from the OUTGOING strip's travel, and a parked column on the incoming one
     // would be painted at its own strip position plus a stranger's offset.
     if (!dropStripMotion(screenId) && droppedAny && KWin::effects) {
-        // No output resolves for this id. Screen removal is not the case that
-        // lands here — the effect's own screenRemoved handler has already
-        // dropped this output's transition and spring by then — it is an id
-        // that never named a connected output at all. The relocations just
-        // dropped were paint inputs, so something has to repaint, and full is
-        // the honest fallback rather than skipping it.
+        // No output resolves for this id: an id that never named a connected
+        // output, a drifted spelling of one, or a just-removed output's id if
+        // the daemon announces a new epoch for it before its own prune (the
+        // effect's screenRemoved handler has already dropped that output's
+        // transition and spring by then). The relocations just dropped were
+        // paint inputs, so something has to repaint, and full is the honest
+        // fallback rather than skipping it.
         KWin::effects->addRepaintFull();
     }
 }
@@ -527,8 +551,9 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // engine-authoritative override is gated on m_scrollingScreens membership
     // (via scrollTrackedScreenFor), so the moment the assignment below drops a
     // screen from the set, a parked strip column — which the strip places
-    // ENTIRELY outside its own output — resolves POSITIONALLY onto the
-    // neighbouring output. The batch would then filter it out against
+    // ENTIRELY outside its own output — resolves POSITIONALLY to the output
+    // nearest its park below every output, which can be a neighbour. The
+    // batch would then filter it out against
     // `flipped` and never announce it, stranding the window at its parked rect
     // with neither engine owning it. The entering direction needs no such care
     // (those windows are on-canvas, so positional and override agree), but
@@ -570,16 +595,20 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     //
     // DEPENDENCY, stated rather than removed: announceScreens is populated
     // only when `announcing` is true, so this release rides the RE-ANNOUNCE
-    // and not the set shrinking on its own. An announceFlipped=false call, or
-    // one whose flipped screens fall outside m_managedScreens, leaves the
-    // enumeration empty and releases nothing. Both such callers compensate
-    // deliberately and say so at their own site — the bring-up fetch
-    // (wiring.cpp) runs before any batch has populated the membership hash,
-    // and the bring-up drain (drainDeadSessionState) calls BOTH
-    // restoreAllWindowedFullscreen AND restoreAllMaximizedToEdges immediately
-    // BEFORE its setScrollingScreens({}, false). A future announceFlipped=false
-    // caller that can reach here with live membership owes both restores, or
-    // must resolve the leaving screens independently of the announce.
+    // and not the set shrinking on its own. A change that flips no screen
+    // releases nothing here: a desktop or activity switch (engineFlipScreens
+    // answers empty for it), and a screen leaving the strip for snapping,
+    // whose claims slotScreensChanged's removed-screen pass releases when the
+    // managed set drops it. Of the two announceFlipped=false callers,
+    // drainDeadSessionState runs restoreAllWindowedFullscreen,
+    // restoreAllMonocleMaximized and restoreAllMaximizedToEdges before it
+    // empties the set. The bring-up fetch reply in fetchScrollingScreens is
+    // voided by its generation guards after any live write that follows its
+    // dispatch, so it lands on the set as it stood at dispatch: the empty one
+    // the drain (or a fresh effect) left, unless a live scrollingScreensChanged
+    // landed between the drain and the dispatch. A future announceFlipped=false
+    // caller that can reach here with a non-empty old set owes those three
+    // restores, or must resolve the leaving screens independently of the announce.
     QStringList windowedFsLeavingScrolling;
     // QPointer, not a raw pointer, for the reason slotWindowFullScreenChanged
     // states about the same shape: the release loop below runs
@@ -606,9 +635,14 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             // Rides the same announce enumeration the windowed-fullscreen
             // release above depends on, and inherits the same stated
             // limitation: an announceFlipped=false caller leaves this empty and
-            // sheds nothing. That is bounded here — a stale offer costs one
-            // redundant resize, not a lost relocation — but it is why this is
-            // not the whole answer for such a caller.
+            // sheds nothing. A stale offer is not cheap: the next strip batch
+            // can read the column as already answered, hand back the window's
+            // held size instead of offering the column, and keep doing so until
+            // the column size changes. Neither announceFlipped=false caller
+            // leaves one today (the drain's per-session clear drops every offer,
+            // and the bring-up reply normally lands on an empty set; see the
+            // DEPENDENCY note above), which is why this is noted rather than
+            // handled here.
             m_effect->m_scrollOfferedColumn.remove(wid);
             // The other two per-window scroll companions go with it, the way
             // the teardown funnels shed all three together. Leaving
@@ -700,12 +734,13 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
             ++m_tileStaggerGenByScreen[screenId];
         }
         // enteringAutotile=true: the flag is a MODE-ENTRY discriminator, not an
-        // autotile-specific one. Left false, an already-minimized window on the
-        // flipped screen took claimAlreadyMinimizedAsFloated's early return and
-        // got neither the untiled-minimize marker nor the per-screen float
-        // re-assert, so on unminimize it sat at the PRIOR engine's rect for the
-        // animation grace and then visibly hopped into its new tile — the same
-        // class as the minimized-window-on-mode-swap regression.
+        // autotile-specific one. claimAlreadyMinimizedAsFloated sets the
+        // untiled-minimize marker only on a mode entry (it re-asserts the
+        // per-screen float on every pass either way), and without the marker an
+        // already-minimized window on the flipped screen sat at the PRIOR
+        // engine's rect on unminimize for the animation grace and then visibly
+        // hopped into its new tile — the same class as the
+        // minimized-window-on-mode-swap regression.
         notifyWindowsAddedBatch(announceWindows, flipped, /*resetNotified=*/true,
                                 /*enteringAutotile=*/true, announceScreens);
     }
@@ -752,10 +787,11 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
     // earlier (see the m_activeLayoutsGeneration doc).
     ++m_activeLayoutsGeneration;
     // Seed BEFORE the change gate: an identical map is still a real map, and
-    // the daemon's very first push is legitimately empty on a session with no
-    // engine-managed screen. Gating the flag would leave the effect
-    // permanently unseeded there, holding every ActiveLayout rule out of the
-    // evaluator for the whole session.
+    // the first map can be empty (the daemon names every effective screen, so
+    // it is empty only before its first engine pass or with no screen at all),
+    // which the gate would read as no change. Gating the flag would leave the
+    // effect unseeded there, holding every ActiveLayout rule out of the
+    // evaluator.
     if (!m_activeLayoutsSeeded) {
         m_activeLayoutsSeeded = true;
         // Seeding edge: ActiveLayout-referencing rules were held out of every
@@ -769,13 +805,15 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
         // getAllRules round-trip, a full RuleSet parse and an
         // updateAllDecorations sweep, and it can only change an outcome when
         // the last admission pass actually dropped a rule for referencing
-        // ActiveLayout. A pass that ran with the map already seeded leaves the
-        // marker false, which is also the right answer: it admitted the field
-        // itself. The other writer is clearActiveLayoutsForTeardown, which
-        // sets the marker when its re-slice actually removed a rule — so an
-        // unseed that withheld nothing does not arm this edge either. The
-        // marker is consumed here so a later unseed→seed cycle re-drives only
-        // on its own evidence.
+        // ActiveLayout. Every getAllRules pass that parses assigns the marker
+        // (a pass that ran with the map already seeded leaves it false, which
+        // is right: it admitted the field itself). The reply arms that admit
+        // nothing set it true, because this edge consumed it before
+        // dispatching: retry exhaustion, both payload caps, non-object JSON and
+        // a refused RuleSet. clearActiveLayoutsForTeardown's re-slice sets it
+        // when it actually removed a rule, so an unseed that withheld nothing
+        // does not arm this edge. The marker is consumed here so a later
+        // unseed→seed cycle re-drives only on its own evidence.
         if (m_effect->m_activeLayoutRulesWithheld) {
             m_effect->m_activeLayoutRulesWithheld = false;
             m_effect->loadRuleAnimationsFromDbus();
@@ -807,10 +845,11 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
 
 void TilingHandler::clearCenteringTargetsForTeardown()
 {
-    // Both maps, because both arm the same pass: m_tileTargetZones supplies the
-    // zone it re-centres into, m_centeredWaylandZones the already-centred
-    // record that short-circuits it. See the header for why these cannot be
-    // left to the bring-up drain like the rest of the per-session state.
+    // All three. m_tileTargetZones arms the centring pass, which runs off the
+    // window's own frame changes with no daemon gate. The centred stamp and
+    // its frame are read only by the tile batch's redundant-apply skip, so a
+    // survivor there would carry a dead session's stamp into the next one.
+    // See the header.
     m_tileTargetZones.clear();
     m_centeredWaylandZones.clear();
     m_centeredWaylandFrames.clear();

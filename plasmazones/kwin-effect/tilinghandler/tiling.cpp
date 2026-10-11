@@ -183,10 +183,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // NOT cleared globally here. Each retile fires for a single screen at a
     // time (per-VS retile after a swap/rotate), so a global clear would wipe
     // sibling-VS entries mid-animation and strand their windows without a
-    // centering target. The per-window erase-on-consumption below (and inside
-    // the centering handler) keeps the map self-cleaning — entries for
-    // windows in the new request get overwritten, entries for windows not in
-    // any request are consumed the next time their frame geometry changes.
+    // centering target. Each entry in this batch replaces its own: the geometry
+    // apply drops the window's target and stamp (dropCenteringTarget), and the
+    // batch records a fresh target after it when an ack is coming. Entries for
+    // windows in no request are consumed by the centring pass on their next frame change.
     // Closed windows are pruned via cleanupClosedWindowState.
 
     struct Entry
@@ -1593,10 +1593,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // shed). The wire flag can only be true for a scroll entry today,
             // so this is defensive rather than a live gap — but the per-window
             // applies are STAGGERED and outlive this function, and
-            // setScrollingScreens does not bump the stagger generation, so a
-            // pending apply from a batch built while the screen was scrolling
-            // can land after the flip has already released the claim, taking
-            // membership back with nothing to hand it to.
+            // setScrollingScreens voids pending applies (a per-screen stagger
+            // bump) only for the screens its re-announce flips, so an apply from
+            // a batch built while the screen was scrolling can still land after a
+            // flip that voided nothing here, taking membership back with nothing to hand it to.
             // Set ONLY where this iteration actually wrote KWin's maximize
             // bit, because the geometry apply further down needs to know
             // whether THIS batch is the one that changed the maximize state.
@@ -2506,8 +2506,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // gated on wire fields and tracking state
                     // (scrollTrackedScreenFor answers empty across a
                     // mode-flip or output-disconnect race, and
-                    // setScrollingScreens does not bump the stagger
-                    // generation), and an entry that falls through every gate
+                    // setScrollingScreens voids pending applies only for
+                    // the screens it re-announces), and an entry that falls through every gate
                     // used to reach applyWindowGeometry bare — a full
                     // animated leg from the live on-screen frame down to the
                     // park row. An ORIGIN override does not redeem the leg

@@ -59,6 +59,31 @@ void TilingHandler::cancelPendingUnminimizeUnfloat(const QString& windowId)
     m_pendingUnminimizeUnfloat.cancel(windowId);
 }
 
+bool TilingHandler::removeMinimizeFloated(const QString& windowId)
+{
+    cancelPendingMinimizeFloat(windowId);
+    cancelPendingUnminimizeUnfloat(windowId);
+    m_minimizeFloatMarks.remove(windowId);
+    m_unfloatRetryAttempts.remove(windowId);
+    const bool owned = m_minimizeFloatedWindows.remove(windowId);
+    return m_unfloatInFlight.remove(windowId) > 0 || owned;
+}
+
+void TilingHandler::adoptMinimizeFloated(const QString& windowId, bool untiled)
+{
+    m_minimizeFloatedWindows.insert(windowId);
+    if (untiled) {
+        m_minimizeFloatMarks.markUntiled(windowId);
+    }
+}
+
+void TilingHandler::seedUnfloatRetryBudget(const QString& windowId, int attemptsUsed)
+{
+    if (attemptsUsed > m_unfloatRetryAttempts.value(windowId)) {
+        m_unfloatRetryAttempts.insert(windowId, attemptsUsed);
+    }
+}
+
 // Clears three things despite the name, which dates from when it held only the
 // first: the debounced minimize-float commits, the deferred unminimize-unfloat
 // timers (grace and retry alike), and the fullscreen-hold records (record,
@@ -213,10 +238,8 @@ void TilingHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const 
     if (!m_managedScreens.contains(screenId)) {
         return;
     }
-    // Same skip as the runtime minimize path: an already-floating window
-    // (user float, or another mode's minimize-float record) keeps its float
-    // and its owner — claiming it would make our unminimize path force-tile
-    // a window whose float we did not create.
+    // An own minimize-float is re-asserted, not re-claimed (the foreign-float
+    // skip is further down, after the snap adoption arm).
     // isMinimizeFloated, not the raw set: it also covers m_unfloatInFlight,
     // during which this handler still owns the float (tilinghandler.h states
     // the rule). A window that re-minimized while its screen was outside the

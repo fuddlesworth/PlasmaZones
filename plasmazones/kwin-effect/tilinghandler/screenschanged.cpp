@@ -180,10 +180,10 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // Capture tracked-ness BEFORE demoting: it is the only
         // evidence the window was actually autotile-managed on this
         // desktop. The daemon-fallback restore below must never fire
-        // without it — the placement store is mode-shared,
-        // appId-fuzzy and session-persisted, so a never-autotiled
-        // free window would match a stale entry and teleport on a
-        // mere desktop switch.
+        // without it — the placement record is mode-shared and
+        // session-persisted, so a never-autotiled free window would be
+        // moved to its own float-back from another mode or an earlier
+        // session on a mere desktop switch.
         const bool wasTracked = m_notifiedWindows.remove(windowId);
         if (wasTracked) {
             m_notifiedWindowScreens.remove(windowId);
@@ -715,7 +715,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // exclusively by the SIGNAL. Without the unwrap, toInt() on a
             // wrapped value yields 0 for every entry, every key mismatches, and
             // every desktop-switch announce is dropped. Same one-level unwrap
-            // state.cpp:717 and scrollbehaviourparse.h:50 perform.
+            // slotActiveLayoutsChanged and ScrollBehaviourParse::parseIdList perform.
             QVariant value = it.value();
             if (value.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
                 value = qvariant_cast<QDBusVariant>(value).variant();

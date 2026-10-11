@@ -1100,7 +1100,7 @@ void TilingHandler::noteScrollTabOutputRemoved(KWin::LogicalOutput* output, cons
     if (!output) {
         return;
     }
-    // Compare against the id the caller resolved BEFORE it cleared the
+    // Compare against the spelling the caller read BEFORE it cleared the
     // screen-id cache (onScreenRemoved's documented order): outputScreenId
     // caches every resolve, so resolving here would re-insert the entry the
     // handler just purged, spelled for the post-unplug world rather than for

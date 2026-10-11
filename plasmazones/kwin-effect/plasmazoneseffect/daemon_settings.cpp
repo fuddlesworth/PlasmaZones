@@ -993,13 +993,6 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
 
-    loadSettingAsync(QStringLiteral("scrollingFocusFollowsMouse"), [this](const QVariant& v) {
-        if (v.typeId() != QMetaType::Bool) {
-            return;
-        }
-        m_tilingHandler->setScrollingFocusFollowsMouse(v.toBool());
-    });
-
     // Type-guard matters doubly here: scrollingWheelFocusEnabled defaults to
     // TRUE, so a non-bool reply would invert it and leave every wheel chord
     // inert for the duration of the skew.

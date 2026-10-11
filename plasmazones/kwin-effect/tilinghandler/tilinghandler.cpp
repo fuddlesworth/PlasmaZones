@@ -98,7 +98,7 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // naming a pre-event cursor position, and swallow the first move within
     // the resume radius once the condition cleared. Same reasoning as the
     // clears in setFocusFollowsMouse(false) and clearPerSessionDaemonState.
-    // ffmOffEverywhere(), not the two global flags: the scrolling half's
+    // ffmOffEverywhere(), not the global flags alone: the scrolling half's
     // authority is the daemon's resolved per-screen set, so a
     // SetScrollFocusFollowsMouse rule that turns the behaviour ON for one
     // monitor while the global setting is off must not be bailed out from
@@ -369,7 +369,7 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
     // The RAW set, deliberately, NOT the isScrollingScreen intersection. Both
     // consumers want the conservative answer: the paint clip / input filter,
     // and getWindowScreenId's engine-authoritative screen override (a parked
-    // column's frame centre lies inside the NEIGHBOUR output). The union and
+    // column lies below every output and resolves to the nearest, possibly a neighbour). The union and
     // the scrolling set arrive on independent signals, so intersecting made a
     // screen leaving scrolling lose clip AND override together for the frames
     // between them. The intersection belongs on the rule and verb consumers.
@@ -763,9 +763,9 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
     m_unfloatRetryAttempts.remove(windowId);
     m_pendingFreshWindows.remove(windowId);
     m_deferredWindowRoutes.remove(windowId);
-    // The tab-colour verdict dies with the window: the cache is per window
-    // and nothing else evicts it, so every close funnels through here (this
-    // is the one untrack funnel every caller passes).
+    // The tab-colour verdict dies with the window. The tab rebuilds evict a
+    // window that stops being a tab, but a close or untrack must evict too,
+    // and this is the one untrack funnel every caller passes.
     dropScrollTabColorsForWindow(windowId);
     // The announce stamp dies with the tracking, and that erasure is what makes
     // a late error reply for a CLOSED window harmless: the arm reads back 0,
@@ -906,7 +906,7 @@ void TilingHandler::releaseWindowTracking(const QString& windowId, const QString
 
 void TilingHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate)
 {
-    // Restore border and clear tiling state synchronously — don't wait for
+    // Clear tiling state synchronously — don't wait for
     // the daemon's async windowFloatingChanged signal, which may never arrive
     // (e.g., cross-screen drag where onWindowClosed removes daemon tracking
     // before setWindowFloatingForScreen processes).
