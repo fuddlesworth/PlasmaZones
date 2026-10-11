@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
+#include "virtualscreengeometry.h"
 
 #include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -660,18 +661,13 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     // Compute absolute geometry from fractional region within physical
                     // screen. No isValid() test: the arm above returns on an invalid
                     // physGeom now, so a guard here would be dead and would re-imply that
-                    // an invalid one reaches this loop.
-                    qreal rx = region.value(QLatin1String("x")).toDouble();
-                    qreal ry = region.value(QLatin1String("y")).toDouble();
-                    qreal rw = region.value(QLatin1String("width")).toDouble();
-                    qreal rh = region.value(QLatin1String("height")).toDouble();
-                    // Edge-consistent rounding: compute edges then derive width/height
-                    // to avoid 1px gaps between abutting virtual screens
-                    int left = physGeom.x() + qRound(rx * physGeom.width());
-                    int top = physGeom.y() + qRound(ry * physGeom.height());
-                    int right = physGeom.x() + qRound((rx + rw) * physGeom.width());
-                    int bottom = physGeom.y() + qRound((ry + rh) * physGeom.height());
-                    def.geometry = QRect(left, top, right - left, bottom - top);
+                    // an invalid one reaches this loop. The region is kept so an
+                    // output that moves re-derives the rect (onScreenAdded).
+                    def.region =
+                        QRectF(region.value(QLatin1String("x")).toDouble(), region.value(QLatin1String("y")).toDouble(),
+                               region.value(QLatin1String("width")).toDouble(),
+                               region.value(QLatin1String("height")).toDouble());
+                    def.geometry = absoluteVirtualScreenRect(def.region, physGeom);
 
                     if (def.geometry.isValid() && !def.id.isEmpty()) {
                         defs.append(def);
@@ -911,6 +907,20 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
         return;
     }
     m_motionClocksByOutput.emplace(output, std::make_unique<CompositorClock>(output));
+    // Once per output, under the guard above. An arrangement change can move an output and keep
+    // the union, which slotScreenGeometryChanged ignores, and the daemon announces nothing for it,
+    // so its virtual screens are re-derived here (F806). KWin emits this before desktopResized
+    // carries the windows along, so nothing is re-resolved now (the windows still stand where the
+    // output was): their crossings wait for the settle latched below, whose re-fetch re-resolves.
+    connect(output, &KWin::LogicalOutput::geometryChanged, this, [this, output]() {
+        const auto defs = m_virtualScreenDefs.find(outputScreenId(output));
+        if (defs != m_virtualScreenDefs.end()) {
+            for (EffectVirtualScreenDef& def : *defs) {
+                def.geometry = absoluteVirtualScreenRect(def.region, output->geometry());
+            }
+        }
+        m_screenChangeHandler->slotOutputGeometryChanged();
+    });
     // The painter's per-output state was dropped with the old output, and
     // noteScrollTabOutputRemoved dropped that screen's payload with it, so
     // for a plain re-plug this re-seeds nothing until the daemon's next

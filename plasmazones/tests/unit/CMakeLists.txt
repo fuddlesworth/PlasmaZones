@@ -1356,6 +1356,13 @@ target_link_libraries(test_gesture_end_decisions PRIVATE Qt6::Test Qt6::Core Pho
 target_include_directories(test_gesture_end_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_gesture_end_decisions COMMAND test_gesture_end_decisions)
 
+# The absolute rect of a virtual screen (plasmazoneseffect/virtualscreengeometry.h):
+# edges rounded, re-derived when its output moves (F806). Same header-only reach.
+add_executable(test_virtual_screen_geometry ui/effect/test_virtual_screen_geometry.cpp)
+target_link_libraries(test_virtual_screen_geometry PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_virtual_screen_geometry PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_virtual_screen_geometry COMMAND test_virtual_screen_geometry)
+
 # Pure-logic test for the screen of a window filling a split output
 # (plasmazoneseffect/windowscreendecisions.h): engine, then restore rect, then
 # the last stamp, and only a live virtual screen. Same header-only reach.

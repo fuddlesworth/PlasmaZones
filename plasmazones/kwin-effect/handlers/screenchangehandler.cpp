@@ -101,7 +101,16 @@ void ScreenChangeHandler::slotScreenGeometryChanged()
         qCDebug(lcScreenChange) << "Screen geometry unchanged, ignoring signal";
         return;
     }
+    slotOutputGeometryChanged();
+}
 
+void ScreenChangeHandler::slotOutputGeometryChanged()
+{
+    if (m_stopped) {
+        return;
+    }
+    // No union test here: an arrangement change can move outputs and keep the
+    // union (F806), and the windows KWin carries along wait for the settle.
     if (!m_pendingScreenChange) {
         takeBaseline();
     }

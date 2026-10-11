@@ -23,7 +23,8 @@ class PlasmaZonesEffect;
 /**
  * @brief Liaises screen and work-area changes between KWin and the daemon.
  *
- * Monitors virtualScreenGeometryChanged (resolution / monitor setup changes),
+ * Monitors virtualScreenGeometryChanged (resolution / monitor setup changes)
+ * and each output's geometryChanged (an arrangement that keeps the union),
  * debounces rapid-fire signals, and requests updated window geometries from
  * the daemon when the screen size actually changes. Also handles the daemon's
  * reapplyWindowGeometriesRequested signal.
@@ -133,6 +134,9 @@ public:
 
 public Q_SLOTS:
     void slotScreenGeometryChanged();
+    /// One output's geometry changed (LogicalOutput::geometryChanged): the
+    /// same latch as @ref slotScreenGeometryChanged without its union test.
+    void slotOutputGeometryChanged();
     void slotReapplyWindowGeometriesRequested();
     /// The daemon dropped @p windowId's park for the output @p outputUuid.
     void slotParkDropped(const QString& windowId, const QString& outputUuid);
