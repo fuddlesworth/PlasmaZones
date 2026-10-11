@@ -157,12 +157,36 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     m_daemonGate.commandStamps.bump(window);
     m_daemonGate.commandStamps.noteDrop(window);
 
+    QPointer<KWin::EffectWindow> safeWindow = window;
+    // The drop's outcome is in for a held move tail (F751): it drains once KWin's
+    // move has finished too.
+    const auto settleMoveTail = [this, safeWindow]() {
+        MoveTailHold& tail = m_dragActivation.tail;
+        if (!safeWindow || tail.window != safeWindow || !tail.awaitingOutcome) {
+            return;
+        }
+        tail.awaitingOutcome = false;
+        if (tail.finished) {
+            drainMoveTail();
+        }
+    };
+    // The one tail of every exit, after the outcome (if any) is applied, so no
+    // exit can skip a step (F667, F734): the suspended tile settles against the
+    // outcome, a held move tail drains, the desktop and activity edits KWin made
+    // during the drag run once against the context the window had (EE), and the
+    // deferred rule invalidations go last.
+    const auto finishDragExit = [this, safeWindow, settleSuspendedTile, settleMoveTail]() {
+        settleSuspendedTile();
+        settleMoveTail();
+        releaseDragContextHold(safeWindow);
+        drainDragSuppressedRuleInvalidations();
+    };
+
     // No daemon, no outcome: the drop settles now as an unanswered one does,
     // and no call goes out to fail (F573).
     if (!m_daemonGate.serviceRegistered) {
         revertOptimisticDragFloat();
-        settleSuspendedTile();
-        drainDragSuppressedRuleInvalidations();
+        finishDragExit();
         return;
     }
 
@@ -175,7 +199,6 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
         {windowId, qRound(cursorAtRelease.x()), qRound(cursorAtRelease.y()), static_cast<int>(m_currentModifiers),
          static_cast<int>(m_currentMouseButtons), cancelled});
 
-    QPointer<KWin::EffectWindow> safeWindow = window;
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
     // Pair the watcher with a timeout. If the daemon is blocked (layout
@@ -190,26 +213,13 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     timeoutTimer->setSingleShot(true);
     // QPointer: the `handled` handshake already prevents a double-delete, but
     // a raw watcher capture would still dangle if that invariant ever slips.
-    // The drop's outcome is in for a held move tail (F751): it drains once KWin's
-    // move has finished too. Every exit runs it, after the outcome is applied.
-    const auto settleMoveTail = [this, safeWindow]() {
-        MoveTailHold& tail = m_dragActivation.tail;
-        if (!safeWindow || tail.window != safeWindow || !tail.awaitingOutcome) {
-            return;
-        }
-        tail.awaitingOutcome = false;
-        if (tail.finished) {
-            drainMoveTail();
-        }
-    };
     connect(timeoutTimer, &QTimer::timeout, this,
             [this, windowId, handled, watcherGuard = QPointer<QDBusPendingCallWatcher>(watcher), timeoutTimer,
-             revertOptimisticDragFloat, settleSuspendedTile, settleMoveTail]() {
+             revertOptimisticDragFloat, finishDragExit]() {
                 if (*handled) {
                     return;
                 }
                 *handled = true;
-                settleMoveTail();
                 qCWarning(lcEffect) << "endDrag timed out after" << EndDragTimeoutMs
                                     << "ms; daemon unresponsive. Leaving window" << windowId << "at release position.";
                 // No outcome will ever arrive, so the drag-start float is
@@ -217,11 +227,10 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 // reply is discarded by `handled`, and any real daemon-side
                 // float lands later through its own windowFloatingChanged.
                 revertOptimisticDragFloat();
-                settleSuspendedTile();
                 // The window still sits wherever the user dropped it, on whatever
                 // screen that is, so a crossing the handlers deferred during the
                 // drag has to be re-resolved even though no outcome ever arrived.
-                drainDragSuppressedRuleInvalidations();
+                finishDragExit();
                 if (watcherGuard) {
                     watcherGuard->deleteLater();
                 }
@@ -231,7 +240,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, safeWindow, windowId, handled, timeoutTimer, startedFloating, dragMoveGeneration,
-             revertOptimisticDragFloat, settleSuspendedTile, settleMoveTail](QDBusPendingCallWatcher* w) {
+             revertOptimisticDragFloat, finishDragExit](QDBusPendingCallWatcher* w) {
                 // True only while THIS drag's interactive move is still the one
                 // KWin is running, and only when the left button is already up
                 // (the case the rescues exist for: KWin waits for the last
@@ -259,9 +268,6 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 *handled = true;
                 timeoutTimer->stop();
                 timeoutTimer->deleteLater();
-                // At this lambda's exit, after the outcome and any rescue (whose
-                // cancel fires the move's finish inside this reply).
-                const auto tailGuard = qScopeGuard(settleMoveTail);
 
                 // Both failure paths below leave the window at its release
                 // position on its release screen, so the deferred cross-screen
@@ -270,8 +276,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 if (reply.isError()) {
                     qCWarning(lcEffect) << "endDrag call failed:" << reply.error().message();
                     revertOptimisticDragFloat();
-                    settleSuspendedTile();
-                    drainDragSuppressedRuleInvalidations();
+                    finishDragExit();
                     return;
                 }
                 const PhosphorProtocol::DragOutcome outcome = reply.value();
@@ -282,8 +287,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     qCWarning(lcEffect) << "endDrag outcome rejected:" << err
                                         << "— dropping without applying any action for" << windowId;
                     revertOptimisticDragFloat();
-                    settleSuspendedTile();
-                    drainDragSuppressedRuleInvalidations();
+                    finishDragExit();
                     return;
                 }
                 qCInfo(lcEffect) << "endDrag outcome:" << windowId << "action=" << outcome.action
@@ -632,9 +636,10 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 // drag gate, so the tracked screen already equals the live one.
                 // Idempotent with the per-branch calls above (the flush coalesces
                 // the turn), so it runs for every outcome rather than only the two.
-                // The suspended tile settles first, against the outcome just applied.
-                settleSuspendedTile();
-                drainDragSuppressedRuleInvalidations();
+                // It is the last step of the exit tail, after the outcome just
+                // applied and any rescue, whose cancel fires the move's finish
+                // inside this reply.
+                finishDragExit();
 
                 // Auto-fill: if window was dropped without snapping to a
                 // zone and wasn't floated, try the first empty zone on the

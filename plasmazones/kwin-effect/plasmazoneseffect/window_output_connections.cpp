@@ -12,6 +12,7 @@
 
 #include "plasmazoneseffect.h"
 #include "gestureenddecisions.h"
+#include "windowcontexthold.h"
 #include "windowflagedges.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -21,6 +22,7 @@
 #include <window.h>
 
 #include <QPointer>
+#include <QScopeGuard>
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/screenchangehandler.h"
@@ -147,6 +149,17 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             if (!safeW->isUserMove() && m_sizeOnlyFrames.value(safeW) == QRectF(safeW->frameGeometry())) {
                 return;
             }
+            // The ack of a move KWin re-desked the window for before the client
+            // committed it (F650): an edit held meanwhile runs at this lambda's
+            // exit, after the crossing notice below, or waits on for the settle
+            // when the crossing is deferred. An intermediate ack of a move KWin
+            // has since replaced keeps holding.
+            const auto inFlightDone = qScopeGuard([this, safeW]() {
+                const KWin::Window* const win = safeW ? safeW->window() : nullptr;
+                if (win && win->moveResizeOutput() == win->output()) {
+                    releaseContextHold(safeW, WindowContextHold::OutputInFlight);
+                }
+            });
             // The window's screen, and where it is going when this output
             // change is the ack of a move KWin has since been asked to
             // replace: a held "move to output" key (or a move reversed inside
@@ -193,6 +206,11 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             // window's own, whichever modes the two screens run.
             if (m_screenChangeHandler->isScreenChangeInProgress()) {
                 m_screenChangeHandler->deferCrossing(safeW, oldScreenId);
+                // A held edit waits with the crossing, released by its replay.
+                if (const auto hold = m_contextHold.holds.find(safeW.data());
+                    hold != m_contextHold.holds.end() && m_screenChangeHandler->crossingAwaitsSettle(safeW)) {
+                    hold->reasons |= WindowContextHold::SettlePending;
+                }
                 return;
             }
             m_screenChangeHandler->applyOutputCrossing(safeW, oldScreenId, newScreenId);
@@ -211,6 +229,17 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         const auto onFrameChanged = [this, safeW](KWin::EffectWindow*, const QRectF& oldGeometry) {
             if (!safeW || safeW->isDeleted()) {
                 return;
+            }
+            // An edit held for a move to another output, which KWin then took
+            // back onto the output the window is committed to: no outputChanged
+            // comes for it, so its release is here. A move that lands emits
+            // outputChanged right after this signal and releases there.
+            if (const auto hold = m_contextHold.holds.constFind(safeW.data());
+                hold != m_contextHold.holds.cend() && (hold->reasons & WindowContextHold::OutputInFlight)) {
+                const KWin::Window* const win = safeW->window();
+                if (win && win->output() == hold->committedAtHold && win->moveResizeOutput() == win->output()) {
+                    releaseContextHold(safeW, WindowContextHold::OutputInFlight);
+                }
             }
             // KWin emits this before outputChanged in the same commit
             // (WaylandWindow::updateGeometry), so the output arm reads this

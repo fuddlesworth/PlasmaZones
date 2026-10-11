@@ -174,6 +174,33 @@ private Q_SLOTS:
         QVERIFY(edge.genuineMove);
     }
 
+    // EE release: a drag that went to another output and came back was
+    // re-desked twice while held, and the stamp still names where it began,
+    // so the release diffs it against itself and runs no arm.
+    void cancelledHeldMoveIsAnEmptyEdit()
+    {
+        const Edge edge = classify({d1}, true, {d1}, d1, true);
+        QCOMPARE(edge.kind, Kind::StayedInView);
+        QVERIFY(!edge.genuineMove);
+        QVERIFY(!edge.leftAnId);
+        QVERIFY(!edge.becameEverywhere);
+        QVERIFY(!edge.leftEverywhere);
+    }
+
+    // EE release after a drop on the other output under per-output desktops:
+    // the held stamp is the source desktop. Seen from the source output it is
+    // a genuine departure, and from the destination, which shows the new
+    // desktop, an arrival.
+    void heldMoveReleasedAfterDropIsDeparture()
+    {
+        const Edge fromSource = classify({d1}, true, {d2}, d1, true);
+        QCOMPARE(fromSource.kind, Kind::Departed);
+        QVERIFY(fromSource.genuineMove);
+        const Edge onDestination = classify({d1}, true, {d2}, d2, true);
+        QCOMPARE(onDestination.kind, Kind::Arrived);
+        QVERIFY(onDestination.genuineMove);
+    }
+
     void unseededOrNoViewIsUnclassifiable()
     {
         QCOMPARE(classify({d2}, /*hadPrevious=*/false, {d1}, d1, true).kind, Kind::Unclassifiable);

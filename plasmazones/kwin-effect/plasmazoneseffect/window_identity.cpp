@@ -157,11 +157,15 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     const int rawPid = static_cast<int>(w->pid());
     const int pid = rawPid > 0 ? rawPid : 0;
 
-    // While a resize holds the window's desktop or activity edit, every push
+    // While a gesture or an output change holds the window's desktop or
+    // activity edit, every push (full or caption-only, from any handler)
     // reports the context it had before, so no daemon reconcile carries the
-    // window mid-gesture (F665); the drain pushes the new one.
-    const WindowContextFields context =
-        (m_resizeHold.window == w && m_resizeHold.heldAxes != 0) ? m_resizeHold.context : liveContextFields(w);
+    // window into a context mid-move (F665, F622, F652); the release pushes the
+    // new one.
+    const auto hold = m_contextHold.holds.constFind(w);
+    const WindowContextFields context = (m_resizeHold.window == w && m_resizeHold.heldAxes != 0) ? m_resizeHold.context
+        : (hold != m_contextHold.holds.cend() && hold->heldAxes != 0)                            ? stampContextFields(w)
+                                                                                                 : liveContextFields(w);
 
     const int windowType = static_cast<int>(windowTypeFor(w));
 

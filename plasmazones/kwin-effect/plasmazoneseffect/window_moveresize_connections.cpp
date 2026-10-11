@@ -54,7 +54,8 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
         // because KWin clears isUserResize() before windowFinishUserMovedResized
         // fires. The pre-resize frame is the neighbour-reflow report's baseline
         // (GitHub #652), and the context is what every metadata push reports
-        // while an edit waits for the resize to end.
+        // while an edit waits for the resize to end: the held stamp's when a
+        // context hold already holds an edit, which its release hands over.
         if (window && window->isUserResize()) {
             if (m_resizeHold.window) {
                 // A new gesture settles the one before it.
@@ -65,7 +66,8 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
             m_resizeHold.generation = generation;
             m_resizeHold.window = window;
             m_resizeHold.startGeometry = window->frameGeometry().toRect();
-            m_resizeHold.context = liveContextFields(window);
+            m_resizeHold.context = m_contextHold.holds.value(window).heldAxes != 0 ? stampContextFields(window)
+                                                                                   : liveContextFields(window);
         }
         // window.movement.move shader transition: KWin's interactive move is
         // its own animation system (Window::moveResize via pointer drag), but
@@ -372,6 +374,7 @@ void PlasmaZonesEffect::armResizeAckWatch(KWin::EffectWindow* w)
 void PlasmaZonesEffect::drainMoveTail()
 {
     KWin::EffectWindow* const w = m_dragActivation.tail.window.data();
+    const bool outcomeApplied = !m_dragActivation.tail.awaitingOutcome;
     // Released FIRST, as in drainResizeHold: the bodies below must not see a hold.
     m_dragActivation.tail = {};
     if (!w || w->isDeleted()) {
@@ -386,6 +389,13 @@ void PlasmaZonesEffect::drainMoveTail()
         m_trackedScreenPerWindow[w] = after;
         reportActiveWindowScreen(w, after);
         m_screenChangeHandler->applyGestureEndCrossing(w, before, after);
+    }
+    // Then the drop's desktop and activity edits (EE), after the crossing
+    // notice. The drop's exit left them to this drain while KWin's move was
+    // live, and with its outcome still owed (a new move drained this tail
+    // early) that exit releases them instead.
+    if (outcomeApplied) {
+        releaseDragContextHold(w);
     }
 }
 

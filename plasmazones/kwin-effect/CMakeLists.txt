@@ -118,6 +118,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_metadata_connections.cpp
     plasmazoneseffect/window_moveresize_connections.cpp
     plasmazoneseffect/window_desktop_connections.cpp
+    plasmazoneseffect/window_context_hold.cpp
     plasmazoneseffect/daemon_bringup.cpp
     plasmazoneseffect/daemon_settings.cpp
     plasmazoneseffect/daemon_settings_scrolltabs.cpp

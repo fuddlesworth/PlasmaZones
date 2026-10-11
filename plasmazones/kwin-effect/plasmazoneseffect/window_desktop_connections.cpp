@@ -85,6 +85,12 @@ void PlasmaZonesEffect::wireContextChangeHandlers(KWin::EffectWindow* w)
             m_resizeHold.heldAxes |= ResizeHold::DesktopAxis;
             return;
         }
+        // Held the same way while the window is a drag subject, while KWin's
+        // move to another output is in flight, or while its crossing waits
+        // for the screen-change settle (EE, window_context_hold.cpp).
+        if (holdContextEdit(window, ResizeHold::DesktopAxis)) {
+            return;
+        }
         runContextEdit(window, ResizeHold::DesktopAxis);
     });
 
@@ -103,6 +109,9 @@ void PlasmaZonesEffect::wireContextChangeHandlers(KWin::EffectWindow* w)
             // Held like the desktop edit above.
             if (m_resizeHold.window == window) {
                 m_resizeHold.heldAxes |= ResizeHold::ActivityAxis;
+                return;
+            }
+            if (holdContextEdit(window, ResizeHold::ActivityAxis)) {
                 return;
             }
             runContextEdit(window, ResizeHold::ActivityAxis);

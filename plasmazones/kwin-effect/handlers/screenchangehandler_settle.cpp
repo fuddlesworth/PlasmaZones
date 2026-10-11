@@ -16,6 +16,7 @@
 #include "tilinghandler/tilinghandler.h"
 #include "plasmazoneseffect/desktopvisibility.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/windowcontexthold.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -29,8 +30,10 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
+#include <QScopeGuard>
 
 #include <algorithm>
+#include <utility>
 
 Q_DECLARE_LOGGING_CATEGORY(lcScreenChange)
 
@@ -199,6 +202,7 @@ void ScreenChangeHandler::forgetWindow(KWin::EffectWindow* w)
     m_evacueeRecords.remove(w);
     m_settleBaseline.remove(w);
     m_deferredCrossings.remove(w);
+    m_settleCrossings.remove(w);
     m_skippedAnnounces.remove(w);
 }
 
@@ -331,6 +335,7 @@ void ScreenChangeHandler::sendSettleReport()
     crossings.reserve(m_deferredCrossings.size());
     for (auto it = m_deferredCrossings.cbegin(); it != m_deferredCrossings.cend(); ++it) {
         crossings.append({QPointer<KWin::EffectWindow>(it.key()), it.value()});
+        m_settleCrossings.insert(it.key());
     }
     m_deferredCrossings.clear();
     QList<QPointer<KWin::EffectWindow>> skipped;
@@ -436,6 +441,7 @@ void ScreenChangeHandler::applySettleVerdicts(const PhosphorProtocol::OutputSett
                                << verdict.screenId;
     }
     for (const auto& [w, oldScreenId] : crossings) {
+        m_settleCrossings.remove(w.data());
         if (!w || w->isDeleted() || placed.contains(w.data())) {
             continue;
         }
@@ -448,6 +454,12 @@ void ScreenChangeHandler::applySettleVerdicts(const PhosphorProtocol::OutputSett
             continue;
         }
         replayCrossing(w, oldScreenId);
+    }
+    m_settleCrossings.clear();
+    // A placed window's verdict is its move's answer, so its held edits run
+    // now, against where the verdict left it.
+    for (KWin::EffectWindow* const w : std::as_const(placed)) {
+        releaseSettleHold(w);
     }
     for (const QPointer<KWin::EffectWindow>& w : skipped) {
         if (!w || w->isDeleted() || placed.contains(w.data())) {
@@ -478,6 +490,11 @@ void ScreenChangeHandler::replayCrossing(KWin::EffectWindow* w, const QString& o
     if (!w || w->isDeleted()) {
         return;
     }
+    // The edits held for the crossing (EE) run once it is resolved, after its
+    // notice, crossed or not.
+    const auto settled = qScopeGuard([this, w]() {
+        releaseSettleHold(w);
+    });
     // Where it is NOW, against the virtual screens as they are after the
     // change: a window KWin moved and moved back has not crossed.
     const QString current = m_effect->pendingWindowScreenId(w);
@@ -491,6 +508,14 @@ void ScreenChangeHandler::replayCrossing(KWin::EffectWindow* w, const QString& o
         applyVirtualScreenCrossing(w, oldScreenId, current);
     } else {
         applyOutputCrossing(w, oldScreenId, current);
+    }
+}
+
+void ScreenChangeHandler::releaseSettleHold(KWin::EffectWindow* w)
+{
+    // A window that crossed again meanwhile keeps waiting for that crossing.
+    if (w && !crossingAwaitsSettle(w)) {
+        m_effect->releaseContextHold(w, WindowContextHold::SettlePending);
     }
 }
 

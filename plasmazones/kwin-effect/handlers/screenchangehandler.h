@@ -97,6 +97,14 @@ public:
     /// Defer @p w's crossing from @p oldScreenId to the settle. A window
     /// crossing twice keeps the first old screen.
     void deferCrossing(KWin::EffectWindow* w, const QString& oldScreenId);
+    /// Whether @p w's crossing waits for the settle: deferred, or in the
+    /// settle report still in flight. The effect holds the window's desktop
+    /// and activity edits meanwhile, and the replay or the verdict releases
+    /// them (EE, F666).
+    bool crossingAwaitsSettle(KWin::EffectWindow* w) const
+    {
+        return m_deferredCrossings.contains(w) || m_settleCrossings.contains(w);
+    }
     /// Whether @p w is on an output it has a record for that the next settle
     /// has not classified yet. Such a window is not announced to the tiling
     /// engines: the settle re-seats it in its parked place or announces it.
@@ -191,6 +199,8 @@ private:
     /// Replay crossings deferred since the last settle, once nothing is in progress.
     void replayDeferredCrossings();
     void replayCrossing(KWin::EffectWindow* w, const QString& oldScreenId);
+    /// Release the edits held for @p w's crossing, once no crossing of it waits any more.
+    void releaseSettleHold(KWin::EffectWindow* w);
     /// An evacuee: it floats where KWin put it, keeping KWin's state.
     void applyEvacuee(KWin::EffectWindow* w, const QString& screenId);
     /// KWin returned it to the output it was parked for, and the daemon
@@ -220,6 +230,9 @@ private:
     QHash<KWin::EffectWindow*, QHash<QString, EvacueeRecord>> m_evacueeRecords; ///< keyed by output uuid
     QHash<KWin::EffectWindow*, WindowSnapshot> m_settleBaseline;
     QHash<KWin::EffectWindow*, QString> m_deferredCrossings; ///< the first old screen
+    /// The deferred crossings the settle report in flight carries, which the
+    /// map above no longer holds.
+    QSet<KWin::EffectWindow*> m_settleCrossings;
     QSet<KWin::EffectWindow*> m_skippedAnnounces;
     bool m_outputSetChanged = false;
     bool m_settleInFlight = false;

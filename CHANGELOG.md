@@ -150,6 +150,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Switching back to snapping puts a window on every desktop in this desktop's zone**: a window shown on all desktops that was snapped on another desktop took that desktop's zone on this one. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **Splitting a monitor keeps the zones each desktop's layout still has**: changing a monitor's virtual screens judged every window's zone against the layout of the desktop in view, so a window on another desktop or activity lost a zone its own layout still held, and a window snapped on two desktops kept a stale zone on one of them. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **A window closed before you split a monitor reopens on the right part of it**: its remembered place kept naming the whole monitor, so it could reopen stretched across both halves. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **Dragging a window to a monitor on another desktop keeps it where you drop it**: with each monitor showing its own desktop, dragging a snapped window to the other monitor could send it back to the first one on a desktop nobody was looking at, so it vanished. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **Move to Screen across desktops lands the window on the screen you chose**: with each monitor showing its own desktop, KWin's Move to Screen on a maximized or resized window could leave it on the old monitor on a desktop not shown there. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 
 ## [3.4.19] - 2026-09-21
 

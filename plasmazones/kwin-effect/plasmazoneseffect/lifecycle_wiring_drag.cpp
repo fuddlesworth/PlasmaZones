@@ -51,6 +51,9 @@ void PlasmaZonesEffect::connectDragTracker()
                 // user-chosen size, not snap back to the stale pre-autotile rect.
                 m_dragActivation.startedFloating = isWindowFloating(windowId);
                 m_dragActivation.tileSuspended = false;
+                // The desktop and activity edits KWin makes while the window is
+                // dragged wait for the drop's outcome (EE): releaseDragContextHold.
+                m_contextHold.dragLatched.insert(w);
 
                 // Note: `cursor.drag` is intentionally NOT wired here. The
                 // OffscreenEffect pipeline operates on window content; firing

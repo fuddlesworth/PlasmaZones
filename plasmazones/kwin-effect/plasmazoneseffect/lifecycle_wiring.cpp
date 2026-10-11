@@ -918,6 +918,10 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         if (m_dragActivation.tail.window == w) {
             m_dragActivation.tail = {};
         }
+        // Nor anything held for its context (EE). The raw keys go for the
+        // stamp's reasons above.
+        m_contextHold.holds.remove(w);
+        m_contextHold.dragLatched.remove(w);
         // Wired-window guard. The connections themselves die with the window, so
         // this is address-reuse safety, not connection hygiene: a stale entry
         // would make setupWindowConnections REFUSE to wire a new window that

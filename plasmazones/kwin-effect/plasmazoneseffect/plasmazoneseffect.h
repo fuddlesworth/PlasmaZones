@@ -410,19 +410,21 @@ public:
 private:
     // Window management
     void setupWindowConnections(KWin::EffectWindow* w);
-    /// Wire the window's desktop and activity set handling (the
-    /// m_contextStampPerWindow stamp and applyWindowContextEdit) and seed it. Called once per
-    /// window from setupWindowConnections, inside its idempotency guard;
-    /// defined in window_desktop_connections.cpp.
+    /// Wire and seed the window's desktop and activity handling (window_desktop_connections.cpp); once per
+    /// window, from setupWindowConnections inside its idempotency guard.
     void wireContextChangeHandlers(KWin::EffectWindow* w);
-    /// The effect's arms for one classified desktop edit, a function of the
-    /// edge and of the window's tracking state (the table is in
-    /// window_desktop_connections.cpp).
+    /// The effect's arms for one classified desktop or activity edit, a function of the edge and of the
+    /// window's tracking state (the table is in window_desktop_connections.cpp).
     void applyWindowContextEdit(KWin::EffectWindow* window, const WindowContextEdge::Edge& edge);
     /// One desktop or activity edit, start to end: the push, the re-stamp and the arms.
     void runContextEdit(KWin::EffectWindow* window, ResizeHold::ContextAxis axis);
     /// The desktop and activity fields the window has now, as a push carries them.
     static WindowContextFields liveContextFields(KWin::EffectWindow* w);
+    /// The context hold (EE, window_context_hold.cpp), and the held stamp's fields as a push carries them.
+    bool holdContextEdit(KWin::EffectWindow* window, ResizeHold::ContextAxis axis);
+    void releaseContextHold(KWin::EffectWindow* w, quint8 reasons);
+    void releaseDragContextHold(KWin::EffectWindow* w);
+    WindowContextFields stampContextFields(KWin::EffectWindow* w) const;
     /// The rest of setupWindowConnections' per-window wiring, split by concern
     /// and called from it in this order: cross-output and virtual-screen moves
     /// (window_output_connections.cpp), identity and metadata pushes
@@ -1453,8 +1455,9 @@ private:
     /// keepFloatingAboveDefault, consulted by reconcileRuleWindowLayer.
     ResolvedWindowAppearance resolveEffectiveWindowAppearance(KWin::EffectWindow* w, const QString& windowId) const;
 
-    // The interactive resize being held (effect_state.h, ResizeHold).
+    // The interactive resize and the context edits being held (effect_state.h ResizeHold, ContextHoldState).
     ResizeHold m_resizeHold;
+    ContextHoldState m_contextHold;
 
     // Policy returned from the daemon's beginDrag for the currently-active
     // drag. Async-populated a few ms after the
@@ -1567,7 +1570,7 @@ private:
     void drainResizeHold(const QRect& frame);
     /// Drain on the client's commit of the resize's size, a newer command or the deadline (F701).
     void armResizeAckWatch(KWin::EffectWindow* w);
-    /// Settle a held move tail (MoveTailHold) once: the crossing it made, if any (F751).
+    /// Settle a held move tail (MoveTailHold) once: its crossing, if any (F751), then the drop's held context edits.
     void drainMoveTail();
 
     void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
@@ -3644,8 +3647,7 @@ private:
     QFont scrollTabIndicatorFont() const;
     // ── end scrolling tab indicator paint settings ──
 
-    // Per-drag activation / float tracking. Fields + rationale in effect_state.h
-    // (DragActivationState).
+    // Per-drag activation / float tracking. Fields + rationale in effect_state.h (DragActivationState).
     DragActivationState m_dragActivation;
 
     // Per-rule-cache invalidations accumulated within one event-loop turn,
@@ -3687,11 +3689,9 @@ private:
     // gates on it.
     QPointer<KWin::EffectWindow> m_lastReportedActiveWindow;
 
-    // Per-window desktop and activity ids as of the last edit, which each
-    // context edit is classified against (WindowContextEdge). Seeded at wire
-    // time, re-stamped by each axis before any of its arms run, erased in the
-    // windowDeleted cleanup. An empty set is KWin's "every one"; contains()
-    // tells it from an unseeded entry.
+    // Per-window desktop and activity ids each context edit is classified against (WindowContextEdge): seeded
+    // at wire time, re-stamped before the arms run, not advanced while an edit is held (ContextHold), erased at
+    // windowDeleted. An empty set is KWin's "every one"; contains() tells it from an unseeded entry.
     QHash<KWin::EffectWindow*, WindowContextEdge::Stamp> m_contextStampPerWindow;
 
     // Windows that already have their per-window connections. setupWindowConnections

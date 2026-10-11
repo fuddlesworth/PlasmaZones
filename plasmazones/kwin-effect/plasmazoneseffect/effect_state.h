@@ -341,6 +341,33 @@ struct ResizeHold
     quint64 generation = 0; ///< bumped per hold, read by the deadline timer
 };
 
+/// A window's desktop or activity edit that waits for the move that caused it
+/// to settle (EE, windowcontexthold.h). The held context is the window's
+/// context stamp (PlasmaZonesEffect::m_contextStampPerWindow), which a held
+/// edit does not advance, so every push reports it and the release classifies
+/// the live sets against it once. The resize hold keeps precedence: an edit it
+/// holds never reaches this record, and a release during a resize hands the
+/// axes to it.
+struct ContextHold
+{
+    quint8 reasons = 0; ///< WindowContextHold::Reason bits still standing
+    quint8 heldAxes = 0; ///< ResizeHold::ContextAxis bits waiting for the release
+    const KWin::LogicalOutput* committedAtHold = nullptr; ///< OutputInFlight's backstop baseline
+    quint64 generation = 0; ///< read by the in-flight deadline timer
+};
+
+/// Every context hold (window_context_hold.cpp). Raw keys, erased in the
+/// windowDeleted cleanup.
+struct ContextHoldState
+{
+    QHash<const KWin::EffectWindow*, ContextHold> holds;
+    /// Drag subjects from dragStarted until the drop's outcome is applied and
+    /// KWin's move has ended. Not DragTracker::isDragging(), which drops the
+    /// subject at the left button's release, before the outcome (F751).
+    QSet<const KWin::EffectWindow*> dragLatched;
+    quint64 seq = 0; ///< hands out ContextHold::generation
+};
+
 /// Daemon readiness / virtual-screen fetch gate state. Grouped from
 /// PlasmaZonesEffect's trailing member block; see PlasmaZonesEffect::m_daemonGate.
 /// Cached daemon D-Bus service registration state, updated via QDBusServiceWatcher
