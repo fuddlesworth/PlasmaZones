@@ -196,8 +196,8 @@ bool SnapEngine::isWindowExcludedAt(const QString& windowId, const QString& scre
     }
 
     // Minimum-window-size exclusion — only meaningful when the query carries the
-    // frame size (full-query path). Mirrors the autotile eligibility filter, so
-    // a sub-threshold utility window is excluded from auto-snap in both modes.
+    // frame size (full-query path). Mirrors the tiling eligibility filter, so a
+    // sub-threshold utility window is excluded from auto-snap here as autotile and scrolling exclude it.
     if (auto* s = snapSettings()) {
         const int minW = s->minimumWindowWidth();
         const int minH = s->minimumWindowHeight();

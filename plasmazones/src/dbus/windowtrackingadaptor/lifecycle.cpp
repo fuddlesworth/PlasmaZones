@@ -184,7 +184,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // (WTS::isWindowInAutotileMode → the daemon's screenModeForWindow). Using one
     // definition everywhere avoids the mid-mode-flip divergence an isWindowTracked()
     // check would introduce (it goes false at autotile teardown a beat before the
-    // assignment flips). Both engines are still tried (first non-null wins), so the
+    // assignment flips). Every engine is still tried (first non-null wins), so the
     // mode pick is just ordering insurance — SnapEngine::capturePlacement is itself
     // gated to return nullopt on autotile-mode screens.
     PhosphorEngine::PlacementEngineBase* primary = m_snapEngine.data();
@@ -228,7 +228,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
             // tiled/floating — so the owning-engine check is simply `floating`.
             //
             // The owning-engine slot state is NOT sufficient on its own across a
-            // mode flip. The free geometry is SHARED between both engines, but
+            // mode flip. The free geometry is SHARED by every engine, but
             // m_frameGeometry is just the last frame the effect reported — it is not
             // re-validated against the slot. When a window TILED by autotile flips to
             // a snapping-mode screen (or straddles screens), isWindowInAutotileMode
@@ -328,11 +328,11 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // (Stale records are bounded by MaxPerApp and consumed on reopen.)
     //
     // Authoritative close-screen fallback. A window dragged cross-screen and then
-    // closed reaches here with NEITHER engine tracking it: the source engine was
+    // closed reaches here with no engine tracking it: the source engine was
     // cleared when the window left its screen (onWindowRemoved) and the destination
     // engine never adopted it (a same-engine-type cross-screen move skips the
     // handoff, and a floated window is not inserted into the destination tile
-    // layout). With both capturePlacement calls declined, the record's screen would
+    // layout). With every capturePlacement declined, the record's screen would
     // keep the stale source value and a reopen would restore to the wrong monitor.
     // The caller (windowClosed) supplies the window's true current screen from KWin;
     // record the float-back there so the next open restores to the right monitor.
@@ -402,7 +402,7 @@ void WindowTrackingAdaptor::pruneExcludedPlacements(const QStringList& patterns)
     }
 
     // Drop unified placement records for any app the user just added an Exclude
-    // rule for, across both engines (snap and autotile records alike). One store,
+    // rule for, across every engine's records. One store,
     // one prune — no per-engine pending-restore queue to walk.
     const int removed = m_service->placementStore().removeIf([&patterns](const PhosphorEngine::WindowPlacement& p) {
         for (const QString& pattern : patterns) {
@@ -466,8 +466,8 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // below tears that down) and before m_frameGeometry is dropped.
     //
     // Pass the effect's authoritative close screen: a cross-screen move can orphan
-    // the window from both engines by close time, so both capturePlacement calls
-    // miss and the real screen would be lost; the capture falls back to this screen
+    // the window from every engine by close time, so every capturePlacement
+    // misses and the real screen would be lost; the capture falls back to this screen
     // for the float-back. Validate it first (a stale id from an output unplugged
     // mid-close would poison the reopen screen), falling back to the live frame's
     // centre; an empty result keeps the record's prior screen, which beats a dead one.
@@ -801,10 +801,9 @@ void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int old
     if (!validateWindowId(windowId, QStringLiteral("reflow after interactive resize"))) {
         return;
     }
-    // Validate both frames at this untrusted D-Bus boundary. The engine also
-    // requires a valid old frame (it derives the resize delta from it), so a
-    // non-positive old dimension would be rejected one layer down regardless —
-    // reject it here so the boundary's contract is symmetric and explicit.
+    // Validate both frames at this untrusted D-Bus boundary. Autotile derives
+    // the resize delta from the old frame (the scroll engine ignores it);
+    // reject a non-positive one here so the boundary's contract is explicit.
     if (oldWidth <= 0 || oldHeight <= 0 || newWidth <= 0 || newHeight <= 0) {
         return;
     }

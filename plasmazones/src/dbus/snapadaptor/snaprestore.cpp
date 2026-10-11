@@ -92,13 +92,13 @@ void SnapAdaptor::snapToLastZone(const QString& windowId, const QString& windowS
     qCInfo(lcDbusWindow) << "Snapping new window" << windowId << "to last used zone" << result.zoneId;
 }
 
-void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowScreenName, bool sticky, int& snapX,
+void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowScreenId, bool sticky, int& snapX,
                                 int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
-    if (windowId.isEmpty() || windowScreenName.isEmpty()) {
+    if (windowId.isEmpty() || windowScreenId.isEmpty()) {
         return;
     }
 
@@ -114,7 +114,7 @@ void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowSc
         return;
     }
 
-    SnapResult result = m_engine->calculateSnapToPlacementRule(windowId, windowScreenName, sticky);
+    SnapResult result = m_engine->calculateSnapToPlacementRule(windowId, windowScreenId, sticky);
     if (!result.shouldSnap) {
         return;
     }

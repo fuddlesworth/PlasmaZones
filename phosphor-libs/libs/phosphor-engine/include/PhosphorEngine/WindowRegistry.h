@@ -198,7 +198,9 @@ public:
     /// the count removed. @p aliveInstanceIds are the uuid components
     /// (WindowId::extractInstanceId), matching this registry's keying. The
     /// normal per-window path is remove() on windowClosed; this is the batch
-    /// backstop the WTA alive-ids report drives.
+    /// backstop the WTA alive-ids report drives. An EMPTY @p aliveInstanceIds
+    /// is refused (returns 0 with a warning) while any record or mapping
+    /// exists: the effect's first alive report can come before restored apps map.
     int pruneStaleInstances(const QSet<QString>& aliveInstanceIds);
 
 Q_SIGNALS:

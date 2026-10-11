@@ -73,7 +73,7 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     // No manual full-windowId→appId float-back copy is needed: the unified record's
     // freeGeometry rides on the record itself, which is stored in its appId bucket,
     // so the reopen claim finds it. The engines' float bits were cleared by their
-    // own windowClosed (snapState->windowClosed above); this clears the legacy
+    // own windowClosed (snapState->windowClosed above, each tiling engine's on its own); this clears the legacy
     // fallback set, used only by unit tests and early init, under the canonical
     // id and its appId alias. A float the user leaves on a window persists in the
     // record's floating slot and re-floats the reopen; that is not this set.

@@ -124,9 +124,4 @@ void SnapAdaptor::clearEngine()
     m_contextResolver = nullptr;
 }
 
-PhosphorSnapEngine::SnapEngine* SnapAdaptor::engine() const
-{
-    return m_engine;
-}
-
 } // namespace PlasmaZones

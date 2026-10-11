@@ -505,9 +505,9 @@ public:
     /**
      * @brief Set persistence callbacks for save/load
      *
-     * KConfig persistence is owned by WindowTrackingAdaptor (engine is KConfig-free).
+     * Persistence is owned by WindowTrackingAdaptor's session store (the engine has none).
      * These callbacks allow AutotileEngine to fulfill the IPlacementEngine persistence
-     * contract without introducing KConfig as a dependency.
+     * contract with no storage dependency.
      *
      * @param saveFn Called by saveState() to persist tiling state
      * @param loadFn Called by loadState() to restore tiling state
@@ -1817,7 +1817,7 @@ private:
     QTimer m_writeBackGuardTimer;
     QTimer m_settingsRetileTimer;
 
-    // Persistence delegates (KConfig stays in WTA layer)
+    // Persistence delegates (storage stays in the WTA)
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
 

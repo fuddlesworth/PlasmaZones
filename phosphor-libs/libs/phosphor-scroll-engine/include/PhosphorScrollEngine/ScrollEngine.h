@@ -809,7 +809,7 @@ public:
     /// "screenId|desktop|activity". On a key collision the live strip's
     /// focus, view and axis win and the stash's not-yet-returned columns
     /// are appended after the live ones (a merge, not a replacement). The
-    /// daemon persists this blob through the WTA KConfig layer so a login
+    /// daemon persists this blob through the WTA's session store so a login
     /// restore rebuilds stacked columns (with each column's active tile,
     /// i.e. a tabbed column's shown tab), the strip focus, and the view
     /// anchor together with whether that anchor was an explicit pan (the

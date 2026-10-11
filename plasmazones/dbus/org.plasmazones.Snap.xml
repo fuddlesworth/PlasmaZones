@@ -60,7 +60,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="snapToAppRule">
             <annotation name="org.gtk.GDBus.DocString" value="Resolve a snap into the window's SnapToZone-rule-defined zone(s)."/>
             <arg name="windowId" type="s" direction="in"/>
-            <arg name="windowScreenName" type="s" direction="in"/>
+            <arg name="windowScreenId" type="s" direction="in"/>
             <arg name="sticky" type="b" direction="in"/>
             <arg name="snapX" type="i" direction="out"/>
             <arg name="snapY" type="i" direction="out"/>

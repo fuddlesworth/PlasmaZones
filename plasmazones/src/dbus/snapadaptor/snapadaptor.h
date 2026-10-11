@@ -76,7 +76,7 @@ public:
     /**
      * @brief Clear the engine pointer during shutdown
      *
-     * Disconnects all signals. Mirrors TilingAdaptor::clearEngine().
+     * Drops the signal relays its constructor made and every borrow.
      * Called by Daemon::stop() before the SnapEngine unique_ptr is reset.
      */
     void clearEngine();
@@ -99,11 +99,6 @@ public:
     {
         m_contextResolver = resolver;
     }
-
-    /**
-     * @brief Access the underlying SnapEngine (for daemon-side callers)
-     */
-    PhosphorSnapEngine::SnapEngine* engine() const;
 
 public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -154,7 +149,7 @@ public Q_SLOTS:
      * @brief Snap a window to its SnapToZone-rule-defined zone(s). No in-tree
      *        caller; external contract surface like snapToLastZone.
      */
-    void snapToAppRule(const QString& windowId, const QString& windowScreenName, bool sticky, int& snapX, int& snapY,
+    void snapToAppRule(const QString& windowId, const QString& windowScreenId, bool sticky, int& snapX, int& snapY,
                        int& snapWidth, int& snapHeight, bool& shouldSnap);
 
     /**

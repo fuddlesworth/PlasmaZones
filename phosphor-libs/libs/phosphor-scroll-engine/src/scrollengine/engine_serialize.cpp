@@ -3,7 +3,7 @@
 
 // Durable strip-structure snapshots. serializeStripState captures every live
 // strip plus the un-consumed mode-round-trip stash as one JSON blob the
-// daemon persists through the WTA KConfig layer; restoreStripState loads a
+// daemon persists through the WTA's session store; restoreStripState loads a
 // blob back INTO THE STASH so the existing arrival-restore path
 // (restoreFromStripStash) rebuilds each strip as its windows are announced —
 // there is deliberately no second restore mechanism.

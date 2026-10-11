@@ -289,8 +289,8 @@ public Q_SLOTS:
      *                       daemon's resolvers match the same KWin-property fields the
      *                       effect path resolves live (window_query.cpp).
      *
-     * Emits no D-Bus signal. Populates the daemon's WindowRegistry; consumers
-     * subscribe to the registry's Qt signals directly.
+     * Populates the daemon's WindowRegistry (its first record and each title or app
+     * change reach the bus as windowMetadataChanged); consumers subscribe to its Qt signals.
      *
      * Safe to call unconditionally on every observation — no-op if metadata
      * is unchanged.
@@ -388,11 +388,11 @@ public Q_SLOTS:
      * @param windowKind PhosphorEngine::WindowKind wire value (Unknown/Normal/
      *        Transient). Unused: it gated the pending-restore queue, which was
      *        removed; kept so the wire signature does not change
-     * @param screenId The window's authoritative current screen at close (KWin's
+     * @param screenId The window's authoritative current screen at close (the effect's
      *        getWindowScreenId). Threaded into the final placement capture so a
      *        window dragged cross-screen and closed records its float-back on the
      *        screen it actually closed on — by close time a cross-screen move has
-     *        torn down both engines' tracking, so neither capturePlacement can
+     *        torn down every engine's tracking, so no capturePlacement can
      *        report the real screen. Empty = legacy/opt-out.
      * @note Call this when KWin reports a window has been closed to prevent memory leaks
      */
@@ -413,18 +413,18 @@ public Q_SLOTS:
      * handlers (float toggle, etc.) so they can compose pre-tile geometry
      * without a round-trip back to the effect.
      *
-     * ABSENCE IS NOT LATENCY. The shadow has exactly three writers: this
+     * ABSENCE IS NOT LATENCY. Three effect pushes call this setter: the
      * motion-driven flush, the bulk seed on daemon (re)registration
      * (kwin-effect daemon_bringup.cpp, which states the consequence), and
      * the open-path seed the snap handler pushes immediately before
-     * resolveWindowRestore. A window that has never MOVED and is not being
-     * opened therefore has no entry at all — not one that arrives 50 ms
-     * later — so callers deciding policy on an invalid read must not assume
-     * a retry would populate it.
+     * resolveWindowRestore; notifyWindowResized writes the shadow too at a
+     * resize's end. A window that has never MOVED and is not being opened therefore has no
+     * entry at all — not one that arrives 50 ms later — so callers deciding policy on an
+     * invalid read must not assume a retry would populate it.
      *
      * The open-path seed exists because that assumption was made and was
      * wrong: applyOpenScreenRouting translates a bare RouteToScreen from
-     * this shadow, and with only the first two writers a freshly opened
+     * this shadow, and with only the first two pushes a freshly opened
      * window read back invalid, so the route silently never moved it while
      * still suppressing the remembered-placement fallback. The same rule
      * worked on an already-open window purely because a daemon restart had
@@ -439,12 +439,12 @@ public Q_SLOTS:
      * Notify the daemon that a tiled window finished an interactive resize.
      *
      * Called by the compositor plugin from windowFinishUserMovedResized when
-     * the interaction was a resize (not a move). Forwards to the autotile
-     * engine so it can reflow neighbouring windows to fill the gap (GitHub
-     * #652). The old/new frames are supplied directly by the plugin (latched at
+     * the interaction was a resize (not a move). Routes to the scroll engine when it holds the
+     * window in view (the column takes the size), else to autotile, which reflows the neighbours
+     * (GitHub #652). The old/new frames are supplied directly by the plugin (latched at
      * resize start / read at finish) because the throttled frame shadow updates
-     * mid-drag and can't serve as a reliable baseline. No-op for windows the
-     * autotile engine doesn't track.
+     * mid-drag and can't serve as a reliable baseline. No-op for a window
+     * neither tiling engine holds.
      *
      * @param windowId Window identifier
      * @param oldX,oldY,oldWidth,oldHeight Frame geometry before the resize
@@ -539,7 +539,7 @@ public Q_SLOTS:
 
     /**
      * Get typed list of empty zones for Snap Assist continuation
-     * @param screenId Screen ID (e.g. DP-1)
+     * @param screenId Screen id (EDID-based, or a virtual-screen id)
      * @return PhosphorProtocol::EmptyZoneList of empty zone entries with overlay-local geometry
      */
     PhosphorProtocol::EmptyZoneList getEmptyZones(const QString& screenId);
@@ -813,14 +813,14 @@ public:
     /// registry metadata) so a reopen restores the pre-minimize placement in
     /// the right place.
     ///
-    /// @p authoritativeScreen (the close path passes KWin's getWindowScreenId)
+    /// @p authoritativeScreen (the close path passes the effect's getWindowScreenId)
     /// therefore plays TWO roles when non-empty: it marks the capture as a
     /// close-with-known-screen (enabling the minimize preserve branch above
     /// and the pure-float sibling collapse), and it is the fallback screen
-    /// when NEITHER engine produces a placement — the case where a
+    /// when no engine produces a placement, the case where a
     /// cross-screen move removed the window from the source engine's tracking
-    /// and the destination never adopted it, so both capturePlacement calls
-    /// return nullopt and the live screen would otherwise be lost. In that
+    /// and the destination never adopted it, so every capturePlacement
+    /// returns nullopt and the live screen would otherwise be lost. In that
     /// case the float-back is recorded on @p authoritativeScreen via
     /// WindowTrackingService::recordFloatingClose. NOTE a screen-LESS call is
     /// not necessarily a live capture: TilingAdaptor::windowClosed runs the
@@ -887,9 +887,8 @@ public:
      * Restores previously persisted window tracking state.
      * Called automatically on construction.
      *
-     * @note Stale entries (windows that no longer exist) are not
-     * automatically cleaned up - they will be removed when the
-     * daemon next encounters those window IDs.
+     * @note Records of windows that died meanwhile are dropped by
+     * pruneStaleWindows once the effect reports the live set.
      */
     void loadState();
 
@@ -919,11 +918,11 @@ public:
     ///
     /// Uniform stamping is therefore necessary but NOT sufficient: the hinted
     /// and unhinted paths resolve different screens, so the ORDER matters too.
-    /// The hint-bearing resolver has to seed first, and does on both engines
-    /// today — SnapEngine::resolveWindowRestore calls calculateSnapToPlacementRule
-    /// (libs/phosphor-snap-engine/src/lifecycle.cpp) ahead of the restore, managed-restore
+    /// The hint-bearing resolver has to seed first, and does on both open paths today (snap's,
+    /// and the tiling adaptor's for autotile and scrolling): SnapEngine::resolveWindowRestore calls
+    /// calculateSnapToPlacementRule (phosphor-snap-engine lifecycle.cpp) ahead of the restore, managed-restore
     /// and float predicates, and TilingAdaptor::dispatchWindowOpened calls
-    /// applyOpenRoutingForTiling ahead of the tile engine's windowOpened.
+    /// applyOpenRoutingForTiling ahead of the tiling engine's windowOpened.
     /// Reordering either would silently revert ActiveLayout / ScreenId matching
     /// on the open path without failing a test.
     ///
@@ -940,8 +939,8 @@ public:
 
     /// Resolve whether a FLOATED window should have its previous position restored
     /// on open. Consulted by the restore-position predicate the daemon injects into
-    /// BOTH engines (in-process, not via D-Bus); @p mode selects which per-engine
-    /// global default applies (snap-floated vs autotile-floated). A matched
+    /// all three engines (in-process, not via D-Bus); @p mode selects which per-engine
+    /// global default applies (snapping, autotile or scrolling). A matched
     /// RestorePosition rule wins (engine-neutral); otherwise the
     /// per-engine `*RestoreFloatedWindowsOnLogin` setting decides. Builds a
     /// WindowQuery from the window registry metadata.
@@ -986,7 +985,7 @@ public:
 
     /// Resolve whether an opening window should start FLOATING because a "Float
     /// this app" rule matched it. Consulted by the float predicate the
-    /// daemon injects into BOTH engines (in-process, not via D-Bus). Unlike
+    /// daemon injects into all three engines (in-process, not via D-Bus). Unlike
     /// RestorePosition there is no global default — Float is purely rule-driven,
     /// so the answer is false unless a Float rule matches. The Float action's
     /// params are free-form, so the verdict is the presence of the filled slot.
@@ -1193,7 +1192,7 @@ public:
      *
      * Single `placementStore().removeIf(...)` over the unified store, dropping any
      * record whose appId matches one of @p patterns (via
-     * PhosphorIdentity::WindowId::appIdMatches), across BOTH engines' records — there
+     * PhosphorIdentity::WindowId::appIdMatches), across every engine's records — there
      * is no longer a per-engine pending-restore queue to walk. Marks
      * DirtyWindowPlacements when anything was removed so the next debounced save
      * persists the pruned store.
@@ -1202,7 +1201,7 @@ public:
      * every caller is in-process and reaches it via direct C++ invocation through the
      * daemon. Same pattern as `WindowDragAdaptor::handleWindowClosed`.
      *
-     * Called from three daemon-side sites:
+     * Called from two daemon-side sites:
      *   1. Daemon::init's init-prologue priming call — runs once, synchronously,
      *      before the `rulesChanged` subscription connects, pruning what loadState
      *      just deserialized into the store.
@@ -1210,8 +1209,6 @@ public:
      *      `RuleStore::rulesChanged` whose post-filter placement-exclusion
      *      slice (Exclude ∪ ExcludePlacement) differs
      *      from the cached one (equality-guarded). Drives live rule edits into the prune.
-     *   3. Daemon::finalizeStartup, after AutotileEngine::loadState has restored its
-     *      placement records, so any autotile records loaded then are pruned too.
      * The daemon derives @p patterns from the unified Rule store via
      * `PhosphorRules::ExclusionRules::applicationExcludePatternsFrom`.
      *
@@ -1316,9 +1313,10 @@ Q_SIGNALS:
      * @brief Daemon requests KWin to apply geometry (daemon-driven flow)
      * @param windowId Window to apply geometry to
      * @param x, y, width, height Target frame
-     * @param zoneId PhosphorZones::Zone to snap to (empty for float restore - do not call windowSnapped)
+     * @param zoneId Zone already committed daemon-side (empty for a free placement)
      * @param screenId Screen for OSD placement
-     * @param sizeOnly When true, only width/height are meaningful (x/y ignored, window stays at current position)
+     * @param sizeOnly When true, only width/height are meaningful: a drag-out keeps the window's
+     *        top-left, the open path keeps its centre and clamps it to the screen
      * @param purpose PhosphorProtocol::PlacementPurpose: a user verb, or a re-statement that keeps maximize
      */
     void applyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
@@ -1440,7 +1438,7 @@ private Q_SLOTS:
     /**
      * @brief Orchestrate a cross-MODE directional move handoff.
      *
-     * Wired to both engines' crossModeMoveRequested. The source engine (the
+     * Wired to every engine's crossModeMoveRequested. The source engine (the
      * signal sender) reached a context boundary whose target is a different
      * tiling mode and deferred here. This resolves the target mode at the
      * destination context, relinquishes the window from the source engine
@@ -1480,7 +1478,7 @@ private Q_SLOTS:
     /**
      * @brief Orchestrate a cross-MODE directional swap handoff (two-way).
      *
-     * Wired to both engines' crossModeSwapRequested. Resolves the swap partner —
+     * Wired to every engine's crossModeSwapRequested. Resolves the swap partner —
      * the target surface's entry-edge window facing the source in @p direction
      * (autotile: the edge tile; snap: the entry zone's occupant). With no partner
      * the entry slot is empty, so it degrades to a plain cross-mode move. With a
@@ -1526,9 +1524,9 @@ public:
     void forgetClosedFullscreenHold(const QString& windowId); ///< the scroll engine's closed-mid-hold memory is spent
     /// Resolve a resnap filter (empty / physical / virtual screen id) into
     /// the concrete list of snap-mode screens the resnap should touch.
-    /// Consults the shared ScreenModeRouter to drop autotile screens from
-    /// the candidate set — the router lives on WTA so this helper is
-    /// exposed publicly so SnapEngine's navigation methods can reuse it.
+    /// Keeps only the screens snapping runs on (the shared ScreenModeRouter) whose
+    /// context is not disabled, and none when snapping is switched off. SnapAdaptor's
+    /// resnapCurrentAssignments, reapplySnapZones and resnapForVirtualScreenReconfigure call it.
     QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
 
     /// The screen id for a snap: the caller's (the effect, or SnapAdaptor's gate),

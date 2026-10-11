@@ -98,7 +98,7 @@ public Q_SLOTS:
 
     /**
      * @brief Get a complete state snapshot
-     * @return JSON object with all daemon state (layouts, zones, windows, screens, autotile)
+     * @return JSON object: the layouts, the active layout, the tracked windows and the autotile state
      */
     QString getFullState();
 

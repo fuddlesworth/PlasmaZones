@@ -498,10 +498,10 @@ public:
     QStringList preFloatZones(const QString& windowId) const override;
 
     /**
-     * @brief Get the screen name where the window was snapped before floating,
+     * @brief Get the screen id where the window was snapped before floating,
      *        from the window's primary snap store
      * @param windowId Full window ID
-     * @return Screen name or empty string if unknown
+     * @return Screen id, or empty if unknown
      */
     QString preFloatScreen(const QString& windowId) const override;
 
@@ -624,7 +624,7 @@ public:
 
     /**
      * @brief Get typed list of all empty zones for Snap Assist continuation
-     * @param screenId Screen to find layout for (e.g. DP-1)
+     * @param screenId Screen id (EDID-based, or a virtual-screen id)
      * @return PhosphorProtocol::EmptyZoneList of empty zone entries with overlay-local geometry
      */
     PhosphorProtocol::EmptyZoneList getEmptyZones(const QString& screenId) const;
