@@ -104,8 +104,9 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
     // Undamped, unlike the sibling relay of this same signal onto
     // Tiling.tilingChanged (init_engines.cpp), which skips the edge
     // auto-scroll's ~60 Hz tick. Deliberate rather than an oversight: that
-    // one had no in-tree subscriber to damp it, while both readers of this
-    // signal coalesce. The settings reader folds every wake-up onto a settle
+    // one's subscribers (TilingAdaptor::refreshFocusedWindow and the shell
+    // placement map, placementmap_p.h) would run on every tick, while both
+    // readers of this signal coalesce. The settings reader folds every wake-up onto a settle
     // timer and re-reads once, and the shell's placement map
     // (libs/phosphor-shell placementmap.cpp) does the same and keeps one
     // stripModelJson read in flight at a time, so the cost per tick here is a

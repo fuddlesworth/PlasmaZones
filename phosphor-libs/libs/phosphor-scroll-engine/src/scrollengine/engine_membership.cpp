@@ -357,8 +357,9 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
         m_forceEmitScreens.insert(key.screenId);
         scheduleRetileForScreen(key.screenId);
     }
-    // placementChanged is the sole producer of the strip's dirty mark. A
-    // release on a background desktop mutates persisted structure just as a
+    // placementChanged is this engine's only way to mark DirtyScrollStrips
+    // (the tracking service's scheduleSaveState, DirtyAll, also sets that
+    // bit). A release on a background desktop mutates persisted structure just as a
     // close does, and a save landing before that desktop's next batch would
     // otherwise persist the column the window just left.
     Q_EMIT placementChanged(key.screenId);

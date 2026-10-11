@@ -466,7 +466,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setFrameGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Push current frame geometry for a window into the daemon's shadow. Called by the compositor plugin on windowFrameGeometryChanged (debounced). Enables daemon-local shortcut handlers (e.g. float toggle) to read fresh geometry without a cross-process round-trip."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Push current frame geometry for a window into the daemon's shadow. Called by the compositor plugin on windowFrameGeometryChanged, throttled to one push per window every 50 ms. Enables daemon-local shortcut handlers (e.g. float toggle) to read fresh geometry without a cross-process round-trip."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -476,7 +476,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="height" type="i" direction="in"/>
         </method>
         <method name="notifyWindowResized">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a tiled window finished an interactive edge/border resize. The autotile engine reflows neighbouring windows to fill the gap (GitHub #652). Fire-and-forget; the resize is already committed in the compositor. The old/new frames are the window's geometry before and after the resize, supplied by the compositor plugin (the daemon's debounced frame shadow is unreliable as a baseline because it updates during the drag). Floating, untracked, snap-mode, and cross-output windows are ignored daemon-side."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a tiled window finished an interactive edge/border resize. The autotile engine reflows neighbouring windows to fill the gap (GitHub #652). Fire-and-forget; the resize is already committed in the compositor. The old/new frames are the window's geometry before and after the resize, supplied by the compositor plugin (the daemon's throttled frame shadow is unreliable as a baseline because it updates during the drag). Floating, untracked, snap-mode, and cross-output windows are ignored daemon-side."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>

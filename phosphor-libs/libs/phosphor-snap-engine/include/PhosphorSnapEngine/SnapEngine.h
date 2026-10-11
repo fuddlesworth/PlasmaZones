@@ -241,14 +241,14 @@ public:
         m_managedRestorePredicate = std::move(predicate);
     }
 
-    /// Live placement-mode resolver injected by the daemon (its
-    /// ScreenModeRouter): engine-live-set-first with cascade fallback and
-    /// the tiling-mode→Snapping downgrade for unclaimed screens. The
-    /// capture gate consults it so a screen ENTERING a tiling mode (the
-    /// cascade already flipped but no engine claims it yet) can still
-    /// presave its live snap state; the raw cascade would refuse it and
-    /// the presave would silently write nothing. Falls back to the
-    /// registry's cascade when unset. Clear with {} at teardown.
+    /// Live placement-mode resolver injected by the daemon (its ScreenModeRouter):
+    /// engine-live-set-first with cascade fallback and the tiling-mode→Snapping
+    /// downgrade for unclaimed screens. isActiveOnScreen, isSnapModeScreen, the
+    /// capture gate and isTilingOutput consult it; through it a screen ENTERING a
+    /// tiling mode (the cascade already flipped but no engine claims it yet) can
+    /// still presave its live snap state, which the raw cascade would refuse,
+    /// writing nothing. Unset, isActiveOnScreen falls back to "not autotile" and
+    /// the others to the registry's cascade. Clear with {} at teardown.
     using LiveModeResolver = std::function<PhosphorZones::AssignmentEntry::Mode(const QString& screenId)>;
     void setLiveModeResolver(LiveModeResolver resolver)
     {

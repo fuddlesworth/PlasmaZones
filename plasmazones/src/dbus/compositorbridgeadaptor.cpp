@@ -13,9 +13,8 @@
 namespace PlasmaZones {
 
 // Protocol version constants are the single source of truth in
-// PhosphorProtocol::Service (libs/phosphor-protocol). The effect links
-// compositor-common for its own constants; the daemon includes
-// PhosphorProtocol/ServiceConstants.h directly.
+// PhosphorProtocol::Service (libs/phosphor-protocol). The effect and the
+// daemon both read them from PhosphorProtocol/ServiceConstants.h.
 namespace {
 constexpr int DaemonApiVersion = PhosphorProtocol::Service::ApiVersion;
 constexpr int DaemonMinPeerApiVersion = PhosphorProtocol::Service::MinPeerApiVersion;

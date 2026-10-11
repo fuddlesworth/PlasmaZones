@@ -238,8 +238,9 @@ private Q_SLOTS:
     }
 
     // A release from a desktop that is NOT on screen mutates persisted strip
-    // structure; placementChanged is the sole producer of the strip's dirty
-    // mark, so it has to fire for the background screen too.
+    // structure; placementChanged is the engine's only way to mark the
+    // strip dirty (the tracking service's scheduleSaveState, DirtyAll, also
+    // sets that bit), so it has to fire for the background screen too.
     void backgroundReleaseMarksTheStripDirty()
     {
         QObject owner;

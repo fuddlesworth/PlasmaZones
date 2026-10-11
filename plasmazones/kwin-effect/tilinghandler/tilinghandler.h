@@ -424,9 +424,9 @@ public:
     /// flip, with no dispatch to the engine.
     ///
     /// interceptMaximizeRequest sits behind the caller's fully-maximized edge
-    /// filter, so a quick tile (one axis) never reaches it, and nothing else
-    /// clears the bit: the batch arm that would needs a batch, and the engine
-    /// emits on change, so a quick tile that moves no column schedules none.
+    /// filter, so an axis-only maximize (Maximize Vertically / Horizontally)
+    /// never reaches it, and nothing else clears the bit: the batch arm that
+    /// would needs a batch, and the engine emits on change, so none comes.
     /// Cancel only — the engine has no half-maximize to express, and routing
     /// this through the interception would toggle the column instead.
     void cancelAxisOnlyMaximize(KWin::EffectWindow* w);

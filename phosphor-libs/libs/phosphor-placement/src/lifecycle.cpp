@@ -279,6 +279,8 @@ void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString
     // per-screen store.
     PhosphorSnapEngine::SnapState* store = snapForScreen(screenId);
     if (!store) {
+        // Fail-safe for a partial resolver: a real wiring's forScreen never answers null; a test
+        // resolver without a per-screen arm lands here.
         store = snapGlobals();
     }
     if (!store) {

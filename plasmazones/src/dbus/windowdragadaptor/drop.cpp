@@ -176,9 +176,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         PhosphorEngine::IPlacementEngine* sourceEngine = nullptr;
         QString sourceScreen;
         // screensMatch, not raw !=: an engine may hold the connector-name form
-        // (or a "/vs:" virtual-screen variant) of the very screen the drop
-        // landed on, and a raw compare would read that as a cross-screen move
-        // and release the window's tracking on its own screen.
+        // of the very screen the drop landed on, and a raw compare would read
+        // that as a cross-screen move and release the window's tracking on its
+        // own screen.
         const auto isCrossScreen = [&releaseScreenId](const QString& engineScreen) {
             return !engineScreen.isEmpty()
                 && !PhosphorScreens::ScreenIdentity::screensMatch(engineScreen, releaseScreenId);

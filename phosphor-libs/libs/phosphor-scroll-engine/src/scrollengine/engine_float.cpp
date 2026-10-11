@@ -529,8 +529,10 @@ void ScrollEngine::settleReannouncedFullscreenHold(const QString& windowId)
             }
             // The deferred apply emits placementChanged only when the anchor
             // moved; the strip's structure changed regardless, and this is
-            // the dirty mark's sole producer (windowOpened's burst path emits
-            // it unconditionally for the same reason).
+            // the engine's only way to mark DirtyScrollStrips (the tracking
+            // service's scheduleSaveState, DirtyAll, also sets that bit).
+            // windowOpened's burst path emits it unconditionally for the same
+            // reason.
             Q_EMIT placementChanged(key.screenId);
         }
         return;

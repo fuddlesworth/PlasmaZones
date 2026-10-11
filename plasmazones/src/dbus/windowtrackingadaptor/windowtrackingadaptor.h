@@ -408,8 +408,8 @@ public Q_SLOTS:
     /**
      * Push current frame geometry for a window into the daemon's shadow.
      *
-     * Called by the compositor plugin on windowFrameGeometryChanged (debounced
-     * at ~50ms per window). The shadow is read by daemon-local shortcut
+     * Called by the compositor plugin on windowFrameGeometryChanged (throttled
+     * to one push per window per 50 ms). The shadow is read by daemon-local shortcut
      * handlers (float toggle, etc.) so they can compose pre-tile geometry
      * without a round-trip back to the effect.
      *
@@ -442,7 +442,7 @@ public Q_SLOTS:
      * the interaction was a resize (not a move). Forwards to the autotile
      * engine so it can reflow neighbouring windows to fill the gap (GitHub
      * #652). The old/new frames are supplied directly by the plugin (latched at
-     * resize start / read at finish) because the debounced frame shadow updates
+     * resize start / read at finish) because the throttled frame shadow updates
      * mid-drag and can't serve as a reliable baseline. No-op for windows the
      * autotile engine doesn't track.
      *

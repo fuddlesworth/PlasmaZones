@@ -205,8 +205,9 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // screens only (layoutForScreen also answers for a tiling context). The zone
     // is read from the ARRIVAL CONTEXT'S OWN store, not SnapEngine::zoneForWindow,
     // whose primary membership can name another desktop's zone: that is the
-    // ghost of discussion #1104 by a new route. A floated window keeps its zone
-    // as the memory a float toggle resnaps into, so it is left floating.
+    // ghost of discussion #1104 by a new route. A floating window is left
+    // floating: the arrival re-applies only a zone the window occupies, and a
+    // float holds none (its zones are the pre-float memory).
     const auto answerHeldZone = [&]() {
         if (!m_engine->isSnapModeScreen(screenId)
             || !snapPermittedForContext(windowId, screenId, /*virtualDesktop=*/0)) {

@@ -281,8 +281,9 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // a return from tiling to snapping) was re-centred into the dead tile,
     // on the output the window had just left or at the old tile's centre
     // (discussion #1124). The tile batch records its target after its own
-    // apply, so a tile command keeps its entry. Before the no-op skip below:
-    // a window already at the new rect is still no longer that tile's.
+    // apply, so a tile applied now keeps its entry, and one deferred to the
+    // gesture's end records none. Before the no-op skip below: a window
+    // already at the new rect is still no longer that tile's.
     if (m_tilingHandler && !window->isDeleted()) {
         m_tilingHandler->dropCenteringTarget(getWindowId(window));
     }

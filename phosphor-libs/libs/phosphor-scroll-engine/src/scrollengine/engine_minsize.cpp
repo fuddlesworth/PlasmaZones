@@ -173,7 +173,9 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     if (state->strip().reconcileWindowSize(windowId, newFrame.size(), mainChanged, crossChanged, resizeParams)) {
         // The reconcile WROTE persisted intent (the column's Fixed width, the
         // tile's Fixed height — both serialized by serializeStripState), and
-        // placementChanged is the sole producer of DirtyScrollStrips. Without
+        // placementChanged is this engine's only way to mark DirtyScrollStrips
+        // (the tracking service's scheduleSaveState, DirtyAll, also sets that
+        // bit). Without
         // this emit a resize that is the session's last strip interaction is
         // never saved and the column comes back at its old width.
         // reconcileWindowSize returns true only on a genuine change, so

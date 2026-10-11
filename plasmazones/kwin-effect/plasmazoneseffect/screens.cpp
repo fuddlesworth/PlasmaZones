@@ -114,7 +114,7 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output, con
     }
 
     // Build a screen ID that exactly matches the daemon's PhosphorScreens::ScreenIdentity::identifierFor().
-    // Uses shared ScreenIdUtils (compositor-common) for hex normalization and sysfs EDID
+    // Uses PhosphorIdentity::ScreenId for hex normalization and sysfs EDID
     // fallback, ensuring byte-identical output across daemon and compositor processes.
     //
     // Try QScreen::serialNumber() first (same source as daemon), then sysfs fallback.
@@ -300,9 +300,9 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w, const QStrin
         return QString();
     }
     // Engine-authoritative override for scroll-managed windows: the strip
-    // parks off-viewport columns and hidden tabs ENTIRELY outside their
-    // screen rect, so a parked frame's centre lands inside a NEIGHBOUR
-    // output's geometry and the position-derived resolution below would
+    // parks off-viewport columns and hidden tabs below every output, inside
+    // none, so a parked frame resolves to the nearest output, which can be a
+    // NEIGHBOUR, and the position-derived resolution below would
     // misattribute the window (wrong minimize routing, wrong close/float
     // record, wrong Mode stamp). Scroll windows change screens only through
     // engine-driven handoffs, which update the tracked screen first.

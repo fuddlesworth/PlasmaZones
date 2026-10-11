@@ -299,15 +299,15 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
     // interception does only on a REFUSED request — but unconditionally, and
     // with no dispatch.
     //
-    // An axis-only maximize (KWin's quick tile) never reaches the interception,
-    // because the caller's edge filter only passes a change in the FULLY
-    // maximized state. On a scroll-managed tile nothing else takes the bit back
-    // either: the batch arm that clears a stray partial maximize needs a batch,
-    // and the engine emits on change, so a quick tile that moves no column
-    // schedules none. Put the bit back to whatever the engine last said and
-    // stop there — the engine has no half-maximize to express, so there is
-    // nothing to dispatch and asking it would turn a quick tile into a column
-    // maximize.
+    // An axis-only maximize (Maximize Vertically / Horizontally) never reaches
+    // the interception, because the caller's edge filter only passes a change
+    // in the FULLY maximized state. On a scroll-managed tile nothing else takes
+    // the bit back either: the batch arm that clears a stray partial maximize
+    // needs a batch, and the engine emits on change, so a flip that moves no
+    // column schedules none. Put the bit back to whatever the engine last said
+    // and stop there — the engine has no half-maximize to express, so there is
+    // nothing to dispatch and asking it would turn an axis maximize into a
+    // column maximize.
     if (!w || w->isDeleted()) {
         return;
     }

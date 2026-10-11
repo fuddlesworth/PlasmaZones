@@ -281,9 +281,10 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // The tab-indicator model came from the daemon that just died, so
         // every pill it described belongs to a strip nothing owns now: drop
         // the handler's model, hover and cursor override with the painter's
-        // per-output state. GL-free on this D-Bus dispatch: the painter
-        // RETIRES the per-output textures and deletes them at its next
-        // GL-current point (the next paint, or releaseGl at teardown). The
+        // per-output state. The painter retires the per-output textures
+        // without GL, and clearScrollTabState then deletes them under a
+        // made-current context before it returns (left to releaseGl only at
+        // compositor teardown, when none can be made current). The
         // bring-up fetches a dying daemon may still answer are voided first,
         // so a late strips/overrides reply cannot re-seed what this clears.
         m_tilingHandler->voidInFlightScrollTabFetches();
