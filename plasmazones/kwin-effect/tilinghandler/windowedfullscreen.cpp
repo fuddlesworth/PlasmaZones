@@ -16,6 +16,7 @@
 
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/shader_internal.h"
 #include "compositor/effectlogging.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -26,7 +27,6 @@
 
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDateTime>
 #include <QList>
 #include <QLoggingCategory>
 #include <QScopeGuard>
@@ -541,7 +541,7 @@ bool TilingHandler::maximizeToggleInFlight(const QString& windowId)
     // can be lost or outlive the window, and the only reader that matters is
     // the batch arm, which runs often enough that an expired entry is
     // collected promptly.
-    if (QDateTime::currentMSecsSinceEpoch() - it->armedAtMs > MaximizeToggleFlightMs) {
+    if (ShaderInternal::shaderClockNowMs() - it->armedAtMs > MaximizeToggleFlightMs) {
         // A recorded press SURVIVES expiry. The suppression this entry
         // provides is time-bounded because a latched one would disable the
         // repair arm for the session, but the user's second click is not
@@ -604,7 +604,7 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
     // this is reachable with an entry already present, and value-overwriting
     // would silently drop a press the interception had recorded.
     MaximizeToggleFlight& flightEntry = m_maximizeToggleInFlight[windowId];
-    flightEntry.armedAtMs = QDateTime::currentMSecsSinceEpoch();
+    flightEntry.armedAtMs = ShaderInternal::shaderClockNowMs();
     // The echo debt is SEEDED, not accumulated: the reply handler computes the
     // full count it owes (whatever the entry it took still had, plus one if
     // its own write-back has not committed yet) and passes it here, so a

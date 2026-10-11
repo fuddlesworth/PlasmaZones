@@ -13,6 +13,7 @@
 #include "handlers/screenchangehandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "plasmazoneseffect/gestureenddecisions.h"
+#include "plasmazoneseffect/shader_internal.h"
 #include "compositor/windowanimator.h"
 #include "compositor/effectlogging.h"
 
@@ -24,7 +25,6 @@
 #include <effect/effectwindow.h>
 #include <window.h>
 
-#include <QDateTime>
 #include <QDBusPendingCallWatcher>
 #include <QLoggingCategory>
 #include <QScopeGuard>
@@ -134,7 +134,7 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
             {
                 // Budget arithmetic is pure and unit-tested
                 // (scrolldecisions.h, test_scroll_decisions).
-                const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+                const qint64 nowMs = ShaderInternal::shaderClockNowMs();
                 if (ScrollDecisions::shouldCounterAssert(cit->burstStartMs, cit->burstCount, nowMs,
                                                          actual != cit->rect)) {
                     // Copy out of the hash node first: the apply below emits
@@ -151,11 +151,13 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                     // Routed through applyWindowGeometry ON PURPOSE, unlike
                     // the fullscreen-ack re-commit (signals.cpp): its
                     // already-at-target skip cannot fire here (this slot runs
-                    // because the frame DIFFERS from the commanded rect), and
-                    // its user-move defer is wanted — countering a live mouse
-                    // drag would fight the user, and the drag machinery owns
-                    // the re-insert; a superseding batch mooting the deferred
-                    // replay is the correct outcome, not a drop.
+                    // because the frame DIFFERS from the commanded rect), and it
+                    // brings constrainTileGeometry's X11 pre-centre and the
+                    // size-preserving move or moveResize split. Its user-move
+                    // defer cannot trigger, because the gate above excludes a
+                    // live move or resize, and those terms must stay: without
+                    // them the counter would defer to the gesture end and the
+                    // replay would yank the dropped window back to its rect.
                     // Save/restore, not set/clear (nesting-safe), through
                     // qScopeGuard like the four siblings in this file and
                     // signals.cpp. Hand-restoring was correct as written —
@@ -186,7 +188,9 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // on the same physical monitor (e.g., A/vs:0 → A/vs:1), no outputChanged
     // fires. Detect the change here so the autotile engine can transfer the
     // window. Only check windows we're already tracking (m_notifiedWindowScreens)
-    // and only when the physical screen has virtual subdivisions.
+    // and only while some monitor has virtual subdivisions (a global test, so
+    // windows on unsubdivided monitors are resolved too and simply never read
+    // as crossing).
     // Skip during a daemon-driven apply (slotWindowsTileRequested /
     // slotApplyGeometriesBatch): the daemon is the authoritative source of the
     // window's intended VS during VS swap/rotate, and the cached
@@ -194,9 +198,9 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()
         && m_effect->m_daemonGate.virtualScreensReady && !m_effect->m_daemonGate.inGeometryApply) {
         // Don't detect VS crossings for the window in a gesture: the drop
-        // handler (callDragStopped / autotile drag end) owns a drag's
-        // transitions, and the resize drain owns a resize's (F486). Detecting
-        // mid-gesture would transfer the window before the user lets go.
+        // handler (callEndDrag) owns a drag's transitions, and the resize
+        // drain owns a resize's (F486). Detecting mid-gesture would transfer
+        // the window before the user lets go.
         // Other windows (e.g., a terminal reflowing) should still get VS crossing checks.
         // A tile whose client acks a larger size than its tile has not moved
         // either (F248): the centring pass below is what answers it.
@@ -349,13 +353,14 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
 
     // Defensive bounds clamp: if the (oversized) window would extend past the
-    // physical output containing the zone, shift it left/up so it stays on
-    // the same output. Without this, a window whose min size exceeds its
-    // zone leaks into an adjacent monitor — KWin then reassigns the window's
-    // output and the autotile engine ejects it. The daemon-side bounds clamp
-    // in recalculateLayout already shifts zones to fit, so this is a backstop
-    // for cases where the zone still violates min size (script algorithms,
-    // unsatisfiable constraints, residual rounding).
+    // physical output nearest the zone's centre, shift it back inside that
+    // output (left/up for overflow, right/down for underflow). Without this,
+    // a window whose min size exceeds its zone leaks into an adjacent monitor
+    // — KWin then reassigns the window's output and the autotile engine ejects
+    // it. The daemon-side bounds clamp in recalculateLayout already shifts
+    // zones to fit, so this is a backstop for cases where the zone still
+    // violates min size (script algorithms, unsatisfiable constraints,
+    // residual rounding).
     //
     // Scope: this clamps to the physical Output*, NOT the virtual-screen
     // sub-region. Overflow that crosses a virtual-screen boundary on the
@@ -403,10 +408,9 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                               << "to" << centered.topLeft() << "screen=" << screenGeo;
         }
     } else {
-        // screenAt may return null if the zone center happens to fall in the
-        // air between outputs (unusual; daemon assigns zones to a real
-        // screen). Log so the silent skip is diagnosable rather than
-        // mysterious.
+        // Unreachable in a live session: screenAt is nearest-output (see
+        // windowOutput in screens.cpp) and returns null only with no
+        // outputs, which KWin prevents with a placeholder. Kept as a cheap belt.
         qCDebug(lcEffect) << "Autotile centering: screenAt(" << targetZone.center()
                           << ") returned null — skipping bounds clamp for" << windowId;
     }
@@ -474,9 +478,11 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     qCInfo(lcEffect) << "Centering autotile window" << windowId << "actual=" << actual.size()
                      << "zone=" << targetZone.size() << "offset=(" << dx << "," << dy << ")";
 
-    // Erase BEFORE moveResize to prevent re-entrancy: moveResize emits
-    // windowFrameGeometryChanged synchronously, which would re-enter
-    // this slot and find the entry still present → infinite recursion → crash.
+    // Stamp and erase before the compositor call. The pass's own synchronous
+    // re-entry returns at the inGeometryApply gate (the moveResize below is
+    // bracketed), so this is not what stops recursion; it keeps the map settled
+    // before any re-entrant code runs, and `targetZone` is a reference into the
+    // erased node, so nothing below may read it.
     m_centeredWaylandZones[windowId] = targetZone;
     m_centeredWaylandFrames[windowId] = centered;
     m_tileTargetZones.erase(it);

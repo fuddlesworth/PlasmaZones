@@ -70,8 +70,13 @@ void TilingHandler::untileWindowsLeftOnScreen(const QString& screenId, const QSe
         m_effect->m_scrollCommandedRects.remove(wid);
         m_effect->m_scrollOfferedColumn.remove(wid);
         if (!win || win->isMinimized()) {
-            // A minimized (or vanished) window KEEPS its centering target and
-            // its claims: the re-tile on unminimize re-asserts them.
+            // A minimized (or vanished) window is left to its own funnel.
+            // Minimizing a tile floats it, and that float's cleanup
+            // (applyFloatCleanup for an autotile minimize-float,
+            // applyPassiveFloatShed for a strip tile) drops its centring maps
+            // and releases its claims; a vanished window's close cleanup does
+            // the same. A re-tile on unminimize records a fresh centring
+            // target of its own.
             continue;
         }
         // A daemon-initiated untile that is not a float/fullscreen/close (a

@@ -91,11 +91,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     }
 
     // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). The
-    // ARRIVAL of a batch is itself the evidence: the engine emits on change
-    // only (see engine_apply.cpp), so returning to a desktop whose strip is
-    // unchanged emits nothing at all, and candidate A is diagnosed by this
-    // line NOT appearing after a desktop switch. Read against the
-    // desktopChanged line from the same category.
+    // ARRIVAL of a batch is itself the evidence: the engine emits on change,
+    // plus one forced emit per strip-context switch (m_forceEmitScreens, the
+    // candidate-A fix), so if this line does NOT appear after a desktop switch
+    // that changed the strip's context, that forced emit has regressed. Read
+    // against the desktopChanged line from the same category.
     if (lcStripDiag().isDebugEnabled()) {
         QSet<QString> screens;
         int parkedEntries = 0;
@@ -144,11 +144,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // every strip window's decoration ~60 times a second for the length of
     // an edge hold. A structural change mid-hold gives ownership back first,
     // so its batch arrives without the flag and invalidates as before.
-    // Accepted trade: the POSITIONAL rule fields (positionX/Y, width,
-    // height) DO move on a view tick, so a rule scoped on them freezes for
-    // the length of the hold and refreshes on the first non-immediate batch
-    // — a bounded cosmetic lag bought for not re-resolving every window's
-    // decoration at heartbeat rate.
+    // Nothing is lost for the POSITIONAL rule fields (positionX/Y, width,
+    // height), which do move on a view tick: the frame-geometry flush evicts
+    // those verdicts per window whenever a geometry-scoped rule exists, so
+    // they keep up at the flush rate without this wholesale invalidation.
     QSet<QString> immediateTickScreens;
     for (const auto& req : validatedRequests) {
         if (req.viewImmediate) {
@@ -499,9 +498,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         }
         // Belt behind the claimed-set above: a double-resolve that slips
         // through must not apply twice — and a WARNED drop shrinks
-        // toApply below tileRequestCount, so the stranded-window log at
-        // the end of this function fires and the case is diagnosable
-        // instead of silent.
+        // toApply below tileRequestCount, so the "sent N tile requests,
+        // resolved M" log below (after the cascade sort) fires and the
+        // case is diagnosable instead of silent.
         if (applied.contains(e.window)) {
             qCWarning(lcEffect) << "Autotile: two batch entries resolved to one window — dropping the second for"
                                 << e.windowId;
@@ -553,12 +552,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // each start a moment apart and integrate themselves apart.
     //
     // Filled with the screenIds whose spring actually STARTED (or
-    // retargeted) a leg this batch. Consumed twice below: the residual-
+    // retargeted) a leg this batch. Consumed three times below: the residual-
     // origin branch of the apply lambda treats an entry's viewDelta as
     // real only for these screens (with no leg the paint offset is zero,
     // so an origin placed a delta behind the target would pop backwards
-    // and slide double), and the cascade decision skips the direction sort
-    // only when a leg exists to make the one-pass apply mandatory.
+    // and slide double), the cascade decision skips the direction sort,
+    // and the dispatch forces the one-pass apply described next.
     // Membership comes from applyBatchDelta's return value, NOT from the
     // wire delta: animations-off and clockless outputs fold the delta into
     // the accumulator without a leg.
@@ -567,9 +566,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // path adds the view offset to every scroll-managed window on the
     // output with no test for whether that window's own commit has arrived,
     // so a column still waiting on its stagger timer draws at (old rect +
-    // offset), a full delta from where it belongs. With the shipped 40 ms
-    // cascade against a 150 ms leg, columns from the fourth on would sit
-    // still for the whole leg and then teleport in sequence.
+    // offset), a full delta from where it belongs. Column i waits i times the
+    // stagger interval while the leg runs (the global animation duration
+    // unless scrolling.view overrides it) and then teleports, so with a long
+    // enough strip some columns sit still for the whole leg.
     QSet<QString> startedViewScreens;
     // Screens whose view travel this batch is USER-DRIVEN continuous motion
     // (the drag edge auto-scroll heartbeat, ~60 Hz). Their delta is folded
@@ -751,7 +751,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // column by the centring offset, so the raw column rect made
         // `isArriving` answer differently than the apply does for a column
         // straddling its output by less than that offset, and gave every such
-        // staying column's netDx term a spurious -centringOffset — enough to
+        // staying column's netAlong term a spurious -centringOffset — enough to
         // flip the batch's net sign and run the whole cascade mirrored.
         // Falls back to the raw rect for a null window pointer, which is what
         // constrainTileGeometry returns for a windowless entry anyway.
@@ -853,13 +853,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         });
     }
 
-    // A TILE window the daemon asked us to tile that we could not resolve to a
-    // live EffectWindow is dropped from this batch. Surface it: a silent drop
-    // here is exactly how a source-monitor reflow loses windows (only the
-    // resolvable ones move, the rest are stranded). Compare against the count of
-    // TILE requests only — float entries (req.floating) are validated but
-    // handled inline above and never enter `toApply`, so counting them would
-    // make every batch containing a float falsely report stranded windows.
+    // A TILE window the daemon asked us to tile that we could not resolve to a live EffectWindow is
+    // dropped from this batch. Surface it: a silent drop here is exactly how a source-monitor reflow
+    // loses windows (only the resolvable ones move, the rest are stranded). Compare against the count
+    // of TILE requests only — float entries (req.floating) are validated but handled inline above and
+    // never enter `toApply`, so counting them would make every batch containing a float falsely report
+    // stranded windows. A heartbeat batch logs at debug, or one unresolvable strip entry would log at
+    // INFO on every edge-hold tick; the next real batch reports it at INFO.
     const qsizetype tileRequestCount =
         std::count_if(validatedRequests.cbegin(), validatedRequests.cend(), [](const auto& r) {
             return !r.floating;
@@ -869,8 +869,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         for (const TileSnap& s : toApply) {
             resolved << s.windowId;
         }
-        qCInfo(lcEffect) << "slotWindowsTileRequested: sent" << tileRequestCount << "tile requests, resolved"
-                         << toApply.size() << "windows — applying:" << resolved;
+        if (immediateViewScreens.isEmpty()) {
+            qCInfo(lcEffect) << "slotWindowsTileRequested: sent" << tileRequestCount << "tile requests, resolved"
+                             << toApply.size() << "windows — applying:" << resolved;
+        } else {
+            qCDebug(lcEffect) << "slotWindowsTileRequested: sent" << tileRequestCount << "tile requests, resolved"
+                              << toApply.size() << "windows — applying:" << resolved;
+        }
     }
 
     // Global epoch (desktop/screen switch) captured for the apply guards below.
@@ -936,9 +941,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // The genuinely raced-ahead case — a batch that established strip state
     // before the effect had ever heard an epoch for the screen — is not
     // handled here at all. slotStripContextChanged's first-epoch branch
-    // handles it by declining to retire, so no apply is ever cancelled on its
-    // behalf. A screen with no epoch yet reads empty on both sides and is
-    // unaffected.
+    // declines to retire, so the state such a batch already established
+    // survives. Its entries still pending in the stagger captured an empty
+    // epoch and are dropped once the first epoch is recorded, like any batch
+    // built before an announcement. A screen that never hears an epoch reads
+    // empty on both sides and is unaffected.
     QHash<QString, QString> stripEpochByScreen;
     for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
         stripEpochByScreen.insert(it.key(), m_stripEpochByScreen.value(it.key()));
@@ -986,11 +993,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
             untileWindowsLeftOnScreen(screenId, screenIt.value());
         }
-        // A batch with NO tile applies (every request resolved away or the
-        // batch was floats-only) still owes the untile cleanup above, but
-        // must not churn the whole stacking order or spend the one-shot
-        // saved-order/pending-focus state — nothing moved, so there is no
-        // z-order to repair.
+        // A batch with NO tile applies (every request resolved away, or a floats-only batch) runs no
+        // untile diff: newTiledByScreen is built from toApply, so it is empty, and the batch-float arm
+        // cleaned each float up inline (applyFloatCleanup). Nor may it churn the stacking order or
+        // spend the one-shot saved-order/pending-focus state: nothing moved, so no z-order to repair.
         auto* ws = KWin::Workspace::self();
         if (ws && hasApplies && !scrollOnlyBatch) {
             // Overlap groups take their declared order at the slot of their
@@ -1208,8 +1214,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // duration of this per-window apply. applyWindowGeometry's moveResize emits
             // frameGeometryChanged synchronously, and after a VS swap/rotate the cached
             // m_virtualScreenDefs may still hold pre-rotation regions — without this
-            // guard the slot would resolve the new position against stale boundaries
-            // and falsely conclude the window crossed VSes, then unsnap it.
+            // guard the per-frame detector in slotWindowFrameGeometryChanged would read
+            // a false virtual-screen crossing off the stale boundaries and transfer the
+            // window to the neighbouring virtual screen's engine.
             // Save/restore, not set/clear (nesting-safe).
             const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
             m_effect->m_daemonGate.inGeometryApply = true;
@@ -1245,10 +1252,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             if (!inOwnFullscreen) {
                 saveAndRecordPreTileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
             }
-            KWin::Window* kwForLog = snap.window->window();
-            qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry
-                             << "monocle=" << snap.isMonocle << "maximizeMode="
-                             << (kwForLog ? maximizeModeName(kwForLog->maximizeMode()) : "no-window");
+            // Not on a heartbeat view tick, which re-commits every column at pointer rate.
+            if (!immediateViewScreens.contains(snap.screenId)) {
+                KWin::Window* kwForLog = snap.window->window();
+                qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry
+                                 << "monocle=" << snap.isMonocle << "maximizeMode="
+                                 << (kwForLog ? maximizeModeName(kwForLog->maximizeMode()) : "no-window");
+            }
             // Scroll-batch decision inputs, at debug. The animation arm a
             // strip entry takes is chosen from these four plus the predicted
             // commit, and none of them were observable — which is a problem
@@ -1504,12 +1514,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // the committed rect at draw time AND folds into the
                     // backdrop capture, so a garbled pair would draw the column
                     // and its sample arbitrarily far off until the next batch.
-                    // The clamp runs in qint64, per axis. The value is an
-                    // unvalidated int off the wire, so widening before the
-                    // qBound the protocol layer explicitly leans on keeps a
-                    // garbled pair from overflowing on the way in — signed
-                    // overflow is undefined, not a wrapped number the clamp
-                    // could then rescue. Widen, clamp, then narrow.
+                    // The clamp runs per axis on the int the wire carries. Nothing adds to
+                    // it before the qBound, so there is no overflow to guard; the qint64
+                    // form only matches the constant's type.
                     //
                     // The bound is StripViewAnimator's per-leg DELTA budget,
                     // reused here as a sanity bound on an absolute strip
@@ -1972,11 +1979,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // Centred the same way the paint resolver centres
                         // (scrollVisualTranslationFor), so the drawn and
                         // committed positions agree: same toRect() rounding on
-                        // the size, and the same clamp at zero. The clamp is
-                        // what constrainTileGeometry already does for the X11
-                        // pre-centre — a frame whose minimum exceeds its column
-                        // stays anchored at the column's origin instead of
-                        // shifting past its edge.
+                        // the size, and the same clamp at zero. The clamp is inert
+                        // here, because mayCarryCommittedSize carries only a commit
+                        // that fits the column, and is kept for parity with
+                        // scrollVisualTranslationFor.
                         //
                         // isEmpty rather than isValid: QSize::isValid() admits
                         // 0x0, and a degenerate mid-unmap commit would then
@@ -2019,13 +2025,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // rect while this is null. Without this the counter would be
                 // permanently disarmed for exactly the windows it protects.
                 //
-                // The rect is `geo` unchanged, and that is now the honest
-                // record: the sibling arm's warning about recording "the raw
-                // column instead" was written when the size-continuity pass
-                // did NOT exclude maximized columns, so the delivered rect
-                // could be a centred commit the counter had never offered.
-                // With the exemption in place the column rect IS what gets
-                // delivered, so the two agree by construction.
+                // The rect is `geo` unchanged, the column rect: the size-continuity
+                // pass excludes maximized columns, so the rect delivered is the one
+                // asked for, which the commanded-rect arm at the bottom then records.
                 if (isScrollingScreen(snap.screenId) && snap.isMaximizedToEdges && !snap.isMonocle
                     && !snap.isWindowedFullscreen && snap.window->isWaylandClient()) {
                     scrollDeliveredRect = geo;
@@ -2156,12 +2158,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // animation it used to run. That is the point: those
                     // predicates are asking where the window will actually be,
                     // and the answer is the constrained frame.
-                    // Normalized first, matching what applyWindowGeometry does
-                    // before it constrains the same rect: this is a D-Bus
-                    // boundary, and an inverted wire rect would otherwise hand
-                    // KWin a negative frame size here while the apply rejected
-                    // it downstream, leaving the two disagreeing about the
-                    // predicted commit.
+                    // Normalized for symmetry with applyWindowGeometry, which
+                    // normalizes the same rect before it constrains it, so the two
+                    // cannot disagree about the predicted commit. The wire cannot
+                    // deliver an inverted rect here: validationError refused negative
+                    // and empty tiled extents at the head of slotWindowsTileRequested,
+                    // and the entry stored the normalized rect.
                     const QRect committedGeo = m_effect->constrainTileGeometry(snap.window, geo.normalized());
                     // Shared four-edge anchor for both LEAVING treatments
                     // below: move the rect just past the named departure edge
@@ -2244,17 +2246,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // target: a target off the union of every output is a
                         // park, and a park-bound (LEAVING) entry needs the
                         // opposite treatment from an arriving one in both arms
-                        // below. The historical code assumed edge+viewDelta
-                        // means ARRIVING and edge-less+viewDelta means
-                        // on-strip travel — but a mid-strip close's re-anchor
-                        // batch carries viewDelta on EVERY entry, including
-                        // the parks the re-anchor just created, and routing
-                        // those through the arrival arms produced the two
-                        // artifacts fixed here: an unmasked pop to the park
-                        // (edged), and a real animated leg sweeping the
-                        // window visibly down to the park row (edge-less) —
-                        // the "closing a mid-strip window slides down off the
-                        // screen" bug.
+                        // below. The engine sends no viewDelta for a park
+                        // (engine_apply.cpp: a parked tile is not carried by the
+                        // view), so the two park-bound branches below are a
+                        // defensive backstop for an effect and engine that
+                        // disagree about which rects are parks, such as an
+                        // output-disconnect race. They keep such an entry out of
+                        // the arrival arms, which would pop it to the park
+                        // (edged) or sweep it down to the park row (edge-less),
+                        // the closing-a-mid-strip-window bug they were written for.
                         const bool viewLeavingToPark = rectAtScrollPark(committedGeo);
                         if (!snap.scrollEdge.isEmpty() && viewLeavingToPark) {
                             // LEAVING to a park with a named edge, carried by
