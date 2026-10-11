@@ -202,9 +202,9 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
 {
     // CALLER CONTRACT: callers must guarantee a non-minimized window. Unlike
     // the snap engine's applyFloatGeometryUnlessMinimized twin, this method
-    // has no minimize guard — it is not exposed on D-Bus, and its sole caller
-    // (Daemon::syncAutotileFloatState) is the user-toggle path whose passive
-    // sync twin deliberately skips it for exactly this reason.
+    // has no minimize guard — it is not exposed on D-Bus, and its callers
+    // (Daemon::syncAutotileFloatState and the scroll engine's active float arm
+    // in init_engines.cpp) are user float paths whose passive twins skip it.
     auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (geo) {
         qCInfo(lcDbusWindow) << "applyGeometryForFloat: windowId=" << windowId << "geo=" << *geo

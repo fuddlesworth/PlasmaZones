@@ -100,9 +100,9 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
 
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
-    // first navigation call; setZoneDetectionAdaptor is forwarded to
-    // SnapEngine alongside WTA's own copy, so the late-wired zone detector
-    // still reaches the resolver.
+    // first navigation call. setEngines hands the snap engine the zone
+    // detection adaptor recorded here (setZoneAdjacencyResolver), and the
+    // engine passes it to the resolver.
 
     // Forward service signals to D-Bus
     connect(m_service, &PhosphorPlacement::WindowTrackingService::windowZoneChanged, this,
@@ -270,15 +270,7 @@ PhosphorSnapEngine::SnapEngine* WindowTrackingAdaptor::snapEngine() const
     return m_cachedSnapEngine;
 }
 
-// Current virtual desktop, with a safe fallback of 0 when no
-// VirtualDesktopManager is wired (guiless tests, minimal sessions).
-// Centralises the null-guarded read shared by the disabled-context gates and
-// last-used-zone tracking. setEngines() lives in enginewiring.cpp.
-int WindowTrackingAdaptor::currentDesktop() const
-{
-    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-}
-
+// setEngines() lives in enginewiring.cpp.
 int WindowTrackingAdaptor::currentDesktopForScreen(const QString& screenId) const
 {
     // Per-output virtual desktops (#648): this screen's current desktop, falling
@@ -294,10 +286,8 @@ void WindowTrackingAdaptor::setScreenModeRouter(ScreenModeRouter* router)
 void WindowTrackingAdaptor::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
 {
     m_zoneDetectionAdaptor = adaptor;
-    // Target resolver ownership moved to SnapEngine (Phase 5E). SnapEngine's
-    // own setZoneDetectionAdaptor wiring pushes the adaptor into its
-    // resolver when late-wired; this setter no longer has anything to do
-    // except record the pointer for any WTA-side consumers.
+    // Only records the pointer: setEngines hands it to the snap engine as its
+    // adjacency resolver, so it must be set before setEngines.
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

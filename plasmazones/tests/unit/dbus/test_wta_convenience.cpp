@@ -16,6 +16,7 @@
 
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorProtocol/AutotileTypes.h>
+#include <QRegularExpression>
 #include <QScopeGuard>
 #include <QSignalSpy>
 
@@ -108,6 +109,15 @@ private Q_SLOTS:
         m_wta->windowClosed(windowId, 0);
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.first().at(0).toString(), windowId);
+    }
+
+    // The shutdown save takes the synchronous path by design (the worker is
+    // gone first), so it logs at debug rather than as a fallback warning (F636).
+    void testShutdownSave_logsNoWarning()
+    {
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("synchronous fallback")));
+        m_wta->service()->markDirty(PhosphorPlacement::WindowTrackingService::DirtyAll);
+        m_wta->saveStateOnShutdown();
     }
 
     void testPruneStaleWindows_relaysTheAliveInstances()

@@ -37,18 +37,17 @@ bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, 
         return false;
     }
     if (!m_contextResolver) {
-        // Pre-`setContextResolver` path — the first call lands from
-        // this adaptor's ctor (loadState()) before Daemon hands the
-        // resolver over. Returns "nothing is disabled" so the
-        // historical "load everything when no settings backend is
-        // wired" behaviour is preserved.
+        // Pre-`setContextResolver` path: before Daemon hands the resolver
+        // over (and in fixtures that never wire one) nothing is disabled,
+        // so every gate keeps the record. Records load unfiltered either
+        // way; loadState never asks this predicate.
         return false;
     }
     // Routes through `handleForPersisted` which resolves the screen's
     // mode via the bound IModeProvider — every consumer (the snap engine's
     // restore gate, the WindowPlacementStore serialize keep-predicate,
-    // and the save/load filters) ends up applying the cascade keyed on
-    // the mode the screen is actually running.
+    // the instant-restore cache, the re-apply and the resnap filter) ends
+    // up applying the cascade keyed on the mode the screen is running.
     return m_contextResolver->isDisabled(m_contextResolver->handleForPersisted(screenId, virtualDesktop, activity));
 }
 
@@ -226,8 +225,8 @@ void WindowTrackingAdaptor::saveState()
         // Fallback synchronous path.
         //
         // Reachable in two cases:
-        //   1. m_sessionBackend is not a PhosphorConfig::JsonBackend —
-        //      tests that wire a memory-only backend.
+        //   1. m_sessionBackend is not a PhosphorConfig::JsonBackend (none
+        //      today: createSessionBackend builds one).
         //   2. The production shutdown path: `saveStateOnShutdown` resets
         //      `m_persistenceWorker` before calling `saveState()`, so the
         //      async branch is unavailable on the very last save.
@@ -236,12 +235,13 @@ void WindowTrackingAdaptor::saveState()
         // write and re-mark the committed bits for retry. The mask has
         // already been taken (above), which means a silent failure here
         // silently loses the committed bits — same behavior as
-        // pre-Phase-3 code. Log a one-time warning on first hit so any
-        // unexpected production regression (steady-state saves landing
-        // here instead of the shutdown one-shot) is obvious in logs.
-        if (!m_syncFallbackWarned) {
-            qCWarning(lcDbusWindow) << "saveState: using synchronous fallback backend; failed writes cannot be retried "
-                                       "(expected for the one shutdown save and for unit tests with a memory backend)";
+        // pre-Phase-3 code. A backend that is not a JsonBackend warns once;
+        // the shutdown save is expected and logs at debug.
+        if (jsonBackend) {
+            // The shutdown save: saveStateOnShutdown reset the worker first.
+            qCDebug(lcDbusWindow) << "saveState: shutdown save written synchronously";
+        } else if (!m_syncFallbackWarned) {
+            qCWarning(lcDbusWindow) << "saveState: using synchronous fallback backend; failed writes cannot be retried";
             m_syncFallbackWarned = true;
         }
         m_sessionBackend->sync();

@@ -187,12 +187,12 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // A placement record saved before the user toggled the disable (or
         // before the disable propagated through settingsChanged) would still
         // restore the window when it reopens. This gate fires on the open
-        // path, so the same isPersistedContextDisabled rule that filters reads
-        // and writes also covers the window-arrives-during-running-session
-        // case. Resolves the user-visible "windows tracked even on disabled
-        // monitor — restarting the service fixes it" symptom: a restart
-        // re-loaded from disk, where the read-time filter dropped the same
-        // entries; this gate makes the running session match.
+        // path, so the same isPersistedContextDisabled rule that filters saves
+        // also covers the window-arrives-during-running-session case.
+        // Resolves the user-visible "windows tracked even on disabled monitor
+        // — restarting the service fixes it" symptom: a restart re-loaded
+        // from disk, where the save-time filter had dropped the same entries;
+        // this gate makes the running session match.
         //
         // Activity: the current one, because every restore lands in the
         // activity in view.

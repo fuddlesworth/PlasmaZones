@@ -93,7 +93,7 @@ public:
      *        Daemon::initEnginesAndWiring (the resolver already exists then);
      *        a setter so stop() and clearEngine() can null it.
      *
-     * @param resolver IContextResolver instance (not owned, must outlive adaptor)
+     * @param resolver IContextResolver instance (not owned; Daemon::stop() clears it after clearEngine())
      */
     void setContextResolver(PhosphorContext::IContextResolver* resolver)
     {
