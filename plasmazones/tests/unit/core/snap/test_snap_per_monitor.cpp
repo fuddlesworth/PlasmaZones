@@ -667,6 +667,66 @@ private Q_SLOTS:
         QCOMPARE(m_engine->screenForTrackedWindow(QStringLiteral("new|u-1")), screen);
     }
 
+    // "Move new windows to their last zone" takes only a zone the layout the
+    // screen runs now holds: a last-used zone of the layout it switched away
+    // from still resolves a rect (F983).
+    void lastZoneIsRefusedAfterALayoutSwitch()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+        m_settings->setMoveNewWindowsToLastZone(true);
+        m_engine->commitUserSnap(QStringLiteral("konsole|a"), {m_zoneIds[2]}, screen, QRect(0, 0, 400, 300), QString());
+        QVERIFY2(m_engine->calculateSnapToLastZone(QStringLiteral("konsole|b"), screen, false).shouldSnap,
+                 "control: the zone is taken while the layout holds it");
+
+        PhosphorZones::Layout* two = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(two);
+        m_layoutManager->assignLayout(screen, 0, QString(), two);
+
+        QVERIFY2(!m_engine->calculateSnapToLastZone(QStringLiteral("konsole|b"), screen, false).shouldSnap,
+                 "a zone of the layout the screen left is not a last zone");
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // The last zone is read from the opening screen's own store ahead of the
+    // global holder's restored representative (F863).
+    void lastZoneReadsTheScreensOwnStore()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+        m_settings->setMoveNewWindowsToLastZone(true);
+        m_engine->commitUserSnap(QStringLiteral("konsole|a"), {m_zoneIds[1]}, screen, QRect(0, 0, 400, 300), QString());
+        m_engine->snapState()->restoreLastUsedZone(m_zoneIds[0], QString(), QStringLiteral("konsole"), 0);
+
+        const PhosphorEngine::SnapResult here =
+            m_engine->calculateSnapToLastZone(QStringLiteral("konsole|b"), screen, false);
+
+        QVERIFY(here.shouldSnap);
+        QCOMPARE(here.zoneId, m_zoneIds[1]);
+        m_service->setSnapState(m_engine->snapState());
+    }
+
+    // The unfloat fallback's last-used tier reads the same per-screen store
+    // (F863).
+    void unfloatFallbackTakesTheScreensLastZone()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+        m_settings->setSnapUnfloatFallbackToZone(true);
+        m_engine->commitUserSnap(QStringLiteral("konsole|a"), {m_zoneIds[1]}, screen, QRect(0, 0, 400, 300), QString());
+        const QString floating = QStringLiteral("konsole|floating");
+        m_engine->stateForWindowOnScreen(floating, screen, 1)->setFloatingOnScreen(floating, screen, 1);
+
+        const UnfloatResult result = m_engine->resolveFallbackUnfloatGeometry(floating, screen);
+
+        QVERIFY(result.found);
+        QCOMPARE(result.zoneIds, QStringList{m_zoneIds[1]});
+        m_service->setSnapState(m_engine->snapState());
+    }
+
 private:
     /// Freeze "old|u-1" as instance u-1's canonical id, then push the class
     /// change that makes the compositor report it as "new|u-1".

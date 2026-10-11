@@ -10,6 +10,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
@@ -253,6 +254,15 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
     // Calculate geometry
     QRect geo = m_windowTracker->zoneGeometry(lastUsedZoneId, effectiveScreenId);
     if (!geo.isValid()) {
+        return SnapResult::noSnap();
+    }
+    // Only a zone the layout this screen runs now holds: zoneGeometry resolves
+    // an id from any registered layout, so a last-used zone left over from a
+    // layout the screen switched away from still has a rect (F983). The unfloat
+    // fallback's last-used tier has the same guard.
+    if (!PhosphorZones::LayoutUtils::contextLayoutHoldsZones(m_layoutManager, effectiveScreenId,
+                                                             currentVirtualDesktopForScreen(effectiveScreenId),
+                                                             currentActivity(), {lastUsedZoneId})) {
         return SnapResult::noSnap();
     }
 
