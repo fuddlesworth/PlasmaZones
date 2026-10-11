@@ -208,10 +208,8 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     }
 
     if (!m_effect->isDaemonReady("resolve window restore")) {
-        // No daemon means no snap-restore (and no autotile either — it
-        // needs the daemon too). Release first-frame suppression so the
-        // window is not held invisible waiting on a reposition that will
-        // never come.
+        // No daemon, no restore (autotile needs it too): release the first-frame
+        // suppression so the window is not held invisible for a reposition that never comes.
         m_effect->endRestoreSuppression(window);
         if (onComplete) {
             onComplete(false);
@@ -224,15 +222,11 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     QString screenId = m_effect->getWindowScreenId(window);
     bool sticky = m_effect->isWindowSticky(window);
 
-    // On a resolve miss (daemon found no zone) release first-frame
-    // suppression through the miss helper, which holds a window whose
-    // size-only reposition is still in flight — unless the caller says
-    // another path will reposition it (autotile screen), where the hold stays.
+    // On a miss, release the first-frame suppression through the miss helper (it holds a window whose size-only
+    // reposition is still in flight), unless the caller says another path repositions it (an autotile screen).
     const auto releaseSuppression = [this, safeWindow, releaseSuppressionOnMiss]() {
-        if (releaseSuppressionOnMiss) {
-            if (safeWindow) {
-                m_effect->releaseRestoreSuppressionOnMiss(safeWindow);
-            }
+        if (releaseSuppressionOnMiss && safeWindow) {
+            m_effect->releaseRestoreSuppressionOnMiss(safeWindow);
         }
     };
     const auto onMiss = [this, windowId, releaseSuppression]() {
@@ -240,20 +234,26 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
         releaseSuppression();
     };
 
-    // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain.
+    // A window under a user move is placed by its drop, so a restore asked for now (a sweep or desktop-arrival
+    // re-drive) takes the miss path: sent, it would reach the daemon after the drag began, its reply would defer
+    // behind the gesture, and the daemon would keep a zone the window never reached (F884).
+    if (window->isUserMove()) {
+        qCInfo(lcEffect) << "resolveWindowRestore skipped for" << windowId << ": it is being dragged";
+        onMiss();
+        if (onComplete) {
+            onComplete(false);
+        }
+        return;
+    }
+
+    // Single D-Bus call: the daemon runs the full appRule → persisted → emptyZone → lastZone chain.
+    // skipAnimation=true teleports into the zone (a morph from the spawn spot would drag the open shader with it).
+    // storePreSnap=false: the window already sits at its zone, which must not become its float-back.
     //
-    // skipAnimation=true: teleport straight into the resolved zone, or the
-    // morph tweens from the spawn position and drags the open shader with it.
-    //
-    // storePreSnap=false: the window is already at its zone position, so
-    // storing that frame as pre-tile would make the zone the float-back.
-    //
-    // Seed the daemon's frame-geometry shadow before the resolve, open path
-    // only: the daemon translates a bare RouteToScreen from that shadow, and a
-    // freshly opened window has no entry there, so the rule silently did
-    // nothing for it (confirmed live). Fire-and-forget is safe: both calls
-    // ride one D-Bus connection, whose message order is preserved. The free
-    // rect, so a window that maps maximized routes its restore rect (F575).
+    // Seed the daemon's frame-geometry shadow before the resolve, open path only: the daemon translates a bare
+    // RouteToScreen from that shadow, and a freshly opened window has none, so the rule did nothing for it
+    // (confirmed live). Fire-and-forget is safe: both calls ride one D-Bus connection, which keeps message order.
+    // The free rect, so a window that maps maximized routes its restore rect (F575).
     if (isOpenPath) {
         const QRect openGeo = m_effect->freeGeometryForCapture(window, window->frameGeometry()).toRect();
         if (openGeo.isValid()) {

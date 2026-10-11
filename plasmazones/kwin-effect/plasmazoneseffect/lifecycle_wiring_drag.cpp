@@ -171,7 +171,6 @@ void PlasmaZonesEffect::connectDragTracker()
                 // (post-settings-reload — the #310 scenario).
                 if (m_tilingHandler->isManagedScreen(startScreenId)) {
                     m_dragBypassedForEngine = true;
-                    m_dragBypassScreenId = startScreenId;
                     // Reorder mode: the daemon owns drag-insert preview for tile
                     // swapping. Skip the synchronous float transition — we want
                     // the tile to stay visually in place while the daemon runs
@@ -299,10 +298,8 @@ void PlasmaZonesEffect::connectDragTracker()
             });
     connect(m_dragTracker.get(), &DragTracker::dragStopped, this,
             [this](KWin::EffectWindow* w, const QString& windowId, bool cancelled) {
-                // Release keyboard grab before handling drag end. Effects
-                // guard mirrors the dragStarted lambda: DragTracker signals
-                // are less teardown-exposed than D-Bus replies, but the two
-                // lambdas should not drift.
+                // Release the keyboard grab before handling the drag end (the
+                // KWin::effects test is belt and braces, as in dragStarted).
                 if (m_keyboardGrabbed && KWin::effects) {
                     KWin::effects->ungrabKeyboard();
                     m_keyboardGrabbed = false;
@@ -354,7 +351,6 @@ void PlasmaZonesEffect::connectDragTracker()
                 // Clear drag state for the next session.
                 m_currentDragPolicy = PhosphorProtocol::DragPolicy{};
                 m_dragBypassedForEngine = false;
-                m_dragBypassScreenId.clear();
                 m_dragActivation.detected = false;
 
                 // The pill hover guard held the tab indicators inert for the

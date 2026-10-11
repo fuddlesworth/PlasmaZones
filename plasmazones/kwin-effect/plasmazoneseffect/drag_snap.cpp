@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 
 #include "dragpolicytransition.h"
+#include "gestureenddecisions.h"
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
@@ -46,16 +47,20 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
         m_snapHandler->ensurePreSnapGeometryStored(window, windowId, QRectF(window->frameGeometry()),
                                                    /*overwrite=*/true);
     }
+    // A drop after this request is newer than its answer. The daemon agrees
+    // then: the drag reached it after the commit, and its end released the
+    // zone (F884).
+    const quint64 dropAtRequest = window ? m_daemonGate.commandStamps.lastDrop(window) : 0;
     QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(interface, method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     connect(
         watcher, &QDBusPendingCallWatcher::finished, this,
         [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation, onComplete,
-         onError](QDBusPendingCallWatcher* w) {
+         onError, dropAtRequest](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<int, int, int, int, bool> reply = *w;
             if (reply.isError()) {
-                qCDebug(lcEffect) << method << "error:" << reply.error().message();
+                qCWarning(lcEffect) << method << "failed for" << windowId << ':' << reply.error().message();
                 if (onError)
                     onError();
                 else if (fallback)
@@ -65,10 +70,21 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                 return;
             }
             if (reply.argumentAt<4>() && (!window || window->isDeleted())) {
-                // The daemon DID resolve/commit — the window just died in
-                // flight. This is not a restore miss: onMiss/fallback
-                // would drop restart-candidate state a same-app reopen
-                // may still need. Nothing to apply; just complete.
+                // The daemon committed and the window died in flight: nothing
+                // to apply, and the miss path owes nothing (its restart
+                // candidate and the suppression die with the window,
+                // SnapHandler::onWindowClosed).
+                if (onComplete)
+                    onComplete();
+                return;
+            }
+            if (reply.argumentAt<4>() && m_daemonGate.commandStamps.lastDrop(window) != dropAtRequest) {
+                // The user dropped the window after asking, so the drop is the
+                // placement that stands. The miss path is right for it: it
+                // was placed by hand.
+                qCInfo(lcEffect) << method << "superseded by a drop of" << windowId << ", not applied";
+                if (fallback)
+                    fallback();
                 if (onComplete)
                     onComplete();
                 return;
@@ -107,7 +123,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                     applyWindowGeometry(window, verdict.applyRect, false, skipAnimation,
                                         PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(), purpose);
                 }
-                // Async snap (keyboard / empty-zone / last-zone / auto-fill)
+                // Async snap (a restore resolve or the drop auto-fill)
                 // committed — record in snapping's border set, but only for
                 // a resolved snap-mode screen (autotile windows are tracked
                 // by TilingHandler; an empty screen is left untracked,
@@ -130,7 +146,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                     // Symmetric with the snap-tracked branch: re-resolve rules.
                     invalidateRuleCacheForStateChange(windowId);
                 }
-                // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
+                // args[1] is the screen id in both callers (resolveWindowRestore, snapToEmptyZone).
                 if (onSnapSuccess && args.size() >= 2) {
                     onSnapSuccess(windowId, args[1].toString());
                 }
@@ -182,11 +198,16 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
         height = qMin(height, virtualSize.height());
     }
 
-    // Restore-size-only: keep current position, apply pre-snap width/height
-    QRectF frame = window->frameGeometry();
-    // qRound, not truncation — fractional-scale sub-pixel residue (see the
-    // no-op skip in applyWindowGeometry, window_geometry_apply.cpp).
-    QRect geometry(qRound(frame.x()), qRound(frame.y()), width, height);
+    // The pre-snap size, placed so the point under the cursor stays at the
+    // same fraction of the window, as KWin's own restore-on-drag does. On X11
+    // KWin applies the rect at once and re-anchors the move only on the next
+    // pointer step, so a kept top-left left the window shrunk toward the
+    // zone's corner with the grab point outside it. Wayland re-anchors at the
+    // commit, so the rect only has to agree with that (F702). The helper
+    // rounds (qRound, not truncation) for fractional-scale residue.
+    const QPointF grab = KWin::effects ? KWin::effects->cursorPos() : window->frameGeometry().center();
+    const QRect geometry =
+        GestureEndDecisions::frameUnderGrab(QRectF(window->frameGeometry()), grab, QSize(width, height));
 
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
     // Live drag-out unsnap: restoring pre-snap dimensions while the user is
@@ -201,12 +222,10 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
 
 void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy)
 {
-    // Daemon-owned cross-VS flip. The daemon's updateDragCursor
-    // handler computed policy at the current cursor position and found it
-    // different from the policy in force — tell us so we can apply the
-    // compositor-level transition. Replaces the effect-side cross-VS flip
-    // loop in the dragMoved lambda that walked KWin::effects->screens()
-    // with a stale m_managedScreens cache.
+    // The daemon's updateDragCursor found the policy at the cursor different
+    // from the one in force (any field: engine to snapping and back, one engine
+    // screen to another, a virtual-screen edge among them) and adopted it
+    // before emitting this.
     //
     // Guards: this slot only acts if we're actively tracking the drag for
     // this windowId. Stray signals (daemon restart, out-of-order delivery)
@@ -217,9 +236,9 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
     }
 
     if (const QString err = newPolicy.validationError(); !err.isEmpty()) {
-        // Garbled policy change — keep current state rather than transitioning
-        // to a corrupted one. The daemon will re-emit on the next cursor tick
-        // if this was transient.
+        // Garbled policy change: keep the current state. Defensive: the daemon
+        // adopts a policy before emitting it, so it never re-sends this one,
+        // and the only invalid shape (an engine bypass with no screen) is never emitted.
         qCWarning(lcEffect) << "slotDragPolicyChanged rejected:" << err << "for" << windowId;
         return;
     }
@@ -260,9 +279,6 @@ void PlasmaZonesEffect::applyDragPolicyTransition(KWin::EffectWindow* w, const Q
     if (p.enterBypass) {
         m_dragBypassedForEngine = true;
     }
-    if (p.bypassScreen) {
-        m_dragBypassScreenId = *p.bypassScreen;
-    }
     if (p.leave != DragPolicyTransition::Leave::None) {
         // Id-keyed bookkeeping, so a window that died mid-drag still has its
         // tracking settled. On a flip the daemon still holds the tile and the
@@ -278,7 +294,9 @@ void PlasmaZonesEffect::applyDragPolicyTransition(KWin::EffectWindow* w, const Q
             }
         }
         m_dragBypassedForEngine = false;
-        m_dragActivation.detected = false;
+        // A flip keeps the latch so the daemon still sees the ticks that flip
+        // it back (F811). The reply resets it.
+        m_dragActivation.detected = p.latchActivation;
     }
     if (p.floatNow) {
         m_tilingHandler->handleDragToFloat(w, windowId, /*immediate=*/true);

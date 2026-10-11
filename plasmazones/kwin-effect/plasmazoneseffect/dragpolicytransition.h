@@ -5,10 +5,6 @@
 
 #include <PhosphorProtocol/DragTypes.h>
 
-#include <QString>
-
-#include <optional>
-
 /// What the effect does when it adopts a drag policy from the daemon,
 /// header-only so the rules are unit-testable without a compositor (same
 /// pattern as tilinghandler/scrolldecisions.h). It decides, it does not act:
@@ -34,8 +30,10 @@
 ///   the conservative default.
 /// - Leaving on a flip suspends the tile effect-side and keeps it tracked: the
 ///   daemon still holds it, and the drop decides (a drop back on the engine
-///   screen finds the tile, a snap elsewhere releases it). Leaving on the
-///   reply untracks it: the daemon answered that no engine owns the start.
+///   screen finds the tile, a snap elsewhere releases it). It also latches the
+///   activation, so the ticks that let the daemon flip back keep flowing.
+///   Leaving on the reply untracks it: the daemon answered that no engine owns
+///   the start.
 /// - A tile reaching a screen whose engine floats on drag takes its free size
 ///   at once. A flip floats only a window the effect holds as a tile; the
 ///   reply corrects a start the effect may have misread, so its answer
@@ -70,10 +68,11 @@ struct Input
 struct Plan
 {
     bool enterBypass = false;
-    /// Leaving the bypass also resets the drag's activation latch.
     Leave leave = Leave::None;
-    /// nullopt keeps the bypass screen, an empty string clears it.
-    std::optional<QString> bypassScreen;
+    /// What the activation latch holds after leaving the bypass. A flip latches
+    /// it: the daemon's drag is live and must keep seeing ticks to flip back.
+    /// The reply resets it.
+    bool latchActivation = false;
     bool floatNow = false;
     bool grab = false;
     bool ungrab = false;
@@ -86,10 +85,9 @@ inline Plan plan(const Input& in)
     const bool engine = in.policy.bypassReason == R::EngineOwnedScreen;
     if (engine) {
         p.enterBypass = !in.bypassLatched;
-        p.bypassScreen = in.policy.screenId;
     } else if (in.bypassLatched && in.policy.bypassReason == R::None) {
         p.leave = in.source == Source::Flip ? Leave::SuspendTile : Leave::Untrack;
-        p.bypassScreen = QString();
+        p.latchActivation = p.leave == Leave::SuspendTile;
     }
     p.floatNow = engine && in.policy.immediateFloatOnStart && in.windowLive && !in.floating && !in.floatedThisDrag
         && (in.tileHeld || in.source == Source::BeginDragReply);

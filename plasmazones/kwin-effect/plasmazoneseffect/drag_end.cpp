@@ -152,8 +152,10 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // the gesture (a tile or snap batch that landed mid-drag) must not replay at
     // windowFinishUserMovedResized over whatever the drop decides, and that
     // signal can fire before the reply. Whatever the outcome applies is a fresh
-    // command of its own.
+    // command of its own. The drop mark voids a restore reply still owed for
+    // a request sent before it (tryAsyncSnapCall).
     m_daemonGate.commandStamps.bump(window);
+    m_daemonGate.commandStamps.noteDrop(window);
 
     // qRound the cursor coords (not truncation): the hot-path updateDragCursor
     // stream rounds, so on fractional-scale outputs the release coordinate the

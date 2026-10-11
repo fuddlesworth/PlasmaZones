@@ -5,7 +5,10 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
+#include <QPointF>
+#include <QRect>
 #include <QRectF>
+#include <QSize>
 #include <QSizeF>
 #include <QString>
 #include <QtGlobal>
@@ -63,6 +66,21 @@ inline bool reportsResize(Crossing crossing)
 inline bool isSizeOnlyChange(const QRectF& before, const QRectF& after)
 {
     return (before.topLeft() - after.topLeft()).manhattanLength() <= 1.0 && before.size() != after.size();
+}
+
+/// The rect a size restored during a move takes so the grab point stays at
+/// the same fraction of the window, as KWin's own restore-on-drag places it
+/// (F702). The fraction is read from @p frame and clamped into it, so a grab
+/// point outside the frame pins to the nearest edge. An empty frame keeps its
+/// top-left.
+inline QRect frameUnderGrab(const QRectF& frame, const QPointF& grab, const QSize& size)
+{
+    if (frame.width() <= 0 || frame.height() <= 0) {
+        return QRect(QPoint(qRound(frame.x()), qRound(frame.y())), size);
+    }
+    const qreal fx = qBound(0.0, (grab.x() - frame.x()) / frame.width(), 1.0);
+    const qreal fy = qBound(0.0, (grab.y() - frame.y()) / frame.height(), 1.0);
+    return QRect(QPoint(qRound(grab.x() - fx * size.width()), qRound(grab.y() - fy * size.height())), size);
 }
 
 /// How long the end-of-resize reports wait for the client to commit the size

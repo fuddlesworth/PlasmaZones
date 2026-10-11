@@ -6,7 +6,8 @@
  * @brief The end-of-resize and crossing rules (plasmazoneseffect/gestureenddecisions.h):
  *        when the client has committed the size it was dragged to, what a
  *        held resize crossed, when the neighbour-reflow report is sent, and
- *        when a frame change moved nothing (F486, F701, F248).
+ *        when a frame change moved nothing, and where a size restored
+ *        mid-move puts the window (F486, F701, F248, F702).
  */
 
 #include "plasmazoneseffect/gestureenddecisions.h"
@@ -77,6 +78,31 @@ private Q_SLOTS:
     void sizeOnly_unchanged()
     {
         QVERIFY(!isSizeOnlyChange(QRectF(0, 0, 800, 600), QRectF(0, 0, 800, 600)));
+    }
+
+    // A size restored during a move keeps the grab point at the same fraction
+    // of the window (F702).
+    void frameUnderGrab_centredGrabStaysCentred()
+    {
+        QCOMPARE(frameUnderGrab(QRectF(0, 0, 1920, 1080), QPointF(960, 540), QSize(800, 600)),
+                 QRect(560, 240, 800, 600));
+    }
+    void frameUnderGrab_grabNearTheRightEdge()
+    {
+        // 90% across a 500-wide zone stays 90% across the 150-wide window, and
+        // halfway down stays halfway down.
+        const QRect r = frameUnderGrab(QRectF(8, 8, 500, 752), QPointF(458, 384), QSize(150, 178));
+        QCOMPARE(r, QRect(323, 295, 150, 178));
+        QVERIFY(r.contains(458, 384));
+    }
+    void frameUnderGrab_grabOutsideIsClampedToTheEdge()
+    {
+        QCOMPARE(frameUnderGrab(QRectF(100, 100, 400, 300), QPointF(600, 50), QSize(200, 100)),
+                 QRect(400, 50, 200, 100));
+    }
+    void frameUnderGrab_emptyFrameKeepsTheTopLeft()
+    {
+        QCOMPARE(frameUnderGrab(QRectF(30, 40, 0, 0), QPointF(500, 500), QSize(200, 100)), QRect(30, 40, 200, 100));
     }
 };
 

@@ -55,7 +55,6 @@ private Q_SLOTS:
         const Plan p = plan(input(R::None, policy(R::EngineOwnedScreen, QStringLiteral("DP-2"), false), false, true));
         QVERIFY(p.enterBypass);
         QCOMPARE(p.leave, Leave::None);
-        QCOMPARE(p.bypassScreen, std::optional<QString>(QStringLiteral("DP-2")));
         QVERIFY(p.ungrab);
         QVERIFY(!p.grab);
     }
@@ -68,7 +67,6 @@ private Q_SLOTS:
             plan(input(R::EngineOwnedScreen, policy(R::EngineOwnedScreen, QStringLiteral("DP-3"), true), true, false));
         QVERIFY(!p.enterBypass);
         QCOMPARE(p.leave, Leave::None);
-        QCOMPARE(p.bypassScreen, std::optional<QString>(QStringLiteral("DP-3")));
         QVERIFY(p.grab);
         QVERIFY(!p.ungrab);
     }
@@ -76,24 +74,26 @@ private Q_SLOTS:
     /// F638: back on the snap path mid-drag, the tile is suspended, not
     /// released (HEAD relayed releaseWindowTracking and the drop back on the
     /// stack found nothing to reorder), and the snap path's grab is taken.
+    /// F811: the activation stays latched, so the ticks that let the daemon
+    /// flip back keep flowing (HEAD reset it and the return went unseen).
     void engineToSnap_suspendsTheTileOnAFlip()
     {
         const Plan p =
             plan(input(R::EngineOwnedScreen, policy(R::None, QStringLiteral("DP-1"), true), true, false, Source::Flip));
         QCOMPARE(p.leave, Leave::SuspendTile);
-        QCOMPARE(p.bypassScreen, std::optional<QString>(QString()));
+        QVERIFY(p.latchActivation);
         QVERIFY(!p.enterBypass);
         QVERIFY(p.grab);
     }
 
     /// The reply corrects a stale fast-path latch: no engine owns the start,
-    /// so the effect's own tracking goes.
+    /// so the effect's own tracking goes, and the activation latch resets.
     void engineToSnap_untracksOnTheReply()
     {
         const Plan p = plan(input(R::EngineOwnedScreen, policy(R::None, QStringLiteral("DP-1"), true), true, false,
                                   Source::BeginDragReply));
         QCOMPARE(p.leave, Leave::Untrack);
-        QCOMPARE(p.bypassScreen, std::optional<QString>(QString()));
+        QVERIFY(!p.latchActivation);
     }
 
     /// The latch, not the previous reason, says whether there is a bypass to
@@ -118,7 +118,7 @@ private Q_SLOTS:
         QFETCH(R, reason);
         const Plan p = plan(input(R::EngineOwnedScreen, policy(reason, QStringLiteral("DP-1"), false), true, true));
         QCOMPARE(p.leave, Leave::None);
-        QVERIFY(!p.bypassScreen.has_value());
+        QVERIFY(!p.latchActivation);
         QVERIFY(!p.enterBypass);
         QVERIFY(p.ungrab);
         QVERIFY(!p.grab);
@@ -180,7 +180,7 @@ private Q_SLOTS:
         const Plan p = plan(input(R::None, policy(R::None, QStringLiteral("DP-1"), true), false, true));
         QVERIFY(!p.enterBypass);
         QCOMPARE(p.leave, Leave::None);
-        QVERIFY(!p.bypassScreen.has_value());
+        QVERIFY(!p.latchActivation);
         QVERIFY(!p.floatNow);
         QVERIFY(!p.grab);
         QVERIFY(!p.ungrab);

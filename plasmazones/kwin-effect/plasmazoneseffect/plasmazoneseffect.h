@@ -1145,15 +1145,16 @@ private:
 
     // Move a window to a target geometry, running the configured placement
     // transition (snap / tile / move). Shared chokepoint for snap zones,
-    // autotile tiles, and float restores — not snap-specific despite history.
-    // When allowDuringDrag is true, applies immediately even if window is in user move state (snap-on-hover).
-    // When false and the window is being dragged, defers via windowFinishUserMovedResized signal.
+    // autotile tiles and float restores. Every call is the window's newest
+    // command: it bumps the command stamp, retires a pending deferred replay and
+    // drops a centring target the tiling handler holds (a tile batch applied now
+    // records its own after this returns). allowDuringDrag applies even under a
+    // user move or resize and is for the drag-time size restores only; zone and
+    // tile placements pass false and defer to windowFinishUserMovedResized.
     //
-    // profilePath drives the shader-transition resolve (see ShaderProfileTree). This used to be
-    // hardcoded to one path inside applyWindowGeometry, which fired the same shader for every
-    // motion that flowed through this chokepoint — place, release, resnap, resize, restore, etc.
-    // Callers now pass the logical event path so the shader tree can route each one independently.
-    // Default is WindowPlaceIn (the placement animation every engine's arrival leg rides).
+    // profilePath drives the shader-transition resolve (see ShaderProfileTree):
+    // each caller passes its logical event path so the tree routes each motion
+    // independently. Default is WindowPlaceIn (every engine's arrival leg).
     //
     // originOverride replaces the window's CURRENT frame as the animation's
     // departure rect. Normally the two are the same — a window animates from
@@ -3520,7 +3521,6 @@ private:
     // True while the drag is on a screen a tiling engine owns: the drag
     // forwards every cursor tick so the daemon can flip it back (mouse_drag.cpp).
     bool m_dragBypassedForEngine = false;
-    QString m_dragBypassScreenId; // Screen at drag start (for float D-Bus call on drag end)
 
     // Cached activation settings (loaded from daemon via D-Bus, updated on settingsChanged)
     // Used for local trigger checking to gate D-Bus calls (see anyLocalTriggerHeld)
@@ -3660,8 +3660,8 @@ private:
     // unconditionally, so at drag end the tracked screen already equals the
     // live one and no comparison there can recover the skipped invalidation.
     // Each suppressed handler records the id here instead, and callEndDrag
-    // drains the set once the daemon's outcome has been applied. Cleared on
-    // daemon loss, where invalidateAllRuleCaches supersedes it. An id whose
+    // drains the set once the daemon's outcome has been applied. Drained on
+    // every callEndDrag exit, not on daemon loss (a stale id costs one re-resolve). An id whose
     // window died meanwhile is harmless: the flush's findWindowById returns
     // null and skips it.
     QSet<QString> m_dragSuppressedRuleInvalidations;

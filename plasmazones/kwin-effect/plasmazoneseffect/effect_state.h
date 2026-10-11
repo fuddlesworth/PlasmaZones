@@ -241,9 +241,25 @@ struct WindowCommandStamps
             byWindow[w] = stamp;
         }
     }
+    /// A drop is the user's own placement, so it gets a mark of its own: a
+    /// reply to a request sent before the window's latest drop answers a
+    /// placement the user has since replaced (F884). Only drops count. A
+    /// daemon apply between a request and its reply (the open path's
+    /// size-only restore) is part of the answer, not a newer one.
+    void noteDrop(const KWin::EffectWindow* w)
+    {
+        if (w) {
+            dropsByWindow[w] = ++seq;
+        }
+    }
+    quint64 lastDrop(const KWin::EffectWindow* w) const
+    {
+        return dropsByWindow.value(w);
+    }
     void forget(const KWin::EffectWindow* w)
     {
         byWindow.remove(w);
+        dropsByWindow.remove(w);
         staleAcks.remove(w);
     }
     /// Supersede every pending deferred apply at once (daemon loss, F405):
@@ -269,6 +285,7 @@ struct WindowCommandStamps
     QHash<const KWin::EffectWindow*, StaleAck> staleAcks;
 
     QHash<const KWin::EffectWindow*, quint64> byWindow;
+    QHash<const KWin::EffectWindow*, quint64> dropsByWindow;
     quint64 seq = 0;
 };
 
