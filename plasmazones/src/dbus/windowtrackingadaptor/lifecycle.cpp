@@ -323,10 +323,9 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // The single per-window record is per-mode MEMORY: a window on an autotile screen
     // keeps its frozen snap slot (its last snap-mode placement) and vice versa, and a
     // transient gap where neither engine tracks a just-opened window must not wipe
-    // that memory. A record is only ever merge-updated by an engine recording newer
-    // state (record()), consumed on restore (take), or removed by an explicit
-    // exclude-rule prune (removeIf) — never by a capture miss. (Stale records are
-    // bounded by MaxPerApp and consumed on reopen.)
+    // that memory. A capture miss never clears or rewrites the record; only
+    // record(), take, and the explicit prunes and slot releases change it.
+    // (Stale records are bounded by MaxPerApp and consumed on reopen.)
     //
     // Authoritative close-screen fallback. A window dragged cross-screen and then
     // closed reaches here with NEITHER engine tracking it: the source engine was
@@ -455,7 +454,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
 
-    // Release the open claim BEFORE the capture reads the store.
+    // The closed window's open claim goes with it.
     m_service->placementStore().releaseOpenClaim(windowId);
     // A closed window has nothing left to return to an output.
     dropEvacueeParks(windowId);
@@ -523,10 +522,10 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     }
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
-    // rely on other WTS state still being present during their cleanup. The
-    // canonical release MUST happen after remove() because WindowRegistry's
-    // disappear signal fires synchronously from remove() and subscribers may
-    // still call canonicalizeForLookup on their way out.
+    // rely on other WTS state still being present during their cleanup.
+    // remove() emits windowDisappeared while the canonical mapping is still
+    // live and retires it afterwards, so subscribers can still
+    // canonicalizeForLookup on their way out.
     if (m_windowRegistry) {
         m_windowRegistry->remove(instanceId);
     }

@@ -178,8 +178,8 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
         // AFTER the handoff: handoffReceive already pushed the destination's
         // tiles, so the effect's own notified-screen record names the
         // destination by now and cannot answer "where did it come from".
-        // screensMatch, not a raw compare: connector-name / EDID-id spelling
-        // and the "/vs:" suffix make raw inequality unreliable, and a spurious
+        // screensMatch, not a raw compare: a connector-name / EDID-id spelling
+        // difference makes raw inequality unreliable, and a spurious
         // one arms a one-shot for a move that never happens — which then
         // swallows the window's next genuine outputChanged.
         if (placedOnTarget && !sourceScreen.isEmpty()
@@ -560,7 +560,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     //    focusedStillOnTarget, not focusedAdopted: arming the one-shot for a
     //    window the target no longer holds would swallow that window's next
     //    genuine outputChanged. screensMatch rather than a raw compare, for
-    //    the connector-name / EDID-id / "/vs:" spelling reasons guardedHandoff
+    //    the connector-name / EDID-id spelling reasons guardedHandoff
     //    documents — a spurious inequality here arms a move that never happens.
     if (!PhosphorScreens::ScreenIdentity::screensMatch(targetScreenId, sourceScreen)) {
         if (focusedStillOnTarget) {

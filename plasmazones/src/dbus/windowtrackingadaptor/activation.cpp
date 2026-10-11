@@ -166,8 +166,10 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     // window floating on another monitor than the one it activated on, which
     // a move that sent no screen report leaves behind; re-key it there so
     // the float verbs and the unfloat fallback read the monitor it is on.
-    // screensMatch keeps an id-form difference on one monitor from churning
-    // the stores. A window holding a zone in ANY store is left alone (a
+    // screensMatch absorbs a connector-name or EDID spelling of one monitor, and
+    // a physical id reported for a split monitor was mapped to the virtual
+    // screen snap tracks by resolveFocusedWindowScreen above. A window holding
+    // a zone in ANY store is left alone (a
     // migrate leaves the zone behind, and an activation racing a snap commit
     // would unsnap it, F259/F77/F125), and so is an activation on a screen
     // snap does not run: a tiling destination owns the window there (F679).
