@@ -142,6 +142,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Moving a snapped window with the keyboard or touch takes it out of its zone**: a move accepted with Return, or ended by lifting a finger, was treated as cancelled and the window kept its zone. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **A window you keep moving after letting go of the left button is placed once, where the drop put it**: with a mouse-button trigger still held, a monitor crossing after the drop was reported before the drop was settled, and the window could end up off the zone it was dropped on. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **No log flood while PlasmaZones is turned off**: with the PlasmaZones service disabled, moving or dragging a window no longer writes a failed-call warning to the system log for every step of the move. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **The shell's desktop maps show tiled windows on desktops you are not looking at**: the map of a tiling or scrolling desktop you were not on showed none of its tiled windows, and a tiled window that once had a zone showed as snapped. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 
 ## [3.4.19] - 2026-09-21
 

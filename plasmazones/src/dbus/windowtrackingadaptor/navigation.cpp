@@ -6,9 +6,8 @@
 // cycleWindowsInZone, restoreWindowSize, rotateWindowsInLayout) moved to
 // SnapAdaptor (src/dbus/snapadaptor/navigation.cpp).
 //
-// resolveSnapModeScreensForResnap stays — it's a public utility used by
-// SnapEngine's navigation methods. SnapAdaptor has its own copy that
-// delegates here via m_adaptor.
+// resolveSnapModeScreensForResnap stays: SnapAdaptor's resnapCurrentAssignments,
+// reapplySnapZones and resnapForVirtualScreenReconfigure delegate to it through m_adaptor.
 //
 // requestMoveSpecificWindowToZone and reportNavigationFeedback stay — they are
 // pure signal emitters used cross-mode.

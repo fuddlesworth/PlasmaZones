@@ -48,7 +48,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="pruneStaleWindows">
-            <annotation name="org.gtk.GDBus.DocString" value="Remove zone assignments for windows not in the alive set. Called by KWin effect after daemon ready to clean up stale persisted entries."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Drop the windows not in the alive set: capture the final placement of each one the daemon holds a frame for, then release it from every engine, the window registry and the daemon's per-window shadows. An empty set is refused. Called by the KWin effect after the daemon is ready."/>
             <arg name="aliveWindowIds" type="as" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window IDs currently known to KWin."/>
             </arg>
@@ -87,7 +87,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Window height."/>
             </arg>
             <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen connector name where window is located (for cross-screen restore)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Screen id where the window is located (for cross-screen restore)."/>
             </arg>
             <arg name="overwrite" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True when the frame is a known-fresh free position, which is always written. False keeps an existing entry."/>
@@ -300,7 +300,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <signal name="applyGeometryRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometry. zoneId empty = float restore only; zoneId set = apply and call windowSnapped."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometry. The daemon has already committed the placement: zoneId names the zone it committed (empty for a free placement), and screenId is the screen the effect pre-seeds as tracked."/>
             <arg name="windowId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Window to apply to. A size-only apply resolves this id exactly; a full apply may fall back to a same-app window."/>
             </arg>
@@ -403,7 +403,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setWindowMetadata">
-            <annotation name="org.gtk.GDBus.DocString" value="Register or update metadata for a live window. Called by the compositor bridge on window-added and on every mutation of the window's app class, desktop file, caption, virtual desktop, activity, or role. Idempotent — safe to call on every observation; a no-op if metadata is unchanged."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Register or update metadata for a live window. Called by the compositor bridge on window-added and on every mutation of the window's app class, desktop file, caption, virtual desktop, activity or role, and on its minimize, urgency, maximize and fullscreen edges. Idempotent, so it is safe to call on every observation and a no-op if metadata is unchanged."/>
             <arg name="instanceId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Opaque compositor handle, stable for the window lifetime (KWin internalId)."/>
             </arg>
@@ -444,7 +444,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the closing window (0=Unknown, 1=Normal, 2=Transient). Unused: it gated the pending-restore queue, which was removed. Kept so the signature does not change."/>
             </arg>
             <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="The window's authoritative current screen at close (KWin's getWindowScreenId). Used by the final placement capture to record the float-back on the screen the window actually closed on, even when a cross-screen move has torn down both engines' tracking. Empty opts out (legacy callers)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="The window's authoritative current screen at close (the effect's getWindowScreenId). Used by the final placement capture to record the float-back on the screen the window actually closed on, even when a cross-screen move has torn down every engine's tracking. Empty opts out (legacy callers)."/>
             </arg>
         </method>
         <method name="windowActivated">
@@ -476,7 +476,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="height" type="i" direction="in"/>
         </method>
         <method name="notifyWindowResized">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a tiled window finished an interactive edge/border resize. The autotile engine reflows neighbouring windows to fill the gap (GitHub #652). Fire-and-forget; the resize is already committed in the compositor. The old/new frames are the window's geometry before and after the resize, supplied by the compositor plugin (the daemon's throttled frame shadow is unreliable as a baseline because it updates during the drag). Floating, untracked, snap-mode, and cross-output windows are ignored daemon-side."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a tiled window finished an interactive edge/border resize. The scrolling engine fits the column to the new size, or the autotile engine reflows neighbouring windows to fill the gap (GitHub #652). Fire-and-forget, since the resize is already committed in the compositor. The old/new frames are the window's geometry before and after the resize, supplied by the compositor plugin (the daemon's throttled frame shadow is unreliable as a baseline because it updates during the drag). Floating, untracked and snap-mode windows are ignored daemon-side, and the autotile engine also ignores a resize that carried the window's centre off its screen."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -564,7 +564,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getAllWindowStates">
-            <annotation name="org.gtk.GDBus.DocString" value="Get state for all tracked windows (TUI dashboard)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get the state of every window an engine holds, in any context, tiled ones included (TUI dashboard, shell maps). A tiled window reads as its tiling engine has it, so a snap zone kept for a return to snapping is not reported as a placement."/>
             <arg name="states" type="a(sssbsasb)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Array of WindowStateEntry structs."/>
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowStateList"/>
@@ -626,7 +626,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getWindowStatesForDesktop">
-            <annotation name="org.gtk.GDBus.DocString" value="getAllWindowStates filtered to one screen and one virtual desktop, for the Phosphor shell dashboard's per-desktop placement maps. A window is on the desktop when its last setWindowMetadata push named it (virtualDesktop, or any entry of the multi-desktop span list), or when it is sticky (the push's IsSticky flag, a virtualDesktop of 0, or the service's setWindowSticky record), which puts it on every desktop. Windows the compositor never registered through setWindowMetadata are left out, since there is no desktop to compare against. Same WindowStateEntry struct and the same rows as getAllWindowStates; nothing is added or re-shaped."/>
+            <annotation name="org.gtk.GDBus.DocString" value="getAllWindowStates filtered to one screen and one virtual desktop, for the Phosphor shell dashboard's per-desktop placement maps. A window is on the desktop when its last setWindowMetadata push named it (virtualDesktop, or any entry of the multi-desktop span list), or when it is sticky (the push's IsSticky flag, a virtualDesktop of 0, or the service's setWindowSticky record), which puts it on every desktop. Windows the compositor never registered through setWindowMetadata are left out, since there is no desktop to compare against. Same WindowStateEntry struct and the same rows as getAllWindowStates, tiled windows on a desktop out of view included, with nothing added or re-shaped."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier the rows must be on (the entry's screenId). Empty means any screen, except that a virtualDesktop of 0 then has no screen to resolve against and answers nothing."/>
             </arg>

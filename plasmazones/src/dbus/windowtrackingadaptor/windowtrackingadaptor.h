@@ -591,7 +591,7 @@ public Q_SLOTS:
     PhosphorProtocol::WindowStateEntry getWindowState(const QString& windowId);
 
     /**
-     * @brief Get state for all tracked windows (TUI dashboard)
+     * @brief The state of every window an engine holds, in any context (TUI dashboard, shell maps).
      * @return List of PhosphorProtocol::WindowStateEntry structs
      */
     PhosphorProtocol::WindowStateList getAllWindowStates();
@@ -654,9 +654,9 @@ public Q_SLOTS:
      * A window is on a desktop when its last metadata push said so
      * (virtualDesktop, or any entry of the spanned list), or when it is
      * sticky (isSticky, or virtualDesktop 0 meaning "all"), which lands it
-     * on every desktop. An empty @p screenId means any screen. Windows the
-     * registry does not know are left out: without a push there is no
-     * desktop to compare against.
+     * on every desktop. An empty @p screenId means any screen, except that a
+     * desktop of 0 then answers nothing. Windows the registry does not know
+     * are left out: without a push there is no desktop to compare against.
      */
     PhosphorProtocol::WindowStateList getWindowStatesForDesktop(const QString& screenId, int virtualDesktop);
 
@@ -1570,12 +1570,7 @@ private:
     // Helper Methods - Private
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    /**
-     * @brief Validate window ID and log warning if empty
-     * @param windowId Window ID to validate
-     * @param operation Name of the operation (for logging)
-     * @return true if windowId is valid, false if empty
-     */
+    /// False, with a warning naming @p operation, when @p windowId is empty.
     bool validateWindowId(const QString& windowId, const QString& operation) const;
 
     // ── Shell-surface registry mirror (shellsurface.cpp) ──
@@ -1611,6 +1606,9 @@ private:
 
     /// True when the ledger row puts the window on @p desktop (1-based).
     static bool factsOnDesktop(const ShellWindowFacts& facts, int desktop);
+    /// getWindowState's row (convenience.cpp): the tiling engine's view of a window it tracks
+    /// unless snap holds the window on a context that runs snapping, else snap's.
+    PhosphorProtocol::WindowStateEntry stateRowFor(const QString& windowId) const;
     QHash<QString, ShellWindowFacts> m_shellWindowFacts;
     quint64 m_shellWindowFactsSeq = 0;
 

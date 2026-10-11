@@ -468,9 +468,9 @@ void Daemon::initEnginesAndWiring()
         // Drop the placement records of apps now covered by an Exclude or
         // ExcludePlacement rule. Snap-engine's resolveWindowRestore already
         // refuses them at runtime, but stale records spam logs and bloat the
-        // saved state. Autotile's records are not loaded yet at init, so
-        // daemon/signals.cpp's finalizeStartup re-runs the prune once
-        // AutotileEngine::loadState has loaded them.
+        // saved state. One store holds every engine's records (WTA::loadState
+        // loads them all), so the priming call above and this refilter are the
+        // daemon's only pruneExcludedPlacements calls.
         if (m_windowTrackingAdaptor) {
             // Shutdown-window guard, mirrors snapEnginePtr null-check above.
             m_windowTrackingAdaptor->pruneExcludedPlacements(

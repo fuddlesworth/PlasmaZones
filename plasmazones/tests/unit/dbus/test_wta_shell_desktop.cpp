@@ -17,24 +17,31 @@
  *  3. findWindowByPid answers the window pushed most recently among those
  *     sharing the pid, empty for an unknown pid, and forgets a closed
  *     window.
+ *  4. A window a tiling engine tracks has a row on its desktop even when
+ *     that desktop is not in view, and a snap zone kept on a context that
+ *     no longer runs snapping is not reported (F464).
  */
 
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QScopeGuard>
 #include <QTest>
 #include <QVariantMap>
 #include <memory>
 
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorPlacement/SnapStateResolver.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/StubPlacementEngine.h"
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
 
@@ -87,9 +94,9 @@ private:
         return extended;
     }
 
-    /// The service tracks snapped and floating windows only; floating is
-    /// the one state a test can set without a layout, so every window here
-    /// floats to appear in getAllWindowStates at all.
+    /// With no tiling engine wired, getAllWindowStates lists snapped and
+    /// floating windows only; floating is the one state a test can set
+    /// without a layout, so most windows here float to appear at all.
     void track(const char* instance)
     {
         m_wta->setWindowFloating(windowId(instance), true);
@@ -261,6 +268,64 @@ private Q_SLOTS:
         // to resolve it; this harness has neither.
         QVERIFY(m_wta->getWindowStatesForDesktop(QString(), 0).isEmpty());
         QVERIFY(m_wta->getWindowStatesForDesktop(QStringLiteral("DP-1"), 0).isEmpty());
+    }
+
+    // A window only a tiling engine holds, tracked on a desktop not in view,
+    // has a row on that desktop's map, with no zone (F464).
+    void statesForDesktop_listsABackgroundDesktopsTile()
+    {
+        StubPlacementEngine autotile;
+        m_wta->setEngines(m_snapEngine, &autotile, nullptr);
+        const auto unwire = qScopeGuard([this] {
+            m_wta->setEngines(m_snapEngine, nullptr, nullptr);
+        });
+        const QString screen = QStringLiteral("DP-1");
+        push(InstanceA, 100, 2, snapshot());
+        autotile.trackedElsewhere.insert(windowId(InstanceA));
+        autotile.elsewhereScreen.insert(windowId(InstanceA), screen);
+
+        const auto rows = m_wta->getWindowStatesForDesktop(screen, 2);
+        QCOMPARE(ids(rows), QStringList{windowId(InstanceA)});
+        QVERIFY(rows.first().zoneId.isEmpty());
+        QCOMPARE(rows.first().screenId, screen);
+    }
+
+    // A tiled window whose snap store keeps a zone reads as snapped only
+    // while that zone's context runs snapping. Once the context is switched
+    // to autotile the zone is memory for a return, and the row carries none
+    // (F464).
+    void statesForDesktop_frozenSnapMemoryIsNoZone()
+    {
+        PhosphorZones::Layout* layout = createTestLayout(3, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+        m_wta->service()->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(m_snapEngine));
+        StubPlacementEngine autotile;
+        m_wta->setEngines(m_snapEngine, &autotile, nullptr);
+        const auto unwire = qScopeGuard([this] {
+            m_wta->setEngines(m_snapEngine, nullptr, nullptr);
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString screen = QStringLiteral("DP-1");
+        const QString w = windowId(InstanceA);
+        const QString zone = layout->zones().first()->id().toString();
+        push(InstanceA, 100, 1, snapshot());
+        m_snapEngine->setCurrentDesktopForScreen(screen, 1);
+        m_wta->service()->assignWindowToZone(w, zone, screen, 1);
+        autotile.heldScreen.insert(w, screen);
+        QCOMPARE(m_wta->getWindowState(w).zoneId, zone); // desktop 1 still runs snapping
+
+        PhosphorZones::AssignmentEntry tiling;
+        tiling.mode = PhosphorZones::AssignmentEntry::Autotile;
+        tiling.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(screen, 1, QString(), tiling);
+        QCOMPARE(m_wta->service()->zoneForWindow(w), zone); // the snap store still keeps it
+
+        const auto rows = m_wta->getWindowStatesForDesktop(screen, 1);
+        QCOMPARE(ids(rows), QStringList{w});
+        QVERIFY(rows.first().zoneId.isEmpty());
+        QVERIFY(rows.first().zoneIds.isEmpty());
+        QCOMPARE(rows.first().screenId, screen);
     }
 
     void findWindowByPid_mostRecentPushWins()
