@@ -63,9 +63,9 @@ void Daemon::warnCompositorBridgeMissing()
         return;
     }
 
-    // Re-check: the watchdog is stopped on bridgeRegistered, but a registration
-    // landing in the same event-loop turn as the timeout could still reach
-    // here. Treat a registered bridge as success and stay silent.
+    // Defensive only: bridgeRegistered stops the watchdog through a direct
+    // connection (init_adaptors.cpp) and start() arms it only while unregistered,
+    // so neither a registered nor a null bridge reaches here today.
     if (!m_compositorBridge || m_compositorBridge->isBridgeRegistered()) {
         return;
     }

@@ -66,17 +66,17 @@ void Daemon::initializeAutotile()
         // fires for float, swap, window open/close, etc. which is too noisy)
         connect(m_autotileEngine.get(), &PlacementEngineBase::algorithmChanged, this,
                 [this](const QString& algorithmId) {
-                    // Suppress during startup: loadState() emits algorithmChanged from
-                    // finalizeStartup(), and finalizeStartup() is the authoritative
+                    // Suppress during startup, while m_running is false: an algorithm
+                    // switch then must not race finalizeStartup(), the authoritative
                     // startup-OSD path (gated on showOsdOnDesktopSwitch via
                     // showOsdForAllScreens). Letting this handler also fire would both
                     // double-queue an OSD on the focused screen AND leak past
                     // showOsdOnDesktopSwitch=false, since this branch gates only on
                     // showOsdOnLayoutSwitch.
                     //
-                    // Also gate on isAnyScreenAutotile() — loadState() may emit even
-                    // when no screen is in autotile mode, and a runtime algorithm
-                    // change is irrelevant in that case.
+                    // Also gate on isAnyScreenAutotile(): an algorithm switch with no
+                    // screen in autotile mode is not worth an OSD (the global default
+                    // can change from settings while every screen snaps or scrolls).
                     if (m_running && isAnyScreenAutotile() && m_overlayService) {
                         QString screenId;
                         if (m_autotileEngine) {

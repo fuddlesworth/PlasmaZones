@@ -220,7 +220,7 @@ void Daemon::connectLayoutSignals()
                 if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
-                // Suppress during startup. Mirrors the algorithmChanged gate above.
+                // Suppress during startup. Mirrors the algorithmChanged gate (autotile_init.cpp).
                 // A `layoutApplied` emitted while startup assigns layouts would
                 // otherwise show alongside the startup OSD, and
                 // finalizeStartup() is the authoritative startup-OSD path
@@ -292,8 +292,8 @@ void Daemon::connectLayoutSignals()
                 if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
-                // Suppress during startup. Mirrors the algorithmChanged and
-                // layoutApplied gates above. An `autotileApplied` emitted while
+                // Suppress during startup. Mirrors the algorithmChanged gate (autotile_init.cpp)
+                // and the layoutApplied gate above. An `autotileApplied` emitted while
                 // startup assigns autotile-mode entries would otherwise show
                 // alongside the startup OSD, and finalizeStartup() is the
                 // authoritative startup-OSD path (it calls `showOsdForAllScreens`).

@@ -38,6 +38,10 @@ void Daemon::queryPlasmaWorkspaceState()
     //
     // Fail-open on all D-Bus errors: `m_plasmaWorkspaceActive` defaults to `true`,
     // so non-systemd setups and headless tests aren't accidentally silenced.
+    //
+    // Every query starts from the fail-open default, so an inactive answer from a
+    // previous run, or none at all, does not carry into this one.
+    m_plasmaWorkspaceActive = true;
     QDBusConnection sessionBus = QDBusConnection::sessionBus();
     if (!sessionBus.isConnected()) {
         qCDebug(lcDaemon) << "queryPlasmaWorkspaceState: session bus unavailable, leaving m_plasmaWorkspaceActive=true";
@@ -117,10 +121,12 @@ void Daemon::fetchPlasmaWorkspaceActiveState()
                          << "plasmaWorkspaceActive=" << m_plasmaWorkspaceActive << "path=" << path;
 
         QDBusConnection bus = QDBusConnection::sessionBus();
-        // Disconnect first: a stop() -> start() cycle re-runs this whole query,
-        // and QDBusConnectionPrivate appends identical signal hooks without
-        // deduping, so without this the slot would fire once per registration
-        // per signal. Harmless (the handler is idempotent) but wasteful.
+        // Disconnect first: QtDBus refuses a hook identical to one already
+        // installed, and connect() then returns false. Two replies can reach
+        // here in one run (a GetUnit reply from before a stop() landing after
+        // the next start() resolves the same path, which the path check above
+        // cannot tell apart), and without the disconnect the second would log a
+        // false subscription failure.
         bus.disconnect(QStringLiteral("org.freedesktop.systemd1"), path,
                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
                        SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));

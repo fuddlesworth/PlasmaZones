@@ -135,10 +135,11 @@ void Daemon::start()
     // Note what this does NOT fix: stop() also unregisters the D-Bus object and the
     // service name, and re-registering them lives in init(), not here, so a restarted
     // daemon has no bus presence and nothing it publishes reaches the effect regardless.
-    // The same asymmetry covers the autotile shortcuts: their grabs survive stop() while
-    // their handler connections died with the engine, and initializeAutotile() re-runs
-    // from start() below but wires handlers only when m_autotileEngine exists, which
-    // after a no-init stop() it does not. With no bus presence nothing they trigger
+    // The autotile shortcuts are the same: stop() releases every grab (unregisterShortcuts)
+    // and severs the Daemon-side handler connections (the shortcut-manager sweep); start()
+    // re-grabs them all, but initializeAutotile() rewires the autotile handlers only when
+    // m_autotileEngine exists (retile is wired regardless), which after a no-init stop() it
+    // does not. With no bus presence nothing they trigger
     // reaches anyone, so wiring them here would repair a limb of a cycle that is
     // degraded by design. The re-arm exists so the daemon's own state is consistent
     // after the cycle, not because the cycle restores service.
@@ -203,7 +204,7 @@ void Daemon::start()
     // after this, so the migration is not discarded (F479).
     migrateStartupScreenAssignments();
 
-    // Intentionally last: the algorithmChanged handler (signals.cpp) and showDesktopSwitchOsd
+    // Intentionally last: the algorithmChanged handler (autotile_init.cpp) and showDesktopSwitchOsd
     // (osd.cpp) both gate on !m_running to suppress OSD/feedback during startup, while layouts
     // and algorithms are being assigned, and KWin/Plasma can deliver
     // desktop/activity-change signals during the same window. Setting m_running before
@@ -228,9 +229,9 @@ void Daemon::stop()
     // (the engine is cleared below; a late fire would be a wasted no-op).
     m_gapResnapTimer.stop();
 
-    // The bridge watchdog is double-guarded (m_shuttingDown + registered
-    // re-check) so a late fire is harmless, but every other piece of this
-    // teardown severs explicitly rather than relying on an invariant.
+    // A late watchdog fire is harmless (it returns on m_shuttingDown), but
+    // every other piece of this teardown severs explicitly rather than
+    // relying on an invariant.
     m_bridgeWatchdogTimer.stop();
 
     // The preview-notify debounce and the resnap-suppression watchdog are
@@ -272,8 +273,8 @@ void Daemon::stop()
     // reason as the provider lambdas and QML statics below: both are wired from init()
     // (init_adaptors.cpp / init_engines.cpp), which runs before start(), so an
     // init-without-start teardown (test fixture, early-fail init, double-stop) would
-    // otherwise reach member destruction with the adaptor still holding a pointer to the
-    // about-to-die ShortcutManager / AutotileEngine. Both setters are null-safe and
+    // otherwise reach member destruction with the adaptor still holding pointers to the
+    // about-to-die engines and ShortcutManager. The setters are null-safe and
     // idempotent, so running this on an already-stopped daemon costs nothing.
     if (m_windowDragAdaptor) {
         // Cancel a live preview BEFORE dropping the engine borrows. The
@@ -308,14 +309,16 @@ void Daemon::stop()
     // comment below names. NOTE the deliberate asymmetry this creates for a stop() → start()
     // cycle: nothing rebuilds the loader, nor the m_ruleStoreWatcher reset beside it below (both
     // are ctor-only), so live reload of `plasmazones/curves` and of rules.json does not survive
-    // the cycle — the curve seeds and the low-precedence tag DO survive so inheritance keeps
-    // resolving, rules.json is still re-read by an explicit load() (D-Bus reloadRules), and a
-    // restarted daemon has no bus presence anyway (see the partition-shedding rationale above).
+    // the cycle. The profile seeds and the low-precedence tag survive, but the named curves do
+    // not: the loader's destructor unregisters every curve it registered (the bundled set too),
+    // so a curve named after the cycle resolves to the library default. Nothing re-reads
+    // rules.json either (stop() detaches the RuleAdaptor), and a restarted daemon has no bus
+    // presence (see the profile-partition note after the m_running gate).
     m_rawJsonProfiles.clear();
 
-    // Stop the publish coalescing trampoline before resetting the loaders — the timer is a member
-    // QTimer, so its `timeout` slot would otherwise still fire on the next event-loop tick after
-    // m_settings (its data source) has been destroyed.
+    // Stop the publish coalescing trampoline before resetting the loaders, so a publish queued
+    // before stop() cannot run after it and write m_profileRegistry once the QML statics above
+    // are unhooked.
     m_animationPublishTimer.stop();
     m_animationPublishPending = false;
 
@@ -411,18 +414,15 @@ void Daemon::stop()
     // SnapAdaptor, TilingAdaptor, AutotileAdaptor, ScrollingAdaptor) all
     // ship destructors that don't
     // deref any borrowed pointer — they are `= default` or empty-body
-    // (no member access); DBusScreenAdaptor ships an empty out-of-line
-    // body. The substantive
+    // (no member access); DBusScreenAdaptor's out-of-line body does
+    // nothing. The substantive
     // safety claim is "no borrowed-pointer deref runs in any of their
     // destructors" — confirmed by inspecting each header + cpp pair,
-    // not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
-    // method dispatch to them before we begin tearing down, and Qt's
-    // sender-destruction auto-disconnect cleans up signal wiring when the
-    // borrowed sender (m_layoutManager, etc.) is destroyed during member
-    // destruction. Adding detach() to those eleven would require null-guarding
-    // every slot body (they currently rely on the "borrowed pointer is
-    // always valid" invariant), which is a larger refactor than the
-    // defense-in-depth buys. If a future adaptor grows a dtor body that
+    // not header alone. Their borrowed pointers are still severed below
+    // (the engine adaptors' clearEngine, and the WTA's, WDA's,
+    // TilingAdaptor's and SnapAdaptor's late-bound borrows), with the bus
+    // already unregistered above; none of them needs a detach() for its
+    // DESTRUCTOR. If a future adaptor grows a dtor body that
     // derefs a borrowed member, add detach() to it AND wire the call here
     // — same pattern as these four.
     if (m_settingsAdaptor) {
@@ -561,8 +561,9 @@ void Daemon::stop()
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr, nullptr);
     }
 
-    // Clear the late-bound WTS float / mode callbacks that capture `this`, so
-    // the "every `this`-capturing predicate is cleared" contract stays grep-discoverable.
+    // Clear the late-bound WTS float / mode callbacks. All but the tiled predicate reach `this`
+    // (directly or through the routing inputs); that one holds only QPointers and goes with
+    // them, so the clear-before-teardown contract stays grep-discoverable.
     if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
         auto* wts = m_windowTrackingAdaptor->service();
         wts->setEngineFloatResolver({});
@@ -614,10 +615,9 @@ void Daemon::stop()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setContextResolver(nullptr);
         // m_screenModeRouter is destroyed on the running path below; null its
-        // WTA borrow before that reset so any D-Bus call landing in the gap
-        // between this teardown and the bus unregister can't deref
-        // a freed router pointer. SnapAdaptor's clearEngine() does
-        // the symmetric clear (snapadaptor.cpp).
+        // WTA borrow before that reset so nothing later in this teardown
+        // derefs a freed router (the bus is already unregistered above).
+        // SnapAdaptor holds no router.
         m_windowTrackingAdaptor->setScreenModeRouter(nullptr);
     }
     if (m_tilingAdaptor) {
@@ -649,10 +649,10 @@ void Daemon::stop()
         // closure null-checks the router, but clearing it here keeps the
         // teardown grep-discoverable like every other late-bound borrow.
         concreteSnap->setLiveModeResolver({});
-        // The window-registry borrow belongs here too. Member order means the
-        // registry outlives the engines, so nothing can deref it in the
-        // teardown gap; this is the grep-discoverable contract, and it matches
-        // the clear the tiling adaptor's identically-named borrow gets above.
+        // The window-registry borrow, cleared in every engine block. Member
+        // order already makes the registry outlive the engines. The engine-settings
+        // borrow (setEngineSettings refuses null) and snap's autotile borrow die
+        // with the engines just below.
         concreteSnap->setWindowRegistry(nullptr);
         // The navigation-state provider and cross-surface resolver: raw borrows too.
         concreteSnap->setNavigationStateProvider(nullptr);
@@ -661,8 +661,8 @@ void Daemon::stop()
         concreteSnap->setPersistenceDelegate({}, {});
     }
 
-    // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
-    // its restore-position evaluator) before the store is destroyed. Same
+    // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (read by
+    // every per-window rule resolver) before the store is destroyed. Same
     // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setRuleStore(nullptr);
@@ -679,9 +679,10 @@ void Daemon::stop()
     // Clear the autotile context-gap provider, which captures `this` (Daemon, via
     // m_layoutManager / currentDesktopForScreen / currentActivity). No live deref
     // can occur today — m_autotileEngine is destroyed on the running path below
-    // while `this` is still alive — but clearing it keeps the "every
-    // `this`-capturing closure is cleared before teardown" contract complete and
-    // grep-discoverable, exactly like the SnapEngine exclude-rule borrow above.
+    // while `this` is still alive — but clearing it keeps the engine-side clears
+    // complete and grep-discoverable (ScrollingAdaptor's step and gate providers
+    // stay installed on purpose: its scroll slots refuse once clearEngine nulls
+    // the engine), exactly like the SnapEngine exclude-rule borrow above.
     // `m_autotileEngine` is base-typed `PlacementEngineBase*`;
     // setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
@@ -689,6 +690,7 @@ void Daemon::stop()
         // The cross-surface resolver borrow all three engines took (enginefactory.cpp).
         concreteAutotile->setCrossSurfaceResolver(nullptr);
         concreteAutotile->setPersistenceDelegate({}, {});
+        concreteAutotile->setWindowRegistry(nullptr);
     }
     // Scroll twin of the clear above: every closure below captures Daemon `this`
     // (init_engines.cpp) under the same clear-before-destroy contract.
@@ -697,6 +699,7 @@ void Daemon::stop()
         concreteScroll->setScrollingModeResolver({});
         concreteScroll->setCrossSurfaceResolver(nullptr);
         concreteScroll->setPersistenceDelegate({}, {});
+        concreteScroll->setWindowRegistry(nullptr);
     }
 
     // Everything ABOVE this gate is init/ctor-origin teardown that must run on
@@ -725,11 +728,13 @@ void Daemon::stop()
     // teardownIdleConnections(): every connection these senders hold on
     // `this` is made in per-start code, so severing them is exactly undone
     // by the next start(). This sweep covers the connectScreenSignals /
-    // connectDesktopActivity / connectShortcutSignals connections in
-    // start.cpp; the connectLayoutSignals / connectOverlaySignals connections
-    // (whose sender m_layoutManager is mixed and must not be blanket-severed)
-    // are instead tracked in m_restartScopedConnections and cleared at the
-    // top of connectLayoutSignals(), and the WTA-to-drag-adaptor fan-out uses
+    // connectDesktopActivity connections (start.cpp) and
+    // connectShortcutSignals' (shortcuts_wiring.cpp). m_restartScopedConnections
+    // carries the connectLayoutSignals / connectOverlaySignals connections on
+    // long-lived senders: m_layoutManager and m_scrollingTemplateStore rely on
+    // that list alone, and m_overlayService and the WTA are swept here as
+    // well. Their unified-controller connections die with the controller each
+    // start() rebuilds, and the WTA-to-drag-adaptor fan-out uses
     // Qt::UniqueConnection. The two schemes are complementary, not
     // alternatives — this one owns the persistent-sender sweep, that one owns
     // the mixed-sender and non-daemon-receiver connections.
@@ -757,8 +762,9 @@ void Daemon::stop()
     // (m_layoutManager, m_scrollingTemplateStore) are ctor-owned and keep
     // emitting, so a store mutation between stop() and the next start() would
     // run updateEngineScreens on a stopped daemon. Severing here makes the
-    // teardown symmetric with every other per-start list; the clear in
-    // connectLayoutSignals stays, because init() can re-run without a stop().
+    // teardown symmetric with every other per-start list. The clear at the top
+    // of connectLayoutSignals is a belt: every start() that fills the list sets
+    // m_running, so the next stop() severs it here.
     for (const QMetaObject::Connection& conn : std::as_const(m_restartScopedConnections)) {
         disconnect(conn);
     }
@@ -766,19 +772,22 @@ void Daemon::stop()
 
     // Per-session change-gate state: a stale tiled-count entry would make the
     // first placementChanged of the next init/start cycle read as "unchanged"
-    // and silently skip its save trigger.
+    // and skip its count-rule re-resolve (the save trigger is a separate,
+    // ungated connection).
     m_lastTiledCountByScreen.clear();
     // Sibling latch, same per-session shape (its queued single-shot also
     // gates on m_shuttingDown, so this is symmetry rather than a live fix).
     m_reconcileAssignmentsPending = false;
     // Its colour-scheme twin, same shape and same reasoning.
     m_colorSchemeRefreshPending = false;
+    // And the tab-colour broadcast latch, same shape (its single shot gates on m_shuttingDown).
+    m_scrollTabColorsBroadcastPending = false;
     // Per-session restore staging: entries computed against the pre-stop
     // window set must not feed a post-restart KCM apply with dead geometry.
     m_pendingSnapFloatRestores.clear();
     // The derived engine sets are only read while the recompute latch is held,
     // and the next cycle's first recompute rewrites them before any read — but
-    // they are per-session change-gate state like the two above, and leaving
+    // they are per-session change-gate state like the state above, and leaving
     // them out was an asymmetry in a block whose whole purpose is that reset.
     m_derivedAutotileScreens.clear();
     m_derivedScrollingScreens.clear();
@@ -859,11 +868,12 @@ void Daemon::stop()
     // also reached only from the ctor-origin setup.
     //
     // `m_curveLoader` is reset ABOVE the m_running gate so its destructor runs
-    // NOW (issuing its own `clearOwner(ownerTag)` and tearing down the
-    // QFileSystemWatcher) rather than in the `~Daemon` body, where it would
-    // fire path-change signals into a half-destroyed object. What it owns is
-    // CURVES, not profiles, so its teardown costs the cycle live curve reload
-    // and nothing else — and it is the only sender of `curvesChanged`, so after
+    // NOW (unregistering every curve it loaded under its owner tag from the
+    // CurveRegistry, and tearing down the QFileSystemWatcher) rather than in the
+    // `~Daemon` body, where it would fire path-change signals into a
+    // half-destroyed object. What it owns is CURVES, not profiles, so the cycle
+    // loses every named file curve and their live reload, and nothing else —
+    // and it is the only sender of `curvesChanged`, so after
     // a cycle nothing re-parses the timing tree against a reloaded registry
     // either. The raw-JSON snapshot is cleared alongside because it caches
     // curve-resolved profiles, not because any destructor drops matching
@@ -888,7 +898,7 @@ void Daemon::stop()
         m_overlayService->hideCheatsheet();
         // The zone selector has the same no-way-out problem: OverlayService
         // outlives stop(), the drag adaptor's engine borrows are already
-        // nulled and the bus unregisters below, so no drag-end can ever hide
+        // nulled and the bus is already unregistered, so no drag-end can ever hide
         // a selector left showing — and the latched m_zoneSelectorVisible
         // would make showZoneSelector's entry guard refuse every show for
         // the whole next session.
@@ -928,14 +938,12 @@ void Daemon::stop()
     m_screenModeAdapter.reset();
     m_workspaceStateAdapter.reset();
 
-    // Destroy the router. Engines below outlive it so any in-flight
-    // navigatorForShortcut path completes with the engine pointers it
-    // already captured before the router went away.
+    // Destroy the router before the engines: it holds raw borrows of every engine (screenmoderouter.h).
     m_screenModeRouter.reset();
 
     // Destroy engines now (during stop(), before Qt child destruction order).
-    // Their exclude-rule / rule-store / context-gap borrows were severed
-    // above the running gate.
+    // Their exclude-rule and context-gap borrows were severed above the running
+    // gate (the rule-store borrow severed there is the WTA's).
     m_snapEngine.reset();
     m_autotileEngine.reset();
     // Drop the strip-state provider FIRST, and only now: once the engine is
@@ -952,7 +960,7 @@ void Daemon::stop()
     // All three engines borrowed m_crossSurfaceResolver (injected at construction).
     // They are destroyed immediately above, so the borrow is already dead;
     // reset the resolver here too so the teardown order is explicit and
-    // grep-discoverable — matching the exclude-rule / window-rule borrow
+    // grep-discoverable — matching the exclude-rule and context-gap borrow
     // severing above — and survives a future member-declaration reorder.
     m_crossSurfaceResolver.reset();
 
