@@ -65,7 +65,8 @@ public:
      * not finished mapping). Callers needing a window's app identity must ask
      * appIdFor / currentAppIdFor, which read the metadata record and
      * self-correct when the class arrives, rather than parsing it back out of
-     * the frozen id.
+     * the frozen id. An empty id, or one with no instance part ("appId|"),
+     * names no window and comes back unchanged without being frozen.
      */
     virtual QString canonicalizeWindowId(const QString& rawWindowId) = 0;
     virtual QString canonicalizeForLookup(const QString& rawWindowId) const = 0;

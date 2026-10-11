@@ -222,6 +222,11 @@ QString WindowRegistry::canonicalizeWindowId(const QString& rawWindowId)
         return rawWindowId;
     }
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
+    // An id with no instance part ("appId|") names no window: freezing it under
+    // the empty key would map every later "x|" to this one (F207).
+    if (instanceId.isEmpty()) {
+        return rawWindowId;
+    }
     auto it = m_canonicalByInstance.constFind(instanceId);
     if (it != m_canonicalByInstance.constEnd()) {
         return it.value();
@@ -252,6 +257,9 @@ QString WindowRegistry::canonicalizeForLookup(const QString& rawWindowId) const
         return rawWindowId;
     }
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
+    if (instanceId.isEmpty()) {
+        return rawWindowId; // never filed (canonicalizeWindowId)
+    }
     auto it = m_canonicalByInstance.constFind(instanceId);
     return (it != m_canonicalByInstance.constEnd()) ? it.value() : rawWindowId;
 }
