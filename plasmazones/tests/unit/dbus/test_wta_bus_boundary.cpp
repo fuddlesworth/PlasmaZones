@@ -7,8 +7,9 @@
  *        the daemon does not know is held until it arrives, a split monitor's
  *        physical id lands in the right virtual screen, a metadata push is
  *        normalised to WindowMetadata's invariants, the focused-window, frame
- *        and resize reports are keyed and routed as the adaptor documents, and
- *        the stale-window prune drops what died (F81, F852, F48, F853 to F858).
+ *        and resize reports are keyed and routed as the adaptor documents, the
+ *        stale-window prune drops what died, and a close on a removed virtual
+ *        screen files where the frame is (F81, F852, F48, F853 to F858, F251).
  */
 
 #include "wta_float_back_fixture.h"
@@ -336,6 +337,30 @@ private Q_SLOTS:
         const auto rec = f.wta->service()->placementStore().peekExact(dead);
         QVERIFY2(rec, "the dead window's placement is recorded before its snap state goes");
         QCOMPARE(rec->slotFor(WindowPlacement::snapEngineId()).zoneIds, QStringList{f.zone(1)});
+    }
+
+    // A close reported on a virtual screen the daemon no longer has (its
+    // physical monitor is known, its subdivision is gone) files the float-back
+    // under the screen the frame is on, not under the dead id (F251, F851).
+    void closeOnARemovedVirtualScreenFilesTheFloatBackWhereTheFrameIs()
+    {
+        FloatBackFixture f;
+        QVERIFY(f.screenMgr->setVirtualScreenConfig(kRight, TestHelpers::makeSplitConfig(kRight)));
+        const QString vs1 = QStringLiteral("DP-2/vs:1");
+        const QString dead = QStringLiteral("DP-2/vs:5");
+        const QString windowId = f.registerWindow(QStringLiteral("close-vs-1"));
+        const QRect frame(3000, 100, 400, 300); // the right half of DP-2
+        f.setFrame(windowId, frame);
+        QVERIFY2(!f.snap->isWindowTracked(windowId) && !f.tiling.isWindowTracked(windowId),
+                 "control: no engine captures, so the close falls back to the reported screen");
+
+        f.wta->windowClosed(windowId, 0, dead);
+
+        const auto rec = f.wta->service()->placementStore().peekExact(windowId);
+        QVERIFY(rec);
+        QCOMPARE(rec->screenId, vs1);
+        QCOMPARE(rec->freeGeometryByScreen.value(vs1), frame);
+        QVERIFY(!rec->freeGeometryByScreen.contains(dead));
     }
 };
 

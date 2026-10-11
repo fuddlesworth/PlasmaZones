@@ -143,6 +143,34 @@ private Q_SLOTS:
         QVERIFY(m_wta->lastActiveScreenName().isEmpty());
     }
 
+    // The focused window is matched by its instance, so a close naming a
+    // class-renamed composite of it still forgets it (F851).
+    void testClosingTheFocusedWindow_byAnotherCompositeOfItsInstance()
+    {
+        m_wta->windowActivated(QStringLiteral("app|inst-a"), QStringLiteral("DP-1"));
+        m_wta->windowClosed(QStringLiteral("renamed|inst-a"), 0);
+        QVERIFY(m_wta->lastActiveWindowId().isEmpty());
+        QVERIFY(m_wta->lastActiveScreenName().isEmpty());
+    }
+
+    // A close drops the window's suspension-float classification, its frame
+    // shadow and its float-broadcast dedup entry, so the same float state
+    // broadcasts again for a window reusing the id (F851).
+    void testWindowClosed_dropsTheSuspensionAndBroadcastMemory()
+    {
+        const QString w = QStringLiteral("app|closed-2");
+        m_wta->service()->markSuspensionFloat(w);
+        QVERIFY(m_wta->relayWindowFloatingChanged(w, true, m_screenId));
+        m_wta->setFrameGeometry(w, 100, 100, 400, 300);
+        QVERIFY(m_wta->frameGeometry(w).isValid());
+
+        m_wta->windowClosed(w, 0);
+
+        QVERIFY(!m_wta->service()->isSuspensionFloat(w));
+        QVERIFY(!m_wta->frameGeometry(w).isValid());
+        QVERIFY2(m_wta->relayWindowFloatingChanged(w, true, m_screenId), "the dedup entry went with the window");
+    }
+
     // The activation backstop re-homes a window whose snap store names
     // another monitor, but never a SNAPPED one: a migrate leaves the zone
     // behind, so an activation report naming a stale output (one racing a

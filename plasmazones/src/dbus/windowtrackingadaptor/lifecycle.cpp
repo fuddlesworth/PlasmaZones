@@ -468,17 +468,25 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // Pass the effect's authoritative close screen: a cross-screen move can orphan
     // the window from every engine by close time, so every capturePlacement
     // misses and the real screen would be lost; the capture falls back to this screen
-    // for the float-back. Validate it first (a stale id from an output unplugged
-    // mid-close would poison the reopen screen), falling back to the live frame's
-    // centre; an empty result keeps the record's prior screen, which beats a dead one.
+    // for the float-back. Validate it first (a stale id, from an output unplugged
+    // mid-close or a virtual screen a subdivision change removed, would poison the
+    // reopen screen), falling back to the live frame's centre; an empty result
+    // keeps the record's prior screen, which beats a dead one.
     QString closeScreen = screenId;
-    if (!closeScreen.isEmpty() && m_service->screenManager()
-        && !m_service->screenManager()->physicalScreenFor(closeScreen).isValid()) {
-        const QRect closeFrame = m_frameGeometry.value(shadowWindowId(windowId));
-        closeScreen = closeFrame.isValid() ? Utils::effectiveScreenIdAt(m_service->screenManager(), closeFrame.center())
-                                           : QString();
-        qCDebug(lcDbusWindow) << "windowClosed: unknown close screen" << screenId << "for" << windowId
-                              << "— resolved to" << closeScreen;
+    if (!closeScreen.isEmpty() && m_service->screenManager()) {
+        // resolveBusScreen, not physicalScreenFor: that one strips a virtual
+        // screen's suffix, so one a subdivision change removed read as known.
+        const QString known = resolveBusScreen(closeScreen, windowId);
+        if (known.isEmpty()) {
+            const QRect closeFrame = m_frameGeometry.value(shadowWindowId(windowId));
+            closeScreen = closeFrame.isValid()
+                ? Utils::effectiveScreenIdAt(m_service->screenManager(), closeFrame.center())
+                : QString();
+            qCDebug(lcDbusWindow) << "windowClosed: unknown close screen" << screenId << "for" << windowId
+                                  << "— resolved to" << closeScreen;
+        } else {
+            closeScreen = known;
+        }
     }
     captureWindowPlacement(windowId, closeScreen);
     // The engine kept answering the hold for this closed window so the capture
