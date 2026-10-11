@@ -248,33 +248,17 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
     const bool currentChanged = (newCurrent != m_currentDesktop);
     const bool countChanged = (newCount != m_desktopCount);
 
-    // Which POSITION went, while the old list is still here to compare
+    // How the POSITIONS moved, while the old list is still here to compare
     // against. Ids are stable across a renumber and positions are not, so this
     // is the only moment the answer exists — see desktopRemovedAt's doc for
-    // why the count alone cannot supply it. Restricted to the unambiguous
-    // one-out-none-in case: anything else and consumers fall back to the
-    // count handler's out-of-range sweep.
-    int removedPosition = 0;
-    if (newIds.size() == m_desktopIds.size() - 1) {
-        const QSet<QString> survivors(newIds.cbegin(), newIds.cend());
-        for (int i = 0; i < m_desktopIds.size(); ++i) {
-            if (!survivors.contains(m_desktopIds.at(i))) {
-                // A second miss means this is not a simple removal.
-                removedPosition = removedPosition == 0 ? i + 1 : -1;
-            }
-        }
-        // Every surviving id must be one we already had, or something was
-        // added in the same turn and the positions do not simply shift.
-        if (removedPosition > 0) {
-            const QSet<QString> previous(m_desktopIds.cbegin(), m_desktopIds.cend());
-            for (const QString& id : newIds) {
-                if (!previous.contains(id)) {
-                    removedPosition = -1;
-                    break;
-                }
-            }
-        }
-    }
+    // why the count alone cannot supply it. One map for every shape of change
+    // (F787). The first snapshot has no previous list and compares against the
+    // previous session's, when the daemon handed one over.
+    const bool liveChange = !m_desktopIds.isEmpty();
+    const PhosphorEngine::DesktopRemap remap =
+        PhosphorEngine::DesktopRemap::fromIds(liveChange ? m_desktopIds : m_baselineDesktopIds, newIds);
+    m_baselineDesktopIds.clear();
+    const int removedPosition = liveChange ? remap.singleRemoval() : 0;
 
     m_desktopIds = newIds;
     m_desktopNames = newNames;
@@ -300,11 +284,15 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
     // anything reasons about the new count — and once it has, the count
     // handler's "prune everything past newCount" sweep correctly finds
     // nothing left to do.
-    if (removedPosition > 0) {
-        // Shift this manager's OWN per-screen mirror with the same numbering,
-        // SILENTLY. Without the shift, screenDesktop() would keep answering
-        // the pre-removal number and any later push of it into an engine would
-        // write that stale value over the one the engine just corrected.
+    if (!remap.isIdentity()) {
+        // Move this manager's OWN per-screen mirror through the same map,
+        // SILENTLY. Without it, screenDesktop() would keep answering the old
+        // number and any later push of it into an engine would write that
+        // stale value over the one the engine just corrected. A screen showing
+        // a removed desktop takes its successor, as KWin moves it there, and
+        // anything past the new count is pulled down with it, so the whole
+        // mirror is correct BEFORE the signals go out and
+        // clampScreenDesktopsToCount below finds nothing to correct.
         //
         // No screenDesktopChanged here, deliberately, and the reason is worth
         // keeping: that signal means "this output switched desktops" and its
@@ -312,30 +300,23 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
         // previews, re-pinning sticky screens, pushing the desktop into all
         // three engines, re-announcing the screen set and showing the switch
         // OSD. Emitting it here would run that pass against engine state that
-        // has NOT been renumbered yet, since desktopRemovedAt goes out below,
-        // and the push it makes would then be decremented a SECOND time by the
+        // has NOT been renumbered yet, since the renumber signals go out below,
+        // and the push it makes would then be moved a SECOND time by the
         // engines' own renumber. Nothing switched desktops; the desktops were
-        // renumbered underneath everyone, which is what desktopRemovedAt says.
-        for (auto it = m_screenDesktops.begin(); it != m_screenDesktops.end(); ++it) {
-            if (it.value() > removedPosition) {
-                --it.value();
+        // renumbered underneath everyone, which is what those signals say.
+        //
+        // A first snapshot moves no screen: the map then compares against the
+        // previous session, and every screen this manager knows of was
+        // reported in the live numbering.
+        if (liveChange) {
+            for (auto it = m_screenDesktops.begin(); it != m_screenDesktops.end(); ++it) {
+                it.value() = qBound(1, remap.successor(it.value()), m_desktopCount);
             }
         }
-        // Removing the LAST desktop shifts nothing (no entry is above it), so a
-        // screen sitting on it is left naming a number that no longer exists.
-        // Pull those down here, still silently, so the whole per-screen mirror
-        // is correct BEFORE desktopRemovedAt goes out. Otherwise the subscriber
-        // resolves every screen against the stale number and publishes an
-        // active-layout map built from it, and only clampScreenDesktopsToCount
-        // below corrects it — one wrong publish later, via a signal that also
-        // means "this output switched desktops" when nothing did. That clamp
-        // now finds these entries already in range and stays quiet.
-        for (auto it = m_screenDesktops.begin(); it != m_screenDesktops.end(); ++it) {
-            if (it.value() > m_desktopCount) {
-                it.value() = m_desktopCount;
-            }
+        Q_EMIT desktopsRenumbered(remap);
+        if (removedPosition > 0) {
+            Q_EMIT desktopRemovedAt(removedPosition);
         }
-        Q_EMIT desktopRemovedAt(removedPosition);
     }
     // The count notification belongs HERE, where the value is committed.
     // The create/remove handlers used to emit it themselves, which worked
@@ -458,9 +439,10 @@ void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
 
 void VirtualDesktopManager::onKWinDesktopCreated()
 {
-    // No emit here: refreshFromKWin is asynchronous once started, so the
+    // No count emit here: refreshFromKWin is asynchronous once started, so the
     // count is still the old one at this point. applyDesktopListReply
     // notifies when it actually commits the new snapshot.
+    Q_EMIT desktopListChanging();
     refreshFromKWin();
 }
 
@@ -470,6 +452,7 @@ void VirtualDesktopManager::onKWinDesktopRemoved()
     // asynchronous once started, so both would run against the OLD count
     // and the clamp would be a no-op. applyDesktopListReply does both when
     // it commits the new snapshot.
+    Q_EMIT desktopListChanging();
     refreshFromKWin();
 }
 
@@ -603,15 +586,34 @@ void VirtualDesktopManager::seedScreenDesktop(const QString& screenId, int deskt
     Q_EMIT screenDesktopSeeded(screenId, desktop);
 }
 
+void VirtualDesktopManager::setBaselineDesktopIds(const QStringList& desktopIds)
+{
+    if (desktopIds.isEmpty()) {
+        return;
+    }
+    if (m_desktopIds.isEmpty()) {
+        // No snapshot yet: the first one compares against this.
+        m_baselineDesktopIds = desktopIds;
+        return;
+    }
+    // The snapshot is already here, so the stores it renumbers are keyed on
+    // the baseline's positions until this goes out. The per-screen mirror is
+    // not touched: every screen in it was reported in the live numbering.
+    const PhosphorEngine::DesktopRemap remap = PhosphorEngine::DesktopRemap::fromIds(desktopIds, m_desktopIds);
+    if (!remap.isIdentity()) {
+        Q_EMIT desktopsRenumbered(remap);
+    }
+}
+
 void VirtualDesktopManager::clampScreenDesktopsToCount()
 {
     // Clamp only entries above the live count: KWin renumbers on desktop
     // removal, so a screen pinned past the new count is pulled down to it here.
-    // A surviving entry whose desktop was RENUMBERED by a mid-list removal is
-    // not this function's business: applyDesktopListArg shifts those itself
-    // when it works out which position went, before this runs. What is left
-    // here is the genuine out-of-range case, which a removal at the END
-    // produces.
+    // An entry whose desktop was RENUMBERED (a removal, an insert, a move) is
+    // not this function's business: applyDesktopListArg moves those itself
+    // through the position map, before this runs, and pulls down the ones a
+    // removal at the END left out of range. What is left here is the
+    // onNumberOfDesktopsChanged path, which commits a count before the list.
     //
     // Mutate first, then emit the captured value — emitting mid-iteration could
     // re-enter updateScreenDesktop and invalidate the hash iterator, and a
@@ -660,7 +662,9 @@ void VirtualDesktopManager::setCurrentDesktopById(const QString& desktopId)
 void VirtualDesktopManager::onKWinDesktopDataChanged()
 {
     // No count change to report; refreshFromKWin re-reads the list and
-    // applyDesktopListReply emits desktopsChanged if anything moved.
+    // applyDesktopListReply emits desktopsChanged if anything moved. A
+    // position move arrives here, so this may renumber.
+    Q_EMIT desktopListChanging();
     refreshFromKWin();
 }
 
@@ -691,6 +695,7 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(uint count)
         // the clamp below runs, and the full snapshot (ids, names, rows,
         // current) commits later in applyDesktopListArg, which re-clamps
         // and re-emits change-gated against the values written here.
+        Q_EMIT desktopListChanging();
         refreshFromKWin();
     }
 

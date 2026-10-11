@@ -72,6 +72,7 @@ if(NOT TARGET PhosphorProtocol::PhosphorProtocol)
 endif()
 
 add_library(PhosphorEngine SHARED
+    include/PhosphorEngine/DesktopRemap.h
     include/PhosphorEngine/PlacementEngineBase.h
     include/PhosphorEngine/GapResolution.h
     include/PhosphorEngine/LayerFocusSwitch.h
@@ -79,6 +80,7 @@ add_library(PhosphorEngine SHARED
     include/PhosphorEngine/ScreenContextTracker.h
     include/PhosphorEngine/WindowPlacement.h
     include/PhosphorEngine/WindowPlacementStore.h
+    src/DesktopRemap.cpp
     src/LayerFocusSwitch.cpp
     src/PlacementEngineBase.cpp
     src/ScreenContextTracker.cpp

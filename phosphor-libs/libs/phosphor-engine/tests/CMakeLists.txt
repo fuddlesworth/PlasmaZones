@@ -51,3 +51,4 @@ pe_add_test(test_engine_iplacementengine_defaults test_iplacementengine_defaults
 pe_add_test(test_engine_perscreenstates test_perscreenstates.cpp)
 pe_add_test(test_engine_windowcontext test_windowcontext.cpp)
 pe_add_test(test_engine_layerfocusswitch test_layerfocusswitch.cpp)
+pe_add_test(test_engine_desktopremap test_desktopremap.cpp)

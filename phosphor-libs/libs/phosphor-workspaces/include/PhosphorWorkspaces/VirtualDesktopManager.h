@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/IVirtualDesktopManager.h>
 #include <phosphorworkspaces_export.h>
 #include <QHash>
@@ -76,6 +77,15 @@ public:
     /// because the engines dropped the output's desktop when it went away.
     void seedScreenDesktop(const QString& screenId, int desktop);
 
+    /// The desktop ids a previous session saw, in position order, so a change
+    /// KWin made while nothing was listening (desktops added, removed or moved
+    /// while the daemon was down) still renumbers the stores keyed on the old
+    /// positions. Compared against the first committed snapshot, or against
+    /// the current one at once when it has already landed; a difference goes
+    /// out as desktopsRenumbered and nothing else (the per-screen desktops and
+    /// desktopRemovedAt are about live changes only). An empty list is ignored.
+    void setBaselineDesktopIds(const QStringList& desktopIds);
+
 Q_SIGNALS:
     void currentDesktopChanged(int desktop);
     void desktopCountChanged(int count);
@@ -99,8 +109,11 @@ Q_SIGNALS:
     ///
     /// Only for the unambiguous case: exactly one id gone and none added. A
     /// reorder, a simultaneous add and remove, or a multi-desktop change
-    /// leaves this silent and the count handler's out-of-range sweep is all a
-    /// consumer gets.
+    /// leaves this silent.
+    ///
+    /// Superseded by desktopsRenumbered, which goes out just before it and
+    /// covers every shape of change. Kept for existing consumers: connect one
+    /// of the two, never both, or a store is shifted twice.
     void desktopRemovedAt(int removedPosition);
     /// A single screen's current virtual desktop changed (per-output virtual
     /// desktops). The primary trigger the daemon's per-screen desktop handler
@@ -110,6 +123,23 @@ Q_SIGNALS:
     /// A screen's desktop was recorded as the output (re)connected
     /// (seedScreenDesktop). Not a switch.
     void screenDesktopSeeded(const QString& screenId, int desktop);
+    /// The desktop positions moved: a removal, an insert, a reorder, or any
+    /// mix of them, as one old-to-new map (F787). Every store keyed on a
+    /// desktop NUMBER applies @p remap once. By the time it goes out the
+    /// manager's own state is renumbered: the ids, the count, the current
+    /// desktop, and each screen's desktop (moved through
+    /// DesktopRemap::successor, silently, for the reason desktopRemovedAt's
+    /// shift is silent). Ahead of desktopCountChanged, like desktopRemovedAt.
+    /// Never sent for a change that moves no number (a rename, a desktop
+    /// appended after the last one).
+    void desktopsRenumbered(const PhosphorEngine::DesktopRemap& remap);
+    /// KWin reported a change to its desktop list, and the snapshot that says
+    /// what changed is on its way. Sent before each refresh it triggers, so a
+    /// change can send it more than once, and a change that moves no number
+    /// is never followed by desktopsRenumbered. A store whose entries the
+    /// compositor re-reports in the new numbering on its own (the window
+    /// registry) marks here which entries predate the change.
+    void desktopListChanging();
 
 private Q_SLOTS:
     /// KWin's countChanged carries `u`, not `i`. A slot declared `int`
@@ -156,6 +186,8 @@ private:
     QStringList m_desktopNames;
     QStringList m_desktopIds;
     uint m_refreshGeneration = 0;
+    /// setBaselineDesktopIds' list, held until the first snapshot commits.
+    QStringList m_baselineDesktopIds;
 };
 
 } // namespace PhosphorWorkspaces
