@@ -31,6 +31,8 @@ const QString kScreen = QStringLiteral("DP-1");
 const QString kInstance = QStringLiteral("11111111-2222-3333-4444-555555555555");
 const QString kWindow = QStringLiteral("app|11111111-2222-3333-4444-555555555555");
 const QString kOther = QStringLiteral("app|66666666-7777-8888-9999-000000000000");
+/// What a missing held key reads as: desktop 0 and no screen, which no membership has.
+const PhosphorEngine::PlacementStateKey kNoKey{QString(), 0, QString()};
 
 PhosphorEngine::DesktopSpan sticky()
 {
@@ -115,9 +117,9 @@ private Q_SLOTS:
         QVERIFY2(f.stateOn(1)->containsWindow(kWindow), "adoption adds a context, it does not move the window");
         // The primary membership follows the desktop in view.
         f.engine.setCurrentDesktopForScreen(kScreen, 2);
-        QCOMPARE(f.engine.heldKeyForWindow(kWindow)->desktop, 2);
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow).value_or(kNoKey).desktop, 2);
         f.engine.setCurrentDesktopForScreen(kScreen, 1);
-        QCOMPARE(f.engine.heldKeyForWindow(kWindow)->desktop, 1);
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow).value_or(kNoKey).desktop, 1);
     }
 
     // The path the author left unexercised: a close arrives while one of the
@@ -348,7 +350,7 @@ private Q_SLOTS:
         QVERIFY2(onOther->containsWindow(kWindow), "the caller's screen adopts the window");
         QVERIFY(!onOther->isFloating(kWindow));
         QVERIFY2(!f.stateOn(1)->containsWindow(kWindow), "the stale membership on the other output is released");
-        QCOMPARE(f.engine.heldKeyForWindow(kWindow)->screenId, other);
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow).value_or(kNoKey).screenId, other);
     }
 
     // A membership under the screen's sticky pin is not evidence the window

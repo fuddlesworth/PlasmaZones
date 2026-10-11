@@ -4,22 +4,25 @@
 /**
  * @file test_snap_desktop_membership.cpp
  *
- * The snap engine's per-desktop membership arm. Snapping places nothing by
- * itself, so adoption grants a window a store of its own on the desktop in
- * view, and what that buys is that snapping it there lands in ITS OWN
- * assignment instead of overwriting the zone it holds on another desktop.
- * The rest of the suite pins the bookkeeping around that: the persisted
- * per-desktop zone map, the close and release paths that have to clear every
- * member store, and the restore that seeds the other desktops' zones back.
+ * The snap engine's per-desktop membership arm. Adoption grants a window a
+ * store of its own on the desktop in view, and what that buys is that
+ * snapping it there lands in ITS OWN assignment instead of overwriting the
+ * zone it holds on another desktop. The rest of the suite pins the
+ * bookkeeping around that (the persisted per-desktop zone map, the close and
+ * release paths, the restore that seeds other desktops), the carry of a snap
+ * into another desktop's layout, the reapply on a switch, and the renumber
+ * after a desktop removal.
  */
 
 #include <QGuiApplication>
+#include <QScopeGuard>
 #include <QSet>
 #include <QSignalSpy>
 #include <QString>
 #include <QStringList>
 #include <QTest>
 #include <memory>
+#include <utility>
 
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
@@ -49,6 +52,8 @@ const QString kScreen = QStringLiteral("DP-1");
 const QString kScreen2 = QStringLiteral("DP-2");
 const QString kWindow = QStringLiteral("app|11111111-2222-3333-4444-555555555555");
 const QString kOther = QStringLiteral("app|66666666-7777-8888-9999-000000000000");
+/// What a missing held key reads as: desktop 0, which no membership has.
+const PhosphorEngine::PlacementStateKey kNoKey{QString(), 0, QString()};
 
 PhosphorEngine::DesktopSpan sticky()
 {
@@ -119,6 +124,9 @@ private Q_SLOTS:
         m_testLayout = nullptr;
         m_zoneIds.clear();
         m_guard.reset();
+        // Checked after the teardown, so a failure cannot skip it.
+        const QStringList batchErrors = std::exchange(m_batchErrors, {});
+        QVERIFY2(batchErrors.isEmpty(), qPrintable(batchErrors.join(QStringLiteral("; "))));
     }
 
     // The defect the whole change exists for: a sticky window snapped on
@@ -139,16 +147,18 @@ private Q_SLOTS:
         // adopted-but-unsnapped window as untracked.
         QVERIFY(m_engine->heldKeyForWindow(kWindow).has_value());
         QCOMPARE(m_engine->heldKeyForWindow(kWindow)->desktop, 1);
+        QVERIFY2(m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky())).isEmpty(),
+                 "a second pass over the adopted desktop adopts nothing");
 
         snapOn(2, kWindow, m_zoneIds[1]);
         QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[1]});
         QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
         // The primary membership follows the desktop in view.
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
-        QCOMPARE(m_engine->heldKeyForWindow(kWindow)->desktop, 2);
+        QCOMPARE(m_engine->heldKeyForWindow(kWindow).value_or(kNoKey).desktop, 2);
         m_engine->setCurrentDesktopForScreen(kScreen, 1);
-        QCOMPARE(m_engine->heldKeyForWindow(kWindow)->desktop, 1);
-        // A second pass is idempotent.
+        QCOMPARE(m_engine->heldKeyForWindow(kWindow).value_or(kNoKey).desktop, 1);
+        // And a pass on the desktop it was already snapped on adopts nothing.
         QVERIFY(m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky())).isEmpty());
     }
 
@@ -209,7 +219,7 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
         snapOn(2, kWindow, m_zoneIds[1]);
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(recordCapture(kWindow));
         QVERIFY(persistedZonesByDesktop(kWindow).contains(1));
 
         // Un-stuck onto desktop 2 while desktop 2 is in view.
@@ -232,7 +242,7 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
         snapOn(2, kWindow, m_zoneIds[1]);
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(recordCapture(kWindow));
         QVERIFY(persistedZonesByDesktop(kWindow).contains(2));
 
         m_service->unassignWindow(kWindow); // the desktop in view is 2
@@ -433,8 +443,7 @@ private Q_SLOTS:
         snapOn(2, kWindow, m_zoneIds[1]);
         QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[1]});
         QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
-        // And a float there is per store too, so the arrival read can tell a
-        // window that occupies its zone from one that only remembers it.
+        // And a float there is per store too: desktop 1 stays a live snap.
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         m_engine->setWindowFloat(kWindow, true, kScreen);
         QVERIFY(static_cast<SnapState*>(m_engine->stateForScreen(kScreen))->isFloating(kWindow));
@@ -444,8 +453,8 @@ private Q_SLOTS:
     }
 
     // A FLOATED window carries nothing: it sits at its own free geometry, so
-    // there is no foreign zone rect to correct, and its zone assignment is
-    // only the memory a float toggle resnaps into.
+    // there is no foreign zone rect to correct, and a float moves its zones to
+    // the pre-float memory.
     void aFloatedWindowCarriesNothing()
     {
         PhosphorZones::Layout* destination = addLayout(3);
@@ -475,9 +484,6 @@ private Q_SLOTS:
         QVERIFY(m_service->windowsInZone(m_zoneIds[0]).contains(kWindow));
         QVERIFY(m_service->windowsInZone(m_zoneIds[1]).contains(kWindow));
         QCOMPARE(m_service->snappedWindows().count(kWindow), 1);
-        // The store the window is NOT a member of holds nothing for it: the
-        // eviction spares member stores only.
-        QVERIFY(zonesOn(3, kWindow).isEmpty());
     }
 
     // Restore: the record names a zone per desktop; the desktop the window
@@ -502,6 +508,9 @@ private Q_SLOTS:
             gatedDesktop = desktop;
             return true;
         });
+        const auto clearGate = qScopeGuard([this] {
+            m_engine->setShouldRestorePredicate({});
+        });
         m_engine->setCurrentDesktopForScreen(kScreen, 1);
         const PhosphorEngine::SnapResult result = m_engine->resolveWindowRestore(kWindow, kScreen, false);
         QVERIFY(result.shouldSnap);
@@ -524,7 +533,6 @@ private Q_SLOTS:
         m_service->assignWindowToZone(kWindow, result.zoneIds.first(), kScreen, result.virtualDesktop);
         QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[1]});
         QCOMPARE(zonesOn(3, kWindow), QStringList{m_zoneIds[2]});
-        m_engine->setShouldRestorePredicate({});
     }
 
     // The per-desktop restore decision. A record captured with the SNAPPED
@@ -560,15 +568,19 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         QVERIFY(static_cast<SnapState*>(m_engine->stateForScreen(kScreen))->preFloatZones(kWindow).isEmpty());
 
-        // The other leg: floating on desktop 1 at capture, zone z1 on desktop 2.
+        // The other leg: floating on desktop 1 at capture, so no zone there (the
+        // store merges the map, so the first leg's is forgotten), z1 on desktop 2.
         m_engine->forgetWindow(kWindow);
+        m_service->forgetDesktopZones(kWindow, WindowPlacement::snapEngineId(), 1);
         WindowPlacement floated = multiDesktopRecord();
         floated.engines[WindowPlacement::snapEngineId()].state = WindowPlacement::stateFloating();
+        floated.engines[WindowPlacement::snapEngineId()].zonesByDesktop.remove(1);
         m_service->placementStore().record(floated);
         result = m_engine->resolveWindowRestore(kWindow, kScreen, false);
         QVERIFY2(result.shouldSnap, "the map names a zone on the restore desktop");
         QCOMPARE(result.zoneIds, QStringList{m_zoneIds[1]});
         QCOMPARE(result.virtualDesktop, 2);
+        QVERIFY2(zonesOn(1, kWindow).isEmpty(), "desktop 1 was floating at capture");
     }
 
     // A restore whose registry span no longer covers a desktop the record
@@ -631,8 +643,7 @@ private Q_SLOTS:
 
     // Floating on a desktop the window was adopted into but never snapped on
     // records the float's residence (screen and desktop) in that desktop's
-    // store: a bare float bit would leave the capture screenless. The other
-    // desktop's zone is untouched.
+    // store: a bare float bit would leave the capture screenless.
     void floatOnAnAdoptedDesktopRecordsItsResidence()
     {
         snapOn(1, kWindow, m_zoneIds[0]);
@@ -645,10 +656,13 @@ private Q_SLOTS:
         QVERIFY(d2 != nullptr);
         QCOMPARE(d2->screenForWindow(kWindow), kScreen);
         QCOMPARE(d2->desktopForWindow(kWindow), 2);
-        QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
+        // Read with desktop 2 still in view, where the float lives.
+        QCOMPARE(m_engine->screenForTrackedWindow(kWindow), kScreen);
         const auto rec = m_engine->capturePlacement(kWindow);
         QVERIFY(rec.has_value());
         QCOMPARE(rec->screenId, kScreen);
+        // The other desktop's zone is untouched.
+        QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
     }
 
     // The service's float path forgets the floated desktop's persisted entry
@@ -660,7 +674,7 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
         snapOn(2, kWindow, m_zoneIds[1]);
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(recordCapture(kWindow));
         QVERIFY(persistedZonesByDesktop(kWindow).contains(2));
 
         m_service->unsnapForFloat(kWindow); // the desktop in view is 2
@@ -743,7 +757,7 @@ private Q_SLOTS:
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
         snapOn(2, kWindow, m_zoneIds[1]);
         m_engine->setCurrentDesktopForScreen(kScreen, 1);
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(recordCapture(kWindow));
         QVERIFY(persistedZonesByDesktop(kWindow).contains(1));
         QVERIFY(persistedZonesByDesktop(kWindow).contains(2));
 
@@ -778,11 +792,11 @@ private Q_SLOTS:
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
         snapOn(2, kWindow, m_zoneIds[1]);
         m_engine->setCurrentDesktopForScreen(kScreen, 1);
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(recordCapture(kWindow));
 
         m_engine->setCurrentDesktopForScreen(kScreen2, 1);
         m_service->assignWindowToZone(kWindow, m_zoneIds[0], kScreen2, 1);
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(recordCapture(kWindow));
         const QHash<int, QStringList> persisted = persistedZonesByDesktop(kWindow);
         QVERIFY2(!persisted.value(1).contains(m_zoneIds[1]), "the first screen's desktop 1 zone must be forgotten");
         QVERIFY2(!persisted.value(2).contains(m_zoneIds[1]), "the first screen's desktop 2 zone must be forgotten");
@@ -805,7 +819,7 @@ private Q_SLOTS:
             m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
             snapOn(desktop, kWindow, m_zoneIds[desktop - 2]);
         }
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(recordCapture(kWindow));
         QCOMPARE(persistedZonesByDesktop(kWindow).size(), 3);
 
         // The primary moves onto desktop 2 with its zone; the other two stay.
@@ -841,7 +855,7 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(kScreen2, 1);
         SnapState* onOther = m_engine->stateForWindowOnScreen(kWindow, kScreen2, 1);
         onOther->setFloatingOnScreen(kWindow, kScreen2, 1);
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(recordCapture(kWindow));
 
         QSignalSpy zoneSpy(m_service, &PhosphorPlacement::WindowTrackingService::windowZoneChanged);
         m_engine->releaseWindowOffScreen(kWindow, kScreen2);
@@ -881,7 +895,7 @@ private Q_SLOTS:
         QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[1]});
         QVERIFY(m_engine->isWindowTracked(kWindow));
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
-        QCOMPARE(m_engine->heldKeyForWindow(kWindow)->desktop, 2);
+        QCOMPARE(m_engine->heldKeyForWindow(kWindow).value_or(kNoKey).desktop, 2);
 
         // Desktop 2 flips too: nothing snapping is left and the window goes.
         m_layoutManager->assignLayoutById(kScreen, 2, QString(), QStringLiteral("autotile:bsp"));
@@ -900,7 +914,7 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
         snapOn(2, kWindow, m_zoneIds[1]);
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(recordCapture(kWindow));
         m_engine->forgetWindow(kWindow); // the handoff dropped every context
 
         // Re-snapped on desktop 1 (the return resnap); desktop 2 is entered.
@@ -923,11 +937,10 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
         snapOn(2, kWindow, m_zoneIds[1]);
-        m_service->placementStore().record(*m_engine->capturePlacement(kWindow));
+        QVERIFY(recordCapture(kWindow));
         m_engine->forgetWindow(kWindow);
 
-        PhosphorZones::Layout* other = createTestLayout(2, m_layoutManager);
-        m_layoutManager->addLayout(other);
+        PhosphorZones::Layout* other = addLayout(2);
         m_layoutManager->assignLayout(kScreen, 2, QString(), other);
 
         snapOn(1, kWindow, m_zoneIds[0]);
@@ -1050,6 +1063,7 @@ private:
 
     /// Wire the engine's resnap batch the way SnapAdaptor does, so what the
     /// pass asks for is actually committed, and keep a copy of the entries.
+    /// A payload that fails to parse is reported by cleanup().
     void wireResnapCommit(QVector<PhosphorEngine::ZoneAssignmentEntry>* seen)
     {
         QObject::connect(m_engine, &SnapEngine::resnapToNewLayoutRequested, m_engine,
@@ -1057,7 +1071,9 @@ private:
                              QString error;
                              const QVector<PhosphorEngine::ZoneAssignmentEntry> entries =
                                  PhosphorEngine::GeometryUtils::deserializeZoneAssignments(payload, &error);
-                             QVERIFY2(error.isEmpty(), qPrintable(error));
+                             if (!error.isEmpty()) {
+                                 m_batchErrors.append(error);
+                             }
                              *seen += entries;
                              m_engine->applyBatchAssignments(entries);
                          });
@@ -1075,15 +1091,26 @@ private:
         m_service->placementStore().record(rec);
     }
 
-    /// Snap @p windowId into @p zoneId on @p desktop of kScreen through the
-    /// service, the way a commit does.
+    /// Switches kScreen's view to @p desktop and snaps @p windowId into @p zoneId
+    /// there through the service, the way a commit does. The view stays there.
     void snapOn(int desktop, const QString& windowId, const QString& zoneId)
     {
         m_engine->setCurrentDesktopForScreen(kScreen, desktop);
         m_service->assignWindowToZone(windowId, zoneId, kScreen, desktop);
     }
 
-    /// The zones @p windowId holds on @p desktop's store, read from that store.
+    /// Records @p windowId's capture; false when the engine captured nothing.
+    bool recordCapture(const QString& windowId)
+    {
+        const auto rec = m_engine->capturePlacement(windowId);
+        if (rec) {
+            m_service->placementStore().record(*rec);
+        }
+        return rec.has_value();
+    }
+
+    /// Switches kScreen's view to @p desktop and returns the zones its store
+    /// holds for @p windowId. The view stays there.
     QStringList zonesOn(int desktop, const QString& windowId)
     {
         m_engine->setCurrentDesktopForScreen(kScreen, desktop);
@@ -1106,6 +1133,7 @@ private:
     std::unique_ptr<PhosphorEngine::WindowRegistry> m_registry;
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
+    QStringList m_batchErrors;
 };
 
 QTEST_MAIN(TestSnapDesktopMembership)

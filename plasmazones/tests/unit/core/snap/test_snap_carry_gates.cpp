@@ -7,7 +7,8 @@
  *        (F445): the desktop carry, the membership re-apply, the
  *        layout-switch resnap and the rotation place nothing with snapping
  *        off, in a context the user disabled, on a desktop running no layout,
- *        or for a window snapping leaves alone. And the re-apply puts back
+ *        or for a window snapping leaves alone, and a floating membership is
+ *        not carried. And the re-apply puts back
  *        only zones the layout in view still holds (F982). A batch or span
  *        with an empty zone commits nothing (F459).
  */
@@ -164,6 +165,20 @@ private Q_SLOTS:
         excludeApp(QStringLiteral("app"));
         m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
         QVERIFY2(m_batch.isEmpty(), "a window snapping leaves alone is not carried");
+    }
+
+    // A membership floating with its zone still held is not carried: the
+    // window sits at its own free geometry, so there is no foreign rect to
+    // correct. Only the float bit is set here. setWindowFloat would move the
+    // zone to the pre-float memory and leave nothing to carry anyway.
+    void aFloatingMembershipStillHoldingItsZoneIsNotCarried()
+    {
+        snapOn(1, m_zoneIds[1]);
+        static_cast<SnapState*>(m_engine->stateForScreen(kScreen))->setFloating(kWindow, true);
+        QCOMPARE(zonesOn(1), QStringList{m_zoneIds[1]});
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+        QVERIFY2(m_batch.isEmpty(), "a floating window is not carried into a zone");
+        QVERIFY(zonesOn(2).isEmpty());
     }
 
     // A destination running no layout is skipped like one another mode
