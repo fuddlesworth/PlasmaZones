@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Window lifecycle, layout change handling, state management, and private helpers.
-// Part of WindowTrackingService — split from windowtrackingservice.cpp for SRP.
+// Part of WindowTrackingService, split from WindowTrackingService.cpp.
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include "placementutils.h"
@@ -75,14 +75,11 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
 
     // No manual full-windowId→appId float-back copy is needed: the unified record's
     // freeGeometry rides on the record itself, which is stored in its appId bucket,
-    // so the appId fallback (peek/take) finds it on reopen automatically.
-    // The authoritative engine float bit was already cleared by
-    // snapState->windowClosed above (and AutotileEngine::windowClosed clears
-    // its own); here we only clear the LEGACY fallback float set + its appId
-    // aliases — floating is a runtime-only state that must not carry over when
-    // the window is reopened. Without this, closing a floated window and
-    // reopening it would inherit the float state (via appId fallback), causing
-    // a spurious "floated" OSD and preventing auto-snap.
+    // so the reopen claim finds it. The engines' float bits were cleared by their
+    // own windowClosed (snapState->windowClosed above); this clears the legacy
+    // fallback set, used only by unit tests and early init, under the canonical
+    // id and its appId alias. A float the user leaves on a window persists in the
+    // record's floating slot and re-floats the reopen; that is not this set.
     m_floatingWindows.remove(canonicalizeForLookup(windowId));
     if (appId != windowId) {
         m_floatingWindows.remove(appId);
@@ -241,7 +238,7 @@ WindowTrackingService::ZonePruneResult WindowTrackingService::pruneStaleZoneAssi
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// State Management (persistence handled by adaptor via KConfig)
+// State Management (the adaptor persists through the dirty mask)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void WindowTrackingService::scheduleSaveState(DirtyMask fields)
@@ -313,9 +310,9 @@ void WindowTrackingService::flushPendingLastUsedZone()
 
 bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 {
-    // Check virtual screens first (covers both virtual and non-subdivided physical screens).
-    // Use area-overlap semantics (not center-point containment) so windows on virtual
-    // screen boundaries are handled consistently with the physical-screen fallback path.
+    // Each effective screen alone (virtual screens included) must hold 100x100
+    // of the rect. A small window straddling a virtual-screen boundary can
+    // fail that on both sides, where the QScreen fallback below would pass it.
     PhosphorScreens::ScreenManager* mgr = m_screenManager;
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();

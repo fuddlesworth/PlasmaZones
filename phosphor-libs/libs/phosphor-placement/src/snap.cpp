@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Auto-snap logic and snap tracking helpers.
-// Part of WindowTrackingService — split from windowtrackingservice.cpp for SRP.
+// Part of WindowTrackingService, split from WindowTrackingService.cpp.
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include "placementutils.h"

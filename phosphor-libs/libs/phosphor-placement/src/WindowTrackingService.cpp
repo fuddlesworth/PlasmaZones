@@ -55,9 +55,8 @@ WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layo
     // scheduleSaveState). The service only tracks the dirty mask (markDirty)
     // and emits stateChanged.
     //
-    // Layout change handling: WindowTrackingAdaptor connects activeLayoutChanged
-    // to onLayoutChanged(). The adaptor owns the triggers, so none is
-    // connected here.
+    // Layout change handling: the adaptor's own onLayoutChanged (on activeLayoutChanged)
+    // calls pruneStaleZoneAssignments; nothing is connected here.
 }
 
 WindowTrackingService::~WindowTrackingService()
@@ -843,7 +842,7 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
     // owns the window's current screen mode — floating a window in autotile
     // must NOT set the snap-mode float bit and vice versa. The daemon's writer
     // resolves the owning engine and mutates that engine's authoritative float
-    // store (SnapState / TilingState).
+    // store (SnapState, TilingState or the scroll engine's float set).
     if (m_engineFloatWriter) {
         m_engineFloatWriter(windowId, floating);
         return;
@@ -867,21 +866,15 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         snapState->setFloating(windowId, floating);
     }
 
-    // Floating state is ephemeral and NOT persisted — WindowTrackingAdaptor's
-    // save path never writes it, and its load path only deletes the obsolete
-    // `obsoleteFloatingWindowsKey` to remove any pre-ephemeral remnant on disk.
-    // Calling
-    // scheduleSaveState() here used to OR DirtyAll into the dirty mask
-    // and trigger a debounced full state rewrite of every OTHER persisted
-    // field for nothing — every Meta+F toggle / drag-to-float would
-    // unnecessarily re-serialise pre-float assignments, autotile orders,
-    // pending restores, etc. Skip the schedule entirely.
+    // No save: this legacy set is never persisted (the adaptor's save only
+    // deletes the obsolete FloatingWindows key). A real float persists through
+    // the engine's slot in the placement record, which this branch never sees.
 }
 
 QStringList WindowTrackingService::floatingWindows() const
 {
     // Per-engine aggregation when wired: floats now live in each engine's
-    // authoritative store (SnapState / TilingState), not the legacy shared set.
+    // authoritative store (SnapState, TilingState or the scroll engine's float set), not the legacy shared set.
     if (m_engineFloatLister) {
         return m_engineFloatLister();
     }
@@ -982,14 +975,10 @@ bool WindowTrackingService::clearGlobalLastUsedIfRemoved(const QStringList& remo
 }
 
 // The lastUsed* accessors are read during the WTA constructor's loadState()
-// call — which runs BEFORE Daemon::init wires the snap-state resolver via
-// setSnapStateResolver(). Returning a sentinel (empty string / 0) when SnapState isn't yet
-// attached lets early-init readers (the setLastUsedZone restore in
-// WindowTrackingAdaptor::loadState) pass through harmlessly instead of
-// asserting and crashing the daemon on startup. The snap-engine's own lastUsedZone
-// state is loaded later from KConfig through its persistence delegate
-// once SnapState is wired, so the early-init read here can only ever
-// produce a "no last zone yet" result anyway.
+// call, which runs BEFORE Daemon::init wires the snap-state resolver, so this
+// answers null (snapGlobals is unwired) and the getters answer empty, except
+// lastUsedZoneId, which answers the held load (m_pendingLastUsedZone, parked
+// by setLastUsedZone and flushed when the resolver is wired).
 PhosphorSnapEngine::SnapState* WindowTrackingService::snapRepresentativeLastUsed() const
 {
     PhosphorSnapEngine::SnapState* best = nullptr;

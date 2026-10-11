@@ -50,8 +50,9 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
         if (!activityInView(activity, currentActivity)) {
             return;
         }
-        // Skip floating windows — they have preserved zone assignments (for resnap
-        // on mode switch) but should not make zones appear occupied.
+        // A window the engine of its tracked screen floats does not occupy the
+        // zone. A snap float holds no zone here (assignWindowToZones clears the
+        // store's bit), so this skips only a window another engine floats.
         if (isWindowFloating(windowId)) {
             return;
         }

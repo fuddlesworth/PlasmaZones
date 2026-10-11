@@ -128,15 +128,15 @@ public:
     /// empty when the engine does not hold it or holds it only in a
     /// background context.
     ///
-    /// This exists for the adaptor's post-claim ownership check: after a
-    /// claim onto another virtual screen, the effect's already-queued arrival
-    /// announce still carries the ARRIVAL screen, and dispatching it would
-    /// migrate the window straight back. isWindowTracked cannot serve: its
-    /// contract is PER-ENGINE (ScrollEngine answers from the raw reverse-map
-    /// key a refused adoption can leave dangling; SnapEngine and
-    /// AutotileEngine verify membership). isWindowManaged/isWindowTiled
-    /// cannot either: both exclude engine-floating windows, which a claim
-    /// can produce.
+    /// Read wherever the engine's own hold matters more than the window's
+    /// position: the daemon's seed filter and engine routing, the adaptors'
+    /// focus, close and screen-leave paths, and the tiling adaptor's arrival
+    /// dispatch, where after a claim onto another virtual screen the effect's
+    /// queued announce still carries the ARRIVAL screen. isWindowTracked cannot serve: its contract is PER-ENGINE
+    /// (ScrollEngine answers from a raw reverse-map key a refused adoption can
+    /// leave dangling; SnapEngine and AutotileEngine verify membership).
+    /// isWindowManaged/isWindowTiled cannot either: both exclude
+    /// engine-floating windows, which a claim can produce.
     ///
     /// CURRENT-context only, so the check never suppresses repair: a claim's
     /// adoption keys by the home screen's current context, while a stale
