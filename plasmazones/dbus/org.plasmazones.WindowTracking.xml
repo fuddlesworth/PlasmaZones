@@ -70,7 +70,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="storePreTileGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Store window geometry before tiling (snap or autotile). If overwrite is false (snap mode), skips if entry exists."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Store window geometry before tiling (snap or autotile). With overwrite false an existing entry is kept."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -90,7 +90,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Screen connector name where window is located (for cross-screen restore)."/>
             </arg>
             <arg name="overwrite" type="b" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="If false, skip if entry exists (snap). If true, always overwrite (autotile)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True when the frame is a known-fresh free position, which is always written. False keeps an existing entry."/>
             </arg>
         </method>
         <method name="hasPreTileGeometry">
@@ -249,7 +249,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="navigationFeedback">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when KWin effect reports navigation result via reportNavigationFeedback (for OSD)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="A navigation result for the OSD: a daemon verb's own outcome (the snap, autotile and scrolling engines and the Snap adaptor's bus verbs), or one the effect reports through reportNavigationFeedback."/>
             <arg name="success" type="b">
                 <annotation name="org.gtk.GDBus.DocString" value="True if navigation succeeded."/>
             </arg>
@@ -336,7 +336,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="activateWindowRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to activate (focus) a window. Used by daemon-driven focus/cycle navigation."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to activate (focus) a window. For the snap engine's focus, cycle and layer-switch verbs and its Focus new windows activation after a restore, the cross-mode focus crossing, and activateWindow."/>
             <arg name="windowId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Window to activate."/>
             </arg>
@@ -351,29 +351,29 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="windowOutputMoveExpected">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-initiated cross-output move: the daemon already migrated its tiling state for the window onto targetScreenId and reflowed both outputs. The window's resulting outputChanged is expected; the effect updates bookkeeping and decoration only, without re-issuing windowClosed/windowOpened. User-drag cross-output moves carry no marker."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon-initiated cross-output move: the daemon is moving the window onto targetScreenId, and its placement follows on this connection or already ran for a cross-mode move. The window's resulting outputChanged is expected; the effect updates bookkeeping and decoration only, without re-issuing windowClosed/windowOpened. User-drag cross-output moves carry no marker."/>
             <arg name="windowId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Window the daemon moved across outputs."/>
             </arg>
             <arg name="targetScreenId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Destination screen the daemon migrated the window onto."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Destination screen the daemon is moving the window onto."/>
             </arg>
             <arg name="sourceScreenId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen the window is leaving, when the daemon knows it authoritatively at arm time. Empty means the daemon armed the marker before it touched the window's placement, and the compositor may take its own notified-screen record as the source."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Screen the window is leaving: the spawn screen for open-time routing, the left screen for a cross-mode move. Empty for an engine move, armed before the engine re-keys the window, where the compositor may take its own notified-screen record as the source."/>
             </arg>
         </signal>
         <signal name="applyGeometriesBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometries for a batch of windows."/>
             <arg name="geometries" type="a(siiiis)">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowGeometryList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). screenId is the daemon-authoritative target screen — compositor uses it to seed its tracked-screen cache without re-deriving from geometry. Empty screenId means no authoritative answer (fall back to geometry-based resolution)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). A non-empty screenId is the zone's screen for a snap placement, and the compositor seeds its tracked-screen cache from it. An empty screenId marks a float or restore entry: the compositor clears the window's snapped mark, judges the rect on the screen it lies on, and skips a minimized window."/>
             </arg>
             <arg name="action" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Navigation action type (rotate, resnap, restate, vs_reconfigure) for feedback. restate re-states placements the windows already have, so it shows no Snap Assist."/>
+                <annotation name="org.gtk.GDBus.DocString" value="rotate, resnap, restate or vs_reconfigure. It picks the compositor's animation profile, and only resnap offers Snap Assist afterwards."/>
             </arg>
         </signal>
         <signal name="raiseWindowsRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to raise windows in order (z-order restoration)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Reserved: the daemon does not emit it. It stays on the interface because shipped compositor bridges subscribe to it."/>
             <arg name="windowIds" type="as">
                 <annotation name="org.gtk.GDBus.DocString" value="Ordered list of window IDs (bottom-to-top)."/>
             </arg>
@@ -520,7 +520,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="queryWindowFloating">
-            <annotation name="org.gtk.GDBus.DocString" value="Query the daemon's authoritative floating state for a window. The effect uses this on bringup to reconcile its local cache against persisted state across daemon restarts."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Query the daemon's floating state for one window. The effect asks when a window opens, to seed its float cache for that window, and around an unminimize unfloat. Its bring-up re-seed reads getFloatingWindows."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -639,7 +639,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="findWindowByPid">
-            <annotation name="org.gtk.GDBus.DocString" value="The tracked window whose last setWindowMetadata push carried this process id, for attaching the Phosphor shell's polkit prompt to the window that asked. When several windows share the pid (a multi-window application) the one whose metadata was pushed most recently wins. Empty when no registered window matches, or when pid is not positive."/>
+            <annotation name="org.gtk.GDBus.DocString" value="The tracked window whose last setWindowMetadata push carried this process id, for attaching the Phosphor shell's polkit prompt to the window that asked. When several windows share the pid (a multi-window application) the one whose registered record changed most recently wins (a push that repeats a window's record does not count). Empty when no registered window matches, or when pid is not positive."/>
             <arg name="pid" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Process id, as setWindowMetadata received it."/>
             </arg>

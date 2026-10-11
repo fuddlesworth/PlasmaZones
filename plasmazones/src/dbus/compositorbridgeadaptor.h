@@ -21,7 +21,7 @@ namespace PlasmaZones {
  * Compositor-agnostic bridge protocol: the registration handshake and
  * modifier-state reporting. Window manipulation commands do NOT flow over
  * this interface — they ride org.plasmazones.WindowTracking
- * (applyGeometryRequested, applyGeometriesBatch, raiseWindowsRequested, ...),
+ * (applyGeometryRequested, applyGeometriesBatch, ...),
  * which bridges subscribe to after a successful registration.
  *
  * Inherits @c QDBusContext so reportGesture can identify its caller. The
@@ -128,9 +128,9 @@ Q_SIGNALS:
     // Bridge lifecycle
     //
     // NOTE: this interface deliberately carries NO window-manipulation
-    // command signals. Geometry/focus/stacking commands flow over
+    // command signals. Geometry and focus commands flow over
     // org.plasmazones.WindowTracking (applyGeometryRequested,
-    // applyGeometriesBatch, raiseWindowsRequested, ...) — a set of dead,
+    // applyGeometriesBatch, ...) — a set of dead,
     // never-emitted command signals used to live here and misled bridge
     // implementers into subscribing to a channel that never fired.
     // ═══════════════════════════════════════════════════════════════════════════

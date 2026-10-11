@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <interface name="org.plasmazones.CompositorBridge">
-        <annotation name="org.gtk.GDBus.DocString" value="Compositor-agnostic bridge protocol: registration handshake and modifier reporting. Window manipulation commands flow over org.plasmazones.WindowTracking (applyGeometryRequested, applyGeometriesBatch, raiseWindowsRequested, ...)."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Compositor-agnostic bridge protocol: registration handshake and modifier reporting. Window manipulation commands flow over org.plasmazones.WindowTracking (applyGeometryRequested, applyGeometriesBatch, ...)."/>
 
         <!-- Bridge registration (compositor → daemon) -->
         <method name="registerBridge">
