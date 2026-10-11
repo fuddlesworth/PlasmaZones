@@ -467,10 +467,28 @@ void SnapEngine::renumberDesktopsAfterRemoval(int removedDesktop)
             if (!moving) {
                 continue;
             }
-            // A state already at the target is a transient placeholder from a
-            // lazy lookup; snapping creates them on placement and they hold no
-            // windows the reverse map has not already been told about.
+            // Unreachable while the daemon prunes the removed desktop first
+            // (IPlacementEngine's renumber contract): the ascending walk vacates
+            // each target before filling it. A store found here holds windows
+            // whose memberships the re-key below points at the moving store, so
+            // its windows are merged into it, not dropped with it (F797).
             if (SnapState* existing = m_states.takeState(newKey)) {
+                qCWarning(PhosphorSnapEngine::lcSnapEngine)
+                    << "renumberDesktopsAfterRemoval: merging a store found at" << newKey.screenId << newKey.desktop;
+                QSet<QString> windows;
+                for (auto it = existing->screenAssignments().cbegin(); it != existing->screenAssignments().cend();
+                     ++it) {
+                    windows.insert(it.key());
+                }
+                for (auto it = existing->zoneAssignments().cbegin(); it != existing->zoneAssignments().cend(); ++it) {
+                    windows.insert(it.key());
+                }
+                for (const QString& windowId : existing->floatingWindows()) {
+                    windows.insert(windowId);
+                }
+                for (const QString& windowId : std::as_const(windows)) {
+                    existing->migrateWindowTo(moving, windowId, newKey.screenId);
+                }
                 existing->deleteLater();
             }
             m_states.insertState(newKey, moving);
@@ -657,6 +675,15 @@ void SnapEngine::setAutotileEngine(PhosphorEngine::IPlacementEngine* engine)
         // ever does, all three sites must move to context/handle-based
         // disconnects together.
         disconnect(m_autotileEngineObj, &QObject::destroyed, this, nullptr);
+    }
+    if (engine && !obj) {
+        // The destroyed guard needs a QObject; without one the typed pointer
+        // could dangle unnoticed, so the release build refuses it as the
+        // assert does (F502).
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "setAutotileEngine: engine is not a QObject, ignored";
+        m_autotileEngineObj = nullptr;
+        m_autotileEngineTyped = nullptr;
+        return;
     }
     m_autotileEngineObj = obj;
     m_autotileEngineTyped = engine;

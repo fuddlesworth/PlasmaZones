@@ -47,6 +47,7 @@
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/NavigationContext.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -89,6 +90,7 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_engine->setWindowRegistry(nullptr);
         m_service->setSnapState(nullptr);
         m_service->setSnapEngine(nullptr);
         delete m_engine;
@@ -633,7 +635,49 @@ private Q_SLOTS:
         m_service->setSnapState(m_engine->snapState());
     }
 
+    // A registry attached after a store exists reaches that store: a window
+    // whose class changed since it was first seen reads its zone and screen
+    // back through its new id (F836).
+    void aRegistryAttachedLaterReachesExistingStores()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        m_engine->stateForWindowOnScreen(QStringLiteral("old|u-1"), screen, 1)
+            ->assignWindowToZones(QStringLiteral("old|u-1"), {m_zoneIds[0]}, screen, 1);
+
+        PhosphorEngine::WindowRegistry registry;
+        renameClass(registry);
+        m_engine->setWindowRegistry(&registry);
+
+        QCOMPARE(m_engine->zoneForWindow(QStringLiteral("new|u-1")), m_zoneIds[0]);
+        QCOMPARE(m_engine->screenForTrackedWindow(QStringLiteral("new|u-1")), screen);
+    }
+
+    // A store created after the registry is attached is seeded with it (F837).
+    void aStoreCreatedLaterTakesTheRegistry()
+    {
+        const QString screen = QStringLiteral("DP-2");
+        PhosphorEngine::WindowRegistry registry;
+        renameClass(registry);
+        m_engine->setWindowRegistry(&registry);
+
+        m_engine->stateForWindowOnScreen(QStringLiteral("old|u-1"), screen, 2)
+            ->assignWindowToZones(QStringLiteral("old|u-1"), {m_zoneIds[0]}, screen, 2);
+
+        QCOMPARE(m_engine->zoneForWindow(QStringLiteral("new|u-1")), m_zoneIds[0]);
+        QCOMPARE(m_engine->screenForTrackedWindow(QStringLiteral("new|u-1")), screen);
+    }
+
 private:
+    /// Freeze "old|u-1" as instance u-1's canonical id, then push the class
+    /// change that makes the compositor report it as "new|u-1".
+    static void renameClass(PhosphorEngine::WindowRegistry& registry)
+    {
+        registry.canonicalizeWindowId(QStringLiteral("old|u-1"));
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("new");
+        registry.upsert(QStringLiteral("u-1"), meta);
+    }
+
     /// Install the FULL per-key resolver so the WTS facade and the engine agree on
     /// the same per-(screen,desktop,activity) stores (the default single-store
     /// convenience routes every facade call to the global holder, which hides the

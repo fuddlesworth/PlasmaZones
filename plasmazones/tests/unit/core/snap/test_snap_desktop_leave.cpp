@@ -221,9 +221,12 @@ private Q_SLOTS:
 
     // Removing desktop 2 renumbers 3 to 2: the stores move, and so do the
     // desktop numbers they hold for each window and for the last-used zone,
-    // which otherwise named the desktop that took the old number (F145).
+    // which otherwise named the desktop that took the old number (F145). The
+    // desktop in view and the window's membership follow, 3 is left empty and
+    // a window below the removed desktop is untouched (F796).
     void aDesktopRemovalRenumbersTheDesktopsTheStoresHold()
     {
+        snapOn(1, kClosed, m_zoneIds[1]);
         snapOn(3, kWindow, m_zoneIds[0]);
         auto* onThree = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
         onThree->restoreLastUsedZone(m_zoneIds[0], kScreen, QStringLiteral("app"), 3);
@@ -232,12 +235,37 @@ private Q_SLOTS:
         m_engine->pruneStatesForDesktop(2);
         m_engine->renumberDesktopsAfterRemoval(2);
 
+        QVERIFY(!m_engine->desktopsWithActiveState().contains(3));
+        QCOMPARE(static_cast<SnapState*>(m_engine->stateForScreen(kScreen)), onThree);
+        const auto held = m_engine->heldKeyForWindow(kWindow);
+        QVERIFY(held.has_value());
+        QCOMPARE(held->desktop, 2);
+        QCOMPARE(zonesOn(1, kClosed), QStringList{m_zoneIds[1]});
+
         m_engine->setCurrentDesktopForScreen(kScreen, 2);
         auto* onTwo = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
         QCOMPARE(onTwo, onThree);
         QCOMPARE(onTwo->zonesForWindow(kWindow), QStringList{m_zoneIds[0]});
         QCOMPARE(onTwo->desktopForWindow(kWindow), 2);
         QCOMPARE(onTwo->lastUsedDesktop(), 2);
+    }
+
+    // Only a renumber the prune did not run ahead of meets a store at its
+    // target. That store's windows join the store moving in, whose key the
+    // re-key gives their memberships, instead of going with it (F797).
+    void aRenumberMergesAStoreFoundAtTheTarget()
+    {
+        snapOn(2, kClosed, m_zoneIds[1]);
+        snapOn(3, kWindow, m_zoneIds[0]);
+        auto* onThree = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
+
+        m_engine->renumberDesktopsAfterRemoval(2);
+
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        auto* onTwo = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
+        QCOMPARE(onTwo, onThree);
+        QCOMPARE(onTwo->zonesForWindow(kWindow), QStringList{m_zoneIds[0]});
+        QCOMPARE(onTwo->zonesForWindow(kClosed), QStringList{m_zoneIds[1]});
     }
 
 private:
