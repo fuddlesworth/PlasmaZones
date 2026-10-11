@@ -285,10 +285,10 @@ void TilingHandler::applyScrollFocusScrollBlockedWindows(const QStringList& wind
     // identical list is still a real write, and it still proves this state is
     // newer than any property reply dispatched earlier.
     ++m_scrollFocusScrollBlockedGeneration;
-    // No parse contract to honour here, unlike the behaviour map: this arrives
-    // as a typed `as` on its own property rather than as one variant of an
-    // a{sv}, so Qt has already refused anything that is not a string list and
-    // an empty list is the only "nothing" this can be. Empty ids are dropped
+    // No parse contract to honour here, unlike the behaviour map: this is a
+    // typed `as` on its own property, so the live signal's QStringList slot and
+    // the bring-up reply's type test refuse anything that is not a string list,
+    // and an empty list is the only "nothing" this can be. Empty ids are dropped
     // for the same reason the map's parser drops them — no window resolves to
     // one, and they would only defeat the change gate below.
     QSet<QString> next;
@@ -381,9 +381,10 @@ void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds, bo
     // not move, so slotScreensChanged never invalidates anything and a `Mode
     // Equals "scrolling"` rule would keep its stale verdict. The switch flag
     // and the screens leaving for autotile tell that flip from a switch and
-    // from a move out of the union.
-    setScrollingScreens(QSet<QString>(screenIds.cbegin(), screenIds.cend()), /*announceFlipped=*/true, isContextSwitch,
-                        QSet<QString>(leavingToAutotile.cbegin(), leavingToAutotile.cend()));
+    // from a move out of the union. Empty ids are dropped at this boundary like
+    // the sibling slots' (nonEmptyIdSet).
+    setScrollingScreens(ScrollDecisions::nonEmptyIdSet(screenIds), /*announceFlipped=*/true, isContextSwitch,
+                        ScrollDecisions::nonEmptyIdSet(leavingToAutotile));
 }
 
 void TilingHandler::slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel)
@@ -558,26 +559,26 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // with neither engine owning it. The entering direction needs no such care
     // (those windows are on-canvas, so positional and override agree), but
     // resolving both under the old set keeps one rule for the whole batch.
-    // NOT converted to QPointer, deliberately, and the exposure is recorded
-    // here rather than left silent. This list and its announceScreens twin are
-    // consumed by notifyWindowsAddedBatch after the release loops below, whose
-    // compositor calls can re-enter — the same hazard the column list above
-    // converts for. Converting these two is a wider change than it looks: the
-    // list is a parameter of notifyWindowsAddedBatch, and the hash uses the
-    // pointer as its KEY, which QPointer cannot serve without a custom qHash.
-    // Both are built and consumed in the same turn, and the consumer bails on
-    // a null-or-deleted window, so the residual risk is the isDeleted() test
-    // itself on a pointer that has already been freed.
-    QList<KWin::EffectWindow*> announceWindows;
+    // Collected as QPointer: the release loops below call into the compositor
+    // (setFullScreen(false), maximize(), moveResize), which emits synchronously
+    // into effect handlers, so a raw pointer collected here is not safe to test
+    // with isDeleted() afterwards. The re-announce takes the windows still
+    // alive. announceScreens stays keyed by the raw pointer: the leaving loop
+    // below reads it before any release runs, and notifyWindowsAddedBatch looks
+    // it up only with a pointer from the live list built at the re-announce, so
+    // a dead key is never dereferenced.
+    QList<QPointer<KWin::EffectWindow>> announceWindows;
     QHash<KWin::EffectWindow*, QString> announceScreens;
     if (announcing && KWin::effects) {
-        announceWindows = KWin::effects->stackingOrder();
-        announceScreens.reserve(announceWindows.size());
-        for (KWin::EffectWindow* w : std::as_const(announceWindows)) {
+        const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
+        announceWindows.reserve(stack.size());
+        announceScreens.reserve(stack.size());
+        for (KWin::EffectWindow* w : stack) {
             // Close-grabbed dying windows linger in the stacking order and
             // resolving one re-pollutes the scrubbed id caches — the same bail
             // the batch itself takes before any id lookup.
             if (w && !w->isDeleted()) {
+                announceWindows.append(w);
                 announceScreens.insert(w, m_effect->getWindowScreenId(w));
             }
         }
@@ -610,8 +611,8 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // caller that can reach here with a non-empty old set owes those three
     // restores, or must resolve the leaving screens independently of the announce.
     QStringList windowedFsLeavingScrolling;
-    // QPointer, not a raw pointer, for the reason slotWindowFullScreenChanged
-    // states about the same shape: the release loop below runs
+    // QPointer for the reason given at announceWindows above (the shape
+    // slotWindowFloatingChanged also keeps): the release loop below runs
     // releaseWindowedFullscreenState first, whose setFullScreen(false) emits
     // synchronously into effect handlers, and a raw pointer collected before
     // that is not safe to test with isDeleted() afterwards — that check is
@@ -741,7 +742,14 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
         // engine's rect on unminimize for the animation grace and then visibly
         // hopped into its new tile — the same class as the
         // minimized-window-on-mode-swap regression.
-        notifyWindowsAddedBatch(announceWindows, flipped, /*resetNotified=*/true,
+        QList<KWin::EffectWindow*> liveAnnounce;
+        liveAnnounce.reserve(announceWindows.size());
+        for (const QPointer<KWin::EffectWindow>& w : std::as_const(announceWindows)) {
+            if (w && !w->isDeleted()) {
+                liveAnnounce.append(w);
+            }
+        }
+        notifyWindowsAddedBatch(liveAnnounce, flipped, /*resetNotified=*/true,
                                 /*enteringAutotile=*/true, announceScreens);
     }
 }

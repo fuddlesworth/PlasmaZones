@@ -7,6 +7,7 @@
 // slot bodies.
 
 #include "tilinghandler.h"
+#include "scrolldecisions.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/snaphandler.h"
 #include "compositor/effectlogging.h"
@@ -314,7 +315,6 @@ void TilingHandler::fetchScrollingScreens()
                 }
                 QDBusPendingReply<QDBusVariant> reply = *w;
                 if (reply.isValid()) {
-                    const QStringList screens = reply.value().variant().toStringList();
                     // Through the chokepoint: the initial load must run the
                     // same rule-cache invalidate + border sweep as a live
                     // signal, or a Mode "scrolling" rule verdict memoised
@@ -326,7 +326,7 @@ void TilingHandler::fetchScrollingScreens()
                     // screen half-tiled. The guards above make it land only on
                     // the set as it stood at dispatch (setScrollingScreens'
                     // DEPENDENCY note says what that leaves unreleased).
-                    setScrollingScreens(QSet<QString>(screens.cbegin(), screens.cend()),
+                    setScrollingScreens(ScrollDecisions::nonEmptyIdSet(reply.value().variant().toStringList()),
                                         /*announceFlipped=*/false);
                     qCInfo(lcEffect) << "Loaded scrolling screens:" << m_scrollingScreens;
                 } else {
@@ -468,7 +468,13 @@ void TilingHandler::fetchScrollFocusScrollBlockedWindows()
                 }
                 QDBusPendingReply<QDBusVariant> reply = *w;
                 if (reply.isValid()) {
-                    applyScrollFocusScrollBlockedWindows(reply.value().variant().toStringList());
+                    const QVariant value = reply.value().variant();
+                    if (value.typeId() != QMetaType::QStringList) {
+                        qCWarning(lcEffect)
+                            << "Focus scroll blocks: ignoring a non-string-list reply of type" << value.typeName();
+                        return;
+                    }
+                    applyScrollFocusScrollBlockedWindows(value.toStringList());
                     // Logged on its OWN reply rather than beside the behaviour
                     // map's: the two are separate Gets now, and the map's reply
                     // lands first, so printing this there would have described

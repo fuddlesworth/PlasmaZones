@@ -6,6 +6,7 @@
 #include <QSet>
 #include <QSize>
 #include <QString>
+#include <QStringList>
 #include <QtGlobal>
 
 /// Pure decision logic for the scroll-managed window mechanisms in
@@ -418,6 +419,21 @@ inline QSet<QString> engineFlipScreens(const QSet<QString>& oldSet, const QSet<Q
         return {};
     }
     return ((newSet - oldSet) & managed) + ((oldSet - newSet) & leavingToAutotile);
+}
+
+/// The non-empty ids of a wire screen list, as a set. An empty id names no
+/// screen, and in the scrolling set it would also match every window whose
+/// screen lookup falls back to an empty QString (F359).
+inline QSet<QString> nonEmptyIdSet(const QStringList& ids)
+{
+    QSet<QString> out;
+    out.reserve(ids.size());
+    for (const QString& id : ids) {
+        if (!id.isEmpty()) {
+            out.insert(id);
+        }
+    }
+    return out;
 }
 
 } // namespace PlasmaZones::ScrollDecisions

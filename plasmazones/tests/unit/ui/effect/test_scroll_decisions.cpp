@@ -7,8 +7,9 @@
 // column-maximize 3-way batch decision (with its toggle-in-flight marker and
 // the two threaded stale-batch walks), the counter-assert burst budget, the
 // compositor-claim release table (which claim answers to which exit scope,
-// the teardown ordering rule, and the retain-on-fullscreen-skip policy), and
-// the size-continuity carry-forward table. Same header-only reach as
+// the teardown ordering rule, and the retain-on-fullscreen-skip policy), the
+// size-continuity carry-forward table, the engine-flip screen set, and the
+// wire screen-list filter. Same header-only reach as
 // test_anchor_uniforms:
 // kwin-effect has no linkable test target, so the pure halves are extracted
 // into a header this test includes directly.
@@ -560,6 +561,18 @@ private Q_SLOTS:
     {
         const QSet<QString> s{QStringLiteral("S")};
         QVERIFY(engineFlipScreens({}, s, {}, false, {}).isEmpty());
+    }
+
+    // The scrolling-set boundary (F359): an empty wire id is dropped, and the
+    // rest collapse to a set.
+    void nonEmptyIdSet_dropsEmpty()
+    {
+        const QStringList ids{QStringLiteral("A"), QString(), QStringLiteral("A"), QStringLiteral("B")};
+        QCOMPARE(nonEmptyIdSet(ids), (QSet<QString>{QStringLiteral("A"), QStringLiteral("B")}));
+    }
+    void nonEmptyIdSet_allEmpty()
+    {
+        QVERIFY(nonEmptyIdSet(QStringList{QString()}).isEmpty());
     }
 };
 
