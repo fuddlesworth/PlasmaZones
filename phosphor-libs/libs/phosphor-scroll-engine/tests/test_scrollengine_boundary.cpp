@@ -11,6 +11,10 @@
  * (their columns are either fully on screen or fully off), driven here by an
  * always-center settings stub so the neighbours of the focused column
  * genuinely straddle.
+ *
+ * Also the other way a window crosses its column's boundary: a client that
+ * commits a frame wider than its column, which the column has to widen to
+ * (reportCommittedSize), and which raises the peek floor with it.
  */
 
 #include <QJsonArray>
@@ -27,6 +31,7 @@
 #include "scrollstriptestutils.h"
 #include "scrollstubsettings.h"
 
+using PhosphorScrollEngine::ColumnWidth;
 using PhosphorScrollEngine::ScrollEngine;
 namespace Ax = ScrollTestUtils::Ax;
 
@@ -86,6 +91,35 @@ QRect rectOfEntry(const QJsonObject& o)
 {
     return QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
                  o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
+}
+
+/// A size in ROLE terms, @p main along the strip and @p cross across it,
+/// transposed with the arm into the physical size the compositor reports.
+QSize roleSize(int main, int cross)
+{
+    return Ax::t(QSize(main, cross));
+}
+
+/// The committed-width fixture: quarter-width (300px) columns that never
+/// centre, so both columns sit wholly on screen and a column's extent reads
+/// straight off where its neighbour starts. a is focused, so the width
+/// setters act on it. Minimum sizes are respected unless @p respectMinimumSize
+/// says otherwise, since that is the setting the committed width rides.
+ScrollEngine* makeFloorEngine(QObject* owner, bool respectMinimumSize = true)
+{
+    auto* settings = makeBoundarySettings(owner);
+    settings->widthValue = 0.25;
+    settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never);
+    settings->respectMinimumSize = respectMinimumSize;
+    ScrollEngine* engine = makeProviderEngine(owner, {kS1});
+    engine->setEngineSettings(settings);
+    engine->refreshConfigFromSettings();
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), kS1);
+    engine->retile(kS1);
+    QCoreApplication::processEvents();
+    return engine;
 }
 
 } // namespace
@@ -552,6 +586,180 @@ private Q_SLOTS:
         const QRect corrected = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
         QCOMPARE(Ax::crossEnd(corrected), Ax::crossEnd(inset));
         QCOMPARE(corrected, applied);
+    }
+
+    // ── A client that commits wider than its column ─────────────────────
+    //
+    // Some clients answer their column with a frame WIDER along the strip (a
+    // game holding a whole-number scale of its native resolution picks the
+    // scale from the cross extent alone). Laid out at its intent, that column
+    // puts the next one underneath the window. The compositor reports the
+    // settled commit through reportCommittedSize; these pin what the engine
+    // does with it.
+
+    void aWiderCommitWidensItsColumnAndMovesTheNeighbour()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        const QRect offered = engine->lastManagedRect(QStringLiteral("app|a"));
+        QCOMPARE(Ax::mainLen(offered), 300);
+        QCOMPARE(Ax::mainPos(engine->lastManagedRect(QStringLiteral("app|b"))), Ax::mainEnd(offered) + 1);
+
+        // Wider along the strip and a little short across it.
+        engine->reportCommittedSize(QStringLiteral("app|a"), offered.size(), roleSize(450, Ax::crossLen(offered) - 20));
+        QCoreApplication::processEvents();
+
+        const QRect a = engine->lastManagedRect(QStringLiteral("app|a"));
+        QCOMPARE(Ax::mainLen(a), 450);
+        QCOMPARE(Ax::mainPos(engine->lastManagedRect(QStringLiteral("app|b"))), Ax::mainEnd(a) + 1);
+    }
+
+    // Only an answer to the tile's whole rect says anything about the column.
+    void aCommitAgainstAnythingButTheWholeTileTeachesNothing()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        const QRect a = engine->lastManagedRect(QStringLiteral("app|a"));
+        const QRect b = engine->lastManagedRect(QStringLiteral("app|b"));
+        const int cross = Ax::crossLen(a);
+
+        // Narrower than the tile along the strip: a peek clamped at the edge.
+        engine->reportCommittedSize(QStringLiteral("app|a"), roleSize(200, cross), roleSize(450, cross));
+        // The tile's main extent without its cross one: a stack tile clamped
+        // across the strip, or an offer a newer batch has since replaced.
+        engine->reportCommittedSize(QStringLiteral("app|a"), roleSize(300, cross - 100), roleSize(450, cross - 100));
+        QCoreApplication::processEvents();
+
+        QCOMPARE(engine->lastManagedRect(QStringLiteral("app|a")), a);
+        QCOMPARE(engine->lastManagedRect(QStringLiteral("app|b")), b);
+    }
+
+    void aNarrowerAnswerGivesTheWideningBack()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        const int cross = Ax::crossLen(engine->lastManagedRect(QStringLiteral("app|a")));
+        engine->reportCommittedSize(QStringLiteral("app|a"), roleSize(300, cross), roleSize(450, cross));
+        QCoreApplication::processEvents();
+        QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 450);
+
+        // Narrower than the widened offer, still wider than the column asks
+        // for: the floor follows the client down.
+        engine->reportCommittedSize(QStringLiteral("app|a"), roleSize(450, cross), roleSize(350, cross));
+        QCoreApplication::processEvents();
+        QRect a = engine->lastManagedRect(QStringLiteral("app|a"));
+        QCOMPARE(Ax::mainLen(a), 350);
+        QCOMPARE(Ax::mainPos(engine->lastManagedRect(QStringLiteral("app|b"))), Ax::mainEnd(a) + 1);
+
+        // Under the column's own width: the widening goes entirely.
+        engine->reportCommittedSize(QStringLiteral("app|a"), roleSize(350, cross), roleSize(250, cross));
+        QCoreApplication::processEvents();
+        a = engine->lastManagedRect(QStringLiteral("app|a"));
+        QCOMPARE(Ax::mainLen(a), 300);
+        QCOMPARE(Ax::mainPos(engine->lastManagedRect(QStringLiteral("app|b"))), Ax::mainEnd(a) + 1);
+    }
+
+    // A client that rounds its size down answers narrower than its column.
+    // That is not a floor, so the column still narrows when asked.
+    void aNarrowerAnswerNeverSetsAFloor()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        const int cross = Ax::crossLen(engine->lastManagedRect(QStringLiteral("app|a")));
+        engine->reportCommittedSize(QStringLiteral("app|a"), roleSize(300, cross), roleSize(290, cross));
+        engine->setColumnWidth(ColumnWidth::makeFixed(200), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 200);
+    }
+
+    void aFloorHoldsUntilTheColumnOutgrowsIt()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        const int cross = Ax::crossLen(engine->lastManagedRect(QStringLiteral("app|a")));
+        engine->reportCommittedSize(QStringLiteral("app|a"), roleSize(300, cross), roleSize(450, cross));
+        QCoreApplication::processEvents();
+
+        // Narrowing the column cannot narrow a client that never took less.
+        engine->setColumnWidth(ColumnWidth::makeFixed(200), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 450);
+
+        // Widening past the floor satisfies it, so it is dropped...
+        engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 600);
+
+        // ...and narrowing again offers the column as asked, instead of
+        // reapplying an answer the client gave to a different offer.
+        engine->setColumnWidth(ColumnWidth::makeFixed(300), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 300);
+    }
+
+    // The floor is the client's behaviour in THIS strip, not a width intent:
+    // it is not carried through a float round trip, and the client's next
+    // answer re-establishes it.
+    void aFloorLeavesTheStripWithItsWindow()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        const int cross = Ax::crossLen(engine->lastManagedRect(QStringLiteral("app|a")));
+        engine->reportCommittedSize(QStringLiteral("app|a"), roleSize(300, cross), roleSize(450, cross));
+        QCoreApplication::processEvents();
+        QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 450);
+
+        engine->setWindowFloat(QStringLiteral("app|a"), true, kS1);
+        engine->setWindowFloat(QStringLiteral("app|a"), false, kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 300);
+    }
+
+    // The floor rides respectMinimumSize like a declared minimum does: off,
+    // the user has chosen to let a window overhang its column.
+    void aCommittedWidthIsIgnoredWithoutRespectMinimumSize()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner, /*respectMinimumSize=*/false);
+        const QRect offered = engine->lastManagedRect(QStringLiteral("app|a"));
+        engine->reportCommittedSize(QStringLiteral("app|a"), offered.size(), roleSize(450, Ax::crossLen(offered)));
+        QCoreApplication::processEvents();
+        QCOMPARE(engine->lastManagedRect(QStringLiteral("app|a")), offered);
+    }
+
+    // The peek floor rises to the committed width too. A widened column
+    // clamped at the screen edge would hand the client a sliver it answers
+    // at full width, straight across the edge, so it parks instead.
+    void aWidenedStraddlerParksInsteadOfPeeking()
+    {
+        QObject owner;
+        auto* settings = makeBoundarySettings(&owner);
+        settings->respectMinimumSize = true;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setEngineSettings(settings);
+        engine->refreshConfigFromSettings();
+
+        engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+        engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+        engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+        // Centring b leaves a peeking 300px of its 600 past the lead edge.
+        engine->windowFocused(QStringLiteral("app|b"), kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+
+        const QRect screen = defaultScreenRect();
+        const QRect peek = engine->lastManagedRect(QStringLiteral("app|a"));
+        QVERIFY2(peek.y() <= screen.bottom() && Ax::mainLen(peek) < 600, "precondition: a peeks, clamped at the edge");
+
+        // Answered against the WHOLE tile, which is what a clamped column
+        // still resolves to; the peek above is only what was committed.
+        const int cross = Ax::crossLen(peek);
+        engine->reportCommittedSize(QStringLiteral("app|a"), roleSize(600, cross), roleSize(700, cross));
+        QCoreApplication::processEvents();
+
+        QVERIFY2(engine->lastManagedRect(QStringLiteral("app|a")).y() > screen.bottom(),
+                 "a 300px remainder of a column the client holds 700px wide must park, not peek");
     }
 };
 

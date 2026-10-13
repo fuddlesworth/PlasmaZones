@@ -3,6 +3,8 @@
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
+#include "scrollengine/enginelimits.h"
+
 #include <QtGlobal>
 
 #include <algorithm>
@@ -932,6 +934,99 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
         }
     }
     return changed;
+}
+
+bool ScrollStrip::recordCommittedSize(const QString& windowId, const QSize& offered, const QSize& committed,
+                                      const ScrollLayoutParams& params)
+{
+    const int colIdx = columnOfWindow(windowId);
+    // A maximized-to-edges column's extent is declared and takes no floor
+    // (columnExtentPx returns before reading one), so nothing a client says
+    // about it can change the layout.
+    if (!params.respectMinimumSize || colIdx < 0 || offered.isEmpty() || committed.isEmpty()
+        || m_columns.at(colIdx).maximizedToEdges) {
+        return false;
+    }
+    const int offeredMain = params.axis.mainSize(offered);
+    // Bounded like every other extent that arrives from outside: the floor is
+    // summed with the tab reservation and the gaps, so an absurd value has to
+    // be cut down before it can overflow those sums.
+    const int committedMain = qMin(params.axis.mainSize(committed), static_cast<int>(kMaxFixedExtentPx));
+    const int recorded = m_committedMainFloor.value(windowId);
+    // Nothing to learn, answered before the relayout below: the extent along
+    // the strip matches the offer, repeats the floor already held, or is
+    // narrower with no widening to give back. The compositor reports every
+    // divergent commit, so these are its steady state for a client whose
+    // answer the strip has already accounted for.
+    if (committedMain == offeredMain || committedMain == recorded || (committedMain < offeredMain && recorded == 0)) {
+        return false;
+    }
+    // The answer has to be to the tile's whole rect. applyLayout commits a
+    // clamped rect for a column peeking past the screen edge and for a stack
+    // tile overflowing the work area, and a client answering one of those was
+    // never offered its column.
+    bool offeredWholeTile = false;
+    const ResolvedStrip resolved = relayout(params);
+    for (const ResolvedColumn& rc : resolved.columns) {
+        for (const ResolvedTile& rt : rc.tiles) {
+            if (rt.windowId == windowId) {
+                offeredWholeTile = rt.rect.size() == offered;
+            }
+        }
+    }
+    if (!offeredWholeTile) {
+        return false;
+    }
+    const Column& col = m_columns.at(colIdx);
+    const int extentBefore = columnExtentPx(col, params);
+    if (committedMain > offeredMain) {
+        m_committedMainFloor.insert(windowId, committedMain);
+    } else {
+        // Narrower than an offer this floor had widened. What the tile is
+        // offered once the floor is gone is the column's extent without it,
+        // less whatever the tab indicator takes out of the column along the
+        // strip — the same difference that separates the offer from the
+        // column extent measured above.
+        m_committedMainFloor.remove(windowId);
+        const int reservation = extentBefore - offeredMain;
+        if (committedMain + reservation > columnExtentPx(col, params)) {
+            m_committedMainFloor.insert(windowId, committedMain);
+        }
+    }
+    return columnExtentPx(col, params) != extentBefore;
+}
+
+void ScrollStrip::dropSatisfiedCommittedFloors(const ResolvedStrip& resolved, const ScrollLayoutParams& params)
+{
+    if (m_committedMainFloor.isEmpty() || !params.respectMinimumSize) {
+        return;
+    }
+    for (const ResolvedColumn& rc : resolved.columns) {
+        // A declared extent takes no floor, so there is nothing to measure a
+        // floor against until the column is un-maximized, and the client's
+        // answer is as true afterwards as it was before.
+        if (rc.maximizedToEdges || rc.columnIndex < 0 || rc.columnIndex >= m_columns.size()) {
+            continue;
+        }
+        const Column& col = m_columns.at(rc.columnIndex);
+        for (const ResolvedTile& rt : rc.tiles) {
+            const auto it = m_committedMainFloor.find(rt.windowId);
+            if (it == m_committedMainFloor.end()) {
+                continue;
+            }
+            // Measured with the floor zeroed in place, which reads exactly as
+            // an absent entry does and keeps the iterator valid. The tab
+            // reservation is the column's resolved extent less the tile's.
+            const int floorPx = it.value();
+            it.value() = 0;
+            const int reservation = params.axis.mainSize(rc.rect) - params.axis.mainSize(rt.rect);
+            if (columnExtentPx(col, params) - reservation >= floorPx) {
+                m_committedMainFloor.erase(it);
+            } else {
+                it.value() = floorPx;
+            }
+        }
+    }
 }
 
 } // namespace PhosphorScrollEngine

@@ -780,29 +780,28 @@ public:
     /// the effect leaves the paint chain).
     void drainRetiredScrollTabTextures();
 
-    /// True when at least one scrolling screen resolves to cropping its
-    /// straddlers. The direct-scanout gate needs a whole-session answer (the
-    /// hazard is any un-cropped overhang reaching a hardware plane), so it
-    /// asks this rather than per-screen membership. The per-screen
-    /// distinction never reaches the paint CLIP: on a screen that does not
-    /// crop the engine clamps the geometry so no rect straddles, leaving the
-    /// clip nothing to cut.
+    /// True when at least one scrolling screen resolves to cropping its straddlers. The direct-scanout gate needs
+    /// a whole-session answer (the hazard is any un-cropped overhang reaching a hardware plane), so it asks this
+    /// rather than per-screen membership. The per-screen distinction never reaches the paint CLIP: on a screen
+    /// that does not crop the engine clamps the geometry so no rect straddles, leaving the clip nothing to cut.
     bool anyScreenCropsStraddlers() const
     {
         return !m_scrollCropStraddlerScreens.isEmpty();
     }
 
-    /// Which way @p screenId's strip runs. NEVER derive this from the output's
-    /// aspect ratio: the axis is resolved by the engine against the work area
-    /// and may be an explicit user choice, so a guess here can disagree with
-    /// the geometry the daemon actually committed — and the disagreement shows
-    /// up as a full-strip shear for the length of every leg, on exactly the
-    /// near-square topologies where a guess is least reliable.
+    /// Which way @p screenId's strip runs. NEVER derive this from the output's aspect ratio: the axis is resolved
+    /// by the engine against the work area and may be an explicit user choice, so a guess here can disagree with
+    /// the geometry the daemon actually committed — and the disagreement shows up as a full-strip shear for the
+    /// length of every leg, on exactly the near-square topologies where a guess is least reliable.
     PhosphorProtocol::ScrollAxis scrollAxisForScreen(const QString& screenId) const
     {
         return m_scrollVerticalAxisScreens.contains(screenId) ? PhosphorProtocol::ScrollAxis::Vertical
                                                               : PhosphorProtocol::ScrollAxis::Horizontal;
     }
+
+    /// Tell the engine what a strip window committed when it differs from its offered column (signals.cpp).
+    void reportStripCommit(KWin::EffectWindow* w, const QString& windowId, const QRect& offered,
+                           const QRect& committed);
 
     /// True once the daemon's scrollEffectBehaviour map has landed (live
     /// signal or the bring-up Properties.Get reply), false again after either

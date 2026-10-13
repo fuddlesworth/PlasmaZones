@@ -10,11 +10,12 @@
 namespace PhosphorScrollEngine {
 
 // Minimum-size bookkeeping and the client-driven resize it feeds: the clamp a
-// window reports, the re-layout its change forces, and the resize echo that has
-// to tell an effect-applied rect apart from a user drag. Split from
+// window reports, the re-layout its change forces, the resize echo that has
+// to tell an effect-applied rect apart from a user drag, and the size a client
+// settled on when it would not take its column. Split from
 // engine_lifecycle.cpp on that file's fourth size crossing, on the concern seam
-// its earlier splits established — this trio answers "how big may this window
-// be" rather than "is it here yet", and the open/close/focus arrivals it left
+// its earlier splits established — these answer "how big may this window be"
+// rather than "is it here yet", and the open/close/focus arrivals it left
 // behind never call into it except through the engine's own retile scheduling.
 
 QSize ScrollEngine::windowMinimumSize(const QString& rawWindowId) const
@@ -233,6 +234,46 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
         if (currentContext) {
             scheduleRetileForScreen(key.screenId);
         }
+    }
+}
+
+void ScrollEngine::reportCommittedSize(const QString& rawWindowId, const QSize& offered, const QSize& committed)
+{
+    // isEmpty rejects the zero and negative sizes a malformed caller can put
+    // on the wire; the strip bounds the other end.
+    if (offered.isEmpty() || committed.isEmpty()) {
+        return;
+    }
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    // onWindowResized's drag exclusion, for its reason: a frame under an
+    // interactive move is motion, not the client's answer to a column.
+    if (!m_interactiveDragWindow.isEmpty() && windowId == m_interactiveDragWindow) {
+        return;
+    }
+    PhosphorEngine::PlacementStateKey key;
+    ScrollState* state = stateForWindow(windowId, &key);
+    if (!state || state->isFloating(windowId)) {
+        return;
+    }
+    // Whether this answers the column the strip holds NOW is the strip's
+    // check: it compares @p offered against the tile's resolved rect, so a
+    // report that crossed a newer batch on the wire is refused there, and the
+    // client's answer to that batch arrives as a report of its own. Gating on
+    // m_lastAppliedRect instead would lose a genuine answer whenever one of
+    // the many paths that drop that memory ran first, and the compositor does
+    // not repeat a report it has already sent.
+    const ScrollLayoutParams params = layoutParamsForKey(key);
+    if (!state->strip().recordCommittedSize(windowId, offered, committed, params)) {
+        return;
+    }
+    qCInfo(lcScrollEngine) << "reportCommittedSize:" << windowId << "offered" << offered << "committed" << committed
+                           << "column floor now" << state->strip().committedMainFloorPx(windowId) << "on"
+                           << key.screenId;
+    // Runtime state only, so no placementChanged: the floor is the client's
+    // behaviour, re-learned from its next answer, and never persisted intent.
+    // Context-guarded like every other retile this file schedules.
+    if (key == currentKeyForScreen(key.screenId)) {
+        scheduleRetileForScreen(key.screenId);
     }
 }
 

@@ -7,8 +7,9 @@
 // column-maximize 3-way batch decision (with its toggle-in-flight marker and
 // the two threaded stale-batch walks), the counter-assert burst budget, the
 // compositor-claim release table (which claim answers to which exit scope,
-// the teardown ordering rule, and the retain-on-fullscreen-skip policy), and
-// the size-continuity carry-forward table. Same header-only reach as
+// the teardown ordering rule, and the retain-on-fullscreen-skip policy), the
+// size-continuity carry-forward table, and which commits are reported to the
+// engine as a client's answer to its column. Same header-only reach as
 // test_anchor_uniforms:
 // kwin-effect has no linkable test target, so the pure halves are extracted
 // into a header this test includes directly.
@@ -521,6 +522,51 @@ private Q_SLOTS:
         QFETCH(QSize, column);
         QFETCH(bool, carries);
         QCOMPARE(mayCarryCommittedSize(declaredRect, columnAnswered, committed, column), carries);
+    }
+
+    // Which commits reach the engine as the client's answer to its column.
+    // The rows that matter most are the unsettled ones: a frame from a
+    // configure the client acked late must never be passed off as the answer
+    // to the newest offer, or the engine widens a column to a size the client
+    // is on its way out of.
+    void committedSizeReportTable_data()
+    {
+        QTest::addColumn<bool>("settled");
+        QTest::addColumn<QSize>("offered");
+        QTest::addColumn<QSize>("committed");
+        QTest::addColumn<bool>("vertical");
+        QTest::addColumn<bool>("reports");
+
+        const QSize column(1908, 2052);
+        // The shape that prompted this: wider along a horizontal strip, a
+        // little short across it.
+        QTest::newRow("wider along the strip") << true << column << QSize(2880, 1948) << false << true;
+        QTest::newRow("narrower along the strip") << true << column << QSize(1500, 2052) << false << true;
+        QTest::newRow("unsettled wider") << false << column << QSize(2880, 1948) << false << false;
+        QTest::newRow("unsettled narrower") << false << column << QSize(1500, 2052) << false << false;
+        // Across the strip only: the commit path already centres it, and
+        // reporting would send the engine a no-op on every placement.
+        QTest::newRow("cross only, horizontal strip") << true << column << QSize(1908, 1948) << false << false;
+        QTest::newRow("matches the offer") << true << column << column << false << false;
+        // The axis decides which dimension is the main one. The same pair
+        // that is cross-only on a horizontal strip is a main-axis answer on a
+        // vertical one, and the other way round.
+        QTest::newRow("cross only, vertical strip") << true << column << QSize(2880, 2052) << true << false;
+        QTest::newRow("taller along a vertical strip") << true << column << QSize(1908, 2400) << true << true;
+        // Degenerate sizes carry no answer (a mid-unmap commit, a column not
+        // yet known).
+        QTest::newRow("empty commit") << true << column << QSize(0, 0) << false << false;
+        QTest::newRow("empty offer") << true << QSize() << QSize(2880, 1948) << false << false;
+    }
+
+    void committedSizeReportTable()
+    {
+        QFETCH(bool, settled);
+        QFETCH(QSize, offered);
+        QFETCH(QSize, committed);
+        QFETCH(bool, vertical);
+        QFETCH(bool, reports);
+        QCOMPARE(shouldReportCommittedSize(settled, offered, committed, vertical), reports);
     }
 };
 

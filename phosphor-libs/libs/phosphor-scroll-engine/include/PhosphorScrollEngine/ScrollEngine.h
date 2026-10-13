@@ -216,8 +216,7 @@ public:
     void moveColumnToLast(const QString& screenId);
     void consumeWindowIntoColumn(const QString& screenId);
     void expelWindowFromColumn(const QString& screenId);
-    /// delta -1 = towards the strip's start, +1 = towards its end (niri
-    /// consume-or-expel-window-left/right).
+    /// delta -1 = towards the strip's start, +1 = towards its end (niri consume-or-expel-window-left/right).
     void consumeOrExpelWindow(int delta, const QString& screenId);
     void centerColumn(const QString& screenId);
     void toggleColumnTabbed(const QString& screenId);
@@ -239,10 +238,11 @@ public:
     void forgetClosedFullscreenHold(const QString& windowId);
     /// Compositor-driven reconciliation: the client left fullscreen on its own.
     void clearWindowedFullscreen(const QString& windowId);
-    /// Compositor-driven repair: the compositor moved this window behind
-    /// the engine's back (KWin's fullscreen-exit restore), so evict its
-    /// emit-gate memory and relayout its screen to re-emit the true rect.
+    /// Compositor-driven repair: the compositor moved this window behind the engine's back (KWin's fullscreen-exit
+    /// restore), so evict its emit-gate memory and relayout its screen to re-emit the true rect.
     void reapplyWindowGeometry(const QString& windowId);
+    /// Compositor-driven: the size a client settled on when offered its column rect (engine_minsize.cpp).
+    void reportCommittedSize(const QString& windowId, const QSize& offered, const QSize& committed);
     /// delta -1/+1 through the preset width list.
     void cycleColumnPresetWidth(int delta, const QString& screenId);
     /// deltaPercent of the work area's MAIN extent (e.g. +10 / -10).
