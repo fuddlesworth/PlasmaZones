@@ -613,7 +613,9 @@ private Q_SLOTS:
 
         QVERIFY2(captureIsNonEmpty(lines), "snap-engine log capture produced nothing");
         QVERIFY2(!result.shouldSnap, "another output's tiled record is never snapped here");
-        QVERIFY2(!result.deferredToTilingEngine, "nothing defers a snap-screen open to another output's engine");
+        QVERIFY2(engine.isFloating(QStringLiteral("app|new")),
+                 "nothing defers a snap-screen open to another output's engine: the snap float default takes it");
+        QCOMPARE(engine.screenForTrackedWindow(QStringLiteral("app|new")), QStringLiteral("DP-1"));
         QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
                  "the tiled record stays for an instance that opens on DP-2");
         m_wts->setSnapState(nullptr);

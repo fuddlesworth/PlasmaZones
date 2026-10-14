@@ -35,7 +35,9 @@
  *  8. scrollingScreens answers sorted, across several screens.
  *  9. scrollingScreensChanged is gated on an actual change: the engine
  *     re-announces an identical set on every desktop switch, and a wire
- *     consumer comparing successive payloads must not see a phantom one.
+ *     consumer comparing successive payloads must not see a phantom one. It
+ *     also names the screens leaving for autotile (not those leaving for
+ *     snapping) and carries the context switch.
  * 10. clearEngine leaves every slot answering safely AND stops relaying.
  * 11. The scrollingScreens property never emits PropertiesChanged (change
  *     traffic rides the dedicated signal only).

@@ -1718,22 +1718,22 @@
         <translation>ზონის ნომერი, სულ ცოტა, 1-ს უნდა უდრიდეს</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="82"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="81"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation>PlasmaZones-ის KWin-ის ეფექტის დამატება იქ არ არის დაყენებული, სადაც მას KWin იპოვის. თავიდან დააყენეთ PlasmaZones.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="121"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="120"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin.</source>
         <translation>PlasmaZones-ის KWin-ის ეფექტი აგებულია KWin %1-ისთვის, მაგრამ გაშვებულია KWin %2, ამიტომ KWin მას არ ჩატვირთავს. თავიდან ააგეთ და დააყენეთ PlasmaZones გაშვებული KWin-ისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="148"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="147"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation>PlasmaZones-ის KWin-ის ეფექტი დემონთან არ დარეგისტრირდა, ამიტომ ფანჯრების გადათრევა და მალსახმობები არ იმუშავებს. დარწმუნდით, რომ ის ჩართულია აქ: სისტემის პარამეტრები &gt; სამუშაო მაგიდის ეფექტები, შემდეგ თავიდან გაუშვით Plasma-ის სესია.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="167"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="166"/>
         <source>Window manager integration is inactive</source>
         <translation>ფანჯრების მმართველთან ინტეგრაცია არააქტიურია</translation>
     </message>
@@ -19794,9 +19794,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
-        <source>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
-        <oldsource>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
-        <translation type="unfinished">როცა ისეთ ფანჯარას ხდით მოტივტივედან, რომელიც არასდროს ყოფილა მიმაგრებული, მიამაგრეთ ის სათადარიგო ზონას (ბოლოს გამოყენებული, შემდეგ პირველი ცარიელი, შემდეგ პირველი ზონა) მისი მოტივტივედ დატოვების ნაცვლად.</translation>
+        <source>When you unfloat a window with no zone to return to on its monitor and desktop, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
+        <oldsource>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="153"/>
@@ -20919,7 +20919,7 @@
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="100"/>
         <source>This window is excluded from snapping</source>
         <oldsource>This window is excluded from tiling</oldsource>
-        <translation type="unfinished">ეს ფანჯარა ფილირებიდან გამორიცხულია</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="116"/>
@@ -21763,7 +21763,7 @@
         <translation>იმ ფანჯრის ჩანართი, რომელიც ყურადღებას ითხოვს.</translation>
     </message>
     <message>
-        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="717"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="711"/>
         <source>Untitled window</source>
         <translation>უსახელო ფანჯარა</translation>
     </message>

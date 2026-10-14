@@ -11,7 +11,9 @@
  *     triggers as a string array, in the provider's order.
  *  3. notifyShortcutsChanged emits shortcutsChanged once per call.
  *  4. generateSupportReport after detach() answers the Shutdown error over
- *     the bus (F847).
+ *     the bus (F847's Shutdown half). The Busy reply to a concurrent call
+ *     needs a report in flight, with the screen, layout and autotile
+ *     services behind it, and has no row here.
  */
 
 #include <QDBusConnection>

@@ -83,27 +83,33 @@ private Q_SLOTS:
     }
 
     // Desktop 2 of 4 removed while S1 shows desktop 4: the per-removal pair
-    // the daemon drives today and the map give the same result, the removed
-    // strip pruned, the ones above shifted down, the screen on the desktop it
-    // showed.
+    // (pruneStatesForDesktop, then renumberDesktopsAfterRemoval) and the map
+    // the daemon drives give the same result, the removed strip pruned, the
+    // ones above shifted down, the screen on the desktop it showed.
+    void removalMatchesTheShift_data()
+    {
+        QTest::addColumn<bool>("viaMap");
+        QTest::newRow("the per-removal pair") << false;
+        QTest::newRow("the desktop map") << true;
+    }
+
     void removalMatchesTheShift()
     {
-        for (const bool viaMap : {false, true}) {
-            QObject owner;
-            ScrollEngine* engine = oneWindowPerDesktop(&owner, 4);
-            QCOMPARE(engine->managedWindowOrder(kS1), QStringList{QStringLiteral("app|w4")});
-            if (viaMap) {
-                engine->remapDesktops(DesktopRemap::removal(2, 4));
-            } else {
-                engine->pruneStatesForDesktop(2);
-                engine->renumberDesktopsAfterRemoval(2);
-            }
-            QCOMPARE(engine->managedWindowOrder(kS1), QStringList{QStringLiteral("app|w4")});
-            QVERIFY(!engine->isWindowTracked(QStringLiteral("app|w2")));
-            QCOMPARE(windowsOn(engine, 1), QStringList{QStringLiteral("app|w1")});
-            QCOMPARE(windowsOn(engine, 2), QStringList{QStringLiteral("app|w3")});
-            QCOMPARE(windowsOn(engine, 3), QStringList{QStringLiteral("app|w4")});
+        QFETCH(bool, viaMap);
+        QObject owner;
+        ScrollEngine* engine = oneWindowPerDesktop(&owner, 4);
+        QCOMPARE(engine->managedWindowOrder(kS1), QStringList{QStringLiteral("app|w4")});
+        if (viaMap) {
+            engine->remapDesktops(DesktopRemap::removal(2, 4));
+        } else {
+            engine->pruneStatesForDesktop(2);
+            engine->renumberDesktopsAfterRemoval(2);
         }
+        QCOMPARE(engine->managedWindowOrder(kS1), QStringList{QStringLiteral("app|w4")});
+        QVERIFY(!engine->isWindowTracked(QStringLiteral("app|w2")));
+        QCOMPARE(windowsOn(engine, 1), QStringList{QStringLiteral("app|w1")});
+        QCOMPARE(windowsOn(engine, 2), QStringList{QStringLiteral("app|w3")});
+        QCOMPARE(windowsOn(engine, 3), QStringList{QStringLiteral("app|w4")});
     }
 
     // A strip stashed by a mode change and the context's overrides have no

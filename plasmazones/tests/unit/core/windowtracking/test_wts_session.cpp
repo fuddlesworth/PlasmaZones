@@ -302,7 +302,7 @@ private Q_SLOTS:
         snapSlot.state = PhosphorEngine::WindowPlacement::stateSnapped();
         snapSlot.zoneIds = QStringList{m_zoneIds[0]};
         rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snapSlot);
-        m_service->placementStore().record(rec);
+        QVERIFY(m_service->placementStore().record(rec));
 
         QVERIFY(m_service->zonesForWindow(windowId).isEmpty()); // live map is cold
 
@@ -355,8 +355,8 @@ private Q_SLOTS:
             slot.zoneIds = QStringList{m_zoneIds[0]};
             slot.zonesByDesktop = byDesktop;
             rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
-            service.placementStore().record(rec);
-            return rec.windowId;
+            // An empty id when the store refused the record; checked below.
+            return service.placementStore().record(rec) ? rec.windowId : QString();
         };
         const QString movedOff = addWindow(QStringLiteral("moved-off"), 1, {}, 2, {}, QString());
         const QString spanMoved =
@@ -364,6 +364,7 @@ private Q_SLOTS:
         const QString otherActivity =
             addWindow(QStringLiteral("other-activity"), 1, {}, 1, {}, QStringLiteral("act-b"));
         const QString inView = addWindow(QStringLiteral("in-view"), 1, {}, 1, {}, QStringLiteral("act-a"));
+        QVERIFY(!movedOff.isEmpty() && !spanMoved.isEmpty() && !otherActivity.isEmpty() && !inView.isEmpty());
 
         service.populateResnapBufferForAllScreens({}, {screen}, 1);
 
@@ -398,8 +399,9 @@ private Q_SLOTS:
         registry.upsert(QStringLiteral("both"), meta);
         meta.activities = {QStringLiteral("act-a"), QStringLiteral("act-c")};
         registry.upsert(QStringLiteral("elsewhere"), meta);
-        service.placementStore().record(snappedRecord(QStringLiteral("app|both"), screen, {m_zoneIds[0]}));
-        service.placementStore().record(snappedRecord(QStringLiteral("app|elsewhere"), screen, {m_zoneIds[1]}));
+        QVERIFY(service.placementStore().record(snappedRecord(QStringLiteral("app|both"), screen, {m_zoneIds[0]})));
+        QVERIFY(
+            service.placementStore().record(snappedRecord(QStringLiteral("app|elsewhere"), screen, {m_zoneIds[1]})));
 
         service.populateResnapBufferForAllScreens({}, {screen});
 
@@ -448,10 +450,10 @@ private Q_SLOTS:
         PhosphorEngine::WindowMetadata meta;
         meta.appId = QStringLiteral("app");
         registry.upsert(QStringLiteral("live"), meta);
-        service.placementStore().record(
-            snappedRecord(QStringLiteral("app|dead"), QStringLiteral("DP-1"), {m_zoneIds[0]}));
-        service.placementStore().record(
-            snappedRecord(QStringLiteral("app|live"), QStringLiteral("DP-1"), {m_zoneIds[1]}));
+        QVERIFY(service.placementStore().record(
+            snappedRecord(QStringLiteral("app|dead"), QStringLiteral("DP-1"), {m_zoneIds[0]})));
+        QVERIFY(service.placementStore().record(
+            snappedRecord(QStringLiteral("app|live"), QStringLiteral("DP-1"), {m_zoneIds[1]})));
 
         service.populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
         QCOMPARE(bufferIds(service), QStringList{QStringLiteral("app|live")});
@@ -472,7 +474,8 @@ private Q_SLOTS:
         registry.upsert(QStringLiteral("u"), meta);
         QCOMPARE(registry.canonicalizeWindowId(QStringLiteral("old|u")), QStringLiteral("old|u"));
         state.assignWindowToZone(QStringLiteral("old|u"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
-        service.placementStore().record(snappedRecord(QStringLiteral("new|u"), QStringLiteral("DP-1"), {m_zoneIds[0]}));
+        QVERIFY(service.placementStore().record(
+            snappedRecord(QStringLiteral("new|u"), QStringLiteral("DP-1"), {m_zoneIds[0]})));
 
         service.populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
         QCOMPARE(bufferIds(service).size(), 1);
@@ -486,7 +489,7 @@ private Q_SLOTS:
             snappedRecord(QStringLiteral("app|f"), QStringLiteral("DP-1"), {m_zoneIds[0]});
         rec.engines[PhosphorEngine::WindowPlacement::snapEngineId()].state =
             PhosphorEngine::WindowPlacement::stateFloating();
-        m_service->placementStore().record(rec);
+        QVERIFY(m_service->placementStore().record(rec));
         m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
         QVERIFY(bufferIds(*m_service).isEmpty());
     }
@@ -511,7 +514,7 @@ private Q_SLOTS:
         rec.virtualDesktop = 1;
         rec.engines[PhosphorEngine::WindowPlacement::snapEngineId()].zonesByDesktop = {{1, {m_zoneIds[0]}},
                                                                                        {2, {m_zoneIds[1]}}};
-        service.placementStore().record(rec);
+        QVERIFY(service.placementStore().record(rec));
 
         service.populateResnapBufferForAllScreens({}, {screen});
         const QVector<PhosphorEngine::ResnapEntry> buffer = service.takeResnapBuffer();

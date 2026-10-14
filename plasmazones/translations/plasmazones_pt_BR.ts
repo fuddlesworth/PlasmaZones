@@ -1718,22 +1718,22 @@
         <translation>O número da zona precisa ser no mínimo 1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="82"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="81"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation>O plugin de efeito do PlasmaZones para o KWin não está instalado onde o KWin possa encontrá-lo. Reinstale o PlasmaZones.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="121"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="120"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin.</source>
         <translation>O efeito do PlasmaZones para o KWin foi compilado para o KWin %1, mas o KWin %2 está em execução, então ele não será carregado. Recompile e reinstale o PlasmaZones para a versão do KWin em execução.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="148"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="147"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation>O efeito do PlasmaZones para o KWin não se registrou no serviço, então arrastar janelas e os atalhos não vão funcionar. Verifique se ele está ativado em Configurações do sistema &gt; Efeitos da área de trabalho e reinicie a sessão do Plasma.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="167"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="166"/>
         <source>Window manager integration is inactive</source>
         <translation>A integração com o gerenciador de janelas está inativa</translation>
     </message>
@@ -19794,9 +19794,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
-        <source>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
-        <oldsource>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
-        <translation type="unfinished">Quando você tira uma janela nunca encaixada do estado flutuante, ela é encaixada em uma zona alternativa (a última usada, depois a primeira vazia, depois a primeira zona) em vez de continuar flutuando.</translation>
+        <source>When you unfloat a window with no zone to return to on its monitor and desktop, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
+        <oldsource>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="153"/>
@@ -20919,7 +20919,7 @@
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="100"/>
         <source>This window is excluded from snapping</source>
         <oldsource>This window is excluded from tiling</oldsource>
-        <translation type="unfinished">Esta janela está excluída do ladrilhamento</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="116"/>
@@ -21763,7 +21763,7 @@
         <translation>A aba de uma janela que está pedindo atenção.</translation>
     </message>
     <message>
-        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="717"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="711"/>
         <source>Untitled window</source>
         <translation>Janela sem título</translation>
     </message>

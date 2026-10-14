@@ -11,8 +11,8 @@
  *        not carried into a zone. And the re-apply puts back
  *        only zones the layout in view still holds (F982). A batch or span
  *        with an empty zone commits nothing (F459). A restore pinned to one
- *        desktop leaves the window's other desktops alone, and a float parked
- *        before the window had a store ends with the unfloat (F331).
+ *        desktop leaves the window's other desktops alone (F477), and a float
+ *        parked before the window had a store ends with the unfloat (F331).
  */
 
 #include <QSet>

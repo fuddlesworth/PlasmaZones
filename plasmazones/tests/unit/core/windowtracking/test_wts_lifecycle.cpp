@@ -6,11 +6,11 @@
  * @brief Unit tests for WindowTrackingService lifecycle: windowClosed and onLayoutChanged
  *
  * Tests cover:
- * 1. Window close -> zone and float teardown
- * 2. Pre-snap geometry stable ID migration on close
- * 3. Pre-float zone conversion on close
- * 4. PhosphorZones::Layout change -> stale assignment removal and resnap buffer
- * 5. State change signal emission
+ * 1. Window close -> zone and float teardown, and the save it schedules
+ * 2. PhosphorZones::Layout change -> stale assignment removal
+ * 3. The free-geometry captures (recordFreeGeometry, recordFloatingClose)
+ * 4. recordedSnapZones and the resnap from an autotile order
+ * 5. The open claim (claimPlacementForOpen)
  *
  * WIRE FORMAT NOTE: These tests construct WTS without a WindowRegistry, so
  * they drive legacy-compat "appId|uuid" composite fixtures to exercise the
@@ -107,22 +107,28 @@ private Q_SLOTS:
     // P0: Window Close
     // =====================================================================
 
+    void testWindowClosed_unassignsSnappedWindow_data()
+    {
+        QTest::addColumn<QString>("screen");
+        QTest::newRow("physical screen") << QStringLiteral("DP-1");
+        QTest::newRow("virtual screen") << QStringLiteral("DP-1/vs:0");
+    }
+
     void testWindowClosed_unassignsSnappedWindow()
     {
         // Close drops the window from its zone, on a physical screen and on a
         // virtual one alike. A reopen restores from the placement store the
         // adaptor's close capture feeds, so the service keeps nothing of its
         // own for the closed window.
-        for (const QString& screen : {QStringLiteral("DP-1"), QStringLiteral("DP-1/vs:0")}) {
-            const QString windowId = QStringLiteral("firefox|12345");
-            m_service->assignWindowToZone(windowId, m_zoneIds[0], screen, 1);
-            QVERIFY(m_service->isWindowSnapped(windowId));
+        QFETCH(QString, screen);
+        const QString windowId = QStringLiteral("firefox|12345");
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], screen, 1);
+        QVERIFY(m_service->isWindowSnapped(windowId));
 
-            m_service->windowClosed(windowId);
+        m_service->windowClosed(windowId);
 
-            QVERIFY(!m_service->isWindowSnapped(windowId));
-            QVERIFY(m_service->zoneForWindow(windowId).isEmpty());
-        }
+        QVERIFY(!m_service->isWindowSnapped(windowId));
+        QVERIFY(m_service->zoneForWindow(windowId).isEmpty());
     }
 
     // testWindowClosed_preTileGeometryConvertedToStableId removed: the per-engine
@@ -210,6 +216,13 @@ private Q_SLOTS:
         QVERIFY(m_service->zonesForWindow(inView).isEmpty());
     }
 
+    void testOnLayoutChanged_nonSnappingScreenKeepsAssignments_data()
+    {
+        QTest::addColumn<bool>("liveEngine");
+        QTest::newRow("the snap engine's live mode") << true;
+        QTest::newRow("the configured ids, no snap engine") << false;
+    }
+
     void testOnLayoutChanged_nonSnappingScreenKeepsAssignments()
     {
         // onLayoutChanged prunes assignments whose zones no longer exist in the
@@ -219,10 +232,11 @@ private Q_SLOTS:
         // unrelated cascade layout and prune every assignment the screen is
         // holding for its eventual return to snapping.
         //
-        // Both arms matter and only the control was covered before: every
-        // existing onLayoutChanged test uses a snapping screen, so deleting
-        // either half of the `isAutotile(id) || isScrolling(id)` predicate
-        // failed nothing.
+        // The prune asks the snap engine whether snapping runs live on the
+        // screen, and the configured assignment ids only when no snap engine
+        // is attached. A row for each: removing either autotile or scrolling
+        // from either answer fails it.
+        QFETCH(bool, liveEngine);
         const QString autotileScreen = QStringLiteral("DP-1");
         const QString scrollingScreen = QStringLiteral("HDMI-1");
         const QString snappingScreen = QStringLiteral("DP-2");
@@ -269,7 +283,7 @@ private Q_SLOTS:
 
         QCOMPARE(m_layoutManager->modeForScreen(autotileScreen, desktop), PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(m_layoutManager->modeForScreen(scrollingScreen, desktop), PhosphorZones::AssignmentEntry::Scrolling);
-        // The sentinel ids are what the predicate under test inspects.
+        // The sentinel ids are what the no-engine answer inspects.
         QVERIFY(
             PhosphorLayout::LayoutId::isScrolling(m_layoutManager->assignmentIdForScreen(scrollingScreen, desktop)));
 
@@ -295,7 +309,11 @@ private Q_SLOTS:
                                                : PhosphorZones::AssignmentEntry::Mode::Snapping;
         });
 
+        if (!liveEngine) {
+            m_service->setSnapEngine(nullptr);
+        }
         m_service->onLayoutChanged();
+        m_service->setSnapEngine(m_engine);
 
         QVERIFY2(m_service->isWindowSnapped(autotileWindow), "an autotile screen's assignments must survive");
         QVERIFY2(m_service->isWindowSnapped(scrollingWindow), "a scrolling screen's assignments must survive");
@@ -858,10 +876,22 @@ private Q_SLOTS:
 
     void testRecordedSnapZones_neverAnswersALiveSiblingsZone()
     {
-        // The live-store half of the same rule: a sibling snapped LIVE does
-        // not lend its zone to a record-less instance of the app.
-        m_service->assignWindowToZone(QStringLiteral("firefox|live"), m_zoneIds[0], QString(), 0);
+        // The live-store half of the same rule: a sibling snapped LIVE, with
+        // its record in the app's bucket too, does not lend its zone to a
+        // record-less instance of the app.
+        const QString liveId = QStringLiteral("firefox|live");
+        m_service->assignWindowToZone(liveId, m_zoneIds[0], QString(), 0);
+        PhosphorEngine::WindowPlacement p;
+        p.windowId = liveId;
+        p.appId = PhosphorIdentity::WindowId::extractAppId(liveId);
+        PhosphorEngine::EngineSlot snap;
+        snap.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        snap.zoneIds = QStringList{m_zoneIds[0]};
+        p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        m_service->placementStore().record(p);
+
         QVERIFY(m_service->recordedSnapZones(QStringLiteral("firefox|other")).isEmpty());
+        QCOMPARE(m_service->recordedSnapZones(liveId), QStringList{m_zoneIds[0]});
     }
 
     void testResnapFromAutotileOrder_sameAppInstancesEachKeepOwnZone()

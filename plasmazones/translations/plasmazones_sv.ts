@@ -1718,22 +1718,22 @@
         <translation>Zonnumret måste vara minst 1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="82"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="81"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation>Insticksmodulen för PlasmaZones KWin-effekt är inte installerad där KWin kan hitta den. Installera om PlasmaZones.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="121"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="120"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin.</source>
         <translation>PlasmaZones KWin-effekt byggdes för KWin %1 men KWin %2 körs, så KWin läser inte in den. Bygg om och installera om PlasmaZones mot den KWin som körs.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="148"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="147"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation>PlasmaZones KWin-effekt har inte registrerats hos demonen, så fönsterdragning och genvägar fungerar inte. Se till att den är aktiverad i Systeminställningar &gt; Skrivbordseffekter och starta sedan om Plasma-sessionen.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="167"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="166"/>
         <source>Window manager integration is inactive</source>
         <translation>Fönsterhanterarintegrationen är inaktiv</translation>
     </message>
@@ -19794,9 +19794,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
-        <source>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
-        <oldsource>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
-        <translation type="unfinished">När du tar ett fönster som aldrig har fästs ur flytläge, fäst det i en reservzon (senast använda, sedan första tomma, sedan första zonen) i stället för att lämna det flytande.</translation>
+        <source>When you unfloat a window with no zone to return to on its monitor and desktop, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
+        <oldsource>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="153"/>
@@ -20919,7 +20919,7 @@
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="100"/>
         <source>This window is excluded from snapping</source>
         <oldsource>This window is excluded from tiling</oldsource>
-        <translation type="unfinished">Det här fönstret är uteslutet från panelindelning</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="116"/>
@@ -21763,7 +21763,7 @@
         <translation>Fliken för ett fönster som ber om uppmärksamhet.</translation>
     </message>
     <message>
-        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="717"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="711"/>
         <source>Untitled window</source>
         <translation>Namnlöst fönster</translation>
     </message>

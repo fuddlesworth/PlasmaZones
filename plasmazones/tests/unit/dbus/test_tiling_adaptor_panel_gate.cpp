@@ -271,15 +271,6 @@ private Q_SLOTS:
         QCOMPARE(engine.burstDepth, 0);
     }
 
-    // -------------------------------------------------------------------------
-    // A live release no longer suppresses the next announce's claim round.
-    //
-    // The move-release one-shot existed because the claim could pull a moved
-    // window back to another output. The reopen contract makes the engines
-    // decline that themselves (their own record is final, and a claim never
-    // leaves the opening output), so the adaptor offers every announce, the
-    // re-announce after a release included, and the engine decides.
-    // -------------------------------------------------------------------------
     // F428 / F449 / F450: "Focus new windows" focuses genuine opens only. The
     // adaptor states each entry's intent to the engines for the whole
     // dispatch, the reopen claim included, and restores the default after.
@@ -406,6 +397,13 @@ private Q_SLOTS:
         adaptor.setWindowTrackingAdaptor(nullptr);
     }
 
+    // A live release no longer suppresses the next announce's claim round.
+    //
+    // The move-release one-shot existed because the claim could pull a moved
+    // window back to another output. The reopen contract makes the engines
+    // decline that themselves (their own record is final, and a claim never
+    // leaves the opening output), so the adaptor offers every announce, the
+    // re-announce after a release included, and the engine decides.
     void testLiveReleaseDoesNotSuppressTheNextClaimRound()
     {
         RecordingEngine engine;

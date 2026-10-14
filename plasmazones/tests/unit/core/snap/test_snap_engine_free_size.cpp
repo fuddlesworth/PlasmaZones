@@ -15,8 +15,10 @@
  *        window size to their own config on every resize, and a snap is a
  *        resize, so an app with a snapped window opens its next window at the
  *        zone's size. The size comes from the window's own record, else from
- *        the earliest-recorded live sibling's, only for a first placement,
- *        only from a rect on the opening screen, clamped to that screen.
+ *        the earliest-recorded live sibling's, else from a closed record of
+ *        the app, only for a first placement. A rect on the opening screen is
+ *        preferred, another screen's gives only its size, and either is
+ *        clamped to the opening screen.
  */
 class TestSnapEngineFreeSize : public SnapEngineTestFixture
 {
@@ -498,7 +500,7 @@ private Q_SLOTS:
     // The screen-containment gate and the clamp need real output geometry
     // behind the service (the guiless fixture's null ScreenManager fails
     // open), so this builds its own service over a FakePhysicalScreenSource.
-    void testScreenGate_refusesRectOffScreenAndClampsToAvailable()
+    void testScreenGate_offScreenRectGivesOnlyItsSizeAndClampsToAvailable()
     {
         PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(kScreen, QRect(0, 0, 1920, 1080));

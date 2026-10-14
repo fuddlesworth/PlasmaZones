@@ -8,8 +8,11 @@
 // the two threaded stale-batch walks), the counter-assert burst budget, the
 // compositor-claim release table (which claim answers to which exit scope,
 // the teardown ordering rule, and the retain-on-fullscreen-skip policy), the
-// size-continuity carry-forward table, the engine-flip screen set, and the
-// wire screen-list filter. Same header-only reach as
+// size-continuity carry-forward table, the engine-flip screen set, the
+// wire screen-list filter, the maximize-membership and claimed-press answers,
+// the view-carried origin, the passive float scope, the user Monocle
+// unmaximize read, the restore-rect output check and the KWin move off a
+// strip. Same header-only reach as
 // test_anchor_uniforms:
 // kwin-effect has no linkable test target, so the pure halves are extracted
 // into a header this test includes directly.

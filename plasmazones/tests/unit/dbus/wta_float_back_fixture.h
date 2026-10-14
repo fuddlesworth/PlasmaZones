@@ -5,8 +5,10 @@
 
 /**
  * @file wta_float_back_fixture.h
- * @brief Shared fixture for the float-back tests (test_wta_float_back_model.cpp
- *        and test_wta_presnap_capture.cpp): two outputs side by side on a real
+ * @brief Shared fixture for the adaptor tests that need real outputs, such as
+ *        the float-back tests (test_wta_float_back_model.cpp,
+ *        test_wta_presnap_capture.cpp), the bus gates and the snap navigation
+ *        fixture built on it: two outputs side by side on a real
  *        ScreenManager, a snap engine on per-screen stores, a stub tiling
  *        engine in the autotile slot and a window registry.
  */

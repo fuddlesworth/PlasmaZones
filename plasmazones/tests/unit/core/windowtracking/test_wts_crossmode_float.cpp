@@ -28,7 +28,8 @@
  *    (virtual vs bare) of the same monitor still restores.
  * 8. migrateWindowToScreen_leavesTheZoneBehind: the per-monitor migration moves
  *    the reverse map and residence to the destination monitor's store, and the
- *    zone stays behind, unassigned, with the source store's last-used naming it.
+ *    zone stays behind, unassigned, with no last-used naming it in the source
+ *    store.
  *
  * Phase 4 (per-(screen,desktop,activity) last-used):
  * 9. lastUsedZoneIsPerScreen: last-used zone is tracked per store, so recording it
@@ -45,6 +46,8 @@
  *     physical-monitor test, so a per-VS home id restores against the bare id.
  * 13. suspensionUnfloatWithFallbackSettingOnStillRefuses: the unconfined
  *     fallback-zone tier must not rescue a refused suspension unfloat.
+ * 14. unfloatFallbackLandsOnTheMonitorItIsOn: test 6's fallback tier with the
+ *     destination a live output places the window there.
  */
 
 #include <QTest>
@@ -53,9 +56,12 @@
 #include <QStringList>
 #include <QSet>
 #include <QGuiApplication>
+#include <QScopeGuard>
 #include <memory>
 
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorScreens/Manager.h>
+#include "FakePhysicalScreenSource.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowPlacement.h>
@@ -545,14 +551,53 @@ private Q_SLOTS:
         QVERIFY(m_engine->isFloating(windowId));
 
         // With it on, the refusal falls through to the fallback-zone tier and
-        // the window is placed afresh, never back into its home zone on A.
-        // (Which screen the fallback resolves on is that tier's own contract,
-        // pinned in test_snap_unfloat_fallback; HDMI-1 is no live output here.)
+        // the window is placed afresh. HDMI-1 is no live output in this
+        // fixture, so the tier resolves on the tracked screen; test 14 stages
+        // HDMI-1 and pins the screen.
         m_settings->setSnapUnfloatFallbackToZone(true);
         m_engine->setWindowFloat(windowId, false, monitorB);
         m_settings->setSnapUnfloatFallbackToZone(false);
         QCOMPARE(applySpy.count(), 1);
         QVERIFY(!m_engine->isFloating(windowId));
+    }
+
+    // =====================================================================
+    // Test 14: test 6's fallback tier with HDMI-1 a live output. The window
+    // is placed on the monitor it is on, never back on DP-1.
+    // =====================================================================
+    void testUnfloatFallbackLandsOnTheMonitorItIsOn()
+    {
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(monitorA, QRect(0, 0, 1920, 1080), monitorA);
+        fake.addScreen(monitorB, QRect(1920, 0, 1920, 1080), monitorB);
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, &screenMgr, nullptr);
+        SnapEngine engine(m_layoutManager, &service, m_zoneDetector, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        service.setSnapState(engine.snapState());
+        service.setSnapEngine(&engine);
+        const auto detach = qScopeGuard([this, &service] {
+            m_settings->setSnapUnfloatFallbackToZone(false);
+            service.setSnapState(nullptr);
+            service.setSnapEngine(nullptr);
+        });
+
+        const QString windowId = QStringLiteral("dolphin|ffffffff-0000-0000-0000-000000000014");
+        service.assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
+        service.unsnapForFloat(windowId);
+        service.setWindowFloating(windowId, true);
+        QCOMPARE(service.preFloatScreen(windowId), monitorA);
+
+        m_settings->setSnapUnfloatFallbackToZone(true);
+        QSignalSpy applySpy(&engine, &SnapEngine::applyGeometryRequested);
+        engine.setWindowFloat(windowId, false, monitorB);
+        QCOMPARE(applySpy.count(), 1);
+        QCOMPARE(applySpy.first().at(6).toString(), monitorB);
+        QVERIFY(!engine.isFloating(windowId));
     }
 
     // =====================================================================

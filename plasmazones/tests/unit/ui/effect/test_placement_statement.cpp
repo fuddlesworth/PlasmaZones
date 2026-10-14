@@ -95,16 +95,22 @@ private Q_SLOTS:
 
     // A tiling engine's claim is shed for any purpose: the window is leaving
     // the stack or strip that owns it (F342). The old demote returned early.
+    void engineClaimIsShedForAnyPurpose_data()
+    {
+        QTest::addColumn<int>("purpose");
+        QTest::newRow("user verb") << static_cast<int>(Purpose::UserVerb);
+        QTest::newRow("restatement") << static_cast<int>(Purpose::Restatement);
+    }
+
     void engineClaimIsShedForAnyPurpose()
     {
-        for (const Purpose purpose : {Purpose::UserVerb, Purpose::Restatement}) {
-            Inputs in = inputs(purpose);
-            in.maximized = true;
-            in.engineMaximizeClaim = true;
-            const Verdict v = decide(in);
-            QVERIFY(v.shedEngineMaximize);
-            QVERIFY2(!v.endMaximize, "the claim's own release ends the maximize");
-        }
+        QFETCH(int, purpose);
+        Inputs in = inputs(static_cast<Purpose>(purpose));
+        in.maximized = true;
+        in.engineMaximizeClaim = true;
+        const Verdict v = decide(in);
+        QVERIFY(v.shedEngineMaximize);
+        QVERIFY2(!v.endMaximize, "the claim's own release ends the maximize");
     }
 
     // A windowed-fullscreen member placed into a snap zone is handed back,

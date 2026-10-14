@@ -6,7 +6,11 @@
  * @brief Snap focus at the edge of a layout with no neighbour output: it
  *        steps onto the next desktop and enters at that desktop's first zone
  *        (its last stepping back), taking only windows that desktop's own
- *        store holds in the current activity (F387, F146, F225, F340).
+ *        store holds in the current activity (F387, F146, F225, F340). Also
+ *        the keyboard move to the next desktop (L14.10), moves to a desktop
+ *        running another mode (L14.11), Restore acting on snapped windows only
+ *        (L14.12) and the pre-float zone kept per window and per desktop
+ *        (L14.13).
  */
 
 #include "wta_snap_nav_fixture.h"

@@ -192,14 +192,9 @@ private Q_SLOTS:
     {
         // Two windows of one app, remembered on DIFFERENT desktops. Before the
         // open claim, peek (newest-first) and take (oldest-first) each chose a
-        // record independently, so one window got the other's desktop; and a
-        // window that needed no move could consume its sibling's record, leaving
-        // the sibling with nothing to restore from.
-        //
-        // MUTATION NOTE: asserting only that both instances got A record passes
-        // even with the pairing removed — they always did. The assertion that
-        // matters is that the two records are DIFFERENT and that each instance's
-        // peek and take agree with each other.
+        // record, so one window got the other's desktop or consumed its record.
+        // The records must DIFFER and each instance's peek and take must agree:
+        // that both got A record held even with the pairing removed.
         WindowPlacementStore store;
         WindowPlacement a = makePlacement(QStringLiteral("app|old-a"), QStringLiteral("app"),
                                           WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
@@ -246,15 +241,11 @@ private Q_SLOTS:
 
     void testClaimSurvivesAnAppIdRename()
     {
-        // windowId is the composite appId|uuid, so a mid-session class change
-        // (the Electron/CEF WM_CLASS rebroadcast) rewrites the id STRING while
-        // the record itself survives, re-bucketed under the new appId. The claim
-        // is keyed by that id, so it has to be re-keyed with the record.
-        //
-        // The harm if it is not: the renamed record looks UNCLAIMED to the
-        // reverse index, so a sibling opening afterwards can take it away from
-        // the window that owns it — the exact record-stealing this mechanism
-        // exists to prevent, reintroduced by a rename.
+        // A mid-session class change (the Electron/CEF WM_CLASS rebroadcast)
+        // rewrites the appId|uuid id STRING while the record survives under the
+        // new appId. The claim is keyed by that id and must be re-keyed with it,
+        // or the renamed record looks UNCLAIMED and a sibling opening later
+        // takes it from its owner.
         WindowPlacementStore store;
         WindowPlacement own = makePlacement(QStringLiteral("oldclass|u1"), QStringLiteral("oldclass"),
                                             WindowPlacement::stateSnapped(), WindowPlacement::snapEngineId());
@@ -761,15 +752,11 @@ private Q_SLOTS:
 
     void testTake_contentlessResidueRejectedSoRealPlacementWins()
     {
-        // Regression (floating geometry restore on login): a window the user floated
-        // and resized is captured LAST at logout, so its content-bearing `floating`
-        // record (with freeGeometry) sits at the BACK of the appId FIFO, behind OLDER
-        // contentless residue records left by earlier-closed windows of the same app.
-        // The snap engine's restore ACCEPT predicate rejects contentless residue
-        // (hasRestorableContent() == false), so the FIFO never consumes it ahead of
-        // the real placement — the saved position is the one taken on reopen, and the
-        // residue is left untouched (later drained by MaxPerApp eviction / save-time
-        // hasRestorableContent filter).
+        // Regression (floating geometry restore on login): a floated, resized window
+        // is captured LAST at logout, so its `floating` record with freeGeometry sits
+        // behind OLDER contentless residue of the same app in the FIFO. The restore
+        // ACCEPT predicate rejects the residue (hasRestorableContent() == false), so
+        // the saved position is taken on reopen and the residue is left untouched.
         WindowPlacementStore store;
         // Older contentless free record (empty screen, no geometry) — residue.
         WindowPlacement residue;
@@ -1146,12 +1133,9 @@ private Q_SLOTS:
     void testDeserialize_preservesAppIdFifoOrder()
     {
         // The per-app bucket's POSITIONAL order is load-bearing for take()'s
-        // direct consumers (the snap paths consume oldest-first) and for the
-        // eviction's last-resort tier; the tiling reopen path distributes by
-        // sequence + live probe instead. The positional ordering must survive
-        // a serialize → deserialize round trip — a bucket rebuilt in a
-        // different order silently rotates which reopened instance receives
-        // which snap placement.
+        // oldest-first snap consumers and the eviction's last-resort tier, so
+        // it must survive a round trip: a bucket rebuilt in another order
+        // rotates which reopened instance receives which snap placement.
         WindowPlacementStore store;
         const QRect r1(10, 10, 300, 200);
         const QRect r2(20, 20, 310, 210);
@@ -1428,12 +1412,24 @@ private Q_SLOTS:
         WindowPlacementStore next;
         next.deserialize(saved);
         QVERIFY(next.peekForReclaim(QStringLiteral("firefox|fresh"), QStringLiteral("firefox")).has_value());
+
+        // A record a file saved with its credit spent still answers the lookup and the claim.
+        QJsonObject spent = rec;
+        spent.insert(QStringLiteral("liveAtSave"), false);
+        QJsonObject spentFile = saved;
+        spentFile.insert(QStringLiteral("firefox"), QJsonArray{spent});
+        WindowPlacementStore older;
+        older.deserialize(spentFile);
+        QVERIFY(older.peekForReclaim(QStringLiteral("firefox|fresh"), QStringLiteral("firefox")).has_value());
+        QVERIFY(older.claimForOpen(QStringLiteral("firefox|fresh"), QStringLiteral("firefox")).has_value());
     }
+
     void testReleaseEngineSlot_downgradesOnlyThatEnginesSlot()
     {
         // The handoff-release primitive. Slots are otherwise only merged,
         // never cleared, so a slot left behind by an engine that gave the
-        // window up reads as a false home to the cross-screen reclaim.
+        // window up reads as a false home to the restore that still crosses
+        // virtual screens of one output (pendingCrossScreenManagedRestore).
         WindowPlacementStore store;
         WindowPlacement rec =
             makePlacement(QStringLiteral("term|a"), QStringLiteral("term"), WindowPlacement::stateTiled(),
@@ -1452,15 +1448,15 @@ private Q_SLOTS:
         // takeForReopen's exact-final gate keeps recognising this instance as
         // one the engine has seen (removing it made a released window
         // indistinguishable from a fresh one, which then consumed a sibling's
-        // floating record), while no longer being MANAGED so the cross-screen
-        // reclaim cannot read it as a home.
+        // floating record), while no longer being MANAGED so the restore across
+        // virtual screens cannot read it as a home.
         const PhosphorEngine::EngineSlot released = after->slotFor(WindowPlacement::scrollingEngineId());
         QVERIFY2(!released.isEmpty(), "the slot must remain present for the exact-final gate");
         QCOMPARE(released.state, QString(WindowPlacement::stateReleased()));
         QVERIFY(released.zoneIds.isEmpty());
         QCOMPARE(released.order, -1);
         QVERIFY2(released.state != QString(WindowPlacement::stateTiled()),
-                 "a released slot must not satisfy the reclaim's managed-state key");
+                 "a released slot must not satisfy the managed-state key");
         // Everything else untouched.
         QCOMPARE(after->slotFor(WindowPlacement::snapEngineId()).state, QString(WindowPlacement::stateSnapped()));
         QCOMPARE(after->freeGeometryFor(QStringLiteral("DP-1")), QRect(10, 10, 400, 300));
@@ -1470,13 +1466,17 @@ private Q_SLOTS:
         QVERIFY(!store.releaseEngineSlot(QStringLiteral("term|a"), WindowPlacement::scrollingEngineId()));
         QVERIFY(!store.releaseEngineSlot(QStringLiteral("nope|x"), WindowPlacement::snapEngineId()));
 
-        // A released slot no longer earns a cross-screen pull.
+        // A released slot earns no restore onto another virtual screen of its output; the tiled one did.
         const auto always = [](const QString&, int, const QString&) {
             return true;
         };
+        const QString otherHalf = QStringLiteral("DP-1/vs:1");
+        QVERIFY(PhosphorEngine::pendingCrossScreenManagedRestore(rec, WindowPlacement::scrollingEngineId(),
+                                                                 WindowPlacement::stateTiled(),
+                                                                 QStringLiteral("term|b"), otherHalf, always));
         QVERIFY(!PhosphorEngine::pendingCrossScreenManagedRestore(*after, WindowPlacement::scrollingEngineId(),
-                                                                  WindowPlacement::stateTiled(), QStringLiteral("DP-2"),
-                                                                  always));
+                                                                  WindowPlacement::stateTiled(),
+                                                                  QStringLiteral("term|b"), otherHalf, always));
     }
 };
 

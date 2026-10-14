@@ -127,9 +127,9 @@ private Q_SLOTS:
         QCOMPARE(spy.first().at(0).toStringList(), QStringList{QStringLiteral("1")});
     }
 
-    // Closing the focused window forgets its screen too, so a shortcut falls
-    // back to the cursor's screen instead of a closed window's (F291), on the
-    // close path and on the prune path alike.
+    // Closing the focused window forgets its screen too, on the close path and
+    // on the prune path alike, so the daemon's shortcut screen resolution
+    // falls back to the cursor's screen instead of a closed window's (F291).
     void testClosingTheFocusedWindow_forgetsItsScreen()
     {
         const QString focused = QStringLiteral("firefox|focused-1");
@@ -139,6 +139,7 @@ private Q_SLOTS:
         QVERIFY(m_wta->lastActiveScreenName().isEmpty());
 
         m_wta->windowActivated(focused, QStringLiteral("DP-1"));
+        QCOMPARE(m_wta->lastActiveScreenName(), QStringLiteral("DP-1"));
         m_wta->pruneStaleWindows({QStringLiteral("konsole|alive-1")}); // an empty set is refused
         QVERIFY(m_wta->lastActiveScreenName().isEmpty());
     }

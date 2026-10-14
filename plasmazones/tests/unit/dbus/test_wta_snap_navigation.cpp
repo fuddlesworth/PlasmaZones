@@ -14,10 +14,10 @@
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleSet.h>
 
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QUuid>
 
-#include <functional>
 #include <memory>
 
 using PhosphorEngine::NavigationContext;
@@ -99,13 +99,13 @@ private Q_SLOTS:
         QVERIFY(f.ready());
         const QString w = f.live(QStringLiteral("moded-1"));
         f.snapOn(w, {f.zone(0)}, kLeft);
-        excludeWhen(
+        QVERIFY(excludeWhen(
             f,
             PhosphorRules::MatchExpression::makeAll(
                 {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId,
                                                           PhosphorRules::Operator::AppIdMatches, QStringLiteral("app")),
                  PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::Mode, PhosphorRules::Operator::Equals,
-                                                          QStringLiteral("snapping"))}));
+                                                          QStringLiteral("snapping"))})));
         QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
         f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
         QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
@@ -122,9 +122,9 @@ private Q_SLOTS:
         QVERIFY(f.ready());
         const QString w = f.live(QStringLiteral("negated-1"));
         f.snapOn(w, {f.zone(0)}, kLeft);
-        excludeWhen(f,
-                    PhosphorRules::MatchExpression::makeNone({PhosphorRules::MatchExpression::makeLeaf(
-                        PhosphorRules::Field::IsSnapped, PhosphorRules::Operator::Equals, true)}));
+        QVERIFY(excludeWhen(f,
+                            PhosphorRules::MatchExpression::makeNone({PhosphorRules::MatchExpression::makeLeaf(
+                                PhosphorRules::Field::IsSnapped, PhosphorRules::Operator::Equals, true)})));
         f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
         QCOMPARE(f.snap->zoneForWindow(w), f.zone(1));
         f.snap->setExcludeRuleSet(nullptr);
@@ -141,7 +141,7 @@ private Q_SLOTS:
         const QString w = f.live(QStringLiteral("land-1"), QRect(1300, 100, 400, 300));
         f.snapOn(w, {f.zone(2)}, kLeft);
         f.cross.outputs.insert(kLeft + QStringLiteral("|right"), kRight);
-        excludeWhen(f, appAnd(PhosphorRules::Field::ScreenId, kRight));
+        QVERIFY(excludeWhen(f, appAnd(PhosphorRules::Field::ScreenId, kRight)));
         QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
         QSignalSpy applies(f.snap.get(), &SnapEngine::applyGeometryRequested);
         f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
@@ -161,7 +161,7 @@ private Q_SLOTS:
         SnapNavFixture f;
         QVERIFY(f.ready());
         const QString w = f.live(QStringLiteral("land-2"), QRect(2400, 100, 400, 300));
-        excludeWhen(f, appAnd(PhosphorRules::Field::ScreenId, kRight));
+        QVERIFY(excludeWhen(f, appAnd(PhosphorRules::Field::ScreenId, kRight)));
         QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
         f.snap->moveFocusedInDirection(QStringLiteral("left"), NavigationContext{w, kRight});
         QVERIFY(f.snap->zoneForWindow(w).isEmpty());
@@ -185,9 +185,10 @@ private Q_SLOTS:
         f.registry.canonicalizeWindowId(partner);
         f.snapOn(w, {f.zone(0)}, kLeft);
         f.snapOn(partner, {f.zone(1)}, kLeft);
-        excludeWhen(f,
-                    PhosphorRules::MatchExpression::makeLeaf(
-                        PhosphorRules::Field::AppId, PhosphorRules::Operator::AppIdMatches, QStringLiteral("other")));
+        QVERIFY(excludeWhen(f,
+                            PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId,
+                                                                     PhosphorRules::Operator::AppIdMatches,
+                                                                     QStringLiteral("other"))));
         QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
         f.snap->swapFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
         QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
@@ -205,7 +206,7 @@ private Q_SLOTS:
         const QString w = f.live(QStringLiteral("land-3"), QRect(1300, 100, 400, 300));
         f.snapOn(w, {f.zone(2)}, kLeft, 1);
         f.cross.desktopCount = 2;
-        excludeWhen(f, appAnd(PhosphorRules::Field::VirtualDesktop, 2));
+        QVERIFY(excludeWhen(f, appAnd(PhosphorRules::Field::VirtualDesktop, 2)));
         QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
         QSignalSpy desktopMove(f.snap.get(), &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested);
         f.snap->moveFocusedInDirection(QStringLiteral("right"), NavigationContext{w, kLeft});
@@ -371,9 +372,10 @@ private Q_SLOTS:
         const QString w = f.live(QStringLiteral("float-1"));
         f.snapThenFloat(w, kLeft);
         QVERIFY(f.snap->isFloating(w));
-        excludeWhen(f,
-                    PhosphorRules::MatchExpression::makeLeaf(
-                        PhosphorRules::Field::AppId, PhosphorRules::Operator::AppIdMatches, QStringLiteral("app")));
+        QVERIFY(excludeWhen(f,
+                            PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId,
+                                                                     PhosphorRules::Operator::AppIdMatches,
+                                                                     QStringLiteral("app"))));
         QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
         f.snap->toggleFocusedFloat(NavigationContext{w, kLeft});
         QVERIFY(f.snap->isFloating(w));
@@ -382,44 +384,55 @@ private Q_SLOTS:
     }
 
     // Every snapping verb reports an exclusion once and commits nothing (F840).
+    void everyVerbReportsAnExclusionOnce_data()
+    {
+        QTest::addColumn<int>("verb");
+        QTest::newRow("move") << 0;
+        QTest::newRow("span") << 1;
+        QTest::newRow("swap") << 2;
+        QTest::newRow("move to position") << 3;
+        QTest::newRow("push to empty zone") << 4;
+    }
+
     void everyVerbReportsAnExclusionOnce()
     {
+        QFETCH(int, verb);
         SnapNavFixture f;
         QVERIFY(f.ready());
         const QString w = f.live(QStringLiteral("excl-all"));
         f.snapOn(w, {f.zone(1)}, kLeft);
-        excludeWhen(f,
-                    PhosphorRules::MatchExpression::makeLeaf(
-                        PhosphorRules::Field::AppId, PhosphorRules::Operator::AppIdMatches, QStringLiteral("app")));
+        QVERIFY(excludeWhen(f,
+                            PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId,
+                                                                     PhosphorRules::Operator::AppIdMatches,
+                                                                     QStringLiteral("app"))));
+        const auto detachRules = qScopeGuard([&f] {
+            f.snap->setExcludeRuleSet(nullptr);
+        });
         const NavigationContext ctx{w, kLeft};
-        const QList<std::function<void()>> verbs = {
-            [&] {
-                f.snap->moveFocusedInDirection(QStringLiteral("right"), ctx);
-            },
-            [&] {
-                f.snap->spanFocusedInDirection(QStringLiteral("right"), ctx);
-            },
-            [&] {
-                f.snap->swapFocusedInDirection(QStringLiteral("right"), ctx);
-            },
-            [&] {
-                f.snap->moveFocusedToPosition(1, ctx);
-            },
-            [&] {
-                f.snap->pushFocusedToEmptyZone(ctx);
-            },
-        };
-        for (const auto& verb : verbs) {
-            QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
-            QSignalSpy applies(f.snap.get(), &SnapEngine::applyGeometryRequested);
-            verb();
-            QCOMPARE(feedback.count(), 1);
-            QCOMPARE(feedback.first().at(2).toString(), QStringLiteral("excluded"));
-            QCOMPARE(feedback.first().at(5).toString(), kLeft);
-            QCOMPARE(applies.count(), 0);
-            QCOMPARE(f.snap->zoneForWindow(w), f.zone(1));
+        QSignalSpy feedback(f.snap.get(), &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        QSignalSpy applies(f.snap.get(), &SnapEngine::applyGeometryRequested);
+        switch (verb) {
+        case 0:
+            f.snap->moveFocusedInDirection(QStringLiteral("right"), ctx);
+            break;
+        case 1:
+            f.snap->spanFocusedInDirection(QStringLiteral("right"), ctx);
+            break;
+        case 2:
+            f.snap->swapFocusedInDirection(QStringLiteral("right"), ctx);
+            break;
+        case 3:
+            f.snap->moveFocusedToPosition(1, ctx);
+            break;
+        default:
+            f.snap->pushFocusedToEmptyZone(ctx);
+            break;
         }
-        f.snap->setExcludeRuleSet(nullptr);
+        QCOMPARE(feedback.count(), 1);
+        QCOMPARE(feedback.first().at(2).toString(), QStringLiteral("excluded"));
+        QCOMPARE(feedback.first().at(5).toString(), kLeft);
+        QCOMPARE(applies.count(), 0);
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(1));
     }
 
     // ── L14.5: zone occupants are the windows of the context in view ──
@@ -470,6 +483,11 @@ private Q_SLOTS:
         f.snapOn(w2, {f.zone(1)}, kLeft, 2);
         f.showDesktop(kLeft, 1);
         QVERIFY(f.snap->windowInZoneOnScreen(f.zone(1), kLeft).isEmpty());
+
+        // Control: a window holding the zone in view is the partner.
+        const QString w1 = f.live(QStringLiteral("view-3"));
+        f.snapOn(w1, {f.zone(1)}, kLeft, 1);
+        QCOMPARE(f.snap->windowInZoneOnScreen(f.zone(1), kLeft), w1);
     }
 
     // A window on two desktops holds the zone in both stores and is listed
@@ -673,8 +691,8 @@ private Q_SLOTS:
     // A snapped window is acted on on its own stored screen; one that is not
     // snapped, or whose stored screen is gone, on the caller's screen, then
     // the cursor's, then the last active one. The fake outputs are on the
-    // screen manager only, not on Qt's screen list, which is what the stored
-    // screen is judged by (F1006).
+    // screen manager only, not on Qt's screen list, and the stored screen is
+    // judged by the screen manager, so they count as present (F1006).
     void navScreenTiers()
     {
         SnapNavFixture f;
@@ -711,8 +729,9 @@ private:
         f.showDesktop(kLeft, 1);
     }
 
-    /// One Exclude rule matching @p match, installed on the snap engine.
-    void excludeWhen(SnapNavFixture& f, const PhosphorRules::MatchExpression& match)
+    /// One Exclude rule matching @p match, installed on the snap engine. False
+    /// when the rule set refuses it, so the caller's QVERIFY ends the row.
+    bool excludeWhen(SnapNavFixture& f, const PhosphorRules::MatchExpression& match)
     {
         m_rules = std::make_unique<PhosphorRules::RuleSet>();
         PhosphorRules::Rule rule;
@@ -723,8 +742,11 @@ private:
         PhosphorRules::RuleAction action;
         action.type = QString(PhosphorRules::ActionType::Exclude);
         rule.actions.append(action);
-        QVERIFY(m_rules->addRule(rule));
+        if (!m_rules->addRule(rule)) {
+            return false;
+        }
         f.snap->setExcludeRuleSet(m_rules.get());
+        return true;
     }
 
     /// AppId "app" AND @p field Equals @p value.

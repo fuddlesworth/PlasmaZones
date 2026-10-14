@@ -999,6 +999,7 @@ private Q_SLOTS:
         meta.virtualDesktops = {2, 3};
         meta.isSticky = true;
         meta.activity = QStringLiteral("a");
+        meta.activities = {QStringLiteral("a"), QStringLiteral("b")};
         reg.upsert(QStringLiteral("every"), meta);
         const auto context = reg.desktopContext(QStringLiteral("kate|every"));
         QVERIFY(context.has_value());
@@ -1006,6 +1007,7 @@ private Q_SLOTS:
         QCOMPARE(context->virtualDesktops, (QList<int>{2, 3}));
         QCOMPARE(context->sticky, std::optional<bool>(true));
         QCOMPARE(context->activity, QStringLiteral("a"));
+        QCOMPARE(context->activities, (QStringList{QStringLiteral("a"), QStringLiteral("b")}));
         QVERIFY(!reg.desktopContext(QStringLiteral("kate|unknown")).has_value());
 
         QVERIFY(!reg.minimizedState(QStringLiteral("kate|every")).has_value());

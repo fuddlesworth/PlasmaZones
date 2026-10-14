@@ -159,17 +159,23 @@ private Q_SLOTS:
     void currentAssignmentsSkipAnotherActivity()
     {
         snapBoth();
+        bool sawControl = false;
         for (const PhosphorEngine::ZoneAssignmentEntry& e : m_engine->calculateResnapFromCurrentAssignments(kScreen)) {
             QVERIFY2(e.windowId != kWindow, "the current-assignments resnap carries another activity's window");
+            sawControl |= e.windowId == kControl;
         }
+        QVERIFY2(sawControl, "control: the window in view is carried");
     }
 
     void rotationSkipsAnotherActivity()
     {
         snapBoth();
+        bool sawControl = false;
         for (const PhosphorEngine::ZoneAssignmentEntry& e : m_engine->calculateRotation(true, kScreen)) {
             QVERIFY2(e.windowId != kWindow, "the rotation carries another activity's window");
+            sawControl |= e.windowId == kControl;
         }
+        QVERIFY2(sawControl, "control: the window in view is rotated");
     }
 
     // A sticky window (recorded desktop 0) still counts on every desktop

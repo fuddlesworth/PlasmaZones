@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // DragPolicyTransition: what the effect does when it adopts a drag policy,
-// from the beginDrag reply or a mid-drag flip. Each row names the HEAD
+// from the beginDrag reply or a mid-drag flip. Each row names the earlier
 // behaviour it reverses where there was one; the old code was a KWin-typed
 // slot with no unit seam.
 
@@ -48,7 +48,7 @@ class TestDragPolicyTransition : public QObject
 
 private Q_SLOTS:
     /// F69 + F378: reaching an engine screen latches the bypass and lets go of
-    /// a grab the daemon declined. HEAD kept the grab and sent cancelSnap,
+    /// a grab the daemon declined. It used to keep the grab and send cancelSnap,
     /// whose latch left the return to the snapping screen unable to snap; the
     /// plan has no daemon call at all.
     void snapToEngine_entersBypassAndReleasesADeclinedGrab()
@@ -61,7 +61,7 @@ private Q_SLOTS:
     }
 
     /// F69: an engine screen to one that wants the keyboard (always-on
-    /// re-insert) grabs. HEAD took the same-reason early return and never did.
+    /// re-insert) grabs. It used to take the same-reason early return and never did.
     void engineToReorderEngine_grabs()
     {
         const Plan p =
@@ -73,10 +73,10 @@ private Q_SLOTS:
     }
 
     /// F638: back on the snap path mid-drag, the tile is suspended, not
-    /// released (HEAD relayed releaseWindowTracking and the drop back on the
+    /// released (it used to relay releaseWindowTracking and the drop back on the
     /// stack found nothing to reorder), and the snap path's grab is taken.
     /// F811: the activation stays latched, so the ticks that let the daemon
-    /// flip back keep flowing (HEAD reset it and the return went unseen).
+    /// flip back keep flowing (it used to be reset and the return went unseen).
     void engineToSnap_suspendsTheTileOnAFlip()
     {
         const Plan p =
@@ -106,7 +106,7 @@ private Q_SLOTS:
     }
 
     /// Pass-18 fold: a dead reason keeps the latch and only reconciles the
-    /// grab. HEAD un-bypassed and grabbed for any non-engine reason.
+    /// grab. It used to un-bypass and grab for any non-engine reason.
     void deadDragKeepsTheLatch_data()
     {
         QTest::addColumn<R>("reason");
@@ -126,7 +126,7 @@ private Q_SLOTS:
     }
 
     /// F383: a tile reaching a screen whose engine floats on drag takes its
-    /// free size at once. HEAD read the flag only at drag start.
+    /// free size at once. The flag used to be read only at drag start.
     void floatOnStartAcrossEngineScreens_data()
     {
         QTest::addColumn<bool>("windowLive");
@@ -177,8 +177,8 @@ private Q_SLOTS:
     }
 
     /// F1010: a drag with no pointer button held (KWin's keyboard move, a
-    /// touch drag) never grabs, and lets go of a grab it holds. HEAD grabbed
-    /// and swallowed the arrows and Return, so the keyboard move never moved
+    /// touch drag) never grabs, and lets go of a grab it holds. It used to grab
+    /// and swallow the arrows and Return, so the keyboard move never moved
     /// or ended.
     void pointerlessDragNeverGrabs()
     {

@@ -40,7 +40,7 @@ private Q_SLOTS:
         service()->assignWindowToZone(w, m_zoneIds[2], m_screenId, m_desktop);
         QSignalSpy states(m_wta, &WindowTrackingAdaptor::windowStateChanged);
 
-        deleteZone(m_testLayout, m_zoneIds[2]);
+        QVERIFY(deleteZone(m_testLayout, m_zoneIds[2]));
 
         QVERIFY(service()->zoneForWindow(w).isEmpty());
         QVERIFY(hasState(states, w, QStringLiteral("unsnapped")));
@@ -66,7 +66,7 @@ private Q_SLOTS:
         service()->assignWindowToZones(w, {m_zoneIds[1], m_zoneIds[2]}, m_screenId, m_desktop);
         QSignalSpy batch(m_wta, &WindowTrackingAdaptor::applyGeometriesBatch);
 
-        deleteZone(m_testLayout, m_zoneIds[2]);
+        QVERIFY(deleteZone(m_testLayout, m_zoneIds[2]));
 
         QCOMPARE(service()->zonesForWindow(w), QStringList{m_zoneIds[1]});
         const QRect zoneRect = service()->resolveZoneGeometry({m_zoneIds[1]}, m_screenId);
@@ -99,7 +99,7 @@ private Q_SLOTS:
     {
         const QString w = QStringLiteral("app|prune-none");
         service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, m_desktop);
-        setNone();
+        QVERIFY(setNone());
 
         switchDefaultTo(addLayout(2));
 
@@ -114,7 +114,7 @@ private Q_SLOTS:
         const QString goneZone = gone->zones().first()->id().toString();
         const QString w = QStringLiteral("app|prune-none-dead");
         service()->assignWindowToZone(w, goneZone, m_screenId, m_desktop);
-        setNone();
+        QVERIFY(setNone());
 
         QVERIFY(m_layoutManager->removeLayout(gone));
 
@@ -171,19 +171,22 @@ private Q_SLOTS:
         service()->assignWindowToZones(w, {m_zoneIds[1], m_zoneIds[2]}, m_screenId, m_desktop);
         switchActivity(QStringLiteral("act-Y"));
 
-        deleteZone(m_testLayout, m_zoneIds[2]);
+        QVERIFY(deleteZone(m_testLayout, m_zoneIds[2]));
 
+        bool sawActX = false;
         for (SnapState* state : m_snapEngine->allSnapStates()) {
             const auto key = m_snapEngine->keyForState(state);
             if (!key) {
                 continue;
             }
             if (key->activity == QStringLiteral("act-X")) {
+                sawActX = true;
                 QCOMPARE(state->zonesForWindow(w), QStringList{m_zoneIds[1]});
             } else {
                 QVERIFY2(state->zonesForWindow(w).isEmpty(), "no other store may hold the window");
             }
         }
+        QVERIFY2(sawActX, "the act-X store holds the narrowed span");
         switchActivity(QString());
     }
 
@@ -211,23 +214,29 @@ private:
         m_layoutManager->setActiveLayout(layout);
     }
 
-    /// An editor delete: a batch that removes the zone and ends.
-    void deleteZone(PhosphorZones::Layout* layout, const QString& zoneId)
+    /// An editor delete: a batch that removes the zone and ends. False when
+    /// the layout has no such zone, so the caller's QVERIFY ends the row.
+    bool deleteZone(PhosphorZones::Layout* layout, const QString& zoneId)
     {
         PhosphorZones::Zone* zone = layout->zoneById(QUuid::fromString(zoneId));
-        QVERIFY(zone);
+        if (!zone) {
+            return false;
+        }
         layout->beginBatchModify();
         layout->removeZone(zone);
         layout->endBatchModify();
+        return true;
     }
 
-    void setNone()
+    /// The screen on the explicit no-layout word. False when a layout still
+    /// resolves for it.
+    bool setNone()
     {
         PhosphorZones::AssignmentEntry entry;
         entry.mode = PhosphorZones::AssignmentEntry::Snapping;
         entry.snappingLayout = PhosphorZones::NoSnappingLayout;
         m_layoutManager->setAssignmentEntryDirect(m_screenId, 0, QString(), entry);
-        QVERIFY(!m_layoutManager->resolveLayoutForScreen(m_screenId));
+        return !m_layoutManager->resolveLayoutForScreen(m_screenId);
     }
 
     void switchActivity(const QString& activity)

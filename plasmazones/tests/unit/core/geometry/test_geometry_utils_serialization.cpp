@@ -368,6 +368,10 @@ private Q_SLOTS:
         const QRect big = PhosphorEngine::GeometryUtils::carryRectOntoArea(
             QRect(0, 0, 1900, 1000), QRect(0, 0, 1920, 1080), QRect(0, 0, 1280, 720));
         QCOMPARE(big, QRect(0, 0, 1280, 720));
+        // A rect that fits keeps its spot relative to the area: the centre stays the centre.
+        QCOMPARE(PhosphorEngine::GeometryUtils::carryRectOntoArea(QRect(960, 540, 400, 300), QRect(0, 0, 1920, 1080),
+                                                                  QRect(0, 0, 1280, 720)),
+                 QRect(640, 360, 400, 300));
     }
 
     void test_carryRectOntoArea_invalidSourceStartsAtTheTopLeft()

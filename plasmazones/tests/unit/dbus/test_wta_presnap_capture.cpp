@@ -149,9 +149,10 @@ private Q_SLOTS:
     void dbusUnfloatsRecordTheFreeFrame_data()
     {
         QTest::addColumn<int>("call");
-        QTest::newRow("toggleFloatForWindow") << 0;
-        QTest::newRow("setWindowFloat") << 1;
-        QTest::newRow("setWindowFloatingForScreen") << 2;
+        QTest::newRow("Snap.toggleFloatForWindow") << 0;
+        QTest::newRow("Snap.setWindowFloat") << 1;
+        QTest::newRow("WindowTracking.setWindowFloatingForScreen") << 2;
+        QTest::newRow("the engine's setWindowFloat") << 3;
     }
     void dbusUnfloatsRecordTheFreeFrame()
     {
@@ -162,9 +163,11 @@ private Q_SLOTS:
         if (call == 0) {
             f.adaptor->toggleFloatForWindow(w, kLeft);
         } else if (call == 1) {
-            f.snap->setWindowFloat(w, false, kLeft);
-        } else {
+            f.adaptor->setWindowFloat(w, false);
+        } else if (call == 2) {
             f.wta->setWindowFloatingForScreen(w, kLeft, false);
+        } else {
+            f.snap->setWindowFloat(w, false, kLeft);
         }
         QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
         QCOMPARE(f.floatBack(w, kLeft), kFree);

@@ -887,18 +887,24 @@ private Q_SLOTS:
 
     /// A malformed desktop value is refused by contextDimsOf and has no number
     /// to move, so the rule is left exactly as it is.
+    void testRemap_malformedDesktopValueIsLeftAlone_data()
+    {
+        QTest::addColumn<QVariant>("bad");
+        QTest::newRow("not a number") << QVariant(QStringLiteral("abc"));
+        QTest::newRow("zero") << QVariant(0);
+        QTest::newRow("negative") << QVariant(-3);
+    }
+
     void testRemap_malformedDesktopValueIsLeftAlone()
     {
-        for (const QVariant& bad : {QVariant(QStringLiteral("abc")), QVariant(0), QVariant(-3)}) {
-            Rule rule =
-                CRB::makeAssignmentRule(QString(), QStringLiteral("DP-1"), 3, QString(), QStringLiteral("snapping"),
-                                        kLayoutA, QString(), CRB::kContextBandBase, QString());
-            rule.match = MatchExpression::makeAll({
-                MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
-                MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, bad),
-            });
-            QVERIFY2(!CRB::remapContextRules({rule}, {removal(2), {}}), qPrintable(bad.toString()));
-        }
+        QFETCH(QVariant, bad);
+        Rule rule = CRB::makeAssignmentRule(QString(), QStringLiteral("DP-1"), 3, QString(), QStringLiteral("snapping"),
+                                            kLayoutA, QString(), CRB::kContextBandBase, QString());
+        rule.match = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+            MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, bad),
+        });
+        QVERIFY(!CRB::remapContextRules({rule}, {removal(2), {}}));
     }
 
     /// A desktop inserted at the front moves desktop 2 onto 3. A stale rule
@@ -941,7 +947,8 @@ private:
     }
 
     /// A window rule: an AppId leaf beside @p extra (none for the catch-all),
-    /// routing to @p routeDesktop when it is above 0, else snapping to zone 1.
+    /// routing to @p routeDesktop when it is above 0, else setting the engine
+    /// mode to snapping.
     static Rule windowRule(const MatchExpression& extra, int routeDesktop)
     {
         Rule rule;

@@ -1718,22 +1718,22 @@
         <translation>Numer strefy musi wynosić co najmniej 1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="82"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="81"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation>Wtyczka efektu KWin dla PlasmaZones nie jest zainstalowana w miejscu, w którym KWin może ją znaleźć. Zainstaluj ponownie PlasmaZones.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="121"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="120"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin.</source>
         <translation>Efekt KWin dla PlasmaZones został zbudowany dla KWin %1, ale uruchomiony jest KWin %2, więc KWin go nie wczyta. Przebuduj i zainstaluj ponownie PlasmaZones dla uruchomionego KWin.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="148"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="147"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation>Efekt KWin dla PlasmaZones nie zarejestrował się w demonie, więc przeciąganie okien i skróty nie będą działać. Upewnij się, że jest włączony w Ustawieniach systemowych &gt; Efekty pulpitu, a następnie uruchom ponownie sesję Plasmy.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="167"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="166"/>
         <source>Window manager integration is inactive</source>
         <translation>Integracja z menedżerem okien jest nieaktywna</translation>
     </message>
@@ -19839,9 +19839,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
-        <source>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
-        <oldsource>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
-        <translation type="unfinished">Gdy przywracasz z pływania okno, które nigdy nie było przyciągnięte, przyciągnij je do strefy zastępczej (ostatnio używanej, następnie pierwszej pustej, następnie pierwszej strefy), zamiast pozostawiać je pływającym.</translation>
+        <source>When you unfloat a window with no zone to return to on its monitor and desktop, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
+        <oldsource>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="153"/>
@@ -20967,7 +20967,7 @@
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="100"/>
         <source>This window is excluded from snapping</source>
         <oldsource>This window is excluded from tiling</oldsource>
-        <translation type="unfinished">To okno jest wyłączone z kafelkowania</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="116"/>
@@ -21812,7 +21812,7 @@
         <translation>Karta okna, które prosi o uwagę.</translation>
     </message>
     <message>
-        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="717"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="711"/>
         <source>Untitled window</source>
         <translation>Okno bez tytułu</translation>
     </message>

@@ -299,11 +299,10 @@ private Q_SLOTS:
     // resolveWindowRestore — full-query/size exclusion path (parity consumer)
     //
     // isWindowExcluded is exercised in isolation above; this pins the production
-    // wiring in resolveWindowRestore (lifecycle.cpp), which switched from the
-    // appId-only isAppIdExcluded to the full-query isWindowExcluded. A window
-    // with no stored record falls through to the legacy chain and must be
-    // refused (noSnap) when its full query is sub-threshold, with the distinct
-    // "excluded by rule or size" log identifying the branch that produced it.
+    // wiring in resolveWindowRestore (lifecycle.cpp), which asks the full-query
+    // isWindowExcluded before any stored record or placement rule (F735). A
+    // window whose full query is sub-threshold is refused (noSnap), with the
+    // distinct "excluded by rule or size" log identifying the branch.
     void testResolveWindowRestore_excludedBySize_returnsNoSnap()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
@@ -320,8 +319,7 @@ private Q_SLOTS:
             return std::optional<PhosphorRules::WindowQuery>(q);
         });
 
-        // No stored record for this windowId → resolveWindowRestore falls through
-        // to the legacy chain and hits the exclusion check.
+        // The exclusion check runs first, so no stored record is needed.
         PhosphorEngine::SnapResult result;
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|tiny-restore"), QStringLiteral("DP-1"), &result);

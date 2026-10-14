@@ -157,11 +157,11 @@ private Q_SLOTS:
         QCOMPARE(persisted->windowId, QStringLiteral("app|a"));
     }
 
-    // peek() gains the exclusion on request only: the snap engine's
-    // cross-screen gate peeks to predict what take() will consume, and the two
-    // must agree on a live sibling's record. Plain peek() keeps answering it
-    // (float-back geometry reads legitimately consult a live sibling), and
-    // the exclusion is about LIVENESS: a closed sibling's record is still
+    // peek() gains the exclusion on request only. No in-tree caller asks for
+    // it since the snap engine's cross-screen gate retired, so this pins the
+    // installed parameter: plain peek() keeps answering a live sibling's
+    // record (float-back geometry reads legitimately consult one), and the
+    // exclusion is about LIVENESS: a closed sibling's record is still
     // answered, and an empty asker excludes every live record.
     void testPeek_excludeLiveSiblingsOnRequest()
     {
@@ -191,7 +191,8 @@ private Q_SLOTS:
     // of every instance missing from the alive set, and the inert close mark
     // still releases its own, so the record a dead window claimed never stays
     // unpairable for later same-app opens. Pinned through peek() AND through
-    // take(), the two production readers of a claim.
+    // take(), two of the claim's readers (takeForReopen and peekForReclaim
+    // read it too).
     void testClaim_releasedByMarkInstanceClosedAndClear()
     {
         WindowPlacementStore store;

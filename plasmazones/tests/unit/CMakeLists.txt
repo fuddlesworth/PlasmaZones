@@ -112,8 +112,11 @@ target_include_directories(test_wts_virtual_migration PRIVATE ${CMAKE_SOURCE_DIR
 target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
 add_test(NAME test_wts_virtual_migration COMMAND test_wts_virtual_migration)
 
-add_executable(test_wts_crossmode_float core/windowtracking/test_wts_crossmode_float.cpp)
-target_link_libraries(test_wts_crossmode_float PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# FakePhysicalScreenSource compiled in: test 14 stages HDMI-1 as a live output.
+add_executable(test_wts_crossmode_float core/windowtracking/test_wts_crossmode_float.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wts_crossmode_float PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wts_crossmode_float PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
 add_test(NAME test_wts_crossmode_float COMMAND test_wts_crossmode_float)
 
 add_executable(test_wts_registry_integration core/windowtracking/test_wts_registry_integration.cpp)
@@ -1418,7 +1421,7 @@ add_test(NAME test_drag_policy_transition COMMAND test_drag_policy_transition)
 
 # Pure-logic test for the window flag edges (plasmazoneseffect/windowflagedges.h):
 # which flags push to the daemon, drop the cached verdicts, and run the
-# flags-settle eviction. Same header-only reach.
+# flags-settle re-evaluation. Same header-only reach.
 add_executable(test_window_flag_edges ui/effect/test_window_flag_edges.cpp)
 target_link_libraries(test_window_flag_edges PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_window_flag_edges PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
@@ -2713,6 +2716,7 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench" TIMEOUT 900)
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
 #   test_strip_view_animator: StripViewAnimator per-output view-spring behaviour
 #   test_strip_motion_sampler: StripMotionSampler distance/speed sampling
+#   test_desktop_arrival_parks: the desktop-arrival park's cause bookkeeping
 #   test_window_context_edge: the desktop handler's edit classification
 #   test_window_context_hold: why a desktop or activity edit waits (EE)
 #   test_desktop_move_stash: the free geometry a desktop move carries
@@ -2767,15 +2771,15 @@ target_include_directories(test_scroll_behaviour_parse PRIVATE ${CMAKE_SOURCE_DI
 target_link_libraries(test_scroll_behaviour_parse PRIVATE Qt6::Test Qt6::DBus)
 add_test(NAME test_scroll_behaviour_parse COMMAND test_scroll_behaviour_parse)
 
-# StripMotionSampler is header-only plain numbers (no KWin types at all), so
-# the suite includes it straight from the effect tree and drives it with a
-# hand-rolled clock — the same shape as test_strip_view_animator above.
 # The desktop-arrival park's cause bookkeeping (desktoparrivalparks.h, F415).
 add_executable(test_desktop_arrival_parks compositor-common/test_desktop_arrival_parks.cpp)
 target_include_directories(test_desktop_arrival_parks PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 target_link_libraries(test_desktop_arrival_parks PRIVATE Qt6::Test)
 add_test(NAME test_desktop_arrival_parks COMMAND test_desktop_arrival_parks)
 
+# StripMotionSampler is header-only plain numbers (no KWin types at all), so
+# the suite includes it straight from the effect tree and drives it with a
+# hand-rolled clock — the same shape as test_strip_view_animator above.
 add_executable(test_strip_motion_sampler compositor-common/test_strip_motion_sampler.cpp)
 target_include_directories(test_strip_motion_sampler PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 target_link_libraries(test_strip_motion_sampler PRIVATE Qt6::Test)
@@ -3127,4 +3131,9 @@ phosphor_apply_directory_test_isolation()
 # unconditionally above, and set_property(TEST <missing>) is a hard CMake
 # error, so the guard could only ever hide a rename.
 phosphor_append_test_environment(test_windowdrag_drop_proxy
+    "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/helpers/two-screens.json")
+
+# The F724 batch row writes the primary screen's assignment by its identifier,
+# which the unnamed offscreen screen does not have. Same named config.
+phosphor_append_test_environment(test_layout_adaptor_signals
     "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/helpers/two-screens.json")

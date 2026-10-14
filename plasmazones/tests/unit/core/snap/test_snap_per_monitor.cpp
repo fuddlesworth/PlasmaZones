@@ -299,7 +299,9 @@ private Q_SLOTS:
         // Every per-window field but the zone is now on B's store, on B's desktop.
         QVERIFY(stateB->zonesForWindow(windowId).isEmpty());
         QCOMPARE(stateB->screenForWindow(windowId), monitorB); // live screen rewritten to destination
-        QCOMPARE(stateB->desktopForWindow(windowId), m_engine->heldKeyForWindow(windowId)->desktop);
+        const auto heldKey = m_engine->heldKeyForWindow(windowId);
+        QVERIFY(heldKey.has_value());
+        QCOMPARE(stateB->desktopForWindow(windowId), heldKey->desktop);
         QVERIFY(stateB->desktopForWindow(windowId) != desktop);
         QVERIFY(stateB->isFloating(windowId));
         QVERIFY(stateB->isAutoSnapped(windowId));
@@ -468,7 +470,9 @@ private Q_SLOTS:
         m_service->assignWindowToZone(w, m_zoneIds[0], gone, 1);
         m_engine->setCurrentDesktopForScreen(gone, 2);
         m_engine->stateForWindowOnScreen(w, gone, 2)->assignWindowToZone(w, m_zoneIds[1], gone, 2);
-        m_service->placementStore().record(*m_engine->capturePlacement(w));
+        const auto captured = m_engine->capturePlacement(w);
+        QVERIFY(captured.has_value());
+        m_service->placementStore().record(*captured);
         const auto before = m_service->placementStore().peekExact(w);
         QVERIFY(before.has_value());
         QCOMPARE(before->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).zonesByDesktop.size(), 2);

@@ -528,8 +528,10 @@ private Q_SLOTS:
         f.adaptor->swapWindowsById(a, b);
         for (const QString& w : {a, b}) {
             const PhosphorSnapEngine::SnapState* store = f.snap->stateForWindow(w);
-            QVERIFY(store);
-            QCOMPARE(f.snap->keyForState(store).value_or(PhosphorEngine::PlacementStateKey{}).desktop, 2);
+            QVERIFY2(store, qPrintable(w));
+            const auto key = f.snap->keyForState(store);
+            QVERIFY2(key.has_value(), qPrintable(w));
+            QVERIFY2(key->desktop == 2, qPrintable(w + QStringLiteral(" stays on desktop 2")));
         }
         QCOMPARE(f.snap->stateForWindow(a)->zoneForWindow(a), f.zone(1));
         QCOMPARE(f.snap->stateForWindow(b)->zoneForWindow(b), f.zone(0));
@@ -813,12 +815,33 @@ private Q_SLOTS:
         QVERIFY(f.snap->zoneForWindow(w).isEmpty());
     }
 
+    // The desktop manager knows one desktop. The window claims a second and
+    // that desktop's layout holds the zone, so only the count refuses it.
     void busBatchDropsADesktopPastTheLast()
     {
-        GateFixture f;
+        PhosphorWorkspaces::VirtualDesktopManager vdm;
+        vdm.updateScreenDesktop(kLeft, 1);
+        vdm.updateScreenDesktop(kRight, 1);
+        GateFixture f(&vdm);
+        QCOMPARE(vdm.desktopCount(), 1);
+        f.layouts->assignLayout(kLeft, 2, QString(), f.layout);
         const QString w = f.registerOn(QStringLiteral("batch-2"), 1);
-        f.adaptor->handleBatchedResnap(batchFor(f, w, f.zone(0), kLeft, 7));
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.virtualDesktop = 1;
+        meta.virtualDesktops = {1, 2};
+        meta.isMinimized = false;
+        f.registry.upsert(QStringLiteral("batch-2"), meta);
+        QSignalSpy batches(f.wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+
+        f.adaptor->handleBatchedResnap(batchFor(f, w, f.zone(0), kLeft, 2));
+        QCOMPARE(batches.count(), 0);
         QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+
+        // Control: the same entry on the desktop that exists commits.
+        f.adaptor->handleBatchedResnap(batchFor(f, w, f.zone(0), kLeft, 1));
+        QCOMPARE(batches.count(), 1);
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
     }
 
     void busAutotileOrderOnATilingScreenDoesNothing()

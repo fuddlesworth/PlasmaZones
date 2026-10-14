@@ -124,7 +124,6 @@ private Q_SLOTS:
         QCOMPARE(stash.consumeForManagedArrival(kWin, QStringLiteral("DP-1")), std::optional<QRectF>());
     }
 
-    // A managed arrival spends the owed placement with the entry.
     // The bring-up re-send walks every entry with the screen it was measured
     // on (F952); a consumed or forgotten entry is not visited.
     void forEachVisitsEveryEntryWithItsScreen()
@@ -143,6 +142,7 @@ private Q_SLOTS:
         QCOMPARE(seen.value(QStringLiteral("app|v")), qMakePair(QStringLiteral("HDMI-1"), QRectF(5, 6, 300, 200)));
     }
 
+    // A managed arrival spends the owed placement with the entry.
     void managedArrivalClearsOwed()
     {
         DesktopMoveStash stash;

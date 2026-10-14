@@ -523,12 +523,11 @@ private Q_SLOTS:
     // apply's resnap could read them, and the apply carried nothing.
     void batchedAssignmentSetsActiveLayoutAfterApply()
     {
-        // The offscreen platform ctest runs under gives its screen no
-        // identity, so the primary-screen write has nothing to name there.
+        // ctest runs this under the named two-screen offscreen config: the
+        // default offscreen screen has no identity, so the primary-screen
+        // write would have nothing to name.
         const QString primaryId = PhosphorScreens::ScreenIdentity::identifierFor(QGuiApplication::primaryScreen());
-        if (primaryId.isEmpty()) {
-            QSKIP("the primary screen has no identifier on this platform");
-        }
+        QVERIFY2(!primaryId.isEmpty(), "the primary screen needs an identifier (helpers/two-screens.json)");
         PhosphorZones::Layout* first = m_layoutManager->layoutById(QUuid::fromString(m_layoutId));
         QVERIFY(first);
         m_layoutManager->setActiveLayout(first);

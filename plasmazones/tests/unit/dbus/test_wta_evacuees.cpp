@@ -297,9 +297,11 @@ private Q_SLOTS:
         });
         unplugA();
         for (int settle = 0; settle < 2; ++settle) {
-            QCOMPARE(verdictOf(m_wta->reportOutputSettle({unplugRow(w)}), w), int(OutputSettleVerdict::EvacueeFloat));
-            QVERIFY(m_snapEngine->isFloating(w));
-            QCOMPARE(m_snapEngine->screenForTrackedWindow(w), kB);
+            const QByteArray which = QByteArray("settle ") + QByteArray::number(settle);
+            QVERIFY2(verdictOf(m_wta->reportOutputSettle({unplugRow(w)}), w) == int(OutputSettleVerdict::EvacueeFloat),
+                     which.constData());
+            QVERIFY2(m_snapEngine->isFloating(w), which.constData());
+            QVERIFY2(m_snapEngine->screenForTrackedWindow(w) == kB, which.constData());
         }
     }
 

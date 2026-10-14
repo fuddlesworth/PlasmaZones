@@ -10,6 +10,7 @@
  */
 
 #include "wta_convenience_fixture.h"
+#include "wta_float_back_fixture.h"
 
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -32,11 +33,12 @@ private Q_SLOTS:
         cleanupFixture();
     }
 
-    // A layout assigned on two desktops in one pass, then a switch of the
-    // active layout in the next: one pendingRestoresChanged for each pass, so
-    // the effect refetches its instant-restore cache once per change (F625).
-    // Mutations: emitting straight from the edge fails the coalescing check,
-    // and dropping the timer's timeout connect times the first wait out.
+    // A layout assigned on two desktops in one burst, then a switch of the
+    // active layout once the debounce has fired: one pendingRestoresChanged
+    // for each burst, so the effect refetches its instant-restore cache once
+    // per change (F625). Mutations: emitting straight from the edge fails the
+    // coalescing check, and dropping the timer's timeout connect times the
+    // first wait out.
     void pendingRestoresChangedOncePerPass()
     {
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::pendingRestoresChanged);
@@ -45,7 +47,7 @@ private Q_SLOTS:
 
         m_layoutManager->assignLayout(m_screenId, m_desktop, QString(), m_twoZones);
         m_layoutManager->assignLayout(m_screenId, m_desktop + 1, QString(), m_twoZones);
-        QVERIFY2(spy.isEmpty(), "coalesced to the next event-loop pass");
+        QVERIFY2(spy.isEmpty(), "coalesced into the restarting debounce");
         QVERIFY(spy.wait(1000));
         QCoreApplication::processEvents();
         QCOMPARE(spy.count(), 1);
@@ -56,8 +58,9 @@ private Q_SLOTS:
     }
 
     // A desktop switch arrives as several bus messages, each in its own
-    // event-loop pass a few milliseconds apart; the burst still makes one
-    // signal. FAILS with a zero-interval timer (one signal per pass).
+    // event-loop pass; the burst still makes one signal. Each pass is a bare
+    // processEvents, so no wall-clock gap can outlast the debounce on a slow
+    // runner. FAILS with a zero-interval timer (one signal per pass).
     void pendingRestoresChangedOncePerBurstAcrossPasses()
     {
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::pendingRestoresChanged);
@@ -65,9 +68,9 @@ private Q_SLOTS:
         spy.clear();
 
         m_layoutManager->assignLayout(m_screenId, m_desktop, QString(), m_twoZones);
-        QTest::qWait(10);
+        QCoreApplication::processEvents();
         m_layoutManager->assignLayout(m_screenId, m_desktop + 1, QString(), m_twoZones);
-        QTest::qWait(10);
+        QCoreApplication::processEvents();
         m_layoutManager->setActiveLayout(m_twoZones);
         QVERIFY(spy.wait(1000));
         QTest::qWait(200);
@@ -258,14 +261,33 @@ private Q_SLOTS:
     }
 
     // The settings reflow (a gap change, the tiling master switch going off)
-    // re-applies nothing with snapping switched off (F469).
+    // re-applies nothing with snapping switched off (F469). On a real
+    // ScreenManager: with none, the resnap screen list is empty either way.
     void reapplySnapZonesPlacesNothingWithSnappingOff()
     {
-        service()->assignWindowToZone(QStringLiteral("app|reflow"), m_zoneIds[0], m_screenId, m_desktop);
-        QSignalSpy batch(m_wta, &WindowTrackingAdaptor::applyGeometriesBatch);
-        m_settings->setSnappingEnabled(false);
-        m_snapAdaptor->reapplySnapZones();
+        FloatBackFixture f;
+        QObject adaptorParent; // dies before the fixture's engine and adaptor
+        auto* snapAdaptor = new SnapAdaptor(f.snap.get(), f.wta, &f.settings, &adaptorParent);
+        const QString w = f.registerWindow(QStringLiteral("reflow"));
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+
+        f.settings.setSnappingEnabled(false);
+        QSignalSpy batch(f.wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+        snapAdaptor->reapplySnapZones();
         QCOMPARE(batch.count(), 0);
+
+        f.settings.setSnappingEnabled(true);
+        batch.clear();
+        snapAdaptor->reapplySnapZones();
+        QCOMPARE(batch.count(), 1);
+        QVERIFY(batchCarries(batch, w));
+    }
+
+    // The resolution-change replay answers nothing with snapping switched off.
+    void updatedWindowGeometriesAreEmptyWithSnappingOff()
+    {
+        service()->assignWindowToZone(QStringLiteral("app|reflow"), m_zoneIds[0], m_screenId, m_desktop);
+        m_settings->setSnappingEnabled(false);
         QVERIFY(m_wta->getUpdatedWindowGeometries().isEmpty());
 
         m_settings->setSnappingEnabled(true);

@@ -355,7 +355,12 @@ private Q_SLOTS:
         m_wta->setWindowRegistry(registry);
         m_wta->setWindowMetadata(QStringLiteral("second"), appId, QString(), QString(), QString(), 0, 0, QString(), 0,
                                  QVariantMap());
+        int routedOpens = 0;
+        m_wta->setRoutedOpenDispatcher([&routedOpens](const PhosphorProtocol::WindowOpenedEntry&) {
+            ++routedOpens;
+        });
         const auto teardown = qScopeGuard([this] {
+            m_wta->setRoutedOpenDispatcher({});
             m_wta->setWindowRegistry(nullptr);
         });
 
@@ -380,9 +385,21 @@ private Q_SLOTS:
         closedSibling.screenId = m_screenId;
         closedSibling.freeGeometryByScreen.insert(m_screenId, siblingFree);
         QVERIFY(store.record(closedSibling));
+        WindowPlacement snappedElsewhere;
+        snappedElsewhere.windowId = QStringLiteral("reopenapp|snapped");
+        snappedElsewhere.appId = appId;
+        snappedElsewhere.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot snapSlot;
+        snapSlot.state = QString(WindowPlacement::stateSnapped());
+        snapSlot.zoneIds = {m_zoneIds[0]};
+        snappedElsewhere.engines.insert(QString(WindowPlacement::snapEngineId()), snapSlot);
+        QVERIFY(store.record(snappedElsewhere));
+        const WindowPlacement tiledBefore = *store.peekExact(tiledElsewhere.windowId);
+        const WindowPlacement snappedBefore = *store.peekExact(snappedElsewhere.windowId);
 
         QSignalSpy sizeSpy(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
         QSignalSpy geomSpy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        QSignalSpy outputMoveSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
         int x = 0;
         int y = 0;
         int w = 0;
@@ -402,7 +419,14 @@ private Q_SLOTS:
             QVERIFY2(call.at(6).toString() != QStringLiteral("DP-2"),
                      "the window must not be sent to the other output");
         }
-        QVERIFY(store.peekExact(QStringLiteral("reopenapp|old")).has_value());
+        QCOMPARE(outputMoveSpy.count(), 0);
+        QCOMPARE(routedOpens, 0);
+        const auto tiledAfter = store.peekExact(tiledElsewhere.windowId);
+        const auto snappedAfter = store.peekExact(snappedElsewhere.windowId);
+        QVERIFY(tiledAfter.has_value());
+        QVERIFY(snappedAfter.has_value());
+        QVERIFY2(tiledAfter->sameContentAs(tiledBefore), "the tiled record is left as it was");
+        QVERIFY2(snappedAfter->sameContentAs(snappedBefore), "the snapped record is left as it was");
     }
     void testEmitRouteToDesktop_matchedButUnusableTargetStillReportsAMatch()
     {
@@ -792,11 +816,12 @@ private Q_SLOTS:
     }
 
     // The bool verdict of applyOpenScreenRouting and the directiveMatched
-    // out-param of applyOpenRoutingForTiling gate the reopen claim
-    // on their respective channels. Both must report "a directive matched"
-    // for the cases where a rule OWNS the window's monitor but no move is
-    // needed or possible — reading those as "no rule" is what let the two
-    // channels apply opposite precedence to the same rule.
+    // out-param of applyOpenRoutingForTiling both report "a directive
+    // matched" for the cases where a rule OWNS the window's monitor but no
+    // move is needed or possible. The tiling channel's answer vetoes its
+    // reopen claim (dispatchOpenToClaimingEngine); the snap channel's bool
+    // gates no claim and is pinned so the two channels keep one reading of
+    // the same rule.
     void testRoutingVerdicts_matchedButNoMove_reportMatchedOnBothChannels()
     {
         PhosphorScreens::FakePhysicalScreenSource fake;
@@ -844,9 +869,9 @@ private Q_SLOTS:
         bool matched = false;
         const QString routed = wta->applyOpenRoutingForTiling(w, QStringLiteral("DP-1"), &matched);
         QVERIFY2(routed.isEmpty(), "already on target: no redirect");
-        QVERIFY2(matched, "…but the directive matched, so the claim must be vetoed on this channel too");
+        QVERIFY2(matched, "…but the directive matched, so the tiling channel's claim is vetoed");
 
-        // NO RULE AT ALL: both channels report unmatched, so the claim runs.
+        // NO RULE AT ALL: both channels report unmatched, so the tiling claim runs.
         wta->setWindowMetadata(QStringLiteral("inst4"), QStringLiteral("otherapp"), QString(), QString(), QString(), 0,
                                0, QString(), 0, QVariantMap());
         const QString other = QStringLiteral("otherapp|inst4");

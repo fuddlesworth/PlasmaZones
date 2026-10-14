@@ -213,7 +213,7 @@ private Q_SLOTS:
     }
 
     // A stale entry (filed before its monitor moved, so off the screen now)
-    // no longer blocks a first capture. On HEAD first-capture-wins kept it.
+    // no longer blocks a first capture, which first-capture-wins used to keep.
     void staleEntryDoesNotBlockFirstCapture()
     {
         seedFloatBack(kRight, kRight, QRect(100, 100, 300, 200));

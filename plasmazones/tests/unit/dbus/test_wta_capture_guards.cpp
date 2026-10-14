@@ -480,8 +480,11 @@ private Q_SLOTS:
         // The minimize preserve downgrades a slot recorded on DP-2 when the
         // window closes on DP-1; the stored record keeps none of DP-2's
         // per-desktop zones, which the store's merge used to put back (F282).
+        // DP-2 is a live output, so the record names a real other screen and
+        // not an unplugged one.
         PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        fake.addScreen(QStringLiteral("DP-2"), QRect(3072, 0, 1920, 1080), QStringLiteral("DP-2"));
         PhosphorScreens::ScreenManager screenMgr(
             PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();

@@ -6,8 +6,9 @@
  * @brief What a window leaving a desktop or activity takes with it: the
  *        record's snap slot when the membership pass releases it onto a
  *        desktop snap does not run, and the desktop and activity prunes of a
- *        window still open there. Same fixture shape as
- *        test_snap_desktop_membership.
+ *        window still open there. Also the stores a desktop removal, insert or
+ *        reorder renumbers, and a window on several activities keeping its
+ *        zone in each. Same fixture shape as test_snap_desktop_membership.
  */
 
 #include <QGuiApplication>

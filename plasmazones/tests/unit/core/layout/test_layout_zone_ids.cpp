@@ -66,8 +66,8 @@ private Q_SLOTS:
     void load_reissuesZoneIdsTakenByAnotherLayout()
     {
         const QStringList shared = {QUuid::createUuid().toString(), QUuid::createUuid().toString()};
-        writeLayoutFile(kOriginalId, QStringLiteral("Original"), shared);
-        writeLayoutFile(kCopyId, QStringLiteral("Copy"), shared);
+        QVERIFY(writeLayoutFile(kOriginalId, QStringLiteral("Original"), shared));
+        QVERIFY(writeLayoutFile(kCopyId, QStringLiteral("Copy"), shared));
 
         QObject owner;
         PhosphorZones::LayoutRegistry* registry = loadedRegistry(&owner);
@@ -92,9 +92,9 @@ private Q_SLOTS:
     void load_copyUnderAnotherNameIsReplacedByItsLayoutFile()
     {
         const QStringList shared = {QUuid::createUuid().toString(), QUuid::createUuid().toString()};
-        writeLayoutFile(kOriginalId, QStringLiteral("Original"), shared);
+        QVERIFY(writeLayoutFile(kOriginalId, QStringLiteral("Original"), shared));
         const QString copyPath = m_layoutDir + QStringLiteral("/my-copy.json");
-        writeJson(copyPath, layoutJson(kCopyId, QStringLiteral("Copy"), shared));
+        QVERIFY(writeJson(copyPath, layoutJson(kCopyId, QStringLiteral("Copy"), shared)));
 
         QObject owner;
         const QStringList reissued = zoneIdsOf(loadedRegistry(&owner), kCopyId);
@@ -109,12 +109,12 @@ private Q_SLOTS:
     void import_reissuesTakenZoneIds()
     {
         const QStringList shared = {QUuid::createUuid().toString()};
-        writeLayoutFile(kOriginalId, QStringLiteral("Original"), shared);
+        QVERIFY(writeLayoutFile(kOriginalId, QStringLiteral("Original"), shared));
         QObject owner;
         PhosphorZones::LayoutRegistry* registry = loadedRegistry(&owner);
 
         const QString picked = m_guard->dataPath() + QStringLiteral("/picked.json");
-        writeJson(picked, layoutJson(kCopyId, QStringLiteral("Picked"), shared));
+        QVERIFY(writeJson(picked, layoutJson(kCopyId, QStringLiteral("Picked"), shared)));
         PhosphorZones::Layout* imported = registry->importLayout(picked);
         QVERIFY(imported);
         QCOMPARE(imported->zones().size(), 1);
@@ -269,11 +269,15 @@ private:
         return ids;
     }
 
-    static void writeJson(const QString& path, const QJsonObject& json)
+    /// False when the file cannot be written, so the caller's QVERIFY ends the row.
+    static bool writeJson(const QString& path, const QJsonObject& json)
     {
         QFile file(path);
-        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        file.write(QJsonDocument(json).toJson());
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            return false;
+        }
+        const QByteArray bytes = QJsonDocument(json).toJson();
+        return file.write(bytes) == bytes.size();
     }
 
     QString fileFor(const QString& layoutId) const
@@ -282,9 +286,9 @@ private:
             + QStringLiteral(".json");
     }
 
-    void writeLayoutFile(const QString& layoutId, const QString& name, const QStringList& zoneIds)
+    bool writeLayoutFile(const QString& layoutId, const QString& name, const QStringList& zoneIds)
     {
-        writeJson(fileFor(layoutId), layoutJson(layoutId, name, zoneIds));
+        return writeJson(fileFor(layoutId), layoutJson(layoutId, name, zoneIds));
     }
 
     QStringList zoneIdsOnDisk(const QString& layoutId) const

@@ -6,9 +6,10 @@
  * @brief Regression tests for the reactive metadataChanged path.
  *
  * WindowTrackingAdaptor subscribes to WindowRegistry::metadataChanged in
- * setWindowRegistry(). The handler
- * must update internal class tracking but NEVER retroactively unsnap,
- * re-snap, or re-evaluate rules on committed state.
+ * setWindowRegistry(), once for the shell-surface mirror and once for the
+ * class retag this file pins. The retag handler must update internal class
+ * tracking but NEVER retroactively unsnap, re-snap, or re-evaluate rules on
+ * committed state.
  *
  * Concretely: lastUsedZoneClass is a human-readable tag stamped on the
  * last-used-zone tracking when a user snaps a window. If that window later

@@ -16,6 +16,7 @@
 
 #include "wta_convenience_fixture.h"
 
+#include <PhosphorContext/IContextResolver.h>
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
@@ -31,6 +32,61 @@ struct Answer
 };
 } // namespace
 
+// Named, not anonymous: the test class below holds one as a member.
+namespace WtaDesktopArrivalTest {
+/// Answers MonitorDisabled for the screens in m_disabled.
+class ScreenDisablingResolver : public PhosphorContext::IContextResolver
+{
+public:
+    QSet<QString> m_disabled;
+
+    PhosphorContext::ContextHandle handleFor(const QString& screenId) const override
+    {
+        PhosphorContext::ContextHandle h;
+        h.screenId = screenId;
+        return h;
+    }
+    PhosphorContext::ContextHandle globalHandle() const override
+    {
+        return {};
+    }
+    PhosphorContext::ContextHandle handleForMode(const QString& screenId,
+                                                 PhosphorZones::AssignmentEntry::Mode mode) const override
+    {
+        PhosphorContext::ContextHandle h;
+        h.screenId = screenId;
+        h.mode = mode;
+        return h;
+    }
+    PhosphorContext::ContextHandle handleForPersisted(const QString& screenId, int virtualDesktop,
+                                                      const QString& activity) const override
+    {
+        PhosphorContext::ContextHandle h;
+        h.screenId = screenId;
+        h.virtualDesktop = virtualDesktop;
+        h.activity = activity;
+        return h;
+    }
+    int currentVirtualDesktop() const override
+    {
+        return 1;
+    }
+    QString currentActivity() const override
+    {
+        return QString();
+    }
+    PhosphorContext::DisabledReason disabledReason(const PhosphorContext::ContextHandle& h) const override
+    {
+        return m_disabled.contains(h.screenId) ? PhosphorContext::DisabledReason::MonitorDisabled
+                                               : PhosphorContext::DisabledReason::NotDisabled;
+    }
+    bool isLocked(const PhosphorContext::ContextHandle&) const override
+    {
+        return false;
+    }
+};
+} // namespace WtaDesktopArrivalTest
+
 class TestWtaDesktopArrival : public QObject, protected WtaConvenienceFixture
 {
     Q_OBJECT
@@ -45,6 +101,8 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_snapAdaptor->setContextResolver(nullptr);
+        m_resolver.m_disabled.clear();
         m_wta->setRuleStore(nullptr);
         m_wta->setWindowRegistry(nullptr);
         m_store.reset();
@@ -73,6 +131,22 @@ private Q_SLOTS:
         QVERIFY(!resolve(w, RestoreReason::DesktopReapply).shouldSnap);
     }
 
+    // (c) A floating window's zones are its pre-float memory: the arrival
+    // re-applies none of them, though the context's store still lists one.
+    void aFloatingWindowsZoneIsNotReapplied()
+    {
+        const QString w = QStringLiteral("app|arrival-floating");
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[1], m_screenId, 1);
+        PhosphorSnapEngine::SnapState* const state = m_snapEngine->stateForWindowOnScreen(w, m_screenId, 1);
+        QVERIFY(state);
+        state->setFloating(w, true);
+        QCOMPARE(state->zoneForWindow(w), m_zoneIds[1]);
+        QVERIFY(!resolve(w, RestoreReason::DesktopReapply).shouldSnap);
+
+        state->setFloating(w, false);
+        QVERIFY2(resolve(w, RestoreReason::DesktopReapply).shouldSnap, "control: unfloated, the zone is re-applied");
+    }
+
     // (d) A screen a tiling engine runs gets nothing from the snap arm.
     void aTilingScreenGetsNothing()
     {
@@ -92,6 +166,19 @@ private Q_SLOTS:
         m_settings->setSnappingEnabled(false);
         QVERIFY(!resolve(w, RestoreReason::DesktopReapply).shouldSnap);
         m_settings->setSnappingEnabled(true);
+    }
+
+    // (f) Nor does a context the user disabled PlasmaZones in.
+    void aDisabledContextGetsNothing()
+    {
+        const QString w = QStringLiteral("app|arrival-disabled");
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[1], m_screenId, 1);
+        m_snapAdaptor->setContextResolver(&m_resolver);
+        m_resolver.m_disabled.insert(m_screenId);
+        QVERIFY(!resolve(w, RestoreReason::DesktopReapply).shouldSnap);
+
+        m_resolver.m_disabled.clear();
+        QVERIFY2(resolve(w, RestoreReason::DesktopReapply).shouldSnap, "control: enabled, the zone is re-applied");
     }
 
     // A re-apply park re-applies the held zone like the arrival does.
@@ -166,6 +253,7 @@ private:
     }
 
     std::unique_ptr<PhosphorRules::RuleStore> m_store;
+    WtaDesktopArrivalTest::ScreenDisablingResolver m_resolver;
 };
 
 QTEST_MAIN(TestWtaDesktopArrival)
