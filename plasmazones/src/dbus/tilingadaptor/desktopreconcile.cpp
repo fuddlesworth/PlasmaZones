@@ -12,6 +12,9 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 
+#include <algorithm>
+#include <utility>
+
 namespace PlasmaZones {
 
 namespace {
@@ -218,6 +221,51 @@ void TilingAdaptor::reconcileDesktopMemberships(const QString& screenId)
     }
     for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_membershipEngines)) {
         applyMembershipResult(engine, /*lifecycleEngine=*/false, engine->reconcileDesktopMemberships(screenId, spanOf));
+    }
+}
+
+void TilingAdaptor::noteRenumberEvictees(const QStringList& candidates, const QSet<int>& removedDesktops)
+{
+    m_renumberEvictees.clear();
+    if (removedDesktops.isEmpty()) {
+        return;
+    }
+    for (const QString& windowId : candidates) {
+        for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
+            const std::optional<PhosphorEngine::PlacementStateKey> key = engine->heldKeyForWindow(windowId);
+            if (key && removedDesktops.contains(key->desktop)) {
+                // Read now: the prune drops the engine's minimum size with the window.
+                m_renumberEvictees.append({windowId, key->screenId, engine->windowMinimumSize(windowId)});
+                break;
+            }
+        }
+    }
+}
+
+void TilingAdaptor::readoptRenumberEvictees(const InViewTest& inView)
+{
+    const QList<RenumberEvictee> evictees = std::exchange(m_renumberEvictees, {});
+    if (!inView || !m_windowRegistry) {
+        return;
+    }
+    for (const RenumberEvictee& evictee : evictees) {
+        const bool held = std::any_of(m_lifecycleEngines.cbegin(), m_lifecycleEngines.cend(), [&](auto* engine) {
+            return engine->isWindowTracked(evictee.windowId);
+        });
+        const bool managed = std::any_of(m_lifecycleEngines.cbegin(), m_lifecycleEngines.cend(), [&](auto* engine) {
+            return engine->isActiveOnScreen(evictee.screenId);
+        });
+        if (held || !managed) {
+            continue;
+        }
+        const auto meta = m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(evictee.windowId));
+        if (!meta || meta->isMinimized.value_or(false) || !inView(evictee.screenId, spanFor(*meta, evictee.windowId))) {
+            continue;
+        }
+        qCInfo(lcDbusTiling) << "readoptRenumberEvictees:" << evictee.windowId
+                             << "left a removed desktop for the one in view on" << evictee.screenId;
+        announceWindow("readoptRenumberEvictees", evictee.windowId, evictee.screenId, qMax(0, evictee.minSize.width()),
+                       qMax(0, evictee.minSize.height()), /*focusEligible=*/false);
     }
 }
 

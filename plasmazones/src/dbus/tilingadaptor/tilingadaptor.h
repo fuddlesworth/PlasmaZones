@@ -13,6 +13,7 @@
 #include <QHash>
 #include <QObject>
 #include <QSet>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QVariant>
@@ -166,6 +167,25 @@ public:
     /// Public so the contract is testable directly, without driving a registry
     /// round-trip to reach it.
     void reconcileWindowMembership(const QString& windowId, const PhosphorEngine::DesktopSpan& span);
+
+    /// What decides whether a window is in view: its screen and its registry span.
+    using InViewTest = std::function<bool(const QString& screenId, const PhosphorEngine::DesktopSpan& span)>;
+    /// First half of the removed-desktop re-adoption (F800). KWin moves a
+    /// removed desktop's windows to its successor, but the engines still
+    /// number their states the old way when the daemon's renumber runs, so
+    /// pruneStatesForDesktop releases those windows with the context. Called
+    /// before the renumber's prunes: remembers each of @p candidates a
+    /// lifecycle engine holds on one of @p removedDesktops, with its screen
+    /// and minimum size.
+    void noteRenumberEvictees(const QStringList& candidates, const QSet<int>& removedDesktops);
+    /// Second half, called once the renumber has moved every engine and the
+    /// window registry and each screen has been told the desktop it shows:
+    /// a remembered window no lifecycle engine holds any more, not minimized,
+    /// on a screen a lifecycle engine runs and in view by @p inView, is
+    /// announced again the way windowReannounced announces it. A window out
+    /// of view is left to the desktop switch's re-announce. The list is
+    /// dropped either way, and an empty @p inView only drops it.
+    void readoptRenumberEvictees(const InViewTest& inView);
 
     /// The screen-wide form: every engine gives every window whose span
     /// covers @p screenId's current context a place in it and takes back the
@@ -386,12 +406,12 @@ public Q_SLOTS:
     /**
      * @brief Drop a LIVE window from engine tracking without a close
      *
-     * The drag-bypass revert's tracking drop (the effect's drag_snap /
-     * lifecycle_wiring transitions) and the effect's desktop arms. The
-     * desktop-membership reconcile is a further caller and goes through the
-     * private overload below.
+     * The effect's tracking drops for a window that stays open, such as one
+     * crossing to another output or desktop, floated onto another screen, or
+     * no longer tileable. The desktop-membership reconcile is a further
+     * caller and goes through the private overload below.
      * Unlike windowClosed, NO placement capture runs: the window is not
-     * dying, and its current frame is transient drag state that must never be
+     * dying, and its current frame is transient state that must never be
      * recorded as a float-back.
      *
      * The owning engine is resolved by window id, which is right for these
@@ -717,6 +737,14 @@ private:
     /// reconcileWindowMembership.
     void applyMembershipResult(PhosphorEngine::IPlacementEngine* engine, bool lifecycleEngine,
                                const PhosphorEngine::MembershipReconcileResult& result);
+    /// A window noteRenumberEvictees found on a removed desktop.
+    struct RenumberEvictee
+    {
+        QString windowId;
+        QString screenId;
+        QSize minSize;
+    };
+    QList<RenumberEvictee> m_renumberEvictees;
     /// Last floating state broadcast per window (the dedup gate's memory).
     QHash<QString, bool> m_lastFloatBroadcast;
     /// Last per-window tab-colour map relayed by relayScrollTabColorsForWindow

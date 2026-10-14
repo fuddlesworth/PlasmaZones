@@ -21,6 +21,7 @@
 #include <QObject>
 #include <QTest>
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -671,6 +672,57 @@ private Q_SLOTS:
         f.engine.cancelDragInsertPreview();
         QCoreApplication::processEvents();
         QVERIFY(f.engine.heldKeyForWindow(kWindow).has_value());
+    }
+
+    // F800: KWin moves a removed desktop's windows to its successor, while the
+    // engines still key them under the removed number when the daemon's
+    // renumber runs, so the prune releases them with the context. The two
+    // halves around the renumber hand a window in view back to the engine, in
+    // the context its screen shows under the new numbering. Mutation: drop
+    // readoptRenumberEvictees' announce and the window stays untracked.
+    void autotile_removedDesktopsWindowInView_isReadopted()
+    {
+        AutotileFixture f;
+        f.openOn(2, {kWindow});
+        QVERIFY(f.engine.isWindowTracked(kWindow));
+
+        // Desktop 2 of 3 goes, as the daemon's renumber handler applies it:
+        // the map through the engine, then the re-seed of the desktop the
+        // screen shows (the successor, which took number 2).
+        f.adaptor.noteRenumberEvictees({kWindow}, {2});
+        f.engine.remapDesktops(PhosphorEngine::DesktopRemap::removal(2, 3));
+        f.engine.setCurrentDesktopForScreen(kScreen, 2);
+        QCoreApplication::processEvents();
+        QVERIFY2(!f.engine.isWindowTracked(kWindow), "the prune releases it with the context");
+
+        // The registry holds the window's push in the new numbering.
+        f.adaptor.readoptRenumberEvictees([](const QString& screenId, const PhosphorEngine::DesktopSpan& span) {
+            return screenId == kScreen && span.coversDesktop(2);
+        });
+        QCoreApplication::processEvents();
+
+        QVERIFY2(f.engine.isWindowTracked(kWindow), "handed back to the engine");
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow).value_or(kNoKey).desktop, 2);
+    }
+
+    // The second half's gate: a window whose successor is out of view is left
+    // for the desktop switch to re-announce. Mutation: drop the inView test and
+    // the window is tiled into the desktop the screen shows instead.
+    void autotile_removedDesktopsWindowOutOfView_waitsForTheSwitch()
+    {
+        AutotileFixture f;
+        f.openOn(2, {kWindow});
+        f.engine.setCurrentDesktopForScreen(kScreen, 1);
+
+        f.adaptor.noteRenumberEvictees({kWindow}, {2});
+        f.engine.remapDesktops(PhosphorEngine::DesktopRemap::removal(2, 3));
+        QCoreApplication::processEvents();
+        f.adaptor.readoptRenumberEvictees([](const QString&, const PhosphorEngine::DesktopSpan& span) {
+            return span.coversDesktop(1);
+        });
+        QCoreApplication::processEvents();
+
+        QVERIFY2(!f.engine.isWindowTracked(kWindow), "out of view: the switch to its desktop re-announces it");
     }
 };
 

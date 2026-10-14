@@ -14,6 +14,7 @@
 #include <QTest>
 #include <QCoreApplication>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QSet>
 #include <QSignalSpy>
 #include <QObject>
@@ -26,6 +27,11 @@
 #include "helpers/AutotileTestHelpers.h"
 #include <PhosphorScreens/Manager.h>
 #include "dbus/tilingadaptor/tilingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/StubSettings.h"
+#include "helpers/StubZoneDetector.h"
 
 #include <functional>
 
@@ -343,6 +349,61 @@ private Q_SLOTS:
         adaptor.onTrackedWindowDestroyed(unrelayed);
         QCOMPARE(scroll.closed.last(), unrelayed);
         QVERIFY2(!autotile.closed.contains(unrelayed), "an engine that never held the window is not told");
+    }
+
+    // A release that ends the window's float closes out the float the
+    // WindowTracking channel last broadcast, or the effect's float cache keeps
+    // a minimize-floated tile moved to another desktop floating. A window
+    // another engine still floats keeps its broadcast (F947).
+    void testReleaseClosesOutTheFloatItEnded()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        auto* layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
+        const auto dropRegistry = qScopeGuard([layoutManager] {
+            delete layoutManager;
+        });
+        QObject parent;
+        StubSettings settings(nullptr);
+        StubZoneDetector zoneDetector(nullptr);
+        auto* wta =
+            new WindowTrackingAdaptor(layoutManager, &zoneDetector, nullptr, &settings, nullptr, nullptr, &parent);
+        RecordingEngine engine;
+        // The engine floats every window it tracks; the set stands in for a
+        // float another engine holds.
+        QSet<QString> floatingElsewhere;
+        // The set, not the engine, is captured: RecordingEngine has internal
+        // linkage, and a lambda capturing it trips -Wsubobject-linkage.
+        wta->service()->setEngineFloatResolver(
+            [tracked = &engine.tracked, &floatingElsewhere](const QString& windowId) {
+                return tracked->contains(windowId) || floatingElsewhere.contains(windowId);
+            });
+        const auto dropResolver = qScopeGuard([wta] {
+            wta->service()->setEngineFloatResolver({});
+        });
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&engine});
+        adaptor.setWindowTrackingAdaptor(wta);
+        QSignalSpy spy(wta, &WindowTrackingAdaptor::windowFloatingChanged);
+        QVERIFY(spy.isValid());
+
+        const QString ended = QStringLiteral("app|minimized");
+        engine.tracked.insert(ended);
+        QVERIFY(wta->relayWindowFloatingChanged(ended, true, QStringLiteral("DP-1")));
+        adaptor.releaseWindowTracking(ended);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.at(1).at(0).toString(), ended);
+        QVERIFY2(!spy.at(1).at(1).toBool(), "the float the release dropped is closed out");
+
+        const QString kept = QStringLiteral("app|kept");
+        engine.tracked.insert(kept);
+        floatingElsewhere.insert(kept);
+        QVERIFY(wta->relayWindowFloatingChanged(kept, true, QStringLiteral("DP-1")));
+        adaptor.releaseWindowTracking(kept);
+        QCOMPARE(spy.count(), 3);
+        QVERIFY2(spy.at(2).at(1).toBool(), "a window still floating elsewhere is not unfloated");
+
+        adaptor.setWindowTrackingAdaptor(nullptr);
     }
 
     void testLiveReleaseDoesNotSuppressTheNextClaimRound()

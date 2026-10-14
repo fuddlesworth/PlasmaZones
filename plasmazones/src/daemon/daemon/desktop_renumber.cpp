@@ -9,6 +9,7 @@
 #include "daemon/daemon.h"
 #include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorEngine/DesktopRemap.h>
@@ -50,80 +51,56 @@ void Daemon::onDesktopsRenumbered(const PhosphorEngine::DesktopRemap& remap)
                        },
                        {}});
 
-    // Scrolling and the window registry take any change through the map
-    // (ScrollEngine::remapDesktops, WindowRegistry::remapDesktops). Snap,
-    // autotile and m_lastEngineOrders still take one removal at a time
-    // (pruneStatesForDesktop + renumberDesktopsAfterRemoval): a change that
-    // only removes desktops is applied as its removals in DESCENDING position
-    // order, which keeps each later position valid: one removal live, several
-    // at once, or what went while the daemon was down. An insert or a move has
-    // no such decomposition; those two engines keep their numbering for it.
-    QList<int> removedPositions;
-    bool removalsOnly = true;
-    int nextSurvivor = 1;
-    for (int oldPosition = 1; oldPosition <= remap.oldCount(); ++oldPosition) {
-        const int newPosition = remap.map(oldPosition);
-        if (newPosition == 0) {
-            removedPositions.prepend(oldPosition);
-        } else if (newPosition == nextSurvivor) {
-            ++nextSurvivor;
-        } else {
-            removalsOnly = false;
-        }
-    }
     // Same ordering the count handler documents: a live preview resolves its
     // state through a create-if-missing lookup, so a cancel arriving after the
     // prune would resurrect a state for the desktop that just went away. Ahead
-    // of every engine change, the scroll remap's prunes included.
+    // of every engine change, the remaps' prunes included.
     if (m_windowDragAdaptor) {
         m_windowDragAdaptor->cancelDragInsertPreviews();
     }
-    if (m_scrollEngine) {
-        m_scrollEngine->remapDesktops(remap);
-    }
-    if (!removalsOnly) {
-        qCWarning(lcDaemon) << "Virtual desktops were inserted or moved: the rules, scrolling and the window records"
-                            << "follow their desktops, snap and autotile per-desktop state keeps its old numbering";
-    } else if (!removedPositions.isEmpty()) {
-        for (const int removedPosition : std::as_const(removedPositions)) {
-            // Prune the removed position, THEN shift everything above it down
-            // one. Both halves are needed and the order is not optional: the
-            // prune leaves the position vacant so the first migration has
-            // somewhere to land.
-            //
-            // Without the shift, every surviving higher state keeps the number
-            // it had before while the compositor reports the new one, and the
-            // desktop-membership reconcile then reads a window that never moved
-            // as having left its desktop.
-            for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_snapEngine.get()}) {
-                if (!engine) {
-                    continue;
-                }
-                engine->pruneStatesForDesktop(removedPosition);
-                engine->renumberDesktopsAfterRemoval(removedPosition);
-            }
-            // The daemon's own desktop-keyed memo moves with them. It is the
-            // window order a mode toggle re-seeds from, so leaving it on the
-            // old numbering would hand the desktop that inherits a number the
-            // order belonging to the one before it, and the deleted desktop's
-            // own order would sit under the number its successor now uses.
-            // Built fresh so an entry shifting down cannot land on one not yet
-            // visited.
-            QHash<TilingStateKey, QStringList> renumberedOrders;
-            renumberedOrders.reserve(m_lastEngineOrders.size());
-            for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
-                TilingStateKey key = it.key();
-                if (key.desktop == removedPosition) {
-                    continue;
-                }
-                if (key.desktop > removedPosition) {
-                    --key.desktop;
-                }
-                renumberedOrders.insert(key, it.value());
-            }
-            m_lastEngineOrders = std::move(renumberedOrders);
+    // KWin has already moved a removed desktop's windows to its successor, and
+    // the effect may have re-announced them there, but every engine still
+    // keys them under the removed number, so the remaps' prunes below release
+    // them with the context. Noted before the first prune and handed back once
+    // everything is renumbered (F800).
+    QSet<int> removedDesktops;
+    for (int oldDesktop = 1; oldDesktop <= remap.oldCount(); ++oldDesktop) {
+        if (remap.map(oldDesktop) == 0) {
+            removedDesktops.insert(oldDesktop);
         }
     }
+    const bool readoptEvictees = m_running && !removedDesktops.isEmpty() && m_tilingAdaptor && m_windowTrackingAdaptor;
+    if (readoptEvictees) {
+        m_tilingAdaptor->noteRenumberEvictees(m_windowTrackingAdaptor->knownWindowIds(), removedDesktops);
+    }
+    // Every engine takes the change through the one map, an insert and a
+    // reorder included: each prunes a removed desktop's state while the
+    // numbers are still the old ones, then moves the rest with their desktops
+    // (IPlacementEngine::remapDesktops). Snap's also moves every engine's
+    // per-desktop zones in the placement records.
+    for (PhosphorEngine::PlacementEngineBase* engine :
+         {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
+        if (engine) {
+            engine->remapDesktops(remap);
+        }
+    }
+    // The daemon's own desktop-keyed memo moves with them. It is the window
+    // order a mode toggle re-seeds from, so leaving it on the old numbering
+    // would hand a desktop the order of the one that had its number. Built
+    // fresh so a moving entry cannot land on one not yet visited; a removed
+    // desktop's order goes.
+    QHash<TilingStateKey, QStringList> remappedOrders;
+    remappedOrders.reserve(m_lastEngineOrders.size());
+    for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
+        TilingStateKey key = it.key();
+        const int to = remap.map(key.desktop);
+        if (to == 0 && key.desktop != 0) {
+            continue;
+        }
+        key.desktop = to;
+        remappedOrders.insert(key, it.value());
+    }
+    m_lastEngineOrders = std::move(remappedOrders);
     // The window records LAST. Each record the remap moves emits
     // metadataChanged, and its subscriber runs the desktop-membership
     // reconcile; with an engine still on the old numbering that reconcile
@@ -145,24 +122,30 @@ void Daemon::onDesktopsRenumbered(const PhosphorEngine::DesktopRemap& remap)
     // renumbered yet. Nothing else re-resolves, so the published active-layout
     // map and the overlays would keep the old answer for every screen whose
     // number moved. Every screen's number is already correct when this runs,
-    // so the re-seed and the diff below resolve against the new numbering.
-    // Not after an insert or a move: snap and autotile kept their old
-    // numbering, and pushing them the new one would resolve each screen to
-    // another desktop's state.
-    if (removalsOnly) {
-        reseedScreenDesktopsAfterRenumber();
-        // A screen that showed a removed desktop now shows its successor,
-        // whose assignment can be snapping: the recompute in the re-seed
-        // demoted it, and nothing else on this path puts the released windows
-        // back on their zones.
-        flushPendingSnapZoneRestores();
+    // for any change, so the re-seed and the diff below resolve against the
+    // new numbering.
+    reseedScreenDesktopsAfterRenumber();
+    // A screen that showed a removed desktop now shows its successor, whose
+    // assignment can be snapping: the recompute in the re-seed demoted it, and
+    // nothing else on this path puts the released windows back on their zones.
+    flushPendingSnapZoneRestores();
+    // After the registry's remap and the re-seed, so a window's span and its
+    // screen's desktop are both in the new numbering: a window in view goes
+    // back to the engine now, one out of view waits for the switch to it.
+    if (readoptEvictees) {
+        m_tilingAdaptor->readoptRenumberEvictees(
+            [this](const QString& screenId, const PhosphorEngine::DesktopSpan& span) {
+                return span.coversDesktop(m_virtualDesktopManager->currentDesktopForScreen(screenId))
+                    && span.coversActivity(
+                        PhosphorWorkspaces::ActivityManager::currentActivityOrEmpty(m_activityManager.get()));
+            });
     }
     diffActiveAssignments();
     if (m_overlayService) {
         m_overlayService->hideDisabledAndRefresh();
     }
-    qCInfo(lcDaemon) << "Virtual desktops renumbered: removed" << removedPositions << "of" << remap.oldCount()
-                     << "desktops; moved the rules, the window records and the states above them";
+    qCInfo(lcDaemon) << "Virtual desktops renumbered:" << remap.oldCount() << "->" << remap.newCount()
+                     << "desktops; moved the rules, every engine's per-desktop state and the window records";
 }
 
 void Daemon::onDesktopCountChanged(int newCount)

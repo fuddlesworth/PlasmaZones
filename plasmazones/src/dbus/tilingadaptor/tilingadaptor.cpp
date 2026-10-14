@@ -954,7 +954,7 @@ void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEn
     }
     // Same bookkeeping as windowClosed — both key forms of the float-relay
     // dedup entry and any parked open go with the tracking — but NO capture:
-    // the window is live and mid-drag, and its frame is not a placement.
+    // the window is live and on its way somewhere, and its frame is not a placement.
     m_lastFloatBroadcast.remove(windowId);
     // The tab-colour relay memo goes too, matching windowClosed and
     // onTrackedWindowDestroyed. It would self-heal on the next relay for
@@ -988,8 +988,21 @@ void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEn
     const QString releasingScreen = owner ? owner->screenForTrackedWindow(windowId) : trackedScreenForWindow(windowId);
     const QVector<PhosphorEngine::IPlacementEngine*> releasing =
         owner ? QVector<PhosphorEngine::IPlacementEngine*>{owner} : enginesTrackingWindow(windowId);
+    const bool floatedBefore = m_windowTrackingAdaptor && m_windowTrackingAdaptor->isWindowFloating(windowId);
     for (PhosphorEngine::IPlacementEngine* engine : releasing) {
         engine->windowClosed(windowId);
+    }
+    // A float the release dropped goes without an edge, so the last broadcast
+    // still says floating and the effect keeps the window in its float cache
+    // (F947: a minimize-floated tile moved to another desktop). Closed out the
+    // way releaseLeftScreens closes out a leave (F716): passive, no geometry
+    // and no capture, and only once no engine floats the window any more. The
+    // suspension classification goes with it.
+    if (floatedBefore && !m_windowTrackingAdaptor->isWindowFloating(windowId)) {
+        if (PhosphorPlacement::WindowTrackingService* service = m_windowTrackingAdaptor->service()) {
+            service->clearSuspensionFloat(windowId);
+        }
+        m_windowTrackingAdaptor->relayWindowFloatingChanged(windowId, false, releasingScreen);
     }
     // A LIVE window released here gets no WindowTracking.windowClosed, so the
     // scroll engine's closed-mid-hold memory (seeded by windowClosed above)

@@ -512,6 +512,12 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         }
         qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:"
                           << windowId;
+        // A window moved here from another desktop while minimized lost its
+        // tracking and its float-back bucket on the way: fold the stash back
+        // before the re-add, as the desktop-switch catch-scan does (F947).
+        if (!m_notifiedWindows.contains(windowId)) {
+            restorePreTileForDesktopMove(windowId, screenId);
+        }
         notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
         return;
     }
