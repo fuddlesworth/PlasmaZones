@@ -7,9 +7,10 @@
  *        when the client has committed the size it was dragged to, what a
  *        held resize crossed, when the neighbour-reflow report is sent, and
  *        when a frame change moved nothing, and where a size restored
- *        mid-move puts the window, whether a move KWin ended was reverted
- *        and where a pointerless drag's grab point is (F486, F701, F248,
- *        F702, F752, F774).
+ *        mid-move puts the window, whether a move KWin ended was reverted,
+ *        where a pointerless drag's grab point is, and how a drag's held
+ *        crossing settles at the drop (F486, F701, F248, F702, F752, F774,
+ *        F713, F731).
  */
 
 #include "plasmazoneseffect/gestureenddecisions.h"
@@ -124,6 +125,47 @@ private Q_SLOTS:
     void frameUnderGrab_emptyFrameKeepsTheTopLeft()
     {
         QCOMPARE(frameUnderGrab(QRectF(30, 40, 0, 0), QPointF(500, 500), QSize(200, 100)), QRect(30, 40, 200, 100));
+    }
+
+    // A dragged window's crossing settles once at the drop, by what the drop
+    // did (F713, F731): a float is never announced where it lands.
+    void settleDragCrossing_floatTracksOnly()
+    {
+        QCOMPARE(settleDragCrossing(DropAnswer::Floated, /*tracked=*/true, /*landedManaged=*/true),
+                 DragCrossingSettle::TrackOnly);
+        QCOMPARE(settleDragCrossing(DropAnswer::Floated, /*tracked=*/false, /*landedManaged=*/true),
+                 DragCrossingSettle::TrackOnly);
+    }
+    // The daemon re-inserted a tracked window: no release relay (F753).
+    void settleDragCrossing_daemonPlacedTrackedReKeys()
+    {
+        QCOMPARE(settleDragCrossing(DropAnswer::DaemonPlaced, /*tracked=*/true, /*landedManaged=*/true),
+                 DragCrossingSettle::ReKeyOnly);
+    }
+    // A plain drop onto a tiling monitor floats there (l18_plain_drop_on_tiling):
+    // tracked, never announced.
+    void settleDragCrossing_daemonPlacedUntrackedTracksOnly()
+    {
+        QCOMPARE(settleDragCrossing(DropAnswer::DaemonPlaced, /*tracked=*/false, /*landedManaged=*/true),
+                 DragCrossingSettle::TrackOnly);
+    }
+    void settleDragCrossing_daemonPlacedOnSnappingRunsBody()
+    {
+        QCOMPARE(settleDragCrossing(DropAnswer::DaemonPlaced, /*tracked=*/true, /*landedManaged=*/false),
+                 DragCrossingSettle::RunBody);
+    }
+    void settleDragCrossing_snapRunsBody()
+    {
+        QCOMPARE(settleDragCrossing(DropAnswer::Snapped, /*tracked=*/true, /*landedManaged=*/false),
+                 DragCrossingSettle::RunBody);
+    }
+    // No answer: the crossing runs as it did mid-drag, once, and is reported.
+    void settleDragCrossing_unansweredRunsBodyAndReports()
+    {
+        QCOMPARE(settleDragCrossing(DropAnswer::Unanswered, /*tracked=*/true, /*landedManaged=*/true),
+                 DragCrossingSettle::RunBodyAndReport);
+        QCOMPARE(settleDragCrossing(DropAnswer::Unanswered, /*tracked=*/false, /*landedManaged=*/true),
+                 DragCrossingSettle::RunBodyAndReport);
     }
 };
 

@@ -119,9 +119,15 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // X11 arm intact for the mover it exists for (a client moving ITSELF, the
     // Wine case) while exempting the one frame change that is never an
     // external mover on either platform.
+    // A NON-member asking for a maximize is in a transition too: on X11 KWin
+    // moves it to the work area before the interception hands the request to
+    // the engine, and countering that frame bounced it back to its column
+    // (F973).
     KWin::Window* kwCounter = w->window();
-    const bool inMaximizeTransition = kwCounter && m_maximizedToEdgesWindows.contains(windowId)
-        && kwCounter->requestedMaximizeMode() != KWin::MaximizeFull;
+    // The mode each one rests in: a member maximized, anything else restored.
+    const KWin::MaximizeMode modeAtRest =
+        m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
+    const bool inMaximizeTransition = kwCounter && kwCounter->requestedMaximizeMode() != modeAtRest;
     const bool externallyMovable = !inMaximizeTransition
         && (!w->isWaylandClient()
             || (kwCounter && m_maximizedToEdgesWindows.contains(windowId)
@@ -131,8 +137,10 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // before the strip's release lands) owns the window now (F71). Nor while
     // the outputs are changing or the strip's output has moved since its
     // batch: the rect is in the old coordinates, and the next batch re-arms
-    // it in the new ones (F815).
-    if (externallyMovable && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()) {
+    // it in the new ones (F815). Nor for a frame KWin moved onto another output
+    // whole (its Move to Screen): a real move, which the output arm hands over (F738).
+    if (externallyMovable && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()
+        && !isKWinMoveOfStripTile(w, windowId)) {
         const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
         if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(scrollTrackedScreenFor(windowId))
             && m_effect->m_daemonGate.commandStamps.isCurrent(w, cit->commandStamp)

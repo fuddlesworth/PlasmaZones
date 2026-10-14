@@ -125,8 +125,8 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                 }
                 // Async snap (a restore resolve or the drop auto-fill)
                 // committed — record in snapping's border set, but only for
-                // a resolved snap-mode screen (autotile windows are tracked
-                // by TilingHandler; an empty screen is left untracked,
+                // a resolved snap-mode screen (a tiling screen's windows are
+                // tracked by TilingHandler; an empty screen is left untracked,
                 // mirroring the batch path's discriminator).
                 if (!asyncScr.isEmpty() && !m_tilingHandler->isManagedScreen(asyncScr)) {
                     // Defensive stale-float clear — see the drag-drop

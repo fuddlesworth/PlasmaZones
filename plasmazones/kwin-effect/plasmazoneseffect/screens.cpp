@@ -308,8 +308,9 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w, const QStrin
     // none, so a parked frame resolves to the nearest output, which can be a
     // NEIGHBOUR, and the position-derived resolution below would
     // misattribute the window (wrong minimize routing, wrong close/float
-    // record, wrong Mode stamp). Scroll windows change screens only through
-    // engine-driven handoffs, which update the tracked screen first.
+    // record, wrong Mode stamp). A strip member's screen changes through the
+    // engine's handoffs, which update the tracked screen first, or through a
+    // move KWin makes itself, which the output arm resolves by position (F738).
     // hasScrollingScreens short-circuit keeps the common no-scrolling
     // session on the pure positional path (no id-cache lookups per call).
     // Both invariant gates (tiled membership AND connected output) live in

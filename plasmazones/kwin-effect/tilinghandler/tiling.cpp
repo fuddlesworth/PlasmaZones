@@ -38,7 +38,6 @@
 
 #include <QLoggingCategory>
 #include <QScopeGuard>
-#include <QtMath>
 
 #include <algorithm>
 #include <utility>
@@ -275,15 +274,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                         << "on" << screenId << "— floated, but left at its tile rect";
                 }
                 if (savedGeo.isValid()) {
-                    // Daemon-driven apply: the restored rect may lie in a
-                    // different virtual screen than the tiled rect, and batch
-                    // floats fire in the same swap/rotate window the
-                    // crossing-detection guard below (per-window tile apply)
-                    // protects against. Without the guard, the synchronous
-                    // frameGeometryChanged would resolve the new position
-                    // against stale m_virtualScreenDefs and spuriously
-                    // re-announce the just-floated window.
-                    // Save/restore, not set/clear (nesting-safe).
+                    // Its spot is on its physical monitor, whichever virtual
+                    // screen that is, and it is counted where it lands: on
+                    // another one, the engine there takes it floating, before
+                    // the apply (l18_overflow_float_physical, F310).
+                    const QPoint restoredCentre = savedGeo.toRect().center();
+                    const QString restoredScreen =
+                        m_effect->resolveEffectiveScreenId(restoredCentre, KWin::effects->screenAt(restoredCentre));
+                    if (!restoredScreen.isEmpty() && restoredScreen != screenId) {
+                        floatOntoScreen(floatWin, floatWindowId, savedGeo, screenId, restoredScreen);
+                    }
+                    // The restored rect may lie in another virtual screen, and
+                    // batch floats fire in the swap/rotate window the tile
+                    // apply's crossing guard covers: unguarded, the synchronous
+                    // frame change resolves against stale m_virtualScreenDefs
+                    // and re-announces the window. Save/restore (nesting-safe).
                     const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
                     m_effect->m_daemonGate.inGeometryApply = true;
                     const auto floatGuard = qScopeGuard([this, prevInApply] {
@@ -293,17 +298,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
                                                   PhosphorAnimation::ProfilePaths::WindowPlaceOut);
-                    // Re-seed the tracked screen from the restored rect, which
-                    // may lie in another virtual screen: the bracket held the
-                    // detectors' write and the apply has not landed, so the
-                    // frame still reads the tile (F152), and the notified screen
-                    // with it: the per-frame virtual-screen detector diffs
-                    // against m_notifiedWindowScreens, and a stale one hands the
-                    // floated window to the other virtual screen's engine as a
-                    // tile (F310).
-                    const QPoint restoredCentre = savedGeo.toRect().center();
-                    const QString restoredScreen =
-                        m_effect->resolveEffectiveScreenId(restoredCentre, KWin::effects->screenAt(restoredCentre));
+                    // Re-seed the tracked screen from the restored rect: the
+                    // bracket held the detectors' write and the apply has not
+                    // landed, so the frame still reads the tile (F152). The
+                    // notified screen too, which the per-frame virtual-screen
+                    // detector diffs against: a stale one hands the floated
+                    // window to the other virtual screen's engine as a tile.
                     m_effect->m_trackedScreenPerWindow[floatWin] = restoredScreen;
                     if (m_notifiedWindows.contains(floatWindowId)) {
                         m_notifiedWindowScreens[floatWindowId] = restoredScreen;
@@ -1207,18 +1207,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 qCInfo(lcEffect) << "Autotile apply: window closed before its apply, skipping" << snap.windowId;
                 return;
             }
-            // Suppress the windowFrameGeometryChanged crossing-detection paths for the
-            // duration of this per-window apply. applyWindowGeometry's moveResize emits
-            // frameGeometryChanged synchronously, and after a VS swap/rotate the cached
-            // m_virtualScreenDefs may still hold pre-rotation regions — without this
-            // guard the per-frame detector in slotWindowFrameGeometryChanged would read
-            // a false virtual-screen crossing off the stale boundaries and transfer the
-            // window to the neighbouring virtual screen's engine.
-            // Save/restore, not set/clear (nesting-safe).
+            // No crossing detection during this apply: its moveResize emits frameGeometryChanged
+            // synchronously, and after a VS swap/rotate the per-frame detector would read a false
+            // crossing off stale m_virtualScreenDefs and hand the window to the neighbour's engine.
+            // A heartbeat view tick's applies log at debug (F100). Save/restore (nesting-safe).
             const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+            const bool prevQuiet =
+                std::exchange(m_effect->m_daemonGate.quietApplyLog, immediateViewScreens.contains(snap.screenId));
             m_effect->m_daemonGate.inGeometryApply = true;
-            const auto guard = qScopeGuard([this, prevInApply] {
+            const auto guard = qScopeGuard([this, prevInApply, prevQuiet] {
                 m_effect->m_daemonGate.inGeometryApply = prevInApply;
+                m_effect->m_daemonGate.quietApplyLog = prevQuiet;
             });
             endFullscreenOfArrivingTile(snap.windowId, snap.window, snap.screenId, snap.geometry); // F526
             // Pre-seed the effect's tracked screen (mirrors daemon_apply's
@@ -1759,16 +1758,22 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         || columnClaimHandedOver || evacueeClaimReturned) {
                         m_monocleMaximizedWindows.insert(snap.windowId);
                     }
-                    // A batch that re-asserts monocle for this window owes it a
-                    // MAXIMIZE again, whatever a mid-drag release recorded
-                    // earlier — the engine has changed its mind inside the
-                    // gesture, and the gesture end must re-drive, not restore.
+                    // A claim whose restore rect KWin recorded on another monitor (a column handed over from a
+                    // strip there, a maximize taken before the move landed) is re-seated at this tile, as a snap
+                    // seats its zone, so un-maximizing it here does not send it back there (F1011).
+                    const KWin::LogicalOutput* const tileOutput = KWin::effects->screenAt(snap.geometry.center());
+                    if (tileOutput && m_monocleMaximizedWindows.contains(snap.windowId)
+                        && !ScrollDecisions::restoreRectOnOutput(QRectF(kw->geometryRestore()),
+                                                                 QRectF(QRect(tileOutput->geometry())))) {
+                        kw->setGeometryRestore(KWin::RectF(snap.geometry));
+                    }
+                    // A batch that re-asserts monocle for this window owes it a MAXIMIZE again, whatever a mid-drag
+                    // release recorded earlier: the engine has changed its mind inside the gesture, and the gesture
+                    // end must re-drive, not restore.
                     m_monocleRestoreOwed.remove(snap.windowId);
-                    // The column arm's departure-rect fix: maximize() already
-                    // moved the window, so a leg from the live frame animates
-                    // nothing; the windowMaximizedStateAboutToChange capture
-                    // still holds the pre-monocle rect. Only when this arm's
-                    // maximize() ran AND changed state (else it emits nothing
+                    // The column arm's departure-rect fix: maximize() already moved the window, so a leg from the
+                    // live frame animates nothing; the windowMaximizedStateAboutToChange capture still holds the
+                    // pre-monocle rect. Only when this arm's maximize() ran AND changed state (else it emits nothing
                     // and the capture is stale).
                     QRectF monocleOrigin;
                     if (monocleBitWritten) {
@@ -1777,17 +1782,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             monocleOrigin = preMaximize;
                         }
                     }
-                    // A PLACEMENT, on the placement node, like every other
-                    // geometry this batch commits. Setting KWin's maximize bit
-                    // is how monocle gets the work-area rect, borderless
-                    // handling and a sane restore rect; it is a mechanism, not
-                    // a statement that the user maximized anything, and the node
-                    // a user assigns "Maximized" to must not play for a retile.
-                    // What the bit write DOES change is the departure rect,
-                    // anchored above at the captured pre-maximize frame when
-                    // this arm wrote it, because maximize() has already moved
-                    // the window and a leg from the live frame would animate
-                    // nothing.
+                    // A PLACEMENT, on the placement node, like every other geometry this batch commits. Setting
+                    // KWin's maximize bit is how monocle gets the work-area rect, borderless handling and a sane
+                    // restore rect; it is a mechanism, not a statement that the user maximized anything, and the
+                    // node a user assigns "Maximized" to must not play for a retile. What the bit write DOES change
+                    // is the departure rect, anchored above at the captured pre-maximize frame when this arm wrote
+                    // it, because maximize() has already moved the window and a leg from the live frame would
+                    // animate nothing.
                     m_effect->applyWindowGeometry(snap.window, snap.geometry, /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
                                                   PhosphorAnimation::ProfilePaths::WindowPlaceIn, monocleOrigin);
@@ -1795,11 +1796,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_effect->applyWindowGeometry(snap.window, snap.geometry);
                 }
             } else {
-                // True only when THIS call handed KWin's maximize bit back for
-                // a window PlasmaZones itself maximized for monocle. It anchors
-                // the geometry apply below at the captured pre-restore rect, the
-                // same departure the column Release arm gets through
-                // maximizeBitWrittenThisBatch.
+                // True only when THIS call handed KWin's maximize bit back for a window PlasmaZones itself
+                // maximized for monocle. It anchors the geometry apply below at the captured pre-restore rect,
+                // the same departure the column Release arm gets through maximizeBitWrittenThisBatch.
                 const bool monocleBitReleased = unmaximizeMonocleWindow(snap.windowId);
                 if (monocleBitReleased && snap.window->isWaylandClient()) { // absorb KWin's echo (m_monocleEchoOwed)
                     m_effect->m_shaderManager.armMonocleEcho(snap.window, false);

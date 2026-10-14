@@ -338,8 +338,14 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // Generally useful operationally, and the resolved pixel rect is the one
     // number a support report needs to diagnose zone-geometry bugs (the zone
     // id is logged elsewhere; the resolved rect previously was not). Mirrors
-    // the autotile path, which already logs "Autotile tile request: QRect=".
-    qCInfo(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geo;
+    // the autotile path, which already logs "Autotile tile request: QRect=",
+    // and like it a heartbeat view tick, which re-commits every column at
+    // pointer rate, logs at debug (F100).
+    if (m_daemonGate.quietApplyLog) {
+        qCDebug(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geo;
+    } else {
+        qCInfo(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geo;
+    }
 
     // Capture old frame before moveResize for repaint region.
     const QRectF trueOldFrame = window->frameGeometry();

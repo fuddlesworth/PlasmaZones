@@ -54,9 +54,6 @@
 
 #include <cstdint>
 
-class QAction;
-class QTimer;
-
 namespace KWin {
 class LogicalOutput;
 class EffectWindow;
@@ -94,13 +91,13 @@ public:
     // Integration points (called by PlasmaZonesEffect)
     // ═══════════════════════════════════════════════════════════════════
 
-    /// Returns true when the window was on an autotile screen and the
+    /// Returns true when the window was on a tiling screen and the
     /// announce was sent (the daemon is expected to tile it). Returns false
-    /// when it was filtered out locally (ineligible window, non-autotile
+    /// when it was filtered out locally (ineligible window, non-tiling
     /// screen, already notified): callers that depend on a follow-up tile
     /// must not wait for one (the first-frame open suppression path releases
     /// suppression immediately on a no-op). @p knownFreeFloating governs the
-    /// pre-autotile geometry capture: the genuine open passes `true` (the frame
+    /// pre-tile geometry capture: the genuine open passes `true` (the frame
     /// is KWin's spawn geometry and the FloatingCache is not yet populated, so
     /// the isWindowFloating() guard must be bypassed). RE-ADD callers (a window
     /// already known to the engine being re-announced — cross-screen transfer,
@@ -159,21 +156,18 @@ public:
     /// tile, an arrival a rule excludes), the flags-settle eviction (reevaluateWindowEligibility), and the
     /// cross-output transfer in handleWindowOutputChanged.
     ///
-    /// The relay fires only when @p screenId is managed in the CURRENT
-    /// context. Which desktop's state still lists a window is the daemon's
-    /// question, answered by TilingAdaptor's desktop-membership reconcile off
-    /// the registry desktop set (#1076), so the desktop handler relays only a
-    /// genuine move, after the metadata push.
-    void releaseWindowTracking(const QString& windowId, const QString& screenId);
-    /// Tear down all effect-side autotile tracking for @p windowId (shared +
-    /// KWin-specific state, incl. the pending cross-screen-restore connection)
-    /// WITHOUT notifying the daemon. Shared by onWindowClosed and
-    /// releaseWindowTracking (which add their own daemon call) and the
-    /// cross-mode-move marker path (the daemon already ran handoffRelease).
-    /// No screenId parameter: every container this touches is keyed by
-    /// windowId or swept across all screens (a per-screen prune once left the
-    /// id on the cross-output DESTINATION's stacking order). An evacuee
-    /// passes ClaimScope::Evacuation: its claims are scrubbed, not released.
+    /// The relay fires only when @p screenId is managed in the CURRENT context. Which desktop's state still lists a
+    /// window is the daemon's question, answered by TilingAdaptor's desktop-membership reconcile off the registry
+    /// desktop set (#1076), so the desktop handler relays only a genuine move, after the metadata push. A departure
+    /// passes ClaimScope::LiveDeparture (F675).
+    void releaseWindowTracking(const QString& windowId, const QString& screenId,
+                               ScrollDecisions::ClaimScope scope = ScrollDecisions::ClaimScope::UntrackFunnel);
+    /// Tear down all effect-side autotile tracking for @p windowId (shared + KWin-specific state, incl. the pending
+    /// cross-screen-restore connection) WITHOUT notifying the daemon. Its callers include onWindowClosed and
+    /// releaseWindowTracking (which add their own daemon call) and the cross-mode-move marker path (the daemon
+    /// already ran handoffRelease). No screenId parameter: every container this touches is keyed by windowId or
+    /// swept across all screens (a per-screen prune once left the id on the cross-output DESTINATION's stacking
+    /// order). Claims release by @p scope; an evacuee passes ClaimScope::Evacuation and is scrubbed, not released.
     void cleanupAutotileTracking(const QString& windowId,
                                  ScrollDecisions::ClaimScope scope = ScrollDecisions::ClaimScope::UntrackFunnel);
     /// The settle's evacuee and returned-window verdicts (evacuees.cpp): what
@@ -218,16 +212,10 @@ public:
     void seedUnfloatRetryBudget(const QString& windowId, int attemptsUsed);
     bool hasPendingUnminimizeUnfloat(const QString& windowId) const;
     bool hasUnfloatInFlight(const QString& windowId) const;
-    void clearDesktopMoveStash(const QString& windowId) ///< a destroyed window's stash (only destruction may)
-    {
-        m_desktopMoveStash.forget(windowId);
-    }
+    void clearDesktopMoveStash(const QString& windowId); ///< a destroyed window's stash (only destruction may)
     void deferWindowRouting(KWin::EffectWindow* window);
     /// An announce is in flight (see SnapHandler::hasOpenResolveInFlight).
-    bool announceInFlight(const QString& id) const
-    {
-        return m_announceGen.contains(id);
-    }
+    bool announceInFlight(const QString& id) const;
     /// Flags-settle eviction backstop: re-run the structural placement filters for an already-announced window
     /// whose keep-above, skip-switcher, transient or modal state just changed (WindowFlagEdges::actionsFor), and
     /// release it from its engine (restoring the captured spawn frame) when it is no longer tileable. Wired to
@@ -331,7 +319,14 @@ public:
     void noteFreeGeometryAfterGesture(KWin::EffectWindow* w, bool resized);
     /// The tiling side of a crossing. True when it is the window's own (not a daemon
     /// move's echo nor a strip column's hop), for ScreenChangeHandler::reportCrossing.
-    bool handleWindowOutputChanged(KWin::EffectWindow* w);
+    /// TrackOnly re-adds on the new screen without an announce: a drop the daemon placed (F713, F731).
+    enum class ReAdd {
+        Announce,
+        TrackOnly
+    };
+    bool handleWindowOutputChanged(KWin::EffectWindow* w, ReAdd readd = ReAdd::Announce);
+    /// KWin moved a strip tile to another output itself (ScrollDecisions::isKWinMoveOffStrip, F738).
+    bool isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& windowId) const;
 
     // D-Bus signal connections and settings
     void connectSignals();
@@ -464,6 +459,9 @@ public:
     /// closes it: the gesture end replays geometry only, and the engine emits
     /// on change, so a drag that moves no column schedules no batch.
     void reconcileMaximizeAfterGesture(KWin::EffectWindow* w);
+    /// A monocle member KWin un-maximized during a gesture, settled at its end: kept when KWin re-maximized it,
+    /// else unclaimed, and floated unless @p outcomePlacedIt (F775).
+    void settleMonocleUnmaximizeAfterGesture(KWin::EffectWindow* w, bool outcomePlacedIt);
 
     /// What a releaseAllClaims call actually handed back. Callers gate
     /// follow-up work on it — the passive float shed re-resolves decorations
@@ -955,22 +953,16 @@ public:
         return m_scrollingScreens & m_managedScreens;
     }
 
-    /// Check if a window is tracked by the autotile handler (in m_notifiedWindows).
+    /// Check if a window is tracked by the tiling handler (in m_notifiedWindows).
     bool isTrackedWindow(const QString& windowId) const
     {
         return m_notifiedWindows.contains(windowId);
     }
     /// A window demoted by a desktop switch: still held in its desktop's state.
-    bool isParkedForDesktopReturn(const QString& windowId) const
-    {
-        return m_savedNotifiedForDesktopReturn.contains(windowId);
-    }
+    bool isParkedForDesktopReturn(const QString& windowId) const;
 
     /// The screen a tracked window was last notified on (empty when untracked).
-    QString notifiedScreenFor(const QString& windowId) const
-    {
-        return m_notifiedWindowScreens.value(windowId);
-    }
+    QString notifiedScreenFor(const QString& windowId) const;
     /// Update a tracked window's notified screen when something other than an announce moves it: a placement the
     /// effect applies (snap batches and single applies, snap-assist picks, drops, size restores, the
     /// screen-change re-apply and settle) and a virtual-screen re-resolve. Without it the per-frame VS detector
@@ -1081,8 +1073,8 @@ public Q_SLOTS:
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
     /// Cross-mode transfer entry point over slotWindowMinimizedChanged.
     /// Returns false when the ENTRY GATES would refuse the window
-    /// (unhandleable / not on an autotile screen) WITHOUT forwarding the
-    /// edge; true after forwarding. SnapHandler's became-autotile hand-offs
+    /// (unhandleable / not on a tiling screen) WITHOUT forwarding the
+    /// edge; true after forwarding. SnapHandler's became-tiling hand-offs
     /// must use this instead of the raw slot: a silently refused transfer
     /// left ownership with the sender while the edge was already spent, so
     /// the suspension stranded until the next minimize cycle.
@@ -1352,6 +1344,9 @@ private:
     /// The effect-side half of an announce: track @p w on @p screenId and
     /// file its pre-tile geometry. Returns whether a spawn marker was consumed.
     bool trackWithoutAnnounce(KWin::EffectWindow* w, const QString& screenId, bool knownFreeFloating);
+    /// A batch float whose free rect @p freeRect lies on @p toScreenId floats and is counted there (F310).
+    void floatOntoScreen(KWin::EffectWindow* w, const QString& windowId, const QRectF& freeRect,
+                         const QString& fromScreenId, const QString& toScreenId);
     /// Track a window the daemon placed on @p screenId without announcing it, when it sits there already and passes
     /// the untracked arrival branch's eligibility test (outputchange.cpp). Returns whether it did.
     bool adoptsDaemonArrival(KWin::EffectWindow* w, const QString& screenId);
@@ -1941,6 +1936,7 @@ private:
     /// in slotWindowFullScreenChanged then call unmaximizeMonocleWindow with the gesture flags clear and pay
     /// the debt instead.
     QSet<QString> m_monocleRestoreOwed;
+    QSet<QString> m_monocleUnmaximizedInGesture; ///< restore-on-drag un-maximizes awaiting the gesture's end (F775)
     /// Monocle claims an evacuee held when its output went away, taken back by the first monocle batch after its
     /// return (F685); dropped by a close or a real move (cleanupAutotileTracking) and at bring-up.
     QSet<QString> m_evacueeMonocleClaims;

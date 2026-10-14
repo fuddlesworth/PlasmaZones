@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "gestureenddecisions.h"
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/screenchangehandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
 #include "compositor/effectlogging.h"
@@ -38,6 +40,26 @@ namespace {
 // stall waiting on a reply that may never come. On expiry the window is
 // left at its release position and a warning is logged.
 constexpr int EndDragTimeoutMs = 500;
+
+// What the daemon's answer did with the dragged window, for the drag's held
+// crossing and Monocle settle.
+GestureEndDecisions::DropAnswer dropAnswerFor(PhosphorProtocol::DragOutcome::Action action)
+{
+    using GestureEndDecisions::DropAnswer;
+    switch (action) {
+    case PhosphorProtocol::DragOutcome::ApplyFloat:
+        return DropAnswer::Floated;
+    case PhosphorProtocol::DragOutcome::NoOp:
+    case PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap:
+        return DropAnswer::DaemonPlaced;
+    case PhosphorProtocol::DragOutcome::ApplySnap:
+    case PhosphorProtocol::DragOutcome::RestoreSize:
+        return DropAnswer::Snapped;
+    case PhosphorProtocol::DragOutcome::CancelSnap:
+        return DropAnswer::Unanswered;
+    }
+    return DropAnswer::Unanswered;
+}
 } // namespace
 
 void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled,
@@ -171,11 +193,17 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
         }
     };
     // The one tail of every exit, after the outcome (if any) is applied, so no
-    // exit can skip a step (F667, F734): the suspended tile settles against the
-    // outcome, a held move tail drains, the desktop and activity edits KWin made
-    // during the drag run once against the context the window had (EE), and the
+    // exit can skip a step (F667, F734): a Monocle maximize KWin dropped for
+    // the drag and the screen crossings the drag held settle by what the drop
+    // did (F775, F713, F731), the suspended tile settles against the outcome,
+    // a held move tail drains, the desktop and activity edits KWin made during
+    // the drag run once against the context the window had (EE), and the
     // deferred rule invalidations go last.
-    const auto finishDragExit = [this, safeWindow, settleSuspendedTile, settleMoveTail]() {
+    const auto finishDragExit = [this, safeWindow, settleSuspendedTile,
+                                 settleMoveTail](GestureEndDecisions::DropAnswer answer) {
+        m_tilingHandler->settleMonocleUnmaximizeAfterGesture(safeWindow,
+                                                             answer != GestureEndDecisions::DropAnswer::Unanswered);
+        m_screenChangeHandler->settleDragCrossing(safeWindow, answer);
         settleSuspendedTile();
         settleMoveTail();
         releaseDragContextHold(safeWindow);
@@ -186,7 +214,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // and no call goes out to fail (F573).
     if (!m_daemonGate.serviceRegistered) {
         revertOptimisticDragFloat();
-        finishDragExit();
+        finishDragExit(GestureEndDecisions::DropAnswer::Unanswered);
         return;
     }
 
@@ -230,7 +258,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 // The window still sits wherever the user dropped it, on whatever
                 // screen that is, so a crossing the handlers deferred during the
                 // drag has to be re-resolved even though no outcome ever arrived.
-                finishDragExit();
+                finishDragExit(GestureEndDecisions::DropAnswer::Unanswered);
                 if (watcherGuard) {
                     watcherGuard->deleteLater();
                 }
@@ -276,7 +304,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 if (reply.isError()) {
                     qCWarning(lcEffect) << "endDrag call failed:" << reply.error().message();
                     revertOptimisticDragFloat();
-                    finishDragExit();
+                    finishDragExit(GestureEndDecisions::DropAnswer::Unanswered);
                     return;
                 }
                 const PhosphorProtocol::DragOutcome outcome = reply.value();
@@ -287,7 +315,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     qCWarning(lcEffect) << "endDrag outcome rejected:" << err
                                         << "— dropping without applying any action for" << windowId;
                     revertOptimisticDragFloat();
-                    finishDragExit();
+                    finishDragExit(GestureEndDecisions::DropAnswer::Unanswered);
                     return;
                 }
                 qCInfo(lcEffect) << "endDrag outcome:" << windowId << "action=" << outcome.action
@@ -398,6 +426,13 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // holding the pre-float answer whenever the screen came
                     // back empty.
                     invalidateRuleCacheForStateChange(windowId);
+                    // The crossing the drag held settles here, after the float
+                    // cleanup (a strip member answers by position only once it
+                    // is off the strip) and before the float send: its release
+                    // relay must reach the daemon first, or a drag between two
+                    // screens of one engine floats the window inside the one
+                    // it left (float.cpp's dest->isWindowTracked test, F731).
+                    m_screenChangeHandler->settleDragCrossing(safeWindow, GestureEndDecisions::DropAnswer::Floated);
                     // Resolve the drop screen only AFTER the float cleanup
                     // above cleared tiled membership: while the window was
                     // still scroll-tiled, getWindowScreenId answers from the
@@ -639,7 +674,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 // It is the last step of the exit tail, after the outcome just
                 // applied and any rescue, whose cancel fires the move's finish
                 // inside this reply.
-                finishDragExit();
+                finishDragExit(dropAnswerFor(outcome.action));
 
                 // Auto-fill: if window was dropped without snapping to a
                 // zone and wasn't floated, try the first empty zone on the

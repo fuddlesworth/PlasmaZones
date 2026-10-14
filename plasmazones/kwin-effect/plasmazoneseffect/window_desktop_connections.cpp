@@ -129,7 +129,7 @@ void PlasmaZonesEffect::runContextEdit(KWin::EffectWindow* window, ResizeHold::C
     // drives (the tiling per-key release and in-view adopt, the snap carry),
     // must see the new desktop or activity set before any notice this edit
     // sends, so the push leads (F293). The sticky report goes first because
-    // the reconcile's autotile adopt reads it. This is the only push for a
+    // the reconcile's tiling adopt reads it. This is the only push for a
     // desktop edit.
     pushWindowMetadata(window);
     // The arms below adopt or drain by the exclusion verdict, which must be
@@ -205,12 +205,14 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
             // Only a genuine move relays a release, and after the metadata it
             // finds nothing the reconcile left. Unchecking the desktop in view,
             // or an un-stick onto a hidden desktop, keeps the window's other
-            // keys, which a relay would take (F399, F581).
+            // keys, which a relay would take (F399, F581). Either way the window
+            // lives on off-screen, so its claims go back, the monocle maximize
+            // too (F675); the other effect-only releases below hold none here.
             tiling->savePreTileForDesktopMove(windowId);
             if (edge.genuineMove) {
-                tiling->releaseWindowTracking(windowId, screenId);
+                tiling->releaseWindowTracking(windowId, screenId, ScrollDecisions::ClaimScope::LiveDeparture);
             } else {
-                tiling->cleanupAutotileTracking(windowId);
+                tiling->cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::LiveDeparture);
             }
             // Title-bar state is rule-driven: KWin's off-desktop noBorder reset
             // is corrected on return by updateAllDecorations.
@@ -279,7 +281,7 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
         tiling->cleanupAutotileTracking(windowId);
         tiling->restorePreTileForDesktopMove(windowId, screenId);
         if (tiling->notifyWindowAdded(window, /*knownFreeFloating=*/false, focusArrival)) {
-            qCInfo(lcEffect) << "Window moved into the context in view, added to autotile:" << windowId;
+            qCInfo(lcEffect) << "Window moved into the context in view, added to tiling:" << windowId;
         } else {
             qCDebug(lcEffect) << "Window moved into the context in view, not tiled:" << windowId;
         }

@@ -398,10 +398,11 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
 void PlasmaZonesEffect::refreshRestoreCache()
 {
     // The instant-restore cache (pending restore geometries) for slotWindowAdded.
-    // Fetched at bring-up, and again on a settings or rules change, which can
-    // turn the zone restore off: the daemon then answers "{}" and the cache
-    // empties. Fire-and-forget: windows that open before the reply arrives
-    // fall back to the normal async restore path.
+    // Fetched at bring-up, on the daemon's pendingRestoresChanged, and on a
+    // settings or rules change, which can turn the zone restore off: the
+    // daemon then answers "{}" and the cache empties. Fire-and-forget: windows
+    // that open before the reply arrives fall back to the normal async restore
+    // path.
     auto* geoWatcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
                                                    QStringLiteral("getPendingRestoreGeometries")),
@@ -801,6 +802,11 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           PhosphorProtocol::Service::Interface::WindowTracking,
                                           QStringLiteral("parkDropped"), m_screenChangeHandler.get(),
                                           SLOT(slotParkDropped(QString, QString)));
+
+    // The daemon's pending restores changed: the instant-restore cache refetches
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("pendingRestoresChanged"), this, SLOT(refreshRestoreCache()));
 
     // Floating state sync
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,

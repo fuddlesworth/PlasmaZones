@@ -254,29 +254,29 @@ void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
     // it. Pay the release the mid-drag skip owed instead: the gesture flags are
     // clear by now, so it performs the real restore and sheds the entry.
     //
-    // Monocle carries its direction explicitly instead. A monocle member
-    // reaching here holds a live claim in one of two states: still owed its
-    // maximize (the Apply arm skipped mid-drag), or owed a RESTORE
-    // (unmaximizeMonocleWindow skipped mid-drag and recorded that in
-    // m_monocleRestoreOwed). The set is what distinguishes them, and it is
-    // read before the re-apply below because the re-apply is the wrong answer
-    // for the second state — it would re-maximize the window the batch was
-    // demoting, or the one the drag just floated. The release is routed
-    // through unmaximizeMonocleWindow rather than written here so it takes
-    // that function's fullscreen guard and departure bookkeeping; the gesture
-    // flags are clear by now, so it performs the real restore and sheds.
+    // Monocle carries its direction explicitly instead: a member reaching here
+    // is still owed its maximize (the Apply arm skipped mid-drag), or owed a
+    // RESTORE (unmaximizeMonocleWindow skipped mid-drag, m_monocleRestoreOwed),
+    // or KWin un-maximized it on drag and the drop's outcome settles it
+    // (m_monocleUnmaximizedInGesture, F775). The sets are read before the
+    // re-apply below, which would re-maximize the window the batch was
+    // demoting or the drag just floated. The release goes through
+    // unmaximizeMonocleWindow for its fullscreen guard and departure
+    // bookkeeping; the gesture flags are clear, so it restores and sheds.
     if (owesMaximizedToEdges && !isScrollTiledWindow(windowId, w)) {
         releaseMaximizedToEdges(windowId, w);
         if (!owesMonocle) {
             return;
         }
     }
+    if (owesMonocle && m_monocleUnmaximizedInGesture.contains(windowId)) {
+        return;
+    }
     // The return leaves no maximized-to-edges claim behind it. A window in
     // BOTH ledgers is unreachable: the column arm inserts only on a scrolling
     // screen and the monocle arm only under a tiling algorithm, the modes are
-    // exclusive per screen, and a tile batch on a non-scrolling screen releases
-    // (autotile) or hands over (monocle) a column claim before either arm runs. So
-    // when this arm fires, owesMaximizedToEdges was false or already paid.
+    // exclusive per screen, and a tile batch on a non-scrolling screen releases (autotile) or hands over
+    // (monocle) a column claim before either arm runs, so owesMaximizedToEdges is false or paid by here.
     if (owesMonocle && m_monocleRestoreOwed.contains(windowId)) {
         unmaximizeMonocleWindow(windowId);
         return;

@@ -442,6 +442,12 @@ private Q_SLOTS:
         QTest::newRow("snapPlacement/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::SnapPlacement) << false;
         QTest::newRow("snapPlacement/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::SnapPlacement) << false;
         QTest::newRow("snapPlacement/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::SnapPlacement) << false;
+
+        // A live window that left the context in view hands every claim back,
+        // the monocle maximize included (F675).
+        QTest::newRow("liveDeparture/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::LiveDeparture) << true;
+        QTest::newRow("liveDeparture/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::LiveDeparture) << true;
+        QTest::newRow("liveDeparture/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::LiveDeparture) << true;
     }
 
     void claimReleaseTable()
@@ -610,6 +616,70 @@ private Q_SLOTS:
         QVERIFY(!claimReleasesOn(Claim::MonocleMaximize, scope));
         QVERIFY(claimReleasesOn(Claim::WindowedFullscreen, scope));
         QVERIFY(claimReleasesOn(Claim::MaximizedToEdges, scope));
+    }
+
+    // A Restore commit while KWin still holds the Full request is the late ack
+    // of a superseded configure, not the user (F1013).
+    void userMonocleUnmaximize_supersededRestoreAck_false()
+    {
+        QVERIFY(!isUserMonocleUnmaximize(/*committedH=*/false, /*committedV=*/false, /*requestedFull=*/true));
+    }
+    void userMonocleUnmaximize_restoreRequested_true()
+    {
+        QVERIFY(isUserMonocleUnmaximize(/*committedH=*/false, /*committedV=*/false, /*requestedFull=*/false));
+    }
+    void userMonocleUnmaximize_axisStillMaximized_false()
+    {
+        QVERIFY(!isUserMonocleUnmaximize(/*committedH=*/true, /*committedV=*/false, /*requestedFull=*/false));
+    }
+
+    // A monocle member's restore rect must lead back onto its stack's output
+    // (F1011): one left on the strip's monitor is re-seated.
+    void restoreRectOnOutput_onTheOutput_true()
+    {
+        QVERIFY(restoreRectOnOutput(QRectF(1928, 8, 500, 752), QRectF(1920, 0, 1920, 1080)));
+    }
+    void restoreRectOnOutput_otherOutput_false()
+    {
+        QVERIFY(!restoreRectOnOutput(QRectF(8, 8, 500, 752), QRectF(1920, 0, 1920, 1080)));
+    }
+    void restoreRectOnOutput_invalid_false()
+    {
+        QVERIFY(!restoreRectOnOutput(QRectF(), QRectF(0, 0, 1920, 1080)));
+    }
+
+    // KWin's own Move to Screen of a strip tile is a real move; the engine's
+    // handoffs, a parked column, a drag and a straddling column are not (F738).
+    void kwinMoveOffStrip_frameOnAnotherOutput_true()
+    {
+        QVERIFY(isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
+                                   /*parked=*/false, /*userMove=*/false));
+    }
+    void kwinMoveOffStrip_engineHandoff_false()
+    {
+        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/true,
+                                    /*parked=*/false, /*userMove=*/false));
+    }
+    void kwinMoveOffStrip_parkedColumn_false()
+    {
+        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
+                                    /*parked=*/true, /*userMove=*/false));
+    }
+    void kwinMoveOffStrip_drag_false()
+    {
+        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
+                                    /*parked=*/false, /*userMove=*/true));
+    }
+    void kwinMoveOffStrip_straddlingColumn_false()
+    {
+        // Centre on the neighbour, but still overlapping the commanded output.
+        QVERIFY(!isKWinMoveOffStrip(QRectF(1700, 8, 600, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
+                                    /*parked=*/false, /*userMove=*/false));
+    }
+    void kwinMoveOffStrip_noCommandedRect_false()
+    {
+        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(), /*markerArmed=*/false, /*parked=*/false,
+                                    /*userMove=*/false));
     }
 };
 

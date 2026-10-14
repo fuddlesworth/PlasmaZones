@@ -17,6 +17,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
@@ -32,6 +33,21 @@
 #include <memory>
 
 namespace PlasmaZones {
+
+QString TilingHandler::notifiedScreenFor(const QString& windowId) const
+{
+    return m_notifiedWindowScreens.value(windowId);
+}
+
+bool TilingHandler::isParkedForDesktopReturn(const QString& windowId) const
+{
+    return m_savedNotifiedForDesktopReturn.contains(windowId);
+}
+
+bool TilingHandler::announceInFlight(const QString& id) const
+{
+    return m_announceGen.contains(id);
+}
 
 void TilingHandler::updateNotifiedScreen(const QString& windowId, const QString& newScreenId)
 {
@@ -78,7 +94,29 @@ bool TilingHandler::adoptsDaemonArrival(KWin::EffectWindow* w, const QString& sc
     return true;
 }
 
-bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
+bool TilingHandler::isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& windowId) const
+{
+    if (!w || !isTiledWindow(windowId)) {
+        return false;
+    }
+    // The rect the strip last gave it: the commanded rect where one is armed (an
+    // X11 tile, a maximized column), else the column offered to a Wayland tile.
+    const auto commanded = m_effect->m_scrollCommandedRects.constFind(windowId);
+    const QRect stripRect = commanded != m_effect->m_scrollCommandedRects.constEnd()
+        ? commanded->rect
+        : m_effect->m_scrollOfferedColumn.value(windowId);
+    if (stripRect.isNull()) {
+        return false;
+    }
+    // Parked is either end at a park: the strip's rect while the client has
+    // not committed it yet, the frame once it has.
+    const KWin::LogicalOutput* const stripOutput = KWin::effects->screenAt(stripRect.center());
+    return ScrollDecisions::isKWinMoveOffStrip(
+        w->frameGeometry(), stripOutput ? QRectF(QRect(stripOutput->geometry())) : QRectF(),
+        m_expectedOutputMove.contains(windowId), atScrollPark(w) || rectAtScrollPark(stripRect), w->isUserMove());
+}
+
+bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w, ReAdd readd)
 {
     if (!w || w->isDeleted()) {
         return false;
@@ -99,7 +137,10 @@ bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     const auto guard = qScopeGuard([this, windowId] {
         m_outputChangeInFlight.remove(windowId);
     });
-    const QString newScreenId = m_effect->getWindowScreenId(w);
+    // A strip tile KWin moved to another output itself answers by position,
+    // not from the strip that still lists it (F738).
+    const bool kwinMove = isKWinMoveOfStripTile(w, windowId);
+    const QString newScreenId = kwinMove ? m_effect->getWindowScreenId(w, QString()) : m_effect->getWindowScreenId(w);
 
     if (!m_notifiedWindows.contains(windowId)) {
         // A cross-mode SWAP arms windowOutputMoveExpected for the snap
@@ -132,8 +173,13 @@ bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             // track the window as tiled: the handoffReceive that placed it has
             // its frame sitting in the destination zone rect, and passing true
             // would push that rect as the daemon's free/float-back geometry.
-            notifyWindowAdded(w, /*knownFreeFloating=*/!TilingStateHelpers::isTiledWindow(m_border, windowId),
-                              /*focusEligible=*/false);
+            // A drop the daemon placed is tracked without an announce.
+            const bool knownFree = !TilingStateHelpers::isTiledWindow(m_border, windowId);
+            if (readd == ReAdd::TrackOnly) {
+                trackWithoutAnnounce(w, newScreenId, knownFree);
+            } else {
+                notifyWindowAdded(w, knownFree, /*focusEligible=*/false);
+            }
             m_effect->updateAllDecorations();
         }
         return !daemonMove;
@@ -145,7 +191,8 @@ bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // scrolling screen, getWindowScreenId answers from the very map
     // oldScreenId was read from (the engine-authoritative override), so the
     // old-vs-new diff below is an identity for scroll windows and can never
-    // route a scroll handoff — the marker is the only reliable signal.
+    // route a scroll handoff — the marker is the only reliable signal. (A
+    // move KWin made itself is read by position above, and is no handoff.)
     // Positional match alone is NOT sufficient: on a two-output layout a
     // strip parking a column onto the neighbour lands its centre exactly
     // where an armed handoff points. The second conjunct — the window must
@@ -399,8 +446,9 @@ bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // A scroll window returning here deliberately keeps any armed
     // m_expectedOutputMove marker: the marker path is the only reliable
     // scroll transfer signal, and the same-screen drain above already
-    // handles its disposal for scroll windows.
-    if (inScrollStrip()) {
+    // handles its disposal for scroll windows. A column KWin itself moved
+    // off the strip's output is the one positional transfer a strip takes.
+    if (!kwinMove && inScrollStrip()) {
         return false;
     }
 
@@ -602,8 +650,13 @@ bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // Re-add on the new autotile screen. Eligibility drift (e.g. the tiled
         // frame now sits below the user's min-size threshold) or a pending
         // close can filter it locally — a no-op then, the daemon's tile path
-        // owns any follow-up.
-        notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
+        // owns any follow-up. A drop the daemon answers itself is tracked
+        // without an announce, which would tile it there (F731).
+        if (readd == ReAdd::TrackOnly) {
+            trackWithoutAnnounce(w, newScreenId, /*knownFreeFloating=*/false);
+        } else {
+            notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
+        }
     } else if (oldIsAutotile && !newIsAutotile) {
         // Autotile → snapping: restore the window's original (pre-snap/pre-tile)
         // SIZE after the drag ends.  The effect-side m_preTileGeometries may

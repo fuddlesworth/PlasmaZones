@@ -204,6 +204,7 @@ void ScreenChangeHandler::forgetWindow(KWin::EffectWindow* w)
     m_deferredCrossings.remove(w);
     m_settleCrossings.remove(w);
     m_skippedAnnounces.remove(w);
+    m_heldDragCrossings.remove(w);
 }
 
 void ScreenChangeHandler::dropEvacueeRecords()
@@ -566,10 +567,23 @@ void ScreenChangeHandler::applyOutputCrossing(KWin::EffectWindow* w, const QStri
     // The adopt below reads the exclusion verdict, and the queued
     // invalidation further down lands after it.
     m_effect->evictExclusionVerdicts(windowId);
+    // Only the dragged window's crossing waits for the drop, which owns that
+    // window's transitions. Any other window crossing during a drag is its
+    // own move, and nothing at drag end would rediscover it (F241).
+    const bool dragging = m_effect->m_dragTracker->isDragging();
+    const bool dragSubject = dragging && m_effect->m_dragTracker->draggedWindow() == w;
     // Tiling transfer (autotile to autotile, autotile to snapping, and so
-    // on). Runs even mid-drag so the engine drops the window from the old
-    // screen's state at once.
-    const bool ownCrossing = m_effect->m_tilingHandler->handleWindowOutputChanged(w);
+    // on). Not for the dragged window: its crossing is held and settled once
+    // at the drop, by what the drop did, so the tiling monitor it passes over
+    // is not rearranged under the pointer (settleDragCrossing, F713, F731).
+    bool ownCrossing = false;
+    if (dragSubject) {
+        if (!m_heldDragCrossings.contains(w)) {
+            m_heldDragCrossings.insert(w, oldScreenId);
+        }
+    } else {
+        ownCrossing = m_effect->m_tilingHandler->handleWindowOutputChanged(w);
+    }
     if (oldScreenId.isEmpty() || oldScreenId == newScreenId) {
         return;
     }
@@ -579,22 +593,54 @@ void ScreenChangeHandler::applyOutputCrossing(KWin::EffectWindow* w, const QStri
     // invalidation waits for callEndDrag, which drains it once the daemon's
     // outcome has landed: nothing at drag end could rediscover the crossing,
     // because the tracked screen already names the new one.
-    const bool dragging = m_effect->m_dragTracker->isDragging();
     if (dragging) {
         m_effect->m_dragSuppressedRuleInvalidations.insert(windowId);
     } else {
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }
-    // Only the dragged window's crossing waits for the drop, which owns that
-    // window's transitions. Any other window crossing during a drag is its
-    // own move, and nothing at drag end would rediscover it (F241).
-    const bool dragSubject = dragging && m_effect->m_dragTracker->draggedWindow() == w;
     // The daemon drops what it held of the window on the screen left. A
     // window KWin moved off an output that went away, or back onto one that
-    // returned, never reaches here: the settle classified it. Not for the
-    // dragged window, whose drop owns the transitions.
-    if (ownCrossing && !dragSubject) {
+    // returned, never reaches here: the settle classified it.
+    if (ownCrossing) {
         reportCrossing(w, oldScreenId, newScreenId);
+    }
+}
+
+void ScreenChangeHandler::settleDragCrossing(KWin::EffectWindow* w, GestureEndDecisions::DropAnswer answer)
+{
+    const auto held = m_heldDragCrossings.constFind(w);
+    if (held == m_heldDragCrossings.constEnd()) {
+        return;
+    }
+    const QString startScreenId = held.value();
+    m_heldDragCrossings.erase(held);
+    if (w->isDeleted()) {
+        return;
+    }
+    const QString landed = m_effect->pendingWindowScreenId(w);
+    m_effect->m_trackedScreenPerWindow[w] = landed;
+    if (startScreenId.isEmpty() || landed.isEmpty() || startScreenId == landed) {
+        return;
+    }
+    TilingHandler* const tiling = m_effect->m_tilingHandler.get();
+    const QString windowId = m_effect->getWindowId(w);
+    using GestureEndDecisions::DragCrossingSettle;
+    switch (GestureEndDecisions::settleDragCrossing(answer, tiling->isTrackedWindow(windowId),
+                                                    tiling->isManagedScreen(landed))) {
+    case DragCrossingSettle::ReKeyOnly:
+        tiling->updateNotifiedScreen(windowId, landed);
+        return;
+    case DragCrossingSettle::TrackOnly:
+        tiling->handleWindowOutputChanged(w, TilingHandler::ReAdd::TrackOnly);
+        return;
+    case DragCrossingSettle::RunBody:
+        tiling->handleWindowOutputChanged(w);
+        return;
+    case DragCrossingSettle::RunBodyAndReport:
+        if (tiling->handleWindowOutputChanged(w)) {
+            reportCrossing(w, startScreenId, landed);
+        }
+        return;
     }
 }
 
@@ -640,9 +686,12 @@ void ScreenChangeHandler::applyVirtualScreenCrossing(KWin::EffectWindow* w, cons
     if (m_effect->m_dragTracker->isDragging()) {
         m_effect->m_dragSuppressedRuleInvalidations.insert(windowId);
         if (m_effect->m_dragTracker->draggedWindow() == w) {
-            // The drag owns the dragged window's transitions: autotile
-            // through the drag-policy path, snapping through the daemon at
-            // the drop. Any other window's crossing is its own (F241).
+            // The drag owns the dragged window's transitions: held like the
+            // output arm's and settled at the drop (settleDragCrossing, F736).
+            // Any other window's crossing is its own (F241).
+            if (!m_heldDragCrossings.contains(w)) {
+                m_heldDragCrossings.insert(w, oldScreenId);
+            }
             return;
         }
     } else {

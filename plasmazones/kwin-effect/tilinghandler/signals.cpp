@@ -162,7 +162,7 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
     // fullscreen-exit skips) for the rest of the session — and this slot is
     // the only Tiling-channel writer for an autotile unfloat (the WindowTracking
     // relay carries it too, through syncAutotileFloatState and
-    // WindowTrackingAdaptor::setWindowFloating). The
+    // WindowTrackingAdaptor::syncWindowFloating). The
     // pending-focus stamp uses the live id too: its consumer resolves via
     // findWindowByIdExact, which refuses the fuzzy fallback.
     // Resolved ONCE and reused by both branches below. Re-resolving with the
@@ -257,6 +257,22 @@ void TilingHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool 
     if (horizontal || vertical) {
         return;
     }
+    // A Restore commit while KWin still holds the Full request is the late ack
+    // of a configure a monocle batch has since superseded, not the user (F1013).
+    const KWin::Window* const kwMono = w->window();
+    if (!ScrollDecisions::isUserMonocleUnmaximize(horizontal, vertical,
+                                                  kwMono && kwMono->requestedMaximizeMode() == KWin::MaximizeFull)) {
+        qCInfo(lcEffect) << "Monocle window committed a superseded restore:" << windowId << "- keeping membership";
+        return;
+    }
+    // KWin un-maximizes a maximized window the user starts to drag or resize
+    // (restore on drag). Floating it now would reflow the stack under the
+    // pointer, so the claim waits for the gesture's end, where
+    // settleMonocleUnmaximizeAfterGesture reads what the gesture did (F775).
+    if (w->isUserMove() || w->isUserResize()) {
+        m_monocleUnmaximizedInGesture.insert(windowId);
+        return;
+    }
     // Membership drops ONLY when the daemon can actually be told, the same rule
     // the windowed-fullscreen exit follows. The float dispatch below is what
     // makes the daemon agree the window is no longer monocle-maximized; with
@@ -283,6 +299,33 @@ void TilingHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool 
     PhosphorProtocol::ClientHelpers::fireAndForget(
         m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
         {windowId, screenId, true}, QStringLiteral("setWindowFloatingForScreen"));
+}
+
+void TilingHandler::settleMonocleUnmaximizeAfterGesture(KWin::EffectWindow* w, bool outcomePlacedIt)
+{
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    if (!m_monocleUnmaximizedInGesture.remove(windowId)) {
+        return;
+    }
+    // A cancelled move gets its maximize back from KWin (the cancel re-applies
+    // the mode the move started with), and the claim stands.
+    const KWin::Window* const kw = w->window();
+    if (!kw || kw->requestedMaximizeMode() == KWin::MaximizeFull || !m_monocleMaximizedWindows.contains(windowId)) {
+        return;
+    }
+    // A drop that placed the window (a float, a re-insert, a snap) has told
+    // the daemon already, and a restore a demoting batch owed it is the one
+    // KWin just made. Otherwise this is the slot's own float, late.
+    if (!outcomePlacedIt && !m_monocleRestoreOwed.contains(windowId)) {
+        slotWindowMaximizedStateChanged(w, false, false);
+        return;
+    }
+    m_monocleMaximizedWindows.remove(windowId);
+    m_monocleRestoreOwed.remove(windowId);
+    qCInfo(lcEffect) << "Monocle window unmaximized by a gesture its drop placed:" << windowId;
 }
 
 void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
@@ -694,9 +737,10 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // (8,286 948x508) tile, and (1924,54 3840x2160) live on a 3840-wide output.
     // The presentation then runs off the screen with only the part inside the
     // output visible, which for letterboxed video is a black band where the
-    // column was. Unloading this effect and repeating the identical cycle on the
-    // identical window gives the correct origin, so the strip placement is what
-    // KWin's fullscreen geometry ends up anchored on.
+    // column was. The cause was the effect's own offered-column centring (Body
+    // -0.5 in window_connections.cpp), which moved KWin's output-sized ack to
+    // the column's origin; it now stands down for a requested fullscreen
+    // (F973), so this assert is a belt for any other mover in the same commit.
     //
     // Nothing downstream repairs it: every later batch takes
     // applyWindowGeometry's fullscreen bail ("window is fullscreen, skipping"),

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QRectF>
 #include <QSet>
 #include <QSize>
 #include <QString>
@@ -302,8 +303,9 @@ enum class ClaimScope {
     /// it: the untile diff, the active float channel, the leaving-scrolling
     /// loop.
     StripExit,
-    /// The untrack funnel — a close, or a cross-output transfer to a screen
-    /// this handler's engines do not manage.
+    /// The untrack funnel: a close, a cross-output transfer to a screen this
+    /// handler's engines do not manage, and the effect-only releases that pass
+    /// no scope.
     ///
     /// Identical to StripExit except that monocle does NOT release here, and
     /// that blank is RECORDED rather than filled because it is unresolved, not
@@ -340,6 +342,12 @@ enum class ClaimScope {
     /// already handed every claim back, anchored at the placement rect, so the
     /// untrack it runs releases none.
     SnapPlacement,
+    /// A live window left the context in view (a desktop or activity edit) and
+    /// survives off-screen: every claim releases, the monocle maximize included,
+    /// against KWin's geometryRestore, so it does not arrive elsewhere holding a
+    /// maximize nothing hands back (F675, l18_monocle_move). The funnel releases
+    /// the monocle claim before its scrub drops the membership the release reads.
+    LiveDeparture,
 };
 
 /// Whether @p claim releases on @p scope.
@@ -379,8 +387,46 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
     case ClaimScope::SnapPlacement:
         // Released already, by the placement, at the placement's rect.
         return false;
+    case ClaimScope::LiveDeparture:
+        // All three: the context the window lands in re-claims what it runs.
+        return true;
     }
     return false;
+}
+
+/// Whether a monocle member's committed un-maximize is the user's (F1013). A
+/// commit with either axis still maximized is not an un-maximize at all, and a
+/// Restore commit while KWin still holds a MaximizeFull request is the late ack
+/// of a configure a monocle batch has since superseded: on Wayland a
+/// non-monocle batch and a monocle batch can land inside one client round trip,
+/// and the client acks the Restore after the Full was requested.
+inline constexpr bool isUserMonocleUnmaximize(bool committedHorizontal, bool committedVertical, bool requestedFull)
+{
+    return !committedHorizontal && !committedVertical && !requestedFull;
+}
+
+/// Whether KWin's restore rect for a monocle member leads back onto the output
+/// its stack is on (F1011). A column maximized to edges and handed to a monocle
+/// stack on another monitor keeps the strip frame KWin recorded there, so
+/// un-maximizing it would send it back to that monitor. An invalid rect reads
+/// as off the output.
+inline bool restoreRectOnOutput(const QRectF& restore, const QRectF& outputGeometry)
+{
+    return restore.isValid() && outputGeometry.contains(restore.center());
+}
+
+/// Whether an output change of a strip tile is a move KWin made itself (its
+/// Move to Screen, a window rule), not a column the engine parked or handed
+/// over (F738). The engine's own moves arm a marker, a parked column sits off
+/// every output by design, and a drag is the drop's. Anything else whose frame
+/// has left the output of the rect the strip last gave it has gone to another
+/// output: a column straddling its output's edge still intersects it.
+/// @p commandedOutput the output under that rect (commanded, or the offered column)
+inline bool isKWinMoveOffStrip(const QRectF& frame, const QRectF& commandedOutput, bool markerArmed, bool parked,
+                               bool userMove)
+{
+    return !markerArmed && !parked && !userMove && commandedOutput.isValid() && frame.isValid()
+        && !frame.intersects(commandedOutput);
 }
 
 /// The scope the passive float channel releases under (F723). On a scrolling

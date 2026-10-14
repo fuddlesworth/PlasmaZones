@@ -368,10 +368,6 @@ private:
     /// that rejected the bridge handshake.
     void continueDaemonReadySetup();
 
-    /// Refetch the instant-restore cache (getPendingRestoreGeometries): at bring-up, and on a settings or
-    /// rules change, which can turn the zone restore off and empty it.
-    void refreshRestoreCache();
-
 public:
     /**
      * @brief Compose the window's composite runtime identifier.
@@ -3884,6 +3880,10 @@ private Q_SLOTS:
     /// fetch and parse each). The restore cache is refetched at once, since a
     /// saved rule can refuse the zone restore (refreshRestoreCache).
     void slotRulesChanged();
+
+    /// Refetch the instant-restore cache (getPendingRestoreGeometries): at bring-up, on the daemon's
+    /// pendingRestoresChanged, and on a settings or rules change, which can turn the zone restore off and empty it.
+    void refreshRestoreCache();
 };
 
 } // namespace PlasmaZones

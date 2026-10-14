@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "plasmazoneseffect/gestureenddecisions.h"
+
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <QHash>
 #include <QObject>
@@ -131,6 +133,12 @@ public:
     /// tile crossing virtual screens goes through the tiling handler's
     /// transfer, since the per-frame detector skipped it while held.
     void applyGestureEndCrossing(KWin::EffectWindow* w, const QString& oldScreenId, const QString& newScreenId);
+    /// The dragged window's crossings are held by the two arms above from the
+    /// first one until its drop's answer is in, then settled here once by what
+    /// the drop did (GestureEndDecisions::settleDragCrossing, F713, F731). A
+    /// drag that crossed and came back crossed nothing. Inert for a window
+    /// with nothing held.
+    void settleDragCrossing(KWin::EffectWindow* w, GestureEndDecisions::DropAnswer answer);
 
 public Q_SLOTS:
     void slotScreenGeometryChanged();
@@ -238,6 +246,7 @@ private:
     /// map above no longer holds.
     QSet<KWin::EffectWindow*> m_settleCrossings;
     QSet<KWin::EffectWindow*> m_skippedAnnounces;
+    QHash<KWin::EffectWindow*, QString> m_heldDragCrossings; ///< the screen a dragged window's first crossing left
     bool m_outputSetChanged = false;
     bool m_settleInFlight = false;
 };

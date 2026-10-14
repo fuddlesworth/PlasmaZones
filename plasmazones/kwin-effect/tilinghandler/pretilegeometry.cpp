@@ -487,6 +487,11 @@ void TilingHandler::savePreTileForDesktopMove(const QString& windowId)
     m_desktopMoveStash.setOwed(windowId, TilingStateHelpers::isTiledWindow(m_border, windowId));
 }
 
+void TilingHandler::clearDesktopMoveStash(const QString& windowId)
+{
+    m_desktopMoveStash.forget(windowId);
+}
+
 void TilingHandler::restorePreTileForDesktopMove(const QString& windowId, const QString& screenId)
 {
     // Only applied when the source monitor matches the destination: saved

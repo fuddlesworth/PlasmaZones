@@ -13,10 +13,11 @@
 #include <QString>
 #include <QtGlobal>
 
-/// The end of an interactive resize, and what a frame change crossed,
-/// header-only so the rules are unit-testable without a compositor (same
-/// pattern as pretiledecisions.h). The hold itself, and the drain that applies
-/// these, are in window_moveresize_connections.cpp.
+/// The end of an interactive resize, what a frame change crossed, and how a
+/// drag's held crossing settles, header-only so the rules are unit-testable
+/// without a compositor (same pattern as pretiledecisions.h). The resize hold
+/// and its drain are in window_moveresize_connections.cpp, the drag crossing
+/// hold in screenchangehandler_settle.cpp.
 namespace PlasmaZones::GestureEndDecisions {
 
 /// The client has committed the size KWin asked for at the end of a resize:
@@ -99,6 +100,49 @@ inline bool moveReverted(const QRectF& start, const QRectF& commandedAtEnd)
 inline QPointF grabPointAt(const QPointF& anchor, const QPointF& startTopLeft, const QPointF& nowTopLeft)
 {
     return anchor + (nowTopLeft - startTopLeft);
+}
+
+/// What a drop's answer did with the dragged window, for the crossing it held.
+enum class DropAnswer {
+    Floated, ///< ApplyFloat: the effect floats it where it was dropped
+    DaemonPlaced, ///< NoOp or NotifyDragOutUnsnap: the daemon placed it itself (a drag-insert, a plain drop)
+    Snapped, ///< ApplySnap or RestoreSize: the snap drop owns the move
+    Unanswered, ///< CancelSnap, an error, the timeout, or no daemon
+};
+
+/// How a dragged window's held crossing settles at its drop.
+enum class DragCrossingSettle {
+    RunBody, ///< the tiling transfer a crossing runs: release, then announce on the new screen
+    RunBodyAndReport, ///< the same, and the crossing is reported, since no answer covered it
+    TrackOnly, ///< the transfer without the announce: the drop is its placement there
+    ReKeyOnly, ///< only the effect's screen record moves
+};
+
+/// A dragged window's crossings wait for its drop and settle once by what the
+/// drop did, so a tiling monitor the pointer passes over is not rearranged
+/// mid-drag (F713, F731). A float is tracked where it lands and never
+/// announced there, which would tile it (l18_plain_drop_on_tiling). A window
+/// the daemon placed on a tiling screen is re-keyed when the effect tracks it
+/// and tracked when it does not, with no release relay, which would delete the
+/// tile the daemon just put there (F753). A snap drop's own release covers the
+/// screen left, and a drop with no answer runs the crossing as it used to run
+/// mid-drag, once, and reports it.
+inline constexpr DragCrossingSettle settleDragCrossing(DropAnswer answer, bool tracked, bool landedManaged)
+{
+    switch (answer) {
+    case DropAnswer::Floated:
+        return DragCrossingSettle::TrackOnly;
+    case DropAnswer::DaemonPlaced:
+        if (landedManaged) {
+            return tracked ? DragCrossingSettle::ReKeyOnly : DragCrossingSettle::TrackOnly;
+        }
+        return DragCrossingSettle::RunBody;
+    case DropAnswer::Snapped:
+        return DragCrossingSettle::RunBody;
+    case DropAnswer::Unanswered:
+        return DragCrossingSettle::RunBodyAndReport;
+    }
+    return DragCrossingSettle::RunBody;
 }
 
 /// How long the end-of-resize reports wait for the client to commit the size

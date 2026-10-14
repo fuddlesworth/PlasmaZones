@@ -426,6 +426,7 @@ struct DaemonGateState
     /// authoritative source of the window's intended VS during these applies, so the crossing check
     /// is unsafe and must be skipped.
     bool inGeometryApply = false;
+    bool quietApplyLog = false; ///< a heartbeat view tick's tile apply: applyWindowGeometry logs at debug (F100)
     /// The window whose commit applyWindowGeometry's ANIMATED arm is making
     /// right now (null otherwise). That arm commits before it retargets its
     /// own leg, and the frame-change hook's strip retarget must not answer

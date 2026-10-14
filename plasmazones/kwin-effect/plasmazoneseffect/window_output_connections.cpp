@@ -190,15 +190,18 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
             // replace: a held "move to output" key (or a move reversed inside
             // one round trip) acks the intermediate output after the daemon
             // stored the final one, and reading the frame unsnapped the window
-            // there (see pendingWindowScreenId).
-            const QString newScreenId = pendingWindowScreenId(safeW);
+            // there (see pendingWindowScreenId). A strip tile KWin moved to
+            // another output itself answers by position (F738).
+            const QString newScreenId = m_tilingHandler->isKWinMoveOfStripTile(safeW, getWindowId(safeW))
+                ? getWindowScreenId(safeW, QString())
+                : pendingWindowScreenId(safeW);
             // The daemon's focused window moved: report it (see
             // reportActiveWindowScreen). Ahead of the apply gate below on
             // purpose: a move the daemon drives is still a move of the focused
             // window, and the screen answers from the engine for a strip tile,
             // so a parked column crossing outputs does not flip the record (a
             // window a snap placement took off its strip is untracked by then
-            // and answers by position).
+            // and answers by position, and so does one KWin moved itself).
             // Not onto KWin's placeholder output, which the daemon has no
             // screen for (F729).
             if (const KWin::Window* const win = safeW->window();

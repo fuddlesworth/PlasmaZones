@@ -380,6 +380,8 @@ void PlasmaZonesEffect::drainMoveTail()
     if (!w || w->isDeleted()) {
         return;
     }
+    // A Monocle maximize KWin dropped for a move no drop answered (F775).
+    m_tilingHandler->settleMonocleUnmaximizeAfterGesture(w, /*outcomePlacedIt=*/false);
     // The crossing arms wrote no stamp while the tail was held, so the stamp
     // is the screen the tail began on (or the one a deferred replay re-stamped
     // after the drop's placement).
@@ -412,6 +414,9 @@ void PlasmaZonesEffect::drainResizeHold(const QRect& frame)
     if (!w || w->isDeleted()) {
         return;
     }
+    // A corner drag takes a Monocle tile out of its maximize: the user's
+    // un-maximize, floated now the resize is over (F775).
+    m_tilingHandler->settleMonocleUnmaximizeAfterGesture(w, /*outcomePlacedIt=*/false);
     // Where the resize left the window, settled once (F486). At the deadline
     // the committed frame is still the old size, so the screen is read from
     // the frame the drain was handed.

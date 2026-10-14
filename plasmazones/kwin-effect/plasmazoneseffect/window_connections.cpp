@@ -464,289 +464,297 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // read fresh geometry without round-tripping. Throttled by the shared
     // single-shot m_frameGeometryFlushTimer: at most one setFrameGeometry
     // per window per 50 ms, so a long drag sends one every 50 ms.
-    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
-            [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
-                // isDeleted() alongside the null test, as the other lambdas
-                // over this signal and its maximize siblings do. A window held
-                // alive under WindowClosedGrabRole still emits this, and no body
-                // below is owed anything for a corpse.
-                //
-                // It is a HAZARD guard, not merely an early-out, and the hazard
-                // is the same one the maximize lambda's guard names: Body -0.5
-                // and Body 2 both call getWindowId BEFORE the checks that would
-                // decline for them, and getWindowId re-populates the id caches
-                // on a miss — the caches slotWindowClosed has just scrubbed for
-                // a window not riding a close animation. The re-populated
-                // mapping then waits for the windowDeleted backstop. The moves
-                // and the daemon flush themselves do decline on their own
-                // (scrollManagedOutputFor and flushPendingFrameGeometry both
-                // refuse a deleted window); what they do not do is decline
-                // before the lookup.
-                if (!safeW || safeW->isDeleted()) {
-                    return;
-                }
-                // Body -1.5 — answer a superseded configure's late ack. An
-                // apply that asked for the size the client already had, while a
-                // different size was still in flight, was applied by KWin with
-                // no configure, so that older configure stayed outstanding and
-                // its ack just landed the stale size (WindowCommandStamps::
-                // StaleAck). Re-issue the command once: its size now differs
-                // from the client's, so KWin sends a real configure. Void once
-                // a newer command has landed or the user has the frame.
-                if (const auto staleIt = m_daemonGate.commandStamps.staleAcks.find(safeW.data());
-                    staleIt != m_daemonGate.commandStamps.staleAcks.end() && !m_daemonGate.inGeometryApply) {
-                    const WindowCommandStamps::StaleAck stale = *staleIt;
-                    const QSize committed = safeW->frameGeometry().toRect().size();
-                    if (!m_daemonGate.commandStamps.isCurrent(safeW.data(), stale.stamp) || safeW->isUserMove()
-                        || safeW->isUserResize()) {
-                        m_daemonGate.commandStamps.staleAcks.erase(staleIt);
-                    } else if (committed != stale.target.size()) {
-                        m_daemonGate.commandStamps.staleAcks.erase(staleIt);
-                        if (KWin::Window* kwStale = safeW->window()) {
-                            qCInfo(lcEffect) << "Re-issuing" << stale.target << "over a superseded configure's ack"
-                                             << committed << "for" << getWindowId(safeW.data());
-                            const auto staleGuard = geometryApplyScope();
-                            kwStale->moveResize(QRectF(stale.target));
-                        }
+    connect(
+        w, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
+            // isDeleted() alongside the null test, as the other lambdas
+            // over this signal and its maximize siblings do. A window held
+            // alive under WindowClosedGrabRole still emits this, and no body
+            // below is owed anything for a corpse.
+            //
+            // It is a HAZARD guard, not merely an early-out, and the hazard
+            // is the same one the maximize lambda's guard names: Body -0.5
+            // and Body 2 both call getWindowId BEFORE the checks that would
+            // decline for them, and getWindowId re-populates the id caches
+            // on a miss — the caches slotWindowClosed has just scrubbed for
+            // a window not riding a close animation. The re-populated
+            // mapping then waits for the windowDeleted backstop. The moves
+            // and the daemon flush themselves do decline on their own
+            // (scrollManagedOutputFor and flushPendingFrameGeometry both
+            // refuse a deleted window); what they do not do is decline
+            // before the lookup.
+            if (!safeW || safeW->isDeleted()) {
+                return;
+            }
+            // Body -1.5 — answer a superseded configure's late ack. An
+            // apply that asked for the size the client already had, while a
+            // different size was still in flight, was applied by KWin with
+            // no configure, so that older configure stayed outstanding and
+            // its ack just landed the stale size (WindowCommandStamps::
+            // StaleAck). Re-issue the command once: its size now differs
+            // from the client's, so KWin sends a real configure. Void once
+            // a newer command has landed or the user has the frame.
+            if (const auto staleIt = m_daemonGate.commandStamps.staleAcks.find(safeW.data());
+                staleIt != m_daemonGate.commandStamps.staleAcks.end() && !m_daemonGate.inGeometryApply) {
+                const WindowCommandStamps::StaleAck stale = *staleIt;
+                const QSize committed = safeW->frameGeometry().toRect().size();
+                if (!m_daemonGate.commandStamps.isCurrent(safeW.data(), stale.stamp) || safeW->isUserMove()
+                    || safeW->isUserResize()) {
+                    m_daemonGate.commandStamps.staleAcks.erase(staleIt);
+                } else if (committed != stale.target.size()) {
+                    m_daemonGate.commandStamps.staleAcks.erase(staleIt);
+                    if (KWin::Window* kwStale = safeW->window()) {
+                        qCInfo(lcEffect) << "Re-issuing" << stale.target << "over a superseded configure's ack"
+                                         << committed << "for" << getWindowId(safeW.data());
+                        const auto staleGuard = geometryApplyScope();
+                        kwStale->moveResize(QRectF(stale.target));
                     }
                 }
-                // Body -1 — retarget a strip animation onto the rect the
-                // client actually committed.
-                //
-                // Only fires for a client that did not take the geometry it
-                // was handed. A programmatic moveResize commits synchronously,
-                // so for an ordinary window frameGeometry() already equals the
-                // animation's target by the time any leg is running and the
-                // isAnimatingToTarget test short-circuits. A client with a
-                // size constraint it enforces itself — an aspect ratio, a
-                // minimum bigger than its column — negotiates asynchronously
-                // and lands somewhere else, usually centred within the rect it
-                // was offered. The leg then drove toward the COLUMN rect while
-                // the commit sat centred inside it, so the window slid to its
-                // column's edge and snapped back on every step scroll.
-                //
-                // Measured, not predicted: constrainTileGeometry can pre-empt
-                // this for X11 (it applies the same constraint KWin will) but
-                // is a pass-through for Wayland, where the negotiated size is
-                // not knowable up front. Retargeting when the commit arrives
-                // needs no prediction and covers both.
-                //
-                // DELIBERATELY UNGATED on inGeometryApply, unlike Body -0.5
-                // below, and the difference is what each body does with the
-                // commit rather than an oversight. This one retargets a
-                // running leg ONTO the rect that was just committed, which is
-                // the right destination whoever committed it — including the
-                // effect itself, since a mid-animation apply from any of the
-                // bracketed sites is exactly a new destination the leg should
-                // adopt. Body -0.5 instead CENTRES the window on a
-                // size mismatch, and during an effect apply that mismatch is
-                // transient, so acting on it would fight the write in flight.
-                //
-                // NOT for applyWindowGeometry's own animated commit, which it
-                // makes BEFORE retargeting the leg itself: the synchronous
-                // re-entry would retarget first with PreservePosition and zero
-                // the leg's velocity, so a spring curve lost its momentum on
-                // every animated re-apply. The apply marks that one commit
-                // (DaemonGateState::animatedApplyCommit); every other effect
-                // commit is a new destination the leg should adopt.
-                //
-                // Scoped to strip members: this is the only path that
-                // relocates a window away from its committed rect, so it is
-                // the only one where a divergent commit desynchronises the
-                // leg from where the window will actually be.
-                if (m_windowAnimator->hasAnimation(safeW.data()) && scrollManagedOutputFor(safeW.data())
-                    && m_daemonGate.animatedApplyCommit != safeW.data()) {
-                    const QRectF committed = safeW->frameGeometry();
-                    if (!committed.isEmpty() && !m_windowAnimator->isAnimatingToTarget(safeW.data(), committed)) {
-                        // PreservePosition: the leg keeps the pixels it is
-                        // already showing and bends toward the true rect.
-                        // Velocity carried across would re-scale to a
-                        // correction that is a few hundred pixels at most and
-                        // overshoot it.
+            }
+            // Body -1 — retarget a strip animation onto the rect the
+            // client actually committed.
+            //
+            // Only fires for a client that did not take the geometry it
+            // was handed. A programmatic moveResize commits synchronously,
+            // so for an ordinary window frameGeometry() already equals the
+            // animation's target by the time any leg is running and the
+            // isAnimatingToTarget test short-circuits. A client with a
+            // size constraint it enforces itself — an aspect ratio, a
+            // minimum bigger than its column — negotiates asynchronously
+            // and lands somewhere else, usually centred within the rect it
+            // was offered. The leg then drove toward the COLUMN rect while
+            // the commit sat centred inside it, so the window slid to its
+            // column's edge and snapped back on every step scroll.
+            //
+            // Measured, not predicted: constrainTileGeometry can pre-empt
+            // this for X11 (it applies the same constraint KWin will) but
+            // is a pass-through for Wayland, where the negotiated size is
+            // not knowable up front. Retargeting when the commit arrives
+            // needs no prediction and covers both.
+            //
+            // DELIBERATELY UNGATED on inGeometryApply, unlike Body -0.5
+            // below, and the difference is what each body does with the
+            // commit rather than an oversight. This one retargets a
+            // running leg ONTO the rect that was just committed, which is
+            // the right destination whoever committed it — including the
+            // effect itself, since a mid-animation apply from any of the
+            // bracketed sites is exactly a new destination the leg should
+            // adopt. Body -0.5 instead CENTRES the window on a
+            // size mismatch, and during an effect apply that mismatch is
+            // transient, so acting on it would fight the write in flight.
+            //
+            // NOT for applyWindowGeometry's own animated commit, which it
+            // makes BEFORE retargeting the leg itself: the synchronous
+            // re-entry would retarget first with PreservePosition and zero
+            // the leg's velocity, so a spring curve lost its momentum on
+            // every animated re-apply. The apply marks that one commit
+            // (DaemonGateState::animatedApplyCommit); every other effect
+            // commit is a new destination the leg should adopt.
+            //
+            // Scoped to strip members: this is the only path that
+            // relocates a window away from its committed rect, so it is
+            // the only one where a divergent commit desynchronises the
+            // leg from where the window will actually be.
+            if (m_windowAnimator->hasAnimation(safeW.data()) && scrollManagedOutputFor(safeW.data())
+                && m_daemonGate.animatedApplyCommit != safeW.data()) {
+                const QRectF committed = safeW->frameGeometry();
+                if (!committed.isEmpty() && !m_windowAnimator->isAnimatingToTarget(safeW.data(), committed)) {
+                    // PreservePosition: the leg keeps the pixels it is
+                    // already showing and bends toward the true rect.
+                    // Velocity carried across would re-scale to a
+                    // correction that is a few hundred pixels at most and
+                    // overshoot it.
+                    //
+                    // A DegenerateReap needs no replacement: the retarget
+                    // landed on the rect the window already occupies, the
+                    // leg has converged, and the reap's completion handler
+                    // ends it cleanly. An ACCEPTED retarget restarts the
+                    // animator's progress from the pixels on screen, so a
+                    // geometry-owning morph riding it is re-anchored there
+                    // too, as applyWindowGeometry does after its own
+                    // retarget. Left alone, the morph replayed the whole leg
+                    // from its original departure rect (the #795 jump-back).
+                    const QRectF visualPos = m_windowAnimator->currentValue(safeW.data(), committed);
+                    const auto retarget = m_windowAnimator->retargetWithResult(
+                        safeW.data(), committed, PhosphorAnimation::RetargetPolicy::PreservePosition);
+                    auto* morph = m_shaderManager.findTransition(safeW.data());
+                    if (retarget == PhosphorAnimation::RetargetResult::Accepted && morph && morph->cached
+                        && morph->cached->iFromRectLoc >= 0 && morph->durationMs == 0) {
+                        morph->fromGeometry = visualPos;
+                        morph->toGeometry = committed;
+                    }
+                }
+            }
+            // Body -0.5 — centre a client that answered its column with
+            // a different size.
+            //
+            // The strip offers the full column rect the first time it
+            // sees a column SIZE, because until the client has answered
+            // there is nothing else to offer. A client that will not take
+            // that size commits its own at the column's top-left, so a
+            // freshly inserted window — or one that just went full width —
+            // hugs the top (or the left) until the next batch, which is
+            // the first placement able to offer the settled size centred.
+            //
+            // Correct it here instead of waiting: the commit that just
+            // arrived IS the answer, so the centred position is known now.
+            // Measured rather than predicted, like every other placement
+            // decision on this path — the alternative would be modelling
+            // the client's own size rule, which is not knowable up front.
+            //
+            // A pure move(), so it cannot renegotiate the size it just
+            // settled on and cannot be re-anchored by a queued configure.
+            // Converges in one step: the guard compares against the
+            // position it is about to install, so the synchronous
+            // frameGeometryChanged this emits re-enters and does nothing.
+            //
+            // Cheapest test first, and the ordering is load-bearing for
+            // cost rather than correctness. scrollManagedOutputFor memoises
+            // only WITHIN a paint pass, and this lambda runs off the paint
+            // cycle, so once any screen is scrolling — its own first test
+            // is hasScrollingScreens, which costs nothing when none is —
+            // every call pays a tracked-screen resolve, a float probe and
+            // an output lookup uncached. Asking it before the
+            // offered-column probe made every window's every geometry tick
+            // pay that, including plain snap and autotile windows that miss
+            // the map. The hash probe answers the common case for one
+            // lookup. Body -1 above already orders it this way.
+            if (!m_daemonGate.inGeometryApply && !m_scrollOfferedColumn.isEmpty()) {
+                const QString scrollId = getWindowId(safeW.data());
+                // Copied out, not held as an iterator across the predicate
+                // below. scrollManagedOutputFor does not touch this map
+                // today, so the iterator would survive — but it resolves a
+                // screen, a float verdict and an output, and a future
+                // reader has no reason to expect an unrelated call to be
+                // iterator-critical. The value is a QRect. The hit/miss
+                // answer is kept as its own bool rather than inferred from
+                // the copied rect, so the test stays exactly the one the
+                // iterator comparison made.
+                const auto colIt = m_scrollOfferedColumn.constFind(scrollId);
+                const bool haveOffer = colIt != m_scrollOfferedColumn.constEnd();
+                const QRect offered = haveOffer ? *colIt : QRect();
+                // Not while the outputs change or the strip's output has moved
+                // since its batch: the offer is in the old coordinates (F815).
+                if (haveOffer && scrollManagedOutputFor(safeW.data())
+                    && !m_screenChangeHandler->isScreenChangeInProgress()
+                    && !m_tilingHandler->stripOutputMovedSinceBatch(
+                        m_tilingHandler->scrollTrackedScreenFor(scrollId))) {
+                    const QRect live = safeW->frameGeometry().toRect();
+                    // A tile at rest answering its column. KWin's own
+                    // fullscreen and maximize commit the new size before the
+                    // new state, so the requested state says which this is,
+                    // and a frame that left the column was moved elsewhere,
+                    // by KWin's Move to Screen (F973, F738).
+                    const KWin::Window* const kwOffer = safeW->window();
+                    const bool atRest = kwOffer && kwOffer->requestedMaximizeMode() == KWin::MaximizeRestore
+                        && !kwOffer->isRequestedFullScreen() && !kwOffer->isFullScreen();
+                    if (atRest && live.intersects(offered) && live.size() != offered.size() && !live.size().isEmpty()) {
+                        // Same centring as the strip apply and the paint
+                        // resolver: the same toRect() rounding, and the
+                        // same clamp at zero, so a frame whose minimum
+                        // exceeds its column stays anchored at the column's
+                        // origin rather than shifting past its edge.
                         //
-                        // A DegenerateReap needs no replacement: the retarget
-                        // landed on the rect the window already occupies, the
-                        // leg has converged, and the reap's completion handler
-                        // ends it cleanly. An ACCEPTED retarget restarts the
-                        // animator's progress from the pixels on screen, so a
-                        // geometry-owning morph riding it is re-anchored there
-                        // too, as applyWindowGeometry does after its own
-                        // retarget. Left alone, the morph replayed the whole leg
-                        // from its original departure rect (the #795 jump-back).
-                        const QRectF visualPos = m_windowAnimator->currentValue(safeW.data(), committed);
-                        const auto retarget = m_windowAnimator->retargetWithResult(
-                            safeW.data(), committed, PhosphorAnimation::RetargetPolicy::PreservePosition);
-                        auto* morph = m_shaderManager.findTransition(safeW.data());
-                        if (retarget == PhosphorAnimation::RetargetResult::Accepted && morph && morph->cached
-                            && morph->cached->iFromRectLoc >= 0 && morph->durationMs == 0) {
-                            morph->fromGeometry = visualPos;
-                            morph->toGeometry = committed;
+                        // isEmpty rather than isValid: QSize::isValid()
+                        // admits 0x0, which would centre a degenerate
+                        // mid-unmap commit by the whole column.
+                        const QPoint centred(offered.x() + qMax(0, offered.width() - live.width()) / 2,
+                                             offered.y() + qMax(0, offered.height() - live.height()) / 2);
+                        if (live.topLeft() != centred && safeW->window()) {
+                            // Bracketed like the effect's other commits
+                            // (applies, centring). The move emits a synchronous
+                            // frameGeometryChanged, which re-enters this
+                            // signal's whole connection list from the top
+                            // — including the virtual-screen crossing
+                            // detector and the autotile reactive centring
+                            // pass, both connected ahead of this lambda.
+                            // Without the gate they treat a move the effect
+                            // itself made as a user-driven one.
+                            const auto restoreGate = geometryApplyScope();
+                            safeW->window()->move(QPointF(centred));
                         }
                     }
                 }
-                // Body -0.5 — centre a client that answered its column with
-                // a different size.
-                //
-                // The strip offers the full column rect the first time it
-                // sees a column SIZE, because until the client has answered
-                // there is nothing else to offer. A client that will not take
-                // that size commits its own at the column's top-left, so a
-                // freshly inserted window — or one that just went full width —
-                // hugs the top (or the left) until the next batch, which is
-                // the first placement able to offer the settled size centred.
-                //
-                // Correct it here instead of waiting: the commit that just
-                // arrived IS the answer, so the centred position is known now.
-                // Measured rather than predicted, like every other placement
-                // decision on this path — the alternative would be modelling
-                // the client's own size rule, which is not knowable up front.
-                //
-                // A pure move(), so it cannot renegotiate the size it just
-                // settled on and cannot be re-anchored by a queued configure.
-                // Converges in one step: the guard compares against the
-                // position it is about to install, so the synchronous
-                // frameGeometryChanged this emits re-enters and does nothing.
-                //
-                // Cheapest test first, and the ordering is load-bearing for
-                // cost rather than correctness. scrollManagedOutputFor memoises
-                // only WITHIN a paint pass, and this lambda runs off the paint
-                // cycle, so once any screen is scrolling — its own first test
-                // is hasScrollingScreens, which costs nothing when none is —
-                // every call pays a tracked-screen resolve, a float probe and
-                // an output lookup uncached. Asking it before the
-                // offered-column probe made every window's every geometry tick
-                // pay that, including plain snap and autotile windows that miss
-                // the map. The hash probe answers the common case for one
-                // lookup. Body -1 above already orders it this way.
-                if (!m_daemonGate.inGeometryApply && !m_scrollOfferedColumn.isEmpty()) {
-                    const QString scrollId = getWindowId(safeW.data());
-                    // Copied out, not held as an iterator across the predicate
-                    // below. scrollManagedOutputFor does not touch this map
-                    // today, so the iterator would survive — but it resolves a
-                    // screen, a float verdict and an output, and a future
-                    // reader has no reason to expect an unrelated call to be
-                    // iterator-critical. The value is a QRect. The hit/miss
-                    // answer is kept as its own bool rather than inferred from
-                    // the copied rect, so the test stays exactly the one the
-                    // iterator comparison made.
-                    const auto colIt = m_scrollOfferedColumn.constFind(scrollId);
-                    const bool haveOffer = colIt != m_scrollOfferedColumn.constEnd();
-                    const QRect offered = haveOffer ? *colIt : QRect();
-                    // Not while the outputs change or the strip's output has moved
-                    // since its batch: the offer is in the old coordinates (F815).
-                    if (haveOffer && scrollManagedOutputFor(safeW.data())
-                        && !m_screenChangeHandler->isScreenChangeInProgress()
-                        && !m_tilingHandler->stripOutputMovedSinceBatch(
-                            m_tilingHandler->scrollTrackedScreenFor(scrollId))) {
-                        const QRect live = safeW->frameGeometry().toRect();
-                        if (live.size() != offered.size() && !live.size().isEmpty()) {
-                            // Same centring as the strip apply and the paint
-                            // resolver: the same toRect() rounding, and the
-                            // same clamp at zero, so a frame whose minimum
-                            // exceeds its column stays anchored at the column's
-                            // origin rather than shifting past its edge.
-                            //
-                            // isEmpty rather than isValid: QSize::isValid()
-                            // admits 0x0, which would centre a degenerate
-                            // mid-unmap commit by the whole column.
-                            const QPoint centred(offered.x() + qMax(0, offered.width() - live.width()) / 2,
-                                                 offered.y() + qMax(0, offered.height() - live.height()) / 2);
-                            if (live.topLeft() != centred && safeW->window()) {
-                                // Bracketed like the effect's other commits
-                                // (applies, centring). The move emits a synchronous
-                                // frameGeometryChanged, which re-enters this
-                                // signal's whole connection list from the top
-                                // — including the virtual-screen crossing
-                                // detector and the autotile reactive centring
-                                // pass, both connected ahead of this lambda.
-                                // Without the gate they treat a move the effect
-                                // itself made as a user-driven one.
-                                const auto restoreGate = geometryApplyScope();
-                                safeW->window()->move(QPointF(centred));
-                            }
-                        }
+            }
+            // Body 0 — deferred maximize-morph completion. The maximize
+            // state edge above arms this entry when it fires before the
+            // client has committed the new size (see PendingMaximizeMorph);
+            // the geometry change that actually delivers the size lands
+            // here and starts the morph at the visible jump. A
+            // position-only step keeps waiting. The deadline discards a
+            // stale entry (state flipped but the commit never came — e.g.
+            // an occluded client under the lock screen) so a much later
+            // unrelated resize cannot fire a bogus maximize animation.
+            if (const auto pendingIt = m_shaderManager.m_pendingMaximizeMorph.constFind(safeW.data());
+                pendingIt != m_shaderManager.m_pendingMaximizeMorph.constEnd()) {
+                const auto pending = pendingIt.value();
+                if (maximizeSizeLanded(safeW->frameGeometry(), pending.departureFrame)) {
+                    m_shaderManager.m_pendingMaximizeMorph.remove(safeW.data());
+                    // The deadline SKIPS the morph for a stale entry; the
+                    // entry itself is consumed either way by the remove
+                    // above (only a size-landing geometry change reaches
+                    // this branch). A never-landing entry is otherwise
+                    // dropped by the next genuine full-maximize edge (the
+                    // state lambda removes or replaces it on every path),
+                    // by noteMaximizeDemotedForSnap, or by the windowDeleted
+                    // cleanup: bounded, and cheaper than a timer per entry.
+                    const bool stale =
+                        ShaderInternal::shaderClockNowMs() - pending.armedAtMs > kPendingMaximizeMorphDeadlineMs;
+                    // Same interactive guard as the arming site: a drag
+                    // that started while the entry was pending owns the
+                    // visuals through the window.move shader.
+                    if (!stale && !safeW->isUserMove() && !safeW->isUserResize()) {
+                        beginMaximizeShaderMorph(safeW.data(), pending.departureFrame);
                     }
                 }
-                // Body 0 — deferred maximize-morph completion. The maximize
-                // state edge above arms this entry when it fires before the
-                // client has committed the new size (see PendingMaximizeMorph);
-                // the geometry change that actually delivers the size lands
-                // here and starts the morph at the visible jump. A
-                // position-only step keeps waiting. The deadline discards a
-                // stale entry (state flipped but the commit never came — e.g.
-                // an occluded client under the lock screen) so a much later
-                // unrelated resize cannot fire a bogus maximize animation.
-                if (const auto pendingIt = m_shaderManager.m_pendingMaximizeMorph.constFind(safeW.data());
-                    pendingIt != m_shaderManager.m_pendingMaximizeMorph.constEnd()) {
-                    const auto pending = pendingIt.value();
-                    if (maximizeSizeLanded(safeW->frameGeometry(), pending.departureFrame)) {
-                        m_shaderManager.m_pendingMaximizeMorph.remove(safeW.data());
-                        // The deadline SKIPS the morph for a stale entry; the
-                        // entry itself is consumed either way by the remove
-                        // above (only a size-landing geometry change reaches
-                        // this branch). A never-landing entry is otherwise
-                        // dropped by the next genuine full-maximize edge (the
-                        // state lambda removes or replaces it on every path),
-                        // by noteMaximizeDemotedForSnap, or by the windowDeleted
-                        // cleanup: bounded, and cheaper than a timer per entry.
-                        const bool stale =
-                            ShaderInternal::shaderClockNowMs() - pending.armedAtMs > kPendingMaximizeMorphDeadlineMs;
-                        // Same interactive guard as the arming site: a drag
-                        // that started while the entry was pending owns the
-                        // visuals through the window.move shader.
-                        if (!stale && !safeW->isUserMove() && !safeW->isUserResize()) {
-                            beginMaximizeShaderMorph(safeW.data(), pending.departureFrame);
-                        }
-                    }
-                }
-                // Body 1 — suppression release. Integer-aligned compare:
-                // fractional-scale outputs leave sub-pixel residue in
-                // frameGeometry(), and a bit-exact inequality released the
-                // suppression on jitter that moved nothing.
-                if (auto it = m_restoreSuppress.find(safeW.data()); it != m_restoreSuppress.end()
-                    && it->targetGeometry.isValid() && safeW->frameGeometry().toRect() != it->spawnGeometry.toRect()) {
-                    endRestoreSuppression(safeW.data());
-                }
-                // Body 2 — throttled daemon shadow. Per tick this stashes the
-                // latest geometry and runs ONLY the cheap decoration resync.
-                // The shouldHandleWindow gate decides only whether the push
-                // goes out, so it runs where the push does, in
-                // flushPendingFrameGeometry once per window per flush, after
-                // the flush's geometry-scoped verdict eviction (the one place
-                // its cached exclusion verdict routinely misses). Per tick it
-                // ran on every frame of an interactive move or resize
-                // (discussion #816).
-                const QString windowId = getWindowId(safeW);
-                if (windowId.isEmpty()) {
-                    return;
-                }
-                // Self-heal a noBorder reset KWin issues asynchronously after
-                // a cross-OUTPUT move. For a rule-owned (title-bar-hidden)
-                // window the manager already believes it hidden, so the
-                // synchronous resync in updateAllDecorations bails ("still
-                // suppressed") when it runs before KWin re-evaluates the
-                // decoration. KWin grows the frame by the title-bar height
-                // when it re-decorates, firing this very signal: resyncWindow
-                // re-hides exactly the windows the manager owns and believes
-                // hidden whose decoration drifted back, and is a self-guarding
-                // no-op otherwise. Kept PER TICK, not behind the flush: it is
-                // a hash lookup plus two flag checks for the untracked common
-                // case, and deferring it to the flush let the re-decorated
-                // title bar flash for up to the 50ms throttle window. No
-                // shouldHandleWindow gate: the manager owns whatever the title-bar
-                // reconcile hides (reconcileRuleHiddenTitleBar shields structural and
-                // own surfaces only, not the dialogs and transients shouldHandleWindow
-                // rejects), so a gate would drop this self-heal for exactly those.
-                m_decorationManager->resyncWindow(windowId);
-                const QRect geo = safeW->frameGeometry().toRect();
-                if (geo.width() <= 0 || geo.height() <= 0) {
-                    return;
-                }
-                m_pendingFrameGeometry[windowId] = {geo, safeW};
-                if (!m_frameGeometryFlushTimer->isActive()) {
-                    m_frameGeometryFlushTimer->start();
-                }
-            });
+            }
+            // Body 1 — suppression release. Integer-aligned compare:
+            // fractional-scale outputs leave sub-pixel residue in
+            // frameGeometry(), and a bit-exact inequality released the
+            // suppression on jitter that moved nothing.
+            if (auto it = m_restoreSuppress.find(safeW.data()); it != m_restoreSuppress.end()
+                && it->targetGeometry.isValid() && safeW->frameGeometry().toRect() != it->spawnGeometry.toRect()) {
+                endRestoreSuppression(safeW.data());
+            }
+            // Body 2 — throttled daemon shadow. Per tick this stashes the
+            // latest geometry and runs ONLY the cheap decoration resync.
+            // The shouldHandleWindow gate decides only whether the push
+            // goes out, so it runs where the push does, in
+            // flushPendingFrameGeometry once per window per flush, after
+            // the flush's geometry-scoped verdict eviction (the one place
+            // its cached exclusion verdict routinely misses). Per tick it
+            // ran on every frame of an interactive move or resize
+            // (discussion #816).
+            const QString windowId = getWindowId(safeW);
+            if (windowId.isEmpty()) {
+                return;
+            }
+            // Self-heal a noBorder reset KWin issues asynchronously after
+            // a cross-OUTPUT move. For a rule-owned (title-bar-hidden)
+            // window the manager already believes it hidden, so the
+            // synchronous resync in updateAllDecorations bails ("still
+            // suppressed") when it runs before KWin re-evaluates the
+            // decoration. KWin grows the frame by the title-bar height
+            // when it re-decorates, firing this very signal: resyncWindow
+            // re-hides exactly the windows the manager owns and believes
+            // hidden whose decoration drifted back, and is a self-guarding
+            // no-op otherwise. Kept PER TICK, not behind the flush: it is
+            // a hash lookup plus two flag checks for the untracked common
+            // case, and deferring it to the flush let the re-decorated
+            // title bar flash for up to the 50ms throttle window. No
+            // shouldHandleWindow gate: the manager owns whatever the title-bar
+            // reconcile hides (reconcileRuleHiddenTitleBar shields structural and
+            // own surfaces only, not the dialogs and transients shouldHandleWindow
+            // rejects), so a gate would drop this self-heal for exactly those.
+            m_decorationManager->resyncWindow(windowId);
+            const QRect geo = safeW->frameGeometry().toRect();
+            if (geo.width() <= 0 || geo.height() <= 0) {
+                return;
+            }
+            m_pendingFrameGeometry[windowId] = {geo, safeW};
+            if (!m_frameGeometryFlushTimer->isActive()) {
+                m_frameGeometryFlushTimer->start();
+            }
+        });
 
     // Refresh the daemon's registry metadata on every minimize edge, connected
     // BEFORE the handler connections below so the daemon's suspension
@@ -789,7 +797,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         invalidateRuleCacheForStateChange(getWindowId(safeW.data()));
     });
 
-    // Autotile: track minimize/unminimize to remove/re-add windows from tiling
+    // Tiling screens: track minimize/unminimize to remove/re-add windows from tiling
     connect(w, &KWin::EffectWindow::minimizedChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowMinimizedChanged);
 

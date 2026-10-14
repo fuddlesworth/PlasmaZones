@@ -740,6 +740,12 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
 
 void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecisions::ClaimScope scope)
 {
+    // A scope that releases the monocle maximize does so first: the scrub below drops the membership the release
+    // reads (LiveDeparture, F675). The monocle gesture hold goes with the tracking (F775).
+    if (ScrollDecisions::claimReleasesOn(ScrollDecisions::Claim::MonocleMaximize, scope)) {
+        unmaximizeMonocleWindow(windowId);
+    }
+    m_monocleUnmaximizedInGesture.remove(windowId);
     // Compositor-agnostic state cleanup (shared helper).
     TilingStateHelpers::TilingWindowState windowState{
         m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_tileTargetZones,
@@ -794,26 +800,15 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
     if (scope != ScrollDecisions::ClaimScope::Evacuation) {
         m_evacueeMonocleClaims.remove(windowId);
     }
-    // Windowed fullscreen dies with the tracking: this funnel serves the
-    // close path (where slotWindowClosed already removed the membership,
-    // making this belt) and the cross-output transfer (where nothing else
-    // does, and a window landing on a snapping screen would otherwise stay
-    // KWin-fullscreen forever — snapping emits no tile batch to un-flag
-    // it). Forget-then-release, membership first, so a synchronous
-    // re-entry from setFullScreen finds the entry already gone.
-    // UntrackFunnel, not StripExit: monocle deliberately does NOT release here
-    // — it rides cleanupClosedWindowState's scrub — and that blank is recorded
-    // in the scope table with its reasoning rather than quietly filled by the
-    // funnel. Both other claims answer, for the reason this path documents: on
-    // a cross-output transfer to a screen these engines do not manage, no later
-    // tile batch exists to hand the state back.
-    //
-    // The window is resolved so the bit goes back while it is alive and the
-    // release can re-seed the tracked-screen map after its suppressed move.
-    //
-    // An evacuee (Evacuation) releases nothing and is scrubbed bare instead:
-    // KWin keeps its maximize or fullscreen, so it can still return the window
-    // as it was when its output comes back.
+    // The claims go back with the tracking, by the scope's row in claimReleasesOn. Windowed fullscreen dies here
+    // too: on the close path slotWindowClosed already removed the membership (this is belt), and on a cross-output
+    // transfer nothing else does, so a window landing on a snapping screen would stay KWin-fullscreen forever
+    // (snapping emits no tile batch to un-flag it). Forget-then-release, membership first, so a synchronous
+    // re-entry from setFullScreen finds the entry already gone. The default UntrackFunnel leaves monocle to
+    // cleanupClosedWindowState's scrub (the scope table records why); a scope that releases it did so at the top.
+    // The window is resolved so the bit goes back while it is alive and the release can re-seed the tracked-screen
+    // map after its suppressed move. An evacuee (Evacuation) releases nothing and is scrubbed bare instead: KWin
+    // keeps its maximize or fullscreen, so it can still return the window as it was when its output comes back.
     KWin::EffectWindow* const liveWindow = m_effect->findWindowByIdExact(windowId);
     releaseAllClaims(windowId, liveWindow, scope);
     if (scope == ScrollDecisions::ClaimScope::Evacuation) {
@@ -886,9 +881,10 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     }
 }
 
-void TilingHandler::releaseWindowTracking(const QString& windowId, const QString& screenId)
+void TilingHandler::releaseWindowTracking(const QString& windowId, const QString& screenId,
+                                          ScrollDecisions::ClaimScope scope)
 {
-    cleanupAutotileTracking(windowId);
+    cleanupAutotileTracking(windowId, scope);
 
     if (m_managedScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Tiling,

@@ -16,12 +16,15 @@
 
 #include "tilinghandler.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/screenchangehandler.h"
 #include "handlers/snaphandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "plasmazoneseffect/desktopvisibility.h"
 #include "compositor/effectlogging.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 
 #include <effect/effectwindow.h>
 #include <window.h>
@@ -716,6 +719,33 @@ void TilingHandler::settleSuspendedTileAfterDrop(KWin::EffectWindow* w, const QS
     // with no relay.
     cleanupAutotileTracking(windowId);
     m_effect->reconcileDecorationOnPlacementFlip(windowId);
+}
+
+void TilingHandler::floatOntoScreen(KWin::EffectWindow* w, const QString& windowId, const QRectF& freeRect,
+                                    const QString& fromScreenId, const QString& toScreenId)
+{
+    // The engine that floated it lets go, the effect tracks it on the screen
+    // it lands on, and the daemon is told it floats there and crossed: in
+    // this order on one connection, so the float send finds the destination
+    // engine not holding it and hands it over floating
+    // (WindowTrackingAdaptor::setWindowFloatingForScreen), and the crossing
+    // drops what the screen it left still remembers (memory_clears_on_move).
+    // Its free rect is filed where it now floats.
+    releaseWindowTracking(windowId, fromScreenId);
+    if (m_managedScreens.contains(toScreenId)) {
+        m_notifiedWindows.insert(windowId);
+        m_notifiedWindowScreens[windowId] = toScreenId;
+        saveAndRecordPreTileGeometry(windowId, toScreenId, w, freeRect, /*knownFreeFloating=*/true);
+    }
+    if (m_effect->m_daemonGate.serviceRegistered) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("setWindowFloatingForScreen"),
+                                                       {windowId, toScreenId, true},
+                                                       QStringLiteral("setWindowFloatingForScreen - overflow float"));
+    }
+    m_effect->m_screenChangeHandler->reportCrossing(w, fromScreenId, toScreenId);
+    qCInfo(lcEffect) << "Autotile batch float:" << windowId << "floats on" << toScreenId << "where its spot is, from"
+                     << fromScreenId;
 }
 
 void TilingHandler::clearWindowTiledAllScreens(const QString& windowId)
