@@ -318,9 +318,11 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
                 continue;
             }
             // A window on a desktop or activity not in view would not ack the
-            // configure: its zone is re-applied when that desktop is shown.
+            // configure: its zone is re-applied when that desktop is shown. The
+            // park is keyed by the live id the arrival drain resolves windows
+            // by, never the daemon's spelling of it (F1079).
             if (!isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity()) {
-                m_effect->snapHandler()->armDesktopArrivalRestore(entry.windowId,
+                m_effect->snapHandler()->armDesktopArrivalRestore(m_effect->getWindowId(window),
                                                                   DesktopArrivalParks::Cause::ReapplyOnly);
                 continue;
             }

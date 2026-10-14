@@ -351,7 +351,7 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // Declining does not strand the ledger, and that is what makes it safe
     // without knowing how the drag's own float cleanup orders against this
     // edge. KWin clears the bit while membership stands, and every gesture ends
-    // in reconcileMaximizeAfterGesture (window_connections.cpp's
+    // in reconcileMaximizeAfterGesture (window_moveresize_connections.cpp's
     // windowFinishUserMovedResized, the one point that always runs): a window
     // still tiled on its strip has the claim re-driven there, and one the drag
     // took off the strip is routed to releaseMaximizedToEdges instead, which

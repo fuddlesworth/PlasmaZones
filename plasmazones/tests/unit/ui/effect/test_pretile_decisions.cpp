@@ -83,6 +83,18 @@ private Q_SLOTS:
         QCOMPARE(got.size(), saved.size());
     }
 
+    // A tile in the right third of its output keeps a saved size larger than
+    // the room to its right: kept at the live position, the window's centre
+    // would sit on the next monitor and the overflow float would hand it to
+    // that monitor's engine. It is moved back inside its own output (F1076).
+    void rect_degradedSizeStaysOnItsOutput()
+    {
+        const QRectF saved(4000, 100, 1200, 800);
+        const QRectF live(1440, 8, 472, 1064);
+        const QRectF output(0, 0, 1920, 1080);
+        QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/false, live, output), QRectF(720, 8, 1200, 800));
+    }
+
     // An output that did not move still holds the rect's centre: applied whole.
     void rect_sameOutputStillInside_appliedWhole()
     {

@@ -28,6 +28,8 @@
 #include <QScopeGuard>
 #include <QTimer>
 
+#include <utility>
+
 namespace PlasmaZones {
 
 void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
@@ -84,12 +86,15 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         // invalidation would re-assert or re-read PlasmaZones' own write
         // (windowflagedges.h). The eviction runs first, as it always did, and
         // the push before the invalidation, so a flush that re-resolves reads
-        // the field the daemon now holds.
+        // the field the daemon now holds. The exclusion verdicts go before all
+        // of it, synchronously: the eviction and the adopt read them, and the
+        // coalesced invalidation lands a turn later (F1067).
         const auto flagEdge = [this, safeW](WindowFlagEdges::Flag flag) {
             KWin::EffectWindow* const window = safeW.data();
             if (!window || window->isDeleted()) {
                 return;
             }
+            evictExclusionVerdicts(getWindowId(window));
             const WindowFlagEdges::Actions actions = WindowFlagEdges::actionsFor(flag);
             if (actions.reevaluateEligibility) {
                 m_tilingHandler->reevaluateWindowEligibility(window);
@@ -123,9 +128,15 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         connect(kw, &KWin::Window::modalChanged, this, [flagEdge]() {
             flagEdge(Flag::Modal);
         });
-        connect(kw, &KWin::Window::maximizeableChanged, this, [flagEdge](bool) {
-            flagEdge(Flag::Maximizable);
-        });
+        // KWin emits this on every min or max size change of a Wayland client,
+        // whether or not the answer moved, so only a real change is an edge
+        // (F1066).
+        connect(kw, &KWin::Window::maximizeableChanged, this,
+                [flagEdge, last = kw->isMaximizable()](bool maximizable) mutable {
+                    if (std::exchange(last, maximizable) != maximizable) {
+                        flagEdge(Flag::Maximizable);
+                    }
+                });
         connect(kw, &KWin::Window::decorationChanged, this, [flagEdge]() {
             flagEdge(Flag::Decoration);
         });

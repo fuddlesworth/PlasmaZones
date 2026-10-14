@@ -175,7 +175,23 @@ void ScreenChangeHandler::noteOutputAdded(KWin::LogicalOutput* output)
 
 void ScreenChangeHandler::deferCrossing(KWin::EffectWindow* w, const QString& oldScreenId)
 {
-    if (!w || oldScreenId.isEmpty() || m_deferredCrossings.contains(w)) {
+    if (!w || oldScreenId.isEmpty()) {
+        return;
+    }
+    // The dragged window's crossing waits for its drop whether or not a screen
+    // change is running, and settles by what the drop did (settleDragCrossing).
+    // A replay after the drop would run the crossing as if nothing answered it
+    // (F1075). Held as applyOutputCrossing holds it, rule verdicts included.
+    if (m_effect->m_dragTracker->isDragging() && m_effect->m_dragTracker->draggedWindow() == w) {
+        if (!m_heldDragCrossings.contains(w)) {
+            m_heldDragCrossings.insert(w, oldScreenId);
+        }
+        const QString windowId = m_effect->getWindowId(w);
+        m_effect->evictExclusionVerdicts(windowId);
+        m_effect->m_dragSuppressedRuleInvalidations.insert(windowId);
+        return;
+    }
+    if (m_deferredCrossings.contains(w)) {
         return;
     }
     m_deferredCrossings.insert(w, oldScreenId);
@@ -530,11 +546,12 @@ void ScreenChangeHandler::applySettleVerdicts(const PhosphorProtocol::OutputSett
             continue;
         }
         // Still on the placeholder: its crossing resolves once a real output
-        // takes it.
-        if (onPlaceholderOutput(w)) {
-            if (!m_deferredCrossings.contains(w.data())) {
-                m_deferredCrossings.insert(w.data(), oldScreenId);
-            }
+        // takes it. A screen change that began while the report was out is
+        // moving the outputs again, so the crossing waits for that settle, as
+        // replayDeferredCrossings makes one wait (F1077). It crossed before any
+        // crossing deferred since, so its old screen is the one kept.
+        if (onPlaceholderOutput(w) || m_pendingScreenChange) {
+            m_deferredCrossings.insert(w.data(), oldScreenId);
             continue;
         }
         replayCrossing(w, oldScreenId);

@@ -108,32 +108,46 @@ private Q_SLOTS:
     // elsewhere (Return, a lifted finger) is not (F752).
     void moveReverted_escapeRevertIsCancelled()
     {
-        QVERIFY(moveReverted(QRectF(8, 8, 329, 752), QRectF(8, 8, 329, 752), 0, 0));
+        QVERIFY(moveReverted(QRectF(8, 8, 329, 752), QRectF(8, 8, 329, 752), 0, 0, true));
     }
     void moveReverted_acceptedKeyboardMoveIsNotCancelled()
     {
-        QVERIFY(!moveReverted(QRectF(8, 8, 329, 752), QRectF(48, 8, 329, 752), 0, 0));
+        QVERIFY(!moveReverted(QRectF(8, 8, 329, 752), QRectF(48, 8, 329, 752), 0, 0, true));
     }
     void moveReverted_fractionalResidueStillReverted()
     {
-        QVERIFY(moveReverted(QRectF(10.4, 10.4, 300, 300), QRectF(10, 10, 300, 300), 0, 0));
+        QVERIFY(moveReverted(QRectF(10.4, 10.4, 300, 300), QRectF(10, 10, 300, 300), 0, 0, true));
     }
     // Escape on a Monocle tile KWin restored on drag: the cancel re-applies the
     // maximize, which commands the maximize area, not the gap-inset tile rect
     // the move started on (F1014).
     void moveReverted_cancelReMaximizesTheMonocleTile()
     {
-        QVERIFY(moveReverted(QRectF(8, 8, 1008, 752), QRectF(0, 0, 1024, 768), 3, 3));
+        QVERIFY(moveReverted(QRectF(8, 8, 1008, 752), QRectF(0, 0, 1024, 768), 3, 3, true));
+    }
+    // A keyboard or touch move of the same tile taken to another output's top
+    // edge is maximized there by KWin's electric border and accepted: no cancel
+    // (F1072).
+    void moveReverted_edgeMaximizeOnAnotherOutputIsNotCancelled()
+    {
+        QVERIFY(!moveReverted(QRectF(8, 8, 1008, 752), QRectF(1024, 0, 1920, 1080), 3, 3, false));
+    }
+    // A vertically maximized window moved sideways with the keyboard keeps its
+    // maximize, KWin leaving an axis maximize through a move along the free
+    // axis: accepted with Return, it is no cancel (F1057, live run 2).
+    void moveReverted_axisMaximizeMovedAlongItsFreeAxisIsNotCancelled()
+    {
+        QVERIFY(!moveReverted(QRectF(56, 0, 400, 768), QRectF(584, 0, 400, 768), 1, 1, true));
     }
     // The same move accepted elsewhere keeps KWin's restore and is no cancel.
     void moveReverted_restoredOnDragAndAcceptedIsNotCancelled()
     {
-        QVERIFY(!moveReverted(QRectF(8, 8, 1008, 752), QRectF(352, 220, 400, 328), 3, 0));
+        QVERIFY(!moveReverted(QRectF(8, 8, 1008, 752), QRectF(352, 220, 400, 328), 3, 0, true));
     }
     // A move that started restored is judged by its rect alone.
     void moveReverted_restoredStartIgnoresTheMode()
     {
-        QVERIFY(!moveReverted(QRectF(8, 8, 400, 300), QRectF(48, 8, 400, 300), 0, 0));
+        QVERIFY(!moveReverted(QRectF(8, 8, 400, 300), QRectF(48, 8, 400, 300), 0, 0, true));
     }
     // The grab point of a pointerless drag travels with the window (F774).
     void grabPointAt_followsTheWindow()
@@ -214,19 +228,26 @@ private Q_SLOTS:
     // window (F1015).
     void cancelledDragReassert_tilingRetiles()
     {
-        QCOMPARE(cancelledDragReassert(true, true, true, false), CancelReassert::Retile);
+        QCOMPARE(cancelledDragReassert(true, true, false, true, false), CancelReassert::Retile);
     }
     void cancelledDragReassert_stripReemitsTheWindow()
     {
-        QCOMPARE(cancelledDragReassert(true, true, true, true), CancelReassert::ReapplyWindow);
+        QCOMPARE(cancelledDragReassert(true, true, false, true, true), CancelReassert::ReapplyWindow);
+    }
+    // A Reorder-mode tile that crossed a snapping screen mid-drag was
+    // suspended there, which shed its marks the same way (F1058).
+    void cancelledDragReassert_suspendedTileRetiles()
+    {
+        QCOMPARE(cancelledDragReassert(true, false, true, true, false), CancelReassert::Retile);
+        QCOMPARE(cancelledDragReassert(true, false, true, true, true), CancelReassert::ReapplyWindow);
     }
     // A drop that was not cancelled, a window floating before the drag (or kept
-    // tiled by Reorder), and an untracked window ask for nothing.
+    // tiled by Reorder on its screen), and an untracked window ask for nothing.
     void cancelledDragReassert_otherwiseNothing()
     {
-        QCOMPARE(cancelledDragReassert(false, true, true, false), CancelReassert::None);
-        QCOMPARE(cancelledDragReassert(true, false, true, false), CancelReassert::None);
-        QCOMPARE(cancelledDragReassert(true, true, false, false), CancelReassert::None);
+        QCOMPARE(cancelledDragReassert(false, true, true, true, false), CancelReassert::None);
+        QCOMPARE(cancelledDragReassert(true, false, false, true, false), CancelReassert::None);
+        QCOMPARE(cancelledDragReassert(true, true, true, false, false), CancelReassert::None);
     }
 
     void settleRowKwinOnly_draggedIsNot()

@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QRectF>
 #include <QString>
+#include <QtGlobal>
 
 /// Pure decision logic for the pre-autotile geometry restore that
 /// TilingHandler::demoteWindowsForDesktopSwitch runs, extracted so the branch
@@ -82,7 +83,9 @@ inline bool announceMatchesReportedDesktops(const QHash<QString, int>& announced
 /// sitting at its tile rect still looking tiled. Same output is the same
 /// coordinate space only while the output has not moved: a rect whose centre is
 /// no longer on the output's current geometry is from where the output used to
-/// be, and keeps its size only (F807).
+/// be, and keeps its size only (F807). A size kept that way is moved back
+/// inside the output when it would hang over its edge, so a bigger saved size
+/// cannot carry the window's centre onto the next monitor (F1076).
 inline QRectF applicablePreTileRect(const QRectF& saved, bool sameOutput, const QRectF& currentFrame,
                                     const QRectF& outputGeometry = {})
 {
@@ -95,7 +98,12 @@ inline QRectF applicablePreTileRect(const QRectF& saved, bool sameOutput, const 
     if (!currentFrame.isValid()) {
         return {};
     }
-    return QRectF(currentFrame.topLeft(), saved.size());
+    QRectF sized(currentFrame.topLeft(), saved.size());
+    if (outputGeometry.isValid()) {
+        sized.moveLeft(qMax(outputGeometry.left(), qMin(sized.left(), outputGeometry.right() - sized.width())));
+        sized.moveTop(qMax(outputGeometry.top(), qMin(sized.top(), outputGeometry.bottom() - sized.height())));
+    }
+    return sized;
 }
 
 /// What the desktop-switch demote pass does with a window's pre-autotile rect.

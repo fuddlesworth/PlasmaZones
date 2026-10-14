@@ -66,9 +66,17 @@ void TilingHandler::adoptEvacuee(KWin::EffectWindow* w, const QString& screenId)
     // scrubs it bare: KWin keeps the maximize, and the first monocle batch after
     // the window's return takes the claim back (F685, evacuee_keeps_kwin_state).
     const bool heldMonocle = m_monocleMaximizedWindows.contains(windowId);
+    // A minimize-float the same way: the funnel drops it, and it stays dropped
+    // while the window is away, so one unminimized where KWin put it floats
+    // there (F643, evacuee_floats). Its return gives it back (F1046).
+    const bool heldMinimizeFloat = isMinimizeFloated(windowId);
+    const bool untiledMinimizeFloat = m_minimizeFloatMarks.isUntiled(windowId);
     cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::Evacuation);
     if (heldMonocle) {
         m_evacueeMonocleClaims.insert(windowId);
+    }
+    if (heldMinimizeFloat) {
+        m_evacueeMinimizeFloats.insert(windowId, untiledMinimizeFloat);
     }
     // The daemon floated it in place on a tiling destination. Tracked here so
     // the destination's engine owns it, and never announced: an announce
@@ -95,6 +103,29 @@ void TilingHandler::readoptEvacuee(KWin::EffectWindow* w, const QString& screenI
         m_notifiedWindowScreens[windowId] = screenId;
     } else if (m_managedScreens.contains(screenId)) {
         trackWithoutAnnounce(w, screenId, /*knownFreeFloating=*/false);
+    }
+    // The minimize-float it held when its output went away (adoptEvacuee).
+    // The daemon re-seated it floating, so the effect owns that float again,
+    // as the cross-screen hop re-establishes one (handleWindowOutputChanged).
+    // With no peer record from before the evacuation, its unminimize commits
+    // at once. One unminimized while away has passed that edge, and is
+    // unfloated into its tile now (F1046).
+    const auto parked = m_evacueeMinimizeFloats.constFind(windowId);
+    if (parked == m_evacueeMinimizeFloats.constEnd()) {
+        return;
+    }
+    const bool untiled = parked.value();
+    m_evacueeMinimizeFloats.erase(parked);
+    if (!m_notifiedWindows.contains(windowId)) {
+        return;
+    }
+    m_minimizeFloatedWindows.insert(windowId);
+    if (untiled) {
+        m_minimizeFloatMarks.markUntiled(windowId);
+    }
+    m_minimizeFloatMarks.markDisplaced(windowId);
+    if (!w->isMinimized()) {
+        dispatchUnminimizeUnfloat(windowId, screenId);
     }
 }
 

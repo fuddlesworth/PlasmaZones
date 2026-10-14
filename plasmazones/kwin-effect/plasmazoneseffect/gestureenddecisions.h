@@ -90,15 +90,22 @@ inline QRect frameUnderGrab(const QRectF& frame, const QPointF& grab, const QSiz
 /// rect) when the rect it ends on is the one it started on. Integer-aligned:
 /// a fractional-scale frame carries sub-pixel residue. A move that ends
 /// exactly where it began reads as reverted, which changes nothing (F752).
-/// A move that started maximized is reverted when it ends in that requested
-/// maximize mode again (KWin's MaximizeMode bits, 0 for restored): the cancel
-/// re-applies the starting mode after putting the window back, which commands
-/// the maximize area rather than a start rect PlasmaZones inset from it, a
-/// Monocle tile's gaps (F1014).
-inline bool moveReverted(const QRectF& start, const QRectF& commandedAtEnd, int startMaximizeMode, int endMaximizeMode)
+/// A move that started fully maximized is reverted when it ends fully
+/// maximized again (KWin's MaximizeMode bits, 3 for full): any move restores
+/// it, and the cancel re-applies the starting mode after putting the window
+/// back, which commands the maximize area rather than a start rect PlasmaZones
+/// inset from it, a Monocle tile's gaps (F1014). Not an axis maximize: KWin
+/// keeps that one through a move along the free axis, so an accepted move ends
+/// in it too, and its cancel puts the start rect back (F1057). Only on the
+/// output it started on, where the cancel puts it back: a keyboard or touch
+/// move that ends maximized on another output was maximized there by an
+/// electric edge, and keeps it (F1072).
+inline bool moveReverted(const QRectF& start, const QRectF& commandedAtEnd, int startMaximizeMode, int endMaximizeMode,
+                         bool endsOnStartOutput)
 {
+    constexpr int fullMaximize = 3;
     return start.toRect() == commandedAtEnd.toRect()
-        || (startMaximizeMode != 0 && endMaximizeMode == startMaximizeMode);
+        || (startMaximizeMode == fullMaximize && endMaximizeMode == fullMaximize && endsOnStartOutput);
 }
 
 /// The grab point of a drag that left the pointer idle (touch, tablet),
@@ -164,13 +171,16 @@ enum class CancelReassert {
 /// leaves the daemon still tiling it, and KWin puts it back as it started,
 /// which for a maximized tile is the maximize area rather than its gap-inset
 /// rect. Nothing else undoes that float, so the daemon is asked to re-emit the
-/// tile, whose batch re-applies all of it. Nothing for a drop that was not
-/// cancelled, a window that was not floated at the start (it was floating
-/// already, or Reorder mode kept it tiled), or one the effect does not track.
-inline constexpr CancelReassert cancelledDragReassert(bool cancelled, bool floatedAtDragStart, bool tracked,
-                                                      bool scrolling)
+/// tile, whose batch re-applies all of it. A tile a snapping screen suspended
+/// mid-drag (suspendTileForSnapDrag) shed the same marks, and the daemon's
+/// cancel re-emits nothing for it either (F1058). Nothing for a drop that was
+/// not cancelled, a window whose tile state the drag left alone (it was
+/// floating already, or Reorder mode kept it tiled on its screen), or one the
+/// effect does not track.
+inline constexpr CancelReassert cancelledDragReassert(bool cancelled, bool floatedAtDragStart, bool suspendedForSnap,
+                                                      bool tracked, bool scrolling)
 {
-    if (!cancelled || !floatedAtDragStart || !tracked) {
+    if (!cancelled || !(floatedAtDragStart || suspendedForSnap) || !tracked) {
         return CancelReassert::None;
     }
     return scrolling ? CancelReassert::ReapplyWindow : CancelReassert::Retile;

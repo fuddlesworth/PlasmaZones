@@ -142,15 +142,17 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // window as the move started, but the rest of the drag-start float (tiled
     // marks, centring target, claims) stayed shed, and a maximized tile sat at
     // KWin's maximize area instead of its gap-inset rect, until an unrelated
-    // batch. The daemon still tiles the window, so it re-emits the tile (F1015).
+    // batch. The daemon still tiles the window, so it re-emits the tile (F1015),
+    // and the same for a tile a snapping screen suspended mid-drag (F1058).
     // Not while a successor drag holds the window: its own drop decides.
-    const auto reassertCancelledTile = [this, windowId, cancelled, startedFloating, effectFloatedThisDrag]() {
+    const auto reassertCancelledTile = [this, windowId, cancelled, startedFloating, effectFloatedThisDrag,
+                                        tileSuspended]() {
         if (m_dragTracker->isDragging() && m_dragTracker->draggedWindowId() == windowId) {
             return;
         }
         const QString screenId = m_tilingHandler->notifiedScreenFor(windowId);
         switch (GestureEndDecisions::cancelledDragReassert(cancelled, effectFloatedThisDrag && !startedFloating,
-                                                           !screenId.isEmpty(),
+                                                           tileSuspended, !screenId.isEmpty(),
                                                            m_tilingHandler->isScrollingScreen(screenId))) {
         case GestureEndDecisions::CancelReassert::Retile:
             qCInfo(lcEffect) << "endDrag cancelled: re-tiling" << screenId << "for" << windowId;
@@ -217,14 +219,17 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
 
     QPointer<KWin::EffectWindow> safeWindow = window;
     // The drop's outcome is in for a held move tail (F751): it drains once KWin's
-    // move has finished too.
-    const auto settleMoveTail = [this, safeWindow]() {
+    // move has finished too. Only this drop's tail, written with its drag
+    // generation: a later drop's tail waits for that drop's own answer. Not
+    // under the pointer: a re-grab of the window holds it again, and the tail
+    // drains when that move ends (F1068).
+    const auto settleMoveTail = [this, safeWindow, dragGeneration = m_dragActivation.generation]() {
         MoveTailHold& tail = m_dragActivation.tail;
-        if (!safeWindow || tail.window != safeWindow || !tail.awaitingOutcome) {
+        if (!safeWindow || tail.window != safeWindow || tail.generation != dragGeneration || !tail.awaitingOutcome) {
             return;
         }
         tail.awaitingOutcome = false;
-        if (tail.finished) {
+        if (tail.finished && !(m_dragTracker->isDragging() && m_dragTracker->draggedWindow() == safeWindow)) {
             drainMoveTail();
         }
     };
@@ -379,7 +384,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // move alive until the last button comes up is the correct
                     // behaviour for any window. Ending it here would cut a
                     // gesture short mid-drag. A cancel also has the daemon
-                    // re-emit the tile, which the drag-start float shed (F1015).
+                    // re-emit the tile, which the drag-start float or a snapping
+                    // excursion shed (F1015, F1058).
                     revertOptimisticDragFloat();
                     if (outcome.action == PhosphorProtocol::DragOutcome::CancelSnap) {
                         reassertCancelledTile();

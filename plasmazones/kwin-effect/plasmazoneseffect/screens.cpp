@@ -1034,12 +1034,12 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // here would be dereferenced by its damage math and its repaint pump.
     m_pointerPass.outputRemoved(output);
 
-    // Drop this output's strip view accumulator. The map is keyed by
-    // LogicalOutput*, so a disconnected one would leave an entry whose key can
-    // be reused by a later hotplug landing at the same address — the next
-    // scroll on the new output would then spring from the dead one's baseline.
-    // Runs before the motion-clock early-return so it fires even for an output
-    // that never had an animation clock, same as the two clears above.
+    // Drop the strip view accumulators of this output's strips. They are keyed
+    // by strip and each records its LogicalOutput*, so one left behind keeps a
+    // dangling output, and the monitor plugged back would spring its strip from
+    // the dead one's baseline. Runs before the motion-clock early-return so it
+    // fires even for an output that never had an animation clock, same as the
+    // two clears above.
     m_stripViewAnimator->forgetOutput(output);
     // A pill on the dying output may hold the hover and the override cursor;
     // the handler's clear releases both with the painter's state and drops

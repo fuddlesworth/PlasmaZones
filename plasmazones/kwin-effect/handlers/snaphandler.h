@@ -312,10 +312,14 @@ public Q_SLOTS:
                              const PhosphorProtocol::EmptyZoneList& emptyZones);
 
 public:
-    /// Park @p windowId for a snap restore once the desktop it was just moved to
-    /// comes into view, for @p cause (see DesktopArrivalParks). Called from
+    /// Park @p windowId for a snap restore once the desktop it is on comes into
+    /// view, for @p cause (see DesktopArrivalParks). Called from
     /// PlasmaZonesEffect::slotWindowDesktopMoveRequested when the target desktop
-    /// is not the one on screen.
+    /// is not the one on screen or the move is refused, and for a snapped
+    /// window on a desktop not in view from the screen-change zone re-apply
+    /// (ScreenChangeHandler::applyWindowGeometries) and the zone sync at daemon
+    /// bring-up (NavigationHandler::syncZonesFromDaemon). @p windowId is the
+    /// live id, which the arrival drain resolves windows by.
     void armDesktopArrivalRestore(const QString& windowId, DesktopArrivalParks::Cause cause);
 
     /// Drop @p windowId from the desktop-arrival park when it closes

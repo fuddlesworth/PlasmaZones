@@ -151,8 +151,8 @@ public:
     /// onWindowClosed, minus its maximize-ledger scrub, and the daemon relay is Tiling.releaseWindowTracking,
     /// which runs NO placement capture: a close relay would persist the slot being left as the window's final
     /// state. Callers: the desktop handler (a genuine departure, an arrival onto a desktop in view that does not
-    /// tile, an arrival a rule excludes), the flags-settle eviction (reevaluateWindowEligibility), and the
-    /// cross-output transfer in handleWindowOutputChanged.
+    /// tile, an arrival a rule excludes), the flags-settle eviction (reevaluateWindowEligibility), the cross-output
+    /// transfer in handleWindowOutputChanged, and an overflow float landing on another screen (floatOntoScreen).
     ///
     /// The relay fires only when @p screenId is managed in the CURRENT context. Which desktop's state still lists a
     /// window is the daemon's question, answered by TilingAdaptor's desktop-membership reconcile off the registry
@@ -1940,26 +1940,23 @@ private:
     /// Monocle claims an evacuee held when its output went away, taken back by the first monocle batch after its
     /// return (F685); dropped by a close or a real move (cleanupAutotileTracking) and at bring-up.
     QSet<QString> m_evacueeMonocleClaims;
-    /// Windows whose KWin maximize bit this handler holds because the
-    /// scrolling engine says their column is maximized. An OWNERSHIP LEDGER
-    /// on the same terms as m_monocleMaximizedWindows: membership is shed
-    /// only by an arm that actually hands the bit back, never merely because
-    /// the window's situation changed. releaseMaximizedToEdges therefore
-    /// RETAINS membership when it skips a still-fullscreen window, so a later
+    /// Minimize-floats an evacuee held when its output went away (the value is its untiled mark), given back by
+    /// readoptEvacuee on its return (F1046); dropped like m_evacueeMonocleClaims.
+    QHash<QString, bool> m_evacueeMinimizeFloats;
+    /// Windows whose KWin maximize bit this handler holds because the scrolling engine says their column is
+    /// maximized. An OWNERSHIP LEDGER on the same terms as m_monocleMaximizedWindows: membership is shed only by
+    /// an arm that actually hands the bit back, never merely because the window's situation changed.
+    /// releaseMaximizedToEdges therefore RETAINS membership when it skips a still-fullscreen window, so a later
     /// batch can do the real restore.
     ///
-    /// Every path that ends the strip's claim on a window must release it, and
-    /// the batch is not one of them for a window that LEAVES the strip: no
-    /// entry arrives to carry a cleared flag. The float funnels (both
-    /// channels), the untile diff, the demote and removed-screen sweeps, the
-    /// no-strip-left output-change arm, the leaving-scrolling loop, the
-    /// fullscreen-exit-while-floating repair and the untrack funnel
-    /// (cleanupAutotileTracking, via releaseAllClaims) all call it for that reason. The
-    /// untrack funnel matters most for the cross-output transfer half: the
-    /// window survives on a screen these engines do not manage, and nothing
-    /// else would ever hand the bit back. The scroll-to-scroll handoff
-    /// deliberately does NOT: the destination strip owns the bit and answers
-    /// on its own first batch.
+    /// Every path that ends the strip's claim on a window must release it, and the batch is not one of them for a
+    /// window that LEAVES the strip: no entry arrives to carry a cleared flag. The float funnels (both channels),
+    /// the untile diff, the demote and removed-screen sweeps, the no-strip-left output-change arm, the
+    /// leaving-scrolling loop, the fullscreen-exit-while-floating repair and the untrack funnel
+    /// (cleanupAutotileTracking, via releaseAllClaims) all call it for that reason. The untrack funnel matters
+    /// most for the cross-output transfer half: the window survives on a screen these engines do not manage, and
+    /// nothing else would ever hand the bit back. The scroll-to-scroll handoff deliberately does NOT: the
+    /// destination strip owns the bit and answers on its own first batch.
     ///
     /// Per window rather than per column because the wire is flat and the
     /// effect has no column identity — every tile of a maximized column is a

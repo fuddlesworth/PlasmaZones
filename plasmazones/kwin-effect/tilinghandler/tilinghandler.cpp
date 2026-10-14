@@ -741,9 +741,13 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
 void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecisions::ClaimScope scope)
 {
     // A scope that releases the monocle maximize does so first: the scrub below drops the membership the release
-    // reads (LiveDeparture, F675). The monocle gesture hold goes with the tracking (F775).
+    // reads (LiveDeparture, F675). A release that has to wait (fullscreen, a gesture) keeps its membership and owed
+    // restore past the scrub, for the fullscreen exit or the gesture end to pay (F1078). The monocle gesture hold
+    // goes with the tracking (F775).
+    bool monocleRetained = false;
     if (ScrollDecisions::claimReleasesOn(ScrollDecisions::Claim::MonocleMaximize, scope)) {
         unmaximizeMonocleWindow(windowId);
+        monocleRetained = m_monocleMaximizedWindows.contains(windowId);
     }
     m_monocleUnmaximizedInGesture.remove(windowId);
     // Compositor-agnostic state cleanup (shared helper).
@@ -751,6 +755,11 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
         m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_tileTargetZones,
         m_centeredWaylandZones, m_monocleMaximizedWindows, m_preTileGeometries};
     TilingStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
+    if (monocleRetained) {
+        m_monocleMaximizedWindows.insert(windowId);
+    } else {
+        m_monocleRestoreOwed.remove(windowId);
+    }
     m_minimizeFloatMarks.remove(windowId);
     m_centeredWaylandFrames.remove(windowId); // its stamp went in the helper
     m_unfloatInFlight.remove(windowId);
@@ -761,43 +770,34 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
     // strip being left, and the arriving strip answers on its own first batch. The claimed press goes with it.
     m_maximizeToggleInFlight.remove(windowId);
     m_claimedMaximizePresses.remove(windowId);
-    m_monocleRestoreOwed.remove(windowId);
-    // Retry budget and route/provenance markers die with the tracking: a dead
-    // id must not keep an exhausted budget, and every caller of this cleanup
-    // must drop the spawn-provenance entries or they leak past mode moves.
+    // Retry budget and route/provenance markers die with the tracking: a dead id must not keep an exhausted budget,
+    // and every caller of this cleanup must drop the spawn-provenance entries or they leak past mode moves.
     m_unfloatRetryAttempts.remove(windowId);
     m_pendingFreshWindows.remove(windowId);
     m_deferredWindowRoutes.remove(windowId);
-    // The tab-colour verdict dies with the window. The tab rebuilds evict a
-    // window that stops being a tab, but a close or untrack must evict too,
-    // and this is the one untrack funnel every caller passes.
+    // The tab-colour verdict dies with the window. The tab rebuilds evict a window that stops being a tab, but a
+    // close or untrack must evict too, and this is the one untrack funnel every caller passes.
     dropScrollTabColorsForWindow(windowId);
-    // The announce stamp dies with the tracking, and that erasure is what makes
-    // a late error reply for a CLOSED window harmless: the arm reads back 0,
-    // mismatches its captured stamp, and no-ops instead of re-inserting a
-    // spawn-provenance marker for a dead window, a leak until the tail prune.
-    // Safe to erase rather than tombstone because the stamps come
-    // from a session-global monotonic counter (the m_crossScreenRestoreGen
-    // contract).
+    // The announce stamp dies with the tracking, and that erasure is what makes a late error reply for a CLOSED
+    // window harmless: the arm reads back 0, mismatches its captured stamp, and no-ops instead of re-inserting a
+    // spawn-provenance marker for a dead window, a leak until the tail prune. Safe to erase rather than tombstone
+    // because the stamps come from a session-global monotonic counter (the m_crossScreenRestoreGen contract).
     m_announceGen.remove(windowId);
-    // The clip-loss dedupe entry dies with the window too: nothing else prunes
-    // it (the success-path re-arm only runs when the predicate answers), so a
-    // dead id's entry would sit in the map for the rest of the session.
+    // The clip-loss dedupe entry dies with the window too: nothing else prunes it (the success-path re-arm only
+    // runs when the predicate answers), so a dead id's entry would sit in the map for the rest of the session.
     m_scrollClipLossReported.remove(windowId);
-    // The strip companions die with the tracking too: the cross-output transfer
-    // otherwise leaves the OLD screen's commanded rect behind for the
-    // counter-assert to fight a legitimate position with once the window is
-    // re-announced onto another strip, and the parked paint hint is a stale
-    // relocation the moment the window returns to one. The relocation drop
-    // repaints here rather than at the call sites: the cross-mode output
-    // handoff and the move to another desktop reach this funnel with a live
-    // window and nothing else scheduling a frame, so the last presented frame
-    // would keep the column at its dead strip position.
+    // The strip companions die with the tracking too: the cross-output transfer otherwise leaves the OLD screen's
+    // commanded rect behind for the counter-assert to fight a legitimate position with once the window is
+    // re-announced onto another strip, and the parked paint hint is a stale relocation the moment the window
+    // returns to one. The relocation drop repaints here rather than at the call sites: the cross-mode output
+    // handoff and the move to another desktop reach this funnel with a live window and nothing else scheduling a
+    // frame, so the last presented frame would keep the column at its dead strip position.
     dropScrollCompanions(windowId);
-    // An evacuee's monocle claim, parked for its return, survives only its own
-    // scrub and re-seat (Evacuation); a close or a real move drops it (F685).
+    // An evacuee's monocle claim and minimize-float, parked for its return, survive only its own scrub and re-seat
+    // (Evacuation); a close or a real move drops them (F685, F1046).
     if (scope != ScrollDecisions::ClaimScope::Evacuation) {
         m_evacueeMonocleClaims.remove(windowId);
+        m_evacueeMinimizeFloats.remove(windowId);
     }
     // The claims go back with the tracking, by the scope's row in claimReleasesOn. Windowed fullscreen dies here
     // too: on the close path slotWindowClosed already removed the membership (this is belt), and on a cross-output
@@ -1238,14 +1238,12 @@ void TilingHandler::clearPerSessionDaemonState()
     // restart (windowOutputMoveExpected fired, matching outputChanged not yet seen) would swallow the window's
     // next genuine outputChanged, taking the bookkeeping-only path and skipping the real transfer.
     m_expectedOutputMove.clear();
-    // In-flight debounced minimize→float commits and minimize-float records
-    // belong to the dead daemon session — a timer firing now would issue a
-    // setWindowFloatingForScreen against state the new daemon never had, and
-    // a stale record would mis-route the next unminimize. Pending
-    // cross-screen size-restore connections are likewise per-session.
-    // clearAllPendingMinimizeFloats() also cancels the deferred unfloat timers
-    // and clears the fullscreen-float records; the explicit clears below keep
-    // the drain list self-evident (an escapee bails on the ownership miss).
+    // In-flight debounced minimize→float commits and minimize-float records belong to the dead daemon session — a
+    // timer firing now would issue a setWindowFloatingForScreen against state the new daemon never had, and a
+    // stale record would mis-route the next unminimize. Pending cross-screen size-restore connections are likewise
+    // per-session. clearAllPendingMinimizeFloats() also cancels the deferred unfloat timers and clears the
+    // fullscreen-float records; the explicit clears below keep the drain list self-evident (an escapee bails on
+    // the ownership miss).
     clearAllPendingMinimizeFloats();
     m_minimizeFloatedWindows.clear();
     m_fullscreenFloatedWindows.clear();
@@ -1255,6 +1253,7 @@ void TilingHandler::clearPerSessionDaemonState()
     m_unfloatRetryAttempts.clear();
     m_minimizeFloatMarks.clear();
     m_evacueeMonocleClaims.clear(); // the daemon's evacuee park is per session (F685)
+    m_evacueeMinimizeFloats.clear();
     // Routes deferred against the dead daemon session and their provenance
     // markers must not survive into the new one: a stale m_pendingFreshWindows
     // entry silently upgrades a later re-add to knownFreeFloating=true, which

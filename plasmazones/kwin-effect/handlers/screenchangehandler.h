@@ -98,7 +98,8 @@ public:
     /// before that (@ref holdsUnclassifiedRecord).
     void noteOutputAdded(KWin::LogicalOutput* output);
     /// Defer @p w's crossing from @p oldScreenId to the settle. A window
-    /// crossing twice keeps the first old screen.
+    /// crossing twice keeps the first old screen. The dragged window's is held
+    /// for its drop instead (settleDragCrossing, F1075).
     void deferCrossing(KWin::EffectWindow* w, const QString& oldScreenId);
     /// Whether @p w's crossing waits for the settle: deferred, or in the
     /// settle report still in flight. The effect holds the window's desktop
@@ -141,11 +142,12 @@ public:
     /// tile crossing virtual screens goes through the tiling handler's
     /// transfer, since the per-frame detector skipped it while held.
     void applyGestureEndCrossing(KWin::EffectWindow* w, const QString& oldScreenId, const QString& newScreenId);
-    /// The dragged window's crossings are held by the two arms above from the
-    /// first one until its drop's answer is in, then settled here once by what
-    /// the drop did (GestureEndDecisions::settleDragCrossing, F713, F731). A
-    /// drag that crossed and came back crossed nothing. Inert for a window
-    /// with nothing held.
+    /// The dragged window's crossings are held by the two arms above (and by
+    /// @ref deferCrossing during a screen change) from the first one until its
+    /// drop's answer is in, then settled here once by what the drop did
+    /// (GestureEndDecisions::settleDragCrossing, F713, F731). A drag that
+    /// crossed and came back crossed nothing. Inert for a window with nothing
+    /// held.
     void settleDragCrossing(KWin::EffectWindow* w, GestureEndDecisions::DropAnswer answer);
 
 public Q_SLOTS:

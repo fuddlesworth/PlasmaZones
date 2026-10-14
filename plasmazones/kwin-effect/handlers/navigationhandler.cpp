@@ -119,11 +119,14 @@ void NavigationHandler::syncZonesFromDaemon()
         for (const PhosphorProtocol::WindowStateEntry& state : states) {
             if (!state.zoneId.isEmpty()) {
                 m_zoneCache.setZone(state.windowId, state.zoneId);
-                // The parks died with the previous effect: a snapped window on
-                // a hidden desktop is parked again to re-apply its zone there.
-                KWin::EffectWindow* window = m_effect->findWindowByIdExact(state.windowId);
+                // The parks died with the previous effect or daemon: a snapped
+                // window on a hidden desktop is parked again to re-apply its
+                // zone there. Found by instance, since the daemon's id can
+                // carry an older class spelling, and parked under the live id
+                // the arrival drain resolves by (F1079).
+                KWin::EffectWindow* window = m_effect->findWindowByInstanceId(state.windowId);
                 if (window && (!isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity())) {
-                    m_effect->snapHandler()->armDesktopArrivalRestore(state.windowId,
+                    m_effect->snapHandler()->armDesktopArrivalRestore(m_effect->getWindowId(window),
                                                                       DesktopArrivalParks::Cause::ReapplyOnly);
                 }
             }

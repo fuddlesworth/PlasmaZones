@@ -310,10 +310,11 @@ enum class Claim {
 /// deliberate blank is a cell a reader can see rather than a call nobody
 /// wrote.
 ///
-/// THREE OF THESE SIX HAVE NO PRODUCTION CALLER, and that is a decision, not
-/// a gap. StripExit, UntrackFunnel and PassiveFloat route their releases
-/// through releaseAllClaims. ModeFlip, FullscreenExitWhileFloating and
-/// Teardown do not, because the funnel's shape is wrong for them:
+/// MODEFLIP, FULLSCREENEXITWHILEFLOATING AND TEARDOWN HAVE NO PRODUCTION
+/// CALLER, and that is a decision, not a gap. Every other scope routes its
+/// releases through releaseAllClaims, directly or through
+/// cleanupAutotileTracking. These do not, because the funnel's shape is wrong
+/// for them:
 ///
 ///  - ModeFlip's release is deliberately SPLIT IN TWO. The demote pass sheds
 ///    before the engines re-place, and the pre-tile restores run after; one
@@ -331,7 +332,7 @@ enum class Claim {
 ///    its own commit with its own live check (the same standing as the
 ///    UntrackFunnel monocle blank below).
 ///
-/// All three stay in the enum because the table is what the tests drive, and
+/// They stay in the enum because the table is what the tests drive, and
 /// because the answer to "does monocle release on a mode flip" has to be
 /// written down somewhere a reader can find it. Do not "finish the wiring"
 /// by pointing the first two at releaseAllClaims without re-deriving their
