@@ -34,14 +34,9 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/types/types.h"
 #include <PhosphorEngine/WindowRegistry.h>
-// Complete type required where ~WindowTrackingAdaptor destroys the
-// unique_ptr<RuleEvaluator> member (m_ruleEvaluator).
+// Complete type required for the m_ruleEvaluator->evictCached calls below.
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <utility>
 
@@ -179,9 +174,9 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // from a prior snap session — which SnapEngine::capturePlacement would claim as
     // a floated record before autotile is ever asked.
     //
-    // Owning engine = the engine matching the window's CURRENT screen mode, via the
-    // SAME predicate that routes the float resolver / writer / float-back geometry
-    // (WTS::isWindowInAutotileMode → the daemon's screenModeForWindow). Using one
+    // Owning engine = the engine matching the window's CURRENT screen mode:
+    // WTS::isWindowInAutotileMode, which wraps the daemon's screenModeForWindow,
+    // the routing the float resolver and writer also use. Using one
     // definition everywhere avoids the mid-mode-flip divergence an isWindowTracked()
     // check would introduce (it goes false at autotile teardown a beat before the
     // assignment flips). Every engine is still tried (first non-null wins), so the

@@ -387,9 +387,9 @@ void Daemon::updateEngineScreens()
     // engine capture is never second-guessed. Only when the pass has not
     // already seeded that screen, so the arms above always win. And only when
     // the adaptor's focused window is actually ON this screen — the member is
-    // global, one focused window session-wide, and screensMatch is required
-    // because the virtual and physical id forms differ, so a raw comparison
-    // would silently never match on a subdivided screen.
+    // global, one focused window session-wide. screensMatch so a connector
+    // name and an EDID id of one output compare equal; it never equates a
+    // virtual-screen id with its physical output (a mixed pair is false).
     //
     // A wrong or stale id degrades to today's behaviour rather than misfiring:
     // the engine drops a seed naming a window its strip does not contain, and

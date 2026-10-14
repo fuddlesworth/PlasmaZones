@@ -199,7 +199,8 @@ struct OutputSettleRow
     int maximizeMode = 0;
     int quickTileMode = 0;
     bool fullscreen = false;
-    /// Only KWin moved it: no interactive move or resize since the baseline.
+    /// Only KWin moved it: no interactive move or resize since the baseline. A keyboard or
+    /// window-menu Move to Screen is the user's too, so the effect must not report one as this (F1009).
     bool kwinOnly = true;
     /// On the desktop its own output shows and the current activity, and not minimized.
     bool placeableNow = true;

@@ -9,7 +9,6 @@
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
-#include <QRect>
 #include <QStringList>
 #include <QVector>
 
@@ -166,11 +165,12 @@ public Q_SLOTS:
      *                   placement record's kind from a live window, so none carries one.
      * @param restoreReason Why this resolve is running — see
      *                   PhosphorEngine::RestoreReason. Clamped from the wire, so an
-     *                   unrecognised value reads as Open. Gates the open claim and
-     *                   the RouteToDesktop / RouteToScreen routing, and is
-     *                   forwarded to the engine, where it gates the FIFO, a
-     *                   re-entry re-snap, a leaver's rule and the free-size
-     *                   restore of a floated open (#1106).
+     *                   unrecognised value reads as Open. Gates the open claim,
+     *                   the RouteToDesktop / RouteToScreen routing and the
+     *                   DesktopArrival held-zone re-apply, and is forwarded to
+     *                   the engine, where it gates the FIFO, a re-entry re-snap,
+     *                   a leaver's rule and the free-size restore of a floated
+     *                   open (#1106).
      * @param minWidth, minHeight Pinned by the v9 signature, accepted and ignored.
      */
     void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
@@ -240,7 +240,8 @@ public Q_SLOTS:
     void pushToEmptyZone(const QString& screenId = QString());
 
     /**
-     * @brief Restore the focused window to its original size (daemon-driven)
+     * @brief Take the focused window out of its zone and float it at its
+     *        float-back position and size (daemon-driven)
      */
     void restoreWindowSize();
 

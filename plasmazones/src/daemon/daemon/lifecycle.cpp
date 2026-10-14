@@ -636,7 +636,7 @@ void Daemon::stop()
     // Sever SnapEngine's borrow of m_excludeRuleSet (a daemon-owned value
     // member) BEFORE m_snapEngine.reset(). Declaration order currently
     // guarantees lifetime, but a future reorder or ownership move could
-    // silently introduce a dangling pointer through isAppIdExcluded if
+    // silently introduce a dangling pointer through an exclusion resolve if
     // a late shutdown call landed; the explicit clear here makes the
     // teardown contract grep-discoverable and survives that refactor.
     // `m_snapEngine` is base-typed `PlacementEngineBase*`; the setter

@@ -223,7 +223,9 @@ WindowTrackingAdaptor::reportOutputSettle(const PhosphorProtocol::OutputSettleRo
         } else if (m_evacuees->placedAfterEvacuation.contains(windowId) || row.kwinOnly) {
             // KWin moved a window PlasmaZones placed: the placement is
             // re-asserted (a PlasmaZones verb while the output was away, or a
-            // window KWin reverted in place, F770).
+            // window KWin reverted in place, F770). kwinOnly is the effect's
+            // word that the user did not move it, so a Move to Screen from the
+            // keyboard or window menu must not arrive as kwinOnly (F1009).
             const QString screen = reassertEvacuee(row, reassertedScreens);
             if (!screen.isEmpty()) {
                 verdict.verdict = OutputSettleVerdict::Reassert;

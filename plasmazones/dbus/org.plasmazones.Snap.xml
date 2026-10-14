@@ -88,7 +88,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient)."/>
             </arg>
             <arg name="restoreReason" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Why this resolve is running (0=Open, 1=Unminimize, 2=PendingSweep, 3=DesktopArrival, 4=DaemonRestartSweep). Open covers a genuine window open, including a session restore and a deferred-routing flush. The others re-resolve windows that are already open and on screen. Gates the open claim, the FIFO record match (open only, plus a sweep of a window no engine ever captured) and the cross-desktop session restore. Replaces the older isOpenPath bool, which could not distinguish the desktop-arrival re-drive from a user action."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Why this resolve is running (0=Open, 1=Unminimize, 2=PendingSweep, 3=DesktopArrival, 4=DaemonRestartSweep, 5=DesktopReapply). Open covers a genuine window open, including a session restore and a deferred-routing flush. The others re-resolve windows that are already open and on screen. DesktopReapply re-applies only the zone the window already holds where it landed, after a move that did not continue an open. Gates the open claim, the FIFO record match (open only, plus a sweep of a window no engine ever captured) and the cross-desktop session restore. Replaces the older isOpenPath bool, which could not distinguish the desktop-arrival re-drive from a user action."/>
             </arg>
             <arg name="minWidth" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Client-declared minimum width. Accepted and ignored: the cross-screen tile reclaim it sized was removed."/>
@@ -160,7 +160,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="restoreWindowSize">
-            <annotation name="org.gtk.GDBus.DocString" value="Restore the focused window to its original size."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Take the focused window out of its zone and float it at its float-back position and size."/>
         </method>
         <method name="swapWindowWithAdjacentZone">
             <annotation name="org.gtk.GDBus.DocString" value="Swap the focused window with the window in an adjacent zone."/>
