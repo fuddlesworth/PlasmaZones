@@ -340,6 +340,7 @@ struct ResizeHold
     quint64 commandStampAtFinish = 0;
     quint8 heldAxes = 0; ///< ContextAxis bits whose handler waits for the drain
     QMetaObject::Connection ackWatch;
+    QMetaObject::Connection commitWatch; ///< the client's commits, for one that keeps its size (F1096)
     quint64 generation = 0; ///< bumped per hold, read by the deadline timer
 };
 

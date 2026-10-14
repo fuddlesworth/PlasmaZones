@@ -29,6 +29,23 @@ inline bool frameAnswersRequest(const QSizeF& frame, const QSizeF& requested)
     return qAbs(frame.width() - requested.width()) <= 1.0 && qAbs(frame.height() - requested.height()) <= 1.0;
 }
 
+/// A held resize is answered, read on each frame change and client commit
+/// after the finish: the frame answers the size the user asked for
+/// (@p requestedAtFinish), a newer daemon command took over, or KWin's own
+/// request (@p compositorRequest, moveResizeGeometry() now, an invalid size
+/// with no KWin window) matches the frame.
+/// KWin takes the committed frame as its request only on a commit made once no
+/// configure carrying a geometry waits for the client
+/// (XdgSurfaceWindow::maybeUpdateMoveResizeGeometry), so a client that keeps a
+/// cell-grid size (foot) has then answered the last configure with the size it
+/// keeps, and that frame settles at once instead of at the deadline (F1096).
+inline bool resizeAnswered(const QSizeF& frame, const QSizeF& requestedAtFinish, const QSizeF& compositorRequest,
+                           bool newerCommand)
+{
+    return newerCommand || frameAnswersRequest(frame, requestedAtFinish)
+        || frameAnswersRequest(frame, compositorRequest);
+}
+
 enum class Crossing {
     None,
     Output,

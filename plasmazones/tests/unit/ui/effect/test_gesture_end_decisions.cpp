@@ -34,6 +34,21 @@ private Q_SLOTS:
         QVERIFY(!frameAnswersRequest(QSizeF(800, 600), QSizeF(800, 598)));
     }
 
+    // A cell-grid client (foot) keeps 800x608 for a 803x611 drag. Once KWin
+    // takes that frame as its own request, the client has answered the last
+    // configure and the resize settles at the frame it kept. While KWin still
+    // asks for the dragged size, it waits.
+    void resizeAnswered_cellGridClientSettlesOnceKwinTakesItsFrame()
+    {
+        const QSizeF kept(800, 608);
+        const QSizeF dragged(803, 611);
+        QVERIFY(resizeAnswered(kept, dragged, kept, false));
+        QVERIFY(!resizeAnswered(kept, dragged, dragged, false));
+        QVERIFY(!resizeAnswered(kept, dragged, QSizeF(), false));
+        QVERIFY(resizeAnswered(dragged, dragged, dragged, false));
+        QVERIFY(resizeAnswered(kept, dragged, dragged, true));
+    }
+
     void classify_noCrossing()
     {
         QCOMPARE(classify(QStringLiteral("DP-1/vs:0"), QStringLiteral("DP-1/vs:0")), Crossing::None);

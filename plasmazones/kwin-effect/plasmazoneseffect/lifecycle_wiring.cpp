@@ -939,6 +939,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         // A window that dies mid-resize has nothing left to settle.
         if (m_resizeHold.window == w) {
             disconnect(m_resizeHold.ackWatch);
+            disconnect(m_resizeHold.commitWatch);
             const quint64 generation = m_resizeHold.generation + 1;
             m_resizeHold = ResizeHold{};
             m_resizeHold.generation = generation;

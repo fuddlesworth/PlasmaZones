@@ -18,6 +18,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <effect/effecthandler.h>
+#include <wayland/surface.h>
 #include <window.h>
 
 #include <QPointer>
@@ -290,8 +291,9 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
             // The end-of-resize work runs from the frame the client commits for
             // the size it was dragged to. KWin does not wait for that commit at
             // the end of an interactive resize on Wayland, so when the frame
-            // does not answer the request yet, the drain waits for it, for a
-            // newer command, or for the deadline (F701).
+            // does not answer the request yet, the drain waits for it, for the
+            // client's answer to the last configure (F1096), for a newer
+            // command, or for the deadline (F701).
             KWin::Window* const kw = window->window();
             const QRectF requested = kw ? QRectF(kw->moveResizeGeometry()) : QRectF();
             m_resizeHold.finished = true;
@@ -354,16 +356,28 @@ void PlasmaZonesEffect::armResizeAckWatch(KWin::EffectWindow* w)
 {
     const QPointer<KWin::EffectWindow> safeW = w;
     disconnect(m_resizeHold.ackWatch);
-    m_resizeHold.ackWatch =
-        connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW](KWin::EffectWindow*) {
-            if (!safeW || m_resizeHold.window != safeW) {
-                return;
-            }
-            if (GestureEndDecisions::frameAnswersRequest(safeW->frameGeometry().size(), m_resizeHold.requested.size())
-                || m_daemonGate.commandStamps.current(safeW) != m_resizeHold.commandStampAtFinish) {
-                drainResizeHold(safeW->frameGeometry().toRect());
-            }
-        });
+    disconnect(m_resizeHold.commitWatch);
+    const auto settleIfAnswered = [this, safeW]() {
+        if (!safeW || m_resizeHold.window != safeW) {
+            return;
+        }
+        KWin::Window* const kw = safeW->window();
+        if (GestureEndDecisions::resizeAnswered(safeW->frameGeometry().size(), m_resizeHold.requested.size(),
+                                                kw ? kw->moveResizeGeometry().size() : QSizeF(),
+                                                m_daemonGate.commandStamps.current(safeW)
+                                                    != m_resizeHold.commandStampAtFinish)) {
+            drainResizeHold(safeW->frameGeometry().toRect());
+        }
+    };
+    m_resizeHold.ackWatch = connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, settleIfAnswered);
+    // A client that keeps its size commits no frame change, so its commits are
+    // read too. KWin connected its own commit handler when it made the window,
+    // so it has run, and moveResizeGeometry() is current, when this one does.
+    // An X11 frame is set to the request by KWin itself (X11Window::finishSync),
+    // so for one the frame watch is what answers.
+    if (KWin::Window* const kw = w->window(); kw && kw->surface()) {
+        m_resizeHold.commitWatch = connect(kw->surface(), &KWin::SurfaceInterface::committed, this, settleIfAnswered);
+    }
     // A client that never answers (a suspended one) must not hold the window:
     // at the deadline the drain reads the rect the resize asked for, kept at
     // the finish. KWin's request read now could be a newer daemon command not
@@ -413,6 +427,7 @@ void PlasmaZonesEffect::drainResizeHold(const QRect& frame)
     const QRect start = m_resizeHold.startGeometry;
     const quint8 heldAxes = m_resizeHold.heldAxes;
     disconnect(m_resizeHold.ackWatch);
+    disconnect(m_resizeHold.commitWatch);
     // Released FIRST: the bodies below must not see a hold.
     const quint64 generation = m_resizeHold.generation + 1;
     m_resizeHold = ResizeHold{};

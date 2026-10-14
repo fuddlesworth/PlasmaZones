@@ -20,8 +20,9 @@
 namespace PlasmaZones {
 
 /// A pre-computed snap restore target for a pending app: the record's zone
-/// geometry and the screen it was saved on. Fetched once from the daemon on
-/// ready (newest record first per app) and used by the deferred-route dispatch
+/// geometry and the screen it was saved on. Fetched from the daemon on ready and
+/// again on pendingRestoresChanged and on a settings or rules change (newest
+/// record first per app), and used by the deferred-route dispatch
 /// for a flash-free teleport ahead of the async resolve. Only ever applied on
 /// the saved screen's own output: restores happen where the window opens.
 struct CachedSnapRestore
