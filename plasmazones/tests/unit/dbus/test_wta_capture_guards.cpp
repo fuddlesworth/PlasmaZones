@@ -87,7 +87,7 @@ private Q_SLOTS:
     // Regression (float-restores-onto-its-own-tile): on a float-from-tiled
     // toggle the autotile engine clears its tiled bit BEFORE the compositor
     // repositions the window, so when captureWindowPlacement runs (from
-    // setWindowFloating) the live frame still IS the tile rect and the
+    // syncWindowFloating) the live frame still IS the tile rect and the
     // isWindowEngineTiled gate no longer refuses it. The capture must
     // compare against the engine's remembered last-applied rect and skip the
     // free-geometry write, or applyGeometryForFloat (which runs AFTER the
@@ -226,7 +226,7 @@ private Q_SLOTS:
     // window adopted by autotile is handoff-released from snap, so snap
     // tracks NOTHING for it — its record's snap slot is the frozen per-mode
     // memory windowsReleased restores from on return to snapping. A capture
-    // running in that window (windowsReleased's own setWindowFloating(false)
+    // running in that window (windowsReleased's own syncWindowFloating(false)
     // fires one) used to fabricate a "floating" snap slot for the untracked
     // window; with a resolvable screen for the live frame the fabricated slot
     // gains geometry, survives hasRestorableContent(), and the record merge

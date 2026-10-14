@@ -213,6 +213,41 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         relayZonePrune(m_service->pruneStaleZoneAssignments());
     });
 
+    // The instant-restore set (getPendingRestoreGeometries) is read against
+    // the layout each context runs, the desktop and activity in view, the
+    // disabled contexts and the outputs: the effect fetches it again on
+    // pendingRestoresChanged, emitted once per burst however many of those
+    // moved in it (F625, l18_p_q1_f625). A burst spans several event-loop
+    // passes: a desktop switch reaches the daemon as separate bus messages
+    // (the current desktop, each screen's desktop, the active layout), so each
+    // edge restarts a short debounce rather than a zero-interval timer. Rule
+    // edits reach the effect's own refetch through its rules subscription.
+    auto* restoresChanged = new QTimer(this);
+    restoresChanged->setSingleShot(true);
+    restoresChanged->setInterval(50);
+    connect(restoresChanged, &QTimer::timeout, this, &WindowTrackingAdaptor::pendingRestoresChanged);
+    const auto noteRestoresChanged = [restoresChanged]() {
+        restoresChanged->start();
+    };
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this, noteRestoresChanged);
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutAssigned, this, noteRestoresChanged);
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutsChanged, this, noteRestoresChanged);
+    connect(settings, &ISettings::disabledMonitorsChanged, this, noteRestoresChanged);
+    connect(settings, &ISettings::disabledDesktopsChanged, this, noteRestoresChanged);
+    connect(settings, &ISettings::disabledActivitiesChanged, this, noteRestoresChanged);
+    if (m_virtualDesktopManager) {
+        connect(m_virtualDesktopManager, &PhosphorWorkspaces::VirtualDesktopManager::currentDesktopChanged, this,
+                noteRestoresChanged);
+        connect(m_virtualDesktopManager, &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopChanged, this,
+                noteRestoresChanged);
+        connect(m_virtualDesktopManager, &PhosphorWorkspaces::VirtualDesktopManager::desktopsRenumbered, this,
+                noteRestoresChanged);
+    }
+    if (m_activityManager) {
+        connect(m_activityManager, &PhosphorWorkspaces::ActivityManager::currentActivityChanged, this,
+                noteRestoresChanged);
+    }
+
     // Deferred: PhosphorScreens::ScreenManager may not be initialized yet during adaptor construction.
     // If PhosphorScreens::ScreenManager is still unavailable after the first event loop iteration,
     // virtual screen signals won't be connected until the next daemon restart or
@@ -220,7 +255,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // tryEmitPendingRestoresAvailable(), which emits immediately when
     // (m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady()) returns false (no
     // PhosphorScreens::ScreenManager instance).
-    QTimer::singleShot(0, this, [this]() {
+    QTimer::singleShot(0, this, [this, noteRestoresChanged]() {
         auto* screenMgr = m_service->screenManager();
         if (!screenMgr) {
             qCWarning(lcDbusWindow) << "PhosphorScreens::ScreenManager instance not available - window restoration "
@@ -235,6 +270,11 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
                 &WindowTrackingAdaptor::replayHeldScreenReports, Qt::QueuedConnection);
         connect(screenMgr, &PhosphorScreens::ScreenManager::virtualScreensChanged, this,
                 &WindowTrackingAdaptor::replayHeldScreenReports, Qt::QueuedConnection);
+        // The outputs' half of the instant-restore refetch (see above).
+        connect(screenMgr, &PhosphorScreens::ScreenManager::screenAdded, this, noteRestoresChanged);
+        connect(screenMgr, &PhosphorScreens::ScreenManager::screenRemoved, this, noteRestoresChanged);
+        connect(screenMgr, &PhosphorScreens::ScreenManager::screenGeometryChanged, this, noteRestoresChanged);
+        connect(screenMgr, &PhosphorScreens::ScreenManager::virtualScreensChanged, this, noteRestoresChanged);
         // If panel geometry is already ready, trigger the check now
         if ((m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady())) {
             onPanelGeometryReady();

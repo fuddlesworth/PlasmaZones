@@ -537,8 +537,7 @@ private Q_SLOTS:
         // Float-back source of truth: toggling a snapped window to floating must
         // restore it to the float-back geometry carried by its unified placement
         // record, the only store of it (the per-engine store that sat beside it
-        // was uuid-keyed, dropped on load by the disabled-context gate, and is
-        // gone).
+        // was uuid-keyed and is gone).
         m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
         const QString w = QStringLiteral("settings|floatback");
         const QRect floatBack(271, 314, 962, 655);
@@ -797,7 +796,7 @@ private Q_SLOTS:
 
         // Snap then float
         m_snapEngine->commitSnap(windowId, m_zoneIds[0], m_screenId);
-        m_wta->setWindowFloating(windowId, true);
+        m_wta->syncWindowFloating(windowId, true);
 
         PhosphorProtocol::WindowStateEntry state = m_wta->getWindowState(windowId);
         QCOMPARE(state.isFloating, true);
@@ -934,7 +933,7 @@ private Q_SLOTS:
 
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
 
-        m_wta->setWindowFloating(windowId, true);
+        m_wta->syncWindowFloating(windowId, true);
 
         QVERIFY(spy.count() >= 1);
 
@@ -951,7 +950,7 @@ private Q_SLOTS:
     }
 
     // Regression: under the per-engine float model the owning engine flips its
-    // float bit BEFORE the daemon's sync slot reaches WTA::setWindowFloating
+    // float bit BEFORE the daemon's sync slot reaches WTA::syncWindowFloating
     // (e.g. AutotileEngine::performToggleFloat toggles then emits
     // windowFloatingChanged → Daemon::syncAutotileFloatState → here). A re-query
     // of the service therefore already reports floating==true, so the old
@@ -959,7 +958,7 @@ private Q_SLOTS:
     // suppressed EVERY autotile float broadcast — leaving the effect's float
     // cache stale and silently breaking the autotile FFM float-pause. The gate
     // must instead compare against the last value WTA broadcast.
-    void testSetWindowFloating_broadcastsWhenServiceAlreadyReportsFloating()
+    void testSyncWindowFloating_broadcastsWhenServiceAlreadyReportsFloating()
     {
         const QString windowId = QStringLiteral("firefox|12345");
 
@@ -979,17 +978,17 @@ private Q_SLOTS:
         QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowFloatingChanged);
 
         // The real float edge must broadcast even though a re-query says true.
-        m_wta->setWindowFloating(windowId, true);
+        m_wta->syncWindowFloating(windowId, true);
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.first().at(0).toString(), windowId);
         QCOMPARE(spy.first().at(1).toBool(), true);
 
         // Dedup still holds: setting the same broadcast value again is a no-op.
-        m_wta->setWindowFloating(windowId, true);
+        m_wta->syncWindowFloating(windowId, true);
         QCOMPARE(spy.count(), 1);
 
         // The unfloat edge broadcasts.
-        m_wta->setWindowFloating(windowId, false);
+        m_wta->syncWindowFloating(windowId, false);
         QCOMPARE(spy.count(), 2);
         QCOMPARE(spy.at(1).at(1).toBool(), false);
     }

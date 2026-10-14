@@ -905,7 +905,7 @@ private:
     // `ExcludePlacement` action (a kept rule may carry other actions too),
     // built via `PhosphorRules::ExclusionRules::excludePlacementRulesFrom` and
     // kept in lockstep with the store via the rulesChanged subscription wired
-    // in init(). SnapEngine borrows a pointer into this set for isAppIdExcluded;
+    // in init(). SnapEngine borrows a pointer into this set for its exclusion resolves;
     // the WindowTrackingAdaptor's pruneExcludedPlacements receives the
     // AppId patterns extracted from this same slice at refilter time. Held as a
     // member (stable address) so the bound RuleEvaluator's per-revision cache
@@ -1310,7 +1310,7 @@ private:
      * @brief Passively sync daemon-side float state without restoring geometry.
      *
      * Handler for AutotileEngine::windowFloatingStateSynced. Mirrors the WTS
-     * bookkeeping of syncAutotileFloatState (setWindowFloating, autotileFloated
+     * bookkeeping of syncAutotileFloatState (syncWindowFloating, autotileFloated
      * marker, pre-float zone housekeeping) but skips applyGeometryForFloat and
      * the navigation OSD — this path is invoked when the engine's internal state
      * diverges from WTS (e.g. a newly-inserted window carrying stale snap-mode

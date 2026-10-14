@@ -635,8 +635,10 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         m_currentDragPolicy = {};
         // Dropped on another snapping screen than the one snap holds the
         // window on: it leaves its snap memory there and floats where it
-        // was dropped (F677). Nothing else would: the effect holds every
-        // crossing back for the whole drag.
+        // was dropped (F677). Dropped on a screen a tiling engine runs: that
+        // engine adopts it floating where it was dropped and the tiles there
+        // stay put (l18_plain_drop_on_tiling). Nothing else would: the
+        // effect holds every crossing back for the whole drag.
         if (!cancelled && m_windowTracking
             && m_windowTracking->dragEndedOnScreen(windowId, resolveScreenAt(QPointF(cursorX, cursorY)).screenId,
                                                    /*floatIfSnapped=*/true)) {

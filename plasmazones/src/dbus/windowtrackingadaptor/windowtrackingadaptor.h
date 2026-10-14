@@ -28,7 +28,6 @@
 #include <QHash>
 #include <QSet>
 #include <QVariantMap>
-#include <QJsonArray>
 #include <QJsonObject>
 #include <QQueue>
 #include <QRect>
@@ -502,15 +501,15 @@ public Q_SLOTS:
                                   const QString& sourceZoneId, const QString& targetZoneId, const QString& screenId);
 
     /**
-     * Get validated pre-tile geometry (pre-snap or pre-autotile), ensuring it's within visible screen bounds
+     * The window's own free geometry on the screen it is tracked on (its record's screen when untracked)
      * @param windowId Window ID
      * @param x Output: X position (adjusted if off-screen)
      * @param y Output: Y position (adjusted if off-screen)
      * @param width Output: Width (adjusted if off-screen)
      * @param height Output: Height (adjusted if off-screen)
      * @return true if geometry was found and validated, false otherwise
-     * @note If original geometry is off-screen, it will be adjusted to fit within
-     *       the nearest visible screen while preserving dimensions where possible
+     * @note A rect that does not lie on that screen answers false. It is moved onto a screen
+     *       only when no screen manager can measure the output
      */
     bool getValidatedPreTileGeometry(const QString& windowId, int& x, int& y, int& width, int& height);
 
@@ -579,6 +578,7 @@ public Q_SLOTS:
      * live, so a second window never gets the rect its open sibling still uses.
      * Empty while snapping or the zone restore is off, or while an enabled rule
      * can turn that restore off for a window, since the async restore would refuse.
+     * The effect fetches it again on pendingRestoresChanged.
      */
     QString getPendingRestoreGeometries();
 
@@ -675,7 +675,7 @@ public Q_SLOTS:
     QString findWindowByPid(int pid);
 
     /**
-     * @brief Check if a window is temporarily floating (excluded from snapping)
+     * @brief Whether the engine running the window's current screen mode floats it
      * @param windowId Window ID
      * @return true if window is floating
      */
@@ -688,11 +688,8 @@ public Q_SLOTS:
      */
     bool queryWindowFloating(const QString& windowId);
 
-    /**
-     * @brief Set a window's float state
-     * @param windowId Window ID
-     * @param floating true to float, false to unfloat
-     */
+    /// @brief Float or unfloat a window through the engine that runs the screen it is on (the bus verb):
+    /// setWindowFloatingForScreen on its live screen. Refused (logged) for an unregistered or screenless window.
     void setWindowFloating(const QString& windowId, bool floating);
 
     /**
@@ -753,10 +750,14 @@ public:
      */
     QStringList knownWindowIds() const;
 
+    /// The in-process engine sync: the engine already flipped its float bit, so this writes WTS and
+    /// broadcasts. Never route it through setWindowFloatingForScreen, which would toggle the engine again.
+    void syncWindowFloating(const QString& windowId, bool floating);
+
     /// Drop what every engine holds of @p windowId off @p keepScreenId (screenleave.cpp).
     void releaseLeftScreens(const QString& windowId, const QString& keepScreenId,
                             const PhosphorEngine::IPlacementEngine* arrival);
-    /// A drop with no snap commit off the screen snap holds the window on; true if handled.
+    /// True if it handled a drop with no snap commit: off the screen snap holds it on, or plain on a tiling screen.
     bool dragEndedOnScreen(const QString& windowId, const QString& releaseScreenId, bool floatIfSnapped);
 
     /// Internal: the QRect itself, without the D-Bus ZoneGeometryRect wrapper, for daemon-internal callers.
@@ -1060,8 +1061,8 @@ private:
     /// RuleEvaluator's shared one. Seeding the shared memo would poison it (its
     /// key excludes the admit filter, and this query is unstamped) and break
     /// the stamper-first ordering invariant; reading it would miss forever for
-    /// every already-open window (all six seeders run on the OPEN path and a
-    /// rules save bumps the revision), and this runs once per tab per colour
+    /// every already-open window (four seeders run only at open, two on unfloat
+    /// and restore, and a rules save bumps the revision), and this runs per tab per colour
     /// query plus once per window per record change. It caches the extracted
     /// COLOUR MAP: the three slots are all this path reads, and the map keeps
     /// this header free of the rules-engine include.
@@ -1103,10 +1104,10 @@ public:
     /// shared evaluator memo is always seeded with the full trio.
     void stampScreenContext(PhosphorRules::WindowQuery& query, const QString& screenId) const;
 
-    /// Resolve the open-placement directive for a window from its matched window
-    /// rules: the 1-based `SnapToZone` ordinals and/or zone names to snap into
-    /// (both lists empty when no SnapToZone rule matches; multiple targets across
-    /// the two lists request a zone span) plus the
+    /// Resolve the placement directive for a window from its matched window rules, for the open path, the Meta+F
+    /// unfloat's rule tier and the Snap.snapToAppRule slot: the 1-based `SnapToZone` ordinals and/or zone names to
+    /// snap into (both lists empty when no SnapToZone rule matches; multiple targets across the two lists request a
+    /// zone span) plus the
     /// `RouteToScreen` target monitor (empty when unrouted) plus the
     /// `RouteToDesktop` target desktop (unset when unrouted, and only ever a
     /// 1-based desktop). The desktop slot steers where the zones RESOLVE, so a
@@ -1115,7 +1116,7 @@ public:
     /// applyOpenDesktopRouting. Consulted by the
     /// placement resolver the daemon injects into the SnapEngine (in-process, not
     /// via D-Bus). Builds a WindowQuery from the window registry metadata, pins it
-    /// to @p screenId (the screen the window is opening on) so a
+    /// to @p screenId (the screen the window is on) so a
     /// `ScreenId`-constrained rule resolves, and reads the `Placement` /
     /// `RouteScreen` slots — mirrors shouldFloatByRule.
     PhosphorSnapEngine::PlacementDirective placementZonesByRule(const QString& windowId, const QString& screenId);
@@ -1220,7 +1221,7 @@ Q_SIGNALS:
      * @brief A window's floating state changed from what was last broadcast.
      *
      * Emitted only through relayWindowFloatingChanged: snap's own float
-     * changes and its float cleared by a snap (relayed), setWindowFloating,
+     * changes and its float cleared by a snap (relayed), syncWindowFloating,
      * setWindowFloatingForScreen, a screen leave that dropped a float bit, an
      * evacuee re-seat, and the daemon's tiling batch sync. The KWin effect
      * keeps its floating cache from it.
@@ -1244,18 +1245,11 @@ Q_SIGNALS:
     void windowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state);
 
     /**
-     * @brief Emitted when pending window restores become available
-     *
-     * Emitted at most once per session, once both of these hold:
-     * 1. The placement store held at least one record at load or at a
-     *    layout change
-     * 2. Panel geometry has been received
-     *
-     * The KWin effect should respond by calling resolveWindowRestore()
-     * for all visible windows that haven't yet been tracked.
-     *
-     * @note This solves startup timing issues where windows appear before
-     * the daemon has fully initialized its layout.
+     * @brief Pending window restores became available. Emitted at most once per
+     * session, once the placement store held a record at load or at a layout
+     * change AND panel geometry has been received. The KWin effect answers with
+     * resolveWindowRestore() for every visible window it has not tracked yet,
+     * which closes the startup race of windows appearing before the layout.
      */
     void pendingRestoresAvailable();
 
@@ -1367,6 +1361,9 @@ Q_SIGNALS:
     void raiseWindowsRequested(const QStringList& windowIds);
     /// A user verb on @p windowId the daemon places no geometry for: KWin ends its own fullscreen in place.
     void fullscreenHandBackRequested(const QString& windowId);
+    /// getPendingRestoreGeometries may answer differently now: a layout assigned, a desktop or activity switch, a
+    /// context disabled, an output added, removed or moved. One emission per event-loop pass (F625).
+    void pendingRestoresChanged();
 
     // toggleFloatForWindow moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
 
@@ -1397,10 +1394,10 @@ public:
      * against the last value actually broadcast. Engine signal relays MUST
      * route through this (never signal-to-signal into windowFloatingChanged,
      * never a bare Q_EMIT): a direct emission leaves m_broadcastFloating
-     * stale, and the setWindowFloating gate then suppresses the next genuine
+     * stale, and the syncWindowFloating gate then suppresses the next genuine
      * change on the engine-sync channel (e.g. a cross-mode handoff's
      * float-cleared sync after a snap-side float). Returns whether a
-     * broadcast was actually emitted, so setWindowFloating (which delegates
+     * broadcast was actually emitted, so syncWindowFloating (which delegates
      * its gate here) can ride its extra side emissions on the same edge.
      */
     bool relayWindowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
@@ -1553,6 +1550,8 @@ private:
     /// on @p screenId: the effect can send a physical id before the virtual-screen
     /// definitions load, so a tracked virtual screen of the same monitor wins.
     QString resolveFocusedWindowScreen(const QString& windowId, const QString& screenId) const;
+    bool dragEndedOnTilingScreen(PhosphorEngine::PlacementEngineBase* engine, const QString& windowId,
+                                 const QString& releaseScreenId, bool plainDrop);
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods - Private

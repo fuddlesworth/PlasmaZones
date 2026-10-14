@@ -56,7 +56,7 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
 
     // Float state changes — through the relay chokepoint, never
     // signal-to-signal: a direct emission bypasses m_broadcastFloating and
-    // desyncs the setWindowFloating dedup gate (see relayWindowFloatingChanged).
+    // desyncs the syncWindowFloating dedup gate (see relayWindowFloatingChanged).
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::windowFloatingChanged, adaptor,
                                  &WindowTrackingAdaptor::relayWindowFloatingChanged));
 

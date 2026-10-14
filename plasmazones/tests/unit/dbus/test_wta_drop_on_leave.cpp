@@ -180,6 +180,80 @@ private Q_SLOTS:
         QVERIFY2(arriving.releasedOffScreen.isEmpty(), "the arriving engine may still be moving the window");
     }
 
+    // The release keeps every hold on the screen kept: a sticky window's column
+    // on the same monitor's other desktop is not a screen left, so a float
+    // toggle on desktop 1 leaves it in the strip on desktop 2 (F579).
+    void releaseLeftScreensKeepsTheSameScreensOtherDesktop()
+    {
+        QObject owner;
+        StubPlacementEngine autotile;
+        auto* scroll = new PhosphorScrollEngine::ScrollEngine(nullptr, nullptr, &owner);
+        scroll->setActiveScreens({m_screenId});
+        scroll->setCurrentDesktopForScreen(m_screenId, 2);
+        const QString w = QStringLiteral("app|sticky-two-modes");
+        scroll->windowOpened(w, m_screenId, 0, 0);
+        scroll->setCurrentDesktopForScreen(m_screenId, 1);
+        QVERIFY(scroll->heldKeyForWindow(w).has_value());
+        m_wta->setEngines(m_snapEngine, &autotile, scroll);
+
+        m_wta->releaseLeftScreens(w, m_screenId, &autotile);
+
+        const auto held = scroll->heldKeyForWindow(w);
+        QVERIFY2(held.has_value(), "a hold on the screen kept must stay");
+        QCOMPARE(held->screenId, m_screenId);
+        QCOMPARE(held->desktop, 2);
+        m_wta->setEngines(m_snapEngine, nullptr, nullptr);
+    }
+
+    // A plain drag (no snap trigger) of a snapped window dropped on a monitor
+    // a tiling engine runs: that engine adopts it floating where it was
+    // dropped, and the zone on the monitor it left goes silently (F677,
+    // l18_plain_drop_on_tiling). Mutation: restore the early `return false`
+    // for a tiling release screen and nothing adopts the window.
+    void plainDropOnATilingScreenFloatsThere()
+    {
+        StubPlacementEngine tiling;
+        tiling.activeScreens = {QStringLiteral("DP-2")};
+        m_wta->setEngines(m_snapEngine, &tiling, nullptr);
+        const QString w = QStringLiteral("app|plain-drop");
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        QSignalSpy zoneSpy(m_wta->service(), &PhosphorPlacement::WindowTrackingService::windowZoneChanged);
+
+        QVERIFY(m_wta->dragEndedOnScreen(w, QStringLiteral("DP-2"), /*floatIfSnapped=*/true));
+
+        QCOMPARE(tiling.received.size(), 1);
+        QVERIFY2(tiling.received.first().wasFloating, "the drop floats, the tiles there stay put");
+        QCOMPARE(tiling.heldScreenForWindow(w), QStringLiteral("DP-2"));
+        QVERIFY2(!m_snapEngine->isWindowTracked(w), "no snap membership may stay on the monitor left");
+        QCOMPARE(zoneSpy.count(), 0);
+    }
+
+    // The arm's two refusals keep the old outcome: a dead drag (snapping off
+    // where it started) and a window the engine already holds on the drop
+    // screen are the engine's own drag handling, and a refused adoption
+    // leaves the snap zone for the caller's drag-out unsnap.
+    void plainDropOnATilingScreenRefusals()
+    {
+        StubPlacementEngine tiling;
+        tiling.activeScreens = {QStringLiteral("DP-2")};
+        m_wta->setEngines(m_snapEngine, &tiling, nullptr);
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        const QString dead = QStringLiteral("app|dead-drop");
+        m_wta->service()->assignWindowToZone(dead, m_zoneIds[0], m_screenId, 1);
+        QVERIFY(!m_wta->dragEndedOnScreen(dead, QStringLiteral("DP-2"), /*floatIfSnapped=*/false));
+        QVERIFY(tiling.received.isEmpty());
+
+        const QString held = QStringLiteral("app|held-drop");
+        tiling.heldScreen.insert(held, QStringLiteral("DP-2"));
+        QVERIFY(!m_wta->dragEndedOnScreen(held, QStringLiteral("DP-2"), /*floatIfSnapped=*/true));
+        QVERIFY(tiling.received.isEmpty());
+
+        tiling.refuseReceive = true;
+        QVERIFY(!m_wta->dragEndedOnScreen(dead, QStringLiteral("DP-2"), /*floatIfSnapped=*/true));
+        QCOMPARE(m_wta->service()->zoneForWindow(dead), m_zoneIds[0]);
+    }
+
     // Snap arriving on the new screen keeps the slot: the arrival is the
     // placement it now describes. The memberships on the monitor left go all
     // the same.

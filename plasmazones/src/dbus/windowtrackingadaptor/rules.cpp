@@ -508,9 +508,10 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     //    documented above shouldRestoreFloatedPosition — the two existing
     //    unstamped readers only run on the open path, AFTER a stamper.
     //  - COST. Merely READING the shared memo without seeding is not viable
-    //    either: every one of its six seeders runs on the OPEN path only, and
-    //    a rules save bumps the revision, so after any save the peek misses
-    //    forever for every already-open window (they will not open again).
+    //    either: four of its six seeders run only at open and the other two
+    //    only on an unfloat or restore, and a rules save bumps the revision, so
+    //    after any save the peek misses for every already-open window until
+    //    one of those edges re-seeds it, which for most windows is never.
     //    This function runs once per window per call of
     //    TilingAdaptor::scrollTabColors (the effect queries it per tab it
     //    paints) and again on every per-window relay the daemon fires on a
@@ -563,8 +564,9 @@ void WindowTrackingAdaptor::invalidateRuleMemosForColorSchemeChange()
     // session therefore hands the next seed to an unstamped predicate, which
     // writes an empty screenId and makes every ScreenId-scoped rule either
     // stop firing or, negated, fire for every window — until the next revision
-    // bump. Nothing is lost by keeping it: those six slots are open-path
-    // verdicts, and a colour-scheme flip does not re-run the open path.
+    // bump. The cost of keeping it: a flip re-runs none of the six, so the
+    // four open-time verdicts and the two restore predicates keep the verdict
+    // they had until the rules change.
     //
     // The tab-colour memo is the one that genuinely needs a flip to re-drive,
     // and its key now carries the scheme token, so this clear is a

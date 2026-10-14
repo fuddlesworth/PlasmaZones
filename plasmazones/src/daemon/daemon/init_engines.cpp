@@ -396,7 +396,7 @@ void Daemon::initEnginesAndWiring()
 
     // Filter the unified rule store down to its placement-exclusion slice
     // (Exclude ∪ ExcludePlacement) and hand the address to SnapEngine for
-    // its isAppIdExcluded probe. The
+    // its exclusion resolves. The
     // filtered slice is held as a stable Daemon member (m_excludeRuleSet)
     // and refreshed in-place via setRules so the bound RuleEvaluator's
     // per-revision sort index and resolve cache actually invalidate on
@@ -771,10 +771,9 @@ void Daemon::initEnginesAndWiring()
         });
 
         // Owning-engine predicate: WTS answers isWindowInAutotileMode with this
-        // (the single owning-engine signal for the capture funnel + float
-        // routing), using the same screen→mode resolution as the float resolver
-        // above. Float-back geometry itself is single-sourced from the unified
-        // WindowPlacementStore, so no per-engine geometry wiring is needed.
+        // (read by the adaptor's capture funnel only), using the same
+        // screen→mode resolution as the float resolver above. Float-back geometry itself is single-sourced from the
+        // unified WindowPlacementStore, so no per-engine geometry wiring is needed.
         m_windowTrackingAdaptor->service()->setAutotileModePredicate(
             [screenModeForWindow](const QString& windowId) -> bool {
                 return screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile;
@@ -1161,7 +1160,7 @@ void Daemon::initEnginesAndWiring()
                 if (!m_windowTrackingAdaptor) {
                     return;
                 }
-                m_windowTrackingAdaptor->setWindowFloating(windowId, floating);
+                m_windowTrackingAdaptor->syncWindowFloating(windowId, floating);
                 if (floating) {
                     m_windowTrackingAdaptor->service()->clearPreFloatZone(windowId);
                     m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);

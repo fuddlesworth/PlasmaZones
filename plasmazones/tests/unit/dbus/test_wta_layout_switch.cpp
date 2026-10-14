@@ -32,6 +32,48 @@ private Q_SLOTS:
         cleanupFixture();
     }
 
+    // A layout assigned on two desktops in one pass, then a switch of the
+    // active layout in the next: one pendingRestoresChanged for each pass, so
+    // the effect refetches its instant-restore cache once per change (F625).
+    // Mutations: emitting straight from the edge fails the coalescing check,
+    // and dropping the timer's timeout connect times the first wait out.
+    void pendingRestoresChangedOncePerPass()
+    {
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::pendingRestoresChanged);
+        QCoreApplication::processEvents();
+        spy.clear();
+
+        m_layoutManager->assignLayout(m_screenId, m_desktop, QString(), m_twoZones);
+        m_layoutManager->assignLayout(m_screenId, m_desktop + 1, QString(), m_twoZones);
+        QVERIFY2(spy.isEmpty(), "coalesced to the next event-loop pass");
+        QVERIFY(spy.wait(1000));
+        QCoreApplication::processEvents();
+        QCOMPARE(spy.count(), 1);
+
+        m_layoutManager->setActiveLayout(m_twoZones);
+        QVERIFY(spy.wait(1000));
+        QCOMPARE(spy.count(), 2);
+    }
+
+    // A desktop switch arrives as several bus messages, each in its own
+    // event-loop pass a few milliseconds apart; the burst still makes one
+    // signal. FAILS with a zero-interval timer (one signal per pass).
+    void pendingRestoresChangedOncePerBurstAcrossPasses()
+    {
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::pendingRestoresChanged);
+        QCoreApplication::processEvents();
+        spy.clear();
+
+        m_layoutManager->assignLayout(m_screenId, m_desktop, QString(), m_twoZones);
+        QTest::qWait(10);
+        m_layoutManager->assignLayout(m_screenId, m_desktop + 1, QString(), m_twoZones);
+        QTest::qWait(10);
+        m_layoutManager->setActiveLayout(m_twoZones);
+        QVERIFY(spy.wait(1000));
+        QTest::qWait(200);
+        QCOMPARE(spy.count(), 1);
+    }
+
     // A switch on one screen leaves the other screens' windows alone: the
     // quick-layout key populated every screen, and a span on another
     // monitor collapsed to its first zone (F474).

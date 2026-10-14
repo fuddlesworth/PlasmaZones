@@ -112,7 +112,7 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
             // Clear autotile-originated floats (they don't persist into snap mode)
             bool wasAutotileFloated = releasingEngine->isModeSpecificFloated(windowId);
             if (wasAutotileFloated) {
-                m_windowTrackingAdaptor->setWindowFloating(windowId, false);
+                m_windowTrackingAdaptor->syncWindowFloating(windowId, false);
             }
             releasingEngine->clearModeSpecificFloatMarker(windowId);
             // Restore the snap-mode float from the SINGLE source of truth — the
@@ -146,7 +146,7 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
                 && snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped() && !snapSlot.zoneIds.isEmpty();
             if (snapFloat) {
                 qCInfo(lcDaemon) << "windowsReleased: restoring snap-float for" << windowId;
-                m_windowTrackingAdaptor->setWindowFloating(windowId, true);
+                m_windowTrackingAdaptor->syncWindowFloating(windowId, true);
                 const QString screen = wts->screenForWindow(windowId);
                 // Per-screen rect only. anyFreeGeometry() would return a rect
                 // remembered for a DIFFERENT monitor and teleport the window

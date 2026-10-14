@@ -520,7 +520,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Handle unsnap - window was snapped but dropped outside any zone
     // Use same state as float shortcut: save zone for restore and mark floating, so unfloat/snap-back works.
     // Call unconditionally when capturedWasSnapped: unsnapForFloat handles the
-    // no-zone case internally, and setWindowFloating ensures windowClosed won't persist
+    // no-zone case internally, and syncWindowFloating ensures windowClosed won't persist
     // the zone (floating windows are excluded from persistence).
     // capturedExternallyCancelled is the load-bearing half of this gate. With
     // the commit branches above skipped, shouldApplyGeometry is false and a
@@ -531,7 +531,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     if (!shouldApplyGeometry && capturedWasSnapped && !capturedExternallyCancelled) {
         qCInfo(lcDbusWindow) << "Drag-out unsnap for" << windowId << "releaseScreen:" << releaseScreenId;
         // Latch the pre-snap float-back BEFORE the float write (twin of
-        // WindowTrackingAdaptor::notifyDragOutUnsnap): setWindowFloating's
+        // WindowTrackingAdaptor::notifyDragOutUnsnap): syncWindowFloating's
         // capture refresh records the live dragged frame into the same
         // per-screen map this read consumes.
         std::optional<QSize> preSnapSize;
@@ -545,7 +545,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             // unsnapForFloat on WTS: saves zone for restore, clears assignment.
             // No-op if the window wasn't snapped.
             m_windowTracking->service()->unsnapForFloat(windowId);
-            m_windowTracking->setWindowFloating(windowId, true);
+            m_windowTracking->syncWindowFloating(windowId, true);
         }
 
         // On drag-to-unsnap: restore pre-snap width/height; window keeps drop position.

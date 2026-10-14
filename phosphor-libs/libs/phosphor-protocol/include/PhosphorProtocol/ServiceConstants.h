@@ -638,6 +638,13 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       trailing windowId (a(siiiis) -> a(siiiiss)), the window whose record
 //       each one is, so the effect seeds that window only, never a same-app
 //       sibling (F627).
+//
+//       Also in v10, WindowTracking gains the pendingRestoresChanged signal
+//       (no arguments): getPendingRestoreGeometries may answer differently
+//       after a layout assignment, a desktop or activity switch, a context
+//       being disabled or an output change, so the effect fetches its
+//       instant-restore cache again (F625). An old effect never connects it
+//       and keeps the cache it fetched at daemon-ready.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

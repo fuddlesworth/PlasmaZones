@@ -653,7 +653,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
     if (m_windowTrackingAdaptor) {
         PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
         if (floating) {
-            m_windowTrackingAdaptor->setWindowFloating(windowId, true);
+            m_windowTrackingAdaptor->syncWindowFloating(windowId, true);
             m_autotileEngine->markModeSpecificFloated(windowId);
             // The snap-mode pre-float home goes, whatever screen it names. On
             // this screen it is stale. On another one the window has moved away
@@ -666,7 +666,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
             // so there is no parallel saved-float set to update here. The record is
             // the single source of truth and drives the float restore on return to
             // snapping (see windowsReleased).
-            m_windowTrackingAdaptor->setWindowFloating(windowId, false);
+            m_windowTrackingAdaptor->syncWindowFloating(windowId, false);
             m_autotileEngine->clearModeSpecificFloatMarker(windowId);
         }
     }
@@ -714,14 +714,14 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
         m_tilingAdaptor->forgetFloatBroadcast(windowId);
     }
     if (floating) {
-        m_windowTrackingAdaptor->setWindowFloating(windowId, true);
+        m_windowTrackingAdaptor->syncWindowFloating(windowId, true);
         m_autotileEngine->markModeSpecificFloated(windowId);
         // The snap-mode pre-float home goes, as in syncAutotileFloatState.
         wts->clearPreFloatZone(windowId);
     } else {
         // Snap-mode float persists in the placement record's snap slot (single
         // source of truth); nothing to save into a parallel set here.
-        m_windowTrackingAdaptor->setWindowFloating(windowId, false);
+        m_windowTrackingAdaptor->syncWindowFloating(windowId, false);
         m_autotileEngine->clearModeSpecificFloatMarker(windowId);
     }
     // What the other engines hold of the window off the screen autotile has it on
@@ -757,12 +757,12 @@ void Daemon::syncScrollFloatStatePassive(const QString& windowId, bool floating,
         m_tilingAdaptor->forgetFloatBroadcast(windowId);
     }
     if (floating) {
-        m_windowTrackingAdaptor->setWindowFloating(windowId, true);
+        m_windowTrackingAdaptor->syncWindowFloating(windowId, true);
         m_scrollEngine->markModeSpecificFloated(windowId);
         // The snap-mode pre-float home goes, as in syncAutotileFloatState.
         wts->clearPreFloatZone(windowId);
     } else {
-        m_windowTrackingAdaptor->setWindowFloating(windowId, false);
+        m_windowTrackingAdaptor->syncWindowFloating(windowId, false);
         // A release-time hold clear (announceReleasedFullscreenHolds) arrives
         // for a window the engine no longer tracks. Its mode-specific marker
         // is an INPUT to handleEngineWindowsReleased, which runs right after,
@@ -789,7 +789,7 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     for (const QString& windowId : windowIds) {
-        // Update WTS state directly (not adaptor setWindowFloating: its extra
+        // Update WTS state directly (not adaptor syncWindowFloating: its extra
         // windowStateChanged/placement-capture side emissions are wrong for a
         // batch the effect already applied), but DO route the broadcast
         // bookkeeping through the relay chokepoint. Skipping it left

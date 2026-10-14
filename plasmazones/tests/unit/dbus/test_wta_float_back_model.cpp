@@ -10,12 +10,18 @@
  *        managed frame (M), and, where a frame is sampled, the frame of a
  *        minimized, suspended or output-filling window (S). Two outputs side
  *        by side, a snap engine on per-screen stores, a stub tiling engine in
- *        the autotile slot and a window registry.
+ *        the autotile slot and a window registry. Plus the float verbs that
+ *        feed those writers: the bus setWindowFloating and the in-process sync.
  */
 
 #include "wta_float_back_fixture.h"
 
 #include "helpers/WindowPlacementBuilders.h"
+
+#include <QScopeGuard>
+#include <QSignalSpy>
+
+#include <optional>
 
 class TestWtaFloatBackModel : public QObject
 {
@@ -385,7 +391,106 @@ private Q_SLOTS:
         QVERIFY(!f.floatBack(w, kLeft).isValid());
     }
 
+    // The bus float verb floats a tile through the engine that runs its
+    // monitor and says nothing itself: the engine's own relay is the float
+    // edge, so the effect never hears of a float the layout did not make
+    // (F678, l18_bus_setwindowfloating).
+    void busSetWindowFloatingFloatsATileThroughItsEngine()
+    {
+        FloatBackFixture f;
+        FloatLoggingEngine tile;
+        tile.activeScreens = {kRight};
+        f.wta->setEngines(f.snap.get(), &tile, nullptr);
+        const auto restore = qScopeGuard([&f] {
+            f.wta->setEngines(f.snap.get(), &f.tiling, nullptr);
+        });
+        const QString w = f.registerWindow(QStringLiteral("f678-tile"));
+        tile.heldScreen.insert(w, kRight);
+        f.setFrame(w, QRect(2100, 100, 800, 600));
+        QSignalSpy floatSpy(f.wta, &WindowTrackingAdaptor::windowFloatingChanged);
+
+        f.wta->setWindowFloating(w, true);
+
+        QCOMPARE(tile.floatCalls.size(), 1);
+        QCOMPARE(tile.floatCalls.first(), (FloatLoggingEngine::Call{w, true, kRight}));
+        QVERIFY2(floatSpy.isEmpty(), "only the engine's own relay may report the float");
+    }
+
+    // On a snapping monitor the verb takes the window out of its zone, as a
+    // float toggle does, rather than setting a float bit beside the zone. A
+    // window the daemon has no record of is refused (F678).
+    void busSetWindowFloatingTakesASnappedWindowOutOfItsZone()
+    {
+        FloatBackFixture f;
+        const QString stranger = QStringLiteral("app|f678-unregistered");
+        f.snap->commitSnap(stranger, f.zone(0), kLeft);
+        f.wta->setWindowFloating(stranger, true);
+        QVERIFY2(!f.snap->isFloating(stranger), "a window with no registry record is refused");
+
+        const QString w = f.registerWindow(QStringLiteral("f678-snap"));
+        f.snap->commitSnap(w, f.zone(1), kLeft);
+        f.setFrame(w, f.zoneRect(1, kLeft));
+
+        f.wta->setWindowFloating(w, true);
+
+        QVERIFY(f.snap->isFloating(w));
+        QVERIFY2(f.wta->service()->zoneForWindow(w).isEmpty(), "the float leaves the zone");
+        QCOMPARE(f.wta->service()->preFloatZone(w), f.zone(1));
+    }
+
+    // The in-process sync names the snap zone only where snapping runs: a
+    // frozen snap zone sent for a window on a tiling monitor lands in the
+    // effect's zone cache and makes the tile read as snapped (F488).
+    void syncWindowFloatingSendsNoZoneOffSnapping()
+    {
+        FloatBackFixture f;
+        const QString onSnap = f.registerWindow(QStringLiteral("f488-snap"));
+        const QString onTile = f.registerWindow(QStringLiteral("f488-tile"));
+        f.snap->commitSnap(onSnap, f.zone(0), kLeft);
+        f.snap->commitSnap(onTile, f.zone(1), kRight);
+        f.snap->setLiveModeResolver([](const QString& screen) {
+            return screen == kRight ? PhosphorZones::AssignmentEntry::Mode::Autotile
+                                    : PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
+        const auto unset = qScopeGuard([&f] {
+            f.snap->setLiveModeResolver({});
+        });
+        QSignalSpy stateSpy(f.wta, &WindowTrackingAdaptor::windowStateChanged);
+        const auto floatedZone = [&stateSpy](const QString& windowId) -> std::optional<QString> {
+            for (const QList<QVariant>& args : stateSpy) {
+                const auto entry = args.at(1).value<PhosphorProtocol::WindowStateEntry>();
+                if (args.at(0).toString() == windowId && entry.changeType == QLatin1String("floated")) {
+                    return entry.zoneId;
+                }
+            }
+            return std::nullopt;
+        };
+
+        f.wta->syncWindowFloating(onSnap, true);
+        f.wta->syncWindowFloating(onTile, true);
+
+        QCOMPARE(floatedZone(onSnap), std::optional<QString>(f.zone(0)));
+        QCOMPARE(floatedZone(onTile), std::optional<QString>(QString()));
+    }
+
 private:
+    /// A stub tiling engine that logs every setWindowFloat it is asked for.
+    struct FloatLoggingEngine : StubPlacementEngine
+    {
+        struct Call
+        {
+            QString windowId;
+            bool floating = false;
+            QString screenId;
+            bool operator==(const Call&) const = default;
+        };
+        QList<Call> floatCalls;
+        void setWindowFloat(const QString& windowId, bool floating, const QString& screenId) override
+        {
+            floatCalls.append({windowId, floating, screenId});
+        }
+    };
+
     /// @p w tiled on DP-1 by the stub engine, which emitted the whole right
     /// half of the output for it; the tracking service reads it as tiled in
     /// view, as the daemon's predicate does.

@@ -99,7 +99,7 @@ private:
     /// without a layout, so most windows here float to appear at all.
     void track(const char* instance)
     {
-        m_wta->setWindowFloating(windowId(instance), true);
+        m_wta->syncWindowFloating(windowId(instance), true);
     }
 
     static QStringList ids(const PhosphorProtocol::WindowStateList& states)

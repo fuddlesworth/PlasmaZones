@@ -6,8 +6,9 @@
 //
 // This file retains cross-mode float methods that stay on WTA:
 //   notifyDragOutUnsnap, getPreFloatZone, clearPreFloatZone,
-//   isWindowFloating, queryWindowFloating, setWindowFloating (WTS delegate),
-//   getFloatingWindows, applyGeometryForFloat, setWindowFloatingForScreen.
+//   isWindowFloating, queryWindowFloating, setWindowFloating (the bus verb),
+//   syncWindowFloating (the in-process engine sync), getFloatingWindows,
+//   applyGeometryForFloat, setWindowFloatingForScreen.
 
 #include "windowtrackingadaptor.h"
 #include "internal.h"
@@ -35,7 +36,7 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     QString screenId = m_service->screenForWindow(windowId, m_lastActiveScreenId);
     qCInfo(lcDbusWindow) << "Drag-out unsnap (no activation trigger) for" << windowId << "screen:" << screenId;
 
-    // Latch the pre-snap float-back BEFORE the float write: setWindowFloating
+    // Latch the pre-snap float-back BEFORE the float write: syncWindowFloating
     // synchronously runs a placement capture that records the LIVE dragged
     // frame (zone dimensions) into the same per-screen free-geometry map this
     // read consumes — reading afterwards would "restore" the zone size and
@@ -49,7 +50,7 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     // method windowUnsnappedForFloat does the same thing, but this path
     // doesn't need the SnapAdaptor detour for a WTS-level operation).
     m_service->unsnapForFloat(windowId);
-    setWindowFloating(windowId, true);
+    syncWindowFloating(windowId, true);
 
     // Restore pre-snap size (not position — window stays where the user dropped it).
     // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped. A
@@ -121,7 +122,26 @@ bool WindowTrackingAdaptor::queryWindowFloating(const QString& windowId)
 
 void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floating)
 {
+    // The bus verb (F678), floated or unfloated by the engine that runs the
+    // screen the window is on: the path the effect's minimize and drag floats
+    // take. syncWindowFloating below is NOT this: it only records a flip an
+    // engine already made, so on a tile it told subscribers a window floated
+    // while it stayed in the layout.
     if (!validateWindowId(windowId, QStringLiteral("set float state"))) {
+        return;
+    }
+    // A refused verb is silent toward the caller, with a log line.
+    const QString screen = isRegistryTracked(windowId) ? liveScreenForWindow(windowId) : QString();
+    if (screen.isEmpty()) {
+        qCInfo(lcDbusWindow) << "setWindowFloating: no live window or screen for" << windowId << "- refused";
+        return;
+    }
+    setWindowFloatingForScreen(windowId, screen, floating);
+}
+
+void WindowTrackingAdaptor::syncWindowFloating(const QString& windowId, bool floating)
+{
+    if (!validateWindowId(windowId, QStringLiteral("sync float state"))) {
         return;
     }
     // Suspension classification — see WindowTrackingService::isSuspensionFloat.
@@ -233,7 +253,7 @@ bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, 
     // The single owner of the last-broadcast dedup contract — see the header
     // doc: every emission channel must keep m_broadcastFloating equal to what
     // subscribers last heard, or the gate turns from a dedup into a
-    // suppressor of genuine changes. setWindowFloating delegates here too.
+    // suppressor of genuine changes. syncWindowFloating delegates here too.
     // DELIBERATE divergence: the dedup keys on the CANONICAL (shadow) id so a
     // class-mutated window dedups as one window, while the signal carries the
     // CALLER'S raw id — subscribers resolve raw ids through their own
@@ -244,7 +264,7 @@ bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, 
     // relay, so after a daemon restart it is empty while WTS has restored
     // floating windows and subscribers still believe "floating" — treating
     // absent as false would swallow the first genuine unfloat entirely (no
-    // signal, and via setWindowFloating's early return no state-change
+    // signal, and via syncWindowFloating's early return no state-change
     // emission or capture refresh either). The cost is one redundant
     // broadcast per window on its first relay, which subscribers absorb
     // idempotently.

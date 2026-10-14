@@ -231,13 +231,12 @@ bool WindowTrackingAdaptor::dragEndedOnScreen(const QString& windowId, const QSt
     if (!m_service || windowId.isEmpty() || releaseScreenId.isEmpty()) {
         return false;
     }
-    // A drop on a screen a tiling engine runs is that engine's drag handling.
+    PhosphorSnapEngine::SnapEngine* snap = snapEngine();
     for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.data(), m_scrollEngine.data()}) {
         if (engine && engine->isActiveOnScreen(releaseScreenId)) {
-            return false;
+            return dragEndedOnTilingScreen(engine, windowId, releaseScreenId, floatIfSnapped);
         }
     }
-    PhosphorSnapEngine::SnapEngine* snap = snapEngine();
     if (!snap) {
         return false;
     }
@@ -279,6 +278,62 @@ bool WindowTrackingAdaptor::dragEndedOnScreen(const QString& windowId, const QSt
                                       releaseScreenId, true,
                                       static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
         m_service->clearFreeGeometry(windowId, sourceScreen);
+    }
+    return true;
+}
+
+bool WindowTrackingAdaptor::dragEndedOnTilingScreen(PhosphorEngine::PlacementEngineBase* engine,
+                                                    const QString& windowId, const QString& releaseScreenId,
+                                                    bool plainDrop)
+{
+    // A dead drag, and a window the engine already holds there, are the
+    // engine's own drag handling.
+    if (!plainDrop
+        || PhosphorScreens::ScreenIdentity::screensMatch(engine->heldScreenForWindow(windowId), releaseScreenId)) {
+        return false;
+    }
+    // A plain drag (no snap trigger) dropped here floats where it was dropped:
+    // the engine adopts it floating, so the tiles already there stay put and
+    // Meta+F tiles it. Snap's hold on the monitor it left goes silently
+    // (l18_plain_drop_on_tiling, F677).
+    PhosphorSnapEngine::SnapEngine* snap = snapEngine();
+    const QString canonical = shadowWindowId(windowId);
+    const QString snapScreen = WindowTrackingInternal::snapZoneScreen(snap, windowId, releaseScreenId);
+    const bool heldSnap =
+        !snapScreen.isEmpty() || WindowTrackingInternal::snapHoldsOffScreen(snap, windowId, releaseScreenId);
+    // The pre-snap size, read before the release consumes that screen's memory.
+    std::optional<QRect> preSnapGeo;
+    if (!snapScreen.isEmpty() && shouldRestoreSizeOnUnsnap(windowId)) {
+        preSnapGeo = m_service->validatedUnmanagedGeometry(windowId, snapScreen);
+    }
+    PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+    ctx.windowId = windowId;
+    ctx.toScreenId = releaseScreenId;
+    ctx.wasFloating = true;
+    ctx.heldFocus = m_lastActiveWindowId == canonical;
+    ctx.sourceGeometry = m_frameGeometry.value(canonical);
+    // No source and no recovery: a refusal leaves snap's hold as it was, and
+    // the caller's drag-out unsnap runs as before.
+    if (!WindowTrackingInternal::guardedHandoff(nullptr, engine, ctx, QString())) {
+        return false;
+    }
+    qCInfo(lcDbusWindow) << "dragEndedOnScreen:" << windowId << "dropped on" << releaseScreenId << "floats in"
+                         << engine->engineId();
+    // After the adoption, as windowCrossedScreens does it: the arrival is left
+    // alone and the float close-out reads the engine that now holds it.
+    releaseLeftScreens(windowId, releaseScreenId, engine);
+    if (heldSnap) {
+        Q_EMIT windowStateChanged(windowId,
+                                  PhosphorProtocol::WindowStateEntry{windowId, QString(), releaseScreenId, true,
+                                                                     QStringLiteral("screen_changed"), QStringList{},
+                                                                     false});
+    }
+    captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
+    if (preSnapGeo && preSnapGeo->width() > 0 && preSnapGeo->height() > 0) {
+        Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapGeo->width(), preSnapGeo->height(), QString(),
+                                      releaseScreenId, true,
+                                      static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+        m_service->clearFreeGeometry(windowId, snapScreen);
     }
     return true;
 }
