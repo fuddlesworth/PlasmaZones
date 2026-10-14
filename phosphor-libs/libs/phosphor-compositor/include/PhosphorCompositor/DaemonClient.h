@@ -61,6 +61,9 @@ public:
     void notifyWindowOpenedBatch(const PhosphorProtocol::WindowOpenedList& windows);
     void notifyWindowClosed(const QString& windowId);
     void notifyWindowActivated(const QString& windowId, const QString& screenId);
+    /// The focused window moved to @p screenId without a new activation
+    /// (WindowTracking.activeWindowScreenChanged).
+    void notifyActiveWindowScreenChanged(const QString& windowId, const QString& screenId);
 
     // Drag operations (plugin → daemon)
     /// Canonical drag surface, mirroring org.plasmazones.WindowDrag. The
