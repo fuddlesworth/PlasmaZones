@@ -9,7 +9,8 @@
  *        way (F20, F142, F179, F21, F22, F26, F85). The focused-window verbs
  *        and a swap pass the same gates (F362, F79), none of them acts on the
  *        window being dragged (F773), and the effect's confirmations commit
- *        only real zones on real screens (F459).
+ *        only real zones on real screens (F459). A restore asked for a screen
+ *        the daemon does not know runs nothing.
  */
 
 #include "wta_float_back_fixture.h"
@@ -834,7 +835,37 @@ private Q_SLOTS:
         QVERIFY(toggled.isEmpty());
     }
 
+    // An open on a screen the daemon does not know (KWin's placeholder output
+    // while every monitor is off) gets the no-snap answer and plants nothing:
+    // the no-match terminal would float it under that id. The same open on a
+    // real screen is the control that the terminal is reached.
+    void restoreOnAnUnknownScreenRunsNothing()
+    {
+        GateFixture f;
+        QTRY_VERIFY(f.screenMgr->isPanelGeometryReady());
+        const QString known = f.registerOn(QStringLiteral("open-known"), 1);
+        QVERIFY(!resolveOpen(f, known, kLeft));
+        QVERIFY2(f.snap->isFloating(known), "control: an open with no match floats on a known screen");
+
+        const QString unknown = f.registerOn(QStringLiteral("open-unknown"), 1);
+        QSignalSpy floated(f.snap.get(), &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        QVERIFY(!resolveOpen(f, unknown, QStringLiteral("DP-9")));
+        QVERIFY(!f.snap->isFloating(unknown));
+        QCOMPARE(floated.count(), 0);
+    }
+
 private:
+    // One Open resolve through the adaptor, answering its shouldSnap.
+    static bool resolveOpen(GateFixture& f, const QString& windowId, const QString& screenId)
+    {
+        int x = 0, y = 0, w = 0, h = 0;
+        bool shouldSnap = false;
+        f.adaptor->resolveWindowRestore(windowId, screenId, false, static_cast<int>(PhosphorEngine::WindowKind::Normal),
+                                        static_cast<int>(PhosphorEngine::RestoreReason::Open), 0, 0, x, y, w, h,
+                                        shouldSnap);
+        return shouldSnap;
+    }
+
     static QString batchFor(GateFixture& f, const QString& windowId, const QString& zone, const QString& screen,
                             int desktop = 0)
     {

@@ -9,22 +9,42 @@
 
 #include "daemon/daemon.h"
 #include "helpers.h"
-
-#include <QGuiApplication>
-#include <QFutureWatcher>
-#include <QPointer>
-#include <QStandardPaths>
-#include <QtConcurrent>
-#include <QScreen>
-#include <QDBusConnection>
-#include <QDBusPendingCall>
-#include <QDBusError>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QSet>
-#include <QThread>
-#include <array>
+#include "daemon/overlayservice.h"
+#include "daemon/controllers/unifiedlayoutcontroller.h"
+#include "daemon/controllers/shortcutmanager.h"
+#include "daemon/controllers/enginefactory.h"
+#include "daemon/controllers/contextresolverwiring.h"
+#include "daemon/rendering/zoneentryscaffold.h"
+#include "daemon/rendering/zoneshadernoderhi.h"
+#include "config/configbackends.h"
+#include "config/configdefaults.h"
+#include "config/settingsconfigstore.h"
+#include "config/settings.h"
+#include "core/types/baselinecleanup.h"
+#include "core/types/constants.h"
+#include "core/resolve/crosssurfaceresolver.h"
+#include "core/resolve/animationbootstrap.h"
+#include "core/resolve/screenmoderouter.h"
+#include "core/utils/geometryutils.h"
+#include "core/utils/utils.h"
+#include "core/platform/logging.h"
+#include "core/interfaces/shaderregistry.h"
+#include "common/screenidresolver.h"
+#include "common/layoutbundlebuilder.h"
+#include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/settingsadaptor/settingsadaptor.h"
+#include "dbus/overlayadaptor.h"
+#include "dbus/zonedetectionadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
+#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
+#include "dbus/scrollingadaptor/scrollingadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
+#include "dbus/shaderadaptor.h"
+#include "dbus/compositorbridgeadaptor.h"
+#include "dbus/controladaptor.h"
+#include "dbus/ruleadaptor.h"
 
 #include <PhosphorServiceIdle/IdleService.h>
 #include <PhosphorShaders/ShaderPresetStore.h>
@@ -37,15 +57,6 @@
 #include <PhosphorAnimation/QtQuickClockManager.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
-
-#include "daemon/overlayservice.h"
-#include "daemon/controllers/unifiedlayoutcontroller.h"
-#include "daemon/controllers/shortcutmanager.h"
-#include "daemon/controllers/enginefactory.h"
-#include "daemon/controllers/contextresolverwiring.h"
-#include "daemon/rendering/zoneentryscaffold.h"
-#include "daemon/rendering/zoneshadernoderhi.h"
-
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorLayoutApi/LayoutId.h>
@@ -79,35 +90,21 @@
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorRules/RuleStoreWatcher.h>
 
-#include "config/configbackends.h"
-#include "config/configdefaults.h"
-#include "config/settingsconfigstore.h"
-#include "config/settings.h"
-#include "core/types/baselinecleanup.h"
-#include "core/types/constants.h"
-#include "core/resolve/crosssurfaceresolver.h"
-#include "core/resolve/animationbootstrap.h"
-#include "core/resolve/screenmoderouter.h"
-#include "core/utils/geometryutils.h"
-#include "core/utils/utils.h"
-#include "core/platform/logging.h"
-#include "core/interfaces/shaderregistry.h"
-#include "common/screenidresolver.h"
-#include "common/layoutbundlebuilder.h"
-#include "dbus/layoutadaptor/layoutadaptor.h"
-#include "dbus/settingsadaptor/settingsadaptor.h"
-#include "dbus/overlayadaptor.h"
-#include "dbus/zonedetectionadaptor.h"
-#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
-#include "dbus/windowdragadaptor/windowdragadaptor.h"
-#include "dbus/autotileadaptor/autotileadaptor.h"
-#include "dbus/tilingadaptor/tilingadaptor.h"
-#include "dbus/scrollingadaptor/scrollingadaptor.h"
-#include "dbus/snapadaptor/snapadaptor.h"
-#include "dbus/shaderadaptor.h"
-#include "dbus/compositorbridgeadaptor.h"
-#include "dbus/controladaptor.h"
-#include "dbus/ruleadaptor.h"
+#include <QGuiApplication>
+#include <QFutureWatcher>
+#include <QPointer>
+#include <QStandardPaths>
+#include <QtConcurrent>
+#include <QScreen>
+#include <QDBusConnection>
+#include <QDBusPendingCall>
+#include <QDBusError>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QSet>
+#include <QThread>
+#include <array>
 
 namespace PlasmaZones {
 

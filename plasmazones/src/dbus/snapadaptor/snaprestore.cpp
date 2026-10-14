@@ -192,6 +192,16 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
+    // A screen the daemon does not know answers nothing: KWin's placeholder
+    // output while every monitor is off (the effect routes an open there at the
+    // next settle instead), or an output not announced to the daemon yet. Run
+    // on such an id, the chain's no-match terminal would plant a snap float
+    // under it.
+    if (m_adaptor->resolveBusScreen(screenId).isEmpty()) {
+        qCInfo(lcDbusWindow) << "resolveWindowRestore: unknown screen" << screenId << "for" << windowId;
+        return;
+    }
+
     const PhosphorEngine::RestoreReason reason = PhosphorEngine::clampRestoreReasonFromWire(restoreReason);
     const bool isOpen = reason == PhosphorEngine::RestoreReason::Open;
     auto* const svc = m_adaptor->service(); // non-null: guarded above

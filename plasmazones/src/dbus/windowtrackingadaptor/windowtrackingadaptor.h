@@ -21,6 +21,8 @@
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
+#include <PhosphorConfig/IBackend.h>
+
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
@@ -36,8 +38,6 @@
 #include <functional>
 #include <memory>
 #include <optional>
-
-#include <PhosphorConfig/IBackend.h>
 
 namespace PhosphorContext {
 class IContextResolver;
@@ -412,9 +412,9 @@ public Q_SLOTS:
     /**
      * Push current frame geometry for a window into the daemon's shadow.
      *
-     * Called by the compositor plugin on windowFrameGeometryChanged (throttled
-     * to one push per window per 50 ms). The shadow is read by daemon-local shortcut
-     * handlers (float toggle, etc.) so they can compose pre-tile geometry
+     * Called by the compositor plugin on windowFrameGeometryChanged (throttled to one push per window per
+     * 50 ms) for every window it manages, kept-above ones included, never for one an exclusion rule matches.
+     * Daemon-local shortcut handlers (float toggle, etc.) read the shadow to compose pre-tile geometry
      * without a round-trip back to the effect.
      *
      * ABSENCE IS NOT LATENCY. Three effect pushes call this setter: the

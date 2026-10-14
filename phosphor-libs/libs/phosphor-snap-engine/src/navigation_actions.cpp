@@ -213,9 +213,7 @@ bool SnapEngine::isWindowExcludedAt(const QString& windowId, const QString& scre
 
 bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)
 {
-    if (!m_windowTracker) {
-        return false;
-    }
+    // Reached only from navigation verbs that refused a null m_windowTracker on entry.
     // @p screenId is the screen the verb acts on: the stored screen for a
     // window in a zone, the context screen otherwise, which is also where an
     // untracked window is. The landing context is asked separately, by the
@@ -499,9 +497,8 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     // invariant. This mirrors the neighbour-tiling gate installed in
     // SnapEngine::ensureTargetResolver, where testing for Autotile alone was
     // itself the shipped bug.
-    if (m_layoutManager
-        && m_layoutManager->modeForScreen(screenId, targetDesktop, currentActivity())
-            != PhosphorZones::AssignmentEntry::Snapping) {
+    if (m_layoutManager->modeForScreen(screenId, targetDesktop, currentActivity())
+        != PhosphorZones::AssignmentEntry::Snapping) {
         // Deliberately do NOT touch SnapState / the placement store here: the
         // daemon's handleCrossModeMove resolves this engine as the source and
         // calls handoffRelease(windowId) on it, vacating the snap zone before the
@@ -547,7 +544,7 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     QRect rect;
     if (landing.isEmpty() && !keepsFloat) {
         const QStringList sourceZones = source ? source->zonesForWindow(canonical) : QStringList{currentZoneId};
-        if (m_layoutManager && !sourceZones.isEmpty()
+        if (!sourceZones.isEmpty()
             && m_layoutManager->layoutForScreen(screenId, sourceKey.desktop, activity)
                 == m_layoutManager->layoutForScreen(screenId, targetDesktop, activity)) {
             landing = sourceZones;
@@ -557,7 +554,7 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
             rect = geometry;
         }
     }
-    if (!landing.isEmpty() && !rect.isValid() && m_windowTracker) {
+    if (!landing.isEmpty() && !rect.isValid()) {
         rect = m_windowTracker->resolveZoneGeometry(landing, screenId);
     }
     if (!keepsFloat && (landing.isEmpty() || !rect.isValid())) {
@@ -574,7 +571,7 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     // A kept float goes back to its float-back now, while the window is still
     // visible: a free apply has no zone for the arrival to re-apply, and a
     // suspended client on a hidden desktop may not ack it.
-    if (keepsFloat && m_windowTracker) {
+    if (keepsFloat) {
         if (const auto back = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
             back && back->isValid()) {
             Q_EMIT applyGeometryRequested(windowId, back->x(), back->y(), back->width(), back->height(), QString(),
@@ -587,7 +584,7 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         QStringList removed;
         bool lastUsedCleared = releaseMembership(windowId, sourceKey, removed);
         lastUsedCleared |= clearGlobalLastUsedIfRemoved(removed);
-        if (lastUsedCleared && m_windowTracker) {
+        if (lastUsedCleared) {
             m_windowTracker->markLastUsedZoneDirty();
         }
     }
@@ -605,18 +602,14 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         } else {
             commitSnap(windowId, landing.first(), screenId, PhosphorEngine::SnapIntent::UserInitiated, targetDesktop);
         }
-        if (m_windowTracker) {
-            m_windowTracker->recordSnapIntent(windowId, true);
-        }
+        m_windowTracker->recordSnapIntent(windowId, true);
     }
-    if (m_windowTracker) {
-        if (auto placement = capturePlacementAtDesktop(windowId, targetDesktop)) {
-            placement->virtualDesktop = targetDesktop;
-            m_windowTracker->placementStore().record(std::move(*placement));
-        } else {
-            qCDebug(PhosphorSnapEngine::lcSnapEngine) << "tryCrossDesktopMove: capturePlacement miss for" << windowId
-                                                      << "— placement-store desktop not updated to" << targetDesktop;
-        }
+    if (auto placement = capturePlacementAtDesktop(windowId, targetDesktop)) {
+        placement->virtualDesktop = targetDesktop;
+        m_windowTracker->placementStore().record(std::move(*placement));
+    } else {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine) << "tryCrossDesktopMove: capturePlacement miss for" << windowId
+                                                  << "— placement-store desktop not updated to" << targetDesktop;
     }
     Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
     // The target desktop is not in view, so its suspended client may not ack
@@ -840,13 +833,11 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
         return;
     }
     uncommitSnap(windowId);
-    if (m_windowTracker) {
-        // Screen-scoped: this restore consumes exactly one screen's
-        // float-back, and the all-screens form destroyed the position
-        // remembered for every OTHER monitor (the distinct-monitor memory
-        // the store's collapse deliberately preserves).
-        m_windowTracker->clearFreeGeometry(windowId, screenId);
-    }
+    // Screen-scoped: this restore consumes exactly one screen's
+    // float-back, and the all-screens form destroyed the position
+    // remembered for every OTHER monitor (the distinct-monitor memory
+    // the store's collapse deliberately preserves).
+    m_windowTracker->clearFreeGeometry(windowId, screenId);
     // Snapping has only TWO states, so a window that just lost its snap must be
     // marked floating. Leaving it in neither made isWindowTracked answer false,
     // which made capturePlacement return nullopt, which left the STALE SNAPPED

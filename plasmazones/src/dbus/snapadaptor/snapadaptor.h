@@ -159,7 +159,9 @@ public Q_SLOTS:
 
     /**
      * @brief Run the full snap-restore resolution (WindowPlacementStore restore +
-     *        placement-rule / empty-zone / last-zone fallback chain) in one call
+     *        placement-rule / empty-zone / last-zone fallback chain) in one call.
+     *        A screen id the daemon does not know (resolveBusScreen answers empty)
+     *        gets the no-snap answer and runs nothing.
      * @param windowKind Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient).
      *                   Accepted for wire compatibility and ignored: nothing sets a
      *                   placement record's kind from a live window, so none carries one.

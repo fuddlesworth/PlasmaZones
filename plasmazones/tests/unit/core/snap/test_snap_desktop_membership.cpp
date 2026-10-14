@@ -14,20 +14,11 @@
  * after a desktop removal.
  */
 
-#include <QGuiApplication>
-#include <QScopeGuard>
-#include <QSet>
-#include <QSignalSpy>
-#include <QString>
-#include <QStringList>
-#include <QTest>
-#include <memory>
-#include <utility>
-
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
+
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowPlacement.h>
@@ -40,6 +31,16 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/Zone.h>
+
+#include <QGuiApplication>
+#include <QScopeGuard>
+#include <QSet>
+#include <QSignalSpy>
+#include <QString>
+#include <QStringList>
+#include <QTest>
+#include <memory>
+#include <utility>
 
 using namespace PlasmaZones;
 using PhosphorEngine::WindowPlacement;

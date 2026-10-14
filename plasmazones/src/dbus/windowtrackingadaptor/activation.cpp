@@ -57,7 +57,7 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
 
 QString WindowTrackingAdaptor::resolveFocusedWindowScreen(const QString& windowId, const QString& screenId) const
 {
-    if (screenId.isEmpty() || !m_service) {
+    if (screenId.isEmpty()) {
         return screenId;
     }
     const QString trackedScreen = m_service->screenForWindow(windowId);

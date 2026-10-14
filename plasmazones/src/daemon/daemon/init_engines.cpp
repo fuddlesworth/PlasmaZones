@@ -15,13 +15,41 @@
 #include "enginerouting.h"
 #include "stripzones.h"
 #include "common/stripcardserialize.h"
-
-#include <QJsonObject>
-#include <QPointer>
-#include <QSet>
-#include <QTimer>
-#include <algorithm>
-#include <array>
+#include "daemon/overlayservice.h"
+#include "daemon/controllers/unifiedlayoutcontroller.h"
+#include "daemon/controllers/shortcutmanager.h"
+#include "daemon/controllers/enginefactory.h"
+#include "daemon/controllers/contextresolverwiring.h"
+#include "daemon/rendering/zoneentryscaffold.h"
+#include "daemon/rendering/zoneshadernoderhi.h"
+#include "config/configbackends.h"
+#include "config/configdefaults.h"
+#include "config/settingsconfigstore.h"
+#include "config/settings.h"
+#include "core/types/baselinecleanup.h"
+#include "core/types/constants.h"
+#include "core/resolve/crosssurfaceresolver.h"
+#include "core/resolve/animationbootstrap.h"
+#include "core/resolve/screenmoderouter.h"
+#include "core/utils/geometryutils.h"
+#include "core/utils/utils.h"
+#include "core/platform/logging.h"
+#include "core/interfaces/shaderregistry.h"
+#include "common/screenidresolver.h"
+#include "common/layoutbundlebuilder.h"
+#include "phosphor_i18n.h"
+#include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/settingsadaptor/settingsadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
+#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
+#include "dbus/scrollingadaptor/scrollingadaptor.h"
+#include "dbus/snapadaptor/snapadaptor.h"
+#include "dbus/shaderadaptor.h"
+#include "dbus/compositorbridgeadaptor.h"
+#include "dbus/controladaptor.h"
+#include "dbus/ruleadaptor.h"
 
 #include <PhosphorServiceIdle/IdleService.h>
 #include <PhosphorAnimation/CurveLoader.h>
@@ -33,15 +61,6 @@
 #include <PhosphorAnimation/QtQuickClockManager.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
-
-#include "daemon/overlayservice.h"
-#include "daemon/controllers/unifiedlayoutcontroller.h"
-#include "daemon/controllers/shortcutmanager.h"
-#include "daemon/controllers/enginefactory.h"
-#include "daemon/controllers/contextresolverwiring.h"
-#include "daemon/rendering/zoneentryscaffold.h"
-#include "daemon/rendering/zoneshadernoderhi.h"
-
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorLayoutApi/LayoutId.h>
@@ -74,34 +93,12 @@
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleStore.h>
 
-#include "config/configbackends.h"
-#include "config/configdefaults.h"
-#include "config/settingsconfigstore.h"
-#include "config/settings.h"
-#include "core/types/baselinecleanup.h"
-#include "core/types/constants.h"
-#include "core/resolve/crosssurfaceresolver.h"
-#include "core/resolve/animationbootstrap.h"
-#include "core/resolve/screenmoderouter.h"
-#include "core/utils/geometryutils.h"
-#include "core/utils/utils.h"
-#include "core/platform/logging.h"
-#include "core/interfaces/shaderregistry.h"
-#include "common/screenidresolver.h"
-#include "common/layoutbundlebuilder.h"
-#include "phosphor_i18n.h"
-#include "dbus/layoutadaptor/layoutadaptor.h"
-#include "dbus/settingsadaptor/settingsadaptor.h"
-#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
-#include "dbus/windowdragadaptor/windowdragadaptor.h"
-#include "dbus/autotileadaptor/autotileadaptor.h"
-#include "dbus/tilingadaptor/tilingadaptor.h"
-#include "dbus/scrollingadaptor/scrollingadaptor.h"
-#include "dbus/snapadaptor/snapadaptor.h"
-#include "dbus/shaderadaptor.h"
-#include "dbus/compositorbridgeadaptor.h"
-#include "dbus/controladaptor.h"
-#include "dbus/ruleadaptor.h"
+#include <QJsonObject>
+#include <QPointer>
+#include <QSet>
+#include <QTimer>
+#include <algorithm>
+#include <array>
 
 namespace PlasmaZones {
 
@@ -357,9 +354,7 @@ void Daemon::initEnginesAndWiring()
     // contextResolver wire lives there.
 
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
-        if (m_settings) {
-            m_settings->save();
-        }
+        m_settings->save();
     });
     // Wired for symmetry, not because it fires today: the only producer of
     // settingsPersistRequested is AutotileEngine's write-back guard timer, and
@@ -367,9 +362,7 @@ void Daemon::initEnginesAndWiring()
     // lands with its persistence already connected rather than silently
     // dropping, which is the failure this signal exists to prevent.
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
-        if (m_settings) {
-            m_settings->save();
-        }
+        m_settings->save();
     });
 
     autotileEngine->refreshConfigFromSettings();
@@ -471,11 +464,8 @@ void Daemon::initEnginesAndWiring()
         // saved state. One store holds every engine's records (WTA::loadState
         // loads them all), so the priming call above and this refilter are the
         // daemon's only pruneExcludedPlacements calls.
-        if (m_windowTrackingAdaptor) {
-            // Shutdown-window guard, mirrors snapEnginePtr null-check above.
-            m_windowTrackingAdaptor->pruneExcludedPlacements(
-                PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
-        }
+        m_windowTrackingAdaptor->pruneExcludedPlacements(
+            PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
     };
     // The rule store is constructed once in the Daemon ctor and SURVIVES a
     // stop() → init() cycle, so re-wiring here would stack duplicates of every rulesChanged
@@ -600,7 +590,7 @@ void Daemon::initEnginesAndWiring()
                 m_colorSchemeRefreshPending = true;
                 QTimer::singleShot(0, this, [this]() {
                     m_colorSchemeRefreshPending = false;
-                    if (m_shuttingDown || !m_overlayService) {
+                    if (m_shuttingDown) {
                         return;
                     }
                     m_overlayService->refreshContextLockState();
@@ -901,7 +891,7 @@ void Daemon::initEnginesAndWiring()
     m_windowTrackingAdaptor->setScrollStripStateProvider([engine = QPointer(scrollEngine)]() {
         return engine ? engine->serializeStripState() : QJsonObject();
     });
-    if (m_settings && m_settings->scrollingRestoreStripsOnLogin()) {
+    if (m_settings->scrollingRestoreStripsOnLogin()) {
         scrollEngine->restoreStripState(m_windowTrackingAdaptor->loadedScrollStripState());
     }
     scrollEngine->setPersistenceDelegate(
@@ -912,7 +902,7 @@ void Daemon::initEnginesAndWiring()
         [this, wta = QPointer(m_windowTrackingAdaptor), engine = QPointer(scrollEngine)]() {
             if (wta)
                 wta->loadState();
-            if (wta && engine && m_settings && m_settings->scrollingRestoreStripsOnLogin())
+            if (wta && engine && m_settings->scrollingRestoreStripsOnLogin())
                 engine->restoreStripState(wta->loadedScrollStripState());
         });
 
@@ -985,9 +975,6 @@ void Daemon::initEnginesAndWiring()
     connect(
         scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this,
         [this, scrollEngine](const QString& screenId) {
-            if (!m_overlayService) {
-                return;
-            }
             // The edge auto-scroll emits this on EVERY moving tick, up to
             // ~60 Hz for the length of an edge hold, and a refresh clears
             // the popup's stored pick plus re-pushes the whole card model.
@@ -1222,9 +1209,6 @@ void Daemon::initEnginesAndWiring()
     // the store as it actually is rather than against an empty list.
     m_tabColorRuleSlice = tabColorRuleSliceOf(m_ruleStore->ruleSet());
     connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this]() {
-        if (!m_ruleStore) {
-            return;
-        }
         // Equality-guard on the TabColor* slice, the same shape as the
         // exclude refilter above: every rulesChanged emission runs this
         // lambda, but only an edit that moves a tab-colour rule can move a
