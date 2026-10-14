@@ -126,8 +126,8 @@ void WindowTrackingAdaptor::saveState()
         // live companions through unchanged to avoid blanking them.
     }
 
-    // Float state is ephemeral (session-only) — do NOT persist across restarts.
-    // Clear any stale entry from older versions so restored sessions start clean.
+    // The FloatingWindows key is retired: a float persists as its engine's floating
+    // slot in the placement record. Clear any stale entry an older version left.
     tracking->deleteKey(ConfigKeys::obsoleteFloatingWindowsKey());
 
     // Pre-float zone/screen assignments are no longer persisted separately — a
@@ -160,10 +160,12 @@ void WindowTrackingAdaptor::saveState()
     // restore state (snapped / floated). The keep predicate reuses the single
     // disabled-context gate, so a record on a disabled monitor/desktop never
     // persists. refreshOpenWindowPlacements() (top of saveState) has already
-    // re-captured open floating windows' live geometry into the store.
+    // re-captured open floating windows' live geometry into the store. Each
+    // float-back rect is written relative to its output (F814), so the next
+    // login finds it on the same monitor however the monitors are arranged.
     if (dirty & D::DirtyWindowPlacements) {
-        const QJsonObject placements =
-            m_service->placementStore().serialize([this](const PhosphorEngine::WindowPlacement& p) {
+        const QJsonObject placements = m_service->placementStore().serialize(
+            [this](const PhosphorEngine::WindowPlacement& p) {
                 // Persist only records with something to restore. A contentless
                 // {floating, no geometry, no zones} residue carries nothing yet and,
                 // at MaxPerApp per app, would crowd out a real placement in the next
@@ -172,6 +174,9 @@ void WindowTrackingAdaptor::saveState()
                 // content-bearing here.)
                 return p.hasRestorableContent()
                     && !isPersistedContextDisabled(p.screenId, p.virtualDesktop, p.activity);
+            },
+            [service = m_service](const QString& screenId) {
+                return service->outputOrigin(screenId);
             });
         if (!placements.isEmpty()) {
             tracking->writeJson(ConfigKeys::windowPlacementsKey(), placements);
@@ -333,8 +338,8 @@ void WindowTrackingAdaptor::loadState()
                                    m_service->lastUsedDesktop());
     }
 
-    // Float state is ephemeral (session-only) — skip loading.
-    // Any stale FloatingWindows entries from older versions are cleaned up in saveState().
+    // No FloatingWindows key to load: a float comes back from its record's floating
+    // slot. saveState() deletes any stale entry an older version left.
 
     // Pre-float zone/screen assignments are no longer loaded — a floated window's
     // pre-float zones are restored from its WindowPlacement record on reopen.
@@ -361,13 +366,22 @@ void WindowTrackingAdaptor::loadState()
 
     // Restore the unified WindowPlacementStore — the single source of truth for
     // per-window restore state.
+    bool placementsMigrated = false;
     {
         const QString placementsStr = readVal(ConfigKeys::windowPlacementsKey(), QString());
         if (!placementsStr.isEmpty()) {
             QJsonParseError parseError;
             const QJsonDocument doc = QJsonDocument::fromJson(placementsStr.toUtf8(), &parseError);
             if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
-                m_service->placementStore().deserialize(doc.object());
+                // Back to absolute against the outputs the service knows now; an
+                // older absolute file is converted once by the store's format
+                // migration (WindowPlacementStore::FormatVersion) and written
+                // back below, so the conversion never runs a second time.
+                placementsMigrated = PhosphorEngine::WindowPlacementStore::formatVersionOf(doc.object())
+                    < PhosphorEngine::WindowPlacementStore::FormatVersion;
+                m_service->placementStore().deserialize(doc.object(), [service = m_service](const QString& screenId) {
+                    return service->outputOrigin(screenId);
+                });
             } else {
                 qCWarning(lcDbusWindow) << "Failed to parse saved window placements:" << parseError.errorString();
             }
@@ -425,7 +439,7 @@ void WindowTrackingAdaptor::loadState()
     }
 
     const int placementCount = m_service ? m_service->placementStore().size() : 0;
-    qCInfo(lcDbusWindow) << "Loaded state from KConfig: windowPlacements=" << placementCount;
+    qCInfo(lcDbusWindow) << "Loaded session state: windowPlacements=" << placementCount;
     if (placementCount > 0) {
         m_hasPendingRestores = true;
         tryEmitPendingRestoresAvailable();
@@ -433,9 +447,13 @@ void WindowTrackingAdaptor::loadState()
 
     // In-memory state now mirrors the disk file — nothing is dirty until
     // the next mutation lands. Without this clear, the first saveState()
-    // after startup would re-serialize every field we just loaded.
+    // after startup would re-serialize every field we just loaded. A migrated
+    // placements blob is the exception: its converted form has to reach disk.
     if (m_service) {
         m_service->clearDirty();
+        if (placementsMigrated) {
+            m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+        }
     }
 }
 

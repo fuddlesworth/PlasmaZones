@@ -212,6 +212,11 @@ SnapStateResolver snapStateResolverFor(PhosphorSnapEngine::SnapEngine* engine)
             e->rekeyMembershipsToRecordedScreens(physicalScreenId);
         }
     };
+    r.renameScreen = [e = QPointer(engine)](const QString& oldPhysicalId, const QString& newPhysicalId) {
+        if (e) {
+            e->renameScreen(oldPhysicalId, newPhysicalId);
+        }
+    };
     return r;
 }
 

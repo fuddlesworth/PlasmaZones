@@ -43,8 +43,9 @@ struct SnapStateResolver
     std::function<PhosphorSnapEngine::SnapState*(const QString& windowId)> forWindow;
     /// Owning state for a window placed/acting on a screen: resolves the state
     /// (creating it on first placement) AND records the reverse-map entry. A
-    /// pinned @p desktop (>= 1) names that desktop's store outright (see
-    /// SnapEngine::stateForWindowOnScreen); 0 resolves the primary.
+    /// pinned @p desktop (>= 1) names that desktop's store outright, re-homing a
+    /// window tracked on another screen (SnapEngine::stateForWindowOnScreen); 0
+    /// resolves the primary.
     std::function<PhosphorSnapEngine::SnapState*(const QString& windowId, const QString& screenId, int desktop)>
         forWindowOnScreen;
     /// Owning state for a SCREEN's current (screen, desktop, activity) context,
@@ -83,6 +84,11 @@ struct SnapStateResolver
     /// before their prune. Unset (the single-store convenience) is a no-op: one
     /// store has no key to move.
     std::function<void(const QString& physicalScreenId)> rekeyToRecordedScreens;
+    /// Re-file every membership filed on the monitor @p oldPhysicalId (its virtual
+    /// screens included) under @p newPhysicalId, after the screen manager flipped an
+    /// EDID twin's identifier (WindowTrackingService::renameScreen, F189). Unset is
+    /// a no-op, leaving the stores under the old id. Appended last (abi_policy).
+    std::function<void(const QString& oldPhysicalId, const QString& newPhysicalId)> renameScreen;
 };
 
 /// The full resolver over @p engine's stores, every member wired. Each one

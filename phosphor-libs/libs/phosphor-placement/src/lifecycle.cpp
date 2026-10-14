@@ -23,28 +23,6 @@
 
 namespace PhosphorPlacement {
 
-namespace {
-
-QRect clampToRect(const QRect& geometry, const QRect& bounds)
-{
-    QRect adjusted = geometry;
-    if (adjusted.right() > bounds.right()) {
-        adjusted.moveRight(bounds.right());
-    }
-    if (adjusted.left() < bounds.left()) {
-        adjusted.moveLeft(bounds.left());
-    }
-    if (adjusted.bottom() > bounds.bottom()) {
-        adjusted.moveBottom(bounds.bottom());
-    }
-    if (adjusted.top() < bounds.top()) {
-        adjusted.moveTop(bounds.top());
-    }
-    return adjusted;
-}
-
-} // anonymous namespace
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window Lifecycle
 // ═══════════════════════════════════════════════════════════════════════════════

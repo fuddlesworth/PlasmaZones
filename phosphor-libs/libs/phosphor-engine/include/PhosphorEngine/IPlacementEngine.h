@@ -129,11 +129,11 @@ public:
     /// empty when the engine does not hold it or holds it only in a
     /// background context.
     ///
-    /// Read wherever the engine's own hold matters more than the window's
-    /// position: the daemon's seed filter and engine routing, the adaptors'
-    /// focus, close and screen-leave paths, and the tiling adaptor's arrival
-    /// dispatch, where after a claim onto another virtual screen the effect's
-    /// queued announce still carries the ARRIVAL screen. isWindowTracked cannot serve: its contract is PER-ENGINE
+    /// Read where the engine's own hold matters more than the window's position: the daemon's seed
+    /// filter, engine routing and tiled-in-view predicate, the tracking adaptor's capture, focus,
+    /// resize and screen-leave paths, and the tiling adaptor's arrival dispatch, where after a claim
+    /// onto another virtual screen the effect's queued announce still carries the ARRIVAL screen.
+    /// isWindowTracked cannot serve: its contract is PER-ENGINE
     /// (ScrollEngine answers from a raw reverse-map key a refused adoption can
     /// leave dangling; SnapEngine and AutotileEngine verify membership).
     /// isWindowManaged/isWindowTiled cannot either: both exclude
@@ -152,7 +152,7 @@ public:
     /// The (screen, desktop, activity) key of the state that genuinely holds
     /// @p windowId, tiled or floating, in ANY context, or nullopt when none
     /// does. Membership-grade like heldScreenForWindow but NOT scoped to the
-    /// screen's current context: the daemon's desktop-membership reconcile
+    /// screen's current context: for a lifecycle engine the desktop reconcile
     /// asks "which desktop's stack still lists this window" after the
     /// compositor reports a desktop-set change, when the holding state is
     /// usually a BACKGROUND one the current-context predicates answer empty
@@ -167,9 +167,9 @@ public:
     /// answers nullopt during a drag-insert preview (the window is detached
     /// from the strip until the drop or cancel).
     ///
-    /// All three engines override it. Snapping takes part in the reconcile as
-    /// a membership engine: it holds no stack, so a release there is a zone
-    /// assignment dropped, not a gap closed.
+    /// All three engines override it. The reconcile asks only a lifecycle engine;
+    /// snapping, a membership engine, answers for its Meta+F test, the bus swap's
+    /// held context and the window-state rows.
     virtual std::optional<PlacementStateKey> heldKeyForWindow(const QString& windowId) const
     {
         Q_UNUSED(windowId)

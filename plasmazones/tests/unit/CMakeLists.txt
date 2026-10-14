@@ -928,6 +928,9 @@ p_add_test(test_layout_schema_editor_shape core/layout/test_layout_schema_editor
 # user's chosen destination alone.
 p_add_test(test_layoutregistry_transfer core/layout/test_layoutregistry_transfer.cpp)
 
+# A layout that copied another layout's zone ids gets ids of its own at load and import (F552).
+p_add_test(test_layout_zone_ids core/layout/test_layout_zone_ids.cpp)
+
 # Regression guard for the in-process dual-RuleStore data-loss race
 # where Settings used to construct its own store pointed at the same file
 # as the daemon's. Pins the share-via-borrow-ctor wiring in daemon.cpp.

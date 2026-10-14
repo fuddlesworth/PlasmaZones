@@ -298,6 +298,12 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Clear existing zones and add new ones
     layout->clearZones();
 
+    // A zone id another layout holds is replaced, as the registry's load and
+    // import do (F552): a remembered zone id has to name one layout.
+    if (const int reissued = PhosphorZones::LayoutUtils::reissueTakenZoneIds(obj, m_layoutManager->layouts());
+        reissued > 0) {
+        qCInfo(lcDbusLayout) << "updateLayout:" << reissued << "zone id(s) of another layout given new ids";
+    }
     const auto zonesArray = obj[::PhosphorZones::ZoneJsonKeys::Zones].toArray();
     for (const auto& zoneVal : zonesArray) {
         const QJsonObject zoneObj = zoneVal.toObject();
@@ -367,10 +373,26 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
         return QString();
     }
 
-    auto* layout = PhosphorZones::Layout::fromJson(obj, m_layoutManager);
-    if (!layout) {
+    // Zone ids another layout holds are replaced, as the registry's load and
+    // import do (F552). A layout-id collision clones, which replaces them all.
+    if (const int reissued = PhosphorZones::LayoutUtils::reissueTakenZoneIds(obj, m_layoutManager->layouts());
+        reissued > 0) {
+        qCInfo(lcDbusLayout) << "createLayoutFromJson:" << reissued << "zone id(s) of another layout given new ids";
+    }
+
+    auto* parsed = PhosphorZones::Layout::fromJson(obj, m_layoutManager);
+    if (!parsed) {
         qCWarning(lcDbusLayout) << "Failed to create layout from JSON";
         return QString();
+    }
+    // Same as importLayout: a layout id the registry already holds would leave
+    // two layouts under one id, and the reissue skipped that layout's zone ids.
+    PhosphorZones::Layout* layout = parsed;
+    if (m_layoutManager->layoutById(parsed->id())) {
+        qCInfo(lcDbusLayout) << "createLayoutFromJson: layout id collision, regenerating ids";
+        // Unparented: addLayout() below takes ownership.
+        layout = parsed->clone();
+        parsed->deleteLater();
     }
 
     m_layoutManager->addLayout(layout);

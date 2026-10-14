@@ -35,7 +35,8 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // has assigned the NEW layout by now while the windows' zone ids still name
     // the OLD one, so each window's position is read from whichever layout holds
     // its zone; see buildGlobalZonePositionMap for why the merge is unambiguous
-    // (zone UUIDs are unique across layouts).
+    // (zone UUIDs are unique across layouts: the registry re-mints a copied
+    // one at load and import, F552).
     const QHash<QString, int> globalZoneIdToPosition =
         PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts());
 
@@ -124,7 +125,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         }
     });
 
-    // 2. Restart-robustness: a window snapped in a PRIOR session and then autotiled
+    // 2. Restart-robustness: a window snapped in a PRIOR session and then tiled
     // has its snap zones only in the durable WindowPlacement record — the live
     // snap store map above is cold after a daemon restart. Without this pass a
     // layout switch, a KCM apply or a scrolling→snapping return right after a
@@ -175,6 +176,48 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
             }
         }
         addCandidate(rec.windowId, snapZonesOnDesktopInView(snapSlot, rec.screenId), rec.screenId, desktop);
+    }
+
+    // 3. A window minimized while its monitor switches layouts is not moved,
+    // and its unminimize returns it to its pre-float zones, which name the
+    // layout it left. They take the same-numbered zone of the layout its
+    // store's context runs now (F963(b), l18_minimized_layout_switch), the
+    // re-slot the desktop carry gives a minimized window (F953). A layout
+    // short of that zone leaves them alone, and the unfloat's layout guard
+    // keeps the window at its float spot (F963(a)).
+    int reslotted = 0;
+    for (PhosphorSnapEngine::SnapState* store : snapAllStates()) {
+        const QHash<QString, QStringList> preFloats = store->preFloatZoneAssignments();
+        const std::optional<PhosphorEngine::PlacementStateKey> key =
+            m_snapResolver.keyFor ? m_snapResolver.keyFor(store) : std::nullopt;
+        for (auto it = preFloats.constBegin(); it != preFloats.constEnd(); ++it) {
+            const QString& windowId = it.key();
+            if (!store->isFloating(windowId) || !isSuspensionFloat(windowId)) {
+                continue;
+            }
+            // A member store only, as forEachZoneAssignedWindow walks them.
+            const PhosphorSnapEngine::SnapState* owner = snapForWindow(windowId);
+            if (owner && owner != store && !snapHoldsWindow(windowId, store)) {
+                continue;
+            }
+            QString screenId = key ? key->screenId : store->preFloatScreen(windowId);
+            if (screenId.isEmpty()) {
+                screenId = store->screenForWindow(windowId);
+            }
+            if (screenId.isEmpty()) {
+                continue;
+            }
+            const QStringList slot = PhosphorZones::LayoutUtils::sameNumberedZones(
+                it.value(), lastUsedLayoutFor(store, screenId), globalZoneIdToPosition);
+            if (!slot.isEmpty() && slot != it.value()) {
+                store->addPreFloatZone(windowId, slot);
+                ++reslotted;
+            }
+        }
+    }
+    if (reslotted > 0) {
+        qCDebug(lcPlacement) << "Re-slotted the pre-float zones of" << reslotted << "minimized window(s)";
+        markDirty(DirtyWindowPlacements);
     }
 
     // Replaced even when empty: a row kept from an earlier populate belongs
@@ -388,8 +431,10 @@ WindowTrackingService::pendingRestoreGeometries() const
     //  - on each output the list stops at the first newer record the claim
     //    would take instead (a floated sibling, or a snapped one refused here).
     // The resolve does not move a teleported window back when it restores no
-    // zone, and the effect fetches this once per daemon-ready, so a layout,
-    // desktop or work-area change after the fetch leaves entries stale (F625).
+    // zone. The effect fetches this again when the daemon emits
+    // WindowTracking.pendingRestoresChanged (a layout cycle, a desktop or
+    // activity switch, a context disabled, a monitor rearranged: F625,
+    // l18_restore_cache_refetch), so an entry is stale only until then.
     // A record the effect can see is still open is dropped there by window id.
     const QString activity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
     QHash<QString, QList<quint64>> sequences;

@@ -5,10 +5,9 @@
 // agnostic facade every placement engine and the daemon share, and this is an
 // INSTALLED public header — splitting the class is an API break for the
 // third-party consumers the LGPL boundary exists to serve. The implementation
-// is already split by concern across src/ (WindowTrackingService.cpp and its
-// _sticky part, snap, resnap, navigation, virtualscreenmigration, lifecycle),
-// and the member ordering here encodes which of those owns what. Same
-// rationale as PhosphorTileEngine/AutotileEngine.h.
+// is already split by concern across src/ (WindowTrackingService.cpp and its _sticky part, snap, resnap, navigation,
+// virtualscreenmigration, lifecycle), and the member ordering here encodes which of those owns what. Same rationale
+// as PhosphorTileEngine/AutotileEngine.h.
 
 #pragma once
 
@@ -31,6 +30,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QUuid>
 
 #include <functional>
 #include <optional>
@@ -52,6 +52,7 @@ class VirtualDesktopManager;
 
 namespace PhosphorScreens {
 class ScreenManager;
+struct PhysicalScreen;
 }
 
 namespace PhosphorPlacement {
@@ -226,7 +227,7 @@ public:
      * @brief Assign a window to a zone
      * @param windowId Full window ID
      * @param zoneId PhosphorZones::Zone UUID string
-     * @param screenId Screen where the zone is located
+     * @param screenId Screen of the zone; with a pinned desktop, naming another than the window's moves it there
      * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
      */
     void assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
@@ -236,7 +237,7 @@ public:
      * @brief Assign a window to multiple zones (multi-zone snap)
      * @param windowId Full window ID
      * @param zoneIds List of zone UUID strings (first is primary)
-     * @param screenId Screen where the zones are located
+     * @param screenId Screen of the zones; with a pinned desktop, naming another than the window's moves it there
      * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
      */
     void assignWindowToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
@@ -293,7 +294,7 @@ public:
     int pruneStaleAssignments(const QSet<QString>& aliveWindowIds);
 
     /**
-     * @brief Check if a window is assigned to any zone
+     * @brief Whether the window holds a zone in its primary store (the context in view when it is a member there)
      */
     bool isWindowSnapped(const QString& windowId) const override;
 
@@ -356,6 +357,10 @@ public:
     {
         return geometryOverlapsScreen(geometry, screenId);
     }
+
+    /// The top-left of @p screenId's output (its monitor, for a virtual screen) that float-back rects are measured
+    /// from on disk (WindowPlacementStore::OutputOrigin); nullopt for an output this session has not seen (F814).
+    std::optional<QPoint> outputOrigin(const QString& screenId) const;
 
     /// Float-back writes. Three writers fill WindowPlacement::freeGeometryByScreen:
     /// recordFreeGeometry, recordFloatingClose and the adaptor's
@@ -653,7 +658,8 @@ public:
     /**
      * @brief Populate the resnap buffer: each window's primary zone position,
      * read from a map over every loaded layout. Every layout switch builds its
-     * buffer here, and the result replaces the buffer even when it is empty.
+     * buffer here, and the result replaces the buffer even when it is empty. A
+     * minimized window's pre-float zones move to the same-numbered zone (F963).
      *
      * @param excludeScreens Screens to skip (the screens a tiling engine runs, autotile or scrolling)
      * @param includeScreens When non-empty, only process windows on these
@@ -767,8 +773,8 @@ public:
     /// snapped records of closed windows the resolve would restore where they
     /// open now (a snapping context, a zone its layout holds, the shown
     /// desktop's zone for a multi-desktop record), cut on each output at the
-    /// first newer record the open claim would take instead. Read once per
-    /// daemon-ready; not re-checked when a layout or desktop changes (F625).
+    /// first newer record the open claim would take instead. The effect fetches it again when the daemon
+    /// emits WindowTracking.pendingRestoresChanged on a layout, desktop, activity or monitor change (F625).
     QHash<QString, QList<PendingRestoreTarget>> pendingRestoreGeometries() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1132,6 +1138,11 @@ private:
     };
     std::optional<PendingLastUsedZone> m_pendingLastUsedZone{};
     void flushPendingLastUsedZone();
+    /// Each output's last geometry, by identifier (else connector). Float-back rects follow their output's move
+    /// (followOutputGeometry, F814) and an identifier flip (renameScreen, F189); an output never seen is at (0,0).
+    QHash<QString, QRect> m_outputGeometry;
+    void followOutputGeometry(const PhosphorScreens::PhysicalScreen& screen);
+    void renameScreen(const QString& oldPhysicalId, const QString& newPhysicalId);
     // No save timer: persistence is the WindowTrackingAdaptor's debounced save, driven by stateChanged().
 };
 

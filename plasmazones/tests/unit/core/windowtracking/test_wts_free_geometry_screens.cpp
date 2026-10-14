@@ -12,13 +12,22 @@
  * screen centre. A window smaller than the floor, or one across a
  * virtual-screen edge, read as off-screen and was clamped into one half or
  * onto the neighbouring monitor.
+ *
+ * The same spots are kept relative to their monitor (F814): they follow an
+ * output that moves, is re-plugged elsewhere or changes mode, and the session
+ * file stores them relative so a login with the monitors rearranged finds them
+ * there. An EDID twin's identifier flip renames them in place (F189).
  */
 
+#include <QJsonObject>
+#include <QPoint>
 #include <QRect>
 #include <QRectF>
 #include <QString>
 #include <QTest>
+#include <QUuid>
 #include <memory>
+#include <optional>
 
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -132,7 +141,165 @@ private Q_SLOTS:
         QVERIFY(storedUnder(vs0, QRect(1250, 100, 400, 300)));
     }
 
+    // F814: a remembered floating spot is kept relative to its monitor. DP-2
+    // moves from DP-1's right to below it; the spot comes along. Without the
+    // move handler the old absolute rect no longer lies on DP-2 and the read
+    // refuses it.
+    void outputMove_translatesFloatBack()
+    {
+        const QRect spot(2600, 100, 400, 300);
+        seedFloatBack(kRight, kRight, spot);
+        m_source->moveScreen(kRight, QRect(0, 1440, 1920, 1080));
+        const auto back = m_service->validatedUnmanagedGeometry(kWindow, kRight);
+        QVERIFY(back.has_value());
+        QCOMPARE(*back, spot.translated(-2560, 1440));
+    }
+
+    void outputMove_translatesVirtualKeys()
+    {
+        const QString vs0 = splitLeftScreen();
+        const QRect spot(300, 200, 500, 400);
+        seedFloatBack(vs0, vs0, spot);
+        m_source->moveScreen(kLeft, QRect(0, 1080, 2560, 1440));
+        const auto rec = m_service->placementStore().peekExact(kWindow);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->freeGeometryByScreen.value(vs0), spot.translated(0, 1080));
+    }
+
+    // An output that is unplugged keeps its last geometry, so plugging it back
+    // in somewhere else still moves its spots by the difference.
+    void outputReplugElsewhere_translatesFloatBack()
+    {
+        const QRect spot(2600, 100, 400, 300);
+        seedFloatBack(kRight, kRight, spot);
+        m_source->removeScreen(kRight);
+        m_source->addScreen(kRight, QRect(-1920, 0, 1920, 1080));
+        const auto rec = m_service->placementStore().peekExact(kWindow);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->freeGeometryByScreen.value(kRight), spot.translated(-4480, 0));
+    }
+
+    // A smaller mode leaves a spot still on the output alone and pulls one it
+    // left off back onto it.
+    void outputResize_pullsOnlyAnOffSpotBack()
+    {
+        const QRect kept(2600, 50, 300, 200);
+        const QRect off(4260, 900, 200, 150);
+        seedFloatBack(kRight, kRight, kept);
+        PhosphorEngine::WindowPlacement other;
+        other.windowId = QStringLiteral("app|other");
+        other.appId = QStringLiteral("app");
+        other.screenId = kRight;
+        other.freeGeometryByScreen.insert(kRight, off);
+        QVERIFY(m_service->placementStore().record(other));
+        const QRect smaller(2560, 0, 1280, 720);
+        m_source->moveScreen(kRight, smaller);
+        QCOMPARE(m_service->placementStore().peekExact(kWindow)->freeGeometryByScreen.value(kRight), kept);
+        const QRect pulled = m_service->placementStore().peekExact(other.windowId)->freeGeometryByScreen.value(kRight);
+        QCOMPARE(pulled.size(), off.size());
+        QVERIFY2(smaller.contains(pulled), "the spot the smaller mode left off is back on the output");
+    }
+
+    // A spot the smaller mode leaves only partly on the output stays where it
+    // was: part of the window is still on screen, and only a spot with nothing
+    // left on the output is pulled back. FAILS if the resize clamps every spot.
+    void outputResize_leavesAPartlyVisibleSpot()
+    {
+        const QRect straddling(3700, 600, 300, 200);
+        seedFloatBack(kRight, kRight, straddling);
+        const QRect smaller(2560, 0, 1280, 720);
+        m_source->moveScreen(kRight, smaller);
+        QCOMPARE(m_service->placementStore().peekExact(kWindow)->freeGeometryByScreen.value(kRight), straddling);
+    }
+
+    // A stale entry (filed before its monitor moved, so off the screen now)
+    // no longer blocks a first capture. On HEAD first-capture-wins kept it.
+    void staleEntryDoesNotBlockFirstCapture()
+    {
+        seedFloatBack(kRight, kRight, QRect(100, 100, 300, 200));
+        const QRect fresh(2700, 200, 300, 200);
+        m_service->recordFreeGeometry(kWindow, kRight, fresh, /*overwrite=*/false);
+        QCOMPARE(m_service->placementStore().peekExact(kWindow)->freeGeometryByScreen.value(kRight), fresh);
+    }
+
+    // The login half: the session file holds the spot relative to DP-2, so a
+    // login with DP-2 below DP-1 finds it on DP-2. Written absolute, it read
+    // back at its old coordinates, off the monitor.
+    void savedSpotSurvivesARearrangedLogin()
+    {
+        const QRect spot(2600, 100, 400, 300);
+        seedFloatBack(kRight, kRight, spot);
+        const QJsonObject saved = m_service->placementStore().serialize({}, originsOf(m_service.get()));
+        QCOMPARE(saved.value(QStringLiteral("_version")).toInt(), PhosphorEngine::WindowPlacementStore::FormatVersion);
+
+        m_source->moveScreen(kRight, QRect(0, 1440, 1920, 1080));
+        PhosphorPlacement::WindowTrackingService login(m_layoutManager.get(), m_manager.get(), nullptr);
+        login.placementStore().deserialize(saved, originsOf(&login));
+        const auto rec = login.placementStore().peekExact(kWindow);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->freeGeometryByScreen.value(kRight), QRect(40, 1540, 400, 300));
+    }
+
+    // A file from before the format bump holds absolute rects. The one-time
+    // migration keeps a spot on a monitor connected now where it is and drops
+    // one on a monitor that is not, since no frame for it is known.
+    void unversionedFileIsMigratedOnce()
+    {
+        const QRect spot(2600, 100, 400, 300);
+        seedFloatBack(kRight, kRight, spot);
+        QJsonObject legacy;
+        {
+            PhosphorEngine::WindowPlacementStore absolute;
+            PhosphorEngine::WindowPlacement rec = *m_service->placementStore().peekExact(kWindow);
+            rec.freeGeometryByScreen.insert(QStringLiteral("HDMI-9"), QRect(9000, 0, 300, 200));
+            QVERIFY(absolute.record(rec));
+            legacy = absolute.serialize();
+            legacy.remove(QStringLiteral("_version"));
+        }
+        PhosphorPlacement::WindowTrackingService login(m_layoutManager.get(), m_manager.get(), nullptr);
+        login.placementStore().deserialize(legacy, originsOf(&login));
+        const auto rec = login.placementStore().peekExact(kWindow);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->freeGeometryByScreen.value(kRight), spot);
+        QVERIFY(!rec->freeGeometryByScreen.contains(QStringLiteral("HDMI-9")));
+    }
+
+    // F189: an EDID twin's identifier flip renames every stored id of the
+    // monitor in place, its virtual-screen keys and the snap store's value
+    // included, and the output's origin follows.
+    void identifierFlipRenamesStoredIds()
+    {
+        const QString twin = QStringLiteral("DP-2/twin");
+        const QRect spot(2600, 100, 400, 300);
+        seedFloatBack(kRight, kRight, spot);
+        PhosphorEngine::WindowPlacement rec = *m_service->placementStore().peekExact(kWindow);
+        rec.freeGeometryByScreen.insert(PhosphorIdentity::VirtualScreenId::make(kRight, 1), spot);
+        QVERIFY(m_service->placementStore().record(rec));
+        const QString snapped = QStringLiteral("app|snapped");
+        m_snapState->assignWindowToZones(snapped, {QUuid::createUuid().toString()}, kRight, 1);
+
+        Q_EMIT m_manager->screenIdentifierChanged(kRight, twin);
+
+        const auto after = m_service->placementStore().peekExact(kWindow);
+        QVERIFY(after.has_value());
+        QCOMPARE(after->screenId, twin);
+        QCOMPARE(after->freeGeometryByScreen.value(twin), spot);
+        QCOMPARE(after->freeGeometryByScreen.value(PhosphorIdentity::VirtualScreenId::make(twin, 1)), spot);
+        QVERIFY(!after->freeGeometryByScreen.contains(kRight));
+        QCOMPARE(m_snapState->screenForWindow(snapped), twin);
+        const std::optional<QPoint> origin = m_service->outputOrigin(twin);
+        QVERIFY(origin.has_value());
+        QCOMPARE(*origin, kRightGeometry.topLeft());
+    }
+
 private:
+    static PhosphorEngine::WindowPlacementStore::OutputOrigin originsOf(PhosphorPlacement::WindowTrackingService* svc)
+    {
+        return [svc](const QString& screenId) {
+            return svc->outputOrigin(screenId);
+        };
+    }
+
     /// Split DP-1 50/50 side by side and answer its left half's id.
     QString splitLeftScreen()
     {

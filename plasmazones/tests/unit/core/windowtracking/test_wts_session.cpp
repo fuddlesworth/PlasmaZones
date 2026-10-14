@@ -27,6 +27,7 @@
 #include <QRect>
 #include <QSet>
 #include <QRectF>
+#include <QUuid>
 #include <memory>
 
 #include <PhosphorEngine/GeometryUtils.h>
@@ -198,6 +199,47 @@ private Q_SLOTS:
 
         QVector<ZoneAssignmentEntry> secondCall = m_engine->calculateResnapFromPreviousLayout();
         QVERIFY(secondCall.isEmpty()); // Buffer consumed on first call
+    }
+
+    // F963(b), l18_minimized_layout_switch: a window minimized (a suspension
+    // float) while its monitor switches layouts keeps pre-float zones that
+    // name the old layout. The switch's populate re-slots them into the
+    // same-numbered zone of the new one, so the unminimize lands there. Without
+    // the re-slot they keep the old layout's id.
+    void populate_minimizedWindowTakesTheSameNumberedZone()
+    {
+        const QString window = QStringLiteral("app1|minimized");
+        const QString userFloat = QStringLiteral("app2|floated");
+        floatOutOfZone(window, m_zoneIds[1], /*suspension=*/true);
+        floatOutOfZone(userFloat, m_zoneIds[1], /*suspension=*/false);
+        PhosphorZones::Layout* next = switchToNewLayout(3);
+
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+
+        PhosphorZones::Zone* oldZone = m_testLayout->zoneById(QUuid(m_zoneIds[1]));
+        QVERIFY(oldZone);
+        QString sameNumbered;
+        for (PhosphorZones::Zone* z : next->zones()) {
+            if (z->zoneNumber() == oldZone->zoneNumber()) {
+                sameNumbered = z->id().toString();
+            }
+        }
+        QCOMPARE(m_service->preFloatZones(window), QStringList{sameNumbered});
+        // A float the user made is not a minimize: its memory is left alone.
+        QCOMPARE(m_service->preFloatZones(userFloat), QStringList{m_zoneIds[1]});
+    }
+
+    // A new layout without that zone leaves the zones alone, and the unfloat's
+    // layout guard (F963(a)) keeps the window at its float spot.
+    void populate_minimizedWindowKeepsItsZonesWhenTheLayoutIsShort()
+    {
+        const QString window = QStringLiteral("app1|minimized");
+        floatOutOfZone(window, m_zoneIds[2], /*suspension=*/true);
+        switchToNewLayout(1);
+
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+
+        QCOMPARE(m_service->preFloatZones(window), QStringList{m_zoneIds[2]});
     }
 
     // Regression: daemon off->on while in autotile, then swap to snapping. The
@@ -802,6 +844,32 @@ private Q_SLOTS:
     }
 
 private:
+    /// Snap @p windowId into @p zoneId on DP-1, then float it out of the zone,
+    /// as a minimize does when @p suspension.
+    void floatOutOfZone(const QString& windowId, const QString& zoneId, bool suspension)
+    {
+        m_service->assignWindowToZone(windowId, zoneId, QStringLiteral("DP-1"), 0);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        if (suspension) {
+            m_service->markSuspensionFloat(windowId);
+        }
+        QCOMPARE(m_service->preFloatZones(windowId), QStringList{zoneId});
+    }
+
+    /// Make a new @p zoneCount-zone layout the one DP-1 runs.
+    PhosphorZones::Layout* switchToNewLayout(int zoneCount)
+    {
+        PhosphorZones::Layout* next = createTestLayout(zoneCount, m_layoutManager);
+        m_layoutManager->addLayout(next);
+        m_layoutManager->setActiveLayout(next);
+        const QString nextId = next->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([nextId]() {
+            return nextId;
+        });
+        return next;
+    }
+
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsSession* m_settings = nullptr;

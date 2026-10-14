@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Virtual-screen migration cluster for WindowTrackingService — the to/from
-// virtual-screen assignment rewrites and their pruning/scan helpers. Split
-// from lifecycle.cpp for SRP / file-size. Shared Zone/Layout validation
-// helpers live in placementvalidation_p.h.
+// virtual-screen assignment rewrites and their pruning/scan helpers, and the
+// rewrites an output move or identifier flip needs. Split from lifecycle.cpp
+// for SRP / file-size. Shared Zone/Layout validation helpers live in
+// placementvalidation_p.h.
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include "placementutils.h"
@@ -618,6 +619,152 @@ WindowTrackingService::physicalScreensWithStaleVirtualAssignments(const QSet<QSt
         check(p.screenId);
     }
     return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Output moves and identifier flips
+// ═══════════════════════════════════════════════════════════════════════════════
+
+std::optional<QPoint> WindowTrackingService::outputOrigin(const QString& screenId) const
+{
+    const auto it = m_outputGeometry.constFind(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+    if (it == m_outputGeometry.constEnd()) {
+        return std::nullopt;
+    }
+    return it->topLeft();
+}
+
+void WindowTrackingService::followOutputGeometry(const PhosphorScreens::PhysicalScreen& screen)
+{
+    if (!screen.isValid() || !screen.geometry.isValid()) {
+        return;
+    }
+    const QString outputId = screen.identifier.isEmpty() ? screen.name : screen.identifier;
+    // The frame the output's rects are in: its last geometry, or (0,0) for one
+    // this session has not seen, whose rects the load left relative to it.
+    const QRect before = m_outputGeometry.value(outputId);
+    m_outputGeometry.insert(outputId, screen.geometry);
+    const QPoint delta = screen.geometry.topLeft() - before.topLeft();
+    const bool resized = before.isValid() && before.size() != screen.geometry.size();
+    if (delta.isNull() && !resized) {
+        return;
+    }
+    // A remembered floating spot keeps its place ON ITS MONITOR (F814,
+    // l18_floatback_relative): a move carries every key of the output along,
+    // its virtual screens' included. A new size leaves alone a spot still on
+    // the output, since a size change can be transient (a wake, a mode set),
+    // and pulls one it left off back onto it, shrunk to fit.
+    const int moved = m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
+        bool any = false;
+        for (auto it = p.freeGeometryByScreen.begin(); it != p.freeGeometryByScreen.end(); ++it) {
+            if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) != outputId) {
+                continue;
+            }
+            QRect rect = it.value().translated(delta);
+            if (resized && !geometryOverlapsScreen(rect, it.key())) {
+                rect =
+                    clampToRect(QRect(rect.topLeft(), rect.size().boundedTo(screen.geometry.size())), screen.geometry);
+            }
+            if (rect != it.value()) {
+                it.value() = rect;
+                any = true;
+            }
+        }
+        return any;
+    });
+    if (moved > 0) {
+        qCInfo(lcPlacement) << "Output" << outputId << "now at" << screen.geometry << "- moved the floating spots of"
+                            << moved << "window(s) with it";
+        markDirty(DirtyWindowPlacements);
+    }
+}
+
+void WindowTrackingService::renameScreen(const QString& oldPhysicalId, const QString& newPhysicalId)
+{
+    if (oldPhysicalId.isEmpty() || newPhysicalId.isEmpty() || oldPhysicalId == newPhysicalId) {
+        return;
+    }
+    // An EDID twin's identifier flips between the bare and the connector-
+    // suffixed form when its twin connects or leaves (F189). The window never
+    // moved, so every stored id of the monitor is rewritten in place; left
+    // stale, a resnap's screen filters skipped the window and the snap engine
+    // read its next commit as a move off the monitor.
+    const QString oldPrefix = oldPhysicalId + PhosphorIdentity::VirtualScreenId::Separator;
+    const auto renamed = [&](const QString& screenId) -> QString {
+        if (screenId == oldPhysicalId) {
+            return newPhysicalId;
+        }
+        return screenId.startsWith(oldPrefix) ? newPhysicalId + screenId.mid(oldPhysicalId.size()) : QString();
+    };
+    int rewritten = 0;
+    if (const auto geometry = m_outputGeometry.take(oldPhysicalId); geometry.isValid()) {
+        m_outputGeometry.insert(newPhysicalId, geometry);
+    }
+    for (ResnapEntry& entry : m_resnapBuffer) {
+        if (const QString to = renamed(entry.screenId); !to.isEmpty()) {
+            entry.screenId = to;
+        }
+    }
+    if (m_pendingLastUsedZone) {
+        if (const QString to = renamed(m_pendingLastUsedZone->screenId); !to.isEmpty()) {
+            m_pendingLastUsedZone->screenId = to;
+        }
+    }
+    const auto renameValues = [&](QHash<QString, QString> values) -> std::optional<QHash<QString, QString>> {
+        bool any = false;
+        for (auto it = values.begin(); it != values.end(); ++it) {
+            if (const QString to = renamed(it.value()); !to.isEmpty()) {
+                it.value() = to;
+                any = true;
+                ++rewritten;
+            }
+        }
+        if (!any) {
+            return std::nullopt;
+        }
+        return values;
+    };
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        if (const auto screens = renameValues(state->screenAssignments())) {
+            state->setScreenAssignments(*screens);
+        }
+        if (const auto preFloat = renameValues(state->preFloatScreenAssignments())) {
+            state->setPreFloatScreenAssignments(*preFloat);
+        }
+        if (const QString to = renamed(state->lastUsedScreenId()); !to.isEmpty()) {
+            state->restoreLastUsedZone(state->lastUsedZoneId(), to, state->lastUsedZoneClass(),
+                                       state->lastUsedDesktop());
+            ++rewritten;
+        }
+    }
+    rewritten += m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
+        bool any = false;
+        if (const QString to = renamed(p.screenId); !to.isEmpty()) {
+            p.screenId = to;
+            any = true;
+        }
+        QHash<QString, QRect> keyed;
+        for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
+            const QString to = renamed(it.key());
+            if (to.isEmpty()) {
+                keyed.insert(it.key(), it.value());
+            } else if (!p.freeGeometryByScreen.contains(to)) {
+                // A key already under the new id wins, as in the virtual-screen folds.
+                keyed.insert(to, it.value());
+            }
+            any |= !to.isEmpty();
+        }
+        p.freeGeometryByScreen = keyed;
+        return any;
+    });
+    if (m_snapResolver.renameScreen) {
+        m_snapResolver.renameScreen(oldPhysicalId, newPhysicalId);
+    }
+    if (rewritten > 0) {
+        qCInfo(lcPlacement) << "Screen" << oldPhysicalId << "is now" << newPhysicalId << "- renamed" << rewritten
+                            << "stored screen id(s)";
+        scheduleSaveState();
+    }
 }
 
 } // namespace PhosphorPlacement

@@ -6,6 +6,7 @@
 
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutSettingsStore.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include "zoneslogging.h"
@@ -257,8 +258,7 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // not-yet-split (full-format) file with no sidecar entry round-trips
         // unchanged — mergeSettings preserves keys the file already carries.
         const QString layoutId = structural.value(::PhosphorZones::ZoneJsonKeys::Id).toString();
-        const QJsonObject merged =
-            LayoutSettingsStore::mergeSettings(structural, m_layoutSettings.settingsFor(layoutId));
+        QJsonObject merged = LayoutSettingsStore::mergeSettings(structural, m_layoutSettings.settingsFor(layoutId));
 
         // Re-validate after the merge. The sidecar is a separate document that
         // reaches fromJson through this path, and while mergeSettings restricts
@@ -285,6 +285,16 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // file is reported against the layout file.
         if (!isLayoutJsonValid(merged, filePath + QStringLiteral(" (merged with layout-settings sidecar)"))) {
             continue;
+        }
+
+        // A zone id names one layout for good: the resnap's position map and
+        // every remembered zone rely on it. A file that copied another
+        // layout's zones gets ids of its own (F552, l18_duplicate_zone_ids),
+        // and its windows snapped under the old ids lose those snaps once.
+        const int reissued = LayoutUtils::reissueTakenZoneIds(merged, m_layouts);
+        if (reissued > 0) {
+            qCWarning(lcZonesLib) << "Layout file" << filePath << "reused" << reissued
+                                  << "zone id(s) of another layout - gave them new ids";
         }
 
         auto layout = PhosphorZones::Layout::fromJson(merged, this);
@@ -347,6 +357,21 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
                     qCInfo(lcZonesLib) << "Skipping duplicate layout name=" << layout->name() << "id=" << layout->id();
                     // deleteLater, not delete — see the override branch above.
                     layout->deleteLater();
+                }
+            }
+            // The new zone ids are written back to a user file, so it loads
+            // with the ids it holds on disk. A system layout is not copied into
+            // the user directory for it: reissueTakenZoneIds derives the same
+            // ids on every load. saveLayout writes <layout id>.json, so a copy
+            // saved under another name is removed once the save lands: left
+            // there it would load first on a later start, take fresh ids again,
+            // and no snap in it would survive a restart.
+            if (reissued > 0 && m_layouts.contains(layout) && !layout->isSystemLayout()) {
+                layout->markDirty();
+                saveLayout(layout);
+                if (!layout->isDirty() && layout->sourcePath() != filePath && QFile::remove(filePath)) {
+                    qCInfo(lcZonesLib) << "Removed the copied layout file" << filePath << "- the layout now lives in"
+                                       << layout->sourcePath();
                 }
             }
         } else {
@@ -641,7 +666,14 @@ PhosphorZones::Layout* LayoutRegistry::importLayout(const QString& filePath)
         return nullptr;
     }
 
-    auto* parsed = PhosphorZones::Layout::fromJson(doc.object(), this);
+    // Zone ids another layout holds are replaced, as the directory scan does
+    // (F552). A layout-id collision below clones, which replaces them all.
+    QJsonObject imported = doc.object();
+    if (const int reissued = LayoutUtils::reissueTakenZoneIds(imported, m_layouts); reissued > 0) {
+        qCInfo(lcZonesLib) << "importLayout:" << reissued << "zone id(s) of another layout given new ids";
+    }
+
+    auto* parsed = PhosphorZones::Layout::fromJson(imported, this);
     if (!parsed) {
         qCWarning(lcZonesLib) << "Failed to create layout from imported JSON:" << filePath;
         return nullptr;

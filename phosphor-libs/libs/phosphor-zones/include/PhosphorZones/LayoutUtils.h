@@ -96,7 +96,8 @@ PHOSPHORZONES_EXPORT QHash<QString, int> buildZonePositionMap(Layout* layout);
 /**
  * @brief Build a global zoneId → position map merged across every layout in @p layouts.
  *
- * Zone UUIDs are unique across all layouts in the registry, so the merge is
+ * Zone UUIDs are unique across all layouts in the registry (its directory load
+ * and import re-mint a copied one, reissueTakenZoneIds), so the merge is
  * unambiguous. Used by the resnap path (lifecycle.cpp + resnap.cpp) when a
  * window's stored zoneId may have come from any layout — for example, after
  * a promote edit shifts the cascade winner from a per-context layout to the
@@ -129,6 +130,37 @@ PHOSPHORZONES_EXPORT bool layoutHoldsZones(const Layout* layout, const QStringLi
 PHOSPHORZONES_EXPORT bool contextLayoutHoldsZones(const IZoneLayoutRegistry* registry, const QString& screenId,
                                                   int virtualDesktop, const QString& activity,
                                                   const QStringList& zoneIds);
+
+/**
+ * @brief The slot remembered @p zoneIds take in @p target, the layout a context
+ *        runs now: the zones themselves when @p target holds them all (a span
+ *        stays a span), else @p target's zone at the position the first one has
+ *        in its own layout (@p positions, buildGlobalZonePositionMap over the
+ *        registry's layouts), else empty when @p target has fewer zones or none.
+ *
+ * The one same-numbered re-slot of a layout change: the snap engine's desktop
+ * carry (a window moved to a desktop running another layout) and the
+ * layout-switch populate (a minimized window's pre-float zones) share it.
+ */
+PHOSPHORZONES_EXPORT QStringList sameNumberedZones(const QStringList& zoneIds, const Layout* target,
+                                                   const QHash<QString, int>& positions);
+
+/**
+ * @brief Give a layout document's zones ids no other layout holds (F552).
+ *
+ * Every zone id in @p layoutJson's zones array that a layout in @p loaded
+ * already holds, or that repeats within the document, is replaced. A layout
+ * with the document's own id is not another layout: a user copy overriding a
+ * system layout shares its zone ids. The new id is a name-based UUID of the
+ * layout id, the old zone id and its index, so the same document gets the same
+ * ids on every load even before the caller writes it back. Returns the number
+ * of ids replaced.
+ *
+ * The registry's directory load and its import run every document through
+ * this before Layout::fromJson, which is what makes the uniqueness the
+ * position map and layoutHoldsZones rely on hold.
+ */
+PHOSPHORZONES_EXPORT int reissueTakenZoneIds(QJsonObject& layoutJson, const QList<Layout*>& loaded);
 
 } // namespace LayoutUtils
 

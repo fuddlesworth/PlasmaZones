@@ -322,6 +322,27 @@ private Q_SLOTS:
         QCOMPARE(store->preFloatScreen(kWindow), kVs0);
     }
 
+    // An EDID twin's identifier flip re-files the snap membership under the
+    // monitor's new id, zone and desktop kept, nothing released (F189).
+    // FAILS with SnapEngine::renameScreen's moves dropped (the window stays
+    // filed under the id no monitor answers to).
+    void renameScreen_refilesUnderTheNewId()
+    {
+        const QString renamed = QStringLiteral("DP-9");
+        show(1);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[0], kPhys, 1);
+
+        m_engine->renameScreen(kPhys, renamed);
+
+        SnapState* store = storeFor(renamed, 1);
+        QVERIFY2(store, "the new id's desktop 1 store exists");
+        QVERIFY(m_engine->holdsWindowInState(kWindow, store));
+        QCOMPARE(store->zonesForWindow(kWindow), QStringList{m_zoneIds[0]});
+        QCOMPARE(store->screenForWindow(kWindow), renamed);
+        const SnapState* old = storeFor(kPhys, 1);
+        QVERIFY2(!old || !m_engine->holdsWindowInState(kWindow, old), "the old id no longer holds it");
+    }
+
 private:
     /// Every desktop-1 and desktop-2 context of both halves runs @p layout.
     void shareTheLayout(const QStringList& vsIds, PhosphorZones::Layout* layout)

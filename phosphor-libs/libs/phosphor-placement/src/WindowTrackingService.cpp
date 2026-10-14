@@ -57,6 +57,20 @@ WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layo
     //
     // Layout change handling: the adaptor's own onLayoutChanged (on activeLayoutChanged)
     // calls pruneStaleZoneAssignments; nothing is connected here.
+
+    // The outputs float-back rects are measured from, seeded before the adaptor's load reads them relative to
+    // these (F814), then followed through every move, plug and identifier flip.
+    if (screenManager) {
+        for (const PhosphorScreens::PhysicalScreen& screen : screenManager->screens()) {
+            m_outputGeometry.insert(screen.identifier.isEmpty() ? screen.name : screen.identifier, screen.geometry);
+        }
+        connect(screenManager, &PhosphorScreens::ScreenManager::screenAdded, this,
+                &WindowTrackingService::followOutputGeometry);
+        connect(screenManager, &PhosphorScreens::ScreenManager::screenGeometryChanged, this,
+                &WindowTrackingService::followOutputGeometry);
+        connect(screenManager, &PhosphorScreens::ScreenManager::screenIdentifierChanged, this,
+                &WindowTrackingService::renameScreen);
+    }
 }
 
 WindowTrackingService::~WindowTrackingService()
@@ -124,7 +138,8 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     // this window. A screen-carrying write is the reverse map's authoritative
     // seed point. A pinned desktop (a RouteToDesktop commit, a cross-desktop
     // move, a background-desktop restore) names that desktop's store, so the
-    // assignment lives in the context it is for.
+    // assignment lives in the context it is for. A pinned write naming another
+    // screen re-homes the window there first.
     PhosphorSnapEngine::SnapState* snapState = snapForWindowOnScreen(windowId, screenId, virtualDesktop);
     if (!snapState) {
         return;
@@ -568,8 +583,11 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
         // record may suppress the write. A same-app sibling's free geometry
         // must not block recording this window's first genuine spot (it would
         // never persist its own position while the sibling's record lives).
+        // Only a spot still on this screen wins: one the reader would refuse
+        // (filed before its monitor moved) blocked every later capture (F814).
         const auto existing = m_placementStore.peekExact(windowId);
-        if (existing && existing->freeGeometryFor(screenId).isValid()) {
+        const QRect held = existing ? existing->freeGeometryFor(screenId) : QRect();
+        if (held.isValid() && geometryOverlapsScreen(held, screenId)) {
             return; // first-capture-wins
         }
     }
@@ -831,14 +849,10 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
     // called scheduleSaveState, which ORs DirtyAll into the dirty mask and
     // defeats the delta-write design when the call was a no-op.
     //
-    // Use the appId-aware `isWindowFloating` predicate (which checks both
-    // the full windowId AND the session-restored appId fallback — see
-    // isWindowFloating's appId branch). A naive `m_floatingWindows.contains(windowId)` would
-    // return false when only the appId entry exists post-session-restore,
-    // letting the early-return short-circuit the cleanup path below — the
-    // appId entry would never be removed and isWindowFloating would keep
-    // reporting true, breaking clearFloatingForSnap and the daemon's
-    // syncAutotileFloatState callers.
+    // Read through isWindowFloating, not m_floatingWindows.contains(windowId):
+    // wired, that is the owning engine's bit the writer below changes; unwired,
+    // it also sees a bare-appId entry the legacy bulk seeder (setFloatingWindows)
+    // wrote, so an unfloat still reaches the cleanup below and removes it.
     const bool wasFloating = isWindowFloating(windowId);
     if (floating == wasFloating) {
         return;
@@ -861,7 +875,7 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         m_floatingWindows.insert(canonicalizeForLookup(windowId));
     } else {
         m_floatingWindows.remove(canonicalizeForLookup(windowId));
-        // Also remove app ID entry (session-restored entries)
+        // Also remove the appId entry (the legacy bulk seeder's)
         QString appId = currentAppIdFor(windowId);
         if (appId != windowId) {
             m_floatingWindows.remove(appId);

@@ -49,6 +49,25 @@ inline qint64 squaredDistanceToRect(const QPoint& point, const QRect& rect)
     return dx * dx + dy * dy;
 }
 
+/// @p geometry moved (never resized) so it lies inside @p bounds, its top-left edge winning when it is larger.
+inline QRect clampToRect(const QRect& geometry, const QRect& bounds)
+{
+    QRect adjusted = geometry;
+    if (adjusted.right() > bounds.right()) {
+        adjusted.moveRight(bounds.right());
+    }
+    if (adjusted.left() < bounds.left()) {
+        adjusted.moveLeft(bounds.left());
+    }
+    if (adjusted.bottom() > bounds.bottom()) {
+        adjusted.moveBottom(bounds.bottom());
+    }
+    if (adjusted.top() < bounds.top()) {
+        adjusted.moveTop(bounds.top());
+    }
+    return adjusted;
+}
+
 inline QScreen* findNearestScreen(const QPoint& point)
 {
     QScreen* nearest = nullptr;

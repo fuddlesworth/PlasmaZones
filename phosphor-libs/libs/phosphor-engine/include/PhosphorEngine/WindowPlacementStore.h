@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QList>
+#include <QPoint>
 #include <QSet>
 #include <QString>
 
@@ -404,11 +405,25 @@ public:
     /// the effect's instant-restore cache from the snapped records).
     QList<WindowPlacement> records() const;
 
-    /// JSON shape: { appId: [ record, ... ] }. @p keep filters out entries that
-    /// should not persist (e.g. disabled-context). Empty buckets are dropped.
-    /// Each record persists as WindowPlacement::toJson writes it.
+    /// JSON shape: { "_version": FormatVersion, appId: [ record, ... ] }. @p keep
+    /// filters out entries that should not persist (e.g. disabled-context). Empty
+    /// buckets are dropped. Each record persists as WindowPlacement::toJson writes
+    /// it, with every free-geometry rect relative to its output (below). These two
+    /// measure every output from (0,0), so the rects round-trip unchanged.
     QJsonObject serialize(const std::function<bool(const WindowPlacement&)>& keep = {}) const;
     void deserialize(const QJsonObject& obj);
+
+    /// The top-left of the output a free-geometry key (a screen id, virtual or
+    /// not) lies on, which its rect is measured from on disk; nullopt for an
+    /// output the caller does not know.
+    using OutputOrigin = std::function<std::optional<QPoint>(const QString& screenId)>;
+    /// The on-disk form keeps each float-back RELATIVE to its output, so a spot
+    /// survives a rearrangement of the monitors between sessions (F814). The
+    /// write subtracts @p originFor's answer and the read adds it back, an
+    /// unknown output counting as (0,0) both ways. The read first runs the format
+    /// migrations up to FormatVersion; see migrateV1ToV2 in the serializer.
+    QJsonObject serialize(const std::function<bool(const WindowPlacement&)>& keep, const OutputOrigin& originFor) const;
+    void deserialize(const QJsonObject& obj, const OutputOrigin& originFor);
 
     int size() const;
 
@@ -450,6 +465,13 @@ public:
     /// INERT, kept for source compatibility: the shutdown-close grace
     /// serialize() once applied to the reclaim credit, which is gone.
     static constexpr qint64 ShutdownCloseGraceMs = 30000;
+
+    /// The serialized format's version, stamped as "_version". 1 (no stamp):
+    /// absolute float-back rects. 2: rects relative to their output.
+    static constexpr int FormatVersion = 2;
+    /// The version @p stored was written in (1 when unstamped). A caller that
+    /// read an older one writes the migrated form back once.
+    static int formatVersionOf(const QJsonObject& stored);
 
 private:
     /// appId → list of records in positional FIFO order. The POSITION order
