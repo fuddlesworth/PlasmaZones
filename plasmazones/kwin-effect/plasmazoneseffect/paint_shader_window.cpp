@@ -434,7 +434,7 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                 // which is continuous and is where the grab actually is.
                 //
                 // Gated on `heldMove &&`, the IDENTITY flag, exactly like the
-                // drag-start and release handlers in window_connections.cpp.
+                // drag-start and release handlers in window_moveresize_connections.cpp.
                 // `holdUntilRelease` alone is not that test: it is the flag
                 // the drag-start path historically set on whatever leg was
                 // live, most reachably the `window.focus` leg the click that

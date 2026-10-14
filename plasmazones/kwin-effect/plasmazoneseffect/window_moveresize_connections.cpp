@@ -295,7 +295,7 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
             KWin::Window* const kw = window->window();
             const QRectF requested = kw ? QRectF(kw->moveResizeGeometry()) : QRectF();
             m_resizeHold.finished = true;
-            m_resizeHold.requestedSize = requested.size();
+            m_resizeHold.requested = requested;
             m_resizeHold.commandStampAtFinish = m_daemonGate.commandStamps.current(window);
             if (!requested.isValid()
                 || GestureEndDecisions::frameAnswersRequest(window->frameGeometry().size(), requested.size())) {
@@ -359,19 +359,20 @@ void PlasmaZonesEffect::armResizeAckWatch(KWin::EffectWindow* w)
             if (!safeW || m_resizeHold.window != safeW) {
                 return;
             }
-            if (GestureEndDecisions::frameAnswersRequest(safeW->frameGeometry().size(), m_resizeHold.requestedSize)
+            if (GestureEndDecisions::frameAnswersRequest(safeW->frameGeometry().size(), m_resizeHold.requested.size())
                 || m_daemonGate.commandStamps.current(safeW) != m_resizeHold.commandStampAtFinish) {
                 drainResizeHold(safeW->frameGeometry().toRect());
             }
         });
     // A client that never answers (a suspended one) must not hold the window:
-    // at the deadline the drain reads the size KWin asked for.
+    // at the deadline the drain reads the rect the resize asked for, kept at
+    // the finish. KWin's request read now could be a newer daemon command not
+    // yet landed, which is not the user's resize.
     QTimer::singleShot(GestureEndDecisions::kAckDeadlineMs, this, [this, safeW, gen = m_resizeHold.generation]() {
         if (!safeW || m_resizeHold.window != safeW || m_resizeHold.generation != gen) {
             return;
         }
-        const KWin::Window* const kw = safeW->window();
-        const QRectF requested = kw ? QRectF(kw->moveResizeGeometry()) : QRectF();
+        const QRectF requested = m_resizeHold.requested;
         drainResizeHold(requested.isValid() ? requested.toRect() : QRectF(safeW->frameGeometry()).toRect());
     });
 }

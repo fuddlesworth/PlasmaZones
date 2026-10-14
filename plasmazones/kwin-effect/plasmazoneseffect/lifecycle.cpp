@@ -8,6 +8,7 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -128,6 +129,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // fetch overwrites the whole tree on arrival. Borders are rule-owned and
     // render correctly before the fetch, so no placeholder tree is needed.
     seedDecorationTreeBaseline();
+
+    // A virtual-screen strip's tab pills are cut at that virtual screen's edge,
+    // as its columns are (scrollStripPaintRegion). A virtual screen's strip key
+    // is its own screen id (StripKeys::stripKey); a physical strip needs none.
+    m_scrollTabPainter->setStripClip([this](const QString& strip) {
+        return PhosphorIdentity::VirtualScreenId::isVirtual(strip) ? m_tilingHandler->stripScreenRect(strip) : QRect();
+    });
 
     // Constructor wiring decomposed into concern-scoped init methods (definitions
     // in lifecycle_wiring.cpp). Call order is load-bearing and matches the

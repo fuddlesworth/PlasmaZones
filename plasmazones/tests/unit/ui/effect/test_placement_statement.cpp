@@ -9,6 +9,7 @@ using PlasmaZones::PlacementStatement::decide;
 using PlasmaZones::PlacementStatement::fullscreenBails;
 using PlasmaZones::PlacementStatement::Inputs;
 using PlasmaZones::PlacementStatement::Purpose;
+using PlasmaZones::PlacementStatement::statementFor;
 using PlasmaZones::PlacementStatement::Verdict;
 
 namespace {
@@ -229,6 +230,29 @@ private Q_SLOTS:
         const QRect frame(100, 0, 600, 900);
         QCOMPARE(freeAxisRect(zone, frame, /*verticallyMaximized=*/true), QRect(800, 0, 792, 900));
         QCOMPARE(freeAxisRect(zone, frame, /*verticallyMaximized=*/false), QRect(100, 8, 600, 884));
+    }
+
+    // A free re-statement on a snapping screen (the float-restore relay, an
+    // evacuee's return) takes the statement as a zone commit does, so a
+    // maximized window keeps its maximize with the float-back seated (F548,
+    // F575(a)). The single apply took none and moveResized the maximized frame.
+    void restatementFreeApplyKeepsTheMaximize()
+    {
+        const auto statement = statementFor(/*targetKnown=*/true, /*managedTarget=*/false, Purpose::Restatement);
+        QVERIFY(statement.has_value());
+        QVERIFY(*statement == Purpose::Restatement);
+        Inputs in = inputs(*statement);
+        in.maximized = true;
+        const Verdict v = decide(in);
+        QVERIFY(!v.apply);
+        QVERIFY(v.seatMaximizeRestore);
+    }
+
+    // A tiling engine's screen, or no target to judge on: no statement.
+    void noStatementOnAManagedOrUnknownTarget()
+    {
+        QVERIFY(!statementFor(/*targetKnown=*/true, /*managedTarget=*/true, Purpose::UserVerb));
+        QVERIFY(!statementFor(/*targetKnown=*/false, /*managedTarget=*/false, Purpose::Restatement));
     }
 
     // A plain window re-stated: nothing to keep or hand back.

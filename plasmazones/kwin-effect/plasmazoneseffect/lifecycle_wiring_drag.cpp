@@ -112,9 +112,11 @@ void PlasmaZonesEffect::connectDragTracker()
                                 if (!reply.isValid()) {
                                     qCWarning(lcEffect) << "beginDrag reply invalid:" << reply.error().message();
                                     // An unanswered drag releases the optimistic grab: no
-                                    // policy will ever confirm it.
+                                    // policy will ever confirm it. Only that one, taken on the
+                                    // engine fast path: the snap path's grab is its own, for
+                                    // Escape to dismiss the overlay, and drag end releases it.
                                     if (m_dragActivation.generation == capturedDragGeneration && m_keyboardGrabbed
-                                        && KWin::effects) {
+                                        && m_dragBypassedForEngine && KWin::effects) {
                                         KWin::effects->ungrabKeyboard();
                                         m_keyboardGrabbed = false;
                                     }
@@ -225,9 +227,9 @@ void PlasmaZonesEffect::connectDragTracker()
                     // reply releases it, so an engine drag outside always-on
                     // re-insert holds it only for the round trip.
                     if (daemonUp && m_dragTracker->pointerDrag() && !m_keyboardGrabbed && KWin::effects) {
-                        // See the reply lambda: grabKeyboard returns false when
-                        // another effect owns the grab, and claiming it anyway
-                        // makes drag-end release someone else's.
+                        // grabKeyboard returns false when another effect owns
+                        // the grab, and claiming it anyway makes drag-end
+                        // release someone else's (applyDragPolicyTransition too).
                         m_keyboardGrabbed = KWin::effects->grabKeyboard(this);
                         if (!m_keyboardGrabbed) {
                             qCWarning(lcEffect) << "dragStarted: keyboard grab refused (another effect holds it) for"
@@ -243,7 +245,7 @@ void PlasmaZonesEffect::connectDragTracker()
                 // (called internally from the adaptor). Called for its LATCH, not
                 // its answer: it sets m_dragActivation.detected so the per-tick
                 // gates downstream keep forwarding after a mid-drag release. The
-                // grab below is unconditional and is this path's own, which is
+                // grab below is this path's own, not the predicate's, which is
                 // why the predicate no longer takes one.
                 shouldForwardDragTicks();
                 // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
@@ -252,7 +254,7 @@ void PlasmaZonesEffect::connectDragTracker()
                 // Not for a drag with no pointer button held: KWin's keyboard move needs
                 // the keys the grab would swallow (F1010).
                 if (daemonUp && m_dragTracker->pointerDrag() && !m_keyboardGrabbed && KWin::effects) {
-                    // Same answer-respecting capture as the two sites above.
+                    // Same answer-respecting capture as the fast path above.
                     m_keyboardGrabbed = KWin::effects->grabKeyboard(this);
                     if (!m_keyboardGrabbed) {
                         qCWarning(lcEffect) << "dragStarted: keyboard grab refused (another effect holds it) for"
@@ -345,8 +347,15 @@ void PlasmaZonesEffect::connectDragTracker()
                 // KWin's move outlives the drop while another button is held:
                 // its crossings wait for the drop's outcome (none comes with no
                 // daemon, F573) and the move's end (F751).
+                // The tail carries this drop's generation, so a reply for an
+                // earlier drop cannot settle it (F1068). Another window's tail
+                // still pending is drained first rather than overwritten.
                 if (w && !w->isDeleted() && w->isUserMove()) {
-                    m_dragActivation.tail = {w, /*awaitingOutcome=*/m_daemonGate.serviceRegistered, /*finished=*/false};
+                    if (m_dragActivation.tail.window && m_dragActivation.tail.window != w) {
+                        drainMoveTail();
+                    }
+                    m_dragActivation.tail = {w, /*awaitingOutcome=*/m_daemonGate.serviceRegistered, /*finished=*/false,
+                                             m_dragActivation.generation};
                 }
 
                 // Bump the per-drag generation so any in-flight beginDrag
@@ -374,7 +383,7 @@ void PlasmaZonesEffect::connectDragTracker()
                 // with another button still held, KWin's move is still live and
                 // updateScrollTabHover declines on compositorMoveResizeActive()
                 // instead, deliberately. The re-drive for that case runs from
-                // the finish signal (window_connections.cpp), once the
+                // the finish signal (window_moveresize_connections.cpp), once the
                 // compositor's move genuinely ends — so this call doing nothing
                 // on a multi-button drop is the design, not a dead call.
                 if (KWin::effects) {

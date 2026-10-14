@@ -1505,7 +1505,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
                                         KWin::WindowPaintData& data)
 {
     // A column on a virtual-screen strip draws inside that virtual screen only.
-    // The tab pills keep the full region: they draw every band on the output.
+    // The tab pills take the full region: the painter cuts each band at its strip.
     const KWin::Region deviceRegion = scrollStripPaintRegion(w, viewport, fullDeviceRegion);
     // Scrolling-strip boundary clip. A strip column legitimately straddles
     // its screen's edge (centering the active column pushes both neighbours

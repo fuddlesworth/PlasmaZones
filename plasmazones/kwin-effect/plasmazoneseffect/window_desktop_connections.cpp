@@ -192,10 +192,12 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
         // parked is still held on the desktop it left, and the reconcile has
         // released that key, so the park goes: the catch-scan re-announces it
         // on the destination's first view, where the stash is folded back
-        // (F563). A set that only grew keeps every key it held.
+        // (F563). A set that only grew keeps every key it held. It gives its
+        // monocle maximize back too, as every arm below that lets a live window
+        // go does: it arrives elsewhere at its own size (F675, F1091).
         if (parked && edge.leftAnId) {
             tiling->savePreTileForDesktopMove(windowId);
-            tiling->cleanupAutotileTracking(windowId);
+            tiling->cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::LiveDeparture);
         }
         return;
     case Kind::Departed:
@@ -207,7 +209,7 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
             // or an un-stick onto a hidden desktop, keeps the window's other
             // keys, which a relay would take (F399, F581). Either way the window
             // lives on off-screen, so its claims go back, the monocle maximize
-            // too (F675); the other effect-only releases below hold none here.
+            // too (F675).
             tiling->savePreTileForDesktopMove(windowId);
             if (edge.genuineMove) {
                 tiling->releaseWindowTracking(windowId, screenId, ScrollDecisions::ClaimScope::LiveDeparture);
@@ -236,7 +238,7 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
             // settled above and still holds its keys elsewhere (F520).
             if (!edge.becameEverywhere) {
                 tiling->savePreTileForDesktopMove(windowId);
-                tiling->releaseWindowTracking(windowId, screenId);
+                tiling->releaseWindowTracking(windowId, screenId, ScrollDecisions::ClaimScope::LiveDeparture);
                 reconcileDecorationOnPlacementFlip(windowId);
                 // A move from a tiling desktop is owed its free placement,
                 // paid before the drain, whose park the pay skips (F364, F414).
@@ -254,7 +256,7 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
         // The reconcile carries a held tile here without reading any rule. A
         // rule excluding the window on this desktop lets it go (F292).
         if (isExcludedBySnappingRule(window)) {
-            tiling->releaseWindowTracking(windowId, screenId);
+            tiling->releaseWindowTracking(windowId, screenId, ScrollDecisions::ClaimScope::LiveDeparture);
             reconcileDecorationOnPlacementFlip(windowId);
             qCInfo(lcEffect) << "Window moved into the context in view is excluded there, released:" << windowId;
             return;
@@ -276,9 +278,11 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
         // back the adoption the reconcile just made (F563, F717), and the
         // window is announced: a held one is focused by "Focus new windows"
         // (F583), a fresh one is inserted. knownFreeFloating=false because the
-        // frame is likely the source desktop's tile rect.
+        // frame is likely the source desktop's tile rect. A monocle maximize it
+        // held there is given back first; a monocle layout here maximizes it
+        // again (l18_monocle_move).
         tiling->savePreTileForDesktopMove(windowId);
-        tiling->cleanupAutotileTracking(windowId);
+        tiling->cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::LiveDeparture);
         tiling->restorePreTileForDesktopMove(windowId, screenId);
         if (tiling->notifyWindowAdded(window, /*knownFreeFloating=*/false, focusArrival)) {
             qCInfo(lcEffect) << "Window moved into the context in view, added to tiling:" << windowId;

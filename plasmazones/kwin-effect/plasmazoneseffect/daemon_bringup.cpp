@@ -691,14 +691,14 @@ bool PlasmaZonesEffect::shouldForwardDragTicks()
     // FORWARDING ONLY. This deliberately does NOT take the keyboard grab,
     // which it used to. The grab exists so Escape reaches cancelSnap instead
     // of KWin's MoveResizeFilter during an ACTIVATED SNAP drag, and the
-    // snap-drag path takes it unconditionally at dragStarted. Taking it here
-    // meant family (4) latched a grab on a plain snap-screen drag whenever
-    // the drag-insert trigger was held — the shipped default is Alt — so
-    // holding Alt while dragging swallowed every key and rerouted Escape,
-    // with no snapping activation in effect to justify it. Engine-owned
-    // drags never take the grab at all (dragStarted returns on its engine
-    // fast path before the grab), so nothing downstream of family (4)
-    // wanted one.
+    // snap-drag path takes it at dragStarted (a pointer drag with the daemon
+    // up). Taking it here meant family (4) latched a grab on a plain
+    // snap-screen drag whenever the drag-insert trigger was held — the
+    // shipped default is Alt — so holding Alt while dragging swallowed every
+    // key and rerouted Escape, with no snapping activation in effect to
+    // justify it. Engine-owned drags take theirs on dragStarted's fast path
+    // and the beginDrag reply reconciles it, so nothing downstream of family
+    // (4) wanted one from here.
     const bool forward = anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle
         || m_cachedScrollingDragInsertToggle || m_cachedZoneSpanToggleMode
         || TriggerParser::anyTriggerHeld(m_parsedAutotileDragInsertTriggers, m_currentModifiers, m_currentMouseButtons)

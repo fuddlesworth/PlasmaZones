@@ -160,6 +160,13 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     connect(serviceWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon service unregistered";
         m_daemonGate.serviceRegistered = false;
+        // A drag's keyboard grab is there for Escape to reach the daemon, and
+        // none is left: give Escape back to KWin's move filter now rather than
+        // at the drop (F574, which drag start alone checked).
+        if (m_keyboardGrabbed && KWin::effects) {
+            KWin::effects->ungrabKeyboard();
+            m_keyboardGrabbed = false;
+        }
         // Release the idle latch. m_sessionIdle is daemon-pushed state whose ONLY
         // route back to false is a sessionIdleChanged(false) broadcast — and a
         // restarted daemon arms a fresh ext-idle-notify-v1 notification on a seat

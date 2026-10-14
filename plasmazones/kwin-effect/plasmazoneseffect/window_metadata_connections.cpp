@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Per-window identity and metadata wiring for PlasmaZonesEffect: the
-// registry pushes on a class, desktop-file, caption, desktop, activity or
-// role change, the rule-cache invalidations those fields feed, and the
-// identity diagnostic dump. Called once per window from
+// registry pushes on a class, desktop-file, caption or role change, the
+// rule-cache invalidations those fields and a desktop or activity edit feed
+// (that edit's push is runContextEdit's, window_desktop_connections.cpp),
+// and the identity diagnostic dump. Called once per window from
 // setupWindowConnections.
 
 #include "plasmazoneseffect.h"

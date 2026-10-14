@@ -32,6 +32,7 @@
 #include <QStringList>
 
 #include "tilinghandler/tilinghandler.h"
+#include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
@@ -76,9 +77,12 @@ void PlasmaZonesEffect::slotFullscreenHandBackRequested(const QString& windowId)
     // fullscreen surface): the window leaves its own fullscreen where KWin's
     // restore rect has it (F546, F526, F551). A windowed-fullscreen member's
     // fullscreen is the strip's, and a minimized window has nothing to show.
-    KWin::EffectWindow* w = findWindowByIdExact(windowId);
+    // By instance: the cross-mode producers name a window by the engine's
+    // composite, which drifts from the effect's own after a class mutation.
+    KWin::EffectWindow* w = findWindowByInstanceId(windowId);
     KWin::Window* kw = w && !w->isDeleted() ? w->window() : nullptr;
-    if (!kw || !kw->isRequestedFullScreen() || w->isMinimized() || m_windowedFullscreenWindows.contains(windowId)) {
+    if (!kw || !kw->isRequestedFullScreen() || w->isMinimized()
+        || m_windowedFullscreenWindows.contains(getWindowId(w))) {
         return;
     }
     qCInfo(lcEffect) << "Ending the fullscreen of" << windowId << "for a user verb with no placement";
@@ -340,6 +344,12 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
                          << liveWindowId;
         skipGeometry = true;
     }
+    // A skipped float-restore is still the window's latest command: a cascade
+    // entry still pending for it would otherwise land its zone and mark it
+    // snapped after the un-snap below.
+    if (skipGeometry) {
+        beginGeometryCommand(w);
+    }
     qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "(live:" << liveWindowId << ") geo:" << geometry
                      << "zoneId:" << zoneId << "screen:" << screenId << "floating:" << isWindowFloating(liveWindowId)
                      << "currentFrame:" << w->frameGeometry()
@@ -367,26 +377,33 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // virtual-screen move fires no outputChanged to report it later.
             reportActiveWindowScreen(w, screenId);
         }
-        // The placement statement, on a snapping screen only: a tiling
-        // engine's maximize belongs to TilingHandler's own ledgers. A zone
-        // commit and a user verb's free apply (the float toggle, Restore:
-        // the window lands at its float-back, not maximized, F582) take it; a
-        // re-stated free spot leaves a maximize to the user. After the
-        // pre-seed above, whose coverage its committed configure rides;
-        // before the bracketed apply.
-        std::optional<PlacementStatement::Purpose> statement;
+        // The placement statement, on a snapping screen only
+        // (PlacementStatement::statementFor), for a zone and a free spot
+        // alike. After the pre-seed above, whose coverage its committed
+        // configure rides; before the bracketed apply.
+        const std::optional<PlacementStatement::Purpose> statement = PlacementStatement::statementFor(
+            !screenId.isEmpty(), m_tilingHandler->isManagedScreen(screenId),
+            purpose == PhosphorProtocol::PlacementPurpose::Restatement ? PlacementStatement::Purpose::Restatement
+                                                                       : PlacementStatement::Purpose::UserVerb);
         bool keptState = false;
         QRect applyRect = geometry;
-        if (!screenId.isEmpty() && !m_tilingHandler->isManagedScreen(screenId)
-            && (!zoneId.isEmpty() || purpose == PhosphorProtocol::PlacementPurpose::UserVerb)) {
-            statement = purpose == PhosphorProtocol::PlacementPurpose::Restatement
-                ? PlacementStatement::Purpose::Restatement
-                : PlacementStatement::Purpose::UserVerb;
+        if (statement) {
             // A re-statement keeps a maximize or fullscreen and moves nothing:
-            // the zone is now the rect it returns to (F490, F547, F560).
+            // the zone or float-back is now the rect it returns to (F490,
+            // F547, F560, F575).
             const PlacementStatement::Verdict verdict = m_tilingHandler->preparePlacement(w, geometry, *statement);
             keptState = !verdict.apply;
             applyRect = verdict.applyRect;
+            // That keep lands no frame, so the output arm never sees the owed
+            // screen arrive: the verdicts are owed now, on the screen the
+            // pre-seed above already names. Deferred past a drag like there.
+            if (keptState && m_ruleScreenOwed.remove(w) > 0) {
+                if (m_dragTracker->isDragging()) {
+                    m_dragSuppressedRuleInvalidations.insert(liveWindowId);
+                } else {
+                    invalidateRuleCacheForStateChange(liveWindowId);
+                }
+            }
         }
         const auto applyGuard = geometryApplyScope();
         // A float-position restore on a fresh open teleports like the
@@ -579,15 +596,25 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 const QString target = p.screenId.isEmpty()
                     ? resolveEffectiveScreenId(p.geometry.center(), KWin::effects->screenAt(p.geometry.center()))
                     : p.screenId;
-                std::optional<PlacementStatement::Purpose> statement;
+                const std::optional<PlacementStatement::Purpose> statement =
+                    PlacementStatement::statementFor(!target.isEmpty(), m_tilingHandler->isManagedScreen(target),
+                                                     PlacementStatement::Purpose::Restatement);
                 bool keptState = false;
                 QRect applyRect = p.geometry;
-                if (!target.isEmpty() && !m_tilingHandler->isManagedScreen(target)) {
-                    statement = PlacementStatement::Purpose::Restatement;
+                if (statement) {
                     const PlacementStatement::Verdict verdict =
                         m_tilingHandler->preparePlacement(p.window, p.geometry, *statement);
                     keptState = !verdict.apply;
                     applyRect = verdict.applyRect;
+                    // The single apply's owed-screen settle: a keep lands no frame.
+                    if (keptState && m_ruleScreenOwed.remove(p.window) > 0) {
+                        const QString keptId = getWindowId(p.window);
+                        if (m_dragTracker->isDragging()) {
+                            m_dragSuppressedRuleInvalidations.insert(keptId);
+                        } else {
+                            invalidateRuleCacheForStateChange(keptId);
+                        }
+                    }
                 }
                 if (!keptState) {
                     applyWindowGeometry(p.window, applyRect, /*allowDuringDrag=*/false,
@@ -607,6 +634,12 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             const QString batchWid = getWindowId(p.window);
             if (p.screenId.isEmpty() || m_tilingHandler->isManagedScreen(p.screenId)) {
                 m_snapHandler->clearWindowSnapped(batchWid);
+            } else if (m_snapHandler->isMinimizeFloated(batchWid)) {
+                // Its minimize floated it after this batch was scheduled
+                // (F1098): the zone's rect stays its unminimize frame, but the
+                // daemon holds it floating, so it is neither marked nor
+                // unfloated here. The suspension's return re-states the zone
+                // through the single apply, which marks it then.
             } else {
                 // Real snap commit on a snap-mode screen. The daemon emits a non-empty
                 // authoritative screenId ONLY for genuine placements; float/restore
@@ -855,8 +888,11 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
     // A window KWin moved to another screen, or one whose zone a layout change
     // removed, is no longer snapped: a snapped mark left behind keeps its snap
     // decoration and has a later minimize floated as a snap suspension (F328).
+    // By instance, never the app fallback above: a notice for a window that
+    // closed would otherwise un-mark its sole surviving same-app sibling.
     if (state.changeType == QLatin1String("screen_changed") || state.changeType == QLatin1String("unsnapped")) {
-        m_snapHandler->clearWindowSnapped(liveWindowId);
+        KWin::EffectWindow* const exact = findWindowByInstanceId(windowId);
+        m_snapHandler->clearWindowSnapped(exact ? getWindowId(exact) : windowId);
     }
 }
 

@@ -18,8 +18,8 @@
 #include <QObject>
 #include <QPointer>
 #include <QRect>
+#include <QRectF>
 #include <QSet>
-#include <QSizeF>
 #include <QString>
 #include <QVariantList>
 #include <QtGlobal>
@@ -172,6 +172,7 @@ struct MoveTailHold
     QPointer<KWin::EffectWindow> window;
     bool awaitingOutcome = false; ///< a drop was dispatched for it
     bool finished = false; ///< windowFinishUserMovedResized fired
+    quint64 generation = 0; ///< the drag generation of the drop it waits on (0 for a move the tracker never took)
 };
 
 struct DragActivationState
@@ -335,7 +336,7 @@ struct ResizeHold
     /// window into a context mid-gesture (F665).
     WindowContextFields context;
     bool finished = false; ///< KWin ended the gesture; the drain waits for the client
-    QSizeF requestedSize; ///< moveResizeGeometry().size() at the finish
+    QRectF requested; ///< moveResizeGeometry() at the finish, what the deadline drains
     quint64 commandStampAtFinish = 0;
     quint8 heldAxes = 0; ///< ContextAxis bits whose handler waits for the drain
     QMetaObject::Connection ackWatch;

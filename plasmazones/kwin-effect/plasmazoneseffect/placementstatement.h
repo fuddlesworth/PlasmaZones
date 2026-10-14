@@ -12,6 +12,8 @@
 
 #include <QRect>
 
+#include <optional>
+
 namespace PlasmaZones::PlacementStatement {
 
 /// Whether a geometry apply skips a fullscreen window. With a KWin window at
@@ -46,6 +48,20 @@ enum class Purpose {
     UserVerb,
     Restatement,
 };
+
+/// The statement a daemon apply takes on its target screen: none on a tiling
+/// engine's screen, whose maximize belongs to TilingHandler's own ledgers, or
+/// with no target to judge it on, else its own purpose. A free spot takes one
+/// like a zone does, so a re-stated float-back (the float-restore relay, an
+/// evacuee's return) keeps a maximize, as the batch's free entries do (F548,
+/// F575), and a user verb's (Restore, the float toggle) ends it (F582).
+constexpr std::optional<Purpose> statementFor(bool targetKnown, bool managedTarget, Purpose purpose)
+{
+    if (!targetKnown || managedTarget) {
+        return std::nullopt;
+    }
+    return purpose;
+}
 
 /// The window's KWin state a placement may have to hand back. Requested state
 /// throughout: on Wayland the committed bits trail a client round trip.

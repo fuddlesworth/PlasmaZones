@@ -17,6 +17,7 @@
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace KWin {
@@ -240,6 +241,19 @@ public:
     /// The strip view offset the paint and hit-test apply to one strip's band,
     /// by strip key.
     using ViewOffsetFor = std::function<QPointF(const QString& strip)>;
+    /// The absolute logical rect a strip's band is confined to, by strip key:
+    /// a virtual screen's own rect, or a null rect for a strip the output's
+    /// edge already bounds.
+    using StripClipFor = std::function<QRect(const QString& strip)>;
+
+    /// Confine each band's paint and hit-test to its strip's rect, as the
+    /// strip's columns are (vs_edge_clip): a pill sliding out of its virtual
+    /// screen mid-leg is cut at the edge, and input on the cut part goes to
+    /// the neighbour. Set once by the effect; unset confines nothing.
+    void setStripClip(StripClipFor clipFor)
+    {
+        m_stripClipFor = std::move(clipFor);
+    }
 
     /// Replace the model for @p strip (TilingHandler::stripKeyFor), drawn on
     /// @p output. A virtual screen running scrolling is a strip of its own, so
@@ -461,6 +475,8 @@ private:
     std::vector<std::unique_ptr<KWin::GLTexture>> m_retiredTextures;
     /// GL_MAX_TEXTURE_SIZE, queried once on the first paint (0 = unknown).
     int m_maxTextureSize = 0;
+    /// setStripClip's answer; empty confines nothing.
+    StripClipFor m_stripClipFor;
 };
 
 } // namespace PlasmaZones

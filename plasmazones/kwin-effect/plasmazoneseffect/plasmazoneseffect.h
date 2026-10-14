@@ -344,8 +344,8 @@ private Q_SLOTS:
     void applyDragPolicyTransition(KWin::EffectWindow* w, const QString& windowId,
                                    PhosphorProtocol::DragBypassReason oldReason, DragPolicyTransition::Source source);
 
-    // Daemon-driven batch operations (rotate, resnap, vs_reconfigure arrive
-    // over the wire; the effect-local snap_all path calls this slot directly)
+    // Daemon-driven batch operations (rotate, resnap, restate, vs_reconfigure
+    // arrive over the wire; the effect-local snap_all path calls this directly)
     void slotApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
     void slotRaiseWindowsRequested(const QStringList& windowIds);
 

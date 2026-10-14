@@ -59,15 +59,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     }
     m_wiredWindows.insert(w);
 
-    // A maximize-on or fullscreen-on edge: KWin's restore rect is the frame the
-    // window left, a free spot the daemon keeps as its float-back (F215). The
-    // daemon refuses it for a window in a zone or on a tile. Nothing is sent
-    // when there is no restore rect (it equals the frame, or the window is a
-    // windowed-fullscreen or parked strip tile, which freeGeometryForCapture
-    // answers with an invalid rect). Kept for a window kept above too, like
-    // its frame shadow (F923).
+    // A maximize-on (either axis) or fullscreen-on edge: KWin's restore rect is
+    // the frame the window left, a free spot the daemon keeps as its float-back
+    // (F215). The daemon refuses it for a window in a zone or on a tile. Nothing
+    // is sent when there is no restore rect (it equals the frame, or the window
+    // is a windowed-fullscreen or parked strip tile, which freeGeometryForCapture
+    // answers with an invalid rect). Kept for a window kept above too, like its
+    // frame shadow (F923), and for a fullscreen one, whose edge this also is.
     const auto pushRestoreRect = [this](KWin::EffectWindow* window) {
-        if (!shouldHandleWindow(window, nullptr, /*exemptFullscreen=*/false, /*exemptOwnKeepAbove=*/true)) {
+        if (!shouldHandleWindow(window, nullptr, /*exemptFullscreen=*/true, /*exemptOwnKeepAbove=*/true)) {
             return;
         }
         const QString windowId = getWindowId(window);
@@ -219,8 +219,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // (or, on a member, into an un-maximize).
                 //
                 // The daemon's capture reads the axis state too (F65): its
-                // registry must not keep the pre-edge answer.
+                // registry must not keep the pre-edge answer, and refusing the
+                // axis-maximized frame leaves it the restore rect alone to keep
+                // as the float-back. Read before the cancel restores it.
                 pushWindowMetadata(window);
+                if (horizontal || vertical) {
+                    pushRestoreRect(window);
+                }
                 m_tilingHandler->cancelAxisOnlyMaximize(window);
                 return;
             }
@@ -498,7 +503,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // its ack just landed the stale size (WindowCommandStamps::
             // StaleAck). Re-issue the command once: its size now differs
             // from the client's, so KWin sends a real configure. Void once
-            // a newer command has landed or the user has the frame.
+            // a newer command has landed (a size-equal move carries the
+            // answer forward instead) or the user has the frame.
             if (const auto staleIt = m_daemonGate.commandStamps.staleAcks.find(safeW.data());
                 staleIt != m_daemonGate.commandStamps.staleAcks.end() && !m_daemonGate.inGeometryApply) {
                 const WindowCommandStamps::StaleAck stale = *staleIt;

@@ -61,6 +61,20 @@ void moveResizeAnsweringStaleAck(KWin::EffectWindow* window, KWin::Window* kw, c
         stamps.staleAcks.remove(window);
     }
 }
+
+// move() @p window to @p target, which has the size already commanded. move()
+// sends no configure either, so a superseded configure an earlier apply armed
+// an answer for is still outstanding: the answer follows this command, at its
+// rect and stamp. Left on the older stamp, the ack found it stale, dropped it
+// with no re-issue, and the superseded size landed at this rect.
+void moveCarryingStaleAck(KWin::EffectWindow* window, KWin::Window* kw, const QRectF& target, quint64 stamp,
+                          WindowCommandStamps& stamps)
+{
+    kw->move(target.topLeft());
+    if (auto stale = stamps.staleAcks.find(window); stale != stamps.staleAcks.end()) {
+        *stale = {target.toRect(), stamp};
+    }
+}
 } // namespace
 
 void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo)
@@ -578,7 +592,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 m_daemonGate.animatedApplyCommit = prevCommit;
             });
             if (targetFrame.toRect().size() == commandedRectOf(window).size()) {
-                kw->move(targetFrame.topLeft());
+                moveCarryingStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps);
             } else {
                 moveResizeAnsweringStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps);
             }
@@ -937,7 +951,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // sub-pixel residue, so an exact QSizeF equality would miss and send a
         // size-preserving placement down the configure path anyway.
         if (geo.size() == commandedRectOf(window).size()) {
-            kwinWindow->move(QRectF(geo).topLeft());
+            moveCarryingStaleAck(window, kwinWindow, QRectF(geo), commandStamp, m_daemonGate.commandStamps);
         } else {
             moveResizeAnsweringStaleAck(window, kwinWindow, QRectF(geo), commandStamp, m_daemonGate.commandStamps);
         }

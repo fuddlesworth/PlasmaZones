@@ -191,6 +191,11 @@ QString ScrollTabIndicatorPainter::pillAt(KWin::LogicalOutput* output, const QPo
         if (entry.output != output) {
             continue;
         }
+        // A pill cut off at its strip's edge is not there to hit.
+        if (const QRect clip = m_stripClipFor ? m_stripClipFor(strip) : QRect();
+            clip.isValid() && !QRectF(clip).contains(pos)) {
+            continue;
+        }
         // The hit rects are stored where the model put them; the blit shifts
         // them by the strip's view offset, so undo that shift on the pointer
         // rather than re-laying the model out every frame of a scroll.
@@ -418,8 +423,14 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
             continue;
         }
         const bool hasBand = !entry.bounds.isEmpty();
+        // Cut at the strip's edge, where its columns are cut
+        // (PlasmaZonesEffect::scrollStripPaintRegion).
+        KWin::Region stripRegion = clipRegion;
+        if (const QRect clip = m_stripClipFor ? m_stripClipFor(strip) : QRect(); clip.isValid()) {
+            stripRegion &= viewport.mapToDeviceCoordinatesAligned(KWin::RectF(QRectF(clip)));
+        }
         const bool stands =
-            paintStrip(entry, renderTarget, viewport, clipRegion, viewOffsetFor ? viewOffsetFor(strip) : QPointF());
+            paintStrip(entry, renderTarget, viewport, stripRegion, viewOffsetFor ? viewOffsetFor(strip) : QPointF());
         if (hasBand) {
             anyBand = true;
             allStand = allStand && stands;

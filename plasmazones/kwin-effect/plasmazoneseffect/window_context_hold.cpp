@@ -251,6 +251,13 @@ WindowContextFields PlasmaZonesEffect::stampContextFields(KWin::EffectWindow* w)
         }
     }
     std::sort(numbers.begin(), numbers.end());
+    if (numbers.isEmpty() && !stamp->desktops.isEmpty()) {
+        // Every desktop the stamp holds was removed: 0 would report "every
+        // desktop". KWin moved the window, so its live set is the answer.
+        const WindowContextFields live = liveContextFields(w);
+        fields.virtualDesktop = live.virtualDesktop;
+        fields.desktops = live.desktops;
+    }
     if (!numbers.isEmpty()) {
         fields.virtualDesktop = numbers.first();
     }

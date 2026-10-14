@@ -85,10 +85,12 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     // longer a no-op: the motion clock AND the scroll-tab indicator
     // rebuild are what its re-insertion check skips. The duplicate still
     // invalidates the EDID and screen-id caches, re-resolves every
-    // output's recorded spelling, rebuilds the connected-id set and
-    // prunes the desktop dedup map. All of those come out identical on a
-    // second run — the prune drops only keys whose spelling is already
-    // stale — so the ordering stands.
+    // output's recorded spelling, rebuilds the connected-id set, prunes
+    // the desktop dedup map, re-marks the output's evacuee records
+    // unclassified (noteOutputAdded) and re-seeds the desktop it shows
+    // (seedScreenDesktop). All of those come out identical on a second
+    // run — the prune drops only keys whose spelling is already stale —
+    // so the ordering stands.
     if (KWin::effects) {
         connect(KWin::effects, &KWin::EffectsHandler::screenAdded, this, &PlasmaZonesEffect::onScreenAdded);
         connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, this, &PlasmaZonesEffect::onScreenRemoved);
@@ -1049,8 +1051,11 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // screenRemoved BEFORE the per-window outputChanged signals it emits for
     // the windows it moves, so every one of those crossings is deferred to
     // the settle (window_output_connections.cpp). Connected AFTER
-    // onScreenAdded / onScreenRemoved above on purpose: the evacuee records
-    // and the returned-output note are written before the baseline is taken.
+    // onScreenAdded / onScreenRemoved (initRenderingAndRegistries) on purpose:
+    // for each signal the evacuee records and the returned-output note are
+    // written before this slot runs. The baseline is taken once, at a
+    // cascade's first signal, and KWin emits every add before any removal, so
+    // a removal's records can follow it; both still precede KWin's moves.
     connect(KWin::effects, &KWin::EffectsHandler::screenAdded, m_screenChangeHandler.get(),
             &ScreenChangeHandler::slotScreenLayoutChanged);
     connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, m_screenChangeHandler.get(),
