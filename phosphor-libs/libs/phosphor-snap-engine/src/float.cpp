@@ -645,8 +645,9 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
 
     // Re-home FIRST, on every path: a window already tracked here under a
     // different (screen, desktop, activity) key keeps its old owning SnapState
-    // otherwise — stateForWindowOnScreen deliberately does not re-home, and the
-    // zone-resolved branches below place through it — so
+    // otherwise — the free and float arms below write unpinned when the handoff
+    // names no desktop, and an unpinned stateForWindowOnScreen keeps the old
+    // store — so
     // pruneStatesForRemovedScreen / pruneStatesForDesktop on the SOURCE context
     // would silently drop a snap that now lives on the destination. A
     // documented no-op when the key is unchanged or the window is being

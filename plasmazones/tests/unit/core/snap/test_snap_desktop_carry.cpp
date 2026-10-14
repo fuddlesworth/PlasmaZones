@@ -9,12 +9,15 @@
  *        one carries its slot into the layout it arrives in, a destination
  *        with no slot leaves the other desktops' zones alone, a span keeps its
  *        zones on a shared layout, every destination is given its slot with
- *        one apply, and an arrival on the desktop in view takes focus. Plus
+ *        one apply, a float kept on a hidden desktop is given its float-back
+ *        when that desktop shows, and an arrival in view takes focus. Plus
  *        the activity arms: a move into the activity in view is carried like
  *        a desktop move, and a move to one not in view lands when its desktop
  *        shows there (F550, ledger-pass26 DJ).
  */
 
+#include <QHash>
+#include <QRect>
 #include <QSet>
 #include <QSignalSpy>
 #include <QString>
@@ -30,6 +33,7 @@
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Layout.h>
@@ -68,6 +72,32 @@ PhosphorEngine::DesktopSpanQuery spanOf(const PhosphorEngine::DesktopSpan& windo
 }
 } // namespace
 
+/// The compositor's frames, as the effect reports them. Outside the anonymous
+/// namespace: the test class holds one as a member, and a member of an
+/// internal-linkage type is -Wsubobject-linkage.
+class FrameNavState : public PhosphorSnapEngine::INavigationStateProvider
+{
+public:
+    QString lastCursorScreenName() const override
+    {
+        return kScreen;
+    }
+    QString lastActiveScreenName() const override
+    {
+        return kScreen;
+    }
+    QString lastActiveWindowId() const override
+    {
+        return {};
+    }
+    QRect frameGeometry(const QString& windowId) const override
+    {
+        return m_frames.value(windowId);
+    }
+
+    QHash<QString, QRect> m_frames;
+};
+
 class TestSnapDesktopCarry : public QObject
 {
     Q_OBJECT
@@ -98,6 +128,8 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_engine->setNavigationStateProvider(nullptr);
+        m_nav.m_frames.clear();
         m_service->setSnapState(nullptr);
         m_service->setSnapEngine(nullptr);
         delete m_engine;
@@ -157,6 +189,41 @@ private Q_SLOTS:
         const SnapState* there = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
         QVERIFY(there->isFloating(kWindow));
         QVERIFY(there->zonesForWindow(kWindow).isEmpty());
+    }
+
+    // A snapped window moved onto a hidden desktop where it floats keeps the
+    // float with no apply now, since its client is suspended there and drops
+    // a grow. The first time that desktop shows, its float-back is re-stated,
+    // once (F780).
+    void aKeptFloatOnAHiddenDesktopGetsItsFloatBackWhenShown()
+    {
+        QSignalSpy restated(m_engine, &SnapEngine::restatementGeometryRequested);
+        moveSnappedOntoAHiddenFloat();
+        QVERIFY2(m_batch.isEmpty(), "no apply reaches the suspended client");
+        QCOMPARE(restated.count(), 0);
+
+        showDesktop(2);
+        QCOMPARE(restated.count(), 1);
+        const QList<QVariant> args = restated.first();
+        QCOMPARE(args.at(0).toString(), kWindow);
+        QCOMPARE(QRect(args.at(1).toInt(), args.at(2).toInt(), args.at(3).toInt(), args.at(4).toInt()), kFree);
+        QCOMPARE(args.at(6).toString(), kScreen);
+
+        showDesktop(1);
+        showDesktop(2);
+        QCOMPARE(restated.count(), 1);
+    }
+
+    // A frame that moved while the desktop was hidden is the user's: the
+    // owed float-back is dropped, not applied over it (F780).
+    void aMovedFrameKeepsItsPlaceWhenShown()
+    {
+        QSignalSpy restated(m_engine, &SnapEngine::restatementGeometryRequested);
+        moveSnappedOntoAHiddenFloat();
+        m_nav.m_frames.insert(kWindow, QRect(40, 40, 300, 200));
+
+        showDesktop(2);
+        QCOMPARE(restated.count(), 0);
     }
 
     // A floating window arrives floating where it goes, tracked there with
@@ -540,6 +607,27 @@ private:
         QVERIFY(persistedZonesByDesktop().contains(1));
     }
 
+    /// kWindow snapped in zone 1 of desktop 1 and floating on desktop 2, its
+    /// frame on the zone, moved off 1 onto 2 while 1 is in view.
+    void moveSnappedOntoAHiddenFloat()
+    {
+        assignLayout(2, 3);
+        snapOn(1, m_zoneIds[0]);
+        m_engine->stateForWindowOnScreen(kWindow, kScreen, 2)->setFloatingOnScreen(kWindow, kScreen, 2);
+        recordFreeGeometry(kFree);
+        m_nav.m_frames.insert(kWindow, m_service->resolveZoneGeometry({m_zoneIds[0]}, kScreen));
+        m_engine->setNavigationStateProvider(&m_nav);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+    }
+
+    /// Switch kScreen to @p desktop and run the pass a desktop switch runs.
+    void showDesktop(int desktop)
+    {
+        m_engine->setCurrentDesktopForScreen(kScreen, desktop);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(on({2})));
+    }
+
     void snapOn(int desktop, const QString& zoneId)
     {
         m_engine->setCurrentDesktopForScreen(kScreen, desktop);
@@ -579,6 +667,7 @@ private:
     PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
     QVector<PhosphorEngine::ZoneAssignmentEntry> m_batch;
+    FrameNavState m_nav;
 };
 
 QTEST_MAIN(TestSnapDesktopCarry)

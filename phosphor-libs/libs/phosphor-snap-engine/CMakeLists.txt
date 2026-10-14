@@ -84,6 +84,7 @@ add_library(PhosphorSnapEngine SHARED
     src/SnapState.cpp
     src/calculate.cpp
     src/commit.cpp
+    src/desktopremap.cpp
     src/float.cpp
     src/evacueepark.cpp
     src/evacueepark_p.h

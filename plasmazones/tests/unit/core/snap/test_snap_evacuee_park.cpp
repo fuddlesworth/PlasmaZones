@@ -20,6 +20,8 @@
 #include "helpers/LayoutRegistryTestHelpers.h"
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
+#include <PhosphorEngine/DesktopRemap.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -34,6 +36,7 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 const QString kScreen = QStringLiteral("DP-1");
+const QString kOther = QStringLiteral("DP-2");
 } // namespace
 
 class TestSnapEvacueePark : public QObject
@@ -138,6 +141,54 @@ private Q_SLOTS:
         // The parked float comes back floating.
         QVERIFY(m_engine->readoptParked(parked, kScreen, kScreen));
         QVERIFY(m_engine->isFloating(parked));
+    }
+
+    // A window floating in view on the output that went away is still snap's
+    // floating window once the prune drops its store: screenless, its home
+    // there gone, until the daemon's evacuee adoption (the WindowTracking
+    // adaptor's floatEvacuee) floats it on the output KWin moved it to. A
+    // float the park did not see still ends with its store (F639).
+    void aParkedFloatStaysFloatingThroughThePrune()
+    {
+        const QString parked = QStringLiteral("app|kept-float");
+        floatOn(parked);
+        QVERIFY(m_engine->parkOutput(kScreen).contains(parked));
+        const QString unparked = QStringLiteral("app|late-float");
+        floatOn(unparked);
+        m_engine->pruneStatesForRemovedScreen(kScreen);
+
+        QVERIFY(m_engine->isFloating(parked));
+        QVERIFY(m_engine->isWindowTracked(parked));
+        QVERIFY(m_engine->screenForTrackedWindow(parked).isEmpty());
+        QVERIFY(!m_engine->isFloating(unparked));
+
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = parked;
+        ctx.toScreenId = kOther;
+        ctx.wasFloating = true;
+        m_engine->handoffReceive(ctx);
+        QVERIFY(m_engine->isFloating(parked));
+        QCOMPARE(m_engine->screenForTrackedWindow(parked), kOther);
+        QVERIFY2(!m_engine->globalState()->isFloating(parked), "the adoption takes the float out of the global holder");
+    }
+
+    // A parked context names a desktop by number, so it follows its desktop
+    // through a change of KWin's desktop list: two desktops swapped while the
+    // output was away, the zone comes back on the desktop it was on (F763).
+    void aParkedContextFollowsItsDesktop()
+    {
+        const QString w = QStringLiteral("app|parked-swap");
+        snapOn(2, w, m_zoneIds[1]);
+        QCOMPARE(m_engine->parkOutput(kScreen), QStringList{w});
+        m_engine->pruneStatesForRemovedScreen(kScreen);
+
+        m_engine->remapDesktops(PhosphorEngine::DesktopRemap::fromIds({QStringLiteral("a"), QStringLiteral("b")},
+                                                                      {QStringLiteral("b"), QStringLiteral("a")}));
+
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        QVERIFY(m_engine->readoptParked(w, kScreen, kScreen));
+        QCOMPARE(zonesOn(1, w), QStringList{m_zoneIds[1]});
+        QVERIFY(zonesOn(2, w).isEmpty());
     }
 
     // A context out of view gets its zone straight back into that desktop's

@@ -696,9 +696,9 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // and the direct D-Bus resolveWindowRestore path the KWin effect uses,
     // so a placement record saved before the toggle can no longer drag a
     // freshly opened window into a zone the user told us to stay out of.
-    // The `isPersistedContextDisabled` filter on disk load fires only once
-    // per session, so without this gate a record saved during the running
-    // session would leak through. Discussion #461 item 7.
+    // Records load from disk unfiltered (isPersistedContextDisabled filters
+    // only the save), so without this gate a record saved before the toggle
+    // would leak through. Discussion #461 item 7.
     //
     // Placed AFTER the isWindowSnapped/consume guard so windows that are
     // already snapped still consume their appId pending entry; placed

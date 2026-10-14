@@ -17,19 +17,12 @@ using PhosphorEngine::ZoneAssignmentEntry;
 // ═══════════════════════════════════════════════════════════════════════════════
 // Snap-mode resnap coordination
 //
-// SnapEngine does NOT implement per-window navigation (focus/swap/rotate/move).
-// Snap navigation is driven entirely by WindowTrackingAdaptor on the daemon
-// side: it computes zone geometry via the target helpers in
-// src/dbus/windowtrackingadaptor/targets.cpp and emits applyGeometryRequested.
-//
-// The IPlacementEngine interface unifies lifecycle + navigation so both
-// engines are dispatched through a single polymorphic call.
-//
-// What remains here is snap-mode batch operations (layout switch resnap,
-// current-assignment resnap, autotile → snap transition resnap) that don't
-// fit into navigation or lifecycle categories — they're coordination calls
-// the daemon triggers explicitly on SnapEngine in response to layout or
-// mode changes.
+// The navigation verbs (focus, move, swap, span, cycle, rotate) are in
+// navigation_actions.cpp; all but rotate resolve their targets through
+// SnapNavigationTargetResolver (snapnavigationtargets.cpp). What remains here
+// is the batch work the daemon triggers on layout or mode changes: the
+// layout-switch resnap, the current-assignment resnap, the autotile → snap
+// resnap, and snap-all.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapEngine::resnapToNewLayout()

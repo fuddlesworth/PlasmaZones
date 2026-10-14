@@ -41,18 +41,15 @@ std::pair<QString, QRect> SnapEngine::resolveCrossDesktopZone(const QString& cur
     if (!targetLayout || targetLayout->zones().isEmpty()) {
         return {};
     }
-    // Position is the 1-based enumeration index of zones sorted by zone number
-    // (NOT the raw zone number) — the same scheme the resnap path uses.
-    const int position =
-        PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts()).value(currentZoneId, 0);
-    QVector<PhosphorZones::Zone*> zones = targetLayout->zones();
-    PhosphorZones::LayoutUtils::sortZonesByNumber(zones);
-    PhosphorZones::Zone* targetZone =
-        (position >= 1 && position <= zones.size()) ? zones.value(position - 1, nullptr) : nullptr;
-    if (!targetZone) {
+    // The same-numbered slot the layout-switch populate takes too: by position
+    // among the zones sorted by number, NOT the raw zone number.
+    const QStringList slot = PhosphorZones::LayoutUtils::sameNumberedZones(
+        {currentZoneId}, targetLayout,
+        PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts()));
+    if (slot.isEmpty()) {
         return {};
     }
-    const QString targetZoneId = targetZone->id().toString();
+    const QString targetZoneId = slot.first();
     const QRect geo = m_windowTracker ? m_windowTracker->zoneGeometry(targetZoneId, screenId) : QRect();
     if (!geo.isValid()) {
         return {};

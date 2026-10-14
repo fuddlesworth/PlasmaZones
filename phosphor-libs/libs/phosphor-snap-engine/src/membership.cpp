@@ -541,10 +541,11 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         // carries over), so the remembered restore would be a write nothing
         // keeps and a log line claiming a restore that did not stand.
         const bool carriedIntoCurrentContext = plan && viewDesktop != 0 && plan->wrote.contains(viewDesktop);
-        // A move supersedes a carry still waiting for an activity, and a move
-        // to an activity not in view records one.
+        // A move supersedes a carry still waiting for an activity or a float-back
+        // still owed, and a move to an activity not in view records one.
         if (!entry.stale.isEmpty() && m_pendingCarries) {
             m_pendingCarries->byWindow.remove(entry.windowId);
+            m_pendingCarries->owedFloatBacks.remove(entry.windowId);
         }
         if (plan && plan->pending) {
             pendingCarriesOf(m_pendingCarries).byWindow.insert(entry.windowId, *plan->pending);
@@ -678,6 +679,17 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         }
         if (carry.floatStatement) {
             statedThisPass.insert(entry.windowId);
+        }
+        // A float kept on a desktop out of view, by a window that was snapped
+        // (a floating source keeps its frame): no apply goes now (EJ), and its
+        // frame stands on the zone it left, so the float-back is owed for that
+        // desktop's first showing (F780).
+        if (!plan->applied && plan->statedFloating && !plan->sourceFloating && viewDesktop == 0 && m_navState) {
+            if (const QRect frame = m_navState->frameGeometry(entry.windowId); frame.isValid()) {
+                pendingCarriesOf(m_pendingCarries)
+                    .owedFloatBacks.insert(
+                        entry.windowId, {PlacementStateKey{screenId, plan->statedDesktop, currentActivity()}, frame});
+            }
         }
         // A window arriving on the desktop in view is an arrival, focused
         // like an open when "Focus new windows" is on (focus_new_windows_rule,
@@ -876,6 +888,34 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                 Q_EMIT windowFloatingChanged(windowId, false, screenId);
             }
         }
+        // The float-backs owed to this context now that it shows (F780): only
+        // while the window still floats here and its frame has not moved since
+        // the carry (a frame elsewhere is the user's). A minimized window keeps
+        // its debt for a later showing.
+        if (m_pendingCarries && m_navState && m_windowTracker) {
+            auto& owed = m_pendingCarries->owedFloatBacks;
+            for (auto it = owed.begin(); it != owed.end();) {
+                const QString windowId = it.key();
+                if (!(it->key == currentKey) || (!onlyWindow.isEmpty() && windowId != onlyWindow)
+                    || (m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false))) {
+                    ++it;
+                    continue;
+                }
+                const QRect carriedFrame = it->frame;
+                it = owed.erase(it);
+                if (statedThisPass.contains(windowId) || !m_states.hasMembership(windowId, currentKey)
+                    || !currentState->isFloating(windowId) || m_navState->frameGeometry(windowId) != carriedFrame) {
+                    continue;
+                }
+                if (const auto back = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
+                    back && back->isValid()) {
+                    qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: re-stating the float-back of" << windowId
+                                         << "kept floating on desktop" << currentKey.desktop << "while it was hidden";
+                    Q_EMIT restatementGeometryRequested(windowId, back->x(), back->y(), back->width(), back->height(),
+                                                        QString(), screenId);
+                }
+            }
+        }
     }
     if (!reapply.isEmpty()) {
         // Scoped to this screen: the other outputs' assignments did not move,
@@ -1026,6 +1066,50 @@ void SnapEngine::rekeyMembershipsToRecordedScreens(const QString& physicalScreen
     if (!moves.isEmpty()) {
         qCInfo(lcSnapEngine) << "rekeyMembershipsToRecordedScreens:" << moves.size() << "membership(s) re-filed on"
                              << physicalScreenId;
+    }
+}
+
+void SnapEngine::renameScreen(const QString& oldPhysicalId, const QString& newPhysicalId)
+{
+    if (oldPhysicalId.isEmpty() || newPhysicalId.isEmpty() || oldPhysicalId == newPhysicalId) {
+        return;
+    }
+    // An EDID twin's identifier flip (F189): the facade has already rewritten
+    // the screen values, and each store still filed under the old id would
+    // read the next pinned commit as a move off the monitor. Same shape as
+    // rekeyMembershipsToRecordedScreens: collected first, since
+    // ensureStateForKey creates stores, and nothing is released.
+    const QString oldPrefix = oldPhysicalId + PhosphorIdentity::VirtualScreenId::Separator;
+    struct Rekey
+    {
+        QString windowId;
+        PlacementStateKey from;
+        PlacementStateKey to;
+    };
+    QList<Rekey> moves;
+    m_states.forEachMembership([&](const QString& windowId, const PlacementStateKey& key) {
+        QString to;
+        if (key.screenId == oldPhysicalId) {
+            to = newPhysicalId;
+        } else if (key.screenId.startsWith(oldPrefix)) {
+            to = newPhysicalId + key.screenId.mid(oldPhysicalId.size());
+        } else {
+            return;
+        }
+        moves.append({windowId, key, PlacementStateKey{to, key.desktop, key.activity}});
+    });
+    for (const Rekey& move : std::as_const(moves)) {
+        SnapState* from = m_states.stateForKey(move.from);
+        SnapState* to = ensureStateForKey(move.to);
+        if (!from || !to) {
+            continue;
+        }
+        from->migrateWindowTo(to, move.windowId, move.to.screenId);
+        m_states.migrate(move.windowId, move.from, move.to);
+    }
+    if (!moves.isEmpty()) {
+        qCInfo(lcSnapEngine) << "renameScreen:" << moves.size() << "membership(s) re-filed from" << oldPhysicalId
+                             << "to" << newPhysicalId;
     }
 }
 

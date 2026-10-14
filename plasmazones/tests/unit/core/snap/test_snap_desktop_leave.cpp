@@ -11,6 +11,7 @@
  */
 
 #include <QGuiApplication>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSignalSpy>
 #include <QString>
@@ -22,6 +23,7 @@
 #include "helpers/LayoutRegistryTestHelpers.h"
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
@@ -33,6 +35,7 @@
 #include <PhosphorZones/Zone.h>
 
 using namespace PlasmaZones;
+using PhosphorEngine::DesktopRemap;
 using PhosphorEngine::WindowPlacement;
 using PhosphorSnapEngine::SnapEngine;
 using PhosphorSnapEngine::SnapState;
@@ -43,6 +46,17 @@ const QString kScreen = QStringLiteral("DP-1");
 const QString kInstance = QStringLiteral("11111111-2222-3333-4444-555555555555");
 const QString kWindow = QStringLiteral("app|") + kInstance;
 const QString kClosed = QStringLiteral("app|66666666-7777-8888-9999-000000000000");
+const QString kThird = QStringLiteral("app|77777777-8888-9999-0000-111111111111");
+
+/// KWin desktop ids, one per letter, in position order.
+QStringList desktopIds(const char* letters)
+{
+    QStringList ids;
+    for (const char* c = letters; *c; ++c) {
+        ids.append(QString(QLatin1Char(*c)));
+    }
+    return ids;
+}
 
 PhosphorEngine::DesktopSpanQuery onDesktops(QSet<int> desktops)
 {
@@ -268,7 +282,104 @@ private Q_SLOTS:
         QCOMPARE(onTwo->zonesForWindow(kClosed), QStringList{m_zoneIds[1]});
     }
 
+    // A desktop inserted in the middle moves every desktop after it up one:
+    // each store goes with its desktop, its windows' memberships and the
+    // desktop numbers it holds with it, and the screen showing a moved desktop
+    // still shows the same store. The new desktop starts empty (F763, F787).
+    void aDesktopInsertMovesTheStoresAfterIt()
+    {
+        snapOn(1, kClosed, m_zoneIds[0]);
+        snapOn(2, kWindow, m_zoneIds[1]);
+        snapOn(3, kThird, m_zoneIds[2]);
+        SnapState* onThree = storeInView();
+
+        m_engine->remapDesktops(DesktopRemap::fromIds(desktopIds("abc"), desktopIds("axbc")));
+
+        QCOMPARE(storeInView(), onThree);
+        QCOMPARE(onThree->desktopForWindow(kThird), 4);
+        QCOMPARE(heldDesktop(kClosed), 1);
+        QCOMPARE(heldDesktop(kWindow), 3);
+        QCOMPARE(heldDesktop(kThird), 4);
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
+        QCOMPARE(zonesOn(3, kWindow), QStringList{m_zoneIds[1]});
+        QCOMPARE(zonesOn(4, kThird), QStringList{m_zoneIds[2]});
+        QCOMPARE(zonesOn(1, kClosed), QStringList{m_zoneIds[0]});
+    }
+
+    // Two desktops trading places trade their stores whole. A window held on
+    // both keeps each desktop's own zone there, a window on one follows it,
+    // and the record's per-desktop map trades with them. The move goes
+    // through a scratch key, so neither store lands on the other.
+    void aDesktopReorderSwapsTheirStores()
+    {
+        snapOn(2, kWindow, m_zoneIds[1]);
+        snapOn(3, kWindow, m_zoneIds[2]);
+        snapOn(3, kThird, m_zoneIds[0]);
+
+        m_engine->remapDesktops(DesktopRemap::fromIds(desktopIds("abc"), desktopIds("acb")));
+
+        QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[2]});
+        QCOMPARE(zonesOn(3, kWindow), QStringList{m_zoneIds[1]});
+        QCOMPARE(zonesOn(2, kThird), QStringList{m_zoneIds[0]});
+        QVERIFY(zonesOn(3, kThird).isEmpty());
+        QCOMPARE(heldDesktop(kThird), 2);
+        const auto rec = m_service->placementStore().peekExact(kWindow);
+        QVERIFY(rec.has_value());
+        const PhosphorEngine::EngineSlot slot = rec->slotFor(WindowPlacement::snapEngineId());
+        QCOMPARE(slot.zonesByDesktop.value(2), QStringList{m_zoneIds[2]});
+        QCOMPARE(slot.zonesByDesktop.value(3), QStringList{m_zoneIds[1]});
+    }
+
+    // A removal through the map prunes the removed desktop's store while the
+    // numbers are still the old ones, then moves the rest down; the store
+    // moving in finds its target vacant, so nothing is merged.
+    void aDesktopRemovalThroughTheMapPrunesThenShifts()
+    {
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("merging a store")));
+        snapOn(1, kClosed, m_zoneIds[0]);
+        snapOn(2, kWindow, m_zoneIds[1]);
+        snapOn(3, kThird, m_zoneIds[2]);
+
+        m_engine->remapDesktops(DesktopRemap::fromIds(desktopIds("abc"), desktopIds("ac")));
+
+        QVERIFY(!m_engine->isWindowTracked(kWindow));
+        QCOMPARE(heldDesktop(kThird), 2);
+        QCOMPARE(heldDesktop(kClosed), 1);
+        QCOMPARE(zonesOn(2, kThird), QStringList{m_zoneIds[2]});
+        QVERIFY(zonesOn(3, kThird).isEmpty());
+    }
+
+    // A removal and a move in one change, which no sequence of single
+    // removals can express: desktop 2 goes, 4 takes its number and 3 keeps
+    // its own.
+    void aRemovalAndAReorderAtOnce()
+    {
+        snapOn(2, kWindow, m_zoneIds[0]);
+        snapOn(3, kThird, m_zoneIds[1]);
+        snapOn(4, kClosed, m_zoneIds[2]);
+
+        m_engine->remapDesktops(DesktopRemap::fromIds(desktopIds("abcd"), desktopIds("adc")));
+
+        QVERIFY(!m_engine->isWindowTracked(kWindow));
+        QCOMPARE(heldDesktop(kThird), 3);
+        QCOMPARE(heldDesktop(kClosed), 2);
+        QCOMPARE(zonesOn(2, kClosed), QStringList{m_zoneIds[2]});
+        QCOMPARE(zonesOn(3, kThird), QStringList{m_zoneIds[1]});
+    }
+
 private:
+    SnapState* storeInView()
+    {
+        return static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
+    }
+
+    /// The desktop of the store that holds @p windowId, or -1 when none does.
+    int heldDesktop(const QString& windowId) const
+    {
+        const auto held = m_engine->heldKeyForWindow(windowId);
+        return held ? held->desktop : -1;
+    }
+
     void installFullResolver()
     {
         m_service->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(m_engine));

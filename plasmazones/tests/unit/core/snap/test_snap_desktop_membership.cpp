@@ -143,8 +143,8 @@ private Q_SLOTS:
         // snaps it there.
         QVERIFY(!m_engine->stateForWindow(kWindow)->isWindowSnapped(kWindow));
         // The held key still answers, from the store that genuinely holds
-        // the window, so the daemon's membership reconcile never reads an
-        // adopted-but-unsnapped window as untracked.
+        // the window, so isWindowTracked and Meta+F's managed test never
+        // read an adopted-but-unsnapped window as untracked.
         QVERIFY(m_engine->heldKeyForWindow(kWindow).has_value());
         QCOMPARE(m_engine->heldKeyForWindow(kWindow)->desktop, 1);
         QVERIFY2(m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky())).isEmpty(),

@@ -15,6 +15,10 @@
 
 #include <optional>
 
+namespace PhosphorEngine {
+class DesktopRemap;
+}
+
 namespace PhosphorSnapEngine {
 
 /// Per-screen snap placement state.
@@ -285,6 +289,10 @@ public:
     /// @p removedDesktop goes: higher numbers move down by one, and a value ON
     /// the removed desktop reads as unknown (0).
     void renumberDesktopsAfterRemoval(int removedDesktop);
+    /// The same for any change of KWin's desktop list: every number moves to the
+    /// position @p remap gives its desktop, and one on a removed desktop reads as
+    /// unknown (0). A number outside the old list is left as it is.
+    void remapDesktops(const PhosphorEngine::DesktopRemap& remap);
     /// Monotonic stamp bumped every time this store's last-used zone is set to a
     /// non-empty value (via updateLastUsedZone / restoreLastUsedZone). 0 means
     /// "never set". The facade compares stamps across stores to pick the single

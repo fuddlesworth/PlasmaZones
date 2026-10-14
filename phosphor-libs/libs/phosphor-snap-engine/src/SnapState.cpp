@@ -3,6 +3,10 @@
 
 #include <PhosphorSnapEngine/SnapState.h>
 
+#include <PhosphorEngine/DesktopRemap.h>
+
+#include <algorithm>
+
 namespace PhosphorSnapEngine {
 
 SnapState::SnapState(const QString& screenId, QObject* parent)
@@ -236,20 +240,27 @@ void SnapState::renumberDesktopsAfterRemoval(int removedDesktop)
     if (removedDesktop < 1) {
         return;
     }
-    const auto shifted = [removedDesktop](int desktop) {
-        if (desktop == removedDesktop) {
-            return 0;
-        }
-        return desktop > removedDesktop ? desktop - 1 : desktop;
-    };
+    // The removal map has to reach every number this store holds, or one
+    // above its old count would read as outside the list and keep its number.
+    int highest = std::max(removedDesktop, m_lastUsedDesktop);
+    for (const int desktop : std::as_const(m_windowDesktopAssignments)) {
+        highest = std::max(highest, desktop);
+    }
+    remapDesktops(PhosphorEngine::DesktopRemap::removal(removedDesktop, highest));
+}
+
+void SnapState::remapDesktops(const PhosphorEngine::DesktopRemap& remap)
+{
+    // In place: each value is one window's desktop, so no write can land on
+    // an entry not yet visited.
     bool changed = false;
     for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end(); ++it) {
-        if (const int next = shifted(it.value()); next != it.value()) {
+        if (const int next = remap.map(it.value()); next != it.value()) {
             it.value() = next;
             changed = true;
         }
     }
-    if (const int next = shifted(m_lastUsedDesktop); next != m_lastUsedDesktop) {
+    if (const int next = remap.map(m_lastUsedDesktop); next != m_lastUsedDesktop) {
         m_lastUsedDesktop = next;
         changed = true;
     }

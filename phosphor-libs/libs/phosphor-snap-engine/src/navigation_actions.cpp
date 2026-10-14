@@ -36,7 +36,6 @@
 
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
-#include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 
@@ -137,7 +136,7 @@ void SnapEngine::setExcludeRuleSet(const PhosphorRules::RuleSet* ruleSet)
     }
     m_excludeRuleSet = ruleSet;
     // The cached evaluator binds a reference to the previously-pointed-at
-    // rule set. Dropping it forces the next isAppIdExcluded call to rebind
+    // rule set. Dropping it forces the next evaluateExcludeRules call to rebind
     // against the new pointer — a held evaluator with a stale binding would
     // resolve against the WRONG store. The evaluator's per-revision
     // internal cache key off the bound rule set's revision counter, so an
@@ -506,7 +505,7 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         // Deliberately do NOT touch SnapState / the placement store here: the
         // daemon's handleCrossModeMove resolves this engine as the source and
         // calls handoffRelease(windowId) on it, vacating the snap zone before the
-        // autotile target receives the window. Re-stamping the desktop locally
+        // tiling target receives the window. Re-stamping the desktop locally
         // would leave the window double-tracked (snapped here, tiled there) until
         // that release lands. The release is the source-of-truth uncommit.
         Q_EMIT crossModeMoveRequested(windowId, screenId, targetDesktop, direction);
@@ -936,12 +935,11 @@ void SnapEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
     const auto isHidden = [this](const QString& id) {
         return m_windowRegistry && m_windowRegistry->minimizedState(id).value_or(false);
     };
-    // Both pools come from the per-(screen,desktop,activity) store, but a
-    // cross-desktop directional move re-stamps the window's desktop while
-    // leaving it in its source store (reassignDesktop), so the raw pools can
-    // name windows living on OTHER desktops. Activating one would yank the
-    // user's desktop out from under the press — filter both sides to the
-    // screen's current desktop. 0 means "on all desktops" per the KWin
+    // Both pools come from the per-(screen,desktop,activity) store of the
+    // desktop in view; the filter keeps out a window whose recorded desktop
+    // names another one (a value a re-key did not rewrite). Activating one
+    // would yank the user's desktop out from under the press — filter both
+    // sides to the screen's current desktop. 0 means "on all desktops" per the KWin
     // convention buildOccupiedZoneSet documents, and an unstamped plain
     // float reads as 0 too.
     const int currentDesktop = currentVirtualDesktopForScreen(screen);

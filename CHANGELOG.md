@@ -198,6 +198,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Scrolling strips stay put when monitors are rearranged**: they jumped to where their monitor used to be and back once the layout caught up. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **Rules for snapped windows stop applying once a monitor switches to tiling**: a window that had been snapped there still matched snapped and zone rules after it was tiled, and snap focus-follows-mouse could still focus it. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 - **A tiled window keeps its own floating size when you drag it out**: after the KWin effect restarted, a window could take the floating spot of another window of the same app, one that had moved to another monitor, when it was first dragged out of its tile. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **A floating window stays floating when its monitor goes away**: a window you had floated on a monitor that was unplugged or went to sleep arrived on the other monitor no longer floating and no longer known to PlasmaZones, so the float shortcut there said the window was not managed. It now arrives floating where KWin put it. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
+- **A snapped window moved to a desktop where it floats takes its floating spot**: moving it with KWin's move-to-desktop or in the pager to a desktop you were not looking at left it at the size and place of the zone it came from. It now goes to its floating spot the first time you switch to that desktop, unless you moved it meanwhile. ([#1125](https://github.com/fuddlesworth/PlasmaZones/pull/1125))
 
 ## [3.4.19] - 2026-09-21
 
