@@ -167,17 +167,17 @@ void TilingHandler::loadSettings()
                 if (queryGeneration != m_screenQueryGeneration) {
                     return;
                 }
-                // Cleared BEFORE the teardown bail, not after. Every other exit
-                // from this handler clears the flag and drains the deferred
+                // Cleared BEFORE the KWin::effects bail, not after. Every other
+                // exit from this handler clears the flag and drains the deferred
                 // routes; returning with it still set left m_deferredWindowRoutes
                 // and m_pendingFreshWindows undrained forever, because the
                 // scheduler that would retry them is itself gated on this flag
-                // being false. Compositor-teardown only, so effectively benign,
-                // but it was the one arm that broke the file's own invariant.
+                // being false.
                 m_initialScreenQueryPending = false;
-                // Compositor teardown: a D-Bus reply can land after KWin::effects
-                // is gone (the daemon-loss handler documents the same case), and
-                // the stacking-order walk below would deref the null.
+                // Belt and braces for the stacking-order walk below: KWin nulls the
+                // global only after it has destroyed every effect, so a reply this
+                // live handler receives never finds it gone (see
+                // PlasmaZonesEffect::windowOutput).
                 if (!KWin::effects) {
                     return;
                 }
@@ -619,18 +619,13 @@ void TilingHandler::fetchScrollTabPaintOverrides()
                                 << reply.error().message();
             return;
         }
-        // Teardown guard, matching the managedScreens reply handler above. The slots below
-        // reach outputForScreenId, which dereferences KWin::effects->screens() without a check
-        // of its own.
-        //
-        // BOTH scroll-tab slots now carry the same test themselves, and this one is kept as the
-        // cheap early exit that skips the whole loop. It used to be the ONLY guard, which was
-        // the defect: each slot is also invoked by direct D-Bus signal delivery (see the
-        // bus.connect calls near the top of this file), which never passed through here, so the
-        // guard covered one of two callers. Whether a queued delivery can observe a null global
-        // while an Effect object is still alive is a KWin teardown-ordering question nobody here
-        // has answered from KWin's source — this handler asserts it can, and putting the test in
-        // the slots makes both paths agree either way, for one comparison.
+        // Belt and braces, matching the managedScreens reply handler above: the slots below reach
+        // outputForScreenId, which dereferences KWin::effects->screens() without a check of its
+        // own, and the global is never null while this effect is alive (KWin nulls it only after
+        // destroying every effect, see PlasmaZonesEffect::windowOutput). Both scroll-tab slots
+        // carry the same test, since each is also invoked by direct D-Bus signal delivery (the
+        // bus.connect calls near the top of this file); this one is the cheap early exit that
+        // skips the whole loop.
         if (!KWin::effects) {
             return;
         }
@@ -684,8 +679,8 @@ void TilingHandler::fetchScrollTabStrips()
                                 << reply.error().message();
             return;
         }
-        // Teardown guard, matching the managedScreens reply handler above (see
-        // the paint-overrides fetch for why these two slots need it).
+        // Belt and braces, matching the managedScreens reply handler above (see
+        // the paint-overrides fetch).
         if (!KWin::effects) {
             return;
         }

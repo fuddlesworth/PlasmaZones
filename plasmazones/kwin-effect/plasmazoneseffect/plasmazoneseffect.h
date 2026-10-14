@@ -471,14 +471,14 @@ private:
      *                     so the rejection reason has a single source of truth
      *                     (this function) and cannot drift from the filter.
      */
-    /// exemptFullscreen waives ONLY the structural fullscreen/transientFor
-    /// terms (threaded into isStructurallyUnmanageableWindowType) — every
-    /// other rejection stays authoritative. Opt-in for callers that carry the
-    /// scrolling windowed-fullscreen exemption (isEligibleForTilingNotify);
-    /// the default keeps all other consumers treating a genuinely fullscreen
-    /// window as unmanageable.
-    bool shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr,
-                            bool exemptFullscreen = false) const;
+    /// exemptFullscreen waives ONLY the structural fullscreen/transientFor terms
+    /// (isStructurallyUnmanageableWindowType), for callers carrying the scrolling
+    /// windowed-fullscreen exemption (isEligibleForTilingNotify). exemptOwnKeepAbove
+    /// waives ONLY the own keep-above reject, for the producers that record a
+    /// window's position with the daemon (F923). Every other rejection stays
+    /// authoritative; the defaults keep both.
+    bool shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr, bool exemptFullscreen = false,
+                            bool exemptOwnKeepAbove = false) const;
 
     /**
      * @brief Autotile-tree eligibility filter. @see shouldHandleWindow for the
@@ -1479,10 +1479,10 @@ private:
     // auto-nulls if the window dies before the flush; the flush skips those.
     // PendingFrameGeometry moved to effect_state.h.
     QHash<QString, PendingFrameGeometry> m_pendingFrameGeometry;
-    /// Last caption pushed via the caption-only metadata refresh, per window.
-    /// Skips content-identical pushes (spurious captionChanged emissions).
-    /// Raw-pointer-keyed; erased in the windowDeleted cleanup with its
-    /// siblings.
+    /// Last caption sent to the daemon by any metadata push, per window;
+    /// pushCaptionOnly skips a caption equal to it. Raw-pointer-keyed; erased
+    /// in the windowDeleted cleanup with its siblings and cleared on daemon
+    /// loss.
     QHash<KWin::EffectWindow*, QString> m_lastPushedCaption;
     /// Last CONSISTENT shadow margins (expandedGeometry - frameGeometry) per
     /// window, the input surfaceWindowRect() reconstructs the canvas base from.
@@ -1533,8 +1533,8 @@ private:
     /// created, parented to the effect.
     QTimer* m_parkReapTimer = nullptr;
 
-    /// Debounce timer for `Rules.rulesChanged`. Single-shot, 50ms;
-    /// timeout fires `loadRuleAnimationsFromDbus`. Re-armed on every
+    /// Debounce timer for `Rules.rulesChanged`. Single-shot, 50ms; timeout
+    /// fires `loadRuleAnimationsFromDbus` and `refreshRestoreCache`. Re-armed on every
     /// `slotRulesChanged` invocation so a burst of per-rule mutations
     /// (a 50-rule batch edit emits 50 signals) collapses into a single
     /// `getAllRules` fetch at the trailing edge.
@@ -2386,17 +2386,18 @@ private:
     /// to tiled windows must still reconcile on a snap flip with an empty rule set.
     void invalidateRuleCacheForStateChange(const QString& windowId);
 
-    /// Targeted sibling of invalidateRuleCacheForStateChange for the
-    /// frame-geometry edge: evicts ONLY @p windowId's entry from the three
-    /// per-window verdict caches and re-drives that window's decoration,
-    /// title-bar and layer reconciles directly. The coalesced helper above
-    /// clears the GLOBAL animation match cache per flush, but the geometry edge
-    /// fires per 50 ms flush for a whole drag, and a global clear there
-    /// cold-starts every other window's verdict twenty times a second. The
-    /// layer and title-bar reconciles are change-gated; updateWindowDecoration
-    /// keeps the cached prefix fold when its inputs have not moved, and the
-    /// damage lands on a window already repainting for its own motion.
-    void invalidateRuleCachesForWindowGeometry(const QString& windowId, KWin::EffectWindow* w);
+    /// Targeted sibling of invalidateRuleCacheForStateChange for a live match
+    /// field of ONE window (frame geometry, caption): evicts ONLY @p windowId's
+    /// entry from the per-window verdict caches and re-drives that window's
+    /// decoration, title-bar and layer reconciles directly. The coalesced helper
+    /// above clears the GLOBAL animation match cache per flush, but these edges
+    /// fire per 50 ms flush for a whole drag or a chatty title, and a global
+    /// clear there cold-starts every other window's verdict twenty times a
+    /// second. The layer and title-bar reconciles are change-gated;
+    /// updateWindowDecoration keeps the cached prefix fold when its inputs have
+    /// not moved.
+    void invalidateRuleCachesForWindowFields(const QString& windowId, KWin::EffectWindow* w);
+    void recomputeLiveFieldRuleGates(const PhosphorRules::RuleSet& rules);
     /// Drop @p windowId's cached exclusion verdicts at once, ahead of a placement
     /// decision taken in the context it just moved into (per window, so mid-drag too).
     void evictExclusionVerdicts(const QString& windowId);
@@ -3179,17 +3180,17 @@ private:
     /// snap chokepoint) against rule-layer and stale-config assignments the
     /// pickers cannot intercept.
     bool resolvedShaderAppliesToEvent(const QString& effectId, const QString& profilePath) const;
-    // window.maximize / window.unmaximize shader install + geometry-morph
-    // endpoint wiring. `departureFrame` is the frame rect the window is
-    // leaving (the pre-maximize float rect when maximizing, the maximized
-    // rect when restoring); the destination is read live. Both directions
-    // play FORWARD — geometry packs encode direction in the rects, matching
-    // the zone-snap convention (see the implementation comment). Called
-    // either directly from the maximize state edge (geometry already landed)
-    // or deferred to the size-delivering windowFrameGeometryChanged when the
-    // state signal outran the client's commit. Implementation in
-    // window_connections.cpp beside its two call sites.
+    // Maximize / restore morph install (WindowPlaceIn / WindowPlaceOut) and
+    // its geometry endpoints. `departureFrame` is the rect the window leaves
+    // (the pre-maximize rect, or the maximized one on restore); the
+    // destination is read live. Both directions play FORWARD, geometry packs
+    // encoding direction in the rects as zone snaps do. Called from the
+    // maximize edge, or deferred to the size-delivering frame change when the
+    // state outran the commit (window_connections.cpp).
     void beginMaximizeShaderMorph(KWin::EffectWindow* window, const QRectF& departureFrame);
+    // End a running placement leg (not a held move or open leg; a maximize
+    // leg only with @p endMaximizeLeg); returns the rect it drew, or invalid.
+    QRectF endRunningPlacementLeg(KWin::EffectWindow* w, bool endMaximizeLeg);
     /// Evict least-recently-used cached textures back under the soft bound, never
     /// touching one a live transition still points at. @p pending is the transition
     /// currently being BUILT, which is not in shaderTransitions() yet and would
@@ -3414,18 +3415,16 @@ private:
     PhosphorRules::RuleSet m_decorationExclusionRuleSet;
     PhosphorRules::RuleEvaluator m_decorationExclusionEvaluator{m_decorationExclusionRuleSet};
 
-    // True when any enabled rule in the unified store references a frame-
-    // geometry match field (Width / Height / PositionX / PositionY).
-    // Recomputed at the loadRuleAnimationsFromDbus sync point. Gates the
-    // geometry-edge rule-cache invalidation in flushPendingFrameGeometry:
-    // those fields are stamped live into the per-window query but the
-    // verdict caches key on (windowId, ruleSet revision), so without an
-    // invalidation edge a `Width LessThan N` appearance or exclusion verdict
-    // pins at the window's first resolve. The per-tick geometry lambda must
-    // NEVER invalidate directly (discussion #816 — animated geometry fires
-    // hundreds of ticks per second); the 50 ms flush plus this set-level
-    // gate keeps the no-geometry-rules user at zero cost.
+    // Set-level gates for the live-field rule evictions, recomputed at the
+    // loadRuleAnimationsFromDbus sync point (recomputeLiveFieldRuleGates): any
+    // enabled rule matching frame geometry (Width / Height / PositionX /
+    // PositionY), or the caption (Title / CaptionNormal). Those fields are
+    // stamped live into the query while the verdict caches key on (windowId,
+    // revision), so flushPendingFrameGeometry evicts ONE window per 50 ms flush
+    // (never per tick, discussion #816) and users with no such rule pay nothing.
     bool m_hasGeometryScopedRules = false;
+    bool m_hasCaptionScopedRules = false;
+    QSet<QString> m_pendingCaptionEvictions; ///< caption changes awaiting that flush
 
     // True when the last completed loadRuleAnimationsFromDbus admission pass
     // ran with the active-layout map UNSEEDED and dropped at least one rule
@@ -3824,7 +3823,7 @@ private Q_SLOTS:
     /// three exclusion slices (placement = Exclude ∪ ExcludePlacement for the
     /// drag gate, decoration = Exclude ∪ ExcludeDecorations for
     /// shouldDecorateWindow, animation = the ExcludeAnimations slice for
-    /// shouldAnimateWindow) and the geometry-scoped-rules gate. Called once
+    /// shouldAnimateWindow) and the live-field rule gates. Called once
     /// at bringup; the bringup also subscribes to the interface's
     /// `rulesChanged` signal (via a debounce timer — see
     /// m_animationRulesRefreshDebounce) so a settings-UI edit takes effect
@@ -3877,8 +3876,8 @@ private Q_SLOTS:
     /// D-Bus signal handler for `Rules.rulesChanged`. Re-arms a 50ms single-shot
     /// debounce rather than refetching the full ruleset per signal (the daemon
     /// emits one per per-rule mutation, so a batch edit would drive one full
-    /// fetch and parse each). The restore cache is refetched at once, since a
-    /// saved rule can refuse the zone restore (refreshRestoreCache).
+    /// fetch and parse each). The restore cache refetches on the same trailing
+    /// edge, since a saved rule can refuse the zone restore (refreshRestoreCache).
     void slotRulesChanged();
 
     /// Refetch the instant-restore cache (getPendingRestoreGeometries): at bring-up, on the daemon's

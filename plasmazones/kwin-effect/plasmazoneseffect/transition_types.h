@@ -625,8 +625,9 @@ struct ScrollVisualPlacement
 struct RestoreSuppression
 {
     /// frameGeometry at `windowAdded`. The window is released once its
-    /// live geometry leaves this point — i.e. the repositioning configure
-    /// has landed.
+    /// live position leaves this point, or once it reaches the target's
+    /// size — i.e. the repositioning configure has landed
+    /// (InstantRestoreDecisions::suppressionSettled).
     QRectF spawnGeometry;
     /// The resolved snap / tile rect, stamped by `applyWindowGeometry` once
     /// the window is actually being repositioned. Invalid until then:

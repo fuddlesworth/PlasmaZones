@@ -282,11 +282,7 @@ void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QSt
                 // in applyFreeGeometryRestore.
                 // Save/restore, not set/clear: a clearing guard nested inside an outer
                 // apply would hand the outer scope back an un-flagged window.
-                const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-                m_effect->m_daemonGate.inGeometryApply = true;
-                const auto geomGuard = qScopeGuard([this, prevInApply] {
-                    m_effect->m_daemonGate.inGeometryApply = prevInApply;
-                });
+                const auto geomGuard = m_effect->geometryApplyScope();
                 // Clear any lingering KWin maximize flag first or KWin re-asserts
                 // the maximize-area rect and defeats the restore (discussion #461).
                 //
@@ -358,11 +354,7 @@ void TilingHandler::applyFreeGeometryRestore(KWin::EffectWindow* w, const QStrin
     // windowFrameGeometryChanged handler) so a same-screen restore is not
     // mistaken for a virtual-screen crossing, as the retile path does
     // (tiling.cpp). Save/restore, not set/clear (nesting-safe).
-    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-    m_effect->m_daemonGate.inGeometryApply = true;
-    const auto geomGuard = qScopeGuard([this, prevInApply] {
-        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-    });
+    const auto geomGuard = m_effect->geometryApplyScope();
     // Clear any lingering KWin maximize flag first: a still-maximized window
     // makes KWin re-assert the maximize-area rect and defeat the restore, which
     // the tile-request path clears for the same reason (discussion #461).
@@ -512,8 +504,7 @@ void TilingHandler::payOwedFreePlacement(KWin::EffectWindow* w, const QString& w
     // A window the snap side snapped into a zone on the way, or parked to
     // re-apply one on arrival, is placed by its zone (F414). The stash stays
     // for a later move back onto a tiling desktop.
-    if (m_effect->isWindowMarkedSnapped(windowId)
-        || (m_effect->m_snapHandler && m_effect->m_snapHandler->holdsDesktopArrivalPark(windowId))) {
+    if (m_effect->isWindowMarkedSnapped(windowId) || m_effect->m_snapHandler->holdsDesktopArrivalPark(windowId)) {
         m_desktopMoveStash.setOwed(windowId, false);
         return;
     }

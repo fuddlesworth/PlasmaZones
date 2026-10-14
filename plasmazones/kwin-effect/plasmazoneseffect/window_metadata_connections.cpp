@@ -9,13 +9,12 @@
 
 #include "plasmazoneseffect.h"
 #include "desktopvisibility.h"
+#include "tilinghandler/tilinghandler.h"
 
 #include <effect/effecthandler.h>
 #include <window.h>
 
 #include <QPointer>
-
-#include "tilinghandler/tilinghandler.h"
 
 namespace PlasmaZones {
 
@@ -40,44 +39,48 @@ void PlasmaZonesEffect::wireMetadataHandlers(KWin::EffectWindow* w)
         };
         // Caption changes fire every frame for terminals / browsers; the extended
         // property snapshot (geometry / state flags) doesn't change on a title tick,
-        // so refresh the registry's core metadata (title) WITHOUT rebuilding and
-        // marshalling the ~20-entry a{sv} each frame. The daemon preserves the
-        // existing extended fields when none are sent.
+        // so send only the core fields (app id, desktop file, title, role, pid,
+        // desktop, activity, window type, plus captionNormal) WITHOUT rebuilding
+        // and marshalling the extended a{sv} each frame. The daemon applies the
+        // core fields as sent and keeps the existing extended fields.
         auto pushCaptionOnly = [this, safeW]() {
             if (!safeW || safeW->isDeleted()) {
                 return;
             }
-            // Skip content-identical pushes: KWin can emit captionChanged
-            // without a net caption change, and the marshal (plus the
-            // daemon-side upsert) should not ride those. captionNormal
-            // derives from the caption, so an unchanged caption implies an
-            // unchanged push.
             const QString caption = safeW->caption();
-            QString& last = m_lastPushedCaption[safeW.data()];
-            if (last == caption) {
+            const QString windowId = getWindowId(safeW.data());
+            // A compositor-drawn tab pill shows the live caption in the CHIPS
+            // style, so it is rebuilt on every change whatever the daemon has
+            // been sent, skipping screens whose bar style never draws it (a
+            // chatty terminal title must not re-raster a bar that cannot
+            // change). One hash probe when it is not a tab anywhere, the
+            // common case.
+            m_tilingHandler->noteScrollTabTitleChanged(windowId);
+            // Title and CaptionNormal are live rule fields. The eviction rides
+            // the frame-geometry flush, one per window per 50 ms, so a title
+            // rewritten every frame costs one re-resolve per flush (F864).
+            if (m_hasCaptionScopedRules) {
+                m_pendingCaptionEvictions.insert(windowId);
+                if (!m_frameGeometryFlushTimer->isActive()) {
+                    m_frameGeometryFlushTimer->start();
+                }
+            }
+            // Skip a push of the caption the daemon already holds: KWin can
+            // emit captionChanged without a net change, and the marshal (plus
+            // the daemon-side upsert) should not ride those. pushWindowMetadata
+            // records each caption it sends, full push or caption-only, so a
+            // daemon that came back after a title change is compared against
+            // what IT was sent (F170, F345). An unchanged caption is safe to
+            // skip though the push carries more than the title: every other
+            // core field has its own push (the class, desktop-file and role
+            // connects below, and the desktop and activity edits), pid and the
+            // window type do not change, and captionNormal derives from the
+            // caption.
+            if (const auto sent = m_lastPushedCaption.constFind(safeW.data());
+                sent != m_lastPushedCaption.constEnd() && *sent == caption) {
                 return;
             }
-            // Stamped only when the push can actually go out, mirroring BOTH of
-            // pushWindowMetadata's early returns. Recording the caption
-            // regardless made the de-dupe suppress every LATER push of that same
-            // caption — so a title that settled while the daemon was down, or
-            // while the window had no resolvable instance id, stayed stale in
-            // the registry until something else re-pushed it. The bringup sweep
-            // does re-push every live window, so this was bounded rather than
-            // permanent, but the de-dupe should record what was sent, not what
-            // was attempted. The cost of not recording is that a chatty title
-            // re-runs this lambda's tail per tick while the daemon is absent,
-            // which is a hash probe and a push that returns at its own gate.
-            if (m_daemonGate.serviceRegistered && !getWindowInstanceId(safeW.data()).isEmpty()) {
-                last = caption;
-            }
             pushWindowMetadata(safeW, /*includeExtended=*/false);
-            // A compositor-drawn tab pill shows this caption in the CHIPS
-            // style; rebuild the strips that name the window, skipping screens
-            // whose bar style never draws it (a chatty terminal title must not
-            // re-raster a bar that cannot change). One hash probe when it is
-            // not a tab anywhere, which is the common case.
-            m_tilingHandler->noteScrollTabTitleChanged(getWindowId(safeW.data()));
         };
         // Class / desktop-file mutations invalidate the animation rule
         // evaluator's per-window match cache. The cache is keyed on the
@@ -89,14 +92,11 @@ void PlasmaZonesEffect::wireMetadataHandlers(KWin::EffectWindow* w)
         // refresh on the effect's local resolver cache. Desktop / activity /
         // role changes get their own invalidation connects below.
         //
-        // CAPTION is the deliberate exception: Title and CaptionNormal ARE
-        // matchable fields stamped live into the query, so a Title-scoped
-        // verdict IS knowingly left stale until the next natural invalidation
-        // (focus change, placement change, rule edit). A per-caption clear is
-        // strictly worse than the staleness: terminals and browsers rewrite
-        // their title every frame, and each clear drops the GLOBAL per-window
-        // cache — one noisy terminal would cold-start every other window's
-        // verdict at title-tick rate.
+        // CAPTION is not cleared here: Title and CaptionNormal are live rule
+        // fields, and pushCaptionOnly hands a changed caption to the throttled
+        // per-window eviction (flushPendingFrameGeometry) when any rule reads
+        // them, so a title that changes every frame never clears the global
+        // caches.
         auto invalidateRuleCache = [this, safeW]() {
             // Gate each clear on its own rule set, mirroring the sibling
             // invalidation in slotWindowActivated: the no-rules case pays
@@ -183,10 +183,10 @@ void PlasmaZonesEffect::wireMetadataHandlers(KWin::EffectWindow* w)
         // never caption. CEF/Electron apps (Steam included) map with a
         // placeholder class and swap in the real one here, so re-dumping on
         // those catches the final classification the filters act on. Caption
-        // is deliberately excluded: it feeds no filter, and terminals /
-        // browsers (and this very tool's progress spinner) rewrite their title
-        // every frame — dumping on captionChanged floods the journal with
-        // identical blocks. See logWindowDiagnostics().
+        // is deliberately excluded: terminals and browsers (and this very
+        // tool's progress spinner) rewrite their title every frame, and
+        // dumping on captionChanged floods the journal with identical blocks.
+        // See logWindowDiagnostics().
         auto logIdentityChange = [this, safeW]() {
             if (safeW && !safeW->isDeleted()) {
                 logWindowDiagnostics(safeW, "identityChanged");

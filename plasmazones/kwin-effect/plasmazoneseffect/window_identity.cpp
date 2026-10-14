@@ -311,10 +311,20 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
                                                    {instanceId, appId, desktopFile, title, windowRole, pid,
                                                     context.virtualDesktop, context.activity, windowType, extended},
                                                    QStringLiteral("setWindowMetadata"));
+    // Every caption the daemon is sent, by either push, so pushCaptionOnly's
+    // de-dupe compares against what the daemon holds (F170, F345).
+    m_lastPushedCaption.insert(w, title);
 }
 
 void PlasmaZonesEffect::flushPendingFrameGeometry()
 {
+    // Caption changes queued by pushCaptionOnly when a rule reads the title
+    // (F864). Ids are live window ids; a window gone since drops out here.
+    for (const QString& id : std::exchange(m_pendingCaptionEvictions, {})) {
+        if (KWin::EffectWindow* const w = findWindowByIdExact(id); w && !w->isDeleted()) {
+            invalidateRuleCachesForWindowFields(id, w);
+        }
+    }
     if (m_pendingFrameGeometry.isEmpty()) {
         return;
     }
@@ -322,15 +332,16 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
     // disturb the iteration.
     const auto batch = std::exchange(m_pendingFrameGeometry, {});
     for (auto it = batch.constBegin(); it != batch.constEnd(); ++it) {
-        // The shouldHandleWindow exclusion gate runs HERE, once per debounced
-        // flush, rather than on every windowFrameGeometryChanged tick — it is
-        // an uncached rule resolve over a freshly built ruleQuery, and
-        // animated geometry fired it hundreds of times per second
-        // (discussion #816). The decoration resync deliberately stayed per
-        // tick in the stash lambda (window_connections.cpp): it is cheap and
-        // deferring it let a re-decorated title bar flash for the throttle
-        // window. QPointer nulls if the window died since the stash; a dead
-        // or excluded window contributes no daemon push.
+        // The shouldHandleWindow gate runs HERE, once per window per throttled
+        // 50 ms flush, rather than on every windowFrameGeometryChanged tick,
+        // which an interactive move or resize fires every frame (discussion
+        // #816). Its rule step is a per-window cached verdict,
+        // rebuilt on a miss (the eviction below forces one when a
+        // geometry-scoped rule exists). The decoration resync deliberately
+        // stayed per tick in the stash lambda (window_connections.cpp): it is
+        // cheap and deferring it let a re-decorated title bar flash for the
+        // throttle window. QPointer nulls if the window died since the stash;
+        // a dead window contributes no daemon push.
         KWin::EffectWindow* w = it.value().window.data();
         if (!w || w->isDeleted()) {
             continue;
@@ -346,11 +357,16 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
         // helper: that helper's flush clears the GLOBAL animation match
         // cache, and this edge repeats for a drag's whole duration.
         if (m_hasGeometryScopedRules) {
-            invalidateRuleCachesForWindowGeometry(it.key(), w);
+            invalidateRuleCachesForWindowFields(it.key(), w);
         }
-        // The eviction above still runs with no daemon; the push does not, and
-        // nothing is lost: the bring-up seeds every shadow (F573).
-        if (!shouldHandleWindow(w) || !m_daemonGate.serviceRegistered) {
+        // The shadow is the daemon's live frame for every window its verbs
+        // accept: a window the user keeps above is one (the own-keep-above
+        // reject is waived), an Exclude-matched one is not, so its close
+        // records no float-back (F923). The eviction above still runs with no
+        // daemon; the push does not, and nothing is lost: the bring-up seeds
+        // every shadow (F573).
+        if (!shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/false, /*exemptOwnKeepAbove=*/true)
+            || !m_daemonGate.serviceRegistered) {
             continue;
         }
         const QRect& geo = it.value().geometry;

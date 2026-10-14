@@ -16,6 +16,9 @@
 // calls isDragging(), and unity batching must not be what supplies the type.
 #include "handlers/dragtracker.h"
 
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleSet.h>
+
 #include <effect/effecthandler.h>
 
 #include <QSet>
@@ -85,12 +88,33 @@ void PlasmaZonesEffect::evictExclusionVerdicts(const QString& windowId)
     m_decorationExclusionEvaluator.evictCached(windowId);
 }
 
-void PlasmaZonesEffect::invalidateRuleCachesForWindowGeometry(const QString& windowId, KWin::EffectWindow* w)
+void PlasmaZonesEffect::recomputeLiveFieldRuleGates(const PhosphorRules::RuleSet& rules)
+{
+    // Walked over the full parsed set once per rulesChanged, never per
+    // geometry tick or caption change (see the gates' member doc).
+    static const QSet<PhosphorRules::Field> kGeometryFields = {
+        PhosphorRules::Field::Width, PhosphorRules::Field::Height, PhosphorRules::Field::PositionX,
+        PhosphorRules::Field::PositionY};
+    static const QSet<PhosphorRules::Field> kCaptionFields = {PhosphorRules::Field::Title,
+                                                              PhosphorRules::Field::CaptionNormal};
+    m_hasGeometryScopedRules = false;
+    m_hasCaptionScopedRules = false;
+    for (const PhosphorRules::Rule& rule : rules.rules()) {
+        if (!rule.enabled) {
+            continue;
+        }
+        m_hasGeometryScopedRules = m_hasGeometryScopedRules || rule.match.referencesAnyField(kGeometryFields);
+        m_hasCaptionScopedRules = m_hasCaptionScopedRules || rule.match.referencesAnyField(kCaptionFields);
+    }
+}
+
+void PlasmaZonesEffect::invalidateRuleCachesForWindowFields(const QString& windowId, KWin::EffectWindow* w)
 {
     // See the header doc: per-window eviction only — never a global clear on
-    // this per-drag-tick edge. The three evictions cover every cached
-    // verdict a geometry-scoped rule can produce (appearance/animation
-    // overrides, placement exclusion, decoration exclusion).
+    // this per-drag-tick (or per-title-tick) edge. The evictions cover every
+    // cached verdict a geometry- or caption-scoped rule can produce
+    // (appearance/animation overrides, verdicts, placement exclusion,
+    // decoration exclusion).
     m_shaderManager.animationRuleEvaluator().evictCached(windowId);
     // The verdict evaluator caches per (windowId, revision) exactly like the
     // one above and resolves the same geometry-scoped match fields, so it
@@ -103,11 +127,12 @@ void PlasmaZonesEffect::invalidateRuleCachesForWindowGeometry(const QString& win
         return;
     }
     // Same per-window re-drive set as flushPendingRuleInvalidations' body.
-    // The liveId re-derivation is DEFENSIVE here, not load-bearing: today's
-    // only caller (flushPendingFrameGeometry) already keys by getWindowId,
-    // so this is a no-op — it exists so the helper stays correct if a
-    // future caller hands it a daemon-supplied id, the hazard the flush's
-    // findWindowById path documents.
+    // The liveId re-derivation is DEFENSIVE here, not load-bearing: the
+    // caller (flushPendingFrameGeometry, for both its frame batch and its
+    // caption evictions) already keys by getWindowId, so this is a no-op —
+    // it exists so the helper stays correct if a future caller hands it a
+    // daemon-supplied id, the hazard the flush's findWindowById path
+    // documents.
     const QString liveId = getWindowId(w);
     // Per-output, matching updateAllDecorations and every other decorate gate; see
     // desktopvisibility.h.

@@ -925,8 +925,8 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
     // window shouldHandleWindow rejected — in both spans KWin's move filter
     // is live and taking the interception here would strand it (the window
     // then follows every desktop switch, reading as stuck on all desktops).
-    const bool dragLive = m_effect->m_dragTracker
-        && (m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive());
+    const bool dragLive =
+        m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive();
     if (dragLive && m_scrollTabPressHeld) {
         return;
     }
@@ -1164,12 +1164,12 @@ void TilingHandler::setScrollTabHoverCursor(bool overPill)
     // isDragging() does today, but the two are independent members and pairing
     // them here keeps this defence from quietly weakening if that ever stops
     // being true.
-    const bool dragLive = m_effect->m_dragTracker
-        && (m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive());
+    const bool dragLive =
+        m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive();
     const bool hold = (overPill && !dragLive) || m_scrollTabPressHeld;
     if (!KWin::effects) {
-        // No compositor to talk to (teardown): record the intent so the latch
-        // does not claim an interception that was never taken.
+        // Belt and braces (the global outlives every effect, see
+        // PlasmaZonesEffect::windowOutput): the latch records no interception.
         m_scrollTabCursorOverridden = false;
         return;
     }
@@ -1231,8 +1231,7 @@ bool TilingHandler::activateScrollTabAt(const QPointF& pos)
     // non-left button still holds KWin's move, and it never opens at all for a
     // window shouldHandleWindow rejected. Restructuring the strip in either
     // span is the same defect this declines in the tracked one.
-    if (m_effect->m_dragTracker
-        && (m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive())) {
+    if (m_effect->m_dragTracker->isDragging() || m_effect->m_dragTracker->compositorMoveResizeActive()) {
         return false;
     }
     // The same activation the daemon performed for a pill click: focus the

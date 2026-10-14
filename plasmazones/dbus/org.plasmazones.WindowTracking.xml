@@ -466,7 +466,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setFrameGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Push current frame geometry for a window into the daemon's shadow. Called by the compositor plugin on windowFrameGeometryChanged, throttled to one push per window every 50 ms. Enables daemon-local shortcut handlers (e.g. float toggle) to read fresh geometry without a cross-process round-trip."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Push current frame geometry for a window into the daemon's shadow. Called by the compositor plugin on windowFrameGeometryChanged, throttled to one push per window every 50 ms. Sent for every window the plugin manages, including ones kept above others, and not for a window an exclusion rule matches. Enables daemon-local shortcut handlers (e.g. float toggle) to read fresh geometry without a cross-process round-trip."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>

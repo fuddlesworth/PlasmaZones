@@ -289,10 +289,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // so a late strips/overrides reply cannot re-seed what this clears.
         m_tilingHandler->voidInFlightScrollTabFetches();
         m_tilingHandler->clearScrollTabState();
-        // Guarded like repaintSnapRegions: this lambda runs on an arbitrary
-        // later D-Bus dispatch (serviceUnregistered), which can land during
-        // compositor teardown when KWin::effects has been torn down —
-        // unlike the construction-time statements around the connect.
+        // The KWin::effects test is belt and braces, as in repaintSnapRegions:
+        // the global outlives every effect (see PlasmaZonesEffect::windowOutput).
         if (KWin::effects) {
             KWin::effects->addRepaintFull();
         }
@@ -307,11 +305,12 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // The commanded rects and the min-size cache are per-session scroll
         // state like everything above: the counter-assert must not re-arm
         // against a dead session's rects when a new daemon repopulates the
-        // scrolling set, and the min-size cache says "already sent" about a
-        // daemon that no longer holds anything.
+        // scrolling set, and the min-size cache (like the caption stamp) says
+        // "already sent" about a daemon that no longer holds anything.
         m_scrollCommandedRects.clear();
         m_scrollOfferedColumn.clear();
         m_lastReportedMinSize.clear();
+        m_lastPushedCaption.clear();
         // The autotile centring targets too, mirroring the bring-up drain.
         // Their consumer is the reactive centring pass, which is driven by
         // KWin's frameGeometryChanged and has no daemon gate at all — so with

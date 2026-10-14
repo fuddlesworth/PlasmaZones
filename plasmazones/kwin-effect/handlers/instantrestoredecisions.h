@@ -7,14 +7,16 @@
 
 #include <QList>
 #include <QRect>
+#include <QSizeF>
 #include <QString>
 
 #include <functional>
 
-/// The instant snap-restore cache's entry and its pick rule, header-only so
-/// the rule is unit-testable without a compositor (kwin-effect has no linkable
-/// test target; same pattern as pretiledecisions.h). The KWin-facing teleport
-/// stays in PlasmaZonesEffect::tryInstantSnapRestore.
+/// The instant snap-restore cache's entry, its pick rule and the open
+/// suppression's settle rule, header-only so the rules are unit-testable
+/// without a compositor (kwin-effect has no linkable test target; same pattern
+/// as pretiledecisions.h). The KWin-facing teleport stays in
+/// PlasmaZonesEffect::tryInstantSnapRestore.
 namespace PlasmaZones {
 
 /// A pre-computed snap restore target for a pending app: the record's zone
@@ -60,6 +62,29 @@ inline int pickEntry(const QList<CachedSnapRestore>& newestFirst, const QString&
         return i;
     }
     return -1;
+}
+
+/// Whether a window withheld on open has landed: its frame left the spawn
+/// position, or changed size to the one it was sent to (±1 px, fractional
+/// scale). A client that commits a size of its own first has done neither, and
+/// a frame change that leaves the spawn rect as it was is not a landing (F759).
+inline bool suppressionSettled(const QRect& spawn, const QRect& target, const QRect& live)
+{
+    if (live.topLeft() != spawn.topLeft()) {
+        return true;
+    }
+    return live.size() != spawn.size() && qAbs(live.width() - target.width()) <= 1
+        && qAbs(live.height() - target.height()) <= 1;
+}
+
+/// Whether an opener of @p frame size is under the minimum window size
+/// (@p minWidth / @p minHeight, 0 for no limit on that axis). Such a window
+/// takes no cached restore: the snap engine excludes it from every remembered
+/// placement, and the teleport would put a splash or popup into the zone of
+/// its app's last window ahead of the resolve that refuses it (F735).
+inline bool belowMinimumSize(const QSizeF& frame, int minWidth, int minHeight)
+{
+    return (minWidth > 0 && frame.width() < minWidth) || (minHeight > 0 && frame.height() < minHeight);
 }
 
 } // namespace InstantRestoreDecisions

@@ -15,6 +15,7 @@
 // rule cache only on a genuine transition.
 
 #include "tilinghandler.h"
+#include "handlers/instantrestoredecisions.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/screenchangehandler.h"
 #include "handlers/snaphandler.h"
@@ -301,13 +302,24 @@ void TilingHandler::reevaluateWindowEligibility(KWin::EffectWindow* w)
         return;
     }
     const QString windowId = m_effect->getWindowId(w);
-    // Only a window this handler actually announced is a candidate; for
-    // everything else a flag flip stays free. Snap-owned windows are
-    // deliberately out of scope: their capture window is closed by the
-    // routing defer (resolveWindowRestore now runs post-settle), and a LATE
-    // keep-above on a snapped window is dominated by the user raising it
-    // from the title-bar menu, where an unsnap would fight them.
+    // A window this handler never announced is evicted from nothing, but one
+    // that became tileable on a managed screen in view is tiled at once: a
+    // re-placement, not an open, so it takes no focus (late_tileable_adopt,
+    // F991). notifyWindowAdded's own eligibility test covers the desktop,
+    // activity, minimized and size arms. Left alone: a window parked for its
+    // output (the settle re-seats or announces it), one whose open routing is
+    // still pending (the dispatch routes it), and one under a user move or
+    // resize (its drop places it). Snap-owned windows are out of scope on both
+    // arms: no tiling engine runs their screen, and a LATE keep-above on a
+    // snapped window is dominated by the user raising it from the title-bar
+    // menu, where an unsnap would fight them.
     if (!m_notifiedWindows.contains(windowId)) {
+        if (m_managedScreens.contains(m_effect->getWindowScreenId(w)) && !m_deferredWindowRoutes.contains(windowId)
+            && !w->isUserMove() && !w->isUserResize() && !m_effect->m_screenChangeHandler->holdsUnclassifiedRecord(w)
+            && m_effect->shouldHandleWindow(w) && m_effect->isTileableWindow(w)
+            && notifyWindowAdded(w, /*knownFreeFloating=*/true, /*focusEligible=*/false)) {
+            qCInfo(lcEffect) << "Flags-settle adoption:" << windowId << "became tileable";
+        }
         return;
     }
     // The STRUCTURAL pair only, NOT isEligibleForTilingNotify: its desktop /
@@ -377,6 +389,15 @@ QSet<QString> TilingHandler::completeDeferredWindowRoutes()
         if (windowId != it.key()) {
             m_pendingFreshWindows.remove(it.key());
         }
+        // Opened while only KWin's placeholder output exists (every monitor
+        // asleep or unplugged): the daemon has no screen for it, so the settle
+        // that puts it on a real one routes it (F750). Nothing paints
+        // meanwhile, so its first-frame suppression goes now.
+        if (m_effect->m_screenChangeHandler->onPlaceholderOutput(window)) {
+            m_effect->m_screenChangeHandler->deferPlaceholderOpen(window);
+            m_effect->endRestoreSuppression(window);
+            continue;
+        }
         // The defer exists so the eligibility filters run against SETTLED
         // flags, and the snap arms need that re-run as much as the tiling
         // one: the verdict at windowAdded time predates a same-burst
@@ -396,9 +417,13 @@ QSet<QString> TilingHandler::completeDeferredWindowRoutes()
         // Apply (and consume) the instant snap-restore entry saved on this
         // window's own output, if any. A teleport only moves between
         // unmanaged screens of one output, so the managed-screen branch below
-        // reads the same screen either way and needs no re-resolve.
+        // reads the same screen either way and needs no re-resolve. Not for a
+        // window under the minimum size, which the snap engine's exclusion
+        // refuses at the same post-defer frame (F735).
         const QString screenId = m_effect->getWindowScreenId(window);
-        if (canSnapRestore && !window->isMinimized()) {
+        if (canSnapRestore && !window->isMinimized()
+            && !InstantRestoreDecisions::belowMinimumSize(
+                window->frameGeometry().size(), m_effect->m_cachedMinWindowWidth, m_effect->m_cachedMinWindowHeight)) {
             m_effect->tryInstantSnapRestore(window, windowId, screenId);
         }
         if (m_managedScreens.contains(screenId)) {

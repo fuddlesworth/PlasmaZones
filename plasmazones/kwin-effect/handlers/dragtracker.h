@@ -133,6 +133,7 @@ private:
     // grab point a pointerless drag carries with the window (F774).
     QRectF m_dragStartFrame;
     QPointF m_dragStartAnchor;
+    int m_dragStartMaximizeMode = 0; ///< KWin's requested MaximizeMode at the start (F1014)
     bool m_pointerMoved = false;
     bool m_pointerDrag = false;
 

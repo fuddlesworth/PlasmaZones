@@ -526,7 +526,8 @@ bool PlasmaZonesEffect::isShowingDesktop()
     return ws && ws->showingDesktop();
 }
 
-bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason, bool exemptFullscreen) const
+bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason, bool exemptFullscreen,
+                                           bool exemptOwnKeepAbove) const
 {
     if (rejectReason) {
         rejectReason->clear();
@@ -584,10 +585,9 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // tools that linger after capture) shouldn't be snapped to a zone — same
     // rationale as isTileableWindow's keep-above gate. Consults the window's
     // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
-    // stays manageable. Checked BEFORE the rule slice below: this is a flag
-    // read, while a rule-cache miss builds the full ~30-accessor ruleQuery,
-    // and both are pure rejects so the order is behaviour-neutral.
-    if (windowOwnKeepAbove(w)) {
+    // stays manageable. Before the rule slice: a flag read against a ruleQuery
+    // build, both pure rejects. The position producers waive it (F923).
+    if (!exemptOwnKeepAbove && windowOwnKeepAbove(w)) {
         return rejectedBecause(rejectReason, "keep-above window");
     }
 

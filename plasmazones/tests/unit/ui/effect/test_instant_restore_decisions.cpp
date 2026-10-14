@@ -6,13 +6,14 @@
 #include "handlers/instantrestoredecisions.h"
 
 using PlasmaZones::CachedSnapRestore;
+using PlasmaZones::InstantRestoreDecisions::belowMinimumSize;
 using PlasmaZones::InstantRestoreDecisions::pickEntry;
 
 /**
  * @brief The instant snap-restore pick: restores happen only where a window
  *        opens. An opener applies the newest entry saved on its own output,
  *        never one on another monitor, and nothing on an engine-managed
- *        screen.
+ *        screen. A window under the minimum size takes none (F735).
  */
 class TestInstantRestoreDecisions : public QObject
 {
@@ -69,6 +70,49 @@ private Q_SLOTS:
         const QList<CachedSnapRestore> broken{entry(QStringLiteral("DP-1"), QRect()), entry(QString())};
         QCOMPARE(pickEntry(broken, QStringLiteral("DP-1"), false, noneManaged), -1);
         QCOMPARE(pickEntry({entry(QStringLiteral("DP-1"))}, QString(), false, noneManaged), -1);
+    }
+
+    // A window under the minimum size on either axis takes no cached restore,
+    // as the snap engine's exclusion refuses it a remembered zone (F735).
+    void testBelowMinimumSizeOnEitherAxis()
+    {
+        QVERIFY(belowMinimumSize(QSizeF(150, 400), 200, 150));
+        QVERIFY(belowMinimumSize(QSizeF(400, 100), 200, 150));
+        QVERIFY(!belowMinimumSize(QSizeF(200, 150), 200, 150));
+    }
+
+    // A zero limit turns that axis off.
+    void testZeroMinimumIsNoLimit()
+    {
+        QVERIFY(!belowMinimumSize(QSizeF(10, 10), 0, 0));
+        QVERIFY(belowMinimumSize(QSizeF(10, 400), 200, 0));
+    }
+
+    // The open suppression's settle rule (F759): released when the window
+    // leaves the spawn point, or reaches the size it was sent to there, never
+    // on a size the client chose itself.
+    void suppressionSettled_data()
+    {
+        QTest::addColumn<QRect>("spawn");
+        QTest::addColumn<QRect>("target");
+        QTest::addColumn<QRect>("live");
+        QTest::addColumn<bool>("settled");
+        const QRect spawn(700, 400, 500, 400);
+        QTest::newRow("moved") << spawn << QRect(0, 0, 960, 1080) << QRect(0, 0, 500, 400) << true;
+        QTest::newRow("clientOwnSize") << spawn << QRect(0, 0, 960, 1080) << QRect(700, 400, 900, 700) << false;
+        QTest::newRow("sizedToTarget") << spawn << QRect(700, 400, 960, 1080) << QRect(700, 400, 960, 1080) << true;
+        QTest::newRow("fractionalJitter") << spawn << QRect(700, 400, 960, 1080) << QRect(700, 400, 959, 1081) << true;
+        QTest::newRow("unchanged") << spawn << QRect(0, 0, 960, 1080) << spawn << false;
+        QTest::newRow("unchangedAtTargetSize") << spawn << QRect(0, 0, 500, 400) << spawn << false;
+    }
+
+    void suppressionSettled()
+    {
+        QFETCH(QRect, spawn);
+        QFETCH(QRect, target);
+        QFETCH(QRect, live);
+        QFETCH(bool, settled);
+        QCOMPARE(PlasmaZones::InstantRestoreDecisions::suppressionSettled(spawn, target, live), settled);
     }
 };
 

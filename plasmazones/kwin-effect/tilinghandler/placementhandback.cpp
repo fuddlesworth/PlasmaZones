@@ -89,11 +89,7 @@ PlacementStatement::Verdict TilingHandler::preparePlacement(KWin::EffectWindow* 
         // on the placement's own rect, so the VS-crossing detectors stay
         // out; the apply that follows re-stamps the tracked screen.
         // Save/restore so the bracket nests inside an ApplySnap's.
-        const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-        m_effect->m_daemonGate.inGeometryApply = true;
-        const auto geomGuard = qScopeGuard([this, prevInApply] {
-            m_effect->m_daemonGate.inGeometryApply = prevInApply;
-        });
+        const auto geomGuard = m_effect->geometryApplyScope();
         // Fullscreen first: KWin drops a maximize(Restore) issued while
         // fullscreen is requested. Each restore rect is seated at the
         // placement before the state goes, so the window comes back where it

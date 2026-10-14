@@ -138,6 +138,36 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                          << screenId;
         slotWindowFloatingChanged(windowId, false, screenId);
     };
+    // The cache revert above is all a cancel used to get back. KWin returns the
+    // window as the move started, but the rest of the drag-start float (tiled
+    // marks, centring target, claims) stayed shed, and a maximized tile sat at
+    // KWin's maximize area instead of its gap-inset rect, until an unrelated
+    // batch. The daemon still tiles the window, so it re-emits the tile (F1015).
+    // Not while a successor drag holds the window: its own drop decides.
+    const auto reassertCancelledTile = [this, windowId, cancelled, startedFloating, effectFloatedThisDrag]() {
+        if (m_dragTracker->isDragging() && m_dragTracker->draggedWindowId() == windowId) {
+            return;
+        }
+        const QString screenId = m_tilingHandler->notifiedScreenFor(windowId);
+        switch (GestureEndDecisions::cancelledDragReassert(cancelled, effectFloatedThisDrag && !startedFloating,
+                                                           !screenId.isEmpty(),
+                                                           m_tilingHandler->isScrollingScreen(screenId))) {
+        case GestureEndDecisions::CancelReassert::Retile:
+            qCInfo(lcEffect) << "endDrag cancelled: re-tiling" << screenId << "for" << windowId;
+            PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Tiling,
+                                                           QStringLiteral("retile"), {screenId},
+                                                           QStringLiteral("retile - cancelled drag"));
+            break;
+        case GestureEndDecisions::CancelReassert::ReapplyWindow:
+            qCInfo(lcEffect) << "endDrag cancelled: re-emitting the strip rect of" << windowId;
+            PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
+                                                           QStringLiteral("reapplyWindowGeometry"), {windowId},
+                                                           QStringLiteral("reapplyWindowGeometry - cancelled drag"));
+            break;
+        case GestureEndDecisions::CancelReassert::None:
+            break;
+        }
+    };
 
     // Identity of the interactive move/resize this drag belongs to, captured
     // synchronously at dispatch. The four rescue sites in the reply lambda
@@ -178,6 +208,12 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // a request sent before it (tryAsyncSnapCall).
     m_daemonGate.commandStamps.bump(window);
     m_daemonGate.commandStamps.noteDrop(window);
+    // A cancel revokes the drag-start float, and its Monocle restore owed with
+    // it, before the gesture-end reconcile (which runs after this dispatch)
+    // can pay that restore (F1014).
+    if (cancelled && effectFloatedThisDrag && !startedFloating) {
+        m_tilingHandler->revokeDragStartMonocleRestore(window);
+    }
 
     QPointer<KWin::EffectWindow> safeWindow = window;
     // The drop's outcome is in for a held move tail (F751): it drains once KWin's
@@ -268,7 +304,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, safeWindow, windowId, handled, timeoutTimer, startedFloating, dragMoveGeneration,
-             revertOptimisticDragFloat, finishDragExit](QDBusPendingCallWatcher* w) {
+             revertOptimisticDragFloat, reassertCancelledTile, finishDragExit](QDBusPendingCallWatcher* w) {
                 // True only while THIS drag's interactive move is still the one
                 // KWin is running, and only when the left button is already up
                 // (the case the rescues exist for: KWin waits for the last
@@ -342,8 +378,12 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // the user is simply still dragging, and KWin keeping the
                     // move alive until the last button comes up is the correct
                     // behaviour for any window. Ending it here would cut a
-                    // gesture short mid-drag.
+                    // gesture short mid-drag. A cancel also has the daemon
+                    // re-emit the tile, which the drag-start float shed (F1015).
                     revertOptimisticDragFloat();
+                    if (outcome.action == PhosphorProtocol::DragOutcome::CancelSnap) {
+                        reassertCancelledTile();
+                    }
                     break;
 
                 case PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap:

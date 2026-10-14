@@ -324,7 +324,8 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // window. The turn is spent inside the first-frame suppression armed
     // below, so nothing paints early and placement latency is unchanged in
     // any human-visible sense. Flags that arrive later than the tick are
-    // the eviction arm's job (reevaluateWindowEligibility).
+    // the flags-settle re-evaluation's (reevaluateWindowEligibility), which
+    // evicts or adopts.
     if (tileableWindow) {
         if (tileableAppWindow) {
             // Armed for every tileable app window whatever screen it is on:

@@ -597,6 +597,64 @@ private Q_SLOTS:
         QVERIFY(takesMaximizeMembership(/*maximizable=*/true, /*alreadyFull=*/false));
     }
 
+    // The answer to a claimed titlebar maximize finds KWin already maximized
+    // and writes no bit; it still anchors at the press (F989).
+    void answersClaimedPress_maximizeAnswer()
+    {
+        QVERIFY(answersClaimedPress(MaximizeAction::Apply, /*kwinMaximized=*/true, /*markerLive=*/true));
+    }
+    // The answer to a claimed restore finds KWin already restored, and rides placeOut.
+    void answersClaimedPress_restoreAnswer()
+    {
+        QVERIFY(answersClaimedPress(MaximizeAction::Release, /*kwinMaximized=*/false, /*markerLive=*/true));
+    }
+    // An Apply that writes the bit itself (the shortcut path) or a Release that
+    // writes it back is not the answer to a claimed press, and leaves the marker.
+    void answersClaimedPress_armThatWritesIsNot()
+    {
+        QVERIFY(!answersClaimedPress(MaximizeAction::Apply, /*kwinMaximized=*/false, /*markerLive=*/true));
+        QVERIFY(!answersClaimedPress(MaximizeAction::Release, /*kwinMaximized=*/true, /*markerLive=*/true));
+        QVERIFY(!answersClaimedPress(MaximizeAction::None, /*kwinMaximized=*/true, /*markerLive=*/true));
+    }
+    // The answer to a claimed press owes its leg even when KWin's flip already
+    // commanded the batch's rect (F989): maximize from the column, restore from
+    // the maximize area.
+    void claimedPressOwesLeg_atTargetStillAnimates()
+    {
+        QVERIFY(claimedPressOwesLeg(true, QRectF(8, 8, 500, 752), QRect(0, 0, 1024, 768)));
+        QVERIFY(claimedPressOwesLeg(true, QRectF(0, 0, 1024, 768), QRect(8, 8, 500, 752)));
+    }
+    // Any other apply at its target stays a no-op, and so does one with no
+    // departure of its own.
+    void claimedPressOwesLeg_otherwiseNoOp()
+    {
+        QVERIFY(!claimedPressOwesLeg(false, QRectF(8, 8, 500, 752), QRect(0, 0, 1024, 768)));
+        QVERIFY(!claimedPressOwesLeg(true, QRectF(0, 0, 1024, 768), QRect(0, 0, 1024, 768)));
+        QVERIFY(!claimedPressOwesLeg(true, QRectF(), QRect(0, 0, 1024, 768)));
+    }
+    // A view-carried leg starts a view delta behind where it should first
+    // paint, along the strip's axis only: the X11 maximize of the second column
+    // (the view slides 508) departs from the column the press left, 516,8,
+    // and paints there on its first frame (F989).
+    void viewCarriedOrigin_horizontalBacksOutX()
+    {
+        QCOMPARE(viewCarriedOrigin(QRectF(516, 8, 500, 752), 508, /*vertical=*/false), QRect(8, 8, 500, 752));
+    }
+    void viewCarriedOrigin_verticalBacksOutY()
+    {
+        QCOMPARE(viewCarriedOrigin(QRectF(8, 516, 752, 500), 508, /*vertical=*/true), QRect(8, 8, 752, 500));
+    }
+    // Rounded, so sub-pixel residue makes no leg of a pure scroll.
+    void viewCarriedOrigin_roundsResidue()
+    {
+        QCOMPARE(viewCarriedOrigin(QRectF(516.4, 7.6, 499.6, 752.4), 0, false), QRect(516, 8, 500, 752));
+    }
+    // No live marker: the effect-restart adopt (Apply over a held bit) is no press.
+    void answersClaimedPress_noMarkerIsNot()
+    {
+        QVERIFY(!answersClaimedPress(MaximizeAction::Apply, /*kwinMaximized=*/true, /*markerLive=*/false));
+    }
+
     // The passive float channel on a scrolling screen releases every claim,
     // monocle included: no strip batch owns a monocle membership (F723).
     void passiveFloatScope_scrollingReleasesMonocle()

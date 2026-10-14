@@ -301,6 +301,20 @@ void TilingHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool 
         {windowId, screenId, true}, QStringLiteral("setWindowFloatingForScreen"));
 }
 
+void TilingHandler::revokeDragStartMonocleRestore(KWin::EffectWindow* w)
+{
+    // A cancelled move is put back as it started, KWin re-applying its
+    // maximize, so the drag-start float is revoked, and with it the restore
+    // that float's claim release recorded as owed (applyFloatCleanup, retained
+    // under the move). Left, reconcileMaximizeAfterGesture would pay it at this
+    // gesture's end, or a later one, and un-maximize the member KWin just
+    // re-maximized (F1014). A member KWin did not re-maximize keeps it.
+    const KWin::Window* const kw = w && !w->isDeleted() ? w->window() : nullptr;
+    if (kw && kw->requestedMaximizeMode() == KWin::MaximizeFull) {
+        m_monocleRestoreOwed.remove(m_effect->getWindowId(w));
+    }
+}
+
 void TilingHandler::settleMonocleUnmaximizeAfterGesture(KWin::EffectWindow* w, bool outcomePlacedIt)
 {
     if (!w || w->isDeleted()) {
@@ -404,11 +418,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // re-centring, which for a parked column cancels the relocation back
         // to the pre-fix behaviour.
         {
-            const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-            m_effect->m_daemonGate.inGeometryApply = true;
-            const auto restoreGate = qScopeGuard([this, prevInApply] {
-                m_effect->m_daemonGate.inGeometryApply = prevInApply;
-            });
+            const auto restoreGate = m_effect->geometryApplyScope();
             // Validity gate on the STORED rect, not on the constrained result:
             // this is the one windowed-fullscreen apply that bypasses
             // applyWindowGeometry (whose own guard would have caught it), and
@@ -761,11 +771,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             if (fsArea.isValid() && w->frameGeometry().toRect() != fsArea) {
                 qCInfo(lcEffect) << "Asserting fullscreen area for strip tile" << windowId << "from"
                                  << w->frameGeometry() << "to" << fsArea;
-                const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-                m_effect->m_daemonGate.inGeometryApply = true;
-                const auto fsGuard = qScopeGuard([this, prevInApply] {
-                    m_effect->m_daemonGate.inGeometryApply = prevInApply;
-                });
+                const auto fsGuard = m_effect->geometryApplyScope();
                 kwFull->moveResize(QRectF(fsArea));
                 m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
             }

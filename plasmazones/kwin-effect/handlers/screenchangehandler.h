@@ -115,6 +115,14 @@ public:
     /// @p w's announce was skipped for an unclassified record; the settle
     /// announces it unless its verdict placed it.
     void noteSkippedAnnounce(KWin::EffectWindow* w);
+    /// Whether @p w is on KWin's placeholder output (every real output is
+    /// gone), which the daemon has no screen for (F729).
+    bool onPlaceholderOutput(KWin::EffectWindow* w) const;
+    /// @p w opened while only the placeholder output exists. The settle that
+    /// finds it on a real output hands it back to the open routing
+    /// (TilingHandler::deferWindowRouting), and neither reports it as a window
+    /// KWin moved nor replays its crossing off the placeholder (F750).
+    void deferPlaceholderOpen(KWin::EffectWindow* w);
     /// Drop everything held for @p w (the window is gone).
     void forgetWindow(KWin::EffectWindow* w);
     /// Drop every record: the daemon that held the parks is gone.
@@ -218,7 +226,12 @@ private:
     /// KWin returned it to the output it was parked for, and the daemon
     /// re-seated it there.
     void applyReadopt(KWin::EffectWindow* w, const QString& screenId);
-    bool onPlaceholderOutput(KWin::EffectWindow* w) const;
+    /// Route the placeholder opens a real output has taken (F750).
+    void routePlaceholderOpens();
+    /// KWin's output-update cascade begins: an output change made since the
+    /// last one ended was not KWin's, and this one's result is sampled when
+    /// its turn ends (F1009).
+    void openOutputCascade();
 
     PlasmaZonesEffect* m_effect;
     QTimer m_screenChangeDebounce;
@@ -247,6 +260,14 @@ private:
     QSet<KWin::EffectWindow*> m_settleCrossings;
     QSet<KWin::EffectWindow*> m_skippedAnnounces;
     QHash<KWin::EffectWindow*, QString> m_heldDragCrossings; ///< the screen a dragged window's first crossing left
+    QSet<KWin::EffectWindow*> m_placeholderOpens; ///< opens waiting for a real output (F750)
+    /// The output (uuid) each window was on when KWin's last output-update
+    /// cascade ended, and the windows whose output changed outside a cascade
+    /// since the baseline. The settle reports neither as moved by KWin alone
+    /// (OutputSettleRow::kwinOnly, F1009).
+    QHash<KWin::EffectWindow*, QString> m_cascadeOutputs;
+    QSet<KWin::EffectWindow*> m_movedOutsideCascade;
+    bool m_cascadeOpen = false;
     bool m_outputSetChanged = false;
     bool m_settleInFlight = false;
 };

@@ -14,8 +14,8 @@
 /// write PlasmaZones itself made: keep-above and keep-below (the layer
 /// reconcile would put a SetWindowLayer rule back over the user's own toggle)
 /// and the decoration (SetHideTitleBar writes the very flag it would then
-/// read). The flags-settle eviction runs for the four structural tiling
-/// filters only: keep-above, skip-switcher, transient and modal.
+/// read). The flags-settle re-evaluation (evict or adopt) runs for the four
+/// structural tiling filters only: keep-above, skip-switcher, transient and modal.
 namespace PlasmaZones::WindowFlagEdges {
 
 enum class Flag {
@@ -32,7 +32,7 @@ enum class Flag {
 
 struct Actions
 {
-    bool reevaluateEligibility = false; ///< the flags-settle eviction (structural tiling filters)
+    bool reevaluateEligibility = false; ///< the flags-settle re-evaluation (structural tiling filters)
     bool pushMetadata = false; ///< refresh the daemon registry's copy of the field
     bool invalidateRules = false; ///< drop the effect's per-window verdicts
 };

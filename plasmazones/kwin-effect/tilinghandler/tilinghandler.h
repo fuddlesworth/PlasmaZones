@@ -142,11 +142,9 @@ public:
                                  const QHash<KWin::EffectWindow*, QString>& screenOverrides = {});
 
     /// Remove a window from this handler's autotile tracking and notify the daemon.
-    /// INTENT NOTE: an earlier m_pendingCloses guard (deduping a close racing
-    /// its own re-announce) was deliberately deleted — window ids are
-    /// uuid-based, so a closed id can never be re-announced, and the
-    /// regression the guard defended against is unreachable. Do not
-    /// reintroduce it as "missing hardening".
+    /// INTENT NOTE: an earlier m_pendingCloses guard (deduping a close racing its own re-announce) was deliberately
+    /// deleted — window ids are uuid-based, so a closed id can never be re-announced, and the regression the guard
+    /// defended against is unreachable. Do not reintroduce it as "missing hardening".
     void onWindowClosed(const QString& windowId, const QString& screenId);
 
     /// Drop a LIVE window from engine tracking without a close. The same cleanupAutotileTracking teardown as
@@ -216,11 +214,10 @@ public:
     void deferWindowRouting(KWin::EffectWindow* window);
     /// An announce is in flight (see SnapHandler::hasOpenResolveInFlight).
     bool announceInFlight(const QString& id) const;
-    /// Flags-settle eviction backstop: re-run the structural placement filters for an already-announced window
-    /// whose keep-above, skip-switcher, transient or modal state just changed (WindowFlagEdges::actionsFor), and
-    /// release it from its engine (restoring the captured spawn frame) when it is no longer tileable. Wired to
-    /// KWin::Window's flag-change signals in wireOutputChangeHandlers; free for windows this handler never
-    /// announced.
+    /// Flags-settle backstop, wired in wireOutputChangeHandlers: a window's keep-above, skip-switcher, transient or
+    /// modal state changed (WindowFlagEdges::actionsFor). An announced window no longer tileable is released from its
+    /// engine at its captured spawn frame; an unannounced one now tileable on a managed screen in view is tiled at
+    /// once, with no focus (late_tileable_adopt, F991).
     void reevaluateWindowEligibility(KWin::EffectWindow* window);
     void onDaemonReady();
 
@@ -390,8 +387,8 @@ public:
     /// claimed; an unclaimed one is left entirely alone.
     ///
     /// Writes NOTHING to KWin's maximize bit. The user's own flip stands for
-    /// the length of the round trip and the engine's batch imposes the answer,
-    /// which is what keeps the button's motion to a single animated leg. Only
+    /// the length of the round trip and the engine's batch imposes the answer
+    /// in one leg, anchored at the frame the press left (F989). Only
     /// a REFUSED request writes the bit back, from the dispatch's reply
     /// handler.
     ///
@@ -462,6 +459,8 @@ public:
     /// A monocle member KWin un-maximized during a gesture, settled at its end: kept when KWin re-maximized it,
     /// else unclaimed, and floated unless @p outcomePlacedIt (F775).
     void settleMonocleUnmaximizeAfterGesture(KWin::EffectWindow* w, bool outcomePlacedIt);
+    /// A cancelled drag revoked the drag-start float: the Monocle restore it owed goes too (F1014).
+    void revokeDragStartMonocleRestore(KWin::EffectWindow* w);
 
     /// What a releaseAllClaims call actually handed back. Callers gate
     /// follow-up work on it — the passive float shed re-resolves decorations
@@ -1848,27 +1847,28 @@ private:
     {
         qint64 armedAtMs = 0;
         bool pendingPress = false;
-        /// Committed echoes of the REFUSAL write-back still expected to arrive at
-        /// the already-agrees arm while this entry is live. That write puts
-        /// KWin's bit back to membership, so its echo reaches the arm looking
-        /// exactly like a user press that agrees — and the reply handler's
-        /// pending-press guard re-arms a fresh entry AFTER the write, so the
-        /// echo lands on a live entry. Counted rather than flagged so a reply
-        /// that beats its own echo can carry the debt forward to the entry it
-        /// re-arms. Each echo the arm consumes decrements instead of recording a
-        /// press; a genuine press queued behind the echo is recorded normally,
-        /// because the compositor delivers committed edges in request order.
-        /// On X11 the write-back commits synchronously under the suppression
-        /// counter and never reaches the arm, so the reply handler does not
+        /// Committed echoes of the REFUSAL write-back still expected to arrive at the already-agrees arm while
+        /// this entry is live. That write puts KWin's bit back to membership, so its echo reaches the arm looking
+        /// exactly like a user press that agrees — and the reply handler's pending-press guard re-arms a fresh
+        /// entry AFTER the write, so the echo lands on a live entry. Counted rather than flagged so a reply that
+        /// beats its own echo can carry the debt forward to the entry it re-arms. Each echo the arm consumes
+        /// decrements instead of recording a press; a genuine press queued behind the echo is recorded normally,
+        /// because the compositor delivers committed edges in request order. On X11 the write-back commits
+        /// synchronously under the suppression counter and never reaches the arm, so the reply handler does not
         /// count it there.
-        /// Debts are consumed by COUNT, not identity: any agreeing edge that
-        /// lands while one is outstanding pays it, so a press that happens to
-        /// agree (a double toggle inside the round trip) consumes the debt and
-        /// the real write-back echo is then recorded as a press. Bounded to
-        /// one extra toggle; inherent to counting rather than tagging echoes.
+        /// Debts are consumed by COUNT, not identity: any agreeing edge that lands while one is outstanding pays
+        /// it, so a press that happens to agree (a double toggle inside the round trip) consumes the debt and the
+        /// real write-back echo is then recorded as a press. Bounded to one extra toggle; inherent to counting
+        /// rather than tagging echoes.
         int writeBackEchoesPending = 0;
     };
     QHash<QString, MaximizeToggleFlight> m_maximizeToggleInFlight;
+    /// A column maximize or restore the interception claimed (F989): the frame the press left and when. Taken by
+    /// the batch arm that answers it (ScrollDecisions::answersClaimedPress), which can run after the reply took the
+    /// flight entry; dropped by a refusal, with the tracking, and past MaximizeToggleFlightMs.
+    QHash<QString, QPair<QRectF, qint64>> m_claimedMaximizePresses;
+    bool takeClaimedPress(const QString& windowId, ScrollDecisions::MaximizeAction action, bool kwinMaximized,
+                          QRectF& departure);
     /// Upper bound on how long a dispatched toggle is treated as in flight.
     /// Generous against a slow daemon (the round trip is ~40ms) while still
     /// guaranteeing the suppressed repair leg comes back without a timer.

@@ -146,8 +146,7 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
             && m_effect->m_daemonGate.commandStamps.isCurrent(w, cit->commandStamp)
             && !m_effect->m_screenChangeHandler->isScreenChangeInProgress()
             && !stripOutputMovedSinceBatch(scrollTrackedScreenFor(windowId))
-            && !(m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
-                 && windowId == m_effect->m_dragTracker->draggedWindowId())) {
+            && !(m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())) {
             const QRect actual = w->frameGeometry().toRect();
             {
                 // Budget arithmetic is pure and unit-tested
@@ -184,11 +183,7 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                     // added between the call and the restore would strand the
                     // flag set for the rest of the frame, silently muting the
                     // VS-crossing detector.
-                    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-                    m_effect->m_daemonGate.inGeometryApply = true;
-                    const auto counterGuard = qScopeGuard([this, prevInApply] {
-                        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-                    });
+                    const auto counterGuard = m_effect->geometryApplyScope();
                     // Re-asserting the commanded rect is not a new command, so
                     // the window keeps its stamp: a strip entry the next batch
                     // has already scheduled for it must still land.
@@ -222,8 +217,8 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         // Other windows (e.g., a terminal reflowing) should still get VS crossing checks.
         // A tile whose client acks a larger size than its tile has not moved
         // either (F248): the centring pass below is what answers it.
-        const bool heldByGesture = (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
-                                    && windowId == m_effect->m_dragTracker->draggedWindowId())
+        const bool heldByGesture =
+            (m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())
             || m_effect->m_resizeHold.window == w;
         if (!heldByGesture && !GestureEndDecisions::isSizeOnlyChange(oldGeometry, QRectF(w->frameGeometry()))) {
             const QString newScreenId = m_effect->getWindowScreenId(w);
@@ -527,11 +522,7 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // Bracketed like every other effect-issued commit: the synchronous frame
     // change this emits must not reach the VS-crossing detector as an
     // external move, and the pass's own re-entry returns at the gate above.
-    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-    m_effect->m_daemonGate.inGeometryApply = true;
-    const auto applyGuard = qScopeGuard([this, prevInApply] {
-        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-    });
+    const auto applyGuard = m_effect->geometryApplyScope();
     kw->moveResize(centered);
 }
 

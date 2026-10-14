@@ -63,6 +63,13 @@ bool isLiveOutput(const KWin::LogicalOutput* output)
     return output && KWin::effects->screens().contains(const_cast<KWin::LogicalOutput*>(output));
 }
 
+/// Where KWin has put the window, committed or not (see snapshotOf).
+QString moveResizeOutputUuid(KWin::EffectWindow* w)
+{
+    const KWin::Window* const kw = w ? w->window() : nullptr;
+    return kw && kw->moveResizeOutput() ? kw->moveResizeOutput()->uuid() : QString();
+}
+
 } // namespace
 
 ScreenChangeHandler::WindowSnapshot ScreenChangeHandler::snapshotOf(KWin::EffectWindow* w) const
@@ -205,6 +212,74 @@ void ScreenChangeHandler::forgetWindow(KWin::EffectWindow* w)
     m_settleCrossings.remove(w);
     m_skippedAnnounces.remove(w);
     m_heldDragCrossings.remove(w);
+    m_placeholderOpens.remove(w);
+    m_cascadeOutputs.remove(w);
+    m_movedOutsideCascade.remove(w);
+}
+
+void ScreenChangeHandler::deferPlaceholderOpen(KWin::EffectWindow* w)
+{
+    if (!w || m_stopped) {
+        return;
+    }
+    m_placeholderOpens.insert(w);
+    qCInfo(lcScreenChange) << "Window" << m_effect->getWindowId(w)
+                           << "opened on KWin's placeholder output; it is placed once a real output takes it";
+}
+
+void ScreenChangeHandler::routePlaceholderOpens()
+{
+    // Never placed, so a real output taking one is no move: it is routed as
+    // the open it is, and its crossing off the placeholder is dropped (F750).
+    // One still on the placeholder waits for the next settle.
+    const QSet<KWin::EffectWindow*> opens = m_placeholderOpens;
+    for (KWin::EffectWindow* const w : opens) {
+        if (!w->isDeleted() && onPlaceholderOutput(w)) {
+            continue;
+        }
+        m_placeholderOpens.remove(w);
+        m_deferredCrossings.remove(w);
+        if (w->isDeleted()) {
+            continue;
+        }
+        releaseSettleHold(w);
+        qCInfo(lcScreenChange) << "Routing" << m_effect->getWindowId(w) << "as an open: a real output took it";
+        m_effect->m_tilingHandler->deferWindowRouting(w);
+    }
+}
+
+void ScreenChangeHandler::openOutputCascade()
+{
+    // KWin moves the windows of an output change inside the one call that
+    // emits the signal opening this (Workspace::updateOutputs: the output
+    // signals, desktopResized, the placement tracker's restore), so each
+    // window's output when that turn ends is KWin's doing. One changed
+    // outside such a turn was not: a Move to Screen from the keyboard or the
+    // window menu advances no interactive move count, and reported as KWin's
+    // the daemon re-asserts the placement the window left and moves it back
+    // (F1009). Sampled at the turn's edges rather than per outputChanged: a
+    // window's moveResizeOutput follows a commanded move at once, while the
+    // outputChanged of a Wayland configure lands at the client's ack.
+    if (m_cascadeOpen) {
+        return;
+    }
+    m_cascadeOpen = true;
+    for (auto it = m_cascadeOutputs.cbegin(); it != m_cascadeOutputs.cend(); ++it) {
+        if (moveResizeOutputUuid(it.key()) != it.value()) {
+            m_movedOutsideCascade.insert(it.key());
+        }
+    }
+    QTimer::singleShot(0, this, [this]() {
+        m_cascadeOpen = false;
+        if (m_stopped) {
+            return;
+        }
+        for (KWin::EffectWindow* w : KWin::effects->stackingOrder()) {
+            if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/true)) {
+                m_cascadeOutputs.insert(w, moveResizeOutputUuid(w));
+            }
+        }
+    });
 }
 
 void ScreenChangeHandler::dropEvacueeRecords()
@@ -258,8 +333,10 @@ PhosphorProtocol::OutputSettleRowList ScreenChangeHandler::buildSettleRows() con
             continue;
         }
         // A window on KWin's placeholder is reported once a real output takes
-        // it: the daemon has no screen for the placeholder (F729).
-        if (onPlaceholderOutput(w) || !m_effect->shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/true)) {
+        // it: the daemon has no screen for the placeholder (F729). One that
+        // opened there was never placed, and is routed as an open (F750).
+        if (onPlaceholderOutput(w) || m_placeholderOpens.contains(w)
+            || !m_effect->shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/true)) {
             continue;
         }
         const WindowSnapshot now = snapshotOf(w);
@@ -307,7 +384,10 @@ PhosphorProtocol::OutputSettleRowList ScreenChangeHandler::buildSettleRows() con
         row.maximizeMode = now.maximizeMode;
         row.quickTileMode = now.quickTileMode;
         row.fullscreen = now.fullscreen;
-        row.kwinOnly = now.moveResizeCount == base.moveResizeCount && row.windowId != dragged;
+        const auto cascadeOutput = m_cascadeOutputs.constFind(w);
+        row.kwinOnly = GestureEndDecisions::settleRowKwinOnly(
+            base.moveResizeCount, now.moveResizeCount, row.windowId == dragged, m_movedOutsideCascade.contains(w),
+            cascadeOutput != m_cascadeOutputs.cend() ? *cascadeOutput : QString(), now.outputUuid);
         row.placeableNow = !w->isMinimized() && isOnOwnOutputCurrentDesktop(w) && w->isOnCurrentActivity();
         if (s0) {
             row.hasS0 = true;
@@ -331,6 +411,8 @@ void ScreenChangeHandler::sendSettleReport()
 {
     const PhosphorProtocol::OutputSettleRowList rows = buildSettleRows();
     m_settleBaseline.clear();
+    m_cascadeOutputs.clear();
+    m_movedOutsideCascade.clear();
     m_outputSetChanged = false;
     DeferredCrossings crossings;
     crossings.reserve(m_deferredCrossings.size());
@@ -346,6 +428,7 @@ void ScreenChangeHandler::sendSettleReport()
     }
     m_skippedAnnounces.clear();
     if (rows.isEmpty() && crossings.isEmpty() && skipped.isEmpty()) {
+        routePlaceholderOpens();
         return;
     }
     // No daemon: nothing is parked, so every crossing is a move. An old
@@ -468,6 +551,7 @@ void ScreenChangeHandler::applySettleVerdicts(const PhosphorProtocol::OutputSett
         }
         m_effect->m_tilingHandler->notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
     }
+    routePlaceholderOpens();
 }
 
 void ScreenChangeHandler::replayDeferredCrossings()
@@ -496,6 +580,10 @@ void ScreenChangeHandler::replayCrossing(KWin::EffectWindow* w, const QString& o
     const auto settled = qScopeGuard([this, w]() {
         releaseSettleHold(w);
     });
+    // An open waiting for a real output crossed nothing: it is routed (F750).
+    if (m_placeholderOpens.contains(w)) {
+        return;
+    }
     // Where it is NOW, against the virtual screens as they are after the
     // change: a window KWin moved and moved back has not crossed.
     const QString current = m_effect->pendingWindowScreenId(w);

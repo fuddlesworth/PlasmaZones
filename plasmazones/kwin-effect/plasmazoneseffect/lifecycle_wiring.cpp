@@ -487,10 +487,12 @@ void PlasmaZonesEffect::initTimers()
     // daemon emits one signal per per-rule mutation, so without coalescing a
     // 50-rule batch edit fires 50 full-ruleset fetches + parses. 50ms matches
     // the frame-geometry flush above — single edits feel instant, bursts
-    // collapse to a single fetch at the trailing edge.
+    // collapse to a single fetch at the trailing edge. The instant-restore
+    // cache refetches on the same edge, once per burst (F625).
     m_animationRulesRefreshDebounce.setSingleShot(true);
     m_animationRulesRefreshDebounce.setInterval(50);
     connect(&m_animationRulesRefreshDebounce, &QTimer::timeout, this, &PlasmaZonesEffect::loadRuleAnimationsFromDbus);
+    connect(&m_animationRulesRefreshDebounce, &QTimer::timeout, this, &PlasmaZonesEffect::refreshRestoreCache);
 }
 
 void PlasmaZonesEffect::connectWindowAndScreenSignals()

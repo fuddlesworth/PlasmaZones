@@ -50,6 +50,8 @@ void DragTracker::handleWindowStartMoveResize(KWin::EffectWindow* w)
     // client-initiated move began.
     const KWin::Window* kw = w->window();
     m_dragStartAnchor = kw ? kw->interactiveMoveResizeAnchor() : m_lastCursorPos;
+    // Before any restore on drag, which KWin makes once the move gets going.
+    m_dragStartMaximizeMode = kw ? int(kw->requestedMaximizeMode()) : 0;
     m_pointerMoved = false;
     m_pointerDrag = m_effect->m_currentMouseButtons != Qt::NoButton;
     m_dragMovedThrottle.start();
@@ -98,10 +100,12 @@ void DragTracker::handleWindowFinishMoveResize(KWin::EffectWindow* w)
     // compositor-ended move keep where the window went (F752). The COMMANDED
     // rect, not the frame: an Escape that undoes a restore-from-maximize
     // commits its size at the ack, while the commanded rect is the start at
-    // once.
+    // once. With the requested maximize mode too, since that Escape re-applies
+    // the starting maximize, which commands the maximize area (F1014).
     const KWin::Window* kw = w->window();
     const QRectF commanded = kw ? QRectF(kw->moveResizeGeometry()) : QRectF(w->frameGeometry());
-    const bool reverted = GestureEndDecisions::moveReverted(m_dragStartFrame, commanded);
+    const bool reverted = GestureEndDecisions::moveReverted(m_dragStartFrame, commanded, m_dragStartMaximizeMode,
+                                                            kw ? int(kw->requestedMaximizeMode()) : 0);
     m_lastCursorPos = dragPoint();
     qCInfo(lcEffect) << "Window move finished without button release, reverted=" << reverted;
     finishDrag(reverted);
@@ -201,6 +205,7 @@ void DragTracker::reset()
     m_lastCursorPos = QPointF();
     m_pointerMoved = false;
     m_pointerDrag = false;
+    m_dragStartMaximizeMode = 0;
     m_dragMovedThrottle.invalidate();
 }
 

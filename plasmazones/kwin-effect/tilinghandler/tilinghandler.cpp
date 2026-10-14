@@ -755,13 +755,12 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
     m_centeredWaylandFrames.remove(windowId); // its stamp went in the helper
     m_unfloatInFlight.remove(windowId);
     dropFullscreenHoldRecords(windowId);
-    // Same reasoning as the retry budget below: a dead id's entry must not
-    // outlive the window (a leak, not a misattribution: ids are unique). On
-    // the cross-output transfer of a LIVE window, dropping the marker reopens
-    // the race for the rest of a trip still in flight. Accepted: the batch it
-    // would have suppressed describes the strip being left, and the arriving
-    // strip answers on its own first batch.
+    // Same reasoning as the retry budget below: a dead id's entry must not outlive the window (a leak, not a
+    // misattribution: ids are unique). On the cross-output transfer of a LIVE window, dropping the marker reopens
+    // the race for the rest of a trip still in flight. Accepted: the batch it would have suppressed describes the
+    // strip being left, and the arriving strip answers on its own first batch. The claimed press goes with it.
     m_maximizeToggleInFlight.remove(windowId);
+    m_claimedMaximizePresses.remove(windowId);
     m_monocleRestoreOwed.remove(windowId);
     // Retry budget and route/provenance markers die with the tracking: a dead
     // id must not keep an exhausted budget, and every caller of this cleanup

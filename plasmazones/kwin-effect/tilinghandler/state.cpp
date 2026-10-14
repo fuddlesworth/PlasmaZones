@@ -851,9 +851,9 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
     // and undamaged — those never reach a paint pass to pick the new alpha
     // up. Same bookend loadRuleAnimationsFromDbus takes on a rule edit,
     // gated on rule PRESENCE so a session with no opacity rule pays nothing.
-    // The KWin::effects term matches every sibling bookend in this file: the
-    // teardown orderings that leave the handle null all reach a setter of one
-    // kind or another, and this one is no less reachable than setScrollingScreens'.
+    // The KWin::effects term matches every sibling bookend in this file, and
+    // like them it is belt and braces: the global is never null while this
+    // effect is alive (see PlasmaZonesEffect::windowOutput).
     if (m_effect->m_shaderManager.hasOpacityRules() && KWin::effects) {
         KWin::effects->addRepaintFull();
     }

@@ -5,6 +5,11 @@
 #include "shader_internal.h"
 #include "paint_internal.h"
 #include "compositor/effectlogging.h"
+#include "compositor/windowanimator.h"
+#include "handlers/dragtracker.h"
+#include "handlers/instantrestoredecisions.h"
+#include "handlers/screenchangehandler.h"
+#include "tilinghandler/tilinghandler.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/RetargetPolicy.h>
@@ -14,11 +19,6 @@
 
 #include <QLoggingCategory>
 #include <QPointer>
-
-#include "tilinghandler/tilinghandler.h"
-#include "compositor/windowanimator.h"
-#include "handlers/dragtracker.h"
-#include "handlers/screenchangehandler.h"
 
 namespace PlasmaZones {
 
@@ -64,9 +64,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // daemon refuses it for a window in a zone or on a tile. Nothing is sent
     // when there is no restore rect (it equals the frame, or the window is a
     // windowed-fullscreen or parked strip tile, which freeGeometryForCapture
-    // answers with an invalid rect).
+    // answers with an invalid rect). Kept for a window kept above too, like
+    // its frame shadow (F923).
     const auto pushRestoreRect = [this](KWin::EffectWindow* window) {
-        if (!shouldHandleWindow(window)) {
+        if (!shouldHandleWindow(window, nullptr, /*exemptFullscreen=*/false, /*exemptOwnKeepAbove=*/true)) {
             return;
         }
         const QString windowId = getWindowId(window);
@@ -93,8 +94,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // is diffed against) live in window_desktop_connections.cpp.
     wireContextChangeHandlers(w);
 
-    // Cross-output and virtual-screen moves with the flags-settle eviction
-    // backstop (window_output_connections.cpp), the identity and metadata
+    // Cross-output and virtual-screen moves with the flags-settle
+    // re-evaluation (window_output_connections.cpp), the identity and metadata
     // pushes (window_metadata_connections.cpp) and the interactive
     // move/resize pair (window_moveresize_connections.cpp). They are wired
     // here, in this order, so a connection to a signal that is also
@@ -257,12 +258,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // A claimed request skips the shader install HERE
             // deliberately, not the maximize animation: the window still
             // resizes when the column grows, and that geometry arrives
-            // through the strip's own batch, which installs its own
-            // placement leg (slotWindowsTileRequested) anchored at the
-            // pre-maximize rect. Installing a maximize morph from this
-            // handler on top would supersede that one — the same reasoning
-            // as the drag-restore guard below. One owner per leg, and for an
-            // engine-authored maximize the owner is the batch.
+            // through the strip's own batch, which anchors its leg at the
+            // rect this press left (the claimed press interceptMaximizeRequest
+            // records) and rides placeOut on a restore. A maximize morph
+            // from this handler on top would supersede that leg — the same
+            // reasoning as the drag-restore guard below. One owner per leg,
+            // and for an engine-authored maximize the owner is the batch.
             if (!m_tilingHandler->isSuppressingMaximizeChanged() && m_tilingHandler->interceptMaximizeRequest(window)) {
                 m_shaderManager.m_pendingMaximizeMorph.remove(window);
                 return;
@@ -315,8 +316,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // Drag-restore guard: KWin unmaximizes a window mid interactive
             // move when the user grabs the maximized title bar and pulls
             // ("restore on drag"). The drag already owns the visuals — the
-            // windowStartUserMovedResized hookup above installed the
-            // window.move shader as a HELD transition — and installing the
+            // gesture start ended any placement leg and, when a move pack is
+            // assigned, installed it as a HELD transition — and installing the
             // placement morph here would supersede it: the move pack dies
             // mid-drag and a full-screen→cursor morph replays over the
             // pointer. The isUserResize branch is skipped for a different
@@ -348,6 +349,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // complete the install at the visible jump.
             if (maximizeSizeLanded(newFrame, preFrame)) {
                 m_shaderManager.m_pendingMaximizeMorph.remove(window);
+                // A placement leg still running: the morph departs from the
+                // rect it is drawing, and the leg ends (F674).
+                if (const QRectF drawn = endRunningPlacementLeg(window, /*endMaximizeLeg=*/false); drawn.isValid()) {
+                    preFrame = drawn;
+                }
                 beginMaximizeShaderMorph(window, preFrame);
             } else {
                 m_shaderManager.m_pendingMaximizeMorph.insert(window, {preFrame, ShaderInternal::shaderClockNowMs()});
@@ -455,9 +461,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // geometry leaving the spawn point once applyWindowGeometry has
     // stamped the resolved target. Before the target is known a
     // geometry change is just the client's own initial size negotiation
-    // and is ignored. Full-rect compare (not just topLeft) catches
-    // size-only configures whose origin coincidentally matches the
-    // spawn point.
+    // and is ignored. A size-only commit releases only at the target
+    // size: a client that commits a size of its own before the
+    // reposition lands has not landed (F759).
     //
     // Body 2 — frame-geometry shadow: push the latest geometry to the
     // daemon so daemon-local shortcut handlers (float toggle, etc.) can
@@ -701,18 +707,27 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         ShaderInternal::shaderClockNowMs() - pending.armedAtMs > kPendingMaximizeMorphDeadlineMs;
                     // Same interactive guard as the arming site: a drag
                     // that started while the entry was pending owns the
-                    // visuals through the window.move shader.
+                    // visuals (its move pack, when one is assigned). A
+                    // placement leg that ran through the wait ends here,
+                    // and the morph departs from where it drew (F674).
                     if (!stale && !safeW->isUserMove() && !safeW->isUserResize()) {
-                        beginMaximizeShaderMorph(safeW.data(), pending.departureFrame);
+                        QRectF departure = pending.departureFrame;
+                        if (const QRectF drawn = endRunningPlacementLeg(safeW.data(), /*endMaximizeLeg=*/false);
+                            drawn.isValid()) {
+                            departure = drawn;
+                        }
+                        beginMaximizeShaderMorph(safeW.data(), departure);
                     }
                 }
             }
-            // Body 1 — suppression release. Integer-aligned compare:
+            // Body 1 — suppression release. Integer-aligned rects:
             // fractional-scale outputs leave sub-pixel residue in
-            // frameGeometry(), and a bit-exact inequality released the
+            // frameGeometry(), and a bit-exact compare released the
             // suppression on jitter that moved nothing.
             if (auto it = m_restoreSuppress.find(safeW.data()); it != m_restoreSuppress.end()
-                && it->targetGeometry.isValid() && safeW->frameGeometry().toRect() != it->spawnGeometry.toRect()) {
+                && it->targetGeometry.isValid()
+                && InstantRestoreDecisions::suppressionSettled(it->spawnGeometry.toRect(), it->targetGeometry.toRect(),
+                                                               safeW->frameGeometry().toRect())) {
                 endRestoreSuppression(safeW.data());
             }
             // Body 2 — throttled daemon shadow. Per tick this stashes the
@@ -943,6 +958,40 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
             st->needsSnapshot = true;
         }
     }
+}
+
+QRectF PlasmaZonesEffect::endRunningPlacementLeg(KWin::EffectWindow* w, bool endMaximizeLeg)
+{
+    // The rect the leg is drawing: the animator's current value, or a
+    // maximize morph's predicted one (invalid for a morph that draws no rect
+    // of its own, which is then left running). Time-driven legs that are not
+    // maximize legs, the held move and the open among them, belong to the
+    // gesture or the open and are never ended here.
+    const QRectF frame = w->frameGeometry();
+    QRectF drawn;
+    bool endShader = false;
+    if (ShaderTransition* live = m_shaderManager.findTransition(w); endMaximizeLeg && live && live->maximizeLeg) {
+        drawn = predictedMorphRect(*live, ShaderInternal::shaderClockNowMs());
+        endShader = drawn.isValid();
+    }
+    if (m_windowAnimator->hasAnimation(w)) {
+        drawn = m_windowAnimator->currentValue(w, frame);
+        m_windowAnimator->removeAnimation(w);
+        // removeAnimation runs no completion, and an animator-driven shader
+        // leg (durationMs 0) has no other progress source or teardown: end it
+        // as the completion callback would (F335).
+        if (const ShaderTransition* orphan = m_shaderManager.findTransition(w); orphan && orphan->durationMs == 0) {
+            endShader = true;
+        }
+    }
+    if (endShader) {
+        endShaderTransition(w);
+    }
+    // removeAnimation schedules no damage: the drawn rect and the frame.
+    if (drawn.isValid()) {
+        repaintSnapRegions(w, drawn, frame.toRect());
+    }
+    return drawn;
 }
 
 } // namespace PlasmaZones

@@ -90,7 +90,7 @@ struct WindowAppearanceDefault
     }
 };
 
-/// Debounced frame-geometry shadow push state per window. The window pointer
+/// Throttled frame-geometry shadow push state per window. The window pointer
 /// rides along so the flush runs the exclusion gate once per flush. See
 /// PlasmaZonesEffect::m_pendingFrameGeometry.
 struct PendingFrameGeometry
@@ -427,6 +427,9 @@ struct DaemonGateState
     /// is unsafe and must be skipped.
     bool inGeometryApply = false;
     bool quietApplyLog = false; ///< a heartbeat view tick's tile apply: applyWindowGeometry logs at debug (F100)
+    /// The tile apply answering a column maximize or restore the interception claimed: KWin's own flip may already
+    /// have put the window at the batch's rect, and the leg from the caller's origin is owed all the same (F989).
+    bool claimedPressLegOwed = false;
     /// The window whose commit applyWindowGeometry's ANIMATED arm is making
     /// right now (null otherwise). That arm commits before it retargets its
     /// own leg, and the frame-change hook's strip retarget must not answer

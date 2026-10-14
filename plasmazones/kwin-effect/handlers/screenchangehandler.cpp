@@ -78,6 +78,9 @@ void ScreenChangeHandler::stop()
     m_settleBaseline.clear();
     m_deferredCrossings.clear();
     m_skippedAnnounces.clear();
+    m_placeholderOpens.clear();
+    m_cascadeOutputs.clear();
+    m_movedOutsideCascade.clear();
     m_outputSetChanged = false;
 }
 
@@ -114,6 +117,7 @@ void ScreenChangeHandler::slotOutputGeometryChanged()
     if (!m_pendingScreenChange) {
         takeBaseline();
     }
+    openOutputCascade();
     m_pendingScreenChange = true;
     m_screenChangeDebounce.start(); // Restart timer (debounce)
 
@@ -191,6 +195,7 @@ void ScreenChangeHandler::slotScreenLayoutChanged()
     if (!m_pendingScreenChange) {
         takeBaseline();
     }
+    openOutputCascade();
     m_outputSetChanged = true;
     m_pendingScreenChange = true;
     m_screenChangeDebounce.start();

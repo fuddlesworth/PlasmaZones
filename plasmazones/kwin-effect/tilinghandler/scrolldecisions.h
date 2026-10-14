@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QRect>
 #include <QRectF>
 #include <QSet>
 #include <QSize>
@@ -185,6 +186,43 @@ inline MaximizeAction resolveMaximizeToEdgesAction(bool flagOnWire, bool inSet, 
 inline constexpr bool takesMaximizeMembership(bool maximizable, bool alreadyFull)
 {
     return maximizable || alreadyFull;
+}
+
+/// Whether a column-maximize arm is the answer to a press the maximize
+/// interception claimed (F989), given a live marker for it. The interception
+/// dispatches without writing KWin's bit, so KWin already holds the mode the
+/// press asked for when the answer lands, and the arm writes nothing: an Apply
+/// that finds KWin maximized, or a Release that finds it restored. That answer
+/// anchors its leg at the press's departure rect, and a Release rides placeOut.
+/// The effect-restart adopt (Apply over a held bit) carries no marker.
+inline constexpr bool answersClaimedPress(MaximizeAction action, bool kwinMaximized, bool markerLive)
+{
+    return markerLive
+        && ((action == MaximizeAction::Apply && kwinMaximized)
+            || (action == MaximizeAction::Release && !kwinMaximized));
+}
+
+/// Where a leg of a window the strip's view carries starts: @p from, rounded,
+/// backed out by @p viewDelta along the strip's axis. The paint position is the
+/// animated rect plus the view offset, which starts at viewDelta, so the first
+/// frame lands on @p from. Rounded because AnimatedValue judges a degenerate
+/// leg with no pixel epsilon, and fractional residue would start a spring on
+/// every scroll tick. @p from is the live frame, or the frame a claimed
+/// maximize press left (F989).
+inline QRect viewCarriedOrigin(const QRectF& from, int viewDelta, bool vertical)
+{
+    return QRect(qRound(from.x()) - (vertical ? 0 : viewDelta), qRound(from.y()) - (vertical ? viewDelta : 0),
+                 qRound(from.width()), qRound(from.height()));
+}
+
+/// Whether an apply that finds the window already commanded to its target
+/// still owes a leg (F989). Only the answer to a claimed press does: KWin's own
+/// flip already commanded the batch's rect, so the leg from the press's
+/// departure is the only motion the press gets. It needs an origin that is not
+/// the target itself. Every other apply at its target stays a no-op.
+inline bool claimedPressOwesLeg(bool answeringClaimedPress, const QRectF& origin, const QRect& target)
+{
+    return answeringClaimedPress && origin.isValid() && !origin.isEmpty() && origin.toRect() != target;
 }
 
 /// The counter-assert burst budget for scroll-managed X11 windows an

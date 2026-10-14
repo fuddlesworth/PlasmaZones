@@ -13,11 +13,12 @@
 #include <QString>
 #include <QtGlobal>
 
-/// The end of an interactive resize, what a frame change crossed, and how a
-/// drag's held crossing settles, header-only so the rules are unit-testable
-/// without a compositor (same pattern as pretiledecisions.h). The resize hold
-/// and its drain are in window_moveresize_connections.cpp, the drag crossing
-/// hold in screenchangehandler_settle.cpp.
+/// The end of an interactive resize, what a frame change crossed, how a drag's
+/// held crossing settles and what an output settle reports as KWin's,
+/// header-only so the rules are unit-testable without a compositor (same
+/// pattern as pretiledecisions.h). The resize hold and its drain are in
+/// window_moveresize_connections.cpp, the drag crossing hold and the settle in
+/// screenchangehandler_settle.cpp.
 namespace PlasmaZones::GestureEndDecisions {
 
 /// The client has committed the size KWin asked for at the end of a resize:
@@ -89,9 +90,15 @@ inline QRect frameUnderGrab(const QRectF& frame, const QPointF& grab, const QSiz
 /// rect) when the rect it ends on is the one it started on. Integer-aligned:
 /// a fractional-scale frame carries sub-pixel residue. A move that ends
 /// exactly where it began reads as reverted, which changes nothing (F752).
-inline bool moveReverted(const QRectF& start, const QRectF& commandedAtEnd)
+/// A move that started maximized is reverted when it ends in that requested
+/// maximize mode again (KWin's MaximizeMode bits, 0 for restored): the cancel
+/// re-applies the starting mode after putting the window back, which commands
+/// the maximize area rather than a start rect PlasmaZones inset from it, a
+/// Monocle tile's gaps (F1014).
+inline bool moveReverted(const QRectF& start, const QRectF& commandedAtEnd, int startMaximizeMode, int endMaximizeMode)
 {
-    return start.toRect() == commandedAtEnd.toRect();
+    return start.toRect() == commandedAtEnd.toRect()
+        || (startMaximizeMode != 0 && endMaximizeMode == startMaximizeMode);
 }
 
 /// The grab point of a drag that left the pointer idle (touch, tablet),
@@ -143,6 +150,45 @@ inline constexpr DragCrossingSettle settleDragCrossing(DropAnswer answer, bool t
         return DragCrossingSettle::RunBodyAndReport;
     }
     return DragCrossingSettle::RunBody;
+}
+
+/// How a cancelled engine drag's tile is put back (F1015).
+enum class CancelReassert {
+    None,
+    Retile, ///< Tiling.retile for the tile's screen: the autotile engine re-emits every tile there
+    ReapplyWindow, ///< Scrolling.reapplyWindowGeometry: the strip emits on change, so the window's own re-emit
+};
+
+/// A cancelled drag of a tile the effect floated at the drag's start (Float
+/// mode: handleDragToFloat shed its tiled marks, centring target and claims)
+/// leaves the daemon still tiling it, and KWin puts it back as it started,
+/// which for a maximized tile is the maximize area rather than its gap-inset
+/// rect. Nothing else undoes that float, so the daemon is asked to re-emit the
+/// tile, whose batch re-applies all of it. Nothing for a drop that was not
+/// cancelled, a window that was not floated at the start (it was floating
+/// already, or Reorder mode kept it tiled), or one the effect does not track.
+inline constexpr CancelReassert cancelledDragReassert(bool cancelled, bool floatedAtDragStart, bool tracked,
+                                                      bool scrolling)
+{
+    if (!cancelled || !floatedAtDragStart || !tracked) {
+        return CancelReassert::None;
+    }
+    return scrolling ? CancelReassert::ReapplyWindow : CancelReassert::Retile;
+}
+
+/// Whether only KWin moved a window an output change settles
+/// (OutputSettleRow::kwinOnly): no interactive move or resize since the
+/// baseline, not the window being dragged, and no output change outside KWin's
+/// output-update cascade, either one a later cascade found at its start
+/// (@p movedBetweenCascades) or one since the last cascade ended
+/// (@p cascadeOutput, empty when no cascade sampled the window, against
+/// @p outputNow). A Move to Screen from the keyboard or the window menu is the
+/// user's and moves no count (F1009).
+inline bool settleRowKwinOnly(int baseMoveResizeCount, int moveResizeCount, bool dragged, bool movedBetweenCascades,
+                              const QString& cascadeOutput, const QString& outputNow)
+{
+    return moveResizeCount == baseMoveResizeCount && !dragged && !movedBetweenCascades
+        && (cascadeOutput.isEmpty() || cascadeOutput == outputNow);
 }
 
 /// How long the end-of-resize reports wait for the client to commit the size

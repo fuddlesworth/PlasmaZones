@@ -9,6 +9,9 @@
 #include "plasmazoneseffect.h"
 #include "gestureenddecisions.h"
 #include "shader_internal.h"
+#include "handlers/dragtracker.h"
+#include "handlers/screenchangehandler.h"
+#include "tilinghandler/tilinghandler.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -19,10 +22,6 @@
 
 #include <QPointer>
 #include <QTimer>
-
-#include "tilinghandler/tilinghandler.h"
-#include "handlers/dragtracker.h"
-#include "handlers/screenchangehandler.h"
 
 namespace PlasmaZones {
 
@@ -39,6 +38,12 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
     // D-Bus. Cursor position updates are handled event-driven via slotMouseChanged →
     // DragTracker::updateCursorPosition(), throttled to ~30Hz.
     connect(w, &KWin::EffectWindow::windowStartUserMovedResized, this, [this](KWin::EffectWindow* window) {
+        // A placement leg still running when the user grabs the window ends
+        // here, at the rect it is drawing: the window is under the pointer
+        // from the first step, and a move pack installs fresh below (F589).
+        if (window) {
+            endRunningPlacementLeg(window, /*endMaximizeLeg=*/true);
+        }
         m_dragTracker->handleWindowStartMoveResize(window);
         // A move the tracker did not take (a window PlasmaZones does not place,
         // a dialog) is held like a drop's tail: its crossing is reported once,
@@ -449,7 +454,10 @@ void PlasmaZonesEffect::drainResizeHold(const QRect& frame)
     if (heldAxes != 0) {
         invalidateRuleCacheForStateChange(windowId);
     }
-    if (!shouldHandleWindow(w)) {
+    // The float-size store records a position, which the daemon keeps for a
+    // window kept above too (F923); the reflow and the free-geometry note
+    // below are for windows the effect places.
+    if (!shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/false, /*exemptOwnKeepAbove=*/true)) {
         return;
     }
     // A floating window the user just RESIZED has a new free size. Persist it
@@ -482,6 +490,9 @@ void PlasmaZonesEffect::drainResizeHold(const QRect& frame)
     // it does not belong to. The daemon ignores floating / untracked windows,
     // so this is harmless for the float case handled just above, and it
     // re-validates membership before reflowing.
+    if (!shouldHandleWindow(w)) {
+        return;
+    }
     if (GestureEndDecisions::reportsResize(crossing)) {
         notifyWindowResized(w, start, frame);
     }

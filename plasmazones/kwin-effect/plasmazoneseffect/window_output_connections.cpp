@@ -5,7 +5,7 @@
 // (KWin outputChanged), the virtual-screen crossing detector that runs off
 // frame geometry because outputChanged cannot see a crossing inside one
 // monitor, the tracked-screen stamp both diff against, the flags-settle
-// eviction backstop and the rule-field flag edges. Called once per window from
+// re-evaluation (eviction or adoption) and the rule-field flag edges. Called once per window from
 // setupWindowConnections. The
 // crossing bodies live in ScreenChangeHandler, which also replays a crossing
 // deferred during a screen change at its settle.
@@ -14,6 +14,9 @@
 #include "gestureenddecisions.h"
 #include "windowcontexthold.h"
 #include "windowflagedges.h"
+#include "handlers/dragtracker.h"
+#include "handlers/screenchangehandler.h"
+#include "tilinghandler/tilinghandler.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
@@ -24,10 +27,6 @@
 #include <QPointer>
 #include <QScopeGuard>
 #include <QTimer>
-
-#include "tilinghandler/tilinghandler.h"
-#include "handlers/dragtracker.h"
-#include "handlers/screenchangehandler.h"
 
 namespace PlasmaZones {
 
@@ -46,7 +45,7 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         // effect between a move request and its ack sits on the output it is
         // leaving.
         m_trackedScreenPerWindow[w] = pendingWindowScreenId(w);
-        // Flags-settle eviction backstop: a client can set keep-above,
+        // Flags-settle backstop: a client can set keep-above,
         // skip-switcher or its transient parent AFTER mapping (Yakuake
         // queues the first two in its map-time request burst; another client
         // may flip one seconds later). Each of those flips a structural
@@ -54,9 +53,9 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         // verdict was permanent — the pre-settle window got inserted,
         // focused and column-sized. The one-tick routing defer in
         // slotWindowAdded harvests the same-burst case before any insert;
-        // these catch the late case and release the window
-        // (reevaluateWindowEligibility gates itself on announced windows, so
-        // the connection is free for everything else).
+        // these catch the late case both ways: a window that stops being
+        // tileable is released, and one that becomes tileable on a managed
+        // screen in view is tiled at once (late_tileable_adopt, F991).
         //
         // transientChanged / modalChanged are the arms the keep-above pair
         // could not reach: on Wayland an xdg_toplevel's set_parent and

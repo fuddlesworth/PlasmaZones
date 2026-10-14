@@ -29,9 +29,8 @@ void TilingHandler::untileWindowsLeftOnScreen(const QString& screenId, const QSe
     // restart, on the entry's own output).
     const QSet<QString> untiled = previous - newSet;
     KWin::LogicalOutput* const batchOutput = m_effect->outputForScreenId(screenId);
-    const QString dragged = m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
-        ? m_effect->m_dragTracker->draggedWindowId()
-        : QString();
+    const QString dragged =
+        m_effect->m_dragTracker->isDragging() ? m_effect->m_dragTracker->draggedWindowId() : QString();
     for (const QString& wid : untiled) {
         // Exact resolve only: findWindowById's appId fuzzy fallback could hand
         // back a same-app SIBLING for a gone id, and the jurisdiction test

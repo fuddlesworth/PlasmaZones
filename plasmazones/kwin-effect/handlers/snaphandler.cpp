@@ -5,6 +5,7 @@
 
 #include "tilinghandler/tilinghandler.h"
 #include "dragtracker.h"
+#include "screenchangehandler.h"
 #include "plasmazoneseffect/desktopvisibility.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "snapassisthandler.h"
@@ -132,10 +133,9 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
 
 void SnapHandler::clearSnapTracking()
 {
-    // Bookkeeping only. Physical title-bar restores are the
-    // DecorationManager's job — teardown callers pair this with
-    // DecorationManager::restoreAll(). Callers also pair it with
-    // clearAllDecorations() to release the per-window border shader redirect.
+    // Bookkeeping only. Physical title-bar restores are the DecorationManager's job — teardown callers pair
+    // this with DecorationManager::restoreAll(), and with clearAllDecorations() to release the per-window
+    // border shader redirect.
     // Preserve unresolved candidates from an earlier daemon cycle. They are
     // retired only by an authoritative snap, float, close, or restore miss.
     // CONSCIOUS BREADTH: every window snap-tracked at teardown becomes a
@@ -196,9 +196,8 @@ void SnapHandler::setFocusFollowsMouse(bool enabled)
 void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::function<void(bool)> onComplete,
                                            bool releaseSuppressionOnMiss, PhosphorEngine::RestoreReason reason)
 {
-    // The shadow seed and the daemon's two gates all ask the same question of
-    // the reason, and they must keep asking exactly it: widening any of them
-    // beyond Open changes which windows get seeded or reclaimed.
+    // The shadow seed and the daemon's two gates all ask the same question of the reason, and they must keep
+    // asking exactly it: widening any of them beyond Open changes which windows get seeded or reclaimed.
     const bool isOpenPath = reason == PhosphorEngine::RestoreReason::Open;
     if (!window) {
         if (onComplete) {
@@ -236,9 +235,12 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
 
     // A window under a user move is placed by its drop, so a restore asked for now (a sweep or desktop-arrival
     // re-drive) takes the miss path: sent, it would reach the daemon after the drag began, its reply would defer
-    // behind the gesture, and the daemon would keep a zone the window never reached (F884).
-    if (window->isUserMove()) {
-        qCInfo(lcEffect) << "resolveWindowRestore skipped for" << windowId << ": it is being dragged";
+    // behind the gesture, and the daemon would keep a zone the window never reached (F884). So does one on KWin's
+    // placeholder output, which the daemon has no screen for: an open there is routed at the settle (F750).
+    const bool onPlaceholder = m_effect->m_screenChangeHandler->onPlaceholderOutput(window);
+    if (window->isUserMove() || onPlaceholder) {
+        qCInfo(lcEffect) << "resolveWindowRestore skipped for" << windowId
+                         << (onPlaceholder ? ": it is on KWin's placeholder output" : ": it is being dragged");
         onMiss();
         if (onComplete) {
             onComplete(false);
@@ -264,12 +266,10 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
         }
     }
     const int kindInt = static_cast<int>(m_effect->classifyWindowKind(window));
-    // Thread the applied outcome to onComplete: onSnapSuccess fires only on
-    // the zone-applied branch of tryAsyncSnapCall, and every branch calls
-    // onComplete afterwards, so the flag is always settled when it runs.
-    // The completion is ALWAYS constructed, caller callback or not: it is
-    // also what retires the in-flight mark below, and every reply arm
-    // (applied, miss, error, window died) calls it.
+    // Thread the applied outcome to onComplete: onSnapSuccess fires only on the zone-applied branch of
+    // tryAsyncSnapCall, and every branch calls onComplete afterwards, so the flag is always settled when it runs.
+    // The completion is ALWAYS constructed, caller callback or not: it is also what retires the in-flight mark
+    // below, and every reply arm (applied, miss, error, window died) calls it.
     const bool firstPlacement = isOpenPath || reason == PhosphorEngine::RestoreReason::PendingSweep
         || reason == PhosphorEngine::RestoreReason::DesktopArrival;
     const quint64 epoch = m_openResolveEpoch;

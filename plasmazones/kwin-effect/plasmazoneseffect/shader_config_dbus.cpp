@@ -805,10 +805,10 @@ void PlasmaZonesEffect::slotRulesChanged()
 {
     // Coalesce burst signals (one `rulesChanged` per per-rule mutation) behind a
     // re-armed 50ms single-shot debounce, so a batch edit drives one getAllRules
-    // fetch. The restore cache refetches now: a saved rule can refuse the zone
-    // restore (SetRestoreToZoneOnLogin), and the daemon then answers "{}" (F703).
+    // fetch and one restore-cache refetch (the timer's second connection): a
+    // saved rule can refuse the zone restore (SetRestoreToZoneOnLogin), and the
+    // daemon then answers "{}" (F703, F625).
     m_animationRulesRefreshDebounce.start();
-    refreshRestoreCache();
 }
 
 void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
@@ -1064,21 +1064,9 @@ void PlasmaZonesEffect::fetchAllRulesOnce()
             withoutNeverStampedRules(PhosphorRules::ExclusionRules::excludeDecorationsRulesFrom(*setOpt).rules(),
                                      layoutsSeeded, &activeLayoutWithheld));
 
-        // Recompute the geometry-scoped-rules gate for the frame-geometry
-        // flush (see the member doc). Walked over the full parsed set, once
-        // per rulesChanged — never per geometry tick.
-        {
-            static const QSet<PhosphorRules::Field> kGeometryFields = {
-                PhosphorRules::Field::Width, PhosphorRules::Field::Height, PhosphorRules::Field::PositionX,
-                PhosphorRules::Field::PositionY};
-            m_hasGeometryScopedRules = false;
-            for (const PhosphorRules::Rule& rule : setOpt->rules()) {
-                if (rule.enabled && rule.match.referencesAnyField(kGeometryFields)) {
-                    m_hasGeometryScopedRules = true;
-                    break;
-                }
-            }
-        }
+        // The geometry- and caption-scoped rule gates for the frame-geometry
+        // flush's per-window evictions (see the member doc).
+        recomputeLiveFieldRuleGates(*setOpt);
 
         // Per-window border / title-bar rules ride the same animation rule set
         // (Tag::Effect admits them). Refresh borders so an edited /

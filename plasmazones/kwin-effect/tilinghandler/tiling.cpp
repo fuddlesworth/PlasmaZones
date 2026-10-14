@@ -289,11 +289,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // apply's crossing guard covers: unguarded, the synchronous
                     // frame change resolves against stale m_virtualScreenDefs
                     // and re-announces the window. Save/restore (nesting-safe).
-                    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-                    m_effect->m_daemonGate.inGeometryApply = true;
-                    const auto floatGuard = qScopeGuard([this, prevInApply] {
-                        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-                    });
+                    const auto floatGuard = m_effect->geometryApplyScope();
                     // Snap-out: leaving tile-managed sizing.
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
@@ -1211,12 +1207,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // synchronously, and after a VS swap/rotate the per-frame detector would read a false
             // crossing off stale m_virtualScreenDefs and hand the window to the neighbour's engine.
             // A heartbeat view tick's applies log at debug (F100). Save/restore (nesting-safe).
-            const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+            const auto applyScope = m_effect->geometryApplyScope();
             const bool prevQuiet =
                 std::exchange(m_effect->m_daemonGate.quietApplyLog, immediateViewScreens.contains(snap.screenId));
-            m_effect->m_daemonGate.inGeometryApply = true;
-            const auto guard = qScopeGuard([this, prevInApply, prevQuiet] {
-                m_effect->m_daemonGate.inGeometryApply = prevInApply;
+            const auto quietGuard = qScopeGuard([this, prevQuiet] {
                 m_effect->m_daemonGate.quietApplyLog = prevQuiet;
             });
             endFullscreenOfArrivingTile(snap.windowId, snap.window, snap.screenId, snap.geometry); // F526
@@ -1620,6 +1614,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // false for the Apply arm and for every batch that touched no
             // maximize bit at all.
             bool maximizeBitReleasedThisBatch = false;
+            QRectF claimedDeparture; // takeClaimedPress
             if (KWin::Window* kwMax = isScrollingScreen(snap.screenId) ? snap.window->window() : nullptr) {
                 // requestedMaximizeMode, not the committed maximizeMode: the
                 // committed bit trails a client round-trip on Wayland, the
@@ -1703,6 +1698,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 } else if (maxAction == ScrollDecisions::MaximizeAction::Release) {
                     maximizeBitWrittenThisBatch = releaseMaximizedToEdges(snap.windowId, snap.window);
                     maximizeBitReleasedThisBatch = maximizeBitWrittenThisBatch;
+                }
+                // The answer to a press the interception claimed wrote no bit (KWin already held the mode), so it
+                // departs from the frame the press left, and a restore rides placeOut (F989).
+                if (takeClaimedPress(snap.windowId, maxAction, kwinAlreadyFull, claimedDeparture)) {
+                    maximizeBitReleasedThisBatch = maxAction == ScrollDecisions::MaximizeAction::Release;
                 }
             }
 
@@ -2366,13 +2366,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                 // the leg would stop being degenerate: frame
                                 // zero would land a full delta away in BOTH
                                 // components instead of on the window.
-                                const KWin::RectF cur = snap.window->frameGeometry();
+                                // The answer to a claimed press departs from the frame the press left,
+                                // not the live one, which KWin's flip may already have moved (an X11
+                                // maximize commits at once), and is backed out like any carried window
+                                // (F989). Done here, not by the claimed anchor after this chain, so the
+                                // departure is shifted once.
                                 const bool vertical =
                                     scrollAxisForScreen(snap.screenId) == PhosphorProtocol::ScrollAxis::Vertical;
-                                const int originX = qRound(cur.x()) - (vertical ? 0 : snap.viewDelta);
-                                const int originY = qRound(cur.y()) - (vertical ? snap.viewDelta : 0);
-                                originOverride =
-                                    QRectF(QRect(originX, originY, qRound(cur.width()), qRound(cur.height())));
+                                originOverride = QRectF(ScrollDecisions::viewCarriedOrigin(
+                                    claimedDeparture.isValid() ? claimedDeparture
+                                                               : QRectF(snap.window->frameGeometry()),
+                                    snap.viewDelta, vertical));
                             }
                         }
                     } else if (!snap.scrollEdge.isEmpty()) {
@@ -2455,60 +2459,44 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             originOverride = QRectF(committedGeo);
                         }
                     }
-                    // COLUMN-MAXIMIZE TOGGLE: depart from the rect the window
-                    // held before the maximize, not from its live frame.
+                    // COLUMN-MAXIMIZE TOGGLE: depart from the rect the window held before the maximize, not from its
+                    // live frame. By the time this runs the window has ALREADY been resized to KWin's maximize area:
+                    // the shortcut's own batch sets the bit in the maximize arm above, and for a titlebar button or
+                    // any other request the interception claims, KWin flips it before the effect sees the event. So
+                    // the live frame is 3840x2068 on the way in and the target column rect on the way out, and a leg
+                    // departing from it animates a 16px correction growing and NOTHING AT ALL shrinking — the whole
+                    // visible motion is KWin's unanimated jump, with the leg twitching afterwards. Traced live: one
+                    // leg per press, installing at (8,54 3840x2068) maximizing and at (8,54 1908x2052) restoring.
                     //
-                    // By the time this runs the window has ALREADY been resized
-                    // to KWin's maximize area, on both input paths: the titlebar
-                    // button flips the bit itself before the effect sees the
-                    // event, and the shortcut's own batch sets the bit in the
-                    // maximize arm above. So the live frame is 3840x2068 on the
-                    // way in and the target column rect on the way out, and a
-                    // leg departing from it animates a 16px correction growing
-                    // and NOTHING AT ALL shrinking — the whole visible motion is
-                    // KWin's unanimated jump, with the leg twitching afterwards.
-                    // Traced live: one leg per press, installing at
-                    // (8,54 3840x2068) maximizing and at the target rect
-                    // (8,54 1908x2052) restoring.
+                    // m_preMaximizeFrame is the rect KWin captured at windowMaximizedStateAboutToChange, before any
+                    // geometry change, which is the only place the departure rect still exists. Gated on THIS
+                    // iteration having actually written KWin's maximize bit, which is what keeps a stale entry (the
+                    // map is latest-wins and only swept on windowDeleted) from re-anchoring an unrelated later commit.
+                    // A membership-vs-wire delta will not do: both release retain arms and the Apply arm's own
+                    // fullscreen/gesture skip leave that delta true with no capture having been refreshed, so it
+                    // latches on every following batch and anchors the leg at an arbitrarily old rect. The answer to
+                    // a claimed press writes no bit, because KWin already holds the mode, and departs from the capture
+                    // the interception took at the press instead (claimedDeparture, F989).
                     //
-                    // m_preMaximizeFrame is the rect KWin captured at
-                    // windowMaximizedStateAboutToChange, before any geometry
-                    // change, which is the only place the departure rect still
-                    // exists. Gated on THIS iteration having actually written
-                    // KWin's maximize bit, which is what keeps a stale entry
-                    // (the map is latest-wins and only swept on windowDeleted)
-                    // from re-anchoring an unrelated later commit. A
-                    // membership-vs-wire delta will not do: both release retain
-                    // arms and the Apply arm's own fullscreen/gesture skip
-                    // leave that delta true with no capture having been
-                    // refreshed, so it latches on every following batch and
-                    // anchors the leg at an arbitrarily old rect.
+                    // No screen term is needed: maximizeBitWrittenThisBatch is written only by the maximize-to-edges
+                    // Apply and Release arms, which run only on a scrolling screen. An autotile tile releasing a
+                    // column claim it carried in has its own flag (columnClaimReleased) and the same evidence. The
+                    // monocle RELEASE takes the same arm on the same evidence: unmaximizeMonocleWindow's restore just
+                    // moved the window off the maximize area, and the capture is the only place the maximized rect
+                    // still exists. It is not screen-gated, because monocle is not a scrolling-only claim.
                     //
-                    // No screen term is needed: maximizeBitWrittenThisBatch is
-                    // written only by the maximize-to-edges Apply and Release
-                    // arms, which run only on a scrolling screen. An autotile
-                    // tile releasing a column claim it carried in has its own
-                    // flag (columnClaimReleased) and the same evidence.
-                    //
-                    // Placed after the chain above so the park and view-travel
-                    // arms keep priority — those describe where a window should
-                    // appear to come from across the strip, which outranks the
-                    // maximize's own departure rect.
-                    //
-                    // The monocle RELEASE takes the same arm on the same
-                    // evidence: unmaximizeMonocleWindow's restore just moved
-                    // the window off the maximize area, and the capture is the
-                    // only place the maximized rect still exists. It is not
-                    // screen-gated, because monocle is not a scrolling-only
-                    // claim; the per-iteration flag is what keeps it fresh.
-                    //
+                    // Placed after the chain above so the park and view-travel arms keep priority — those describe
+                    // where a window should appear to come from across the strip, which outranks the maximize's own
+                    // departure rect. A claimed press carried by the view already departs from claimedDeparture
+                    // there, backed out by the view delta, so this arm never shifts it a second time.
                     const bool departsFromPreMaximizeRect =
                         maximizeBitWrittenThisBatch || monocleBitReleased || columnClaimReleased;
-                    if (!originOverride.isValid() && departsFromPreMaximizeRect) {
-                        const QRectF preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
-                        if (preMaximize.isValid() && !preMaximize.isEmpty()) {
-                            originOverride = preMaximize;
-                        }
+                    QRectF preMaximize = claimedDeparture;
+                    if (!preMaximize.isValid() && departsFromPreMaximizeRect) {
+                        preMaximize = m_effect->m_shaderManager.preMaximizeFrame(snap.window);
+                    }
+                    if (!originOverride.isValid() && preMaximize.isValid() && !preMaximize.isEmpty()) {
+                        originOverride = preMaximize;
                     }
                     // Terminal backstop for every arm above, and for arms that
                     // do not exist yet: a commit whose target lies off the
@@ -2562,10 +2550,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // KWin, which answers on the native path with its own
                     // placeOut.
                     const bool releasingMaximize = maximizeBitReleasedThisBatch || monocleBitReleased;
+                    // KWin's flip usually commanded this rect already, and the apply's no-op skip would drop the
+                    // claimed press's only leg (claimedPressOwesLeg, F989).
+                    const bool prevLegOwed =
+                        std::exchange(m_effect->m_daemonGate.claimedPressLegOwed, claimedDeparture.isValid());
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   releasingMaximize ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
                                                                     : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                                                   originOverride, visualTargetOverride);
+                    m_effect->m_daemonGate.claimedPressLegOwed = prevLegOwed;
                 }
             }
 

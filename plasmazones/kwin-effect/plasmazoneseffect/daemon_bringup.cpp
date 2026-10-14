@@ -162,6 +162,15 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         if (!w || w->isDeleted()) {
             continue;
         }
+        // The compositor's sticky report leads the push, as on a live desktop
+        // edit (runContextEdit): a daemon that came up after the window opened
+        // never got one (F610). Not while a desktop edit is held, whose
+        // release reports it.
+        const quint8 heldAxes =
+            (m_resizeHold.window == w ? m_resizeHold.heldAxes : quint8(0)) | m_contextHold.holds.value(w).heldAxes;
+        if (!(heldAxes & ResizeHold::DesktopAxis)) {
+            updateWindowStickyState(w);
+        }
         pushWindowMetadata(w);
         // Seed the daemon's frame-geometry shadow alongside the metadata.
         // The shadow's only other writer is the motion-driven
@@ -172,8 +181,9 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         // Deliberately NOT routed through m_pendingFrameGeometry: that path
         // also runs the geometry-scoped rule-cache eviction, which a bulk
         // seed must not trigger. Idempotent across repeated bringups (plain
-        // map assignment daemon-side, pruned by the alive-set sweep).
-        if (shouldHandleWindow(w)) {
+        // map assignment daemon-side, pruned by the alive-set sweep). Gated
+        // like the flush: a window kept above is seeded (F923).
+        if (shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/false, /*exemptOwnKeepAbove=*/true)) {
             // getWindowId, NOT getWindowInstanceId: the daemon's
             // m_frameGeometry shadow is keyed by the same composite id the
             // motion-driven flush uses (window_connections.cpp keys its
@@ -521,15 +531,13 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     {
         QStringList aliveWindowIds;
         for (KWin::EffectWindow* w : windows) {
-            // !isDeleted: a close-grabbed dying window is NOT alive — listing
-            // it would shield its stale persisted snap entry from the prune.
-            // A live fullscreen window IS alive: setScrollingScreens({}) has
-            // run on the serviceRegistered edge and refills async, so no screen
-            // is scrolling here and the plain call would list every
-            // own-fullscreen strip tile as dead, dropping the engine's hold
-            // (and its frame shadow) before the exit could
-            // return it.
-            if (w && !w->isDeleted() && shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/w->isFullScreen())) {
+            // Every live window: the daemon's registry holds every window the
+            // metadata loop above pushed, filtered or not, and its prune must
+            // keep what is alive. Evicting a window the effect no longer
+            // places is reevaluateWindowEligibility's job, not this sweep's
+            // (F739). !isDeleted: a close-grabbed dying window is NOT alive,
+            // and listing it would shield its stale snap entry from the prune.
+            if (w && !w->isDeleted()) {
                 aliveWindowIds.append(getWindowId(w));
             }
         }
