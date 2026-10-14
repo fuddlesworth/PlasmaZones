@@ -165,10 +165,11 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     m_pointerPass.reset();
     // And the tab indicators: the override cursor must be handed back before
     // the effect goes (KWin would keep a pointing hand nothing owns). The
-    // handler's clear is GL-free — it RETIRES the per-output textures rather
-    // than deleting them — and releaseGl() right after is the GL-current
-    // point that actually frees them (plus anything retired earlier), so
-    // nothing leaks past the effect and nothing is deleted off-context.
+    // handler's clear retires the per-output textures and deletes them under
+    // a made-current context when one can be made current (F997); releaseGl()
+    // right after frees whatever is left (a clear that found no context, and
+    // anything retired earlier), so nothing leaks past the effect and nothing
+    // is deleted off-context.
     // Made current HERE rather than inherited from the transition resets
     // above, so reordering those cannot turn this into an off-context free.
     m_tilingHandler->clearScrollTabState();
