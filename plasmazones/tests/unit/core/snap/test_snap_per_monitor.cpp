@@ -727,6 +727,28 @@ private Q_SLOTS:
         m_service->setSnapState(m_engine->snapState());
     }
 
+    // A snap on another monitor into the zone of the same id (one layout on
+    // both) is still a zone change: the zone stays behind on the monitor the
+    // window left, so the destination reads it as new, and Snap Assist's
+    // dismissal hook and the save both hear of it (F54, F94).
+    void aSameZoneIdOnAnotherMonitorIsAZoneChange()
+    {
+        installFullResolver();
+        const QString windowId = QStringLiteral("konsole|f54");
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
+        QSignalSpy zoneChanged(m_service, &PhosphorPlacement::WindowTrackingService::windowZoneChanged);
+        m_service->clearDirty();
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], monitorB, 1);
+
+        QCOMPARE(zoneChanged.count(), 1);
+        QVERIFY((m_service->peekDirty() & PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments) != 0);
+        QCOMPARE(m_service->screenForWindow(windowId), monitorB);
+        m_service->setSnapState(m_engine->snapState());
+    }
+
 private:
     /// Freeze "old|u-1" as instance u-1's canonical id, then push the class
     /// change that makes the compositor report it as "new|u-1".
