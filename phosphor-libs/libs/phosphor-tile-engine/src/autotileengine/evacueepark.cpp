@@ -50,6 +50,31 @@ int parkedInsertIndex(const ParkedTileContext& ctx, const QString& windowId, con
     return insertAt;
 }
 
+/// Hands @p ctx's tuning to @p state, once, with the first window the context
+/// takes back, before that window is added: the script bag when the state has
+/// none of its own and still runs the algorithm that wrote it (the stash's
+/// rule), and the split ratio and master count when @p key carries no tuning
+/// of its own. Shared by the in-view re-seat and the out-of-view grant.
+void restoreParkedTuning(ParkedTileContext& ctx, const TilingStateKey& key, PhosphorTiles::TilingState* state,
+                         const QString& effectiveAlgorithmId, QSet<TilingStateKey>& tunedSplitRatio,
+                         QSet<TilingStateKey>& tunedMasterCount)
+{
+    if (!ctx.scriptState.isEmpty() && state->scriptState().isEmpty() && ctx.algorithmId == effectiveAlgorithmId) {
+        state->setScriptState(ctx.scriptState);
+    }
+    if (ctx.splitRatio && !tunedSplitRatio.contains(key)) {
+        state->setSplitRatio(*ctx.splitRatio);
+        tunedSplitRatio.insert(key);
+    }
+    if (ctx.masterCount && !tunedMasterCount.contains(key)) {
+        state->setMasterCount(*ctx.masterCount);
+        tunedMasterCount.insert(key);
+    }
+    ctx.scriptState = QJsonObject();
+    ctx.splitRatio.reset();
+    ctx.masterCount.reset();
+}
+
 void dropEmptyContexts(QHash<QString, QVector<ParkedTileContext>>& byOutput)
 {
     for (auto outIt = byOutput.begin(); outIt != byOutput.end();) {
@@ -85,8 +110,16 @@ QStringList AutotileEngine::parkOutput(const QString& physicalScreenId)
         ParkedTileContext ctx;
         ctx.key = it.key();
         ctx.order = state->windowOrder();
+        // Only the user's floats. An overflow float re-enters tiled and the
+        // cap floats again whatever does not fit; parked as floating it would
+        // come back a user float the overflow recovery never returns (F1029).
+        // The marks are still live here: the prune that drains them runs after.
         const QStringList floats = state->floatingWindows();
-        ctx.floating = QSet<QString>(floats.begin(), floats.end());
+        for (const QString& windowId : floats) {
+            if (!m_overflow.isOverflow(windowId)) {
+                ctx.floating.insert(windowId);
+            }
+        }
         ctx.pending = QSet<QString>(ctx.order.begin(), ctx.order.end());
         if (m_userTunedSplitRatio.contains(it.key())) {
             ctx.splitRatio = state->splitRatio();
@@ -145,15 +178,16 @@ bool AutotileEngine::readoptParked(const QString& windowId, const QString& parke
         if (!isAutotileScreen(screen)) {
             continue;
         }
-        // The user's script state goes back with the first window into a
-        // context that has no state of its own yet.
-        if (!m_states.stateForKey(key) && !ctx.scriptState.isEmpty() && !m_scriptStateStash.contains(key)) {
-            m_scriptStateStash.insert_or_assign(key, StashedScriptState{ctx.scriptState, nullptr, ctx.algorithmId});
-        }
         PhosphorTiles::TilingState* state = tilingStateForScreen(screen);
         if (!state) {
             continue;
         }
+        // Into the live state, not the stash: a stashed bag is read only when
+        // a state is made or its screen joins the set, and setAutotileScreens
+        // has usually done both for the returning output already (F1032).
+        // Before the add, so handoffReceive's retile lays the window out with it.
+        restoreParkedTuning(ctx, key, state, m_configResolver->effectiveAlgorithmId(screen), m_userTunedSplitRatio,
+                            m_userTunedMasterCount);
         HandoffContext handoff;
         handoff.windowId = canonical;
         handoff.toScreenId = screen;
@@ -164,20 +198,6 @@ bool AutotileEngine::readoptParked(const QString& windowId, const QString& parke
             continue;
         }
         seated = true;
-        bool tuned = false;
-        if (ctx.splitRatio && !m_userTunedSplitRatio.contains(key)) {
-            state->setSplitRatio(*ctx.splitRatio);
-            m_userTunedSplitRatio.insert(key);
-            tuned = true;
-        }
-        if (ctx.masterCount && !m_userTunedMasterCount.contains(key)) {
-            state->setMasterCount(*ctx.masterCount);
-            m_userTunedMasterCount.insert(key);
-            tuned = true;
-        }
-        if (tuned) {
-            scheduleRetileForScreen(screen);
-        }
     }
     dropEmptyContexts(m_evacueePark->byOutput);
     if (seated) {
@@ -189,7 +209,7 @@ bool AutotileEngine::readoptParked(const QString& windowId, const QString& parke
 
 std::optional<std::pair<int, bool>> AutotileEngine::takeGrantedParkedPlace(const QString& windowId,
                                                                            const TilingStateKey& key,
-                                                                           const PhosphorTiles::TilingState* state)
+                                                                           PhosphorTiles::TilingState* state)
 {
     if (!m_evacueePark || !state) {
         return std::nullopt;
@@ -200,6 +220,11 @@ std::optional<std::pair<int, bool>> AutotileEngine::takeGrantedParkedPlace(const
             if (it == ctx.granted.constEnd() || it.value() != key) {
                 continue;
             }
+            // The tuning comes back with the place, as on the in-view re-seat;
+            // left in ctx it went with the context once its last grant was
+            // taken (F1030).
+            restoreParkedTuning(ctx, key, state, m_configResolver->effectiveAlgorithmId(key.screenId),
+                                m_userTunedSplitRatio, m_userTunedMasterCount);
             const std::pair<int, bool> place{parkedInsertIndex(ctx, windowId, state), ctx.floating.contains(windowId)};
             ctx.granted.erase(it);
             dropEmptyContexts(m_evacueePark->byOutput);

@@ -496,10 +496,9 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     // same clear): a released window is one this engine knowingly gave up,
     // and a stale autotile TILED slot left in the unified record is not
     // memory but a false home — paired with a stale record-level screenId
-    // (which an engine-miss capture can leave behind), the cross-screen
-    // reclaim would later yank the window back out from under its new
-    // engine. Ordinary close deliberately KEEPS the slot; only the handoff
-    // clears it.
+    // (which an engine-miss capture can leave behind), it would stand as this
+    // engine's verdict on the window at the next open. Ordinary close
+    // deliberately KEEPS the slot; only the handoff clears it.
     if (m_windowTracker) {
         m_windowTracker->releaseEngineSlot(canonical, engineId());
     }
@@ -529,10 +528,13 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     // The screen the window left still tiles the rest, which keep the slots
     // they had beside it until they are retiled: a window snapped onto
     // another monitor left its old neighbours a quarter of theirs (F1005).
-    // Only the context in view, as the scroll twin does: a release out of
-    // another desktop's state retiles on the switch back. Not a screen
-    // leaving autotile, whose windows the new mode places.
-    if (key == currentKeyForScreen(key.screenId) && isAutotileScreen(key.screenId)) {
+    // The context in view retiles now, unless the screen is leaving
+    // autotile, whose windows the new mode places. A release out of another
+    // desktop's state is memoed like releaseMembership's, since the
+    // identical-set switch back retiles nothing on its own (F1031).
+    if (key != currentKeyForScreen(key.screenId)) {
+        m_dirtyBackgroundContexts.insert(key);
+    } else if (isAutotileScreen(key.screenId)) {
         scheduleRetileForScreen(key.screenId);
     }
 }

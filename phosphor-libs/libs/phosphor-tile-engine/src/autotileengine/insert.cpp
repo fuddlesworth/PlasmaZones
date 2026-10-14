@@ -260,7 +260,8 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     }
 
     // An evacuee granted its parked place in this context while the context
-    // was out of view takes that place now, with its float bit.
+    // was out of view takes that place now, with its float bit and, for the
+    // first one back, the context's tuning.
     if (!inserted) {
         if (const auto place = takeGrantedParkedPlace(windowId, currentKeyForScreen(screenId), state)) {
             inserted = state->addWindow(windowId, place->first);

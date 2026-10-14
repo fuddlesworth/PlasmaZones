@@ -4,11 +4,13 @@
 #include <QTest>
 #include <QCoreApplication>
 #include <QSignalSpy>
+#include <QJsonObject>
 
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -358,6 +360,32 @@ private Q_SLOTS:
         QVERIFY(tiled.last().at(0).toString().contains(QLatin1String("win-stay")));
     }
 
+    // A release out of a desktop not in view leaves the same hole; the switch
+    // back to that desktop closes it up (F1031).
+    void testHandoffRelease_backgroundDesktopRetilesOnReturn()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setCurrentDesktopForScreen(screen, 1);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win-stay"), screen);
+        engine.windowOpened(QStringLiteral("win-leave"), screen);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* desktop1 = engine.tilingStateForScreen(screen);
+        QVERIFY(desktop1);
+
+        engine.setCurrentDesktopForScreen(screen, 2);
+        engine.handoffRelease(QStringLiteral("win-leave"));
+        QVERIFY(!desktop1->containsWindow(QStringLiteral("win-leave")));
+        desktop1->setCalculatedZones({QRect(0, 0, 1920, 1080)});
+
+        QSignalSpy tiled(&engine, &AutotileEngine::windowsTiled);
+        engine.setCurrentDesktopForScreen(screen, 1);
+        QCoreApplication::processEvents();
+        QVERIFY(tiled.count() >= 1);
+        QVERIFY(tiled.last().at(0).toString().contains(QLatin1String("win-stay")));
+    }
+
     void testHandoffRelease_untrackedWindowIsNoop()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
@@ -367,6 +395,121 @@ private Q_SLOTS:
         engine.handoffRelease(QString());
         // Did not crash; nothing tracked.
         QVERIFY(!engine.isWindowTracked(QStringLiteral("never-tracked")));
+    }
+
+    // =========================================================================
+    // Evacuee park — what a returning output's windows get back
+    // =========================================================================
+
+    // A window the cap floated is parked as a tile: back on its output the cap
+    // floats it again, and room brings it back into the layout (F1029).
+    void testEvacueePark_overflowFloatReturnsAsOverflow()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.config()->maxWindows = 2;
+        engine.setAutotileScreens({screen});
+        const QStringList windows{QStringLiteral("win-1"), QStringLiteral("win-2"), QStringLiteral("win-3")};
+        for (const QString& windowId : windows) {
+            engine.windowOpened(windowId, screen);
+        }
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->isFloating(QStringLiteral("win-3")));
+
+        engine.parkOutput(screen);
+        engine.pruneStatesForRemovedScreen(screen);
+        for (const QString& windowId : windows) {
+            QVERIFY(engine.readoptParked(windowId, screen, screen));
+        }
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state->isFloating(QStringLiteral("win-3")));
+        QCOMPARE(state->tiledWindowCount(), 2);
+
+        engine.config()->maxWindows = 3;
+        engine.retile(screen);
+        QCoreApplication::processEvents();
+        QVERIFY2(!state->isFloating(QStringLiteral("win-3")), "an overflow float came back as the user's float");
+    }
+
+    // A context out of view when its output returned gets its tuning back with
+    // the first window that arrives in it, not only the order (F1030).
+    void testEvacueePark_grantedPlaceBringsTheTuning()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setCurrentDesktopForScreen(screen, 1);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win-1"), screen);
+        engine.windowOpened(QStringLiteral("win-2"), screen);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        const QStringList order = state->windowOrder();
+        QVERIFY(!qFuzzyCompare(engine.config()->splitRatio, 0.7));
+        state->setSplitRatio(0.7);
+        engine.noteSplitRatioUserTuned(screen);
+
+        engine.parkOutput(screen);
+        engine.pruneStatesForRemovedScreen(screen);
+        // The output comes back showing another desktop, so the places are granted.
+        engine.setCurrentDesktopForScreen(screen, 2);
+        for (const QString& windowId : order) {
+            QVERIFY(engine.readoptParked(windowId, screen, screen));
+        }
+
+        engine.setCurrentDesktopForScreen(screen, 1);
+        for (const QString& windowId : order) {
+            engine.windowOpened(windowId, screen);
+        }
+        QCoreApplication::processEvents();
+        state = engine.tilingStateForScreen(screen);
+        QCOMPARE(state->windowOrder(), order);
+        QCOMPARE(state->splitRatio(), 0.7);
+        QVERIFY(!engine.hasParked(order.at(0), QString()));
+    }
+
+    // The script bag goes back into the returned output's state, which
+    // setAutotileScreens has made before any window is re-seated (F1032).
+    void testEvacueePark_readoptRestoresTheScriptBagIntoTheLiveState()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win-1"), screen);
+        QCoreApplication::processEvents();
+        const QJsonObject bag{{QStringLiteral("marker"), QStringLiteral("parked")}};
+        engine.tilingStateForScreen(screen)->setScriptState(bag);
+
+        engine.parkOutput(screen);
+        engine.pruneStatesForRemovedScreen(screen);
+        engine.setAutotileScreens({});
+        engine.setAutotileScreens({screen});
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        QVERIFY(state->scriptState().isEmpty());
+
+        QVERIFY(engine.readoptParked(QStringLiteral("win-1"), screen, screen));
+        QCOMPARE(state->scriptState(), bag);
+    }
+
+    // A parked context of a removed activity can never come back into view, so
+    // its windows stop reading as parked; one of a live activity stays (F1024).
+    void testEvacueePark_droppedWithItsRemovedActivity()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setCurrentActivity(QStringLiteral("activity-a"));
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win-1"), screen);
+        QCoreApplication::processEvents();
+        engine.parkOutput(screen);
+        engine.pruneStatesForRemovedScreen(screen);
+
+        engine.pruneStatesForActivities({QStringLiteral("activity-a"), QStringLiteral("activity-b")});
+        QVERIFY(engine.hasParked(QStringLiteral("win-1"), screen));
+        engine.pruneStatesForActivities({QStringLiteral("activity-b")});
+        QVERIFY(!engine.hasParked(QStringLiteral("win-1"), QString()));
+        QVERIFY(!engine.readoptParked(QStringLiteral("win-1"), screen, screen));
     }
 
     // =========================================================================

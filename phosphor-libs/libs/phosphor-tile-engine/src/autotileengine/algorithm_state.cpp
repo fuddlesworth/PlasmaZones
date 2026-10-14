@@ -28,6 +28,7 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
+#include "evacueepark_p.h"
 
 // Qt and std
 #include <QDebug>
@@ -576,24 +577,27 @@ QSet<int> AutotileEngine::desktopsWithActiveState() const
 
 void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
 {
+    const auto onRemovedDesktop = [removedDesktop](const TilingStateKey& key) {
+        return key.desktop == removedDesktop;
+    };
     // The dirty-background memo for the desktop goes with its states: the
     // count-shrink path prunes without renumbering, so nothing else would
     // drop an entry a re-created desktop number could inherit.
-    m_dirtyBackgroundContexts.removeIf([removedDesktop](const TilingStateKey& key) {
-        return key.desktop == removedDesktop;
-    });
+    m_dirtyBackgroundContexts.removeIf(onRemovedDesktop);
+    // So do the user-tuned flags, whether or not a state holds the key: a
+    // stateless one left behind would hand a stale "tuned" skip in
+    // propagateGlobal* to the desktop that takes the number next, since the
+    // remap moves only the flags of desktops that survive (F1033).
+    m_userTunedSplitRatio.removeIf(onRemovedDesktop);
+    m_userTunedMasterCount.removeIf(onRemovedDesktop);
     int pruned = 0;
     QStringList releasedWindows;
     QSet<QString> releasedScreens;
     m_states.removeStatesIf(
         [&](const TilingStateKey& key, PhosphorTiles::TilingState*) {
-            return key.desktop == removedDesktop;
+            return onRemovedDesktop(key);
         },
         [&](const TilingStateKey& key, PhosphorTiles::TilingState* state) {
-            // Drop the per-key user-tuned flags with the state so a reused desktop
-            // number can't inherit a stale "tuned" skip in propagateGlobal*.
-            m_userTunedSplitRatio.remove(key);
-            m_userTunedMasterCount.remove(key);
             // Through the FULL teardown, not a bare deleteLater. A deleted
             // desktop's windows are ALIVE (KWin relocates them), so skipping it
             // lost each one's autotile slot snapshot into the unified record,
@@ -796,6 +800,19 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
     std::erase_if(m_scriptStateStash, [&](const auto& entry) {
         return !entry.first.activity.isEmpty() && !valid.contains(entry.first.activity);
     });
+    // A parked context of a removed activity never comes back into view, so
+    // its windows would read as parked for good and a grant on it would never
+    // be taken. A grant names its own context's activity, so it goes with it
+    // (F1024).
+    if (m_evacueePark) {
+        for (auto outIt = m_evacueePark->byOutput.begin(); outIt != m_evacueePark->byOutput.end();) {
+            QVector<ParkedTileContext>& contexts = outIt.value();
+            contexts.removeIf([&valid](const ParkedTileContext& ctx) {
+                return !ctx.key.activity.isEmpty() && !valid.contains(ctx.key.activity);
+            });
+            outIt = contexts.isEmpty() ? m_evacueePark->byOutput.erase(outIt) : std::next(outIt);
+        }
+    }
     if (pruned > 0) {
         qCInfo(PhosphorTileEngine::lcTileEngine) << "Pruned" << pruned << "TilingStates for removed activities";
     }

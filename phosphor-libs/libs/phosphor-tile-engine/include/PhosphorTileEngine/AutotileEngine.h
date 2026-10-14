@@ -1974,9 +1974,9 @@ private:
     // Consumed by the strict seed in setAutotileScreens() (visible windows,
     // eagerly) and by insertWindow() as remaining windows arrive; purged
     // per-window via purgeFromPendingOrders on every path that stops managing
-    // the window (close, insert refusal, handoff release, the defer gate, the
-    // off-autotile focus arm, the cross-screen claim refusal, the onWindowAdded
-    // skip arm and the shared phantom sweep), swept
+    // the window (close, insert refusal, handoff release, the off-autotile
+    // focus arm, the cross-screen claim refusal, the onWindowAdded skip arm
+    // and the shared phantom sweep), swept
     // by pruneStaleWindows, and reaped by the pending-order timeout — which
     // deliberately RETAINS an order holding live minimized placeholders, so
     // those entries persist until the window opens or closes.
@@ -2078,10 +2078,10 @@ private:
      */
     void processPendingRetiles();
 
-    /// readoptParked's grant to @p windowId on @p key (window-order index, float bit), taken once.
+    /// readoptParked's grant to @p windowId on @p key (window-order index, float bit), taken once; seats its tuning.
     std::optional<std::pair<int, bool>> takeGrantedParkedPlace(const QString& windowId,
                                                                const PhosphorEngine::TilingStateKey& key,
-                                                               const PhosphorTiles::TilingState* state);
+                                                               PhosphorTiles::TilingState* state);
 
     // Appended last (installed header). Created by the first parkOutput.
     std::unique_ptr<TileEvacueePark> m_evacueePark;

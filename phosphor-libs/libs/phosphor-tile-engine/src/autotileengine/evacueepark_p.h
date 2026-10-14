@@ -23,13 +23,15 @@ struct ParkedTileContext
     PhosphorEngine::TilingStateKey key;
     /// windowOrder(), floats included: what a re-seat counts predecessors in.
     QStringList order;
+    /// The user's floats; an overflow float is parked as a tile.
     QSet<QString> floating;
     /// Windows not yet re-seated or dropped.
     QSet<QString> pending;
     /// Windows granted their place on a context out of view, by the key they
     /// may take it on when they arrive there.
     QHash<QString, PhosphorEngine::TilingStateKey> granted;
-    /// The user's own tuning of the context, when it had one.
+    /// The user's own tuning of the context, when it had one, handed back once
+    /// with the first window the context takes back.
     std::optional<qreal> splitRatio;
     std::optional<int> masterCount;
     QJsonObject scriptState;
