@@ -384,14 +384,11 @@ public:
     PhosphorEngine::MembershipReconcileResult
     reconcileWindowMemberships(const QString& windowId, const PhosphorEngine::DesktopSpanQuery& spanOf) override;
 
-    /**
-     * @brief Prune PhosphorTiles::TilingState and saved floating entries for a removed desktop
-     *
-     * Removes all states where key.desktop == removedDesktop. Called when a
-     * virtual desktop is deleted so stale entries don't accumulate.
-     */
+    /// Prune every TilingState of @p removedDesktop, releasing its windows. remapDesktops moves the rest through
+    /// a change of KWin's desktop list, the renumber's one removal included (src/autotileengine/desktopremap.cpp).
     void pruneStatesForDesktop(int removedDesktop) override;
     void renumberDesktopsAfterRemoval(int removedDesktop) override;
+    void remapDesktops(const PhosphorEngine::DesktopRemap& remap) override;
 
     /**
      * @brief Prune PhosphorTiles::TilingState entries for activities not in the given set
@@ -1547,6 +1544,8 @@ private:
      */
     bool migrateStateKey(const PhosphorEngine::PlacementStateKey& oldKey,
                          const PhosphorEngine::PlacementStateKey& newKey);
+    /// Move every state, stash, tuned flag, dirty mark and parked context through @p remap (the prunes ran first).
+    void applyDesktopRemap(const PhosphorEngine::DesktopRemap& remap);
 
     /**
      * @brief Shared key-migration body for focus-driven window moves.
