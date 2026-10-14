@@ -641,6 +641,26 @@ private Q_SLOTS:
         QVERIFY(CRB::matchIsExactContext(combined.match, s, 3, act));
     }
 
+    /// A minted disable rule's name is its mode prefix before the context
+    /// label, and the label follows the desktop as the id does (F1012). A
+    /// minted disable rule the user renamed keeps the name.
+    void testRemap_mintedDisableRuleRenamesItsDesktop()
+    {
+        const QString s = QStringLiteral("Virtual-0");
+        const QString prefix = QStringLiteral("Autotile off · ");
+        const Rule minted = CRB::makeDisableRule(prefix + CRB::contextRuleName(s, 3, QString()), s, 3, QString(),
+                                                 QStringLiteral("autotile"), CRB::kContextBandBase);
+        const Rule renamed = CRB::makeDisableRule(QStringLiteral("No tiling for games"), s, 4, QString(),
+                                                  QStringLiteral("autotile"), CRB::kContextBandBase);
+        const auto remapped = CRB::remapContextRules({minted, renamed}, {removal(2), {}});
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 2);
+        QCOMPARE(remapped->at(0).name, QStringLiteral("Autotile off · Virtual-0 · Desktop 2"));
+        QCOMPARE(remapped->at(0).id, CRB::disableRuleIdFor(s, 2, QString(), QStringLiteral("autotile")));
+        QCOMPARE(remapped->at(1).name, renamed.name);
+        QCOMPARE(remapped->at(1).id, CRB::disableRuleIdFor(s, 3, QString(), QStringLiteral("autotile")));
+    }
+
     /// A reorder moves two rules through each other's numbers. Both survive,
     /// each with the id of its new tuple, and each still carries its own layout.
     void testRemap_reorderSwapsWithoutCollision()

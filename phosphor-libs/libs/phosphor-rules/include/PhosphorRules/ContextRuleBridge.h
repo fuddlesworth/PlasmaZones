@@ -862,14 +862,22 @@ inline std::optional<QList<Rule>> remapContextRules(const QList<Rule>& rules, co
         Rule copy = rule;
         bool namedGone = false;
         copy.match = detail::remapDesktopLeaves(rule.match, remap.desktop, namedGone);
+        const auto mode = disableRuleMode(rule);
+        const bool mintedDisable = mode && rule.id == disableRuleIdFor(screenId, desktop, activity, *mode);
         if (rule.id == assignmentRuleIdFor(screenId, desktop, activity)) {
             copy.id = assignmentRuleIdFor(screenId, newDesktop, activity);
-        } else if (const auto mode = disableRuleMode(rule);
-                   mode && rule.id == disableRuleIdFor(screenId, desktop, activity, *mode)) {
+        } else if (mintedDisable) {
             copy.id = disableRuleIdFor(screenId, newDesktop, activity, *mode);
         }
-        if (rule.name == contextRuleName(screenId, desktop, activity)) {
+        // The generated name is the context label, or for a minted disable
+        // rule a mode prefix ending in " · " before it ("Autotile off · DP-1 ·
+        // Desktop 3"). The prefix is kept and the label re-minted; any other
+        // name is the user's own and stays.
+        const QString oldLabel = contextRuleName(screenId, desktop, activity);
+        if (rule.name == oldLabel) {
             copy.name = contextRuleName(screenId, newDesktop, activity);
+        } else if (mintedDisable && rule.name.endsWith(QStringLiteral(" · ") + oldLabel)) {
+            copy.name = rule.name.chopped(oldLabel.size()) + contextRuleName(screenId, newDesktop, activity);
         }
         movedIds.insert(copy.id);
         remapped.append(copy);
