@@ -750,6 +750,33 @@ private Q_SLOTS:
         QCOMPARE(out.actions.first().params.value(ActionParam::TargetDesktop).toInt(), 3);
     }
 
+    /// F1045: the late start-up renumber reaches only the rules start-up saw.
+    /// A held rule, written since in the live numbering, stays as written, even
+    /// on the desktop the map removes, and a moved rule landing on a held
+    /// rule's id gives way to it.
+    void testRemap_appliesHoldsRulesAndAHeldRuleOutranksAMovedOne()
+    {
+        const QString s = QStringLiteral("DP-1");
+        const Rule restored = CRB::makeAssignmentRule(QString(), s, 3, QString(), QStringLiteral("snapping"), kLayoutA,
+                                                      QString(), CRB::kContextBandBase, QString());
+        const Rule restoredWindow = windowRule(desktopLeaf(3), 0);
+        const Rule heldOnTwo = CRB::makeAssignmentRule(QString(), s, 2, QString(), QStringLiteral("snapping"), kLayoutB,
+                                                       QString(), CRB::kContextBandBase, QString());
+        const Rule heldWindow = windowRule(desktopLeaf(3), 0);
+        const QSet<QUuid> held{heldOnTwo.id, heldWindow.id};
+        CRB::ContextRemap remap{removal(2), {}, [&held](const Rule& rule) {
+                                    return !held.contains(rule.id);
+                                }};
+
+        const auto remapped = CRB::remapContextRules({restored, restoredWindow, heldOnTwo, heldWindow}, remap);
+        QVERIFY(remapped);
+        QCOMPARE(remapped->size(), 3);
+        QCOMPARE(remapped->at(0).id, restoredWindow.id);
+        QVERIFY(remapped->at(0).match.children().at(1) == desktopLeaf(2));
+        QVERIFY(remapped->at(1) == heldOnTwo);
+        QVERIFY(remapped->at(2) == heldWindow);
+    }
+
     /// l18_desktop_rules_renumber: a window rule that named the removed desktop
     /// is switched off, not deleted, and keeps what it said. A negated leaf
     /// names the desktop too, and so does the RouteToDesktop target alone.
@@ -765,6 +792,36 @@ private Q_SLOTS:
         QVERIFY(remapped->at(0).match == negated.match);
         QVERIFY(!remapped->at(1).enabled);
         QVERIFY(remapped->at(1).actions == routed.actions);
+    }
+
+    /// l18_d_q1_rules_confirm: a user rule whose only condition is a desktop
+    /// has the context shape, but a window action makes it a window rule. It
+    /// follows a desktop that moved and is switched off, not deleted, when its
+    /// desktop goes (F1092).
+    void testRemap_desktopOnlyWindowRuleIsSwitchedOffNotDropped()
+    {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("Float on desktop 3");
+        rule.priority = 500;
+        rule.match = desktopLeaf(3);
+        RuleAction floatAction;
+        floatAction.type = QString(ActionType::Float);
+        rule.actions.append(floatAction);
+
+        const auto moved = CRB::remapContextRules({rule}, {removal(2), {}});
+        QVERIFY(moved);
+        QCOMPARE(moved->size(), 1);
+        QCOMPARE(moved->first().id, rule.id);
+        QVERIFY(moved->first().enabled);
+        QVERIFY(moved->first().match == desktopLeaf(2));
+
+        const auto gone = CRB::remapContextRules({rule}, {removal(3), {}});
+        QVERIFY(gone);
+        QCOMPARE(gone->size(), 1);
+        QCOMPARE(gone->first().id, rule.id);
+        QVERIFY(!gone->first().enabled);
+        QVERIFY(gone->first().match == rule.match);
     }
 
     /// A range has no rewrite that names the same desktops after a reorder,

@@ -164,10 +164,12 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         // window moved to another desktop or activity since the record was
         // written (a move into a tiling desktop leaves the snap slot behind)
         // is not on the screen's shown context, and admitting it would snap
-        // a window that is not there (F516).
+        // a window that is not there (F516). A window on several activities is
+        // in view on any of them, not only its first (F426, F1034).
         if (const auto context = m_windowRegistry ? m_windowRegistry->desktopContext(rec.windowId) : std::nullopt) {
-            if (!context->activity.isEmpty() && m_layoutManager
-                && context->activity != m_layoutManager->currentActivity())
+            if (!context->activity.isEmpty()
+                && (context->activities.size() > 1 ? !context->activities.contains(currentActivity)
+                                                   : context->activity != currentActivity))
                 continue;
             if (const auto desktops = context->desktopSet(); desktops && shown > 0) {
                 if (!desktops->contains(shown))
@@ -185,6 +187,17 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // re-slot the desktop carry gives a minimized window (F953). A layout
     // short of that zone leaves them alone, and the unfloat's layout guard
     // keeps the window at its float spot (F963(a)).
+    reslotSuspendedPreFloats(globalZoneIdToPosition);
+
+    // Replaced even when empty: a row kept from an earlier populate belongs
+    // to a switch that already ran, and replaying it would move that window
+    // again (F34).
+    m_resnapBuffer = std::move(newBuffer);
+    qCDebug(lcPlacement) << "Resnap buffer (all screens):" << m_resnapBuffer.size() << "windows";
+}
+
+void WindowTrackingService::reslotSuspendedPreFloats(const QHash<QString, int>& positions)
+{
     int reslotted = 0;
     for (PhosphorSnapEngine::SnapState* store : snapAllStates()) {
         const QHash<QString, QStringList> preFloats = store->preFloatZoneAssignments();
@@ -208,7 +221,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
                 continue;
             }
             const QStringList slot = PhosphorZones::LayoutUtils::sameNumberedZones(
-                it.value(), lastUsedLayoutFor(store, screenId), globalZoneIdToPosition);
+                it.value(), lastUsedLayoutFor(store, screenId), positions);
             if (!slot.isEmpty() && slot != it.value()) {
                 store->addPreFloatZone(windowId, slot);
                 ++reslotted;
@@ -219,12 +232,6 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         qCDebug(lcPlacement) << "Re-slotted the pre-float zones of" << reslotted << "minimized window(s)";
         markDirty(DirtyWindowPlacements);
     }
-
-    // Replaced even when empty: a row kept from an earlier populate belongs
-    // to a switch that already ran, and replaying it would move that window
-    // again (F34).
-    m_resnapBuffer = std::move(newBuffer);
-    qCDebug(lcPlacement) << "Resnap buffer (all screens):" << m_resnapBuffer.size() << "windows";
 }
 
 void WindowTrackingService::bufferWindowsOfRemovedLayout(PhosphorZones::Layout* layout)
@@ -259,8 +266,15 @@ void WindowTrackingService::bufferWindowsOfRemovedLayout(PhosphorZones::Layout* 
             entry.zonePosition = position;
             entry.screenId = screenId;
             entry.virtualDesktop = desktop;
+            // A context the delete leaves on no layout sends it to its
+            // float-back, unlike a switch to none (cr1_f1093).
+            entry.fromRemovedLayout = true;
             buffer.append(entry);
         });
+        // A minimized window's pre-float zones re-slot as on a layout switch
+        // (F963(b)), but the layout each context runs next is picked after this
+        // signal, so the positions wait for the prune that follows (F1035).
+        m_removedLayoutPositions.insert(positions);
     }
     m_resnapBuffer = std::move(buffer);
     qCDebug(lcPlacement) << "Resnap buffer (removed layout):" << m_resnapBuffer.size() << "windows";

@@ -13,10 +13,13 @@ namespace PhosphorSnapEngine {
 /**
  * @brief Narrow interface for zone-adjacency queries used by snap navigation.
  *
- * SnapNavigationTargetResolver needs two directional zone lookups that
- * live on the daemon's ZoneDetectionAdaptor:
+ * Snap navigation (SnapNavigationTargetResolver and the engine's cross-monitor
+ * crossing) needs directional zone lookups that live on the daemon's
+ * ZoneDetectionAdaptor:
  *   - getAdjacentZone   (find the zone next to a given zone in a direction)
+ *   - getAdjacentZoneOutside (the same for a span, never one of its zones)
  *   - getFirstZoneInDirection (find the edge zone when no current zone exists)
+ *   - getFirstZoneInDirectionOnDesktop (the same on a given desktop's layout)
  *
  * Rather than holding an opaque QObject* and dispatching through
  * QMetaObject::invokeMethod, the resolver now depends on this typed

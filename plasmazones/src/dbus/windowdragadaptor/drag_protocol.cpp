@@ -470,6 +470,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
     }
     m_pendingSnapDragGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
+    m_pendingSnapDragFillsOutput = windowFillsOutput(windowId);
     m_pendingSnapDragWasSnapped = m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty();
     Q_UNUSED(
         mouseButtons); // pre-2026-05 cached the mouseButtons here; dragStarted Q_UNUSEDd them so the cache was dead
@@ -564,6 +565,12 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
                          << "via=" << (edgeActivation ? "edge-hover" : "modifier");
     dragStarted(pendingId, static_cast<double>(pendingGeo.x()), static_cast<double>(pendingGeo.y()),
                 static_cast<double>(pendingGeo.width()), static_cast<double>(pendingGeo.height()));
+    // dragStarted read fillsOutput now; the frame it pairs with is from
+    // beginDrag, when a maximize KWin dropped since still filled the output
+    // (F1051).
+    if (m_draggedWindowId == pendingId) {
+        m_originalFrameFillsOutput = m_pendingSnapDragFillsOutput;
+    }
     // Drop the wasSnapped latch after dragStarted has re-derived live
     // m_wasSnapped from the tracking state — its single consumer (the
     // endDrag pending-never-activated branch) is now unreachable for
@@ -579,6 +586,7 @@ void WindowDragAdaptor::clearPendingSnapDragState()
 {
     m_pendingSnapDragWindowId.clear();
     m_pendingSnapDragGeometry = QRect();
+    m_pendingSnapDragFillsOutput = false;
     m_pendingSnapDragWasSnapped = false;
     m_dragReorderActive = false;
     // The strip popup's card exclusion belongs to the pending drag too:

@@ -14,6 +14,7 @@
 #include <PhosphorScreens/Manager.h>
 #include "snapenginelogging.h"
 
+#include <algorithm>
 #include <optional>
 
 namespace PhosphorSnapEngine {
@@ -953,7 +954,18 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacementAtDes
     // floated on desktop 2 must not have its record rewritten to desktop 1 by a
     // refresh capture that happens to run after the user switched away.
     p.virtualDesktop = currentVirtualDesktopForScreen(effScreen);
-    p.activity = currentActivity();
+    // The activity in view, unless the window holds no context there: one
+    // re-seated on another activity (readoptParked) keeps that activity
+    // through the daemon's capture after the re-seat (F1016).
+    const QList<PhosphorEngine::PlacementStateKey> heldIn = m_states.membershipsForWindow(canonicalWindowId(windowId));
+    const QString activityInView = currentActivity();
+    p.activity = heldIn.isEmpty()
+            || std::any_of(heldIn.cbegin(), heldIn.cend(),
+                           [&activityInView](const PhosphorEngine::PlacementStateKey& key) {
+                               return key.activity == activityInView;
+                           })
+        ? activityInView
+        : heldIn.first().activity;
 
     // The slot carries only the snap engine's STATE + slot reference (zone IDs) —
     // NEVER a rectangle. The shared free/float geometry is set by the capture

@@ -130,7 +130,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setWindowFloating">
-            <annotation name="org.gtk.GDBus.DocString" value="Float or unfloat a window through the engine that runs the screen it is on, the path the compositor's minimize and drag floats take. A tile floats on a tiling or scrolling screen and a snapped window leaves its zone on a snapping one. Silent for a window the daemon has no record of or one with no screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Float or unfloat a window through the engine that runs the screen it is on, the path the compositor's minimize and drag floats take. A tile floats on a tiling or scrolling screen and a snapped window leaves its zone on a snapping one. Silent for a window the daemon has no record of, one with no screen, one not on the desktop and activity its screen shows, or one whose screen is disabled there."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -669,7 +669,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="pendingRestoresChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="getPendingRestoreGeometries may answer differently now, because a layout was assigned or switched, a desktop or activity was switched, a context was disabled, or an output was added, removed or moved. Emitted once per daemon event-loop pass however many of those happened in it. The KWin effect fetches its instant-restore cache again."/>
+            <annotation name="org.gtk.GDBus.DocString" value="getPendingRestoreGeometries may answer differently now, because a layout was assigned or switched, a desktop or activity was switched, a context was disabled, or an output was added, removed or moved. Emitted once per burst however many of those happened in it, after a short quiet interval. The KWin effect fetches its instant-restore cache again."/>
         </signal>
     </interface>
 </node>

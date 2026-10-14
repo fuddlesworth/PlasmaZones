@@ -47,6 +47,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
+#include <QUuid>
 #include <memory>
 
 using namespace PlasmaZones;
@@ -90,6 +92,8 @@ private Q_SLOTS:
         auto* layout = new PhosphorZones::Layout(QStringLiteral("SignalTestLayout"));
         for (int i = 0; i < 2; ++i) {
             auto* zone = new PhosphorZones::Zone(QRectF(0.5 * i, 0.0, 0.5, 1.0));
+            // The relative rect is what toJson writes and the schema checks.
+            zone->setRelativeGeometry(QRectF(0.5 * i, 0.0, 0.5, 1.0));
             zone->setZoneNumber(i + 1);
             layout->addZone(zone);
         }
@@ -180,6 +184,28 @@ private Q_SLOTS:
         m_adaptor->notifyLayoutListChanged();
 
         QCOMPARE(listChanged.count(), 1);
+    }
+
+    // A created document whose layout id is no UUID, and whose zone ids
+    // another layout holds, takes fresh zone ids per create: two such creates
+    // never share one, which a remembered zone id needs to name one layout
+    // (F1052).
+    void testCreateLayoutFromJson_withoutAUuidMintsDistinctZoneIds()
+    {
+        QJsonObject doc = m_layoutManager->layoutById(QUuid::fromString(m_layoutId))->toJson();
+        doc[::PhosphorZones::ZoneJsonKeys::Id] = QStringLiteral("not-a-uuid");
+        const QString json = QString::fromUtf8(QJsonDocument(doc).toJson());
+        QVERIFY(!m_adaptor->createLayoutFromJson(json).isEmpty());
+        QVERIFY(!m_adaptor->createLayoutFromJson(json).isEmpty());
+        QSet<QUuid> ids;
+        qsizetype zones = 0;
+        for (const PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
+            for (const PhosphorZones::Zone* zone : layout->zones()) {
+                ids.insert(zone->id());
+                ++zones;
+            }
+        }
+        QCOMPARE(ids.size(), zones);
     }
 
     // ─────────────────────────────────────────────────────────────────

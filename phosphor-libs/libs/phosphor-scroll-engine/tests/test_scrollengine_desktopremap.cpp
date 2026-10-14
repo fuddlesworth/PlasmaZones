@@ -12,7 +12,11 @@
 
 #include "scrollstriptestutils.h"
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QtTest>
+
+#include <utility>
 
 using namespace PhosphorScrollEngine;
 using PhosphorEngine::DesktopRemap;
@@ -131,7 +135,121 @@ private Q_SLOTS:
         QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|b"))), 720);
     }
 
+    // The start-up renumber of a desktop list that came late (F1045), here
+    // desktops 2, 3 and 4 rotating while the daemon was down. The strip the
+    // engine built for app|w2 since is in the live numbering and stays put;
+    // the strip staged from the last session's desktop 3 moves to 4.
+    void restoredOnlyRemapMovesTheStagedStripsAndNoLiveOne()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->restoreStripState(lastSession(&owner, {{3, "old|r3"}}));
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        engine->windowOpened(QStringLiteral("app|w2"), kS1, 0, 0);
+
+        engine->remapRestoredStripStash(rotation());
+
+        const QJsonObject saved = engine->serializeStripState();
+        QVERIFY(stagedOn(saved, 3).isEmpty());
+        QCOMPARE(stagedOn(saved, 4), QStringList{QStringLiteral("old|r3")});
+        QCOMPARE(windowsOn(engine, 2), QStringList{QStringLiteral("app|w2")});
+    }
+
+    // A strip stashed this session, when its screen left scrolling, is in the
+    // live numbering too.
+    void restoredOnlyRemapLeavesAnInSessionStash()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->restoreStripState(lastSession(&owner, {{3, "old|r3"}}));
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        engine->windowOpened(QStringLiteral("app|w2"), kS1, 0, 0);
+        engine->setActiveScreens({});
+
+        engine->remapRestoredStripStash(rotation());
+
+        const QJsonObject saved = engine->serializeStripState();
+        QCOMPARE(stagedOn(saved, 2), QStringList{QStringLiteral("app|w2")});
+        QVERIFY(stagedOn(saved, 3).isEmpty());
+        QCOMPARE(stagedOn(saved, 4), QStringList{QStringLiteral("old|r3")});
+    }
+
+    // A staged strip whose context has adopted windows since is seen live and
+    // keeps its key. One whose new key holds an adopted strip goes rather than
+    // being staged over it, which is restoreStripState's own rule.
+    void restoredOnlyRemapNeverMovesOffOrOntoAnAdoptedStrip()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->restoreStripState(lastSession(&owner, {{3, "old|r3"}, {4, "old|r4"}}));
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        engine->windowOpened(QStringLiteral("app|w2"), kS1, 0, 0);
+        engine->setCurrentDesktopForScreen(kS1, 3);
+        engine->windowOpened(QStringLiteral("app|w3"), kS1, 0, 0);
+
+        engine->remapRestoredStripStash(rotation());
+
+        const QJsonObject saved = engine->serializeStripState();
+        QCOMPARE(stagedOn(saved, 2), QStringList{QStringLiteral("app|w2")});
+        QVERIFY(stagedOn(saved, 3).contains(QStringLiteral("old|r3")));
+        QVERIFY(stagedOn(saved, 4).isEmpty());
+    }
+
+    // A staged strip of a desktop removed while the daemon was down goes; the
+    // one above it takes its number.
+    void restoredOnlyRemapDropsARemovedDesktopsStagedStrip()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->restoreStripState(lastSession(&owner, {{2, "old|r2"}, {3, "old|r3"}}));
+
+        engine->remapRestoredStripStash(DesktopRemap::removal(2, 3));
+
+        const QJsonObject saved = engine->serializeStripState();
+        QVERIFY(stagedOn(saved, 0).isEmpty());
+        QCOMPARE(stagedOn(saved, 2), QStringList{QStringLiteral("old|r3")});
+        QVERIFY(stagedOn(saved, 3).isEmpty());
+    }
+
 private:
+    /// Desktops 2, 3 and 4 rotate: 2 -> 3, 3 -> 4, 4 -> 2.
+    static DesktopRemap rotation()
+    {
+        return DesktopRemap::fromIds(ids({"d1", "d2", "d3", "d4"}), ids({"d1", "d4", "d2", "d3"}));
+    }
+
+    /// The strip blob a previous session saved, one window alone on each
+    /// listed desktop of S1.
+    static QJsonObject lastSession(QObject* owner, const QList<std::pair<int, const char*>>& windows)
+    {
+        ScrollEngine* previous = makeProviderEngine(owner, {kS1});
+        for (const auto& [desktop, windowId] : windows) {
+            previous->setCurrentDesktopForScreen(kS1, desktop);
+            previous->windowOpened(QString::fromLatin1(windowId), kS1, 0, 0);
+        }
+        return previous->serializeStripState();
+    }
+
+    /// The window ids @p blob stages for S1's @p desktop, column by column.
+    static QStringList stagedOn(const QJsonObject& blob, int desktop)
+    {
+        QStringList out;
+        const QString prefix = kS1 + QLatin1Char('|') + QString::number(desktop) + QLatin1Char('|');
+        for (auto it = blob.constBegin(); it != blob.constEnd(); ++it) {
+            if (!it.key().startsWith(prefix)) {
+                continue;
+            }
+            const QJsonArray columns = it.value().toObject().value(QLatin1String("columns")).toArray();
+            for (const QJsonValue& column : columns) {
+                const QJsonArray tiles = column.toObject().value(QLatin1String("tiles")).toArray();
+                for (const QJsonValue& tile : tiles) {
+                    out.append(tile.toObject().value(QLatin1String("windowId")).toString());
+                }
+            }
+        }
+        return out;
+    }
+
     /// app|wN alone on desktop N of S1, for N in 1..@p desktops; S1 left on the last.
     static ScrollEngine* oneWindowPerDesktop(QObject* owner, int desktops)
     {

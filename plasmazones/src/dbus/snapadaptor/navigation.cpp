@@ -45,12 +45,22 @@ void SnapAdaptor::pushToEmptyZone(const QString& screenId)
         return;
     }
     const QString windowId = m_adaptor->lastActiveWindowId();
+    if (windowId.isEmpty()) {
+        Q_EMIT m_adaptor->navigationFeedback(false, QStringLiteral("push"), QStringLiteral("no_window"), QString(),
+                                             QString(), screenId);
+        return;
+    }
+    // The gates refuse silently with a log line, ahead of any outcome the OSD
+    // reports (l13_refusal_feedback): an unknown screen, or one snapping may
+    // not place on.
     const QString screen = m_adaptor->resolveBusScreen(screenId, windowId);
-    if (windowId.isEmpty() || screen.isEmpty()) {
-        Q_EMIT m_adaptor->navigationFeedback(false, QStringLiteral("push"),
-                                             windowId.isEmpty() ? QStringLiteral("no_window")
-                                                                : QStringLiteral("unknown_screen"),
-                                             QString(), QString(), screenId);
+    if (screen.isEmpty()) {
+        qCInfo(lcDbusWindow) << "Bus push of" << windowId << "refused: unknown screen" << screenId;
+        return;
+    }
+    if (!m_engine || m_adaptor->isInteractiveDragWindow(windowId) || !m_engine->isActiveOnScreen(screen)
+        || !snapPermittedForContext(windowId, screen, 0)) {
+        qCInfo(lcDbusWindow) << "Bus push of" << windowId << "refused: snapping does not place it on" << screen;
         return;
     }
     const QString emptyZone = m_adaptor->service()->findEmptyZone(screen);

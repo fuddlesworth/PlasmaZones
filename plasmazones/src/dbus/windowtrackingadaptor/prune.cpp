@@ -6,6 +6,7 @@
 // the engines keep drops the rest.
 
 #include "windowtrackingadaptor.h"
+#include "evacueeledger.h"
 #include "lifecyclerelay.h"
 #include "internal.h"
 #include "core/platform/logging.h"
@@ -183,9 +184,9 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     }
     // Fan the prune out, in the same instance-id key space the local sweeps
     // use, to TilingAdaptor::pruneStaleFloatBroadcasts, which sweeps its
-    // float-broadcast dedup, m_unclaimedOpens, m_pendingOpens and
-    // m_moveReleasedInstances. It only erases from its own maps, so nothing
-    // here depends on emit-vs-sweep ordering.
+    // float-broadcast and tab-colour relay dedups, m_unclaimedOpens and
+    // m_pendingOpens. It only erases from its own maps, so nothing here
+    // depends on emit-vs-sweep ordering.
     Q_EMIT m_lifecycleRelay->stalePruned(QStringList(aliveInstances.cbegin(), aliveInstances.cend()));
     // Same defensive sweep for the last-broadcast floating shadow: an entry
     // would otherwise leak if the window died without a windowClosed signal.
@@ -204,6 +205,22 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     };
     m_pendingOpenGeometry.removeIf(dead);
     m_pendingOpenSize.removeIf(dead);
+    // And the evacuee ledger, as windowClosed drops it: the parks, the pending
+    // float and the placement mark of a window that died with no close (F1049).
+    QSet<QString> deadEvacuees;
+    const auto collectDead = [&aliveInstances, &deadEvacuees](const QList<QString>& keys) {
+        for (const QString& key : keys) {
+            if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(key))) {
+                deadEvacuees.insert(key);
+            }
+        }
+    };
+    collectDead(m_evacuees->entries.keys());
+    collectDead(m_evacuees->evacueeFloatPending.keys());
+    collectDead(m_evacuees->placedAfterEvacuation.keys());
+    for (const QString& windowId : std::as_const(deadEvacuees)) {
+        dropEvacueeParks(windowId);
+    }
     // And the tab-colour rule memo, for the same reason and in the same key
     // space — it is keyed on canonical ids too, so a raw sweep would erase a
     // class-mutating app's live entry every pass.

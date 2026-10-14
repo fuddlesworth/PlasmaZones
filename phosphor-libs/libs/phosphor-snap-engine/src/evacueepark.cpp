@@ -116,22 +116,41 @@ bool SnapEngine::readoptParked(const QString& windowId, const QString& parkedPhy
     }
 
     PhosphorScreens::ScreenManager* mgr = m_windowTracker ? m_windowTracker->screenManager() : nullptr;
+    // Each context goes back into its OWN store. stateForWindowOnScreen pins
+    // the activity in view, so a context parked under another activity landed
+    // in the one showing and counted the window as a zone occupant there
+    // (F1016). A move onto another screen re-homes first, as it does there.
+    const auto seat = [this, &windowId, &canonical](const PhosphorEngine::PlacementStateKey& key) -> SnapState* {
+        if (key.activity == currentActivity()) {
+            return stateForWindowOnScreen(windowId, key.screenId, key.desktop);
+        }
+        if (const auto primary = m_states.windowKey(canonical); primary && primary->screenId != key.screenId) {
+            migrateWindowToKey(windowId, key);
+        }
+        SnapState* state = ensureStateForKey(key);
+        m_states.addMembership(canonical, key);
+        return state;
+    };
     bool seated = false;
     for (const ParkedSnapContext& ctx : contexts) {
         const QString screen = translateOntoOutput(ctx.key.screenId, returnedPhysicalId, mgr);
         const int desktop = ctx.key.desktop;
         const QString& activity = ctx.key.activity;
+        const PhosphorEngine::PlacementStateKey key{screen, desktop, activity};
         // The context must still be snapping, and a zone must still be in the
         // layout it runs: a desktop flipped to tiling or given another layout
-        // while the output was away gets nothing back.
-        if (m_layoutManager
-            && m_layoutManager->modeForScreen(screen, desktop, activity)
-                != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+        // while the output was away gets nothing back. Nor does one where
+        // snapping is switched off or disabled, or a window snapping now
+        // leaves alone, as the desktop carry refuses them (F445, F1017).
+        if ((m_layoutManager
+             && m_layoutManager->modeForScreen(screen, desktop, activity)
+                 != PhosphorZones::AssignmentEntry::Mode::Snapping)
+            || !snapsInContext(key) || isWindowExcluded(windowId, screen)) {
             continue;
         }
-        const bool inView = PhosphorEngine::PlacementStateKey{screen, desktop, activity} == currentKeyForScreen(screen);
+        const bool inView = key == currentKeyForScreen(screen);
         if (ctx.floating) {
-            SnapState* state = stateForWindowOnScreen(windowId, screen, desktop);
+            SnapState* state = seat(key);
             state->setFloatingOnScreen(windowId, screen, desktop);
             // The home only when it was on this same output and its zones are
             // in the layout the context runs now.
@@ -161,9 +180,10 @@ bool SnapEngine::readoptParked(const QString& windowId, const QString& parkedPhy
                                                         ctx.zoneIds.first(), screen);
                 }
             } else {
-                // Out of view: the assignment straight into that desktop's
-                // store, as a cross-desktop handoff does, and its record.
-                SnapState* state = stateForWindowOnScreen(windowId, screen, desktop);
+                // Out of view: the assignment straight into that context's
+                // store, as a cross-desktop handoff does, and its record,
+                // which names the context's activity.
+                SnapState* state = seat(key);
                 if (ctx.zoneIds.size() > 1) {
                     state->assignWindowToZones(windowId, ctx.zoneIds, screen, desktop);
                 } else {
@@ -172,6 +192,7 @@ bool SnapEngine::readoptParked(const QString& windowId, const QString& parkedPhy
                 if (m_windowTracker) {
                     if (auto placement = capturePlacementAtDesktop(windowId, desktop)) {
                         placement->virtualDesktop = desktop;
+                        placement->activity = activity;
                         m_windowTracker->placementStore().record(std::move(*placement));
                     }
                 }
@@ -180,7 +201,7 @@ bool SnapEngine::readoptParked(const QString& windowId, const QString& parkedPhy
             continue;
         }
         if (ctx.autoSnapped) {
-            stateForWindowOnScreen(windowId, screen, desktop)->markAsAutoSnapped(windowId);
+            seat(key)->markAsAutoSnapped(windowId);
         }
         seated = true;
     }

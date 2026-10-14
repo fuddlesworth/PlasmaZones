@@ -231,11 +231,10 @@ void Daemon::stop()
     // relying on an invariant.
     m_bridgeWatchdogTimer.stop();
 
-    // The preview-notify debounce and the resnap-suppression watchdog are
-    // both restartable from paths that outlive the teardown of what they
-    // touch (a queued preview push, a resnap feedback in flight), so they
-    // are severed here with the other timers rather than left to fire into
-    // an unregistered adaptor.
+    // The preview-notify debounce is restartable from a path that outlives
+    // the teardown of what it touches (a queued preview push), so it is
+    // severed here with the other timers rather than left to fire into an
+    // unregistered adaptor.
     m_previewNotifyTimer.stop();
 
     // Both wired in init (init_adaptors.cpp), so init-origin teardown that
@@ -553,9 +552,12 @@ void Daemon::stop()
         m_snapAdaptor->clearEngine();
     }
 
-    // Null the WindowTrackingAdaptor's engine borrows for the same reason.
+    // Null the WindowTrackingAdaptor's engine borrows for the same reason, and
+    // its two `this`-capturing daemon hooks (the contract of the block below).
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr, nullptr);
+        m_windowTrackingAdaptor->setOutputRetirer({});
+        m_windowTrackingAdaptor->setWindowLeftScreenHook({});
     }
 
     // Clear the late-bound WTS float / mode callbacks. All but the tiled predicate reach `this`

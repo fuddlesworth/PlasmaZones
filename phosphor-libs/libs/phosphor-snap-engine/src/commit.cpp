@@ -66,7 +66,7 @@ QString nearestScreenTo(PhosphorScreens::ScreenManager* mgr, const QPoint& point
 } // namespace
 
 void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                                SnapIntent intent, int virtualDesktop)
+                                SnapIntent intent, int virtualDesktop, bool userVerb)
 {
     Q_ASSERT(m_globals);
     if (!m_globals) {
@@ -144,12 +144,14 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     }
 
     // A RE-STATEMENT of the zones the window already holds in that context
-    // (a membership reapply, a virtual-screen resnap: system resnap batches
-    // commit UserInitiated) is not the user snapping it, so it neither clears
-    // the auto-snapped flag nor records a last-used zone (F456). The
-    // auto-snapped flag lives on the in-view primary, so only a commit that
-    // states the view clears it.
-    const bool restatement = target && target->zonesForWindow(canonical) == zoneIds;
+    // (a virtual-screen resnap, the Reapply Layout shortcut: untagged system
+    // batches commit UserInitiated) is not the user snapping it, so it neither
+    // clears the auto-snapped flag nor records a last-used zone (F456). A
+    // batch entry tagged a re-statement commits AutoReplaced instead, and
+    // @p userVerb (commitUserSnap's) is the user's own snap even onto the
+    // zone the window holds (F209, F1018). The auto-snapped flag lives on the
+    // in-view primary, so only a commit that states the view clears it.
+    const bool restatement = !userVerb && target && target->zonesForWindow(canonical) == zoneIds;
     const bool userSnap = intent == SnapIntent::UserInitiated && !restatement;
     if (userSnap && statesView) {
         m_windowTracker->clearAutoSnapped(windowId);
@@ -258,7 +260,7 @@ void SnapEngine::recordFreeFrameBeforeUserSnap(const QString& windowId, const QS
 void SnapEngine::commitUserSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                 const QRect& geometry, const QString& captureScreen, int virtualDesktop)
 {
-    if (!m_windowTracker || windowId.isEmpty() || zoneIds.isEmpty() || !geometry.isValid()) {
+    if (!m_windowTracker || windowId.isEmpty() || zoneIds.isEmpty() || hasEmptyZone(zoneIds) || !geometry.isValid()) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine)
             << "commitUserSnap: refused for" << windowId << "zones=" << zoneIds << "geometry=" << geometry;
         return;
@@ -266,11 +268,7 @@ void SnapEngine::commitUserSnap(const QString& windowId, const QStringList& zone
     if (!captureScreen.isEmpty()) {
         recordFreeFrameBeforeUserSnap(windowId, captureScreen);
     }
-    if (zoneIds.size() > 1) {
-        commitMultiZoneSnap(windowId, zoneIds, screenId, SnapIntent::UserInitiated, virtualDesktop);
-    } else {
-        commitSnap(windowId, zoneIds.first(), screenId, SnapIntent::UserInitiated, virtualDesktop);
-    }
+    commitSnapImpl(windowId, zoneIds, screenId, SnapIntent::UserInitiated, virtualDesktop, /*userVerb=*/true);
     m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geometry.x(), geometry.y(), geometry.width(), geometry.height(),
                                   zoneIds.first(), screenId, false);
@@ -435,10 +433,14 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
             }
         }
 
+        // An entry its producer tagged a re-statement (a desktop carry, a
+        // re-apply on a switch) is never the user snapping it, whatever zone
+        // it lands in: a carry into a new slot wrote last-used (F1018).
+        const SnapIntent entryIntent = entry.restatement ? SnapIntent::AutoReplaced : intent;
         if (entry.targetZoneIds.size() > 1) {
-            commitMultiZoneSnap(entry.windowId, entry.targetZoneIds, screenId, intent, entry.virtualDesktop);
+            commitMultiZoneSnap(entry.windowId, entry.targetZoneIds, screenId, entryIntent, entry.virtualDesktop);
         } else {
-            commitSnap(entry.windowId, entry.targetZoneId, screenId, intent, entry.virtualDesktop);
+            commitSnap(entry.windowId, entry.targetZoneId, screenId, entryIntent, entry.virtualDesktop);
         }
         geometries.append(
             PhosphorProtocol::WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry, screenId));

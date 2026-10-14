@@ -26,6 +26,7 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include <QScopeGuard>
 
 #include <array>
@@ -60,6 +61,18 @@ QString rowScreen(PhosphorScreens::ScreenManager* mgr, const OutputSettleRow& ro
         }
     }
     return row.screenId;
+}
+
+/// Whether @p windowId, placed by PlasmaZones while an output it was parked
+/// for was away, is reported on that output: KWin pulling it back. Any other
+/// crossing is not a pull-back (F1049).
+bool pulledBackOntoParkedOutput(const EvacueeLedger& ledger, const QString& windowId, const QString& screenId)
+{
+    const auto it = ledger.placedAfterEvacuation.constFind(windowId);
+    return it != ledger.placedAfterEvacuation.constEnd()
+        && std::any_of(it->cbegin(), it->cend(), [&screenId](const QString& physicalId) {
+               return VirtualScreenId::samePhysical(physicalId, screenId);
+           });
 }
 
 } // namespace
@@ -220,12 +233,13 @@ WindowTrackingAdaptor::reportOutputSettle(const PhosphorProtocol::OutputSettleRo
             floatEvacuee(row, false);
             verdict.verdict = OutputSettleVerdict::EvacueeFloat;
             verdict.screenId = rowScreen(mgr, row);
-        } else if (m_evacuees->placedAfterEvacuation.contains(windowId) || row.kwinOnly) {
+        } else if (pulledBackOntoParkedOutput(*m_evacuees, windowId, row.screenId) || row.kwinOnly) {
             // KWin moved a window PlasmaZones placed: the placement is
-            // re-asserted (a PlasmaZones verb while the output was away, or a
-            // window KWin reverted in place, F770). kwinOnly is the effect's
-            // word that the user did not move it, so a Move to Screen from the
-            // keyboard or window menu must not arrive as kwinOnly (F1009).
+            // re-asserted (a PlasmaZones verb while the output was away, and
+            // KWin pulled it back onto that output, F1049; or a window KWin
+            // reverted in place, F770). kwinOnly is the effect's word that the
+            // user did not move it, so a Move to Screen from the keyboard or
+            // window menu must not arrive as kwinOnly (F1009).
             const QString screen = reassertEvacuee(row, reassertedScreens);
             if (!screen.isEmpty()) {
                 verdict.verdict = OutputSettleVerdict::Reassert;
@@ -240,6 +254,14 @@ WindowTrackingAdaptor::reportOutputSettle(const PhosphorProtocol::OutputSettleRo
                              << verdict.verdict;
         verdicts.append(verdict);
     }
+    // A placement mark lives while an output it names is away. Once all are
+    // back this settle has read KWin's pull-backs, and a later crossing is the
+    // user's own (F1049).
+    m_evacuees->placedAfterEvacuation.removeIf([mgr](const auto& it) {
+        return std::all_of(it.value().cbegin(), it.value().cend(), [mgr](const QString& physicalId) {
+            return outputConnected(mgr, physicalId);
+        });
+    });
     return verdicts;
 }
 
@@ -247,6 +269,10 @@ bool WindowTrackingAdaptor::readoptEvacuee(const QString& windowId, const QStrin
                                            const QString& parkedPhysicalId)
 {
     const QString canonical = shadowWindowId(windowId);
+    // Back on the output it left: the float it could not take where KWin had
+    // put it is moot, and a later announce must not float it out of its
+    // place (F1046).
+    m_evacuees->evacueeFloatPending.remove(canonical);
     m_evacuees->adoptInProgress = true;
     const auto guard = qScopeGuard([this] {
         m_evacuees->adoptInProgress = false;
@@ -305,31 +331,47 @@ bool WindowTrackingAdaptor::readoptEvacuee(const QString& windowId, const QStrin
 void WindowTrackingAdaptor::floatEvacuee(const OutputSettleRow& row, bool snapFloating)
 {
     const QString windowId = shadowWindowId(row.windowId);
-    if (!row.placeableNow) {
-        // Minimized, or on a desktop or activity out of view: adopted floating
-        // at its first announce instead of being tiled there (F643).
-        m_evacuees->evacueeFloatPending.insert(windowId);
-        return;
-    }
     PhosphorScreens::ScreenManager* mgr = m_service ? m_service->screenManager() : nullptr;
     const QString screen = rowScreen(mgr, row);
+    const bool tiling = (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screen))
+        || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(screen));
+    // @p snapFloating is the float the park saw, which the prune of the
+    // output's stores has dropped by now.
+    const bool snapFloat =
+        !tiling && m_snapEngine && m_service && (snapFloating || m_service->isWindowFloating(windowId));
+    // A snap float applies no geometry, so one that cannot be placed yet is
+    // stated now, in its own desktop's store (F1047). Only one on several
+    // desktops none of which is in view, or on another activity, waits.
+    std::optional<int> snapDesktop = snapFloat ? std::optional<int>(0) : std::nullopt;
+    if (snapFloat && !row.placeableNow) {
+        PhosphorZones::LayoutRegistry* const layouts = layoutRegistry();
+        const int perOutput = currentDesktopForScreen(screen);
+        snapDesktop = WindowTrackingInternal::ownDesktopOn(
+            windowDesktopContext(windowId),
+            perOutput >= 1 ? perOutput : (layouts ? layouts->currentVirtualDesktop() : 0),
+            layouts ? layouts->currentActivity() : QString());
+    }
+    if (!row.placeableNow && (tiling || (snapFloat && !snapDesktop))) {
+        // Minimized, or on a desktop or activity out of view: adopted floating
+        // at its first arrival where it landed, in the same mode, instead of
+        // being placed (F643, F1047).
+        m_evacuees->evacueeFloatPending.insert(windowId, EvacueeLedger::PendingFloat{screen, !tiling});
+        return;
+    }
     m_evacuees->adoptInProgress = true;
     const auto guard = qScopeGuard([this] {
         m_evacuees->adoptInProgress = false;
     });
-    const bool tiling = (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screen))
-        || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(screen));
     if (tiling) {
         // Floats where KWin put it; the tiles already there do not move.
         setWindowFloatingForScreen(row.windowId, screen, true);
-    } else if (m_snapEngine && m_service && (snapFloating || m_service->isWindowFloating(windowId))) {
+    } else if (snapDesktop) {
         // A snap float keeps floating on the output it landed on, with a
         // residence there and no home on the output it left (F670, F639).
-        // @p snapFloating is the float the park saw, which the prune of the
-        // output's stores has dropped by now.
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = row.windowId;
         ctx.toScreenId = screen;
+        ctx.toDesktop = *snapDesktop;
         ctx.wasFloating = true;
         m_snapEngine->handoffReceive(ctx);
     }
@@ -383,10 +425,27 @@ QString WindowTrackingAdaptor::reassertEvacuee(const OutputSettleRow& row, QSet<
     return QString();
 }
 
-bool WindowTrackingAdaptor::takeEvacueeFloatPending(const QString& windowId, const QString& screenId)
+bool WindowTrackingAdaptor::adoptPendingEvacueeFloat(const QString& windowId, const QString& screenId)
 {
-    Q_UNUSED(screenId)
-    return m_evacuees->evacueeFloatPending.remove(shadowWindowId(windowId));
+    const auto it = m_evacuees->evacueeFloatPending.constFind(shadowWindowId(windowId));
+    if (it == m_evacuees->evacueeFloatPending.constEnd()) {
+        return false;
+    }
+    // Taken on any arrival: one on another output than where it landed moved
+    // meanwhile, and one in another mode than the float's is not owed it
+    // (float is per mode), so neither floats (F1047).
+    const EvacueeLedger::PendingFloat pending = it.value();
+    m_evacuees->evacueeFloatPending.erase(it);
+    const bool tilingHere = (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId))
+        || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId));
+    if (!VirtualScreenId::samePhysical(pending.screenId, screenId) || pending.snap == tilingHere) {
+        return false;
+    }
+    OutputSettleRow row;
+    row.windowId = windowId;
+    row.screenId = screenId;
+    floatEvacuee(row, /*snapFloating=*/true);
+    return true;
 }
 
 bool WindowTrackingAdaptor::readoptOnArrival(const QString& windowId, const QString& screenId)
@@ -461,6 +520,7 @@ void WindowTrackingAdaptor::dropEvacueeParks(const QString& windowId)
 {
     const QString canonical = shadowWindowId(windowId);
     m_evacuees->evacueeFloatPending.remove(canonical);
+    m_evacuees->placedAfterEvacuation.remove(canonical);
     const auto it = m_evacuees->entries.find(canonical);
     if (it == m_evacuees->entries.end()) {
         return;
@@ -475,7 +535,7 @@ void WindowTrackingAdaptor::dropEvacueeParks(const QString& windowId)
         Q_EMIT parkDropped(windowId, entry.outputUuid);
     }
     m_evacuees->entries.erase(it);
-    qCInfo(lcDbusWindow) << "dropEvacueeParks:" << windowId << "touched while its output was away";
+    qCInfo(lcDbusWindow) << "dropEvacueeParks:" << windowId << "touched, closed or gone while its output was away";
 }
 
 void WindowTrackingAdaptor::noteEvacueeTouched(const QString& windowId, const QString& placedOnScreen)
@@ -496,8 +556,12 @@ void WindowTrackingAdaptor::noteEvacueeTouched(const QString& windowId, const QS
     if (onParkedOutput) {
         return;
     }
+    QStringList awayOutputs;
+    for (const EvacueeLedger::Entry& entry : it.value()) {
+        awayOutputs.append(entry.physicalId);
+    }
     dropEvacueeParks(windowId);
-    m_evacuees->placedAfterEvacuation.insert(canonical);
+    m_evacuees->placedAfterEvacuation.insert(canonical, awayOutputs);
 }
 
 void WindowTrackingAdaptor::wireEvacueeTouches()

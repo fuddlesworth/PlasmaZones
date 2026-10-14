@@ -110,9 +110,12 @@ std::optional<SnapAdaptor::BusSnapTarget> SnapAdaptor::validBusSnapTarget(const 
     if (!desktop) {
         return refuse("not on the landing desktop", screen); // F179
     }
-    // A commit pins the current activity's store.
-    if (const auto context = m_adaptor->windowDesktopContext(windowId);
-        context && !context->activity.isEmpty() && !activity.isEmpty() && context->activity != activity) {
+    // A commit pins the current activity's store. A window on several
+    // activities is on the current one when it is any of them, not only its
+    // first (F1040), as WindowContext::effectiveActivity reads it.
+    if (const auto context = m_adaptor->windowDesktopContext(windowId); context && !context->activity.isEmpty()
+        && !activity.isEmpty()
+        && (context->activities.size() > 1 ? !context->activities.contains(activity) : context->activity != activity)) {
         return refuse("on another activity", screen);
     }
     if (!holds(screen, *desktop)) {
@@ -235,6 +238,12 @@ void SnapAdaptor::moveWindowToZoneNumberOnScreen(const QString& windowId, int zo
         : nullptr;
     PhosphorZones::Zone* const zone = layout ? layout->zoneByNumber(zoneNumber) : nullptr;
     if (!zone) {
+        // A screen snapping may not place on refuses silently, as the bus snap
+        // gate does (l13_refusal_feedback); only a real miss is reported.
+        if (!m_engine || !m_engine->isActiveOnScreen(screen) || !snapPermittedForContext(windowId, screen, *desktop)) {
+            qCInfo(lcDbusWindow) << "Bus snap of" << windowId << "refused: snapping does not place on" << screen;
+            return;
+        }
         Q_EMIT m_adaptor->navigationFeedback(false, QStringLiteral("snap"),
                                              layout ? QStringLiteral("zone_not_found")
                                                     : QStringLiteral("no_active_layout"),

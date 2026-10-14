@@ -13,11 +13,16 @@
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorEngine/DesktopRemap.h>
+#include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/RuleStore.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
+
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -40,6 +45,50 @@ void applyContextRemap(PhosphorRules::RuleStore* store, const PhosphorRules::Con
 
 void Daemon::onDesktopsRenumbered(const PhosphorEngine::DesktopRemap& remap)
 {
+    // The start-up renumber, brought by a first desktop list that came late
+    // (reconcileDesktopsAtStartup). The effect's window batch can beat it, and
+    // whatever the engines placed from that batch is in the live numbering
+    // already, so this corrects only what was restored from disk and not seen
+    // live since (cr1_f1045_late_desktop_list): the rules start-up found and
+    // nobody has edited since, the placement records no window has touched,
+    // and the strips the scroll engine staged from the last session. The snap
+    // and autotile engines restore nothing of their own (a reopen re-commits
+    // their state from the records). Every engine's live state, the window
+    // records, the order memo and a rule added or changed since keep their
+    // numbers, and the rule change's own deferred reconcile re-resolves each
+    // screen against the moved rules.
+    if (const std::optional<quint64> restoredUpTo = std::exchange(m_lateStartupRenumberUpTo, std::nullopt)) {
+        QHash<QUuid, PhosphorRules::Rule> startupRules;
+        for (PhosphorRules::Rule& rule : std::exchange(m_lateStartupRules, {})) {
+            const QUuid id = rule.id;
+            startupRules.insert(id, std::move(rule));
+        }
+        applyContextRemap(m_ruleStore.get(),
+                          {[&remap](int desktop) {
+                               return remap.map(desktop);
+                           },
+                           {},
+                           [&startupRules](const PhosphorRules::Rule& rule) {
+                               const auto it = startupRules.constFind(rule.id);
+                               return it != startupRules.constEnd() && *it == rule;
+                           }});
+        int recordsMoved = 0;
+        if (PhosphorPlacement::WindowTrackingService* service =
+                m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr) {
+            recordsMoved = service->placementStore().remapRestoredDesktopZones(remap, *restoredUpTo);
+            if (recordsMoved > 0) {
+                service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+            }
+        }
+        if (auto* scroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
+            scroll->remapRestoredStripStash(remap);
+        }
+        qCInfo(lcDaemon) << "Virtual desktops renumbered while the daemon was down, list read late:" << remap.oldCount()
+                         << "->" << remap.newCount() << "desktops; moved the rules," << recordsMoved
+                         << "restored placement record(s) and the restored strips";
+        return;
+    }
+
     // The rules first, because everything below reads them: the re-seed
     // resolves each screen's mode, diffActiveAssignments resolves each context
     // through isContextDisabled, and hideDisabledAndRefresh is named for it.
@@ -161,10 +210,18 @@ void Daemon::onDesktopCountChanged(int newCount)
     // per-desktop state and m_lastEngineOrders. What is left for this handler
     // is the genuine out-of-range case.
     //
-    // No rules here, deliberately. With KWin's list in use the count commits
-    // with that list, AFTER desktopsRenumbered, so the map has already dropped
-    // a removed desktop's rules, the last one included, and moved the rest.
-    // The start-up sweep prunes them by count (reconcileDesktopsAtStartup).
+    // The rules naming a desktop past the count go too. With KWin's list in
+    // use a shrinking count commits with that list, AFTER desktopsRenumbered,
+    // so the map has already dropped them and this finds nothing to write; a
+    // growing count goes out first (F1022) and finds nothing past it. Without
+    // the list (onNumberOfDesktopsChanged's fallback commits a bare count),
+    // and at start-up (reconcileDesktopsAtStartup), this is the only prune
+    // they get (F1044).
+    applyContextRemap(m_ruleStore.get(),
+                      {[newCount](int desktop) {
+                           return desktop > newCount ? 0 : desktop;
+                       },
+                       {}});
 
     // A live preview must unwind BEFORE the prunes: autotile's cancel
     // resolves its state via a create-if-missing lookup, so a cancel arriving
@@ -256,23 +313,33 @@ void Daemon::reconcileDesktopsAtStartup()
     // through desktopsRenumbered, like a live change. At once when the first
     // snapshot is in, else against the first one that lands. An empty list
     // (the first start that keeps one) does nothing.
+    //
+    // A failed first read leaves no list until a later refresh, and the
+    // effect's window batch can arrive first: windows are then placed under
+    // the live numbering before the map exists. The renumber that list brings
+    // moves only what was restored and not seen live since (F1045), so the
+    // stamp of the newest restored placement record and the rules as they
+    // stand are taken here, before any window opens or rule is written. The
+    // desktopsChanged handler drops both when the late list renumbers nothing.
+    const QStringList liveIds = m_virtualDesktopManager->desktopIds();
+    m_lateStartupRenumberUpTo.reset();
+    m_lateStartupRules.clear();
     if (m_windowTrackingAdaptor) {
-        m_virtualDesktopManager->setBaselineDesktopIds(m_windowTrackingAdaptor->knownDesktopIds());
+        const QStringList knownIds = m_windowTrackingAdaptor->knownDesktopIds();
+        if (liveIds.isEmpty() && !knownIds.isEmpty()) {
+            const PhosphorPlacement::WindowTrackingService* service = m_windowTrackingAdaptor->service();
+            m_lateStartupRenumberUpTo = service ? service->placementStore().sequence() : 0;
+            m_lateStartupRules = m_ruleStore ? m_ruleStore->ruleSet().rules() : QList<PhosphorRules::Rule>();
+        }
+        m_virtualDesktopManager->setBaselineDesktopIds(knownIds);
     }
     // The count sweep only once the snapshot is in: a failed first read
     // leaves no ids and a fallback count of 1, and sweeping against that
     // would delete every rule for desktop 2 and up.
-    const QStringList liveIds = m_virtualDesktopManager->desktopIds();
     if (!liveIds.isEmpty()) {
-        // A desktop past the count with no list to say which one went. Here,
-        // unlike the live count handler, the count and the list came together.
-        const int count = m_virtualDesktopManager->desktopCount();
-        applyContextRemap(m_ruleStore.get(),
-                          {[count](int desktop) {
-                               return desktop > count ? 0 : desktop;
-                           },
-                           {}});
-        onDesktopCountChanged(count);
+        // A desktop past the count with no list to say which one went: the
+        // count handler drops its rules with its engine state.
+        onDesktopCountChanged(m_virtualDesktopManager->desktopCount());
         // Remembered for the next start. The first snapshot's desktopsChanged
         // went out before connectDesktopActivity's connection that keeps it
         // current from here on.

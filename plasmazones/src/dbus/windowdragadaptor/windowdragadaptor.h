@@ -705,6 +705,8 @@ private:
     // laziness now lives on the daemon side.
     QString m_pendingSnapDragWindowId;
     QRect m_pendingSnapDragGeometry;
+    /// m_originalFrameFillsOutput read with the geometry, not at promotion (F1051).
+    bool m_pendingSnapDragFillsOutput = false;
     bool m_pendingSnapDragWasSnapped = false;
     /// Set for the duration of one endDrag whose `cancelled` flag was true —
     /// KWin ended the interactive move itself (Escape, a fullscreen

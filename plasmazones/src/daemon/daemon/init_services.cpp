@@ -373,8 +373,8 @@ void Daemon::initLayoutAndSettingsWiring()
     // m_settings is ctor-owned and SURVIVES a stop() -> init() cycle, and
     // stop()'s per-sender sweep deliberately excludes it — so re-wiring here
     // would stack a second settingsChanged handler and run the whole
-    // mode-transition block twice per save (double resnap, double OSD arm,
-    // second pass against already-cleared pending restores). The duplicate is
+    // mode-transition block twice per save (double resnap, a second pass
+    // against already-cleared pending restores). The duplicate is
     // prevented by the EXACT-handle drop at the top of this function, which
     // this connection registers itself with. Deliberately NOT a
     // (sender, signal, receiver) sweep, per the policy stated there: other
@@ -463,7 +463,11 @@ void Daemon::initLayoutAndSettingsWiring()
         if (((autotileToggled && !autotileNow) || (scrollingToggled && !scrollingNow)) && m_windowTrackingAdaptor
             && m_snapAdaptor && m_snapEngine) {
             // Silent, and only the screens that went from tiling to snapping.
-            m_snapAdaptor->reapplySnapZones(QStringList(tiledBefore.begin(), tiledBefore.end()), false);
+            // None tiled is none to resnap: reapplySnapZones reads an empty
+            // list as every snapping screen (F1042).
+            if (!tiledBefore.isEmpty()) {
+                m_snapAdaptor->reapplySnapZones(QStringList(tiledBefore.begin(), tiledBefore.end()), false);
+            }
             // Batched float-restore: one resnap signal per autotile-disabled
             // toggle instead of per-window D-Bus chatter. Downcast mirrors
             // signals.cpp's resnap-batching path; a non-snap concrete engine

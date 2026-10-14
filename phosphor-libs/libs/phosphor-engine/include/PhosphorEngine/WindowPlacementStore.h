@@ -391,6 +391,21 @@ public:
     /// desktop's entry goes and a record on it reads as unknown (0). Returns
     /// the number of records changed (F763).
     int remapDesktopZones(const DesktopRemap& remap);
+    /// remapDesktopZones for the start-up renumber that KWin's first desktop
+    /// list brings when it lands after windows did (F1045): only the records
+    /// restored from disk that no live window has touched move, which are the
+    /// ones stamped at or below @p restoredUpTo (a sequence() read before any
+    /// window opened) that no downgrade (releaseEngineSlot, clearFreeGeometry)
+    /// changed this session, no open claim names and no live window owns. Each
+    /// keeps its sequence, so a moved record still ranks below every capture
+    /// made since. Returns the number of records changed.
+    int remapRestoredDesktopZones(const DesktopRemap& remap, quint64 restoredUpTo);
+    /// The stamp of the newest record. Every later capture, forget or renumber
+    /// stamps above it.
+    quint64 sequence() const
+    {
+        return m_sequence;
+    }
 
     /// Apply an in-place mutation to every record; @p fn returns true when it changed
     /// the record. Returns the number changed. For bulk rewrites that keep the appId
@@ -442,9 +457,13 @@ private:
     /// this whole mechanism exists to fix.
     bool pairingAllows(const QString& windowId, const WindowPlacement& candidate) const;
 
-    /// Drop any open claim naming @p recordWindowId, for use at the two sites
-    /// that remove a record out from under a possible claim.
+    /// Drop any open claim naming @p recordWindowId: the record is leaving the
+    /// store (forgetRemovedRecord), or its own instance takes it over from
+    /// another claimer (claimForOpenImpl).
     void dropClaimsNaming(const QString& recordWindowId);
+    /// The record @p recordWindowId is leaving the store: its open claim
+    /// (dropClaimsNaming) and its downgrade mark go with it.
+    void forgetRemovedRecord(const QString& recordWindowId);
 
     /// Whether @p p is bound to a still-open window that is NOT the instance
     /// behind @p askingWindowId. The one predicate every live-SIBLING
@@ -500,9 +519,14 @@ private:
     QHash<QString, QString> m_openPairing;
     QHash<QString, QString> m_claimedBy;
 
-    /// INERT, kept for ABI layout: the move excuses markInstanceMovedLive
-    /// once armed. Never written.
-    QSet<QString> m_movedLiveInstances;
+    /// The records a downgrade (releaseEngineSlot, clearFreeGeometry) changed
+    /// this session, by record windowId. A downgrade keeps the record's stamp,
+    /// since a loss is not newer truth, so this is what tells
+    /// remapRestoredDesktopZones that a live window touched it. Dropped with
+    /// the record (forgetRemovedRecord) and on deserialize. TRANSIENT, never
+    /// serialized. The slot that once held the inert m_movedLiveInstances, so
+    /// the layout is unchanged.
+    QSet<QString> m_downgradedThisSession;
 
     /// The one claim walk both claimForOpen overloads share. @p ownRecordFinal
     /// makes a captured own record final (claimed or nothing); otherwise a

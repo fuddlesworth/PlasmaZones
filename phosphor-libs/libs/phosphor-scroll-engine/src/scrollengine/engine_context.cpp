@@ -15,6 +15,7 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 
+#include "evacueepark_p.h"
 #include "scrollenginelogging.h"
 
 namespace PhosphorScrollEngine {
@@ -576,6 +577,13 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     sweepStripStash([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
     });
+    // A strip parked for an output's return on this desktop goes with it: the
+    // sweep just took its stash, and its context never comes into view again.
+    if (m_evacueePark) {
+        m_evacueePark->dropContextsWhere([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
+            return key.desktop == removedDesktop;
+        });
+    }
     // The override map is keyed per CONTEXT, so a destroyed desktop leaves
     // entries no live context can ever resolve. They are not merely dead
     // weight: KWin renumbers desktops on removal, so the index is handed out
@@ -629,6 +637,14 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     sweepStripStash([&stale](const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
     });
+    // And the parked strips of a removed activity, on the desktop prune's
+    // terms: left standing, hasParked keeps answering true for their windows
+    // and readoptParked grants a context that never comes into view.
+    if (m_evacueePark) {
+        m_evacueePark->dropContextsWhere([&stale](const PhosphorEngine::PlacementStateKey& key) {
+            return stale(key.activity);
+        });
+    }
     // Per-context override entries for a deleted activity, on the same terms
     // as the desktop prune's sweep: no live context resolves them again, and
     // an activity id can be reused by a restore from backup.
@@ -696,6 +712,14 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     m_states.removeWindowsIf([&matches](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
     });
+    // A readoptParked grant on the dying output goes first: its window is
+    // tracked nowhere here, so the park taken before this prune never saw it,
+    // and nothing could claim it back. The stash it kept parked goes with it.
+    if (m_evacueePark) {
+        m_evacueePark->dropGrantsWhere(QString(), [&matches](const PhosphorEngine::PlacementStateKey& key) {
+            return matches(key.screenId);
+        });
+    }
     sweepStripStash([this, &matches](const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId) && !isEvacueeParkedKey(key); // a parked strip outlives the output
     });

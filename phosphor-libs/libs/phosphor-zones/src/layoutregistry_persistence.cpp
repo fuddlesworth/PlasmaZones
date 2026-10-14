@@ -364,8 +364,9 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
             // the user directory for it: reissueTakenZoneIds derives the same
             // ids on every load. saveLayout writes <layout id>.json, so a copy
             // saved under another name is removed once the save lands: left
-            // there it would load first on a later start, take fresh ids again,
-            // and no snap in it would survive a restart.
+            // there it carries the same layout id, and on a later start the one
+            // that loads first wins it and the other is skipped as a duplicate,
+            // so a stale copy could stand in for the saved layout and its edits.
             if (reissued > 0 && m_layouts.contains(layout) && !layout->isSystemLayout()) {
                 layout->markDirty();
                 saveLayout(layout);

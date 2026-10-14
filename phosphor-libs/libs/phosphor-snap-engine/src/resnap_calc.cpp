@@ -85,6 +85,16 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
         // Get the layout assigned to this screen (not the global active layout)
         PhosphorZones::Layout* newLayout = m_layoutManager->resolveLayoutForScreen(screenId);
         if (!newLayout || newLayout->zoneCount() == 0) {
+            // No layout to move into. A switch to none keeps the zones for
+            // when a layout comes back (none_layout_memory). A deleted
+            // layout's window has no zone left anywhere: it goes to its
+            // float-back, and one without is unsnapped in place by the prune
+            // that follows (cr1_f1093_context_layout_delete).
+            for (const ResnapEntry* entry : screenIt.value()) {
+                if (entry->fromRemovedLayout) {
+                    tryAppendRestore(entry);
+                }
+            }
             continue;
         }
 

@@ -398,8 +398,8 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       float verdict exactly once from them, so passing 0,0 left an oversized
 //       window tiled for the session. The reclaim was later removed (a window
 //       is restored only on the output it opens on); restoreReason still gates
-//       sibling borrowing and placement rules, and the min sizes are accepted
-//       and ignored.
+//       the snap restore's same-app record FIFO, placement rules and the
+//       free-size restore, and the min sizes are accepted and ignored.
 //
 //       Why the handshake and not signature matching. Most of the above widens
 //       a signature, and Qt matches signal-hook signatures before demarshalling,

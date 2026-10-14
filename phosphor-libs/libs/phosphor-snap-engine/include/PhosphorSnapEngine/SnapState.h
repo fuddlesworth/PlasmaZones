@@ -235,8 +235,9 @@ public:
     /// of this store and INTO @p target, rewriting the LIVE screen assignment to
     /// @p newScreenId so target->screenForWindow(windowId) reports the destination
     /// monitor (the #724 cross-monitor determinism requirement). The pre-float
-    /// zone/screen move UNCHANGED; a caller moving the window to another screen
-    /// drops them (and the zone) first. The global-scalar fields
+    /// zone/screen move UNCHANGED: only a move to another monitor drops them (and
+    /// the zone) first, and a re-key on the same monitor (another desktop, a
+    /// split, an EDID rename) keeps them. The global-scalar fields
     /// (last-used-zone, user-snapped classes) are NOT moved — they stay global.
     /// No-op when @p target is null/this or the window has no entry in this store.
     void migrateWindowTo(SnapState* target, const QString& windowId, const QString& newScreenId);

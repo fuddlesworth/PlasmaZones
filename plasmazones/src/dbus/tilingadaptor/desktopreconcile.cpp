@@ -264,8 +264,13 @@ void TilingAdaptor::readoptRenumberEvictees(const InViewTest& inView)
         }
         qCInfo(lcDbusTiling) << "readoptRenumberEvictees:" << evictee.windowId
                              << "left a removed desktop for the one in view on" << evictee.screenId;
-        announceWindow("readoptRenumberEvictees", evictee.windowId, evictee.screenId, qMax(0, evictee.minSize.width()),
-                       qMax(0, evictee.minSize.height()), /*focusEligible=*/false);
+        // Straight to the engine running the screen, not through the open
+        // path: KWin moved the window, it did not open, so no open claim and
+        // no rule routing (F1050, l24_rule_on_leave).
+        PhosphorProtocol::WindowOpenedEntry entry{evictee.windowId, evictee.screenId, qMax(0, evictee.minSize.width()),
+                                                  qMax(0, evictee.minSize.height())};
+        entry.focusEligible = false;
+        dispatchOpenToClaimingEngine(entry, /*allowPark=*/true, /*allowCrossScreenClaim=*/false);
     }
 }
 

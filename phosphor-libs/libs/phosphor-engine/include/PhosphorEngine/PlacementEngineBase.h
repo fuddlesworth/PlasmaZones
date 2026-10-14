@@ -138,9 +138,9 @@ protected:
     ///
     /// A rect on @p screenId is preferred (the containment check fails open
     /// without a screen manager, accepted for embedders and tests). With none
-    /// in any record, the same order is run again for the record's rect from
-    /// another screen, of which only the size is used. Either way its size
-    /// is not within two pixels of any of @p managedSizes (isManagedSize), the
+    /// in any record, the same order is run again for the record's rects from
+    /// other screens, of which only the size is used. Either way its size,
+    /// clamped as below, is not within two pixels of any of @p managedSizes (isManagedSize), the
     /// sizes a managed window on that screen can have (zones and live spans
     /// for snap, the live tile or column rects for the tiling engines): a
     /// sibling the engine placed at open carries the managed-sized spawn

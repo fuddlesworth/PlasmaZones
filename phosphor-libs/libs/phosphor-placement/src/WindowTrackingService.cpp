@@ -672,12 +672,6 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     // assignment deliberately preserved across an autotile flip would make
     // the guard refuse the one capture (screen adoption + sibling prune)
     // nothing else performs.
-    // The minimized guard DOES apply: a minimized close's frame is the
-    // hidden rect, not a free position, and that read is never stale (S).
-    if (m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
-        qCDebug(lcPlacement) << "recordFloatingClose: refusing minimized frame for" << windowId;
-        return;
-    }
     const QString appId = currentAppIdFor(windowId);
     if (appId.isEmpty()) {
         return;
@@ -688,9 +682,9 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     p.screenId = screenId;
     // The insert takes the pair check (P), as recordFreeGeometry does: the
     // caller pairs the effect's close-time screen with the last frame shadow,
-    // two samples from two moments. It takes (M) and the output-filling half of
-    // (S) too: the frame of a maximized or fullscreen window, or one still on
-    // its zone or tile, is not a free position (F157).
+    // two samples from two moments. It takes (M) and (S) too: the frame of a
+    // minimized, maximized or fullscreen window, or one still on its zone or
+    // tile, is not a free position (F157, F1036).
     //
     // It gates ONLY the geometry insert, never the whole function: the screen
     // adoption, the owning-engine slot synthesis and the pure-float sibling
@@ -698,10 +692,14 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     // forfeit all three to fix a field none of them reads. geometryOverlapsScreen
     // fails OPEN with no ScreenManager, so an embedder without one keeps
     // today's behaviour instead of silently losing every close capture.
+    const bool minimized = m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false);
     const bool fillsOutput = m_windowRegistry && m_windowRegistry->fillsOutputState(windowId).value_or(false);
     if (!geometryOverlapsScreen(geometry, screenId)) {
         qCWarning(lcPlacement) << "recordFloatingClose: refusing" << geometry << "for" << windowId << "under"
                                << screenId << "— the geometry does not lie on that screen; recording the rest";
+    } else if (minimized) {
+        qCDebug(lcPlacement) << "recordFloatingClose: refusing the minimized frame of" << windowId
+                             << "; recording the rest";
     } else if (!fillsOutput && !isManagedFrame(windowId, geometry)) {
         p.freeGeometryByScreen.insert(screenId, geometry);
     }

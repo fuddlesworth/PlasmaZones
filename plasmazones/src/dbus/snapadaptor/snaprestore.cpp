@@ -201,6 +201,12 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         qCInfo(lcDbusWindow) << "resolveWindowRestore: unknown screen" << screenId << "for" << windowId;
         return;
     }
+    // A snap float evacuee that could not float where KWin put it (on another
+    // activity, or on several desktops none in view) floats there now, not
+    // restored to a zone (F1047).
+    if (m_adaptor->adoptPendingEvacueeFloat(windowId, screenId)) {
+        return;
+    }
 
     const PhosphorEngine::RestoreReason reason = PhosphorEngine::clampRestoreReasonFromWire(restoreReason);
     const bool isOpen = reason == PhosphorEngine::RestoreReason::Open;

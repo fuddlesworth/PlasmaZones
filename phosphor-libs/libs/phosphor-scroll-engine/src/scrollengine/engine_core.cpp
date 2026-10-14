@@ -614,12 +614,12 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         // without focus — seen live as new firefox/ghostty windows landing at
         // the park row for the whole session. Exact-id claims above are
         // untouched: the id match is its own evidence.
-        // Half-open [0, grace): elapsed() < grace, deliberately NOT
-        // hasExpired(grace), which compares STRICTLY GREATER and so holds a
-        // zero-length window OPEN for its first millisecond. That makes a
-        // grace of 0 read as "already closed", the one value that lets a test
-        // reach the refusal arm. isValid() still gates: an unstarted timer's
-        // elapsed() is meaningless, and a grace never opened is closed.
+        // Half-open [0, grace): elapsed() < grace reads a grace of 0 as
+        // "already closed", the one value that lets a test reach the refusal
+        // arm. Deliberately NOT hasExpired(grace), which compares STRICTLY
+        // GREATER and so would hold a zero-length window OPEN for its first
+        // millisecond. isValid() still gates: an unstarted timer's elapsed()
+        // is meaningless, and a grace never opened is closed.
         const bool fuzzyGraceOpen =
             stashStrip.fuzzyClaimWindow.isValid() && stashStrip.fuzzyClaimWindow.elapsed() < m_fuzzyClaimGraceMs;
         if (!appPrefix.isEmpty() && !fuzzyGraceOpen) {

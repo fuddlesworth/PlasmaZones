@@ -20,6 +20,7 @@
 #include <QScreen>
 #include <QUuid>
 #include <limits>
+#include <utility>
 
 namespace PhosphorPlacement {
 
@@ -80,6 +81,13 @@ WindowTrackingService::ZonePruneResult WindowTrackingService::pruneStaleZoneAssi
     ZonePruneResult result;
     if (!hasSnapState() || !m_layoutManager)
         return result;
+
+    // A deleted layout's minimized windows: the replacement is picked by now,
+    // as the prune runs on the active-layout change or the closing
+    // layoutsChanged of the removal (bufferWindowsOfRemovedLayout, F1035).
+    if (!m_removedLayoutPositions.isEmpty()) {
+        reslotSuspendedPreFloats(std::exchange(m_removedLayoutPositions, {}));
+    }
 
     const QString currentActivity = m_layoutManager->currentActivity();
     // Every zone id a registered layout holds. An id outside it names a zone
@@ -517,8 +525,8 @@ PhosphorZones::Zone* WindowTrackingService::findZoneById(const QString& zoneId) 
 WindowTrackingService::ZoneLookupResult WindowTrackingService::findZoneInAllLayouts(const QUuid& zoneUuid) const
 {
     // Guard locally like every other m_layoutManager consumer in this file
-    // (onLayoutChanged, validateLastUsedZone) — the API does not promise a
-    // non-null manager.
+    // (such as pruneStaleZoneAssignments and validateLastUsedZone) — the API
+    // does not promise a non-null manager.
     if (!m_layoutManager) {
         return {};
     }

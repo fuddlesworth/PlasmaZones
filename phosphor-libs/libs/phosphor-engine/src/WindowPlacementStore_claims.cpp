@@ -53,6 +53,12 @@ void WindowPlacementStore::dropClaimsNaming(const QString& recordWindowId)
     m_claimedBy.remove(recordWindowId);
 }
 
+void WindowPlacementStore::forgetRemovedRecord(const QString& recordWindowId)
+{
+    dropClaimsNaming(recordWindowId);
+    m_downgradedThisSession.remove(recordWindowId);
+}
+
 bool WindowPlacementStore::boundToLiveOther(const QString& askingWindowId, const WindowPlacement& p) const
 {
     return m_liveInstanceProbe && m_liveInstanceProbe(p.windowId) && !sameWindowInstance(p.windowId, askingWindowId);

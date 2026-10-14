@@ -154,6 +154,54 @@ private Q_SLOTS:
         QCOMPARE(zoneIdsIn(second), ids);
     }
 
+    // A derived id that another layout holds, or that the document keeps
+    // before it, is derived again (F1052). FAILS if the reissue takes the
+    // first derivation without checking it.
+    void reissue_derivedIdCollisionIsDerivedAgain()
+    {
+        QObject owner;
+        const QString shared = QUuid::createUuid().toString();
+        const QUuid layoutId = QUuid::fromString(kCopyId);
+        const QString derived0 = QUuid::createUuidV5(layoutId, shared + QStringLiteral("#0")).toString();
+        const QString derived1 = QUuid::createUuidV5(layoutId, shared + QStringLiteral("#1")).toString();
+        PhosphorZones::Layout* other = PhosphorZones::Layout::fromJson(
+            layoutJson(kOriginalId, QStringLiteral("Other"), {shared, derived0}), &owner);
+        QVERIFY(other);
+
+        // Index 0: shared is taken, and so is its first derivation.
+        QJsonObject takenCase = layoutJson(kCopyId, QStringLiteral("Taken"), {shared});
+        QCOMPARE(PhosphorZones::LayoutUtils::reissueTakenZoneIds(takenCase, {other}), 1);
+        const QString minted = zoneIdsIn(takenCase).first();
+        QVERIFY(minted != shared);
+        QVERIFY(minted != derived0);
+
+        // Index 1: the first derivation is the id the document keeps at index 0.
+        QJsonObject keptCase = layoutJson(kCopyId, QStringLiteral("Kept"), {derived1, shared});
+        QCOMPARE(PhosphorZones::LayoutUtils::reissueTakenZoneIds(keptCase, {other}), 1);
+        const QStringList ids = zoneIdsIn(keptCase);
+        QCOMPARE(ids.first(), derived1);
+        QVERIFY(ids.last() != derived1);
+        QVERIFY(ids.last() != shared);
+    }
+
+    // Documents whose id is no UUID do not share their new zone ids: each
+    // derives from its own random namespace, as Layout::fromJson gives each a
+    // random layout id (F1052). FAILS if the null layout id is the namespace.
+    void reissue_nullLayoutIdDerivesDistinctIds()
+    {
+        QObject owner;
+        const QString shared = QUuid::createUuid().toString();
+        PhosphorZones::Layout* other =
+            PhosphorZones::Layout::fromJson(layoutJson(kOriginalId, QStringLiteral("Other"), {shared}), &owner);
+        QVERIFY(other);
+        QJsonObject first = layoutJson(QStringLiteral("not-a-uuid"), QStringLiteral("First"), {shared});
+        QJsonObject second = layoutJson(QStringLiteral("not-a-uuid"), QStringLiteral("Second"), {shared});
+        QCOMPARE(PhosphorZones::LayoutUtils::reissueTakenZoneIds(first, {other}), 1);
+        QCOMPARE(PhosphorZones::LayoutUtils::reissueTakenZoneIds(second, {other}), 1);
+        QVERIFY(zoneIdsIn(first).first() != shared);
+        QVERIFY(zoneIdsIn(first).first() != zoneIdsIn(second).first());
+    }
+
     // The re-slot the layout-switch populate and the desktop carry share: the
     // zones themselves when the target holds them, the zone at the first one's
     // position when it does not, nothing when the target is short of it.

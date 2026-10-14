@@ -374,7 +374,9 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
     }
 
     // Zone ids another layout holds are replaced, as the registry's load and
-    // import do (F552). A layout-id collision clones, which replaces them all.
+    // import do (F552). A layout id that is no UUID (the schema asks only for a
+    // string) is handled there too (F1052). A layout-id collision clones, which
+    // replaces them all.
     if (const int reissued = PhosphorZones::LayoutUtils::reissueTakenZoneIds(obj, m_layoutManager->layouts());
         reissued > 0) {
         qCInfo(lcDbusLayout) << "createLayoutFromJson:" << reissued << "zone id(s) of another layout given new ids";

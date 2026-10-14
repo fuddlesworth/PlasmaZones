@@ -714,11 +714,16 @@ inline std::optional<QString> disableRuleMode(const Rule& rule)
 /// How the desktops and activities a rule set names have moved. An empty
 /// function is the identity. desktop(old) answers the new 1-based number, or
 /// 0 when that desktop is gone; activityAlive(id) is false for a removed
-/// activity.
+/// activity. applies(rule), when set, picks the rules the remap reaches: one
+/// it answers false for is HELD, kept exactly as written and never dropped, and
+/// it outranks a moved rule that lands on its id. The daemon's late start-up
+/// renumber holds every rule added or changed after start-up took its snapshot
+/// of them (F1045): such a rule was written in the live numbering.
 struct ContextRemap
 {
     std::function<int(int)> desktop{};
     std::function<bool(const QString&)> activityAlive{};
+    std::function<bool(const Rule&)> applies{};
 };
 
 namespace detail {
@@ -800,26 +805,48 @@ inline bool remapRuleDesktops(Rule& rule, const std::function<int(int)>& desktop
     return changed;
 }
 
+/// Whether @p rule, whose match is the exact context shape decoded into the
+/// tuple, is that context's own setting: this bridge minted it for the tuple,
+/// or every action it carries is a context-domain one. A window rule with a
+/// context-shaped match ("Desktop is 3" with Float) is not (F1092).
+inline bool isContextSetting(const Rule& rule, const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    if (rule.id == assignmentRuleIdFor(screenId, virtualDesktop, activity)) {
+        return true;
+    }
+    if (const auto mode = disableRuleMode(rule);
+        mode && rule.id == disableRuleIdFor(screenId, virtualDesktop, activity, *mode)) {
+        return true;
+    }
+    return std::all_of(rule.actions.cbegin(), rule.actions.cend(), [](const RuleAction& action) {
+        return ActionRegistry::instance().domainFor(action) == ActionDomain::Context;
+    });
+}
+
 } // namespace detail
 
 /**
  * @brief @p rules with the desktops and activities they name moved by @p remap.
  *
  * A CONTEXT rule (the exact (screen, desktop, activity) shape: context-only,
- * no pinned non-dimension field, decoded by @ref contextDimsOf) is that
- * context's own setting, whoever wrote it: the layout registry claims such a
- * rule as the context's assignment by its shape. Pinned to a desktop or an
+ * no pinned non-dimension field, decoded by @ref contextDimsOf) that this
+ * bridge minted or that carries only context-domain actions
+ * (detail::isContextSetting) is that context's own setting, whoever wrote it:
+ * the layout registry claims such a rule as the context's assignment by its
+ * shape. Pinned to a desktop or an
  * activity that is gone it is dropped. Pinned to a desktop that moved it is
  * re-pinned there, and when this bridge minted it its deterministic id and
  * its generated name follow the new tuple; a hand-built one keeps both.
  *
- * Every other rule (a window rule, or a context match of another shape) keeps
- * its id and name and follows its desktops through detail::remapRuleDesktops;
- * the activities it names are not touched.
+ * Every other rule (a window rule, a context match of another shape, or the
+ * exact shape carrying a window action) keeps its id and name and follows its
+ * desktops through detail::remapRuleDesktops, which switches it off when it
+ * named a removed desktop; the activities it names are not touched.
  *
  * The walk builds a fresh list, so a reorder cannot collide two re-minted
  * ids. A rule left in place that ends on a moved rule's id (a stale rule past
- * the old desktop list) is dropped and the moved one kept.
+ * the old desktop list) is dropped and the moved one kept, unless
+ * ContextRemap::applies held it: then the moved one is dropped.
  *
  * @return the remapped list, or std::nullopt when nothing changed.
  */
@@ -833,13 +860,21 @@ inline std::optional<QList<Rule>> remapContextRules(const QList<Rule>& rules, co
     QList<bool> moved;
     moved.reserve(rules.size());
     QSet<QUuid> movedIds;
+    QSet<QUuid> heldIds;
     bool changed = false;
     for (const Rule& rule : rules) {
+        if (remap.applies && !remap.applies(rule)) {
+            heldIds.insert(rule.id);
+            remapped.append(rule);
+            moved.append(false);
+            continue;
+        }
         QString screenId;
         int desktop = 0;
         QString activity;
         const bool contextRule = rule.match.isContextOnly() && !pinsNonDimensionContextField(rule.match)
-            && contextDimsOf(rule.match, screenId, desktop, activity);
+            && contextDimsOf(rule.match, screenId, desktop, activity)
+            && detail::isContextSetting(rule, screenId, desktop, activity);
         if (!contextRule) {
             Rule copy = rule;
             const bool ruleMoved = remap.desktop && detail::remapRuleDesktops(copy, remap.desktop);
@@ -891,7 +926,11 @@ inline std::optional<QList<Rule>> remapContextRules(const QList<Rule>& rules, co
         QList<Rule> deduped;
         deduped.reserve(remapped.size());
         for (qsizetype i = 0; i < remapped.size(); ++i) {
-            if (moved.at(i) || !movedIds.contains(remapped.at(i).id)) {
+            const QUuid& id = remapped.at(i).id;
+            // A held rule is newer truth than a moved one, so the moved one
+            // gives way to it. Otherwise the moved one outranks the stale rule.
+            const bool keep = moved.at(i) ? !heldIds.contains(id) : (heldIds.contains(id) || !movedIds.contains(id));
+            if (keep) {
                 deduped.append(remapped.at(i));
             }
         }

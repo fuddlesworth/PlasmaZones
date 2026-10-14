@@ -176,27 +176,71 @@ private Q_SLOTS:
 
     // Deleting a layout assigned to the context itself leaves the context on
     // the explicit no-layout word (the registry's purge does not hand it the
-    // default), so there is nothing to move into: the window in view is
-    // unsnapped where it is and the effect told. It used to keep the deleted
-    // layout's zone id (F429).
-    void deletingAContextLayoutUnsnapsItsWindows()
+    // default), so there is no zone to move into: a window in view with a
+    // floating spot goes back to it, as one past a smaller layout's zone
+    // count does (cr1_f1093_context_layout_delete). It was unsnapped in place
+    // with its spot on file. Mutation: drop the fromRemovedLayout arm in
+    // calculateResnapFromPreviousLayout and the batch carries no float-back.
+    void deletingAContextLayoutFloatsAWindowBackToItsSpot()
+    {
+        PhosphorZones::Layout* doomed = addThreeZoneLayout();
+        m_layoutManager->assignLayout(m_screenId, m_desktop, QString(), doomed);
+        const QString w = QStringLiteral("app|delete-context-spot");
+        service()->recordFreeGeometry(w, m_screenId, QRect(100, 100, 600, 400), true);
+        service()->assignWindowToZone(w, doomed->zones().at(1)->id().toString(), m_screenId, m_desktop);
+        QSignalSpy batch(m_wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+
+        QVERIFY(m_layoutManager->removeLayout(doomed));
+
+        QVERIFY(!m_layoutManager->resolveLayoutForScreen(m_screenId));
+        QVERIFY(service()->zoneForWindow(w).isEmpty());
+        QVERIFY2(batchFloatsBack(batch, w), "the window goes back to its floating spot");
+    }
+
+    // ...and a window with no floating spot is unsnapped where it stands and
+    // the effect told. It used to keep the deleted layout's zone id (F429).
+    void deletingAContextLayoutUnsnapsAWindowWithNoSpot()
     {
         PhosphorZones::Layout* doomed = addThreeZoneLayout();
         m_layoutManager->assignLayout(m_screenId, m_desktop, QString(), doomed);
         const QString w = QStringLiteral("app|delete-context");
         service()->assignWindowToZone(w, doomed->zones().at(1)->id().toString(), m_screenId, m_desktop);
         QSignalSpy states(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+        QSignalSpy batch(m_wta, &WindowTrackingAdaptor::applyGeometriesBatch);
 
         QVERIFY(m_layoutManager->removeLayout(doomed));
 
         QVERIFY(!m_layoutManager->resolveLayoutForScreen(m_screenId));
         QVERIFY(service()->zoneForWindow(w).isEmpty());
+        QVERIFY2(!batchCarries(batch, w), "nothing moves it");
         bool unsnapped = false;
         for (const QList<QVariant>& args : std::as_const(states)) {
             unsnapped |= args.at(0).toString() == w
                 && args.at(1).value<PhosphorProtocol::WindowStateEntry>().changeType == QStringLiteral("unsnapped");
         }
         QVERIFY(unsnapped);
+    }
+
+    // A plain switch to no layout is not a delete: the window keeps its zone
+    // for when a layout comes back, floating spot or not (none_layout_memory).
+    // Mutation: take the float-back for every entry on a screen with no layout
+    // (ignore fromRemovedLayout) and the window floats away from its zone.
+    void switchingToNoLayoutKeepsTheZone()
+    {
+        const QString w = QStringLiteral("app|switch-none");
+        service()->recordFreeGeometry(w, m_screenId, QRect(100, 100, 600, 400), true);
+        service()->assignWindowToZone(w, m_zoneIds[1], m_screenId, m_desktop);
+        PhosphorZones::AssignmentEntry none;
+        none.mode = PhosphorZones::AssignmentEntry::Snapping;
+        none.snappingLayout = PhosphorZones::NoSnappingLayout;
+        m_layoutManager->setAssignmentEntryDirect(m_screenId, 0, QString(), none);
+        QVERIFY(!m_layoutManager->resolveLayoutForScreen(m_screenId));
+        QSignalSpy batch(m_wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+
+        m_wta->resnapScreensToTheirLayouts({}, {m_screenId}, m_desktop);
+
+        QCOMPARE(service()->zoneForWindow(w), m_zoneIds[1]);
+        QVERIFY(!batchFloatsBack(batch, w));
     }
 
     // A window holding the deleted layout's zone on a desktop not in view is
@@ -260,6 +304,20 @@ private:
         for (const QList<QVariant>& args : spy) {
             for (const auto& e : args.at(0).value<PhosphorProtocol::WindowGeometryList>()) {
                 if (e.windowId == windowId) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// The batch sends @p windowId back to its floating spot: a restore entry
+    /// carries no screen.
+    static bool batchFloatsBack(const QSignalSpy& spy, const QString& windowId)
+    {
+        for (const QList<QVariant>& args : spy) {
+            for (const auto& e : args.at(0).value<PhosphorProtocol::WindowGeometryList>()) {
+                if (e.windowId == windowId && e.screenId.isEmpty()) {
                     return true;
                 }
             }

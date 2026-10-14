@@ -670,7 +670,7 @@ private:
      * Returns the batch so the caller can feed it to
      * `SnapEngine::emitBatchedResnap` — one batched signal per autotile
      * toggle instead of per-window D-Bus chatter. Zone-snapped windows are
-     * already handled by `SnapAdaptor::resnapCurrentAssignments`.
+     * placed by the zone resnap beside each caller (reapplySnapZones, calculateResnapFromAutotileOrder).
      *
      * @param excludeWindows Window ids to leave out of the entries (already
      *        handled elsewhere in the calling flow).
@@ -1428,31 +1428,31 @@ private Q_SLOTS:
                                                   const QStringList& invalidatedProperties);
 
 private:
-    // Debounce timers for shortcuts that generate expensive work (Vulkan surface
-    // creation, geometry batches, OSD churn) when triggered faster than ~100ms
-    // by keyboard auto-repeat. Checked at the top of each handler.
+    // Debounce timers for shortcuts that generate expensive work (Vulkan surface creation, geometry batches, OSD
+    // churn) when triggered faster than ~100ms by keyboard auto-repeat. Checked at the top of each handler.
     static constexpr int kShortcutDebounceMs = 100;
     QElapsedTimer m_rotateDebounce;
     QElapsedTimer m_floatDebounce;
     QElapsedTimer m_cycleLayoutDebounce;
     // One timer for all four span directions; handleSpan carries the why.
     QElapsedTimer m_spanDebounce;
-    // Shared debounce for VS swap/rotate. Each fire commits a config change
-    // through Settings and kicks a refresh → resnap cascade — cheap per call
-    // but pile-up-prone under keyboard auto-repeat, same rationale as
-    // m_rotateDebounce above. One timer for both ops: rapid alternation
-    // between swap and rotate is not a user pattern.
+    // Shared debounce for VS swap/rotate. Each fire commits a config change through Settings and kicks a refresh →
+    // resnap cascade — cheap per call but pile-up-prone under keyboard auto-repeat, same rationale as
+    // m_rotateDebounce above. One timer for both ops: rapid alternation between swap and rotate is not a user pattern.
     QElapsedTimer m_virtualScreenDebounce;
 
     // Last TILING-FAMILY window order per (screen, desktop, activity), captured when a screen
     // leaves autotile or scrolling and replayed into either engine's seed (a same-pass flip
     // replays one engine's order into the other); keyed by TilingStateKey so each desktop keeps its own.
-    //
-    // Its focus half is m_transitionFocusSeed, declared just below: the same
-    // two capture sites write both, and the two together are what makes a
-    // same-pass flip reproduce the strip the user was looking at rather than
-    // only its column order. The lifetimes deliberately differ — see there.
+    // Its focus half is m_transitionFocusSeed, declared just below: the same two capture sites write both, and
+    // together they make a same-pass flip reproduce the strip the user saw, not only its column order. The
+    // lifetimes deliberately differ — see there.
     QHash<TilingStateKey, QStringList> m_lastEngineOrders;
+
+    // While KWin's first desktop list is late, what the restored-only renumber it brings may move: placement
+    // records stamped up to this, and these rules as they stood (reconcileDesktopsAtStartup, F1045).
+    std::optional<quint64> m_lateStartupRenumberUpTo;
+    QList<PhosphorRules::Rule> m_lateStartupRules;
 
     /// Focus for a screen entering an engine, captured in the SAME
     /// updateEngineScreens pass. Three write arms: the two engines a screen can

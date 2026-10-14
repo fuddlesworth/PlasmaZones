@@ -688,8 +688,8 @@ public Q_SLOTS:
      */
     bool queryWindowFloating(const QString& windowId);
 
-    /// @brief Float or unfloat a window through the engine that runs the screen it is on (the bus verb):
-    /// setWindowFloatingForScreen on its live screen. Refused (logged) for an unregistered or screenless window.
+    /// @brief The bus verb: setWindowFloatingForScreen on the window's live screen. Refused (logged) for an
+    /// unregistered or screenless window, one off the desktop or activity its screen shows, or a disabled context.
     void setWindowFloating(const QString& windowId, bool floating);
 
     /**
@@ -873,9 +873,9 @@ public:
     bool isInteractiveDragWindow(const QString& windowId) const;
     /// Told (windowId, keepScreenId) at the end of every releaseLeftScreens, for the daemon's own per-screen memory.
     void setWindowLeftScreenHook(std::function<void(const QString&, const QString&)> hook);
-    /// An evacuee announced on @p screenId that could not be adopted floating when its output
-    /// went away (taken once): the caller adopts it floating instead of tiling it.
-    bool takeEvacueeFloatPending(const QString& windowId, const QString& screenId);
+    /// An evacuee that could not be adopted floating when its output went away, arriving on the output it
+    /// landed on in the mode of its float: floated there now. Taken once on any arrival. True when floated.
+    bool adoptPendingEvacueeFloat(const QString& windowId, const QString& screenId);
     /// A window announced on the output it is parked for: re-seated from the park. True when it was.
     bool readoptOnArrival(const QString& windowId, const QString& screenId);
     /// Drop the window's parked contexts on desktops and activities @p span no longer covers.
@@ -1362,7 +1362,7 @@ Q_SIGNALS:
     /// A user verb on @p windowId the daemon places no geometry for: KWin ends its own fullscreen in place.
     void fullscreenHandBackRequested(const QString& windowId);
     /// getPendingRestoreGeometries may answer differently now: a layout assigned, a desktop or activity switch, a
-    /// context disabled, an output added, removed or moved. One emission per event-loop pass (F625).
+    /// context disabled, an output added, removed or moved. One emission per burst, a short debounce (F625).
     void pendingRestoresChanged();
 
     // toggleFloatForWindow moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).

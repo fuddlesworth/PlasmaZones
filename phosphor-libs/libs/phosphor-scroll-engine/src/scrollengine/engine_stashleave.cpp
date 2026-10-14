@@ -22,6 +22,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
 
+#include "evacueepark_p.h"
 #include "scrollenginelogging.h"
 
 #include <QPoint>
@@ -39,12 +40,21 @@ void ScrollEngine::forgetStashedWindowWhere(const QString& windowId,
     if (windowId.isEmpty() || !left) {
         return;
     }
+    // A readoptParked grant goes on the same leave. No parked-key exemption:
+    // the grant is this window's alone, and the window was already returned
+    // when it was handed out.
+    if (m_evacueePark) {
+        m_evacueePark->dropGrantsWhere(windowId, left);
+    }
     QSet<QString> touchedScreens;
     for (auto it = m_stripStash.begin(); it != m_stripStash.end();) {
-        // A strip parked for an output's return is the evacuee park's to give
-        // up: KWin moving the window off the dead output is not the user
-        // leaving it (dropParked marks it consumed when the window is touched).
-        if (!left(it.key()) || isEvacueeParkedKey(it.key())) {
+        // A tile a parked context still owes this window is the evacuee
+        // park's to give up: KWin moving the window off the dead output is not
+        // the user leaving it (dropParked marks it consumed when the window is
+        // touched). Per window, not per key: the key stays parked while other
+        // windows' grants are out, and a window already returned that leaves
+        // gives up its tile like any other.
+        if (!left(it.key()) || (m_evacueePark && m_evacueePark->owesUnder(it.key(), windowId))) {
             ++it;
             continue;
         }

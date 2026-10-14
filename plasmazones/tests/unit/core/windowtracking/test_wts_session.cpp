@@ -242,6 +242,46 @@ private Q_SLOTS:
         QCOMPARE(m_service->preFloatZones(window), QStringList{m_zoneIds[2]});
     }
 
+    // F1035: the same re-slot when the layout is DELETED. The removal buffers
+    // with the layout still alive (wired here as the adaptor wires it), the
+    // registry picks the replacement after, and the prune that closes the
+    // removal re-slots the minimized window into it. A user float is left alone.
+    void layoutDelete_minimizedWindowTakesTheSameNumberedZone()
+    {
+        const QString window = QStringLiteral("app1|minimized");
+        const QString userFloat = QStringLiteral("app2|floated");
+        floatOutOfZone(window, m_zoneIds[1], /*suspension=*/true);
+        floatOutOfZone(userFloat, m_zoneIds[1], /*suspension=*/false);
+        PhosphorZones::Zone* oldZone = m_testLayout->zoneById(QUuid(m_zoneIds[1]));
+        QVERIFY(oldZone);
+        const int oldNumber = oldZone->zoneNumber();
+        PhosphorZones::Layout* next = createTestLayout(3, m_layoutManager);
+        m_layoutManager->addLayout(next);
+        const QString nextId = next->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([nextId]() {
+            return nextId;
+        });
+        const QMetaObject::Connection buffer = connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutRemoved,
+                                                       this, [this](PhosphorZones::Layout* layout) {
+                                                           m_service->bufferWindowsOfRemovedLayout(layout);
+                                                       });
+        QVERIFY(m_layoutManager->removeLayout(m_testLayout));
+        disconnect(buffer);
+        m_testLayout = nullptr;
+        QCOMPARE(m_layoutManager->activeLayout(), next);
+
+        m_service->pruneStaleZoneAssignments();
+
+        QString sameNumbered;
+        for (PhosphorZones::Zone* z : next->zones()) {
+            if (z->zoneNumber() == oldNumber) {
+                sameNumbered = z->id().toString();
+            }
+        }
+        QCOMPARE(m_service->preFloatZones(window), QStringList{sameNumbered});
+        QCOMPARE(m_service->preFloatZones(userFloat), QStringList{m_zoneIds[1]});
+    }
+
     // Regression: daemon off->on while in autotile, then swap to snapping. The
     // window's snap zones live ONLY in the durable WindowPlacement record after a
     // restart — the live m_snapState map is cold. populateResnapBufferForAllScreens
@@ -338,6 +378,36 @@ private Q_SLOTS:
 
         m_layoutManager->setCurrentActivity(QString());
         service.setSnapState(nullptr);
+    }
+
+    // A window on several activities is in view on any of them, not only its
+    // first (F1034, the F426 reading busgate's activity gate shares).
+    void testResnapBuffer_durableArmReadsEveryActivityOfTheWindow()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        SnapState state(QString(), nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, nullptr);
+        service.setSnapState(&state);
+        service.setWindowRegistry(&registry);
+        m_layoutManager->setCurrentActivity(QStringLiteral("act-b"));
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.activity = QStringLiteral("act-a");
+        meta.activities = {QStringLiteral("act-a"), QStringLiteral("act-b")};
+        registry.upsert(QStringLiteral("both"), meta);
+        meta.activities = {QStringLiteral("act-a"), QStringLiteral("act-c")};
+        registry.upsert(QStringLiteral("elsewhere"), meta);
+        service.placementStore().record(snappedRecord(QStringLiteral("app|both"), screen, {m_zoneIds[0]}));
+        service.placementStore().record(snappedRecord(QStringLiteral("app|elsewhere"), screen, {m_zoneIds[1]}));
+
+        service.populateResnapBufferForAllScreens({}, {screen});
+
+        const QStringList ids = bufferIds(service);
+        m_layoutManager->setCurrentActivity(QString());
+        service.setSnapState(nullptr);
+        QVERIFY2(ids.contains(QStringLiteral("app|both")), "a window also on the activity in view is resnapped");
+        QVERIFY(!ids.contains(QStringLiteral("app|elsewhere")));
     }
 
     // ── populate's guards (F828): each row pins one, so deleting it fails the row ──

@@ -292,6 +292,10 @@ int reissueTakenZoneIds(QJsonObject& layoutJson, const QList<Layout*>& loaded)
             taken.insert(zone->id());
         }
     }
+    // A document whose id is not a UUID gets a fresh one from Layout::fromJson,
+    // so its zone ids derive from a random namespace: from the null one, every
+    // such document handed the same taken zone the same new id (F1052).
+    const QUuid nameSpace = layoutId.isNull() ? QUuid::createUuid() : layoutId;
     QJsonArray zones = layoutJson.value(Zones).toArray();
     QSet<QUuid> seen;
     int reissued = 0;
@@ -306,8 +310,16 @@ int reissueTakenZoneIds(QJsonObject& layoutJson, const QList<Layout*>& loaded)
             continue;
         }
         // Name-based on (layout, old id, position), so a reload of the same
-        // document lands on the same ids whichever copy of it wins.
-        const QUuid fresh = QUuid::createUuidV5(layoutId, id.toString() + QLatin1Char('#') + QString::number(i));
+        // document lands on the same ids whichever copy of it wins. A derived
+        // id can itself be taken, or equal one this document keeps or was
+        // given above, so it is re-derived with a counter until it is free
+        // (F1052): the first try is the plain name, which keeps every id this
+        // gave before.
+        const QString name = id.toString() + QLatin1Char('#') + QString::number(i);
+        QUuid fresh = QUuid::createUuidV5(nameSpace, name);
+        for (int attempt = 1; taken.contains(fresh) || seen.contains(fresh); ++attempt) {
+            fresh = QUuid::createUuidV5(nameSpace, name + QLatin1Char('#') + QString::number(attempt));
+        }
         zone[Id] = fresh.toString();
         zones[i] = zone;
         seen.insert(fresh);

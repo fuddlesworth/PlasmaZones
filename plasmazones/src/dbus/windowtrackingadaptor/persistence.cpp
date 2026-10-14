@@ -240,10 +240,10 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
     // activity: the opener lands in the activity in view, so a record from
     // another activity must not teleport it into a context disabled here.
     //
-    // One ARRAY per appId, newest record first: the effect takes the first
-    // entry whose window it cannot see, so on a daemon-only restart (where
-    // the daemon's liveness probe answers false for everything) a live
-    // sibling's record at the head does not cost the app its instant restore.
+    // One ARRAY per appId, newest record first: the effect takes the newest
+    // entry on the opener's output (InstantRestoreDecisions::pickEntry), so a
+    // newer record on another output stays for an opener there instead of
+    // costing this one its instant restore.
     QJsonObject result;
     for (auto it = targets.constBegin(); it != targets.constEnd(); ++it) {
         QJsonArray entries;

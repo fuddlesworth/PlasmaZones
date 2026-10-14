@@ -378,15 +378,13 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     // predates it, and an exit that bypassed this adaptor left it standing
     // (F593, F604). Before the evacuee arms, which float through the engines.
     forgetFloatBroadcast(entry.windowId);
-    // An evacuee that could not float in place when its output went away
-    // (minimized, or out of view) floats now instead of tiling (F643), and one
-    // announced on the output it is parked for re-enters its parked place.
+    // An evacuee announced on the output it is parked for re-enters its parked
+    // place, ahead of the float it could not take where KWin had put it
+    // (F1046). One that could not float in place when its output went away
+    // (minimized, or out of view) floats now instead of tiling (F643).
     if (m_windowTrackingAdaptor) {
-        if (m_windowTrackingAdaptor->takeEvacueeFloatPending(entry.windowId, entry.screenId)) {
-            m_windowTrackingAdaptor->setWindowFloatingForScreen(entry.windowId, entry.screenId, true);
-            return;
-        }
-        if (m_windowTrackingAdaptor->readoptOnArrival(entry.windowId, entry.screenId)) {
+        if (m_windowTrackingAdaptor->readoptOnArrival(entry.windowId, entry.screenId)
+            || m_windowTrackingAdaptor->adoptPendingEvacueeFloat(entry.windowId, entry.screenId)) {
             return;
         }
     }
@@ -886,6 +884,12 @@ void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
         const QString closingScreen = trackedScreenForWindow(windowId);
         for (PhosphorEngine::IPlacementEngine* engine : enginesTrackingWindow(windowId)) {
             engine->windowClosed(windowId);
+        }
+        // The scroll engine's close seeds its closed-mid-hold memory, which
+        // the WindowTracking close already spent: spend it again, as
+        // releaseWindowTrackingVia does.
+        if (m_windowTrackingAdaptor) {
+            m_windowTrackingAdaptor->forgetClosedFullscreenHold(windowId);
         }
         if (!closingScreen.isEmpty()) {
             refreshFocusedWindow(closingScreen);

@@ -153,8 +153,10 @@ PHOSPHORZONES_EXPORT QStringList sameNumberedZones(const QStringList& zoneIds, c
  * with the document's own id is not another layout: a user copy overriding a
  * system layout shares its zone ids. The new id is a name-based UUID of the
  * layout id, the old zone id and its index, so the same document gets the same
- * ids on every load even before the caller writes it back. Returns the number
- * of ids replaced.
+ * ids on every load even before the caller writes it back, re-derived with a
+ * counter while the result is taken or already in the document. A document
+ * whose id is not a UUID derives from a random namespace instead, as
+ * Layout::fromJson mints it a random id. Returns the number of ids replaced.
  *
  * The registry's directory load and its import run every document through
  * this before Layout::fromJson, which is what makes the uniqueness the

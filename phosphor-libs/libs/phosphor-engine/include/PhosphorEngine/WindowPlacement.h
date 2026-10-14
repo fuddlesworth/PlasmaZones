@@ -259,8 +259,8 @@ struct WindowPlacement
             && freeGeometryByScreen == o.freeGeometryByScreen;
     }
 
-    /// Built-in engine-slot ids. Cross-engine readers (resnap, teardown
-    /// capture, autotile's snap-defer gate) key slotFor() on these instead
+    /// Built-in engine-slot ids. Cross-engine readers (such as the resnap and
+    /// the teardown capture) key slotFor() on these instead
     /// of spelling the id inline — same drift-prevention rationale as the
     /// state-token accessors below. Each engine's own engineId() override
     /// returns the same spelling.

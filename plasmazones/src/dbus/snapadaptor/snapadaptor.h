@@ -42,6 +42,7 @@ class ISettings;
  *
  * Signal relay from SnapEngine to WindowTrackingAdaptor is also wired
  * here (navigationFeedback, windowFloatingChanged, applyGeometryRequested,
+ * fullscreenHandBackRequested, restatementGeometryRequested,
  * snapAllWindowsRequested, applyGeometriesBatch, activateWindowRequested).
  * SnapEngine::resnapToNewLayoutRequested routes to this adaptor's
  * applyEngineResnap (bookkeeping + applyGeometriesBatch emission), not
@@ -106,8 +107,9 @@ public Q_SLOTS:
 
     /**
      * @brief Confirm a single-zone snap from the KWin effect (snap assist).
-     *        Commits only a live window, a known screen and a zone that
-     *        screen's layout holds.
+     *        Commits only a live window, a known screen, a window on the
+     *        landing desktop and the current activity, and a zone that
+     *        screen's layout holds (validBusSnapTarget).
      */
     void windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId);
 

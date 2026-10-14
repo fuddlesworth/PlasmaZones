@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Cross-screen reclaim. Split out of engine_lifecycle.cpp, which had reached
-// the file-size ceiling: KWin's session restore opens a window on a
-// nondeterministic output, so a window recorded on monitor A routinely
-// arrives on monitor B, and this is the arm that pulls it back to the strip
-// its placement record homes it on.
+// The cross-screen reopen claim. Split out of engine_lifecycle.cpp, which had
+// reached the file-size ceiling. A reopened window is restored only on the
+// output it opened on, so this arm never pulls one back from another monitor:
+// it claims a FIFO record of another instance of the app that sits on another
+// virtual screen of the opening output (see claimCrossScreenReopen).
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 

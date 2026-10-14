@@ -8,6 +8,8 @@
 
 #include "daemon/daemon.h"
 #include "helpers.h"
+#include "dbus/compositorbridgeadaptor.h"
+#include "phosphor_i18n.h"
 
 #include <QCoreApplication>
 #include <QDBusConnection>
@@ -17,9 +19,6 @@
 #include <QFile>
 #include <QPluginLoader>
 #include <QRegularExpression>
-
-#include "dbus/compositorbridgeadaptor.h"
-#include "phosphor_i18n.h"
 
 namespace PlasmaZones {
 

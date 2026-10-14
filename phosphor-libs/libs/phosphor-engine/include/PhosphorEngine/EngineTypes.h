@@ -161,6 +161,10 @@ struct ResnapEntry
     int zonePosition = 0;
     QString screenId;
     int virtualDesktop = 0;
+    /// The entry holds a zone of a layout being deleted (bufferWindowsOfRemovedLayout). A context the delete
+    /// leaves on no layout sends it to its float-back, or the prune unsnaps it in place; a plain switch to no
+    /// layout keeps the zone (cr1_f1093_context_layout_delete, none_layout_memory). Appended for ABI.
+    bool fromRemovedLayout = false;
 };
 
 struct SnapResult

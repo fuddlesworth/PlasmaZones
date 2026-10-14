@@ -12,12 +12,14 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorEngine/IWindowRegistry.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include "evacueepark_p.h"
 #include "pendingcarries_p.h"
 #include "snapenginelogging.h"
 
 #include <QSet>
 
 #include <algorithm>
+#include <iterator>
 
 namespace PhosphorSnapEngine {
 
@@ -85,6 +87,25 @@ void SnapEngine::pruneStatesForDesktop(int removedDesktop)
         return matches(key);
     });
     m_context.pruneDesktop(removedDesktop);
+    // A parked context, a waiting carry's zones and an owed float-back on the
+    // desktop have nowhere left to land. The renumber drops them too, but the
+    // prune of a shrunk desktop count runs without one (F1020).
+    if (m_evacueePark) {
+        dropParkedContextsIf(*m_evacueePark, [removedDesktop](const ParkedSnapContext& ctx) {
+            return ctx.key.desktop == removedDesktop;
+        });
+    }
+    if (m_pendingCarries) {
+        auto& carries = m_pendingCarries->byWindow;
+        for (auto it = carries.begin(); it != carries.end();) {
+            it->zonesByDesktop.remove(removedDesktop);
+            it = it->zonesByDesktop.isEmpty() ? carries.erase(it) : std::next(it);
+        }
+        auto& owed = m_pendingCarries->owedFloatBacks;
+        for (auto it = owed.begin(); it != owed.end();) {
+            it = it->key.desktop == removedDesktop ? owed.erase(it) : std::next(it);
+        }
+    }
     // A window still open there leaves its snap memory like any other leave:
     // the record slot is released, and one that held a zone is told it is
     // unsnapped (F122).
@@ -126,7 +147,8 @@ void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
         return matches(key);
     });
     // A carry waiting for an activity that is gone, or leaving one, has
-    // nowhere to land.
+    // nowhere to land, nor has a float-back owed there or a context parked
+    // there (F1020, F1024).
     if (m_pendingCarries) {
         auto& carries = m_pendingCarries->byWindow;
         for (auto it = carries.begin(); it != carries.end();) {
@@ -138,6 +160,15 @@ void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
                 ++it;
             }
         }
+        auto& owed = m_pendingCarries->owedFloatBacks;
+        for (auto it = owed.begin(); it != owed.end();) {
+            it = matches(it->key) ? owed.erase(it) : std::next(it);
+        }
+    }
+    if (m_evacueePark) {
+        dropParkedContextsIf(*m_evacueePark, [&matches](const ParkedSnapContext& ctx) {
+            return matches(ctx.key);
+        });
     }
     // A window still open there leaves its snap memory like any other leave:
     // the record slot is released, and one that held a zone is told it is

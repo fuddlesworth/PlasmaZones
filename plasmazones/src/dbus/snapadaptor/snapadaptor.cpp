@@ -48,7 +48,7 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     // because the KWin effect listens for them on that D-Bus interface.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    m_connections.reserve(7);
+    m_connections.reserve(9);
 
     // Navigation feedback (shared OSD path — both engines use the same signal)
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::navigationFeedback, adaptor,

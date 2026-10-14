@@ -259,6 +259,8 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
         PhosphorEngine::DesktopRemap::fromIds(liveChange ? m_desktopIds : m_baselineDesktopIds, newIds);
     m_baselineDesktopIds.clear();
     const int removedPosition = liveChange ? remap.singleRemoval() : 0;
+    // This snapshot ends the change: the next KWin signal is a new one.
+    m_desktopListChangePending = false;
 
     m_desktopIds = newIds;
     m_desktopNames = newNames;
@@ -322,7 +324,9 @@ void VirtualDesktopManager::applyDesktopListArg(const QDBusArgument& arg, const 
     // The create/remove handlers used to emit it themselves, which worked
     // only while refreshFromKWin also read `count` synchronously. Now that
     // the whole snapshot lands with the async reply, emitting from those
-    // handlers would carry the OLD count and clamp against it.
+    // handlers would carry the OLD count and clamp against it. The one count
+    // committed ahead of the list is a growing one from KWin's countChanged,
+    // and this finds it already equal.
     if (countChanged) {
         clampScreenDesktopsToCount();
         Q_EMIT desktopCountChanged(m_desktopCount);
@@ -439,11 +443,10 @@ void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
 
 void VirtualDesktopManager::onKWinDesktopCreated()
 {
-    // No count emit here: refreshFromKWin is asynchronous once started, so the
-    // count is still the old one at this point. applyDesktopListReply
-    // notifies when it actually commits the new snapshot.
-    Q_EMIT desktopListChanging();
-    refreshFromKWin();
+    // No count emit here: this signal carries no count, and KWin's countChanged
+    // right after it commits the grown one (onNumberOfDesktopsChanged).
+    // applyDesktopListReply commits the rest of the snapshot.
+    announceDesktopListChange();
 }
 
 void VirtualDesktopManager::onKWinDesktopRemoved()
@@ -452,8 +455,7 @@ void VirtualDesktopManager::onKWinDesktopRemoved()
     // asynchronous once started, so both would run against the OLD count
     // and the clamp would be a no-op. applyDesktopListReply does both when
     // it commits the new snapshot.
-    Q_EMIT desktopListChanging();
-    refreshFromKWin();
+    announceDesktopListChange();
 }
 
 void VirtualDesktopManager::onKWinDesktopRowsChanged()
@@ -612,8 +614,9 @@ void VirtualDesktopManager::clampScreenDesktopsToCount()
     // An entry whose desktop was RENUMBERED (a removal, an insert, a move) is
     // not this function's business: applyDesktopListArg moves those itself
     // through the position map, before this runs, and pulls down the ones a
-    // removal at the END left out of range. What is left here is the
-    // onNumberOfDesktopsChanged path, which commits a count before the list.
+    // removal at the END left out of range. What is left here is
+    // onNumberOfDesktopsChanged without KWin's interface, which commits a count
+    // with no list behind it.
     //
     // Mutate first, then emit the captured value — emitting mid-iteration could
     // re-enter updateScreenDesktop and invalidate the hash iterator, and a
@@ -628,6 +631,23 @@ void VirtualDesktopManager::clampScreenDesktopsToCount()
     for (const auto& [screenId, desktop] : clamped) {
         Q_EMIT screenDesktopChanged(screenId, desktop);
     }
+}
+
+void VirtualDesktopManager::announceDesktopListChange()
+{
+    // Once per change (F1023). KWin sends several signals for one change (a
+    // removal sends desktopDataChanged per shifted desktop, desktopRemoved and
+    // countChanged), all before the snapshot can land, and the effect's pushes
+    // in the new numbering can arrive between them. The window registry
+    // snapshots its records on this signal and drops each one pushed since, so
+    // a second send re-armed records already in the new numbering and the
+    // renumber moved them twice. Before the first snapshot there is nothing
+    // live to renumber: that map compares against the previous session.
+    if (!m_desktopListChangePending && !m_desktopIds.isEmpty()) {
+        m_desktopListChangePending = true;
+        Q_EMIT desktopListChanging();
+    }
+    refreshFromKWin();
 }
 
 void VirtualDesktopManager::setCurrentDesktop(int desktop)
@@ -664,8 +684,7 @@ void VirtualDesktopManager::onKWinDesktopDataChanged()
     // No count change to report; refreshFromKWin re-reads the list and
     // applyDesktopListReply emits desktopsChanged if anything moved. A
     // position move arrives here, so this may renumber.
-    Q_EMIT desktopListChanging();
-    refreshFromKWin();
+    announceDesktopListChange();
 }
 
 void VirtualDesktopManager::onNumberOfDesktopsChanged(uint count)
@@ -688,16 +707,28 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(uint count)
         return;
     }
 
-    // With KWin's list on the way, nothing is committed here: the snapshot
-    // commits the count, the clamp and both signals together, the renumber
-    // BEFORE the count. Committing the count first published it ahead of the
+    // With KWin's list on the way, a SHRINKING count is not committed here: the
+    // snapshot commits the count, the clamp and both signals together, the
+    // renumber BEFORE the count. Committing it first published it ahead of the
     // map that says which desktop went, so a mid-list removal had the last
     // desktop's per-screen entry clamped and then moved again by the map, and
     // the daemon's count handler pruned the engine states past the new count
     // that the map was about to move down.
+    //
+    // A GROWING count is committed at once (F1022). Nothing is clamped or
+    // pruned by it, and KWin sends countChanged before anything that uses the
+    // new desktop: Move to New Desktop creates it and moves the window in one
+    // call, so the effect's report of desktop N+1 lands ahead of the snapshot,
+    // and every desktop range check (screenDesktopChanged, setWindowMetadata)
+    // refused it against the old count. The effect sends that report once.
+    // An insert before the last desktop still renumbers when the snapshot
+    // lands, after this count went out.
     if (m_useKWinDBus && m_kwinVDInterface && m_kwinVDInterface->isValid()) {
-        Q_EMIT desktopListChanging();
-        refreshFromKWin();
+        if (newCount > m_desktopCount) {
+            m_desktopCount = newCount;
+            Q_EMIT desktopCountChanged(m_desktopCount);
+        }
+        announceDesktopListChange();
         return;
     }
 

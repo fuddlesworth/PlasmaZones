@@ -151,8 +151,8 @@ public:
                                 int minHeight) override;
     QString heldScreenForWindow(const QString& windowId) const override;
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
-    // Evacuee park (engine_evacueepark.cpp; IPlacementEngine's contract). Each context is
-    // parked as a strip stash the sweeps and saves leave alone; an exact-id claim re-seats.
+    // Evacuee park (engine_evacueepark.cpp; IPlacementEngine's contract). Each context is parked as a strip stash
+    // the saves and the leave, aliveness and output sweeps skip; a desktop or activity prune drops it.
     QStringList parkOutput(const QString& physicalScreenId) override;
     bool readoptParked(const QString& windowId, const QString& parkedPhysicalId,
                        const QString& returnedPhysicalId) override;
@@ -806,25 +806,25 @@ public:
         m_persistSaveFn = std::move(saveFn);
         m_persistLoadFn = std::move(loadFn);
     }
-    /// Durable strip-structure snapshot: every LIVE strip (current states)
-    /// plus the un-consumed mode-round-trip stash entries, keyed
-    /// "screenId|desktop|activity". On a key collision the live strip's
-    /// focus, view and axis win and the stash's not-yet-returned columns
-    /// are appended after the live ones (a merge, not a replacement). The
-    /// daemon persists this blob through the WTA's session store so a login
-    /// restore rebuilds stacked columns (with each column's active tile,
-    /// i.e. a tabbed column's shown tab), the strip focus, and the view
-    /// anchor together with whether that anchor was an explicit pan (the
-    /// detach latch) instead of one default column per window. Per-tile height
-    /// intents ride along; per-window minimum sizes do not — the client
-    /// re-reports those. (engine_serialize.cpp)
+    /// Durable strip-structure snapshot: every LIVE strip (current states) plus the un-consumed mode-round-trip
+    /// stash entries, keyed "screenId|desktop|activity". On a key collision the live strip's focus, view and axis
+    /// win and the stash's not-yet-returned columns are appended after the live ones (a merge, not a replacement).
+    /// The daemon persists this blob through the WTA's session store so a login restore rebuilds stacked columns
+    /// (with each column's active tile, i.e. a tabbed column's shown tab), the strip focus, and the view anchor
+    /// together with whether that anchor was an explicit pan (the detach latch) instead of one default column per
+    /// window. Per-tile height intents ride along; per-window minimum sizes do not — the client re-reports those.
+    /// (engine_serialize.cpp)
     QJsonObject serializeStripState() const;
-    /// Load a serializeStripState blob into the stash so the EXISTING
-    /// arrival-restore path (restoreFromStripStash) rebuilds each strip as
-    /// its windows are announced. Additive and conservative: keys that
-    /// already have a stash entry or a live populated state are skipped, so
-    /// a second load cannot re-stage stale structure over adopted windows.
+    /// Load a serializeStripState blob into the stash so the EXISTING arrival-restore path (restoreFromStripStash)
+    /// rebuilds each strip as its windows are announced. Additive and conservative: keys that already have a stash
+    /// entry or a live populated state are skipped, so a second load cannot re-stage stale structure over adopted
+    /// windows.
     void restoreStripState(const QJsonObject& state);
+    /// The start-up renumber when KWin's first desktop list lands after windows did (F1045): only the entries
+    /// restoreStripState staged that no live window has touched since move through @p remap, onto a key it would
+    /// have staged them on. Strips, in-session stashes and every other context map keep the live numbering.
+    /// (engine_desktopremap.cpp)
+    void remapRestoredStripStash(const PhosphorEngine::DesktopRemap& remap);
     /// TEST SEAM: shorten (or lengthen) the cross-session fuzzy-claim grace
     /// window — the period after a stash is staged, or its screen re-enters
     /// scrolling, during which an appId-only claim may take a dead sibling's
@@ -1139,10 +1139,10 @@ private:
     /// Consume @p windowId from a screen's mode-transition seed (marking it
     /// in m_consumedInitialOrder; the list itself keeps its positions) and
     /// drop both entries once every listed id is consumed — MUST run on
-    /// every windowOpened outcome (tiled, consumed, floated, the cross-screen
-    /// restore defer that hands the window to another engine, and — for the
-    /// ARRIVAL screen — a successful claimCrossScreenReopen, whose dispatch
-    /// short-circuits the arrival-screen open), or a stale seed survives to
+    /// every windowOpened outcome (tiled, consumed, floated, a same-key
+    /// re-announce, and — for the ARRIVAL screen — a successful
+    /// claimCrossScreenReopen, whose dispatch short-circuits the arrival-screen
+    /// open), and on readoptParked's floating seat, or a stale seed survives to
     /// re-position an unrelated later open.
     void consumePendingInitialOrder(const QString& screenId, const QString& windowId);
     /// Drop per-screen bookkeeping (seed, tab-strip latch) for each screen

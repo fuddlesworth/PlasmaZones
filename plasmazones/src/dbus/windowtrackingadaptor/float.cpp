@@ -16,9 +16,11 @@
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include <array>
+#include <PhosphorContext/IContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
 namespace PlasmaZones {
 
 void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
@@ -134,6 +136,25 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     const QString screen = isRegistryTracked(windowId) ? liveScreenForWindow(windowId) : QString();
     if (screen.isEmpty()) {
         qCInfo(lcDbusWindow) << "setWindowFloating: no live window or screen for" << windowId << "- refused";
+        return;
+    }
+    // Only in the context the screen shows. The engine running the screen
+    // floats in the desktop and activity in view, so a window on a hidden
+    // desktop or another activity would be adopted into a context it is not
+    // in (float is per mode), and a disabled context places nothing (F1048,
+    // as l13_bus_snap_hidden_multidesktop refuses the bus snap).
+    PhosphorZones::LayoutRegistry* const layouts = layoutRegistry();
+    const int perOutput = currentDesktopForScreen(screen);
+    const int shown = perOutput >= 1 ? perOutput : (layouts ? layouts->currentVirtualDesktop() : 0);
+    if (WindowTrackingInternal::ownDesktopOn(windowDesktopContext(windowId), shown,
+                                             layouts ? layouts->currentActivity() : QString())
+        != 0) {
+        qCInfo(lcDbusWindow) << "setWindowFloating:" << windowId << "is not on the desktop and activity" << screen
+                             << "shows - refused";
+        return;
+    }
+    if (m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(screen))) {
+        qCInfo(lcDbusWindow) << "setWindowFloating:" << screen << "is disabled for" << windowId << "- refused";
         return;
     }
     setWindowFloatingForScreen(windowId, screen, floating);

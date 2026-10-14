@@ -683,12 +683,17 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         // A float kept on a desktop out of view, by a window that was snapped
         // (a floating source keeps its frame): no apply goes now (EJ), and its
         // frame stands on the zone it left, so the float-back is owed for that
-        // desktop's first showing (F780).
-        if (!plan->applied && plan->statedFloating && !plan->sourceFloating && viewDesktop == 0 && m_navState) {
+        // desktop's first showing (F780). So is the restore arm's float onto
+        // such a desktop: its apply reaches a suspended client, which drops a
+        // grow (F1019). A shrink that landed moved the frame, and the debt
+        // lapses on the showing.
+        if ((restoring || (!plan->applied && plan->statedFloating)) && !plan->sourceFloating && viewDesktop == 0
+            && m_navState) {
+            const int owedDesktop = restoring ? plan->applied->virtualDesktop : plan->statedDesktop;
             if (const QRect frame = m_navState->frameGeometry(entry.windowId); frame.isValid()) {
                 pendingCarriesOf(m_pendingCarries)
-                    .owedFloatBacks.insert(
-                        entry.windowId, {PlacementStateKey{screenId, plan->statedDesktop, currentActivity()}, frame});
+                    .owedFloatBacks.insert(entry.windowId,
+                                           {PlacementStateKey{screenId, owedDesktop, currentActivity()}, frame});
             }
         }
         // A window arriving on the desktop in view is an arrival, focused

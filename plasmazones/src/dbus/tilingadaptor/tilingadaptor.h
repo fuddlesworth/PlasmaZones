@@ -181,8 +181,8 @@ public:
     /// Second half, called once the renumber has moved every engine and the
     /// window registry and each screen has been told the desktop it shows:
     /// a remembered window no lifecycle engine holds any more, not minimized,
-    /// on a screen a lifecycle engine runs and in view by @p inView, is
-    /// announced again the way windowReannounced announces it. A window out
+    /// on a screen a lifecycle engine runs and in view by @p inView, goes back
+    /// to that engine with no open claim and no rule routing. A window out
     /// of view is left to the desktop switch's re-announce. The list is
     /// dropped either way, and an empty @p inView only drops it.
     void readoptRenumberEvictees(const InViewTest& inView);

@@ -343,6 +343,38 @@ private Q_SLOTS:
         QCOMPARE(freed.second, QList<QRect>{free});
     }
 
+    // The same for a drag that began maximized and lost the maximize before
+    // the trigger was held: the frame from the drag's start is the output's,
+    // and the fill is read with it, not at the promotion (F1051).
+    void adaptor_maximizeLostBeforeTheTriggerRecordsNoOutputSizedFloatBack()
+    {
+        Fixture f;
+        QVERIFY(f.screen);
+        const QRect screenGeom = f.screen->geometry();
+        const QString zone0 = f.layout->zones().at(0)->id().toString();
+        f.adaptor->registerDropProxy(f.screenId, proxyJson(QRect(20, 20, 100, 90), {{zone0, QRect(20, 20, 100, 90)}}));
+        const QPoint inCell = screenGeom.topLeft() + QPoint(60, 60);
+        const int ctrl = static_cast<int>(Qt::ControlModifier);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.isMaximized = true;
+        meta.isFullscreen = false;
+        meta.isMinimized = false;
+        f.registry.upsert(QStringLiteral("unmaxed"), meta);
+        const QString windowId = QStringLiteral("app|unmaxed");
+        f.registry.canonicalizeWindowId(windowId);
+        f.adaptor->beginDrag(windowId, screenGeom.x(), screenGeom.y(), screenGeom.width(), screenGeom.height(),
+                             f.screenId, 0);
+        meta.isMaximized = false;
+        f.registry.upsert(QStringLiteral("unmaxed"), meta);
+        f.adaptor->updateDragCursor(windowId, inCell.x(), inCell.y(), ctrl, 0);
+        const PhosphorProtocol::DragOutcome outcome =
+            f.adaptor->endDrag(windowId, inCell.x(), inCell.y(), ctrl, 0, false);
+        QCOMPARE(outcome.action, PhosphorProtocol::DragOutcome::ApplySnap);
+        const auto rec = f.wta->service()->placementStore().peekExact(windowId);
+        QVERIFY2(!rec || rec->freeGeometryByScreen.isEmpty(), "the output rect was recorded as a float-back");
+    }
+
 private:
     /// A snap-only drag adaptor on the offscreen platform's screen: no
     /// engines, no screen manager (the adaptor falls back to the QScreen

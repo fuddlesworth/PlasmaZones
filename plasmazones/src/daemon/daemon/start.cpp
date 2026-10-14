@@ -28,6 +28,7 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/tilingadaptor/tilingadaptor.h"
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -190,17 +191,9 @@ void Daemon::connectScreenSignals()
                     m_virtualDesktopManager->removeScreenDesktop(removedScreenId);
                 }
 
-                // A live drag-insert preview on the departing output (any
-                // virtual sub-screen of it) must unwind BEFORE the prunes
-                // tear its states down — the scroll engine's prune cancels
-                // internally, the autotile prune does not, and the daemon
-                // path must not depend on which engine holds the preview.
-                if (m_windowDragAdaptor) {
-                    m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(removedScreenId);
-                }
-
-                // Park the output's windows, then reap every engine's states
-                // on it (see retireOutputPlacements).
+                // Cancel any drag-insert preview on the output, park its
+                // windows, then reap every engine's states on it (see
+                // retireOutputPlacements).
                 retireOutputPlacements(removedScreenId);
 
                 // The removed output's strip-preview settle timers, including
@@ -452,8 +445,9 @@ void Daemon::connectDesktopActivity()
             &Daemon::applyScreenDesktopSeed);
 
     // KWin's desktop list renumbered (a desktop removed, inserted or moved): one
-    // old-to-new map for every number-keyed store. Ahead of desktopCountChanged,
-    // and the only one of the desktop manager's two renumber signals connected
+    // old-to-new map for every number-keyed store. Ahead of desktopCountChanged
+    // for a removal or a move; a growing count goes out first (F1022). The only
+    // one of the desktop manager's two renumber signals connected
     // (desktopRemovedAt is its single-removal subset). desktop_renumber.cpp.
     connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopsRenumbered, this,
             &Daemon::onDesktopsRenumbered);
@@ -474,6 +468,16 @@ void Daemon::connectDesktopActivity()
     connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopsChanged, this, [this]() {
         const QStringList ids = m_virtualDesktopManager->desktopIds();
         if (m_windowTrackingAdaptor && !ids.isEmpty()) {
+            // A late first list that matches the last session's is followed by
+            // no desktopsRenumbered, the signal that would end the restored-only
+            // hold (onDesktopsRenumbered, F1045), so it ends here. The same two
+            // lists the desktop manager compares, read before this replaces one.
+            if (m_lateStartupRenumberUpTo
+                && PhosphorEngine::DesktopRemap::fromIds(m_windowTrackingAdaptor->knownDesktopIds(), ids)
+                       .isIdentity()) {
+                m_lateStartupRenumberUpTo.reset();
+                m_lateStartupRules.clear();
+            }
             m_windowTrackingAdaptor->setKnownDesktopIds(ids);
         }
     });

@@ -260,6 +260,33 @@ private Q_SLOTS:
         QCOMPARE(applies.count(), 0);
     }
 
+    // A window on several activities is on the current one when it is any of
+    // them, not only its first; a window on one other activity is refused (F1040).
+    void aWindowOnSeveralActivitiesSnapsOnAnyOfThem()
+    {
+        GateFixture f;
+        f.layouts->setCurrentActivity(QStringLiteral("act-2"));
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.virtualDesktop = 1;
+        meta.isMinimized = false;
+        meta.activity = QStringLiteral("act-1");
+        meta.activities = {QStringLiteral("act-1"), QStringLiteral("act-2")};
+        f.registry.upsert(QStringLiteral("acts-1"), meta);
+        const QString spanning = QStringLiteral("app|acts-1");
+        f.registry.canonicalizeWindowId(spanning);
+        meta.activities.clear();
+        f.registry.upsert(QStringLiteral("acts-2"), meta);
+        const QString elsewhere = QStringLiteral("app|acts-2");
+        f.registry.canonicalizeWindowId(elsewhere);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        f.adaptor->moveWindowToZoneOnScreen(elsewhere, f.zone(0), kLeft);
+        QCOMPARE(applies.count(), 0);
+        f.adaptor->moveWindowToZoneOnScreen(spanning, f.zone(0), kLeft);
+        QCOMPARE(applies.count(), 1);
+        QCOMPARE(f.snap->zoneForWindow(spanning), f.zone(0));
+    }
+
     // One layout on both outputs: a call naming no screen snaps on the one the
     // window is on, not the first that runs the layout (F21).
     void anEmptyHintPrefersTheWindowsScreen()
@@ -376,6 +403,21 @@ private Q_SLOTS:
         f.adaptor->pushToEmptyZone(kRight);
         QCOMPARE(applies.count(), 1);
         QCOMPARE(applies.first().at(6).toString(), kRight);
+    }
+
+    // A named-screen verb the gates refuse is silent, as its keyboard twin is:
+    // no OSD for an unknown screen, or for a zone missing on a screen snapping
+    // does not run (l13_refusal_feedback).
+    void namedScreenRefusalsAreSilent()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("silent-1"), 1);
+        f.wta->windowActivated(w, kLeft);
+        f.tile(kRight);
+        QSignalSpy feedback(f.wta, &WindowTrackingAdaptor::navigationFeedback);
+        f.adaptor->pushToEmptyZone(QStringLiteral("DP-9"));
+        f.adaptor->snapToZoneByNumber(9, kRight);
+        QCOMPARE(feedback.count(), 0);
     }
 
     // The focused-window verbs pass the keyboard gates: a snapped window on a

@@ -17,6 +17,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 
@@ -156,6 +157,78 @@ private Q_SLOTS:
         QCOMPARE(recordFor(store, kWindow)->virtualDesktop, 2);
         QCOMPARE(zonesByDesktopOf(store, kWindow).value(2), QStringList{kZoneC});
         QCOMPARE(recordFor(store, kSibling)->virtualDesktop, 0);
+    }
+
+    // The start-up renumber of a desktop list that came late (F1045): desktop
+    // 2 went while the daemon was down, so the restored record's desktop 3 is
+    // now 2. Everything a live window has touched since is already in the
+    // live numbering and stays: a record captured after the mark, one an
+    // opening window claimed, and an open window's own record.
+    void remapRestoredDesktopZones_movesOnlyRecordsNoLiveWindowTouched()
+    {
+        const QString claimedId = QStringLiteral("claimed|11111111-0000-0000-0000-000000000001");
+        const QString openId = QStringLiteral("open|22222222-0000-0000-0000-000000000002");
+        WindowPlacementStore store;
+        store.record(snappedOn(kWindow, {{3, {kZoneC}}}));
+        WindowPlacement claimed = snappedOn(claimedId, {{3, {kZoneC}}});
+        claimed.appId = QStringLiteral("claimed");
+        store.record(claimed);
+        WindowPlacement open = snappedOn(openId, {{3, {kZoneC}}});
+        open.appId = QStringLiteral("open");
+        store.record(open);
+        const quint64 restoredUpTo = store.sequence();
+        const quint64 restoredStamp = recordFor(store, kWindow)->sequence;
+
+        store.record(snappedOn(kSibling, {{3, {kZoneB}}}));
+        const QString claimer = QStringLiteral("claimed|99999999-0000-0000-0000-000000000009");
+        QVERIFY(store.claimForOpen(claimer, claimed.appId).has_value());
+        store.setLiveInstanceProbe([openId](const QString& windowId) {
+            return windowId == openId;
+        });
+
+        QCOMPARE(store.remapRestoredDesktopZones(PhosphorEngine::DesktopRemap::removal(2, 3), restoredUpTo), 1);
+        QCOMPARE(zonesByDesktopOf(store, kWindow), (QHash<int, QStringList>{{2, {kZoneC}}}));
+        QCOMPARE(recordFor(store, kWindow)->sequence, restoredStamp);
+        QCOMPARE(zonesByDesktopOf(store, kSibling), (QHash<int, QStringList>{{3, {kZoneB}}}));
+        QCOMPARE(zonesByDesktopOf(store, claimedId), (QHash<int, QStringList>{{3, {kZoneC}}}));
+        QCOMPARE(zonesByDesktopOf(store, openId), (QHash<int, QStringList>{{3, {kZoneC}}}));
+    }
+
+    // A downgrade keeps a record's stamp, a loss being no newer truth, and
+    // still counts as a live window touching it: a released snap slot and a
+    // consumed float-back both leave the record in the live numbering. A load
+    // starts the session over and forgets the marks.
+    void remapRestoredDesktopZones_skipsRecordsADowngradeTouched()
+    {
+        const auto removal = PhosphorEngine::DesktopRemap::removal(2, 3);
+        WindowPlacementStore store;
+        WindowPlacement released = snappedOn(kWindow, {{3, {kZoneC}}});
+        released.virtualDesktop = 3;
+        store.record(released);
+        WindowPlacement floated = snappedOn(kSibling, {{3, {kZoneB}}});
+        floated.virtualDesktop = 3;
+        floated.freeGeometryByScreen.insert(kScreen, QRect(10, 20, 300, 400));
+        store.record(floated);
+        const QString wipedId = QStringLiteral("app|33333333-0000-0000-0000-000000000003");
+        WindowPlacement wiped = snappedOn(wipedId, {{3, {kZoneA}}});
+        wiped.freeGeometryByScreen.insert(kScreen, QRect(10, 20, 300, 400));
+        store.record(wiped);
+        const quint64 restoredUpTo = store.sequence();
+
+        QVERIFY(store.releaseEngineSlot(kWindow, WindowPlacement::snapEngineId()));
+        QVERIFY(store.clearFreeGeometry(kSibling, kScreen));
+        QVERIFY(store.clearFreeGeometry(wipedId));
+        QVERIFY(recordFor(store, kWindow)->sequence <= restoredUpTo);
+        QCOMPARE(store.remapRestoredDesktopZones(removal, restoredUpTo), 0);
+        QCOMPARE(recordFor(store, kWindow)->virtualDesktop, 3);
+        QCOMPARE(zonesByDesktopOf(store, kSibling), (QHash<int, QStringList>{{3, {kZoneB}}}));
+        QCOMPARE(zonesByDesktopOf(store, wipedId), (QHash<int, QStringList>{{3, {kZoneA}}}));
+
+        store.deserialize(store.serialize());
+        QCOMPARE(store.remapRestoredDesktopZones(removal, store.sequence()), 3);
+        QCOMPARE(recordFor(store, kWindow)->virtualDesktop, 2);
+        QCOMPARE(zonesByDesktopOf(store, kSibling), (QHash<int, QStringList>{{2, {kZoneB}}}));
+        QCOMPARE(zonesByDesktopOf(store, wipedId), (QHash<int, QStringList>{{2, {kZoneA}}}));
     }
 
     // The whole point of the map is surviving a restart.

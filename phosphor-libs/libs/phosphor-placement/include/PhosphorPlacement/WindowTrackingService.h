@@ -100,11 +100,9 @@ public:
      * @brief Wire the shared WindowRegistry. Not owned; the adaptor forwards its
      * own setter, so it can be swapped or cleared at any time.
      *
-     * Feeds currentAppIdFor, canonicalizeForLookup, the placement store's
-     * live-instance probe, the durable resnap arm's desktop context, and
-     * recordFloatingClose's minimized and output-filling refusals. Without one
-     * (unit tests) each is permissive: the class parsed from the id, a
-     * passthrough key, no live instance, no context, no refusal.
+     * Feeds currentAppIdFor, canonicalizeForLookup, the placement store's live-instance probe, the durable resnap
+     * arm's desktop context, isWindowSticky's fallback (F610), recordedSnapZones' desktop arm (F964) and
+     * recordFloatingClose's minimized and output-filling refusals. Without one (unit tests) each is permissive.
      */
     void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
 
@@ -659,14 +657,13 @@ public:
      * @brief Populate the resnap buffer: each window's primary zone position,
      * read from a map over every loaded layout. Every layout switch builds its
      * buffer here, and the result replaces the buffer even when it is empty. A
-     * minimized window's pre-float zones move to the same-numbered zone (F963).
+     * minimized window's pre-float zones move to the same-numbered zone (F963),
+     * in every store: the filters below choose buffer rows only.
      *
      * @param excludeScreens Screens to skip (the screens a tiling engine runs, autotile or scrolling)
-     * @param includeScreens When non-empty, only process windows on these
-     *        screens. Only memberships of the activity in view are taken.
-     * @param desktopFilter When > 0, only windows on their screen's current
-     *        desktop (this value when no desktop manager answers); sticky windows
-     *        (virtualDesktop==0) always pass.
+     * @param includeScreens When non-empty, only windows on these screens. Only the activity in view is taken.
+     * @param desktopFilter When > 0, only windows on their screen's current desktop (this value when no desktop
+     *        manager answers); sticky windows (virtualDesktop==0) always pass.
      */
     void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {},
                                            const QSet<QString>& includeScreens = {}, int desktopFilter = 0);
@@ -684,9 +681,9 @@ public:
     /// by window id. Seeds the autotile order on a switch to tiling.
     QStringList buildZoneOrderedWindowList(const QString& screenId) const;
 
-    /// Replace the resnap buffer with the windows in view on a snapping screen
-    /// whose primary zone @p layout (being removed, still alive) holds, by
-    /// zone position, so a resnap moves them to the layout their context runs.
+    /// Replace the resnap buffer with the windows in view on a snapping screen whose primary zone @p layout
+    /// (being removed, still alive) holds, by zone position and tagged fromRemovedLayout, so a resnap moves
+    /// them to the layout their context runs, or to their float-back when the delete leaves it on none.
     void bufferWindowsOfRemovedLayout(PhosphorZones::Layout* layout);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -798,10 +795,10 @@ public:
         QVector<PhosphorEngine::ZoneAssignmentEntry> narrowed;
     };
 
-    /// Drop stale zones in the store holding each: an id no layout holds, in
-    /// every context, and for a context in view that runs snapping, a zone its
-    /// layout lacks (None keeps them). A window left in no zone and not floating
-    /// gives up its snap record slot. The adaptor relays the result.
+    /// Drop stale zones in the store holding each: an id no layout holds, in every context, and for a context in
+    /// view that runs snapping, a zone its layout lacks (None keeps them). A window left in no zone and not
+    /// floating gives up its snap record slot. First re-slots a removed layout's minimized windows
+    /// (bufferWindowsOfRemovedLayout, F1035). The adaptor relays the result.
     ZonePruneResult pruneStaleZoneAssignments();
     /// The prune alone; the adaptor calls pruneStaleZoneAssignments to relay.
     void onLayoutChanged();
@@ -871,9 +868,9 @@ public:
     // runtime mutators that still OR them in are retained because the act of
     // marking ANY bit schedules a save, and saveState()'s refreshOpenWindowPlacements()
     // re-derives the affected per-window state into the placement record. They are
-    // therefore "schedule a save" triggers, not independent persisted fields; only
-    // DirtyActiveLayoutId / DirtyLastUsedZone / DirtyUserSnapped / DirtyWindowPlacements / DirtyScrollStrips
-    // map to their own on-disk key.
+    // therefore "schedule a save" triggers, not independent persisted fields; only DirtyActiveLayoutId /
+    // DirtyKnownDesktops / DirtyLastUsedZone / DirtyUserSnapped / DirtyWindowPlacements / DirtyScrollStrips map to
+    // their own on-disk key.
     enum DirtyField : uint32_t {
         DirtyNone = 0,
         DirtyActiveLayoutId = 1u << 0,
@@ -1143,6 +1140,10 @@ private:
     QHash<QString, QRect> m_outputGeometry;
     void followOutputGeometry(const PhosphorScreens::PhysicalScreen& screen);
     void renameScreen(const QString& oldPhysicalId, const QString& newPhysicalId);
+    /// Move a suspension float's pre-float zones to the same-numbered zone (by @p positions) of the layout its
+    /// store's context runs (F963(b)). The removed layouts' positions wait here for the next prune (F1035).
+    void reslotSuspendedPreFloats(const QHash<QString, int>& positions);
+    QHash<QString, int> m_removedLayoutPositions;
     // No save timer: persistence is the WindowTrackingAdaptor's debounced save, driven by stateChanged().
 };
 

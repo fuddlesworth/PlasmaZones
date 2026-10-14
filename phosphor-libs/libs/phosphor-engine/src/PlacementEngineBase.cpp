@@ -158,20 +158,37 @@ void PlacementEngineBase::restoreFreeSizeWhereItStands(IWindowTrackingService* t
         sourceWindowId = source->windowId;
         return true;
     };
+    // The size sent is clamped to the output's available area when the tracker
+    // can resolve one. An unresolvable screen answers an invalid rect, whose
+    // 0x0 size QSize::isValid would accept as a bound, hence the emptiness
+    // test. The managed-size refusal tests the clamped size, which is the one
+    // the window gets: a larger free size can clamp to a managed one (F1094).
+    const QRect available = tracker->screenAvailableGeometry(screenId);
+    const auto fitted = [&available](const QRect& rect) {
+        return available.isValid() && !available.isEmpty() ? rect.size().boundedTo(available.size()) : rect.size();
+    };
     // First pass: a rect on this screen.
     const auto onThisScreen = [&](const WindowPlacement& p) {
         const QRect rect = p.freeGeometryFor(screenId);
         return rect.isValid() && tracker->geometryBelongsToScreen(rect, screenId)
-                && !isManagedSize(managedSizes, rect.size())
+                && !isManagedSize(managedSizes, fitted(rect))
             ? rect
             : QRect();
     };
-    // Second pass, when no record holds one: the rect a record keeps for
-    // another screen, of which only the size is used. Still refused when it is
-    // a size managed on THIS screen.
+    // Second pass, when no record holds one: a rect a record keeps for another
+    // screen, of which only the size is used. Still refused when it is a size
+    // managed on THIS screen, so each screen's rect is tried in key order, the
+    // order anyFreeGeometry picks by, until one is not (F1038).
     const auto onAnyScreen = [&](const WindowPlacement& p) {
-        const QRect rect = p.anyFreeGeometry();
-        return rect.isValid() && !isManagedSize(managedSizes, rect.size()) ? rect : QRect();
+        QStringList keys = p.freeGeometryByScreen.keys();
+        std::sort(keys.begin(), keys.end());
+        for (const QString& key : std::as_const(keys)) {
+            const QRect rect = p.freeGeometryByScreen.value(key);
+            if (rect.isValid() && !isManagedSize(managedSizes, fitted(rect))) {
+                return rect;
+            }
+        }
+        return QRect();
     };
     const bool local = search(onThisScreen);
     if (!local && !search(onAnyScreen)) {
@@ -179,14 +196,7 @@ void PlacementEngineBase::restoreFreeSizeWhereItStands(IWindowTrackingService* t
                                        << screenId;
         return;
     }
-    QSize size = freeGeo.size();
-    // Clamped to the output's available area when the tracker can resolve
-    // one. An unresolvable screen answers an invalid rect, whose 0x0 size
-    // QSize::isValid would accept as a bound, hence the emptiness test.
-    const QRect available = tracker->screenAvailableGeometry(screenId);
-    if (available.isValid() && !available.isEmpty()) {
-        size = size.boundedTo(available.size());
-    }
+    const QSize size = fitted(freeGeo);
     qCInfo(lcPlacementEngineBase) << "restoreFreeSizeWhereItStands:" << windowId << "->" << size << "from"
                                   << sourceWindowId << (local ? "" : "(from another screen)");
     Q_EMIT sizeRestoreRequested(windowId, size, screenId);

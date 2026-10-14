@@ -6,17 +6,21 @@
 // untouched window KWin brings back re-enters its old column through an
 // exact-id claim, and a window touched while away never claims it.
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 
 #include "scrollstriptestutils.h"
 
 #include <QCoreApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSignalSpy>
 #include <QtTest>
 
 using namespace PhosphorScrollEngine;
+using PhosphorEngine::DesktopRemap;
 using ScrollTestUtils::makeProviderEngine;
 
 namespace {
@@ -133,6 +137,264 @@ private Q_SLOTS:
         QVERIFY(engine->hasParked(kept, kS1));
         QVERIFY(engine->readoptParked(kept, kS1, kS1));
         QVERIFY(engine->isWindowTracked(kept));
+    }
+
+    // A strip parked on a desktop or activity that is then removed is dropped
+    // with it: its context never comes into view again, so nothing is owed
+    // and nothing is granted (F1024).
+    void parkOnARemovedContextIsDropped_data()
+    {
+        QTest::addColumn<bool>("activity");
+        QTest::newRow("activity") << true;
+        QTest::newRow("desktop") << false;
+    }
+
+    void parkOnARemovedContextIsDropped()
+    {
+        QFETCH(bool, activity);
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentActivity(QStringLiteral("act-a"));
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        const QString window = QStringLiteral("app|away");
+        engine->windowOpened(window, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        QVERIFY(engine->hasParked(window, kS1));
+
+        if (activity) {
+            engine->pruneStatesForActivities({QStringLiteral("act-b")});
+        } else {
+            engine->pruneStatesForDesktop(1);
+        }
+        QVERIFY(!engine->hasParked(window, QString()));
+        returnOutput(engine);
+        QVERIFY(!engine->readoptParked(window, kS1, kS1));
+    }
+
+    // A window parked floating holds no column in the parked stash, so its
+    // drop marks nothing consumed there: the stash still owes both tiles and
+    // rebuilds the strip in its order (F1025).
+    void droppedFloatLeavesTheStashWhole()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        const QString a = QStringLiteral("app|a");
+        const QString b = QStringLiteral("app|b");
+        const QString floater = QStringLiteral("app|floater");
+        engine->windowOpened(a, kS1, 0, 0);
+        engine->windowOpened(b, kS1, 0, 0);
+        engine->windowOpened(floater, kS1, 0, 0);
+        engine->setWindowFloat(floater, true, kS1);
+        QCoreApplication::processEvents();
+        const QList<QStringList> before = columnsOf(engine, kS1);
+        QCOMPARE(before, (QList<QStringList>{QStringList{a}, QStringList{b}}));
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        returnOutput(engine);
+
+        engine->dropParked(floater, QString(), 0, QString());
+        QVERIFY(engine->readoptParked(b, kS1, kS1));
+        QVERIFY(engine->readoptParked(a, kS1, kS1));
+        QCoreApplication::processEvents();
+        QCOMPARE(columnsOf(engine, kS1), before);
+    }
+
+    // A window parked floating comes back floating where KWin put it: it
+    // never takes a column on the way, so no strip apply moves it (F1028).
+    void parkedFloatComesBackWithoutAColumn()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        const QString tile = QStringLiteral("app|tile");
+        const QString floater = QStringLiteral("app|floater");
+        engine->windowOpened(tile, kS1, 0, 0);
+        engine->windowOpened(floater, kS1, 0, 0);
+        engine->setWindowFloat(floater, true, kS1);
+        QCoreApplication::processEvents();
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        returnOutput(engine);
+        QVERIFY(engine->readoptParked(tile, kS1, kS1));
+        QCoreApplication::processEvents();
+
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        QVERIFY(engine->readoptParked(floater, kS1, kS1));
+        QCoreApplication::processEvents();
+        QVERIFY(engine->isWindowFloatingInScroll(floater));
+        QCOMPARE(columnsOf(engine, kS1), QList<QStringList>{QStringList{tile}});
+        for (const auto& emission : std::as_const(tiled)) {
+            const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+            for (const QJsonValue& entry : batch) {
+                QVERIFY2(entry.toObject().value(QLatin1String("windowId")).toString() != floater,
+                         "the float is never laid out as a tile");
+            }
+        }
+    }
+
+    // The same for a context out of view when KWin returns the windows: they
+    // are seated into that desktop's strip at once, the float floating, since
+    // nothing announces them again when the desktop is shown (F1095, live).
+    void outOfViewParkedFloatArrivesWithoutAColumn()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        const QString tile = QStringLiteral("app|tile");
+        const QString floater = QStringLiteral("app|floater");
+        engine->windowOpened(tile, kS1, 0, 0);
+        engine->windowOpened(floater, kS1, 0, 0);
+        engine->setWindowFloat(floater, true, kS1);
+        QCoreApplication::processEvents();
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        returnOutput(engine); // desktop 1 in view, the parked strip is on 2
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        QVERIFY(engine->readoptParked(tile, kS1, kS1));
+        QVERIFY(engine->readoptParked(floater, kS1, kS1));
+        QVERIFY(engine->isWindowTracked(tile));
+
+        // The desktop is shown, and no open is announced for either window.
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        QCoreApplication::processEvents();
+        QVERIFY(engine->isWindowFloatingInScroll(floater));
+        QCOMPARE(columnsOf(engine, kS1), QList<QStringList>{QStringList{tile}});
+        for (const auto& emission : std::as_const(tiled)) {
+            const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+            for (const QJsonValue& entry : batch) {
+                QVERIFY2(entry.toObject().value(QLatin1String("windowId")).toString() != floater,
+                         "the float is never laid out as a tile");
+            }
+        }
+    }
+
+    // A window parked floating that KWin returns before its screen scrolls
+    // again is granted with its float verdict: announced once the screen
+    // scrolls, it seats floating and takes no column (F1095).
+    void floatReturnedBeforeTheScreenScrollsArrivesFloating()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        const QString tile = QStringLiteral("app|tile");
+        const QString floater = QStringLiteral("app|floater");
+        engine->windowOpened(tile, kS1, 0, 0);
+        engine->windowOpened(floater, kS1, 0, 0);
+        engine->setWindowFloat(floater, true, kS1);
+        QCoreApplication::processEvents();
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        // Returned while S1 is not a scrolling screen: both are granted.
+        QVERIFY(engine->readoptParked(tile, kS1, kS1));
+        QVERIFY(engine->readoptParked(floater, kS1, kS1));
+        QVERIFY(!engine->isWindowTracked(floater));
+
+        returnOutput(engine);
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        engine->windowOpened(tile, kS1, 0, 0);
+        engine->windowOpened(floater, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY(engine->isWindowFloatingInScroll(floater));
+        QCOMPARE(columnsOf(engine, kS1), QList<QStringList>{QStringList{tile}});
+        for (const auto& emission : std::as_const(tiled)) {
+            const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+            for (const QJsonValue& entry : batch) {
+                QVERIFY2(entry.toObject().value(QLatin1String("windowId")).toString() != floater,
+                         "the float is never laid out as a tile");
+            }
+        }
+    }
+
+    // Once every window of a parked context is granted (returned before its
+    // screen scrolls again), the stash stays parked until the tiles arrive:
+    // the save still leaves it out (F1097).
+    void fullyGrantedStashStaysOutOfTheSave()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        const QString a = QStringLiteral("app|a");
+        const QString b = QStringLiteral("app|b");
+        engine->windowOpened(a, kS1, 0, 0);
+        engine->windowOpened(b, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        // Returned before the screen is scrolling again, so both are granted.
+        QVERIFY(engine->readoptParked(a, kS1, kS1));
+        QVERIFY(engine->readoptParked(b, kS1, kS1));
+        QVERIFY(!engine->hasParked(a, QString()));
+        QVERIFY(!engine->isWindowTracked(a));
+
+        const QJsonObject blob = engine->serializeStripState();
+        QVERIFY2(!QString::fromUtf8(QJsonDocument(blob).toJson()).contains(a),
+                 "a stash still owed to granted tiles must not be saved");
+    }
+
+    // A touch on the last window a parked context still owes does not take
+    // the stash from tiles already granted: they come back in their order
+    // when they arrive (F1097).
+    void dropAfterGrantsKeepsTheStashForTheGrantedTiles()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        const QString a = QStringLiteral("app|a");
+        const QString b = QStringLiteral("app|b");
+        const QString c = QStringLiteral("app|c");
+        engine->windowOpened(a, kS1, 0, 0);
+        engine->windowOpened(b, kS1, 0, 0);
+        engine->windowOpened(c, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        QCOMPARE(columnsOf(engine, kS1), (QList<QStringList>{QStringList{a}, QStringList{b}, QStringList{c}}));
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        // Returned before the screen is scrolling again, so a and c are
+        // granted; the screen's return to scrolling announces them.
+        QVERIFY(engine->readoptParked(a, kS1, kS1));
+        QVERIFY(engine->readoptParked(c, kS1, kS1));
+        QVERIFY(!engine->isWindowTracked(a));
+        engine->dropParked(b, QString(), 0, QString());
+
+        returnOutput(engine);
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        engine->windowOpened(c, kS1, 0, 0);
+        engine->windowOpened(a, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        QCOMPARE(columnsOf(engine, kS1), (QList<QStringList>{QStringList{a}, QStringList{c}}));
+    }
+
+    // A desktop removed while its strip is parked takes the window's parked
+    // float verdict with it: parked again later as a tile, it comes back a
+    // tile (F1026).
+    void removedDesktopParkLeavesNoFloatVerdict()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        const QString window = QStringLiteral("app|window");
+        engine->windowOpened(window, kS1, 0, 0);
+        engine->setWindowFloat(window, true, kS1);
+        QCoreApplication::processEvents();
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        engine->remapDesktops(DesktopRemap::removal(1, 2));
+        QVERIFY(!engine->hasParked(window, QString()));
+
+        returnOutput(engine);
+        engine->windowOpened(window, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY(!engine->isWindowFloatingInScroll(window));
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        returnOutput(engine);
+        QVERIFY(engine->readoptParked(window, kS1, kS1));
+        QCoreApplication::processEvents();
+        QVERIFY2(!engine->isWindowFloatingInScroll(window), "the dropped park's float verdict does not linger");
+        QCOMPARE(columnsOf(engine, kS1), QList<QStringList>{QStringList{window}});
     }
 };
 

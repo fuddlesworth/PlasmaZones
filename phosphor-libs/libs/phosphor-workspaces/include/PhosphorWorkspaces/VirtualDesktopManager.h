@@ -129,14 +129,19 @@ Q_SIGNALS:
     /// manager's own state is renumbered: the ids, the count, the current
     /// desktop, and each screen's desktop (moved through
     /// DesktopRemap::successor, silently, for the reason desktopRemovedAt's
-    /// shift is silent). Ahead of desktopCountChanged, like desktopRemovedAt.
-    /// Never sent for a change that moves no number (a rename, a desktop
-    /// appended after the last one).
+    /// shift is silent). Ahead of desktopCountChanged, like desktopRemovedAt,
+    /// except for a GROWING count, which goes out as KWin reports it so a
+    /// desktop the compositor already uses is in range: an insert before the
+    /// last desktop sends the count first and this after. Never sent for a
+    /// change that moves no number (a rename, a desktop appended after the
+    /// last one).
     void desktopsRenumbered(const PhosphorEngine::DesktopRemap& remap);
     /// KWin reported a change to its desktop list, and the snapshot that says
-    /// what changed is on its way. Sent before each refresh it triggers, so a
-    /// change can send it more than once, and a change that moves no number
-    /// is never followed by desktopsRenumbered. A store whose entries the
+    /// what changed is on its way. Sent once per change, on the first of the
+    /// several signals KWin sends for it, and again only after a snapshot has
+    /// committed (F1023). Not sent before the first snapshot, whose map
+    /// compares against a previous session. A change that moves no number is
+    /// never followed by desktopsRenumbered. A store whose entries the
     /// compositor re-reports in the new numbering on its own (the window
     /// registry) marks here which entries predate the change.
     void desktopListChanging();
@@ -169,6 +174,8 @@ private:
     /// to the count (KWin renumbers on removal; the effect re-reports the true
     /// value shortly after, this just keeps the map valid in the interim).
     void clampScreenDesktopsToCount();
+    /// Emit desktopListChanging unless this change already did, then refresh.
+    void announceDesktopListChange();
 
     QDBusInterface* m_kwinVDInterface = nullptr;
     bool m_running = false;
@@ -188,6 +195,9 @@ private:
     uint m_refreshGeneration = 0;
     /// setBaselineDesktopIds' list, held until the first snapshot commits.
     QStringList m_baselineDesktopIds;
+    /// desktopListChanging went out and no snapshot has committed since
+    /// (announceDesktopListChange). Appended last: installed class.
+    bool m_desktopListChangePending = false;
 };
 
 } // namespace PhosphorWorkspaces

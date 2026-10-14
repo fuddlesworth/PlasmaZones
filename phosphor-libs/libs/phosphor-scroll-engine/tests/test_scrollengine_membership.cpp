@@ -457,20 +457,26 @@ private Q_SLOTS:
     // window's own desktop edit pushed its metadata first, is still focused by
     // "Focus new windows" when the effect's open for it arrives (F583). A
     // column is focused in the strip, a float is activated directly, and a
-    // re-announce of the same held window stays unfocused.
+    // re-announce of the same held window stays unfocused. A per-window
+    // openFocused rule that declines focus outranks the setting here as it
+    // does on a fresh open (F1027).
     void arrivalAdoptedByTheReconcileTakesFocus_data()
     {
         QTest::addColumn<bool>("floated");
         QTest::addColumn<bool>("eligible");
-        QTest::newRow("column") << false << true;
-        QTest::newRow("float") << true << true;
-        QTest::newRow("re-announce") << false << false;
+        QTest::addColumn<bool>("ruleDeclines");
+        QTest::newRow("column") << false << true << false;
+        QTest::newRow("float") << true << true << false;
+        QTest::newRow("re-announce") << false << false << false;
+        QTest::newRow("column, rule declines") << false << true << true;
+        QTest::newRow("float, rule declines") << true << true << true;
     }
 
     void arrivalAdoptedByTheReconcileTakesFocus()
     {
         QFETCH(bool, floated);
         QFETCH(bool, eligible);
+        QFETCH(bool, ruleDeclines);
         QObject owner;
         ScrollEngine* engine = moverEngine(&owner);
         engine->setCurrentDesktopForScreen(kS1, 1);
@@ -490,6 +496,13 @@ private Q_SLOTS:
         QVERIFY(holdsPlaceOn(engine, kS1, 1, kMover));
         QCOMPARE(engine->isWindowFloatingInScroll(kMover), floated);
 
+        if (ruleDeclines) {
+            engine->setOpenParamsResolver([](const QString&, const QString&) {
+                ScrollOpenParams params;
+                params.focused = false;
+                return params;
+            });
+        }
         QSignalSpy activateSpy(engine, &ScrollEngine::activateWindowRequested);
         engine->setOpenFocusEligible(eligible);
         engine->windowOpened(kMover, kS1, 0, 0);
@@ -501,8 +514,9 @@ private Q_SLOTS:
         }
         // The adoption already made a column the strip's active one; what an
         // arrival owes is the compositor's focus.
-        QCOMPARE(activated, eligible);
-        if (eligible && !floated) {
+        const bool focused = eligible && !ruleDeclines;
+        QCOMPARE(activated, focused);
+        if (focused && !floated) {
             auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
             QVERIFY(state);
             QCOMPARE(state->strip().activeWindowId(), kMover);

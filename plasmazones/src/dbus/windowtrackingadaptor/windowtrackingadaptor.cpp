@@ -198,8 +198,12 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // A deleted layout's windows in view move to the same-numbered zone of
     // the layout their context runs afterwards, or their float spot, for an
     // active and a per-context delete alike; a hidden context's are unsnapped
-    // (F403, F429). layoutRemoved fires with the layout still alive, before
-    // the registry picks the replacement; layoutsChanged closes the removal.
+    // (F403, F429). A context the delete leaves on no layout sends them to
+    // their float spot, and one without is unsnapped where it stands: the
+    // buffer tags them fromRemovedLayout, which a switch to none never does
+    // (cr1_f1093_context_layout_delete). layoutRemoved fires with the layout
+    // still alive, before the registry picks the replacement; layoutsChanged
+    // closes the removal.
     connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutRemoved, this,
             [this](PhosphorZones::Layout* layout) {
                 m_service->bufferWindowsOfRemovedLayout(layout);
@@ -284,9 +288,8 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // Load persisted window tracking state from previous session
     loadState();
 
-    // Exclude-pattern pruning is now driven from `Daemon::init` (and again
-    // from `Daemon::finalizeStartup` once AutotileEngine::loadState has
-    // populated the autotile queue) — see WTA::pruneExcludedPlacements.
+    // Exclude-pattern pruning is driven from Daemon::init: its priming call
+    // and its rulesChanged refilter (see WTA::pruneExcludedPlacements).
 
     // If we have placement records but missed activeLayoutChanged (layout was set before we
     // connected), set the flag so tryEmitPendingRestoresAvailable will emit when panel

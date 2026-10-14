@@ -206,6 +206,26 @@ private Q_SLOTS:
         QCOMPARE(f.snap->screenForTrackedWindow(w), f.other);
     }
 
+    // An activated drag KWin cancels over the other monitor never left the
+    // first: the window keeps its zone there and nothing moves it (F1041).
+    void activeDrag_cancelledOverTheOtherMonitorKeepsItsZone()
+    {
+        Fixture f;
+        const QString w = QStringLiteral("app|active-cancelled");
+        f.snapOn(w, QStringLiteral("DP-1"));
+        const int ctrl = static_cast<int>(Qt::ControlModifier);
+        f.adaptor->beginDrag(w, 100, 100, 400, 300, QStringLiteral("DP-1"), 0);
+        f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), ctrl, 0);
+
+        const PhosphorProtocol::DragOutcome outcome =
+            f.adaptor->endDrag(w, f.inOther().x(), f.inOther().y(), ctrl, 0, true);
+
+        QCOMPARE(outcome.action, PhosphorProtocol::DragOutcome::CancelSnap);
+        QCOMPARE(f.wta->service()->zoneForWindow(w), f.zone(0));
+        QVERIFY(f.snapHoldsOn(w, QStringLiteral("DP-1")));
+        QVERIFY(!f.snap->isFloating(w));
+    }
+
     // A drag-out on a monitor where the window has no float-back restores the
     // size it had free on the monitor it left; only the size travels (F269).
     void activeDragOut_restoresTheSizeRememberedOnAnotherMonitor()

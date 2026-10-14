@@ -36,6 +36,53 @@ void ScrollEngine::remapDesktops(const DesktopRemap& remap)
     applyDesktopRemap(remap);
 }
 
+void ScrollEngine::remapRestoredStripStash(const DesktopRemap& remap)
+{
+    if (remap.isIdentity()) {
+        return;
+    }
+    // KWin's first desktop list landed after windows did, so everything this
+    // engine placed or stashed since is in the live numbering already
+    // (cr1_f1045_late_desktop_list). What restoreStripState staged from the
+    // previous session is not, until this moves it. An entry counts as seen
+    // live once an in-session stash replaced it (a non-zero recency stamp), a
+    // live window claimed one of its tiles, a populated strip runs at its key
+    // or an output park holds it; such an entry keeps its key.
+    const auto untouchedRestore = [this](const PlacementStateKey& key, const StashedStrip& stash) {
+        const ScrollState* live = m_states.stateForKey(key);
+        return stash.sequence == 0 && !m_stripStashConsumed.contains(key) && !(live && live->windowCount() > 0)
+            && !isEvacueeParkedKey(key);
+    };
+    // Taken out first and put back after, so a cycle (2 -> 3 and 3 -> 2)
+    // cannot land one entry on another not yet moved.
+    QList<std::pair<PlacementStateKey, StashedStrip>> moving;
+    for (auto it = m_stripStash.begin(); it != m_stripStash.end();) {
+        const int to = remap.map(it.key().desktop);
+        if (to != it.key().desktop && untouchedRestore(it.key(), it.value())) {
+            moving.append({PlacementStateKey{it.key().screenId, to, it.key().activity}, std::move(it.value())});
+            it = m_stripStash.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // Back under the new number on the terms restoreStripState stages on:
+    // never over a stash already there or over a strip that has adopted its
+    // windows. One on a removed desktop goes with it.
+    int moved = 0;
+    for (auto& [key, stash] : moving) {
+        const ScrollState* live = m_states.stateForKey(key);
+        if (key.desktop < 1 || m_stripStash.contains(key) || (live && live->windowCount() > 0)) {
+            continue;
+        }
+        m_stripStash.insert(key, std::move(stash));
+        ++moved;
+    }
+    if (!moving.isEmpty()) {
+        qCInfo(lcScrollEngine) << "remapRestoredStripStash: moved" << moved << "of" << moving.size()
+                               << "restored strip snapshot(s) for the late first desktop list";
+    }
+}
+
 void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
 {
     if (removedDesktop < 1) {
@@ -155,18 +202,28 @@ void ScrollEngine::applyDesktopRemap(const DesktopRemap& remap)
         m_pendingFocusEmitContexts.insert(key);
     }
     // A parked strip's contexts name desktops too; the stash under them moved
-    // above. One on a removed desktop has nothing left to re-seat.
+    // above. One on a removed desktop has nothing left to re-seat, and its
+    // windows' float and clamp entries go with it unless another context still
+    // owes them. A number outside the old list (0 included) is not the map's
+    // to move: map() hands it back, and the context keeps it.
     if (m_evacueePark) {
+        m_evacueePark->dropContextsWhere([&remap](const PlacementStateKey& key) {
+            return key.desktop >= 1 && remap.map(key.desktop) == 0;
+        });
         for (auto& contexts : m_evacueePark->byOutput) {
             QHash<PlacementStateKey, QSet<QString>> remapped;
             for (auto it = contexts.cbegin(); it != contexts.cend(); ++it) {
-                const int to = remap.map(it.key().desktop);
-                if (to > 0) {
-                    remapped.insert(PlacementStateKey{it.key().screenId, to, it.key().activity}, it.value());
-                }
+                remapped.insert(mapped(it.key()), it.value());
             }
             contexts = std::move(remapped);
         }
+        // The grants name contexts the same way (the drop above took those on
+        // a removed desktop).
+        QHash<PlacementStateKey, QHash<QString, bool>> grants;
+        for (auto it = m_evacueePark->grants.cbegin(); it != m_evacueePark->grants.cend(); ++it) {
+            grants[mapped(it.key())].insert(it.value());
+        }
+        m_evacueePark->grants = std::move(grants);
     }
 
     // The pins and the per-output desktop map index the same numbering as the

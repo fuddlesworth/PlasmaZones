@@ -770,6 +770,42 @@ private Q_SLOTS:
         QCOMPARE(plainRec->freeGeometryFor(QStringLiteral("DP-1")), tallFrame);
     }
 
+    void testRecordFloatingClose_minimizedRefusesOnlyTheFrame()
+    {
+        // A minimized close keeps its frame out of the float-back, and the rest
+        // of the capture still runs: the record adopts the close screen and the
+        // snap slot left on the other screen is downgraded (F1036).
+        PhosphorEngine::WindowRegistry registry;
+        const auto clearRegistry = qScopeGuard([this] {
+            m_service->setWindowRegistry(nullptr);
+        });
+        m_service->setWindowRegistry(&registry);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("kate");
+        meta.isMinimized = true;
+        registry.upsert(QStringLiteral("min-close"), meta);
+        const QString windowId = QStringLiteral("kate|min-close");
+        PhosphorEngine::WindowPlacement existing;
+        existing.windowId = windowId;
+        existing.appId = QStringLiteral("kate");
+        existing.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot snap;
+        snap.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        snap.zoneIds = QStringList{m_zoneIds[0]};
+        existing.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        QVERIFY(m_service->placementStore().record(existing));
+
+        m_service->recordFloatingClose(windowId, QStringLiteral("DP-1"), QRect(30, 40, 600, 400));
+
+        const auto rec = m_service->placementStore().peekExact(windowId);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->screenId, QStringLiteral("DP-1"));
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QVERIFY2(!rec->freeGeometryFor(QStringLiteral("DP-1")).isValid(),
+                 "a minimized frame must not become the float-back");
+    }
+
     void testRecordFloatingClose_prefixMutationKeepsOwnEngineSlots()
     {
         // Closing floating after an appId-prefix mutation must merge into the

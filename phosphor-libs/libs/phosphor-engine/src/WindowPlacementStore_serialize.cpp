@@ -175,18 +175,20 @@ void WindowPlacementStore::deserialize(const QJsonObject& stored, const OutputOr
     obj.remove(versionKey());
     shiftFreeGeometry(obj, originFor, 1, /*dropUnknown=*/false);
 
-    // WHOLE-STORE REPLACE, and it runs more than once per startup: the daemon
-    // loads through WindowTrackingAdaptor's constructor and again through the
-    // engines' load delegate at finalizeStartup. Both are bringup, before any
-    // window opens, so discarding what is here costs nothing. Calling this
+    // WHOLE-STORE REPLACE. The daemon loads once per start, through
+    // WindowTrackingAdaptor's constructor, which runs before any window opens,
+    // so discarding what is here costs nothing. (The engines' load delegates
+    // would load again, but nothing in the daemon calls them.) Calling this
     // mid-session would not be safe. It would drop every live capture and void
     // every open claim, so windows already placed this session would lose the
     // record their engines restore from.
     m_byApp.clear();
     m_sequence = 0;
-    // Every claim named a record in the store being replaced.
+    // Every claim and every downgrade mark named a record in the store being
+    // replaced.
     m_openPairing.clear();
     m_claimedBy.clear();
+    m_downgradedThisSession.clear();
     QList<WindowPlacement> loaded;
     // Persisted ARRAY positions, keyed per (bucket, instance) — NOT a global
     // index into the flattened list: a renamed duplicate persisted under an

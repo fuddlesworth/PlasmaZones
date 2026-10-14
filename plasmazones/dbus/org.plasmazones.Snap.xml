@@ -14,7 +14,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
              ═══════════════════════════════════════════════════════════════════════════ -->
 
         <method name="windowSnapped">
-            <annotation name="org.gtk.GDBus.DocString" value="Confirm a single-zone snap. Refused for a window that is gone, an unknown screen, or a zone that screen's layout lacks."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Confirm a single-zone snap. Refused for a window that is gone, an unknown screen, a window not on the desktop it would land on, a window on another activity, or a zone that screen's layout lacks."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="zoneId" type="s" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>

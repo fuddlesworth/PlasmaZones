@@ -590,6 +590,25 @@ private Q_SLOTS:
         m_service->setSnapState(m_engine->snapState());
     }
 
+    // A user verb onto the zone the window already holds is the user's snap
+    // all the same, not a re-statement: an auto-restored window stops
+    // counting as one and the zone becomes the last used (F209, F1018).
+    void aUserSnapOntoItsOwnZoneCounts()
+    {
+        installFullResolver();
+        const QString screen = QStringLiteral("DP-1");
+        m_engine->setCurrentDesktopForScreen(screen, 1);
+        const QString w = QStringLiteral("app|own-zone");
+        m_engine->commitSnap(w, m_zoneIds[0], screen, PhosphorEngine::SnapIntent::AutoRestored);
+        m_service->markAsAutoSnapped(w);
+
+        m_engine->commitUserSnap(w, {m_zoneIds[0]}, screen, QRect(0, 0, 400, 300), QString());
+
+        QVERIFY(!m_service->isAutoSnapped(w));
+        QCOMPARE(static_cast<SnapState*>(m_engine->stateForScreen(screen))->lastUsedZoneId(), m_zoneIds[0]);
+        m_service->setSnapState(m_engine->snapState());
+    }
+
     // Reapply re-applies the zones the focused screen's windows hold in the
     // context in view (F398). It replayed the layout-switch buffer, which is
     // empty outside a switch, so the verb answered no_windows_to_resnap. A

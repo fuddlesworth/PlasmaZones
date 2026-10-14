@@ -1268,17 +1268,17 @@ public:
     // engine's memory of the windows there and re-seats an untouched window
     // when KWin returns it. Session-scoped: a daemon restart loses the park.
 
-    /// Copy every context of @p physicalScreenId (each of its virtual screens)
-    /// into the park, before the prune drops them. Returns the parked windows.
+    /// Copy every context of @p physicalScreenId (each of its virtual screens) into the park, before the prune
+    /// drops them. Returns the parked windows.
     virtual QStringList parkOutput(const QString& physicalScreenId)
     {
         Q_UNUSED(physicalScreenId)
         return {};
     }
-    /// Re-seat @p windowId's contexts parked under @p parkedPhysicalId on
-    /// @p returnedPhysicalId as a re-statement (no focus, no last-used). A
-    /// context out of view is re-seated or granted to the engine's own arrival
-    /// path. True when anything was re-seated or granted.
+    /// Re-seat @p windowId's contexts parked under @p parkedPhysicalId on @p returnedPhysicalId as a re-statement
+    /// (no focus, no last-used). Each context lands in its own (screen, desktop, activity): its virtual screen on
+    /// the returned output (the bare output when that has none), its desktop and activity, never the ones in view.
+    /// One out of view is re-seated or granted to the engine's own arrival path. True when any was.
     virtual bool readoptParked(const QString& windowId, const QString& parkedPhysicalId,
                                const QString& returnedPhysicalId)
     {

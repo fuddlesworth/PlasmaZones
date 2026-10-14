@@ -4,6 +4,7 @@
 #include "daemon/daemon.h"
 #include "helpers.h"
 
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "core/platform/logging.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -26,7 +27,16 @@ void Daemon::retireOutputPlacements(const QString& physicalScreenId)
     if (physicalScreenId.isEmpty()) {
         return;
     }
-    // Park first, while the engines still hold the output's contexts: the
+    // A live drag-insert preview on the departing output (any virtual
+    // sub-screen of it) must unwind BEFORE the prunes tear its states down:
+    // the scroll engine's prune cancels internally, the autotile prune does
+    // not, and neither caller may depend on which engine holds the preview.
+    // Here and not in the screen-removed handler alone, so the effect's
+    // settle report, which can retire the output first, cancels too (F1043).
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(physicalScreenId);
+    }
+    // Park next, while the engines still hold the output's contexts: the
     // windows KWin is moving off it may come back. Idempotent, so the effect's
     // settle report and this daemon's own screen-removed handler can both run
     // it for one removal (F690): the second park finds nothing and keeps the

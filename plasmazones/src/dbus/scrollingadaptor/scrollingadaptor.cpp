@@ -647,7 +647,8 @@ void ScrollingAdaptor::clearEngine()
     // would just mean a detached adaptor whose "last broadcast" memory
     // contradicts every other slot it answers.
     m_lastBroadcastScreens.clear();
-    // The autotile resolver captures the engine it reads.
+    // The autotile resolver captures the autotile engine it reads, not this
+    // adaptor's scroll engine.
     m_isAutotileScreen = nullptr;
     // m_scrollEffectBehaviour and m_scrollFocusScrollBlockedWindows are
     // deliberately NOT cleared, and they are the two members that differ: the

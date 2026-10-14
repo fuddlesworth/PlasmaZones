@@ -94,7 +94,14 @@ void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationLi
             }
             releaseSnapSlotIfFree(entry.windowId);
         } else {
-            windowSnapped(entry.windowId, entry.zoneId, entry.screenId);
+            // windowSnapped's gate, so a refused confirmation records no intent.
+            const std::optional<BusSnapTarget> target =
+                validBusSnapTarget(entry.windowId, {entry.zoneId}, entry.screenId);
+            if (!target) {
+                continue;
+            }
+            m_engine->commitSnap(entry.windowId, entry.zoneId, target->screenId,
+                                 PhosphorEngine::SnapIntent::UserInitiated, target->desktop);
             // The snap-all confirmation, a user snap like any shortcut's.
             recordSnapIntent(entry.windowId, true);
         }

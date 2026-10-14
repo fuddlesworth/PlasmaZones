@@ -167,7 +167,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     //
     // Pre-tile / pre-float geometry captures are preserved by handoffRelease
     // for the receiving side to consult on a future return handoff.
-    if (releaseScreen && m_windowTracking) {
+    //
+    // Not on an externally cancelled drag: KWin is putting the window back
+    // where it started, so it never left its monitor (F1041), as the pending
+    // arm in endDrag skips dragEndedOnScreen on a cancel.
+    if (releaseScreen && m_windowTracking && !capturedExternallyCancelled) {
         auto* snapEngine = m_windowTracking->snapEngine();
         const QString snapScreen = snapEngine ? snapEngine->screenForTrackedWindow(windowId) : QString();
         const QString autotileScreen =

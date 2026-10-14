@@ -43,13 +43,23 @@ struct EvacueeLedger
     /// By canonical window id: one entry per output the window is parked for.
     QHash<QString, QList<Entry>> entries;
     /// Windows a PlasmaZones verb placed while an output they were parked for
-    /// was away. KWin may pull them back when it returns, and the settle then
-    /// re-asserts where PlasmaZones put them.
-    QSet<QString> placedAfterEvacuation;
+    /// was away, with the physical ids of those outputs. KWin may pull them
+    /// back onto one when it returns, and the settle then re-asserts where
+    /// PlasmaZones put them. Dropped once every output it names is back and a
+    /// settle was read, and on close (F1049).
+    QHash<QString, QStringList> placedAfterEvacuation;
+    /// A float an evacuee could not take when its output went away: where it
+    /// landed, and which mode's float it is.
+    struct PendingFloat
+    {
+        QString screenId;
+        bool snap = false; ///< a snap float, else a tiling screen's
+    };
     /// Evacuees that could not be adopted floating when their output went away
-    /// (minimized, or on a desktop or activity out of view): the first
-    /// announce adopts them floating instead of tiling them.
-    QSet<QString> evacueeFloatPending;
+    /// (minimized, or on a desktop or activity out of view): their first
+    /// arrival on the output they landed on, in the same mode, adopts them
+    /// floating instead of placing them (F643, F1047).
+    QHash<QString, PendingFloat> evacueeFloatPending;
     /// Set while the ledger itself places a window, so the engines' float
     /// announcements from that placement do not read as the user's touch.
     bool adoptInProgress = false;

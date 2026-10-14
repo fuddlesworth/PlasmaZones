@@ -416,6 +416,36 @@ private Q_SLOTS:
         QVERIFY2(floatSpy.isEmpty(), "only the engine's own relay may report the float");
     }
 
+    // A window on a desktop its screen does not show is refused: the engine
+    // there would float it in the desktop in view, a context it is not in
+    // (F1048, l13_bus_snap_hidden_multidesktop).
+    void busSetWindowFloatingRefusesAWindowOnAHiddenDesktop()
+    {
+        FloatBackFixture f;
+        FloatLoggingEngine tile;
+        tile.activeScreens = {kRight};
+        f.wta->setEngines(f.snap.get(), &tile, nullptr);
+        const auto restore = qScopeGuard([&f] {
+            f.wta->setEngines(f.snap.get(), &f.tiling, nullptr);
+        });
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.isMinimized = false;
+        meta.virtualDesktop = 2;
+        f.registry.upsert(QStringLiteral("f1048-hidden"), meta);
+        const QString w = QStringLiteral("app|f1048-hidden");
+        f.registry.canonicalizeWindowId(w);
+        tile.heldScreen.insert(w, kRight);
+        f.setFrame(w, QRect(2100, 100, 800, 600));
+
+        f.wta->setWindowFloating(w, true);
+        QVERIFY2(tile.floatCalls.isEmpty(), "desktop 2 is not the one in view");
+
+        f.layouts->setCurrentVirtualDesktop(2);
+        f.wta->setWindowFloating(w, true);
+        QCOMPARE(tile.floatCalls.size(), 1);
+    }
+
     // On a snapping monitor the verb takes the window out of its zone, as a
     // float toggle does, rather than setting a float bit beside the zone. A
     // window the daemon has no record of is refused (F678).

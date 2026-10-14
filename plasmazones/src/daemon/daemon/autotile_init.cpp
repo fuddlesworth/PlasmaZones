@@ -608,7 +608,7 @@ void Daemon::toggleScreenMode(const QString& screenId, bool snappingAutotilePair
             // this branch must drive its own resnap or the released
             // strip windows keep their scroll geometry. Mirrors
             // resnapIfManualMode (navigation.cpp) including the
-            // engine-managed exclude union and the OSD suppress arm.
+            // engine-managed exclude union, and resnaps silently as it does.
             // The service() check is redundant defence, not a real
             // guard: WindowTrackingAdaptor assigns m_service in its
             // constructor and never nulls it, so a live adaptor always

@@ -1106,7 +1106,7 @@ private:
     const SnapState* lastUsedStateForScreen(const QString& screenId) const;
 
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                        PhosphorEngine::SnapIntent intent, int virtualDesktop = 0);
+                        PhosphorEngine::SnapIntent intent, int virtualDesktop = 0, bool userVerb = false);
 
     /// The unfloat target screen: @p primaryScreen when it still exists (virtual ids resolved), else
     /// @p fallbackScreen resolved but not existence-tested (it is the caller's live output); empty only

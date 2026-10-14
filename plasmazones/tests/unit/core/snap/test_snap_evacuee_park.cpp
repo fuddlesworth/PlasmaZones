@@ -22,6 +22,7 @@
 #include "helpers/StubZoneDetector.h"
 #include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
@@ -37,6 +38,8 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 namespace {
 const QString kScreen = QStringLiteral("DP-1");
 const QString kOther = QStringLiteral("DP-2");
+const QString kActA = QStringLiteral("act-a");
+const QString kActB = QStringLiteral("act-b");
 } // namespace
 
 class TestSnapEvacueePark : public QObject
@@ -246,7 +249,105 @@ private Q_SLOTS:
         QVERIFY(!m_engine->hasParked(w, QString()));
     }
 
+    // A context parked under an activity not in view goes back into that
+    // activity's store, never the one showing, where the window would count
+    // as an occupant of a zone it is not in (F1016).
+    void aContextOfAnotherActivityGoesBackThere()
+    {
+        const QString w = QStringLiteral("app|other-activity");
+        showActivity(kActB);
+        snapOn(1, w, m_zoneIds[0]);
+        QCOMPARE(m_engine->parkOutput(kScreen), QStringList{w});
+        m_engine->pruneStatesForRemovedScreen(kScreen);
+
+        showActivity(kActA);
+        QVERIFY(m_engine->readoptParked(w, kScreen, kScreen));
+        QVERIFY2(zonesOn(1, w).isEmpty(), "nothing lands in the activity in view");
+        showActivity(kActB);
+        QCOMPARE(zonesOn(1, w), QStringList{m_zoneIds[0]});
+    }
+
+    // The daemon captures a re-seated window's record straight after the
+    // re-seat: a window held only on an activity not in view is recorded on
+    // that activity, not the one showing (F1016). Mutation: stamp
+    // currentActivity() in capturePlacementAtDesktop and the record says act-a.
+    void aCaptureKeepsTheActivityOfAContextNotInView()
+    {
+        const QString w = QStringLiteral("app|capture-activity");
+        showActivity(kActB);
+        snapOn(1, w, m_zoneIds[0]);
+        QCOMPARE(m_engine->parkOutput(kScreen), QStringList{w});
+        m_engine->pruneStatesForRemovedScreen(kScreen);
+        showActivity(kActA);
+        QVERIFY(m_engine->readoptParked(w, kScreen, kScreen));
+
+        const auto rec = m_engine->capturePlacement(w);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->activity, kActB);
+
+        // A window held in the activity in view still records that one.
+        const QString shown = QStringLiteral("app|capture-shown");
+        snapOn(1, shown, m_zoneIds[1]);
+        const auto shownRec = m_engine->capturePlacement(shown);
+        QVERIFY(shownRec.has_value());
+        QCOMPARE(shownRec->activity, kActA);
+    }
+
+    // Snapping switched off while the output was away gives nothing back
+    // (F1017).
+    void nothingComesBackWithSnappingSwitchedOff()
+    {
+        const QString w = QStringLiteral("app|snapping-off");
+        snapOn(1, w, m_zoneIds[0]);
+        QCOMPARE(m_engine->parkOutput(kScreen), QStringList{w});
+        m_engine->pruneStatesForRemovedScreen(kScreen);
+        m_settings->setSnappingEnabled(false);
+
+        QVERIFY(!m_engine->readoptParked(w, kScreen, kScreen));
+        QVERIFY(m_service->zoneForWindow(w).isEmpty());
+        m_settings->setSnappingEnabled(true);
+    }
+
+    // A desktop removed while the output was away takes its parked context
+    // with it, also through the prune of a shrunk desktop count, which runs
+    // no renumber; the other desktop's context still comes back (F1020).
+    void aRemovedDesktopTakesItsParkedContext()
+    {
+        const QString w = QStringLiteral("app|pruned-desktop");
+        snapOn(1, w, m_zoneIds[0]);
+        snapOn(2, w, m_zoneIds[1]);
+        QCOMPARE(m_engine->parkOutput(kScreen), QStringList{w});
+        m_engine->pruneStatesForRemovedScreen(kScreen);
+
+        m_engine->pruneStatesForDesktop(2);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        QVERIFY(m_engine->readoptParked(w, kScreen, kScreen));
+        QCOMPARE(zonesOn(1, w), QStringList{m_zoneIds[0]});
+        QVERIFY(zonesOn(2, w).isEmpty());
+    }
+
+    // So does a removed activity (F1024).
+    void aRemovedActivityTakesItsParkedContext()
+    {
+        const QString w = QStringLiteral("app|pruned-activity");
+        showActivity(kActB);
+        snapOn(1, w, m_zoneIds[0]);
+        QCOMPARE(m_engine->parkOutput(kScreen), QStringList{w});
+        m_engine->pruneStatesForRemovedScreen(kScreen);
+
+        m_engine->pruneStatesForActivities({kActA, kActB});
+        QVERIFY(m_engine->hasParked(w, kScreen));
+        m_engine->pruneStatesForActivities({kActA});
+        QVERIFY(!m_engine->hasParked(w, kScreen));
+    }
+
 private:
+    void showActivity(const QString& activity)
+    {
+        m_layoutManager->setCurrentActivity(activity);
+        m_engine->setCurrentActivity(activity);
+    }
+
     void snapOn(int desktop, const QString& windowId, const QString& zoneId)
     {
         m_engine->setCurrentDesktopForScreen(kScreen, desktop);

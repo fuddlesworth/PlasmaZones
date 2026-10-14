@@ -704,7 +704,7 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     //
     // Null-guard the engines for the same shutdown-window reason as
     // syncAutotileFloatState above.
-    if (!m_autotileEngine || !m_snapEngine || !m_windowTrackingAdaptor) {
+    if (!m_autotileEngine || !m_windowTrackingAdaptor) {
         return;
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();

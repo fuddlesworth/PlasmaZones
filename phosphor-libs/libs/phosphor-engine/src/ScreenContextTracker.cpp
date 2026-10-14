@@ -136,12 +136,13 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
     // it does not know which desktop identity was removed. Values are dropped
     // here rather than shifted, because this call only knows a count.
     //
-    // The SHIFT is renumberDesktopsAfterRemoval's job, and the daemon runs it
-    // straight after this one on the path that does know which desktop went
-    // away. The two must stay paired: these maps hold positional numbers into
-    // the same numbering the engine state keys use, so renumbering the stores
-    // without renumbering these would leave a pin naming a position whose
-    // content moved.
+    // The SHIFT is remapDesktops' job, run by each engine's remapDesktops on
+    // the daemon's desktopsRenumbered, which goes out BEFORE the count: by the
+    // time this runs the numbers are already moved and nothing names a desktop
+    // past the count. The engines move these maps together with their stores:
+    // they hold positional numbers into the same numbering the engine state
+    // keys use, so renumbering one without the other would leave a pin naming
+    // a position whose content moved.
     //
     // Dropping a per-output entry here is safe, and NOT in tension with
     // releaseScreenOwnership's argument that the same entry must survive a mode

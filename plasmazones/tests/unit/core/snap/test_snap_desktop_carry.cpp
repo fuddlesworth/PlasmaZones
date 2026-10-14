@@ -214,6 +214,58 @@ private Q_SLOTS:
         QCOMPARE(restated.count(), 1);
     }
 
+    // A window moved onto a hidden desktop with no slot for it floats at its
+    // pre-snap rect there, and that apply reaches a suspended client, which
+    // drops a grow. Its float-back is re-stated when the desktop first
+    // shows, like a kept float's (F1019).
+    void aNoSlotFloatOnAHiddenDesktopGetsItsFloatBackWhenShown()
+    {
+        assignLayout(2, 2);
+        recordFreeGeometry(kFree);
+        snapOn(1, m_zoneIds[2]);
+        m_nav.m_frames.insert(kWindow, m_service->resolveZoneGeometry({m_zoneIds[2]}, kScreen));
+        m_engine->setNavigationStateProvider(&m_nav);
+        QSignalSpy restated(m_engine, &SnapEngine::restatementGeometryRequested);
+
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+        QCOMPARE(m_batch.size(), 1);
+        QCOMPARE(m_batch.first().targetZoneId, QString(PhosphorEngine::RestoreSentinel));
+        QCOMPARE(restated.count(), 0);
+
+        showDesktop(2);
+        QCOMPARE(restated.count(), 1);
+        const QList<QVariant> args = restated.first();
+        QCOMPARE(QRect(args.at(1).toInt(), args.at(2).toInt(), args.at(3).toInt(), args.at(4).toInt()), kFree);
+    }
+
+    // A carry into the desktop in view is a re-statement even into a slot
+    // the window did not hold, not the user snapping it: an auto-snapped
+    // window keeps its mark (F1018). The mark sits on desktop 3, which the
+    // move keeps, since the release of the desktop left drops that store's
+    // copy either way. Read through the mark, not the last-used zone: this
+    // fixture wires no desktop manager, so currentVirtualDesktopForScreen
+    // answers 0 and a commit pinned to desktop 2 never passes the last-used
+    // gate whatever its intent. Mutation: commit `intent` in place of
+    // AutoReplaced for a tagged entry and the commit clears the mark.
+    void aCarryIntoViewKeepsTheAutoSnappedMark()
+    {
+        snapOn(3, m_zoneIds[0]);
+        snapOn(1, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 3);
+        m_service->markAsAutoSnapped(kWindow);
+        QVERIFY(m_service->isAutoSnapped(kWindow));
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2, 3})));
+
+        QCOMPARE(m_batch.size(), 1);
+        QCOMPARE(m_batch.first().virtualDesktop, 2);
+        QVERIFY(m_batch.first().restatement);
+        QCOMPARE(zonesOn(2), QStringList{m_zoneIds[1]});
+        QCOMPARE(zonesOn(3), QStringList{m_zoneIds[0]});
+        QVERIFY2(m_service->isAutoSnapped(kWindow), "a carry is not the user's snap");
+    }
+
     // A frame that moved while the desktop was hidden is the user's: the
     // owed float-back is dropped, not applied over it (F780).
     void aMovedFrameKeepsItsPlaceWhenShown()
@@ -553,6 +605,25 @@ private Q_SLOTS:
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(on({1}, kActX)));
         QCOMPARE(m_batch.size(), 1);
         QCOMPARE(m_batch.first().targetZoneId, other[1]);
+    }
+
+    // A waiting carry from a desktop removed meanwhile (the prune of a shrunk
+    // desktop count, which runs no renumber) lands nowhere: a desktop added
+    // later under that number gets nothing (F1020).
+    void aPendingCarryGoesWithItsDesktop()
+    {
+        activityLayout();
+        showActivity(kActY);
+        snapOn(2, m_zoneIds[1]);
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2}, kActX)));
+        QVERIFY(m_batch.isEmpty());
+
+        m_engine->pruneStatesForDesktop(2);
+        showActivity(kActX);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(on({2}, kActX)));
+
+        QVERIFY2(m_batch.isEmpty(), "the carry went with its desktop");
     }
 
 private:

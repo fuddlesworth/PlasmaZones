@@ -12,6 +12,8 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
+#include <array>
+
 namespace PlasmaZones {
 
 PhosphorProtocol::WindowStateEntry WindowTrackingAdaptor::stateRowFor(const QString& windowId) const
@@ -19,11 +21,25 @@ PhosphorProtocol::WindowStateEntry WindowTrackingAdaptor::stateRowFor(const QStr
     // A window a tiling engine tracks reads as that engine has it, unless snap
     // holds it on a context that runs snapping: a snap zone kept on a context
     // that no longer runs snapping is memory for a return, not a placement.
+    // The engine holding it in the context in view first, as
+    // lastActiveScreenName reads it (F216): another context's tile or column
+    // says nothing about where the window is. Else any engine tracking it.
     PhosphorEngine::PlacementEngineBase* tiling = nullptr;
-    for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.data(), m_scrollEngine.data()}) {
-        if (engine && engine->isWindowTracked(windowId)) {
+    QString tilingScreen;
+    const std::array<PhosphorEngine::PlacementEngineBase*, 2> tilingEngines{m_autotileEngine.data(),
+                                                                            m_scrollEngine.data()};
+    for (PhosphorEngine::PlacementEngineBase* engine : tilingEngines) {
+        const QString held = engine ? engine->heldScreenForWindow(windowId) : QString();
+        if (!held.isEmpty()) {
             tiling = engine;
+            tilingScreen = held;
             break;
+        }
+    }
+    for (PhosphorEngine::PlacementEngineBase* engine : tilingEngines) {
+        if (!tiling && engine && engine->isWindowTracked(windowId)) {
+            tiling = engine;
+            tilingScreen = engine->screenForTrackedWindow(windowId);
         }
     }
     if (tiling) {
@@ -36,7 +52,7 @@ PhosphorProtocol::WindowStateEntry WindowTrackingAdaptor::stateRowFor(const QStr
             return PhosphorProtocol::WindowStateEntry{
                 windowId,
                 QString(),
-                tiling->screenForTrackedWindow(windowId),
+                tilingScreen, // where it is held in view, else where it is tracked
                 !tiling->isWindowTiled(windowId),
                 QString(), // changeType: empty for query
                 QStringList(),
