@@ -224,12 +224,12 @@ private Q_SLOTS:
         QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kB));
     }
 
-    // And only in the mode of its float: a snap float waiting on B is spent,
-    // not floated, when B runs a tiling engine by the arrival (float is per
-    // mode, F1047).
-    void aPendingSnapFloatIsNotOwedOnATilingScreen()
+    // One whose own context's mode could not be told (another activity)
+    // floats as an evacuee of the mode it arrives in: in place on B when a
+    // tiling engine runs it by the arrival (evacuee_floats, F1105).
+    void aPendingFloatOfUnknownModeFloatsInPlaceOnATilingArrival()
     {
-        const QString w = QStringLiteral("app|mode-flipped-evacuee");
+        const QString w = QStringLiteral("app|unknown-mode-evacuee");
         pendSnapFloatOnB(w);
         StubPlacementEngine tile;
         tile.activeScreens = {kB};
@@ -238,8 +238,72 @@ private Q_SLOTS:
             m_wta->setEngines(m_snapEngine, nullptr, nullptr);
             m_wta->service()->setEngineFloatResolver({});
         });
+        QVERIFY(m_wta->adoptPendingEvacueeFloat(w, kB));
+        QCOMPARE(tile.received.size(), 1);
+        QVERIFY(tile.received.first().wasFloating);
+    }
+
+    // The mode is the window's own context's, not the one in view: an
+    // evacuee on a hidden desktop that tiles on B waits for its arrival
+    // there while the desktop in view snaps, and is not stated a snap float
+    // in that desktop's store (F1105).
+    void aHiddenEvacueeOnATilingDesktopFloatsAtItsArrivalThere()
+    {
+        const QString w = QStringLiteral("app|hidden-tiling-evacuee");
+        pendOnTilingDesktopOfB(w);
+        const auto key = m_snapEngine->heldKeyForWindow(w);
+        QVERIFY2(!key || key->screenId != kB, "no snap float stated on B's desktop 2");
+        StubPlacementEngine tile;
+        tile.activeScreens = {kB};
+        m_wta->setEngines(m_snapEngine, &tile, nullptr);
+        const auto restore = qScopeGuard([this] {
+            m_wta->setEngines(m_snapEngine, nullptr, nullptr);
+            m_wta->service()->setEngineFloatResolver({});
+        });
+        QVERIFY(m_wta->adoptPendingEvacueeFloat(w, kB));
+        QCOMPARE(tile.received.size(), 1);
+        QVERIFY(tile.received.first().wasFloating);
+    }
+
+    // And that tiling float is spent, not floated, when it arrives where
+    // snapping runs (float is per mode, F1047).
+    void aPendingTilingFloatIsNotOwedOnASnappingArrival()
+    {
+        const QString w = QStringLiteral("app|mode-flipped-evacuee");
+        pendOnTilingDesktopOfB(w);
+        const auto clearResolver = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+        });
         QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kB));
+        const auto key = m_snapEngine->heldKeyForWindow(w);
+        QVERIFY(!key || key->screenId != kB);
+    }
+
+    // The reverse: B tiles in view, but the window's own hidden desktop there
+    // snaps, so its snap float is stated in that desktop's store at the
+    // settle and nothing waits (F1105).
+    void aHiddenSnapFloatOnASnappingDesktopIsStatedThere()
+    {
+        const QString w = QStringLiteral("app|hidden-snapping-evacuee");
+        floatOnA(w);
+        placeOnDesktop(w, 2);
+        unplugA();
+        StubPlacementEngine tile;
+        tile.activeScreens = {kB};
+        m_wta->setEngines(m_snapEngine, &tile, nullptr);
+        const auto restore = qScopeGuard([this] {
+            m_wta->setEngines(m_snapEngine, nullptr, nullptr);
+            m_wta->service()->setEngineFloatResolver({});
+        });
+        OutputSettleRow row = unplugRow(w);
+        row.placeableNow = false;
+        QCOMPARE(verdictOf(m_wta->reportOutputSettle({row}), w), int(OutputSettleVerdict::EvacueeFloat));
+        const auto key = m_snapEngine->heldKeyForWindow(w);
+        QVERIFY(key.has_value());
+        QCOMPARE(key->screenId, kB);
+        QCOMPARE(key->desktop, 2);
         QVERIFY(tile.received.isEmpty());
+        QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kB));
     }
 
     // KWin returned the window untouched: it is back in its place, and the
@@ -270,6 +334,36 @@ private Q_SLOTS:
         moved.screenId = QStringLiteral("DP-3");
         moved.outputUuid = QStringLiteral("uuid-c");
         QCOMPARE(verdictOf(m_wta->reportOutputSettle({moved}), w), int(OutputSettleVerdict::UserMove));
+    }
+
+    // A mark is per output. A window placed while A was away, then parked for
+    // B and placed again while B was away, is marked for both; KWin pulling it
+    // back onto A re-asserts and leaves the mark for B, whose pull-back is
+    // re-asserted too (F1107).
+    void aPlacementMarkKeepsEveryAwayOutputUntilItsPullBack()
+    {
+        const QString w = QStringLiteral("app|placed-twice");
+        const QString kC = QStringLiteral("DP-3");
+        snapOnA(w);
+        unplugA();
+        m_snapEngine->commitSnap(w, m_zoneIds[1], kB);
+        QVERIFY(!m_wta->parkOutput(kB).isEmpty());
+        m_snapEngine->pruneStatesForRemovedScreen(kB);
+        m_wta->releaseParkedSlots(kB);
+        m_snapEngine->setCurrentDesktopForScreen(kC, 1);
+        m_snapEngine->commitSnap(w, m_zoneIds[2], kC);
+
+        OutputSettleRow ontoA = redockRow(w, 4);
+        ontoA.sourceScreenId = kC;
+        ontoA.baseX = 4000;
+        ontoA.baseWidth = 800;
+        ontoA.baseHeight = 600;
+        QCOMPARE(verdictOf(m_wta->reportOutputSettle({ontoA}), w), int(OutputSettleVerdict::Reassert));
+        OutputSettleRow ontoB = ontoA;
+        ontoB.screenId = kB;
+        ontoB.outputUuid = kUuidB;
+        ontoB.sourceScreenId = kA;
+        QCOMPARE(verdictOf(m_wta->reportOutputSettle({ontoB}), w), int(OutputSettleVerdict::Reassert));
     }
 
     // A window that closes drops its placement mark with its park (F1049).
@@ -397,6 +491,34 @@ private:
         OutputSettleRow row = unplugRow(windowId);
         row.placeableNow = false;
         m_wta->reportOutputSettle({row});
+    }
+
+    /// Put @p windowId on @p desktop in the window registry (desktop 1 is in view).
+    void placeOnDesktop(const QString& windowId, int desktop)
+    {
+        installRegistry();
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        meta.virtualDesktop = desktop;
+        m_registry->upsert(PhosphorIdentity::WindowId::extractInstanceId(windowId), meta);
+        m_registry->canonicalizeWindowId(windowId);
+    }
+
+    /// @p windowId snap-floated on A and evacuated onto B while on desktop 2,
+    /// which tiles on B, with desktop 1 (snapping) in view: its float waits
+    /// for its arrival there. The caller clears the float resolver.
+    void pendOnTilingDesktopOfB(const QString& windowId)
+    {
+        floatOnA(windowId);
+        placeOnDesktop(windowId, 2);
+        PhosphorZones::AssignmentEntry tiled;
+        tiled.mode = PhosphorZones::AssignmentEntry::Autotile;
+        tiled.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(kB, 2, QString(), tiled);
+        unplugA();
+        OutputSettleRow row = unplugRow(windowId);
+        row.placeableNow = false;
+        QCOMPARE(verdictOf(m_wta->reportOutputSettle({row}), windowId), int(OutputSettleVerdict::EvacueeFloat));
     }
 
     /// The daemon's retire for A: park, prune, release the parked slots.

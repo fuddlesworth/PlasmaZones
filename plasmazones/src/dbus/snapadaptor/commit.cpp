@@ -25,13 +25,19 @@ void SnapAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, 
     if (!validateWindowId(windowId, QStringLiteral("track window snap"))) {
         return;
     }
+    confirmSnap(windowId, zoneId, screenId);
+}
+
+bool SnapAdaptor::confirmSnap(const QString& windowId, const QString& zoneId, const QString& screenId)
+{
     // A live window, a known screen and a zone its layout holds (F459).
     const std::optional<BusSnapTarget> target = validBusSnapTarget(windowId, {zoneId}, screenId);
     if (!target) {
-        return;
+        return false;
     }
     m_engine->commitSnap(windowId, zoneId, target->screenId, PhosphorEngine::SnapIntent::UserInitiated,
                          target->desktop);
+    return true;
 }
 
 void SnapAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenId)
@@ -93,16 +99,9 @@ void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationLi
                 m_adaptor->service()->clearFreeGeometry(entry.windowId, screen);
             }
             releaseSnapSlotIfFree(entry.windowId);
-        } else {
-            // windowSnapped's gate, so a refused confirmation records no intent.
-            const std::optional<BusSnapTarget> target =
-                validBusSnapTarget(entry.windowId, {entry.zoneId}, entry.screenId);
-            if (!target) {
-                continue;
-            }
-            m_engine->commitSnap(entry.windowId, entry.zoneId, target->screenId,
-                                 PhosphorEngine::SnapIntent::UserInitiated, target->desktop);
-            // The snap-all confirmation, a user snap like any shortcut's.
+        } else if (confirmSnap(entry.windowId, entry.zoneId, entry.screenId)) {
+            // The snap-all confirmation, a user snap like any shortcut's. A
+            // refused one records no intent.
             recordSnapIntent(entry.windowId, true);
         }
     }

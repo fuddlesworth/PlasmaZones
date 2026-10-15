@@ -7,6 +7,8 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/utils/geometryutils.h"
 #include <PhosphorZones/Layout.h>
+#include <QDBusContext>
+#include <QDBusMessage>
 #include <QGuiApplication>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -64,6 +66,14 @@ QScreen* resolvePhysicalQScreen(PhosphorScreens::ScreenManager* mgr, const QStri
     }
     return PhosphorScreens::ScreenIdentity::findByIdOrName(
         PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+}
+
+QString busCaller(const QObject* adaptor)
+{
+    QObject* const host = adaptor ? adaptor->parent() : nullptr;
+    // The lookup Qt itself uses to find the context it sets.
+    const auto* context = host ? static_cast<const QDBusContext*>(host->qt_metacast("QDBusContext")) : nullptr;
+    return context && context->calledFromDBus() ? context->message().service() : QString();
 }
 
 } // namespace DbusHelpers

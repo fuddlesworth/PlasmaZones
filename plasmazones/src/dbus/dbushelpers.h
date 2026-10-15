@@ -377,5 +377,21 @@ QScreen* resolvePhysicalQScreen(PhosphorScreens::ScreenManager* mgr, const QStri
 QRectF resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* layout,
                              const QString& screenId);
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Bus caller (implemented in dbushelpers.cpp)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief The unique bus name of the peer whose call @p adaptor is serving, or
+ *        empty outside a bus call (a direct call, as the unit tests make).
+ *
+ * Qt sets a call's QDBusContext on the object the adaptor is exported
+ * through, its parent, never on the QDBusAbstractAdaptor itself (see the
+ * QDBusContext documentation), so an adaptor that inherits QDBusContext reads
+ * calledFromDBus() as false on every call. The parent has to inherit it
+ * (Daemon does); a parent that does not answers empty.
+ */
+QString busCaller(const QObject* adaptor);
+
 } // namespace DbusHelpers
 } // namespace PlasmaZones

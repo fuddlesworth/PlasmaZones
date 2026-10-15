@@ -21,7 +21,39 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include "dbus/dbushelpers.h"
 namespace PlasmaZones {
+
+namespace {
+
+/// Why a bus float of @p windowId may not act on @p screen, or null. The
+/// engine running the screen floats in the desktop and activity in view, so a
+/// window on a hidden desktop or another activity would be adopted into a
+/// context it is not in (float is per mode), and a disabled context places
+/// nothing (F1048, as l13_bus_snap_hidden_multidesktop refuses the bus snap).
+const char* busFloatRefusal(const WindowTrackingAdaptor& adaptor, const PhosphorContext::IContextResolver* resolver,
+                            const QString& windowId, const QString& screen)
+{
+    PhosphorZones::LayoutRegistry* const layouts = adaptor.layoutRegistry();
+    const int perOutput = adaptor.currentDesktopForScreen(screen);
+    const int shown = perOutput >= 1 ? perOutput : (layouts ? layouts->currentVirtualDesktop() : 0);
+    if (WindowTrackingInternal::ownDesktopOn(adaptor.windowDesktopContext(windowId), shown,
+                                             layouts ? layouts->currentActivity() : QString())
+        != 0) {
+        return "is not on the desktop and activity its screen shows";
+    }
+    if (resolver && resolver->isDisabled(resolver->handleFor(screen))) {
+        return "is in a disabled context";
+    }
+    return nullptr;
+}
+
+} // namespace
+
+void WindowTrackingAdaptor::setBridgeCallerCheck(std::function<bool(const QString&)> check)
+{
+    m_isBridgeCaller = std::move(check);
+}
 
 void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
 {
@@ -138,23 +170,9 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
         qCInfo(lcDbusWindow) << "setWindowFloating: no live window or screen for" << windowId << "- refused";
         return;
     }
-    // Only in the context the screen shows. The engine running the screen
-    // floats in the desktop and activity in view, so a window on a hidden
-    // desktop or another activity would be adopted into a context it is not
-    // in (float is per mode), and a disabled context places nothing (F1048,
-    // as l13_bus_snap_hidden_multidesktop refuses the bus snap).
-    PhosphorZones::LayoutRegistry* const layouts = layoutRegistry();
-    const int perOutput = currentDesktopForScreen(screen);
-    const int shown = perOutput >= 1 ? perOutput : (layouts ? layouts->currentVirtualDesktop() : 0);
-    if (WindowTrackingInternal::ownDesktopOn(windowDesktopContext(windowId), shown,
-                                             layouts ? layouts->currentActivity() : QString())
-        != 0) {
-        qCInfo(lcDbusWindow) << "setWindowFloating:" << windowId << "is not on the desktop and activity" << screen
-                             << "shows - refused";
-        return;
-    }
-    if (m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(screen))) {
-        qCInfo(lcDbusWindow) << "setWindowFloating:" << screen << "is disabled for" << windowId << "- refused";
+    // Only in the context the screen shows (busFloatRefusal).
+    if (const char* refusal = busFloatRefusal(*this, m_contextResolver, windowId, screen)) {
+        qCInfo(lcDbusWindow) << "setWindowFloating:" << windowId << refusal << "on" << screen << "- refused";
         return;
     }
     setWindowFloatingForScreen(windowId, screen, floating);
@@ -314,6 +332,19 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     if (effectiveScreenId.isEmpty()) {
         qCWarning(lcDbusWindow) << "setWindowFloatingForScreen: no screen for" << windowId << "— refusing";
         return;
+    }
+    // A bus caller other than the compositor bridge, such as the shell's
+    // placement map, which draws desktops not in view, is held to the
+    // screenless verb's gate (F1108). The bridge floats a window where it is
+    // (minimize, drag, overflow), and a call the daemon makes outside a bus
+    // call is not gated.
+    if (const QString caller = DbusHelpers::busCaller(this);
+        !caller.isEmpty() && !(m_isBridgeCaller && m_isBridgeCaller(caller))) {
+        if (const char* refusal = busFloatRefusal(*this, m_contextResolver, windowId, effectiveScreenId)) {
+            qCInfo(lcDbusWindow) << "setWindowFloatingForScreen:" << windowId << refusal << "on" << effectiveScreenId
+                                 << "- refused for" << caller;
+            return;
+        }
     }
 
     qCInfo(lcDbusWindow) << "setWindowFloatingForScreen: windowId=" << windowId << "floating=" << floating

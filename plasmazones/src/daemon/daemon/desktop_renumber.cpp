@@ -22,6 +22,7 @@
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
+#include <functional>
 #include <utility>
 
 namespace PlasmaZones {
@@ -41,6 +42,20 @@ void applyContextRemap(PhosphorRules::RuleStore* store, const PhosphorRules::Con
     }
 }
 
+/// Whether a rule is one of @p startupRules as start-up found it, not added or
+/// edited since: the late desktop list's renumber moves only those (F1045).
+std::function<bool(const PhosphorRules::Rule&)> unchangedStartupRule(const QList<PhosphorRules::Rule>& startupRules)
+{
+    QHash<QUuid, PhosphorRules::Rule> byId;
+    for (const PhosphorRules::Rule& rule : startupRules) {
+        byId.insert(rule.id, rule);
+    }
+    return [byId = std::move(byId)](const PhosphorRules::Rule& rule) {
+        const auto it = byId.constFind(rule.id);
+        return it != byId.constEnd() && *it == rule;
+    };
+}
+
 } // namespace
 
 void Daemon::onDesktopsRenumbered(const PhosphorEngine::DesktopRemap& remap)
@@ -58,20 +73,15 @@ void Daemon::onDesktopsRenumbered(const PhosphorEngine::DesktopRemap& remap)
     // numbers, and the rule change's own deferred reconcile re-resolves each
     // screen against the moved rules.
     if (const std::optional<quint64> restoredUpTo = std::exchange(m_lateStartupRenumberUpTo, std::nullopt)) {
-        QHash<QUuid, PhosphorRules::Rule> startupRules;
-        for (PhosphorRules::Rule& rule : std::exchange(m_lateStartupRules, {})) {
-            const QUuid id = rule.id;
-            startupRules.insert(id, std::move(rule));
-        }
+        // A desktop past the new count goes too: the count prune held these
+        // rules while they were still in the old numbering (F1106).
         applyContextRemap(m_ruleStore.get(),
                           {[&remap](int desktop) {
-                               return remap.map(desktop);
+                               const int to = remap.map(desktop);
+                               return to > remap.newCount() ? 0 : to;
                            },
                            {},
-                           [&startupRules](const PhosphorRules::Rule& rule) {
-                               const auto it = startupRules.constFind(rule.id);
-                               return it != startupRules.constEnd() && *it == rule;
-                           }});
+                           unchangedStartupRule(std::exchange(m_lateStartupRules, {}))});
         int recordsMoved = 0;
         if (PhosphorPlacement::WindowTrackingService* service =
                 m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr) {
@@ -216,12 +226,22 @@ void Daemon::onDesktopCountChanged(int newCount)
     // growing count goes out first (F1022) and finds nothing past it. Without
     // the list (onNumberOfDesktopsChanged's fallback commits a bare count),
     // and at start-up (reconcileDesktopsAtStartup), this is the only prune
-    // they get (F1044).
+    // they get (F1044). While a late first list is awaited the rules start-up
+    // found are still in the previous session's numbering, which a count
+    // committed ahead of that list says nothing about: the held renumber
+    // prunes them against the list's own count (F1106).
+    std::function<bool(const PhosphorRules::Rule&)> liveNumbered;
+    if (m_lateStartupRenumberUpTo) {
+        liveNumbered = [held = unchangedStartupRule(m_lateStartupRules)](const PhosphorRules::Rule& rule) {
+            return !held(rule);
+        };
+    }
     applyContextRemap(m_ruleStore.get(),
                       {[newCount](int desktop) {
                            return desktop > newCount ? 0 : desktop;
                        },
-                       {}});
+                       {},
+                       std::move(liveNumbered)});
 
     // A live preview must unwind BEFORE the prunes: autotile's cancel
     // resolves its state via a create-if-missing lookup, so a cancel arriving
@@ -233,7 +253,8 @@ void Daemon::onDesktopCountChanged(int newCount)
 
     // Desktop numbers are 1-based. Any state with desktop > newCount is
     // stale. desktopsWithActiveState() returns the desktops currently holding
-    // state; filter for anything past the new count and prune, avoiding the
+    // state, parked contexts, grants, carries and owed float-backs included;
+    // filter for anything past the new count and prune, avoiding the
     // arbitrary upper bound of the old newCount+20 sweep. All THREE engines
     // carry their own stores, so prune each.
     for (PhosphorEngine::PlacementEngineBase* engine :

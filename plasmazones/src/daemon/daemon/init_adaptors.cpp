@@ -222,6 +222,11 @@ void Daemon::initCoreAdaptors()
     m_windowTrackingAdaptor->setWindowLeftScreenHook([this](const QString& windowId, const QString& keepScreenId) {
         pruneEngineOrdersForWindow(PhosphorIdentity::WindowId::extractInstanceId(windowId), keepScreenId);
     });
+    // The compositor bridge's screen-form floats act on the window where it
+    // is; any other bus caller's are gated as the screenless verb is (F1108).
+    m_windowTrackingAdaptor->setBridgeCallerCheck([this](const QString& busName) {
+        return m_compositorBridge && m_compositorBridge->isBridgeService(busName);
+    });
 
     // Drop closed windows from m_lastEngineOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would

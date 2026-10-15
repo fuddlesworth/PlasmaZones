@@ -11,17 +11,29 @@
  *        minimized, suspended or output-filling window (S). Two outputs side
  *        by side, a snap engine on per-screen stores, a stub tiling engine in
  *        the autotile slot and a window registry. Plus the float verbs that
- *        feed those writers: the bus setWindowFloating and the in-process sync.
+ *        feed those writers: the bus setWindowFloating, its screen form and
+ *        the in-process sync.
  */
 
 #include "wta_float_back_fixture.h"
 
 #include "helpers/WindowPlacementBuilders.h"
 
+#include <QDBusConnection>
+#include <QDBusContext>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
 #include <QScopeGuard>
 #include <QSignalSpy>
 
 #include <optional>
+
+/// The object an adaptor is exported through, as Daemon is: Qt sets a bus
+/// call's QDBusContext on it, not on the adaptor (DbusHelpers::busCaller).
+class BusHost : public QObject, public QDBusContext
+{
+    Q_OBJECT
+};
 
 class TestWtaFloatBackModel : public QObject
 {
@@ -443,6 +455,63 @@ private Q_SLOTS:
 
         f.layouts->setCurrentVirtualDesktop(2);
         f.wta->setWindowFloating(w, true);
+        QCOMPARE(tile.floatCalls.size(), 1);
+    }
+
+    // The screen form holds a bus caller other than the compositor bridge,
+    // such as the shell's placement map drawing a desktop not in view, to the
+    // same refusal. The bridge's own calls are not held (F1108). The adaptor
+    // is exported through a host that carries the call's context, as Daemon
+    // does.
+    void busSetWindowFloatingForScreenRefusesAHiddenWindowForAnotherCaller()
+    {
+        FloatBackFixture f;
+        FloatLoggingEngine tile;
+        tile.activeScreens = {kRight};
+        BusHost host;
+        auto* wta =
+            new WindowTrackingAdaptor(f.layouts, &f.detector, f.screenMgr.get(), &f.settings, nullptr, nullptr, &host);
+        wta->setWindowRegistry(&f.registry);
+        wta->setEngines(nullptr, &tile, nullptr);
+        const auto detach = qScopeGuard([wta] {
+            wta->setEngines(nullptr, nullptr, nullptr);
+            wta->setWindowRegistry(nullptr);
+        });
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.virtualDesktop = 2;
+        f.registry.upsert(QStringLiteral("f1108-hidden"), meta);
+        const QString w = QStringLiteral("app|f1108-hidden");
+        f.registry.canonicalizeWindowId(w);
+        tile.heldScreen.insert(w, kRight);
+
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        QVERIFY(bus.isConnected());
+        const QString path = QStringLiteral("/TestWtaF1108");
+        const QString peerName = QStringLiteral("f1108-peer");
+        QVERIFY(bus.registerObject(path, &host));
+        QDBusConnection peer = QDBusConnection::connectToBus(QDBusConnection::SessionBus, peerName);
+        const auto unregister = qScopeGuard([&bus, &path, &peerName] {
+            bus.unregisterObject(path);
+            QDBusConnection::disconnectFromBus(peerName);
+        });
+        QVERIFY(peer.isConnected());
+        QDBusMessage call =
+            QDBusMessage::createMethodCall(bus.baseService(), path, QStringLiteral("org.plasmazones.WindowTracking"),
+                                           QStringLiteral("setWindowFloatingForScreen"));
+        call << w << kRight << true;
+
+        QDBusPendingCall refused = peer.asyncCall(call, 5000);
+        QTRY_VERIFY(refused.isFinished());
+        QVERIFY(!refused.isError());
+        QVERIFY2(tile.floatCalls.isEmpty(), "another caller may not float a window on a hidden desktop");
+
+        wta->setBridgeCallerCheck([&peer](const QString& busName) {
+            return busName == peer.baseService();
+        });
+        QDBusPendingCall bridged = peer.asyncCall(call, 5000);
+        QTRY_VERIFY(bridged.isFinished());
+        QVERIFY(!bridged.isError());
         QCOMPARE(tile.floatCalls.size(), 1);
     }
 

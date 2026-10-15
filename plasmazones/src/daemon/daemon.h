@@ -11,6 +11,7 @@
 #pragma once
 
 #include <QObject>
+#include <QDBusContext>
 #include <QGuiApplication>
 #include <QElapsedTimer>
 #include <QTimer>
@@ -36,12 +37,11 @@
 namespace PlasmaZones {
 
 /**
- * @brief Main daemon for PlasmaZones
- *
- * Runs in the background managing layouts, zone overlays, KWin D-Bus
- * communication, keyboard shortcuts, and multi-monitor support.
+ * @brief Main daemon for PlasmaZones: layouts, zone overlays, KWin D-Bus, shortcuts
+ * and multi-monitor support. A QDBusContext because Qt sets a bus call's context on
+ * the exported object, not on the adaptor it reaches (DbusHelpers::busCaller).
  */
-class Daemon : public QObject
+class Daemon : public QObject, public QDBusContext
 {
     Q_OBJECT
 

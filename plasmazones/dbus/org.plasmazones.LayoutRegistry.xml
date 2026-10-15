@@ -667,6 +667,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="New virtual desktop count."/>
             </arg>
         </signal>
+        <signal name="virtualDesktopNamesChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the virtual desktop names change, on a rename or when a desktop is added, removed or moved. A growing count can be announced by virtualDesktopCountChanged before the names that come with it, so a reader of names listens here."/>
+            <arg name="names" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="The desktop names in order, as getVirtualDesktopNames returns them."/>
+            </arg>
+        </signal>
         <signal name="layoutChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted on structural layout mutations (updateLayout, the editor's save path) and on every active-layout switch, alongside the cheaper activeLayoutChanged(id). Usually carries the full layout JSON payload; when the update targeted an AUTOTILE entry the payload is instead the caller's raw autotile-override object (id 'autotile:&lt;algorithmId&gt;', not a serialized layout), so subscribers must not blindly parse it as a layout. createLayoutFromJson does not emit this; a new layout announces itself with layoutCreated(id). Scalar property mutations (hidden, autoAssign, aspectRatioClass) emit layoutPropertyChanged instead to avoid the full serialization."/>
             <arg name="layoutJson" type="s">

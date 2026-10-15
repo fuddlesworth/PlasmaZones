@@ -439,6 +439,9 @@ private:
     /// Release the record's snap slot once no store holds a zone or the float
     /// bit for @p windowId (an unsnap confirmation leaves it free).
     void releaseSnapSlotIfFree(const QString& windowId);
+    /// A snap confirmation (windowSnapped, the batch): checked by
+    /// validBusSnapTarget, then committed. True when committed.
+    bool confirmSnap(const QString& windowId, const QString& zoneId, const QString& screenId);
     /// The engine's own resnap batches (resnapToNewLayoutRequested), committed
     /// as they are.
     void applyEngineResnap(const QString& resnapData);

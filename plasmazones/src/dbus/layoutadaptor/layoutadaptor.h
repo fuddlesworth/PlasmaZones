@@ -445,6 +445,9 @@ Q_SIGNALS:
     void activeLayoutForScreenChanged(const QString& screenId, const QString& layoutId);
 
     void virtualDesktopCountChanged(int count);
+    /// The desktop names changed: a rename, or a desktop added, removed or
+    /// moved. A growing count can go out before the names it brings (F1101).
+    void virtualDesktopNamesChanged(const QStringList& names);
 
     /**
      * @brief Emitted when the internal active layout changes
@@ -710,6 +713,7 @@ private:
 
     PhosphorZones::LayoutRegistry* m_layoutManager; // Concrete type for signal connections
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager = nullptr;
+    QStringList m_relayedDesktopNames; ///< the last virtualDesktopNamesChanged payload
     PhosphorWorkspaces::ActivityManager* m_activityManager = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     ISettings* m_settings = nullptr;

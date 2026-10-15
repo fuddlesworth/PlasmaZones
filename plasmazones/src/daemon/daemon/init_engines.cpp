@@ -200,12 +200,11 @@ void Daemon::initEnginesAndWiring()
                 m_settings.get(), screenId);
         });
 
-    // Own-mode resolver for the scroll engine's reopen claim
-    // (claimCrossScreenReopen): answers whether the RECORDED context still
-    // resolves to Scrolling mode, the same-mode half of the reopen contract (a
-    // FIFO record on another virtual screen of the opening output). The scrolling master switch is not
-    // part of this verdict. (The engine's Snapping and Autotile resolvers fed the cross-screen defer
-    // gates, which are gone; they are not wired.)
+    // Own-mode resolver for the scroll engine: does a context still resolve to Scrolling mode? The reopen claim
+    // (claimCrossScreenReopen) asks it for the RECORDED context, the same-mode half of the reopen contract (a FIFO
+    // record on another virtual screen of the opening output); readoptParked asks it for an out-of-view parked
+    // context before seating or granting it (F1102). The scrolling master switch is not part of this verdict.
+    // (The engine's Snapping and Autotile resolvers fed the cross-screen defer gates, which are gone; not wired.)
     scrollEngine->setScrollingModeResolver([this](const QString& screenId, int desktop, const QString& activity) {
         return m_layoutManager
             && m_layoutManager->modeForScreen(screenId, desktop, activity)

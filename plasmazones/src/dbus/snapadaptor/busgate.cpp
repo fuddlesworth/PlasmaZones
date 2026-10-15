@@ -8,6 +8,7 @@
 
 #include "snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
 
@@ -48,15 +49,9 @@ std::optional<int> SnapAdaptor::landingDesktop(const QString& windowId, const QS
         }
         return pinnedDesktop == shown ? 0 : pinnedDesktop;
     }
-    if (!set || shown < 1 || set->contains(shown)) {
-        return 0;
-    }
-    if (set->size() == 1) {
-        return *set->cbegin();
-    }
-    // On several desktops none of which is in view: which one the snap is
-    // for cannot be told (user decision l13_bus_snap_hidden_multidesktop).
-    return std::nullopt;
+    // On several desktops none of which is in view, nullopt: which one the
+    // snap is for cannot be told (user decision l13_bus_snap_hidden_multidesktop).
+    return WindowTrackingInternal::desktopShowing(set, shown);
 }
 
 std::optional<SnapAdaptor::BusSnapTarget> SnapAdaptor::validBusSnapTarget(const QString& windowId,
@@ -110,12 +105,8 @@ std::optional<SnapAdaptor::BusSnapTarget> SnapAdaptor::validBusSnapTarget(const 
     if (!desktop) {
         return refuse("not on the landing desktop", screen); // F179
     }
-    // A commit pins the current activity's store. A window on several
-    // activities is on the current one when it is any of them, not only its
-    // first (F1040), as WindowContext::effectiveActivity reads it.
-    if (const auto context = m_adaptor->windowDesktopContext(windowId); context && !context->activity.isEmpty()
-        && !activity.isEmpty()
-        && (context->activities.size() > 1 ? !context->activities.contains(activity) : context->activity != activity)) {
+    // A commit pins the current activity's store (F1040).
+    if (WindowTrackingInternal::onAnotherActivity(m_adaptor->windowDesktopContext(windowId), activity)) {
         return refuse("on another activity", screen);
     }
     if (!holds(screen, *desktop)) {

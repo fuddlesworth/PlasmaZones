@@ -288,7 +288,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <method name="setWindowFloatingForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state explicitly (directional, not toggle) on the engine that runs the screen: autotile, scrolling or snapping. Used by minimize and unminimize, drag-to-float, the monocle unmaximize and the Phosphor shell placement map. A tiling engine floats or tiles the window where it is, with no float-back geometry and no OSD."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state explicitly (directional, not toggle) on the engine that runs the screen: autotile, scrolling or snapping. Used by minimize and unminimize, drag-to-float, the monocle unmaximize and the Phosphor shell placement map. A tiling engine floats or tiles the window where it is, with no float-back geometry and no OSD. A caller other than the registered compositor bridge is refused, with a log line, for a window off the desktop or activity the screen shows or in a disabled context, as setWindowFloating is."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier (from KWin)."/>
             </arg>

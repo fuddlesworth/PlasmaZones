@@ -49,16 +49,22 @@ struct EvacueeLedger
     /// settle was read, and on close (F1049).
     QHash<QString, QStringList> placedAfterEvacuation;
     /// A float an evacuee could not take when its output went away: where it
-    /// landed, and which mode's float it is.
+    /// landed, and which mode's float it is. A known mode is a tiling one: a
+    /// snap float in a known context is stated at once.
     struct PendingFloat
     {
         QString screenId;
-        bool snap = false; ///< a snap float, else a tiling screen's
+        /// On several desktops none of which was in view, or on another
+        /// activity: the mode it arrives in decides (F1105).
+        bool modeUnknown = false;
+        /// Snap held it floating, so an arrival in snapping with the mode
+        /// unknown floats it there.
+        bool snapFloat = false;
     };
     /// Evacuees that could not be adopted floating when their output went away
     /// (minimized, or on a desktop or activity out of view): their first
-    /// arrival on the output they landed on, in the same mode, adopts them
-    /// floating instead of placing them (F643, F1047).
+    /// arrival on the output they landed on, in a mode that owes them the
+    /// float, adopts them floating instead of placing them (F643, F1047).
     QHash<QString, PendingFloat> evacueeFloatPending;
     /// Set while the ledger itself places a window, so the engines' float
     /// announcements from that placement do not read as the user's touch.

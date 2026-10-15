@@ -189,14 +189,8 @@ public:
                     PhosphorEngine::PlacementEngineBase* autotileEngine,
                     PhosphorEngine::PlacementEngineBase* scrollEngine);
 
-    /**
-     * @brief Set the frozen-snapshot resolver used by saveload's disable
-     *        gate to short-circuit restore on a disabled context.
-     *
-     * Late-bound for the same reason as setEngines: the resolver is
-     * constructed after this adaptor. Daemon calls this once after
-     * `m_contextResolver` lands. Pass nullptr during shutdown.
-     */
+    /// The frozen-snapshot resolver for the disable gates, late-bound like
+    /// setEngines (it is constructed after this adaptor); nullptr at shutdown.
     void setContextResolver(PhosphorContext::IContextResolver* resolver)
     {
         m_contextResolver = resolver;
@@ -873,8 +867,10 @@ public:
     bool isInteractiveDragWindow(const QString& windowId) const;
     /// Told (windowId, keepScreenId) at the end of every releaseLeftScreens, for the daemon's own per-screen memory.
     void setWindowLeftScreenHook(std::function<void(const QString&, const QString&)> hook);
+    /// Whether a unique bus name is the registered compositor bridge's, whose screen-form float is not gated (F1108).
+    void setBridgeCallerCheck(std::function<bool(const QString&)> check);
     /// An evacuee that could not be adopted floating when its output went away, arriving on the output it
-    /// landed on in the mode of its float: floated there now. Taken once on any arrival. True when floated.
+    /// landed on in a mode that owes it the float: floated there now. Taken once on any arrival. True when floated.
     bool adoptPendingEvacueeFloat(const QString& windowId, const QString& screenId);
     /// A window announced on the output it is parked for: re-seated from the park. True when it was.
     bool readoptOnArrival(const QString& windowId, const QString& screenId);
@@ -1381,6 +1377,7 @@ public Q_SLOTS:
      * with a not-floating broadcast. The suspension-float classification is
      * stamped before routing. Used by minimize/unminimize, drag-to-float, the
      * monocle unmaximize and the shell placement map; a tiling engine answers it passively.
+     * A bus caller other than the compositor bridge is refused (logged) as setWindowFloating is (F1108).
      */
     void setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating);
 
@@ -1684,6 +1681,7 @@ private:
     std::function<QJsonObject()> m_scrollStripStateProvider;
     std::function<void(const PhosphorProtocol::WindowOpenedEntry&)> m_routedOpenDispatcher;
     std::function<void(const QString&, const QString&)> m_windowLeftScreenHook;
+    std::function<bool(const QString&)> m_isBridgeCaller; ///< setBridgeCallerCheck
     QJsonObject m_loadedScrollStripState;
     QStringList m_knownDesktopIds;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;

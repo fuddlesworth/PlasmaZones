@@ -131,23 +131,24 @@ inline QJsonObject rectToJsonObject(const QRect& rect)
     return obj;
 }
 
-/// Where a window's own context meets a screen showing @p shownDesktop (0:
-/// unknown) in @p currentActivity (empty: unknown): 0 when the window is on
-/// that desktop (or on every one, or its desktops are unknown), its one
-/// desktop when it is on a single other one, and nullopt when it is on several
-/// others or on another activity. An unknown @p context reads as in view.
-inline std::optional<int> ownDesktopOn(const std::optional<::PhosphorEngine::WindowDesktopContext>& context,
-                                       int shownDesktop, const QString& currentActivity)
+/// Whether a window's own @p context is on another activity than
+/// @p currentActivity (empty: unknown). One on several activities is on the
+/// current one when it is any of them, not only its first (F1040), as
+/// WindowContext::effectiveActivity reads it.
+inline bool onAnotherActivity(const std::optional<::PhosphorEngine::WindowDesktopContext>& context,
+                              const QString& currentActivity)
 {
-    if (!context) {
-        return 0;
-    }
-    if (!context->activity.isEmpty() && !currentActivity.isEmpty()
+    return context && !context->activity.isEmpty() && !currentActivity.isEmpty()
         && (context->activities.size() > 1 ? !context->activities.contains(currentActivity)
-                                           : context->activity != currentActivity)) {
-        return std::nullopt;
-    }
-    const std::optional<QSet<int>> desktops = context->desktopSet();
+                                           : context->activity != currentActivity);
+}
+
+/// Where a window on @p desktops (nullopt: every one, or unknown) meets a
+/// screen showing @p shownDesktop (0: unknown): 0 when it is on that desktop,
+/// its one desktop when it is on a single other one, and nullopt when it is on
+/// several others.
+inline std::optional<int> desktopShowing(const std::optional<QSet<int>>& desktops, int shownDesktop)
+{
     if (!desktops || shownDesktop < 1 || desktops->contains(shownDesktop)) {
         return 0;
     }
@@ -155,6 +156,21 @@ inline std::optional<int> ownDesktopOn(const std::optional<::PhosphorEngine::Win
         return *desktops->cbegin();
     }
     return std::nullopt;
+}
+
+/// Where a window's own context meets a screen showing @p shownDesktop (0:
+/// unknown) in @p currentActivity (empty: unknown): desktopShowing, and
+/// nullopt on another activity. An unknown @p context reads as in view.
+inline std::optional<int> ownDesktopOn(const std::optional<::PhosphorEngine::WindowDesktopContext>& context,
+                                       int shownDesktop, const QString& currentActivity)
+{
+    if (!context) {
+        return 0;
+    }
+    if (onAnotherActivity(context, currentActivity)) {
+        return std::nullopt;
+    }
+    return desktopShowing(context->desktopSet(), shownDesktop);
 }
 
 } // namespace WindowTrackingInternal
