@@ -527,10 +527,7 @@ private Q_SLOTS:
         FloatLoggingEngine tile;
         tile.activeScreens = {kRight};
         BusHost host;
-        auto* wta =
-            new WindowTrackingAdaptor(f.layouts, &f.detector, f.screenMgr.get(), &f.settings, nullptr, nullptr, &host);
-        wta->setWindowRegistry(&f.registry);
-        wta->setEngines(nullptr, &tile, nullptr);
+        WindowTrackingAdaptor* const wta = hostedAdaptor(f, tile, host);
         const auto detach = qScopeGuard([wta] {
             wta->setEngines(nullptr, nullptr, nullptr);
             wta->setWindowRegistry(nullptr);
@@ -542,34 +539,16 @@ private Q_SLOTS:
         const QString w = QStringLiteral("app|f1108-hidden");
         f.registry.canonicalizeWindowId(w);
         tile.heldScreen.insert(w, kRight);
+        BusPeer peer(&host, QStringLiteral("F1108"));
+        QVERIFY(peer.ready());
 
-        QDBusConnection bus = QDBusConnection::sessionBus();
-        QVERIFY(bus.isConnected());
-        const QString path = QStringLiteral("/TestWtaF1108");
-        const QString peerName = QStringLiteral("f1108-peer");
-        QVERIFY(bus.registerObject(path, &host));
-        QDBusConnection peer = QDBusConnection::connectToBus(QDBusConnection::SessionBus, peerName);
-        const auto unregister = qScopeGuard([&bus, &path, &peerName] {
-            bus.unregisterObject(path);
-            QDBusConnection::disconnectFromBus(peerName);
-        });
-        QVERIFY(peer.isConnected());
-        QDBusMessage call =
-            QDBusMessage::createMethodCall(bus.baseService(), path, QStringLiteral("org.plasmazones.WindowTracking"),
-                                           QStringLiteral("setWindowFloatingForScreen"));
-        call << w << kRight << true;
-
-        QDBusPendingCall refused = peer.asyncCall(call, 5000);
-        QTRY_VERIFY(refused.isFinished());
-        QVERIFY(!refused.isError());
+        QVERIFY(peer.floatOn(w, kRight));
         QVERIFY2(tile.floatCalls.isEmpty(), "another caller may not float a window on a hidden desktop");
 
-        wta->setBridgeCallerCheck([service = peer.baseService()](const QString& busName) {
+        wta->setBridgeCallerCheck([service = peer.peer.baseService()](const QString& busName) {
             return busName == service;
         });
-        QDBusPendingCall bridged = peer.asyncCall(call, 5000);
-        QTRY_VERIFY(bridged.isFinished());
-        QVERIFY(!bridged.isError());
+        QVERIFY(peer.floatOn(w, kRight));
         QCOMPARE(tile.floatCalls.size(), 1);
     }
 

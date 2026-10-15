@@ -34,6 +34,7 @@
 #include <QScopedValueRollback>
 #include <QScreen>
 #include <memory>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -100,68 +101,68 @@ bool Daemon::intersectsAnyLiveScreen(const QRect& geometry) const
 }
 
 PhosphorZones::AssignmentEntry::Mode Daemon::runningModeForContext(const QString& screenId, int desktop,
-                                                                   const QString& activity, QString* algorithmId) const
+                                                                   const QString& activity, QString* algorithmId,
+                                                                   bool* routerOptOut) const
 {
     using Mode = PhosphorZones::AssignmentEntry::Mode;
+    if (routerOptOut) {
+        *routerOptOut = false;
+    }
     if (!m_layoutManager) {
         return Mode::Snapping;
     }
-    // The disable cascade for the context named in the mode asked about, not
-    // the screen's current desktop and routing: a hidden desktop has entries
-    // of its own (F1122). No resolver entry point takes all four axes, and
-    // each comes from the caller here, so the handle is built directly; one
-    // from handleForPersisted would pay a router resolve for a mode thrown
-    // away (F1136).
+    // One cascade resolve serves the scrolling test below and the opt-out routedModeForContext asks for (F1159);
+    // modeForScreen is this entry's mode. Skipped when neither reads it.
+    const bool scrollingOn = m_settings && m_settings->scrollingEnabled();
+    std::optional<PhosphorZones::AssignmentEntry> entry;
+    if (scrollingOn || routerOptOut) {
+        entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
+    }
+    if (routerOptOut) {
+        *routerOptOut = entry->mode == Mode::Autotile && entry->tilingAlgorithm == PhosphorZones::NoTilingAlgorithm;
+    }
+    // The disable cascade for the context named in the mode asked about, not the screen's current desktop and
+    // routing: a hidden desktop has entries of its own (F1122). No resolver entry point takes all four axes, and each
+    // comes from the caller here, so the handle is built directly; one from handleForPersisted would pay a router
+    // resolve for a mode thrown away (F1136).
     const auto disabledFor = [&](Mode mode) {
         return m_contextResolver
             && m_contextResolver->isDisabled(PhosphorContext::ContextHandle{screenId, desktop, activity, mode});
     };
-    // Scrolling-mode assignment is resolved from the same cascade; it has
-    // no layout id of its own, so the mode lookup is the discriminator.
-    // The master switch gates here (the peer of the snapping/autotile
-    // feature flags): with scrolling disabled the "scrolling:" assignment
-    // falls through as a non-autotile id, and the context runs snapping —
-    // the same downgrade the router applies for an unclaimed scrolling cascade.
-    if (m_settings && m_settings->scrollingEnabled()
-        && m_layoutManager->modeForScreen(screenId, desktop, activity) == Mode::Scrolling) {
+    // Scrolling-mode assignment is resolved from the same cascade; it has no layout id of its own, so the mode is the
+    // discriminator. The master switch gates here (the peer of the snapping/autotile feature flags): with scrolling
+    // disabled the "scrolling:" assignment falls through as a non-autotile id, and the context runs snapping — the
+    // same downgrade the router applies for an unclaimed scrolling cascade.
+    if (scrollingOn && entry->mode == Mode::Scrolling) {
         return disabledFor(Mode::Scrolling) ? Mode::Snapping : Mode::Scrolling;
     }
     if (disabledFor(Mode::Autotile)) {
         return Mode::Snapping;
     }
     const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-    // The master switch gates here, the exact peer of the scrolling one
-    // above. It is NOT the toggle-off path: switching the feature off fires
-    // handleAutotileDisabled, which flips every Autotile assignment's MODE to
-    // Snapping (keeping tilingAlgorithm dormant for
-    // restoreAutotileAssignments), so no autotile id is left to gate. This
-    // covers the switch being off WITHOUT that transition: a config that
-    // starts with tiling disabled and an autotile assignment stored, and a
-    // user assigning Tiling on the Monitors page while it is off, which that
-    // page deliberately still allows. A null settings pointer (the teardown
-    // window) disables it, as it does the scrolling peer.
+    // The master switch gates here, the exact peer of the scrolling one above. It is NOT the toggle-off path:
+    // switching the feature off fires handleAutotileDisabled, which flips every Autotile assignment's MODE to Snapping
+    // (keeping tilingAlgorithm dormant for restoreAutotileAssignments), so no autotile id is left to gate. This covers
+    // the switch being off WITHOUT that transition: a config that starts with tiling disabled and an autotile
+    // assignment stored, and a user assigning Tiling on the Monitors page while it is off, which that page
+    // deliberately still allows. A null settings pointer (the teardown window) disables it, as for the scrolling peer.
     if (!m_settings || !m_settings->autotileEnabled() || !PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         return Mode::Snapping;
     }
     const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
-    // Explicit per-context opt-out ("autotile:none"): the context is IN
-    // autotile mode but nothing tiles there, by the user's own choice. The
-    // engine must never see the word (its setAlgorithm coerces unknown ids
-    // to the registry default, the opposite of an opt-out), so the screen is
-    // left out of the autotile set.
+    // Explicit per-context opt-out ("autotile:none"): the context is IN autotile mode but nothing tiles there, by the
+    // user's own choice. The engine must never see the word (its setAlgorithm coerces unknown ids to the registry
+    // default, the opposite of an opt-out), so the screen is left out of the autotile set.
     if (algoId == PhosphorZones::NoTilingAlgorithm) {
         return Mode::Snapping;
     }
-    // Bare autotile (mode set, no concrete algorithm — e.g. a mode-only
-    // rule or a plain mode swap) draws its algorithm from the global
-    // default, so it must not tile when that default is SUPPRESSED
-    // (globally or by a per-context rule) or IS the no-algorithm word (the
-    // user cleared it). Without the second test the bare shape escaped:
-    // extractAlgorithmId answers EMPTY (not the sentinel) for a bare
-    // "autotile:" id, so the opt-out arm above misses it, and the screen
-    // tiled with the stale global id the engine still held
-    // (AutotileEngine::refreshConfigFromSettings deliberately declines to
-    // update it for the reserved word). A concrete algorithm always tiles.
+    // Bare autotile (mode set, no concrete algorithm — e.g. a mode-only rule or a plain mode swap) draws its algorithm
+    // from the global default, so it must not tile when that default is SUPPRESSED (globally or by a per-context
+    // rule) or IS the no-algorithm word (the user cleared it). Without the second test the bare shape escaped:
+    // extractAlgorithmId answers EMPTY (not the sentinel) for a bare "autotile:" id, so the opt-out arm above misses
+    // it, and the screen tiled with the stale global id the engine still held
+    // (AutotileEngine::refreshConfigFromSettings deliberately declines to update it for the reserved word). A concrete
+    // algorithm always tiles.
     if (algoId.isEmpty()
         && (m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)
             || m_settings->defaultAutotileAlgorithm() == PhosphorZones::NoTilingAlgorithm)) {
@@ -179,14 +180,10 @@ PhosphorZones::AssignmentEntry::Mode Daemon::routedModeForContext(const QString&
     // The opt-out is the one context the router answers Autotile for while no
     // engine claims it (ScreenModeRouter::modeFor), and a reader that must
     // agree with the router in view answers it the same out of view.
-    if (m_layoutManager) {
-        const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
-        if (entry.mode == PhosphorZones::AssignmentEntry::Autotile
-            && entry.tilingAlgorithm == PhosphorZones::NoTilingAlgorithm) {
-            return PhosphorZones::AssignmentEntry::Autotile;
-        }
-    }
-    return runningModeForContext(screenId, desktop, activity);
+    bool optOut = false;
+    const PhosphorZones::AssignmentEntry::Mode running =
+        runningModeForContext(screenId, desktop, activity, nullptr, &optOut);
+    return optOut ? PhosphorZones::AssignmentEntry::Autotile : running;
 }
 
 void Daemon::updateEngineScreens()

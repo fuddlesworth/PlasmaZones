@@ -303,7 +303,8 @@ public Q_SLOTS:
      * @brief Float toggle for snap-mode screens: the shell placement map's,
      *        gated as the keyboard toggle is (admitBusFloat)
      * @param windowId Window identifier
-     * @param screenId Screen where window is located (empty: its live screen)
+     * @param screenId The screen the window is on (empty: its live screen);
+     *        a screen it is not on is refused, with a log line (F1138)
      */
     void toggleFloatForWindow(const QString& windowId, const QString& screenId);
 
@@ -432,9 +433,10 @@ private:
     /// when it @p placesWindow, not disabled in the context in view and the
     /// focused window not being dragged (F773).
     bool focusedVerbPermitted(const QString& screenHint, bool placesWindow) const;
-    /// The screen a bus float or unfloat of @p windowId acts on (@p screenHint
-    /// resolved, else the window's live screen), or empty when a keyboard
-    /// toggle could not act there or the window is being dragged (F773).
+    /// The screen a bus float or unfloat of @p windowId acts on, always its
+    /// live screen, or empty when @p screenHint resolves to another one
+    /// (F1138), a keyboard toggle could not act there, or the window is being
+    /// dragged (F773).
     QString admitBusFloat(const QString& windowId, const QString& screenHint) const;
     /// Release the record's snap slot once no store holds a zone or the float
     /// bit for @p windowId (an unsnap confirmation leaves it free).

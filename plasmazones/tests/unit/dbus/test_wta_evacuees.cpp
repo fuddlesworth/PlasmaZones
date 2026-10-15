@@ -7,7 +7,10 @@
  *        window KWin moved off an output that went away, and when that output
  *        comes back. A window returned untouched goes back into its zone; one
  *        the user touched, or that closed, is not re-seated; a PlasmaZones
- *        placement while the output was away is re-asserted.
+ *        placement while the output was away is re-asserted. A window
+ *        announced on its parked output is re-seated there, and the re-seat
+ *        is said ahead of the park's drop: alone while another context stays
+ *        parked there, and not at all when nothing was seated (F1147).
  */
 
 #include "wta_convenience_fixture.h"
@@ -315,8 +318,9 @@ private Q_SLOTS:
             m_wta->service()->setEngineFloatResolver({});
             m_wta->setContextModeResolver({});
         });
-        // Only the window's own context snaps: a resolver asked about another
-        // one (the desktop in view, the output it left) answers the assignment.
+        // Only the window's own context snaps: a resolver asked about any other
+        // context (the desktop in view, the output it left) answers Autotile,
+        // so a wrong key fails the row.
         m_wta->setContextModeResolver(
             [activity = m_layoutManager->currentActivity()](const QString& screen, int desktop, const QString& act) {
                 return screen == kB && desktop == 2 && act == activity ? PhosphorZones::AssignmentEntry::Snapping

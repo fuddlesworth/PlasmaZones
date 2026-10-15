@@ -731,18 +731,18 @@ private:
      */
     void showOsdForScreens(const QStringList& screenIds, const QString& activity);
 
-    /// Recompute BOTH tiling-family engines' screen sets in one walk of runningModeForContext, through the shared
-    /// capture-all → seed-all → apply-all phase, so a same-flip autotile↔scrolling transition replays window order
-    /// AND the focused window deterministically (captureScrollingOrders / updateScrollingScreens run in the pass).
+    /// Recompute BOTH tiling engines' screen sets in one walk of runningModeForContext, through the shared capture-all
+    /// → seed-all → apply-all phase, so a same-flip autotile↔scrolling transition replays window order and focus.
     void updateEngineScreens();
     /// The mode a (screen, desktop, activity) context runs, in view or hidden: Scrolling or Autotile only with that
     /// feature on, not disabled there and, for autotile, an algorithm to tile with (into @p algorithmId, empty for the
-    /// global default); else Snapping. The WTA's context-mode resolver answers through it (F1122).
+    /// global default); else Snapping. The WTA's context-mode resolver and the autotile readopt gate read it (F1122).
+    /// @p routerOptOut answers whether the context is the "autotile:none" opt-out, from the same resolve (F1159).
     PhosphorZones::AssignmentEntry::Mode runningModeForContext(const QString& screenId, int desktop,
-                                                               const QString& activity,
-                                                               QString* algorithmId = nullptr) const;
-    /// runningModeForContext, but "autotile:none" answers Autotile as ScreenModeRouter::modeFor does: the lens of the
-    /// out-of-view float routing and the engines' readopt gates, which must agree with the router in view (F1134).
+                                                               const QString& activity, QString* algorithmId = nullptr,
+                                                               bool* routerOptOut = nullptr) const;
+    /// runningModeForContext, but the opt-out answers Autotile as ScreenModeRouter::modeFor does: the lens of the
+    /// out-of-view float routing and the snap and scroll readopt gates, which must agree with the router (F1134).
     PhosphorZones::AssignmentEntry::Mode routedModeForContext(const QString& screenId, int desktop,
                                                               const QString& activity) const;
 

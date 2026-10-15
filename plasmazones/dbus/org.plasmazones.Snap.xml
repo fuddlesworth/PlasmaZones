@@ -207,7 +207,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
              ═══════════════════════════════════════════════════════════════════════════ -->
 
         <method name="toggleFloatForWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Toggle a window between floating and its zone on a snapping screen. Refused where the float shortcut could not act. An empty screen means the window's own."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Toggle a window between floating and its zone on a snapping screen. Refused where the float shortcut could not act. An empty screen means the window's own, and a screen the window is not on is refused, with a log line."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
         </method>

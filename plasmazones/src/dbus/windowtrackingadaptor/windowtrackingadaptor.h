@@ -1208,7 +1208,7 @@ public:
 Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
-    /// The daemon no longer keeps @p windowId parked for @p outputUuid (empty: any output).
+    /// @p windowId no longer parked for @p outputUuid (empty: one output no settle row read so far carried as S0).
     void parkDropped(const QString& windowId, const QString& outputUuid);
     /// @p windowId seated back on @p outputUuid; its parkDropped follows unless a context stays parked there (F1147).
     void parkReseated(const QString& windowId, const QString& outputUuid);

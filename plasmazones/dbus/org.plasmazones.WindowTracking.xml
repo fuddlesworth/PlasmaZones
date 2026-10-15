@@ -586,7 +586,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="The window."/>
             </arg>
             <arg name="outputUuid" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="KWin's uuid of the output the window was parked for. Empty when the daemon never learned it, which means every record of the window."/>
+                <annotation name="org.gtk.GDBus.DocString" value="KWin's uuid of the output the window was parked for. Empty when no settle report row the daemon has read carried that output as the window's state before the output went away (its S0), so the daemon never learned its uuid. The drop still names one output, and the effect forgets only the records it never sent as that state."/>
             </arg>
         </signal>
         <signal name="parkReseated">
