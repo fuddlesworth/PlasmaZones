@@ -503,8 +503,16 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           # Pick the right diff range for the trigger.
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-              BASE="origin/${{ github.base_ref }}"
-              git fetch origin "${{ github.base_ref }}" --depth=1 || true
+              # The base commit the event's merge ref was built on, not the
+              # base branch's current tip. The tip moves when anything lands
+              # on the base branch between the event and this job (merging
+              # the PR itself does it), and the old `fetch --depth=1` of that
+              # tip made the full clone shallow there, cutting off its
+              # parents, so "BASE...HEAD" had no merge base and git exited
+              # 128. fetch-depth: 0 above already holds this commit; the
+              # fetch only covers a checkout that somehow lacks it.
+              BASE="${{ github.event.pull_request.base.sha }}"
+              git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch origin "$BASE"
               RANGE="$BASE...HEAD"
           else
               # Direct push — diff against the previous commit on this ref.
