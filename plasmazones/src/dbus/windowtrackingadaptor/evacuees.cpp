@@ -406,6 +406,8 @@ void WindowTrackingAdaptor::floatEvacuee(const OutputSettleRow& row, bool snapFl
     } else if (snapFloat) {
         // A snap float keeps floating on the output it landed on, with a
         // residence there and no home on the output it left (F670, F639).
+        // On the tiling opt-out the receive takes it as a free window, as no
+        // engine owns a float there, and its park still waits for its return.
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = row.windowId;
         ctx.toScreenId = screen;
@@ -477,6 +479,14 @@ bool WindowTrackingAdaptor::adoptPendingEvacueeFloat(const QString& windowId, co
     // (F1105).
     const EvacueeLedger::PendingFloat pending = it.value();
     m_evacuees->evacueeFloatPending.erase(it);
+    // Nor on the tiling opt-out, where no engine owns a float (user decision
+    // autotile_none_float_owner): the bit the park left in snap's global
+    // holder goes too, and the window arrives not floating.
+    PhosphorZones::LayoutRegistry* const layouts = layoutRegistry();
+    if (WindowTrackingInternal::isOptOutContext(*this, screenId, 0, layouts ? layouts->currentActivity() : QString())) {
+        WindowTrackingInternal::dropOptOutFloat(*this, windowId, screenId);
+        return false;
+    }
     const bool tilingHere = (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId))
         || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId));
     const bool owed = tilingHere || (pending.modeUnknown && pending.snapFloat);

@@ -11,6 +11,7 @@
 
 #include "daemon/daemon.h"
 
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -125,7 +126,17 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
             const auto rec = wts->placementStore().peekExact(windowId);
             const PhosphorEngine::EngineSlot snapSlot =
                 rec ? rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()) : PhosphorEngine::EngineSlot{};
-            const bool snapFloat = snapSlot.state == PhosphorEngine::WindowPlacement::stateFloating();
+            // A screen released into the tiling opt-out ("autotile:none") runs
+            // no engine, and no float is owned there (user decision
+            // autotile_none_float_owner): the snap float the record and snap's
+            // stores kept from before the screen tiled goes, not restored.
+            const QString releasedOn = windowScreen.isEmpty() && rec ? rec->screenId : windowScreen;
+            const bool optOut =
+                WindowTrackingInternal::isOptOutContext(*m_windowTrackingAdaptor, releasedOn, 0, currentActivity());
+            if (optOut) {
+                WindowTrackingInternal::dropOptOutFloat(*m_windowTrackingAdaptor, windowId, releasedOn);
+            }
+            const bool snapFloat = !optOut && snapSlot.state == PhosphorEngine::WindowPlacement::stateFloating();
             // A window SNAPPED in snapping mode, then floated in autotile, keeps its
             // snap-engine state — float is PER ENGINE. Such a window is excluded from
             // the captured autotile tile order (floated windows aren't ordered), so the

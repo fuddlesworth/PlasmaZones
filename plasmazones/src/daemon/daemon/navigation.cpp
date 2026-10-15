@@ -19,6 +19,7 @@
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "dbus/snapadaptor/snapadaptor.h"
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
@@ -100,6 +101,19 @@ static bool refusesDraggedWindow(WindowTrackingAdaptor* wta, const QString& wind
         return false;
     }
     qCInfo(lcDaemon) << shortcutName << "shortcut: ignored," << windowId << "is being dragged";
+    return true;
+}
+
+// A float verb on the focused window where it sits on the tiling opt-out
+// ("autotile:none"), which no engine owns a float on. Refused silently.
+static bool focusedOnOptOut(WindowTrackingAdaptor* wta, const PhosphorEngine::NavigationContext& ctx,
+                            const char* shortcutName)
+{
+    if (!wta || !WindowTrackingInternal::onOptOutContext(*wta, ctx.windowId, ctx.screenId)) {
+        return false;
+    }
+    qCInfo(lcDaemon) << shortcutName << "shortcut: ignored," << ctx.windowId << "is on the tiling opt-out"
+                     << ctx.screenId;
     return true;
 }
 
@@ -216,6 +230,13 @@ void Daemon::handleFloat()
         if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
+        // No engine owns a float on the tiling opt-out (user decision
+        // autotile_none_float_owner), so the shortcut does nothing there. The
+        // router hands it the autotile engine, which runs nothing there and
+        // would only report the window untracked.
+        if (focusedOnOptOut(m_windowTrackingAdaptor, ctx, "Float")) {
+            return;
+        }
         // Restart only on actual dispatch — see handleSpan.
         m_floatDebounce.restart();
         // Dispatch log: performToggleFloat's "now floating" line is emitted
@@ -328,6 +349,10 @@ void Daemon::handleRestore()
         // Autotile: toggle float (restore out of layout).
         // Snap: restore to captured pre-snap geometry.
         if (isFocusedContextGated(ctx.screenId)) {
+            return;
+        }
+        // A float verb in both modes, so nothing on the tiling opt-out either.
+        if (focusedOnOptOut(m_windowTrackingAdaptor, ctx, "Restore")) {
             return;
         }
         nav->restoreFocusedWindow(ctx);

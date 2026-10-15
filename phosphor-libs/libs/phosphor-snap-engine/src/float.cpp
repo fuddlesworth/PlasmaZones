@@ -724,17 +724,29 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     }
 
     const int currentDesktop = ctx.toDesktop > 0 ? ctx.toDesktop : currentVirtualDesktopForScreen(ctx.toScreenId);
+    // A float only where snapping runs. A context the daemon answers another
+    // mode for takes a floating arrival as a free window: the one a float
+    // reaches here is the tiling opt-out ("autotile:none"), where no engine
+    // owns a float (user decision autotile_none_float_owner). Asked for the
+    // arrival key, the context the float would be filed under: the desktop
+    // manager's answer can be unknown (0) where the engine's own key is not.
+    // Unwired, an arrival floats wherever it is handed.
+    const bool snapsThere = !m_contextModeResolver
+        || m_contextModeResolver(arrivalKey.screenId, arrivalKey.desktop, arrivalKey.activity)
+            == PhosphorZones::AssignmentEntry::Mode::Snapping;
     // Re-homing already happened at the top of the function (it must cover the
     // zone-resolved branches too). A home that names another monitor is
     // refused by any later unfloat (resolveUnfloatGeometry).
-    if (!ctx.wasFloating) {
+    if (!ctx.wasFloating || !snapsThere) {
         // Explicit cross-mode MOVE of a MANAGED window whose source zones did
         // not resolve on this screen (foreign zone ids after a layout change).
         // Floating it here converted the user's move into a float toggle. It
         // arrives as a plain FREE window instead — snapping's default for
-        // unmanaged windows — keeping its live frame. Broadcast not-floating
-        // so subscribers that last heard the source mode's state converge
-        // (the adaptor's last-broadcast gate dedups when they already agree).
+        // unmanaged windows — keeping its live frame. A floating arrival on a
+        // context that does not snap lands here the same way. Broadcast
+        // not-floating so subscribers that last heard the source mode's state
+        // converge (the adaptor's last-broadcast gate dedups when they already
+        // agree).
         //
         // Residence is RECORDED, not just broadcast. guardedHandoff verifies
         // the adoption with isWindowTracked() after this returns, and a free

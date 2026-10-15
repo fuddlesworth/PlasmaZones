@@ -19,6 +19,7 @@
 #include "config/settings.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -615,15 +616,12 @@ void Daemon::updateEngineScreens()
         }
     }
 
-    // Retile for existing screens whose overrides changed is handled by the
-    // deferred retile scheduled inside applyPerScreenConfig()/clearPerScreenConfig().
-    // This coalesces with deferred retiles from setAlgorithm() (called by
-    // applyEntry() after updateEngineScreens), producing a SINGLE retile pass
-    // with fully consistent state. An immediate retile() here would fire BEFORE
-    // setAlgorithm() updates the global algorithm/splitRatio, causing a second
-    // windowsTiled D-Bus signal whose stagger generation increment invalidates
-    // the first signal's pending stagger timers — leaving windows at old
-    // positions and producing the left-overlapping-right bug.
+    // Retile for existing screens whose overrides changed is handled by the deferred retile scheduled inside
+    // applyPerScreenConfig()/clearPerScreenConfig(). This coalesces with deferred retiles from setAlgorithm() (called
+    // by applyEntry() after updateEngineScreens), producing a SINGLE retile pass with fully consistent state. An
+    // immediate retile() here would fire BEFORE setAlgorithm() updates the global algorithm/splitRatio, causing a
+    // second windowsTiled D-Bus signal whose stagger generation increment invalidates the first signal's pending
+    // stagger timers — leaving windows at old positions and producing the left-overlapping-right bug.
 
     // The scrolling twin runs from the same recompute points so the two
     // engines' screen sets flip atomically per context switch; its body —
@@ -650,6 +648,8 @@ void Daemon::updateEngineScreens()
     // batched restore — consuming it here strands previously-floated
     // windows off their zones (found the hard way).
     emitPendingSnapFloatRestoresForResnapBuffer(/*preserveZoneEntries=*/true);
+    // A desktop just given the tiling opt-out drops the floats snap held there (autotile_none_float_owner).
+    WindowTrackingInternal::dropOptOutFloats(m_windowTrackingAdaptor);
 
     // Push the per-screen RULES-VISIBLE active layout map to the effect so
     // window-domain (appearance/animation) rules can match Field::ActiveLayout

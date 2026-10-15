@@ -23,6 +23,7 @@
 #include <PhosphorRules/WindowQuery.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "core/platform/logging.h"
+#include "plasmazones_export.h"
 
 namespace PhosphorSnapEngine {
 class SnapEngine;
@@ -177,6 +178,28 @@ inline std::optional<int> ownDesktopOn(const std::optional<::PhosphorEngine::Win
     }
     return desktopShowing(context->desktopSet(), shownDesktop);
 }
+
+/// Whether @p desktop (0: the one @p screenId shows) on @p screenId in @p activity is the tiling opt-out
+/// ("autotile:none"): Autotile mode with no algorithm, so nothing tiles there and no engine owns a float (user
+/// decision autotile_none_float_owner). Read from the same cascade entry as ScreenModeRouter::modeFor's opt-out arm
+/// and Daemon::runningModeForContext's routerOptOut (float.cpp).
+PLASMAZONES_EXPORT bool isOptOutContext(const WindowTrackingAdaptor& adaptor, const QString& screenId, int desktop,
+                                        const QString& activity);
+
+/// Whether @p windowId's own context on @p screenId (empty: its live screen) is the tiling opt-out. False for one
+/// whose context there cannot be told: on several hidden desktops, or on another activity.
+PLASMAZONES_EXPORT bool onOptOutContext(const WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                        const QString& screenId);
+
+/// No float for @p windowId where it is on an opt-out context: snap's float bit and pre-float home go from every
+/// store whose context is the opt-out (the screenless bit with them when its own store is one or it has none), so
+/// does a floating snap slot its record keeps for one, and subscribers hear on @p screenId that it is not floating.
+PLASMAZONES_EXPORT void dropOptOutFloat(WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                        const QString& screenId);
+
+/// dropOptOutFloat for every window snap floats in a store whose context is the opt-out: a desktop given
+/// "autotile:none" while snap floated windows on it. The daemon runs it at the end of every engine-set recompute.
+PLASMAZONES_EXPORT void dropOptOutFloats(WindowTrackingAdaptor* adaptor);
 
 } // namespace WindowTrackingInternal
 

@@ -240,7 +240,8 @@ public:
     }
 
     /// The mode the daemon resolves for a (screenId, desktop, activity) context, in view or hidden: readoptParked
-    /// takes a parked zone back only into one answered Snapping (F1137). Unset, the raw assignment answers.
+    /// takes a parked zone back only into one answered Snapping (F1137). Unset, the raw assignment answers. A
+    /// floating handoffReceive floats only in one answered Snapping too, and anywhere while it is unset.
     using ContextModeResolver =
         std::function<PhosphorZones::AssignmentEntry::Mode(const QString&, int, const QString&)>;
     void setContextModeResolver(ContextModeResolver resolver)
@@ -266,9 +267,8 @@ public:
      *        lifetime contract as setRestorePositionPredicate — clear with `{}`
      *        before destroying any state the closure captured.
      */
-    /// Takes the OPENING SCREEN as well, so the resolver can stamp ScreenId
-    /// and derive Mode — without which a rule pairing either with Float is
-    /// silently inert.
+    /// Takes the OPENING SCREEN as well, so the resolver can stamp ScreenId and derive Mode — without which a rule
+    /// pairing either with Float is silently inert.
     using FloatPredicate = std::function<bool(const QString& windowId, const QString& screenId)>;
 
     void setFloatPredicate(FloatPredicate predicate)
