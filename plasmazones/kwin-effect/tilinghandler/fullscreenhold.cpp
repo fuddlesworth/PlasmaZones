@@ -162,6 +162,11 @@ bool TilingHandler::parkFullscreenHoldForDesktopSwitch(const QString& windowId)
     return true;
 }
 
+bool TilingHandler::holdsFullscreenFloat(const QString& windowId) const
+{
+    return m_fullscreenFloatedWindows.contains(windowId);
+}
+
 void TilingHandler::dropFullscreenHoldRecords(const QString& windowId)
 {
     m_fullscreenFloatedWindows.remove(windowId);

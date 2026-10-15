@@ -5,7 +5,8 @@
  * @file test_command_stamps.cpp
  * @brief WindowCommandStamps (plasmazoneseffect/effect_state.h): a daemon loss
  *        supersedes every deferred apply at once (F405), while a zero stamp
- *        stays current as before.
+ *        stays current as before, and a command that sets no rect carries an
+ *        owed stale-ack answer (F1115).
  */
 
 #include "plasmazoneseffect/effect_state.h"
@@ -58,6 +59,29 @@ private Q_SLOTS:
         const auto* w1 = fakeWindow(0x10);
         stamps.staleAcks.insert(w1, WindowCommandStamps::StaleAck{QRect(0, 0, 100, 100), stamps.bump(w1)});
         stamps.supersedeAll();
+        QVERIFY(stamps.staleAcks.isEmpty());
+    }
+
+    // A command that sets no rect keeps the owed answer current, at its rect
+    // (F1115).
+    void carryStaleAck_followsTheNewStamp()
+    {
+        WindowCommandStamps stamps;
+        const auto* w1 = fakeWindow(0x10);
+        const QRect target(0, 0, 100, 100);
+        stamps.staleAcks.insert(w1, WindowCommandStamps::StaleAck{target, stamps.bump(w1)});
+        stamps.bump(w1);
+        stamps.carryStaleAck(w1);
+        QVERIFY(stamps.isCurrent(w1, stamps.staleAcks.value(w1).stamp));
+        QCOMPARE(stamps.staleAcks.value(w1).target, target);
+    }
+
+    void carryStaleAck_armsNothing()
+    {
+        WindowCommandStamps stamps;
+        const auto* w1 = fakeWindow(0x10);
+        stamps.bump(w1);
+        stamps.carryStaleAck(w1);
         QVERIFY(stamps.staleAcks.isEmpty());
     }
 };

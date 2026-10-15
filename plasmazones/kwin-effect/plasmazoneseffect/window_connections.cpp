@@ -66,11 +66,19 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // is a windowed-fullscreen or parked strip tile, which freeGeometryForCapture
     // answers with an invalid rect). Kept for a window kept above too, like its
     // frame shadow (F923), and for a fullscreen one, whose edge this also is.
+    // Never for a tile this handler tracks, or a strip tile its fullscreen holds
+    // out of the strip: the restore rect is the tile or column rect. The hold's
+    // float reaches the daemon first, so its tiled refusal no longer applies and
+    // only an exact managed-frame match would keep the column rect out (F1114).
     const auto pushRestoreRect = [this](KWin::EffectWindow* window) {
         if (!shouldHandleWindow(window, nullptr, /*exemptFullscreen=*/true, /*exemptOwnKeepAbove=*/true)) {
             return;
         }
         const QString windowId = getWindowId(window);
+        if (m_tilingHandler->holdsFullscreenFloat(windowId)
+            || (m_tilingHandler->isTrackedWindow(windowId) && !isWindowFloating(windowId))) {
+            return;
+        }
         const QRect geom = freeGeometryForCapture(window, QRectF(window->frameGeometry())).toRect();
         if (windowId.isEmpty() || !geom.isValid() || geom == window->frameGeometry().toRect()
             || !m_daemonGate.serviceRegistered) {

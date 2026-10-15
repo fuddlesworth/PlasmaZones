@@ -449,9 +449,11 @@ bool TilingHandler::dropStripMotion(const QString& screenId)
     }
     // Both halves, as at every site that drops a strip's motion: the spring
     // alone leaves an armed transition leg running with the OUTGOING strip's
-    // parameters. The whole output is damaged: a column is clipped to its
-    // virtual screen, but the strip's tab pills draw with the output's whole
-    // region, so a leg can have drawn over a sibling.
+    // parameters. The whole output is damaged, not the strip's rect: a column
+    // and its tab pills are each cut at the strip's virtual screen (F1059),
+    // but a screen can leave the scrolling set because its virtual screens
+    // were redefined, and stripScreenRect then answers from the new
+    // definitions, not the rect the leg drew in (F1115).
     const QString strip = stripKeyFor(screenId);
     m_effect->m_stripTransition.stripRemoved(strip);
     m_effect->m_stripViewAnimator->forgetStrip(strip);

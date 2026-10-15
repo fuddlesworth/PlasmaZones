@@ -518,10 +518,23 @@ void ScreenChangeHandler::applySettleVerdicts(const PhosphorProtocol::OutputSett
                 m_effect->m_trackedScreenPerWindow[w] = verdict.screenId;
                 m_effect->m_tilingHandler->updateNotifiedScreen(verdict.windowId, verdict.screenId);
             }
+            m_effect->m_tilingHandler->forgetEvacueeParks(verdict.windowId);
             placed.insert(w);
+            break;
+        case OutputSettleVerdict::UserMove:
+            // Touched: the daemon dropped its parks (F1120).
+            m_effect->m_tilingHandler->forgetEvacueeParks(verdict.windowId);
             break;
         default:
             break;
+        }
+        // A window dragged while its output went away is placed by its verdict
+        // (an EvacueeFloat, since the drag is a touch), which answers its move
+        // off that output. Its held crossing now starts where the verdict left
+        // it, so the drop settles only the user's own move from there, never a
+        // replay from the dead screen (F1112).
+        if (const auto held = m_heldDragCrossings.find(w); held != m_heldDragCrossings.end() && placed.contains(w)) {
+            *held = verdict.screenId.isEmpty() ? m_effect->pendingWindowScreenId(w) : verdict.screenId;
         }
         if (verdict.verdict != OutputSettleVerdict::EvacueeFloat) {
             // Classified and not parked: a record naming an output that is

@@ -174,6 +174,7 @@ public:
     /// announce (the daemon already placed it).
     void adoptEvacuee(KWin::EffectWindow* w, const QString& screenId);
     void readoptEvacuee(KWin::EffectWindow* w, const QString& screenId);
+    void forgetEvacueeParks(const QString& windowId); ///< the daemon holds none for it any more (F1120, evacuees.cpp)
     /// The windows tiled in @p screenId's strip, wherever their frames sit.
     QStringList stripMembersOn(const QString& screenId) const;
     /// Drop @p windowId from the minimize-float set and cancel EITHER deferred edge — the minimize debounce and
@@ -931,15 +932,11 @@ public:
     /// Drop @p windowId's three per-window scroll companions; true when a park relocation went (state.cpp).
     bool dropScrollCompanions(const QString& windowId, bool damage = true);
 
-    /// The set this discriminator actually answers over.
-    ///
-    /// Because the answer is an INTERSECTION, it can change when EITHER input
-    /// moves. setScrollingScreens invalidates the rule caches on its own
-    /// writes, but m_managedScreens is assigned raw by slotScreensChanged and
-    /// by loadSettings' reply, and those two arrive independently of the
-    /// scrolling-screens signal. Every writer of m_managedScreens must
-    /// therefore snapshot this before and compare after — otherwise a screen
-    /// that enters the union AFTER being marked scrolling leaves every
+    /// The set this discriminator actually answers over. Because the answer is an INTERSECTION, it can change when
+    /// EITHER input moves. setScrollingScreens invalidates the rule caches on its own writes, but m_managedScreens
+    /// is assigned raw by slotScreensChanged and by loadSettings' reply, and those two arrive independently of the
+    /// scrolling-screens signal. Every writer of m_managedScreens must therefore snapshot this before and compare
+    /// after — otherwise a screen that enters the union AFTER being marked scrolling leaves every
     /// `Mode == "scrolling"` verdict memoised as non-matching for the session.
     ///
     /// ONE exemption, by name: clearTiledTracking. It is a teardown-only writer
@@ -959,6 +956,8 @@ public:
     }
     /// A window demoted by a desktop switch: still held in its desktop's state.
     bool isParkedForDesktopReturn(const QString& windowId) const;
+    /// A strip tile held out of its strip for its own fullscreen (setWindowFullscreenFloat), reply pending or not.
+    bool holdsFullscreenFloat(const QString& windowId) const;
 
     /// The screen a tracked window was last notified on (empty when untracked).
     QString notifiedScreenFor(const QString& windowId) const;
@@ -1937,12 +1936,13 @@ private:
     /// the debt instead.
     QSet<QString> m_monocleRestoreOwed;
     QSet<QString> m_monocleUnmaximizedInGesture; ///< restore-on-drag un-maximizes awaiting the gesture's end (F775)
-    /// Monocle claims an evacuee held when its output went away, taken back by the first monocle batch after its
-    /// return (F685); dropped by a close or a real move (cleanupAutotileTracking) and at bring-up.
-    QSet<QString> m_evacueeMonocleClaims;
-    /// Minimize-floats an evacuee held when its output went away (the value is its untiled mark), given back by
-    /// readoptEvacuee on its return (F1046); dropped like m_evacueeMonocleClaims.
-    QHash<QString, bool> m_evacueeMinimizeFloats;
+    /// Monocle claims an evacuee held, per physical output it left, taken back by the first monocle batch on that
+    /// output (F685, F1120); dropped by a close or a real move (cleanupAutotileTracking) and at bring-up.
+    QHash<QString, QSet<QString>> m_evacueeMonocleClaims;
+    bool takeEvacueeMonocleClaim(const QString& windowId, const QString& screenId); ///< evacuees.cpp; consumes it
+    /// Minimize-floats an evacuee held, per physical output it left (the value is its untiled mark), given back by
+    /// readoptEvacuee on that output's return (F1046, F1113); dropped like m_evacueeMonocleClaims.
+    QHash<QString, QHash<QString, bool>> m_evacueeMinimizeFloats;
     /// Windows whose KWin maximize bit this handler holds because the scrolling engine says their column is
     /// maximized. An OWNERSHIP LEDGER on the same terms as m_monocleMaximizedWindows: membership is shed only by
     /// an arm that actually hands the bit back, never merely because the window's situation changed.

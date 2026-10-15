@@ -309,9 +309,10 @@ void PlasmaZonesEffect::applyWindowContextEdit(KWin::EffectWindow* window, const
         if (!managed && tracked && edge.onlyInView) {
             // Shrunk to the non-tiling desktop in view alone: the reconcile
             // released every tiled key it held, so the effect lets go too
-            // (F553).
+            // (F553), the monocle maximize with it: the window stays live on a
+            // desktop that does not tile, at its own size (F675, F1110).
             tiling->savePreTileForDesktopMove(windowId);
-            tiling->cleanupAutotileTracking(windowId);
+            tiling->cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::LiveDeparture);
             reconcileDecorationOnPlacementFlip(windowId);
         }
         // Any other edit in view (a set that grew or shrank) is re-keyed per

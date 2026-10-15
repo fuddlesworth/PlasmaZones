@@ -299,6 +299,15 @@ struct WindowCommandStamps
         quint64 stamp = 0;
     };
     QHash<const KWin::EffectWindow*, StaleAck> staleAcks;
+    /// After a command that sets no rect (a skipped float-restore): the answer
+    /// an armed StaleAck owes is still owed, so it follows @p w's current
+    /// stamp, as a repeat of its rect does in applyWindowGeometry (F1115).
+    void carryStaleAck(const KWin::EffectWindow* w)
+    {
+        if (const auto stale = staleAcks.find(w); stale != staleAcks.end()) {
+            stale->stamp = current(w);
+        }
+    }
 
     QHash<const KWin::EffectWindow*, quint64> byWindow;
     QHash<const KWin::EffectWindow*, quint64> dropsByWindow;

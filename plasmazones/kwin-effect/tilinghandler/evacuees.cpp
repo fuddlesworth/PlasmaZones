@@ -63,20 +63,40 @@ void TilingHandler::adoptEvacuee(KWin::EffectWindow* w, const QString& screenId)
     // No release relay for the output it left: the daemon parked and pruned
     // that output, and a release now would retile its dead tiles over the
     // other evacuees (F617). A monocle claim is read first, since the funnel
-    // scrubs it bare: KWin keeps the maximize, and the first monocle batch after
-    // the window's return takes the claim back (F685, evacuee_keeps_kwin_state).
+    // scrubs it bare: KWin keeps the maximize, and the first monocle batch on
+    // that output after the window's return takes the claim back (F685,
+    // evacuee_keeps_kwin_state, takeEvacueeMonocleClaim).
     const bool heldMonocle = m_monocleMaximizedWindows.contains(windowId);
     // A minimize-float the same way: the funnel drops it, and it stays dropped
     // while the window is away, so one unminimized where KWin put it floats
     // there (F643, evacuee_floats). Its return gives it back (F1046).
     const bool heldMinimizeFloat = isMinimizeFloated(windowId);
     const bool untiledMinimizeFloat = m_minimizeFloatMarks.isUntiled(windowId);
+    // Both are kept per output it left, like the daemon's park, which this
+    // tracking still names before the funnel wipes it. Every evacuation off an
+    // output re-states that output's entries: a park the daemon dropped on a
+    // touch while the window was away sends no Readopt, so its entries would
+    // otherwise ride a later evacuation into that one's return, unfloating
+    // what the user floated since (F1113) or claiming a maximize the user took
+    // since (F1120). A window untracked where it was held neither there.
+    const QString departed =
+        PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_notifiedWindowScreens.value(windowId));
     cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::Evacuation);
-    if (heldMonocle) {
-        m_evacueeMonocleClaims.insert(windowId);
+    if (heldMonocle && !departed.isEmpty()) {
+        m_evacueeMonocleClaims[windowId].insert(departed);
+    } else if (const auto claims = m_evacueeMonocleClaims.find(windowId); claims != m_evacueeMonocleClaims.end()) {
+        claims->remove(departed);
+        if (claims->isEmpty()) {
+            m_evacueeMonocleClaims.erase(claims);
+        }
     }
-    if (heldMinimizeFloat) {
-        m_evacueeMinimizeFloats.insert(windowId, untiledMinimizeFloat);
+    if (heldMinimizeFloat && !departed.isEmpty()) {
+        m_evacueeMinimizeFloats[windowId].insert(departed, untiledMinimizeFloat);
+    } else if (const auto parks = m_evacueeMinimizeFloats.find(windowId); parks != m_evacueeMinimizeFloats.end()) {
+        parks->remove(departed);
+        if (parks->isEmpty()) {
+            m_evacueeMinimizeFloats.erase(parks);
+        }
     }
     // The daemon floated it in place on a tiling destination. Tracked here so
     // the destination's engine owns it, and never announced: an announce
@@ -109,13 +129,20 @@ void TilingHandler::readoptEvacuee(KWin::EffectWindow* w, const QString& screenI
     // as the cross-screen hop re-establishes one (handleWindowOutputChanged).
     // With no peer record from before the evacuation, its unminimize commits
     // at once. One unminimized while away has passed that edge, and is
-    // unfloated into its tile now (F1046).
-    const auto parked = m_evacueeMinimizeFloats.constFind(windowId);
-    if (parked == m_evacueeMinimizeFloats.constEnd()) {
+    // unfloated into its tile now (F1046). Only the entry for the output it
+    // returned to: one for an output still away waits for that return.
+    const auto parks = m_evacueeMinimizeFloats.find(windowId);
+    if (parks == m_evacueeMinimizeFloats.end()) {
         return;
     }
-    const bool untiled = parked.value();
-    m_evacueeMinimizeFloats.erase(parked);
+    const QString returned = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+    if (!parks->contains(returned)) {
+        return;
+    }
+    const bool untiled = parks->take(returned);
+    if (parks->isEmpty()) {
+        m_evacueeMinimizeFloats.erase(parks);
+    }
     if (!m_notifiedWindows.contains(windowId)) {
         return;
     }
@@ -127,6 +154,33 @@ void TilingHandler::readoptEvacuee(KWin::EffectWindow* w, const QString& screenI
     if (!w->isMinimized()) {
         dispatchUnminimizeUnfloat(windowId, screenId);
     }
+}
+
+void TilingHandler::forgetEvacueeParks(const QString& windowId)
+{
+    // A Reassert or UserMove settle verdict: the daemon kept no park for the
+    // window (a touch dropped it, or it never had one), so neither half here
+    // has a return to wait for. Left, a window KWin pulled back after a touch
+    // would have its first monocle batch claim a maximize the user took.
+    m_evacueeMonocleClaims.remove(windowId);
+    m_evacueeMinimizeFloats.remove(windowId);
+}
+
+bool TilingHandler::takeEvacueeMonocleClaim(const QString& windowId, const QString& screenId)
+{
+    // Only on the output it was parked for: a monocle batch elsewhere is a
+    // stack the window joined since, whose maximize was never this claim.
+    // Not gated on the Readopt verdict, which can reach the effect after the
+    // re-seat batch the daemon emitted while answering the settle.
+    const auto claims = m_evacueeMonocleClaims.find(windowId);
+    if (claims == m_evacueeMonocleClaims.end()
+        || !claims->remove(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId))) {
+        return false;
+    }
+    if (claims->isEmpty()) {
+        m_evacueeMonocleClaims.erase(claims);
+    }
+    return true;
 }
 
 QStringList TilingHandler::stripMembersOn(const QString& screenId) const

@@ -1747,12 +1747,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         m_effect->m_shaderManager.armMonocleEcho(snap.window, true);
                     }
                     // A maximized column handed to this stack keeps its KWin maximize: the claim changes ledger,
-                    // it is not released and re-taken (F745). A returned evacuee whose maximize was ours before
-                    // its output went away takes its claim back (F685, evacuee_keeps_kwin_state). Neither is
+                    // it is not released and re-taken (F745). An evacuee whose maximize was ours takes its claim
+                    // back on the output it left (F685, F1120, evacuee_keeps_kwin_state). Neither is
                     // short-circuited, so both entries are consumed.
                     const bool columnClaimHandedOver =
                         !isScrollingScreen(snap.screenId) && m_maximizedToEdgesWindows.remove(snap.windowId);
-                    const bool evacueeClaimReturned = m_evacueeMonocleClaims.remove(snap.windowId);
+                    const bool evacueeClaimReturned = takeEvacueeMonocleClaim(snap.windowId, snap.screenId);
                     if ((!wasAlreadyMaximized
                          && (!callNow || ScrollDecisions::takesMaximizeMembership(kw->isMaximizable(), false)))
                         || columnClaimHandedOver || evacueeClaimReturned) {
