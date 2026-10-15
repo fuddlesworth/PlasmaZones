@@ -645,6 +645,21 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       being disabled or an output change, so the effect fetches its
 //       instant-restore cache again (F625). An old effect never connects it
 //       and keeps the cache it fetched at daemon-ready.
+//
+//       Also in v10, WindowTracking gains the parkReseated (s s) signal: the
+//       daemon put a window back into its parked place on an output that
+//       returned, sent just ahead of the parkDropped for the same window and
+//       output when nothing else stays parked for it there. At an arrival
+//       re-seat (the window's own announce on that output, which carries no
+//       settle verdict) the effect gives the window's minimize-float back on
+//       it, and reads the parkDropped that follows as a seat, keeping the
+//       Monocle claim for the re-seat batch (F1147). An old daemon never
+//       emits it: the effect gives nothing back at an arrival re-seat, and
+//       the parkDropped that follows reads as a seat that put nothing back,
+//       so the effect forgets the window's Monocle claim and minimize-float
+//       for that output. A re-seat inside a settle is unaffected: its Readopt
+//       verdict decides, and the effect ignores a parkReseated there. An old
+//       effect never connects it and reads the parkDropped as it always did.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

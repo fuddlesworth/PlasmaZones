@@ -258,7 +258,9 @@ bool ScrollEngine::readoptParked(const QString& windowId, const QString& parkedP
             // A context given another mode while the output was away gets
             // nothing back, as snap's re-adopt refuses a desktop no longer
             // snapping. m_scrollingScreens speaks only for the contexts in
-            // view, so the context's own assignment decides (F1102).
+            // view, so the mode the context runs decides, as the daemon
+            // resolves it: a scrolling assignment with scrolling switched off
+            // or disabled there does not scroll (F1102, F1137).
         } else if (m_scrollingScreens.contains(screen)) {
             // Out of view on a screen this engine scrolls: seated straight into
             // that context, after the walk. Nothing announces the window again
