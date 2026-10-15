@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QRect>
+#include <QSet>
 #include <QHash>
 #include <QString>
 #include <QPointer>
@@ -200,6 +201,18 @@ PLASMAZONES_EXPORT void dropOptOutFloat(WindowTrackingAdaptor& adaptor, const QS
 /// dropOptOutFloat for every window snap floats in a store whose context is the opt-out: a desktop given
 /// "autotile:none" while snap floated windows on it. The daemon runs it at the end of every engine-set recompute.
 PLASMAZONES_EXPORT void dropOptOutFloats(WindowTrackingAdaptor* adaptor);
+
+/// Of @p screens, the ones whose context in view just became the tiling opt-out release the windows snap holds in
+/// zones there, in place: subscribers hear each "unsnapped" and nothing moves. Snap keeps the zones as frozen memory,
+/// as it does for a context that went to a tiling engine, and the resnap of the flip back to snapping re-applies them.
+/// The daemon passes every screen whose active assignment changed (Daemon::diffActiveAssignments).
+PLASMAZONES_EXPORT void releaseOptOutZones(WindowTrackingAdaptor* adaptor, const QSet<QString>& screens);
+
+/// A window a scrolling strip let go of on the tiling opt-out, where nothing places it: back at @p freeGeometry,
+/// its pre-scroll free spot, when that lies on @p screenId, else moved on screen at its size when its frame is off
+/// the screen's available area. Stated as a re-statement, with no zone and no float. Nothing for a screen that is gone.
+PLASMAZONES_EXPORT void placeReleasedOnOptOut(WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                              const QString& screenId, const QRect& freeGeometry);
 
 } // namespace WindowTrackingInternal
 

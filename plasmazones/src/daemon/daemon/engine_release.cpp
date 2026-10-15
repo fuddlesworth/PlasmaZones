@@ -136,6 +136,16 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
             if (optOut) {
                 WindowTrackingInternal::dropOptOutFloat(*m_windowTrackingAdaptor, windowId, releasedOn);
             }
+            // A strip window lands on screen there: nothing adopts it, and the
+            // drain below holds every restore an opt-out screen would get. It
+            // goes back to the pre-scroll free spot a free or floating window
+            // had, as on a return to snapping, else onto the screen at its size.
+            if (optOut && releasedFromScroll) {
+                const bool hadFreeSpot = rec && snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped();
+                WindowTrackingInternal::placeReleasedOnOptOut(*m_windowTrackingAdaptor, windowId, releasedOn,
+                                                              hadFreeSpot ? rec->freeGeometryFor(releasedOn) : QRect());
+                continue;
+            }
             const bool snapFloat = !optOut && snapSlot.state == PhosphorEngine::WindowPlacement::stateFloating();
             // A window SNAPPED in snapping mode, then floated in autotile, keeps its
             // snap-engine state — float is PER ENGINE. Such a window is excluded from

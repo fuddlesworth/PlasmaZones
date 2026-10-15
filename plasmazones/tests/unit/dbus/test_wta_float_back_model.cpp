@@ -745,6 +745,71 @@ private Q_SLOTS:
         QVERIFY(!floatSpy.first().at(1).toBool());
     }
 
+    // Nor does snap own zones there. A desktop given the opt-out frees the
+    // windows snapped on it in place: each is announced unsnapped, nothing
+    // moves, and snap keeps the zone as frozen memory for a return to
+    // snapping, as it does for a desktop given to a tiling engine. A window
+    // snapped on a screen that still snaps is left alone. Mutations: drop the
+    // opt-out test in releaseOptOutZones and the window on DP-2 is announced
+    // too; drop the emit and nothing is.
+    void theOptOutReleasesItsSnappedWindowsInPlace()
+    {
+        FloatBackFixture f;
+        const QString onOptOut = f.registerWindow(QStringLiteral("release-opt-out"));
+        const QString onSnapping = f.registerWindow(QStringLiteral("release-snapping"));
+        f.snap->commitSnap(onOptOut, f.zone(0), kLeft);
+        f.snap->commitSnap(onSnapping, f.zone(1), kRight);
+        optOut(f, kLeft);
+        QSignalSpy stateSpy(f.wta, &WindowTrackingAdaptor::windowStateChanged);
+        QSignalSpy geometrySpy(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        WindowTrackingInternal::releaseOptOutZones(f.wta, {kLeft, kRight});
+
+        QCOMPARE(stateSpy.count(), 1);
+        QCOMPARE(stateSpy.first().at(0).toString(), onOptOut);
+        const auto entry = stateSpy.first().at(1).value<PhosphorProtocol::WindowStateEntry>();
+        QCOMPARE(entry.changeType, QStringLiteral("unsnapped"));
+        QVERIFY(entry.zoneId.isEmpty());
+        QCOMPARE(entry.screenId, kLeft);
+        QVERIFY2(geometrySpy.isEmpty(), "released in place");
+        QCOMPARE(f.wta->service()->zoneForWindow(onOptOut), f.zone(0));
+        QCOMPARE(f.wta->service()->zoneForWindow(onSnapping), f.zone(1));
+    }
+
+    // A window a scrolling strip let go of on the opt-out lands on screen:
+    // back at its pre-scroll free geometry when that lies on the screen, else
+    // moved into the screen at its size when its frame sits past the viewport,
+    // and left where it is when already on screen. Mutations: ignore the free
+    // geometry and the first window is not put back; drop the move and the
+    // second stays off screen.
+    void aStripWindowReleasedOnTheOptOutLandsOnScreen()
+    {
+        FloatBackFixture f;
+        QSignalSpy geometrySpy(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        const auto landed = [&geometrySpy](const QString& windowId) -> std::optional<QRect> {
+            for (const QList<QVariant>& args : std::as_const(geometrySpy)) {
+                if (args.at(0).toString() == windowId) {
+                    return QRect(args.at(1).toInt(), args.at(2).toInt(), args.at(3).toInt(), args.at(4).toInt());
+                }
+            }
+            return std::nullopt;
+        };
+        const QString freeSpot = f.registerWindow(QStringLiteral("strip-free-spot"));
+        f.setFrame(freeSpot, QRect(3000, 100, 800, 600));
+        const QString pastViewport = f.registerWindow(QStringLiteral("strip-past-viewport"));
+        f.setFrame(pastViewport, QRect(1500, 200, 900, 600));
+        const QString onScreen = f.registerWindow(QStringLiteral("strip-on-screen"));
+        f.setFrame(onScreen, QRect(200, 200, 800, 600));
+
+        WindowTrackingInternal::placeReleasedOnOptOut(*f.wta, freeSpot, kLeft, QRect(100, 100, 700, 500));
+        WindowTrackingInternal::placeReleasedOnOptOut(*f.wta, pastViewport, kLeft, QRect());
+        WindowTrackingInternal::placeReleasedOnOptOut(*f.wta, onScreen, kLeft, QRect());
+
+        QCOMPARE(landed(freeSpot), std::optional<QRect>(QRect(100, 100, 700, 500)));
+        QCOMPARE(landed(pastViewport), std::optional<QRect>(QRect(1020, 200, 900, 600)));
+        QCOMPARE(landed(onScreen), std::optional<QRect>());
+    }
+
 private:
     /// Give desktop 1 of @p screen the tiling opt-out ("autotile:none").
     static void optOut(FloatBackFixture& f, const QString& screen)
