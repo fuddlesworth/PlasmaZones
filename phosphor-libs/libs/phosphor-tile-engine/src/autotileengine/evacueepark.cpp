@@ -176,11 +176,16 @@ bool AutotileEngine::readoptParked(const QString& windowId, const QString& parke
         if (key != currentKeyForScreen(screen)) {
             // A context given another mode while the output was away gets
             // nothing back, like one in view below. isAutotileScreen speaks
-            // only for the context in view, so its own assignment decides
-            // (F1102).
-            if (m_layoutManager
-                && m_layoutManager->modeForScreen(screen, key.desktop, key.activity)
-                    != PhosphorZones::AssignmentEntry::Mode::Autotile) {
+            // only for the context in view, so the context's own running
+            // mode decides (F1102): the daemon's answer, which an assignment
+            // with tiling off, disabled or opted out there fails (F1137), else
+            // the raw assignment.
+            const bool contextTiles = m_contextModeResolver
+                ? m_contextModeResolver(screen, key.desktop, key.activity)
+                : (!m_layoutManager
+                   || m_layoutManager->modeForScreen(screen, key.desktop, key.activity)
+                       == PhosphorZones::AssignmentEntry::Mode::Autotile);
+            if (!contextTiles) {
                 continue;
             }
             if (isAutotileScreen(screen)) {
@@ -252,12 +257,12 @@ bool AutotileEngine::readoptParked(const QString& windowId, const QString& parke
             if (ctx.floating.contains(canonical)) {
                 state->setFloating(canonical, true);
                 // The daemon keeps one float bit per window, the one its
-                // primary context holds (isWindowFloatingInAutotile). Only a
-                // context that becomes the primary here announces: a window
-                // this walk seated in view as a tile stays a tile there, and
-                // the first context of a window held nowhere in view speaks
-                // for the rest (F1121).
-                if (!m_states.hasWindow(canonical) || m_states.keyForWindow(canonical) == key) {
+                // primary context holds (isWindowFloatingInAutotile). Only the
+                // first context of a window held nowhere yet announces, as it
+                // becomes the primary: a window this walk seated in view as a
+                // tile stays a tile there, and a later background context is
+                // never the primary (F1121, F1145).
+                if (!m_states.hasWindow(canonical)) {
                     Q_EMIT windowFloatingStateSynced(canonical, true, key.screenId);
                 }
             } else {

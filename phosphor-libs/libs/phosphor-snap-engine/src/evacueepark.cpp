@@ -142,10 +142,15 @@ bool SnapEngine::readoptParked(const QString& windowId, const QString& parkedPhy
         // while the output was away gets nothing back. Nor does one where
         // snapping is switched off or disabled, or a window snapping now
         // leaves alone, as the desktop carry refuses them (F445, F1017).
-        if ((m_layoutManager
-             && m_layoutManager->modeForScreen(screen, desktop, activity)
-                 != PhosphorZones::AssignmentEntry::Mode::Snapping)
-            || !snapsInContext(key) || isWindowExcluded(windowId, screen)) {
+        // "Snapping" is the mode the context runs, as the daemon resolves it
+        // (a tiling assignment with tiling off or disabled there snaps, an
+        // opt-out tiling context does not), not its raw assignment (F1137).
+        const auto runningMode = m_contextModeResolver
+            ? m_contextModeResolver(screen, desktop, activity)
+            : (m_layoutManager ? m_layoutManager->modeForScreen(screen, desktop, activity)
+                               : PhosphorZones::AssignmentEntry::Mode::Snapping);
+        if (runningMode != PhosphorZones::AssignmentEntry::Mode::Snapping || !snapsInContext(key)
+            || isWindowExcluded(windowId, screen)) {
             continue;
         }
         const bool inView = key == currentKeyForScreen(screen);

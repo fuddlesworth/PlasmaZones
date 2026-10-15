@@ -659,6 +659,41 @@ private Q_SLOTS:
         QVERIFY(!engine.hasParked(QStringLiteral("win-1"), QString()));
     }
 
+    // With the daemon's resolver wired, the parked context's running mode
+    // decides, not its raw assignment, and it is asked about the parked
+    // context itself: a desktop assigned tiling that cannot tile there
+    // (tiling off, disabled or opted out) gets nothing (F1137). The resolver
+    // answers the other way for any other context, so a wrong key fails both
+    // rows.
+    void testEvacueePark_outOfViewContextFollowsTheResolvedMode_data()
+    {
+        QTest::addColumn<bool>("tiles");
+        QTest::newRow("parked desktop tiles") << true;
+        QTest::newRow("parked desktop cannot tile") << false;
+    }
+
+    void testEvacueePark_outOfViewContextFollowsTheResolvedMode()
+    {
+        QFETCH(bool, tiles);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setCurrentDesktopForScreen(screen, 1);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win-1"), screen);
+        QCoreApplication::processEvents();
+        engine.parkOutput(screen);
+        engine.pruneStatesForRemovedScreen(screen);
+        engine.setContextModeResolver([tiles, screen](const QString& screenId, int desktop, const QString& activity) {
+            const bool parked = screenId == screen && desktop == 1 && activity.isEmpty();
+            return parked ? tiles : !tiles;
+        });
+        engine.setCurrentDesktopForScreen(screen, 2);
+
+        QCOMPARE(engine.readoptParked(QStringLiteral("win-1"), screen, screen), tiles);
+        QCOMPARE(engine.isWindowTracked(QStringLiteral("win-1")), tiles);
+        QVERIFY(!engine.hasParked(QStringLiteral("win-1"), QString()));
+    }
+
     // The daemon's prune of a shrunk desktop count reaches only the desktops
     // desktopsWithActiveState lists, and a parked context has no live state
     // left to list its desktop; the prune then takes it (F1100), and only it:

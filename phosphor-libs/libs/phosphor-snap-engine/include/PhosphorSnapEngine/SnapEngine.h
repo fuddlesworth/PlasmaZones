@@ -169,9 +169,8 @@ public:
     /**
      * @brief Inject the auto-snap-restore gate. See ShouldRestorePredicate.
      *
-     * Ownership: the caller keeps any captured state valid for the engine's
-     * lifetime. To detach safely, clear via `setShouldRestorePredicate({})`
-     * before destroying the captured object.
+     * Ownership: the caller keeps any captured state valid for the engine's lifetime. To detach safely, clear
+     * via `setShouldRestorePredicate({})` before destroying the captured object.
      */
     void setShouldRestorePredicate(ShouldRestorePredicate predicate)
     {
@@ -197,12 +196,8 @@ public:
      */
     using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
 
-    /**
-     * @brief Inject the unsnapped-position-restore gate. See
-     *        RestorePositionPredicate. Same lifetime contract as
-     *        setShouldRestorePredicate — clear with `{}` before destroying any
-     *        captured state.
-     */
+    /// Inject the unsnapped-position-restore gate (see RestorePositionPredicate). Same lifetime contract as
+    /// setShouldRestorePredicate: clear with `{}` before destroying any captured state.
     void setRestorePositionPredicate(RestorePositionPredicate predicate)
     {
         m_restorePositionPredicate = std::move(predicate);
@@ -227,12 +222,8 @@ public:
      */
     using ManagedRestorePredicate = std::function<bool(const QString& windowId)>;
 
-    /**
-     * @brief Inject the managed (snapped-to-zone) restore gate. See
-     *        ManagedRestorePredicate. Same lifetime contract as
-     *        setRestorePositionPredicate — clear with `{}` before destroying any
-     *        captured state.
-     */
+    /// Inject the managed (snapped-to-zone) restore gate (see ManagedRestorePredicate). Same lifetime contract as
+    /// setRestorePositionPredicate: clear with `{}` before destroying any captured state.
     void setManagedRestorePredicate(ManagedRestorePredicate predicate)
     {
         m_managedRestorePredicate = std::move(predicate);
@@ -248,9 +239,17 @@ public:
         m_liveModeResolver = std::move(resolver);
     }
 
-    /// INERT, kept for ABI: nothing reads the stored resolver since snap no
-    /// longer defers an open to another engine's reclaim (the reopen
-    /// contract), and the daemon does not wire it. Clear with {} at teardown.
+    /// The mode the daemon resolves for a (screenId, desktop, activity) context, in view or hidden: readoptParked
+    /// takes a parked zone back only into one answered Snapping (F1137). Unset, the raw assignment answers.
+    using ContextModeResolver =
+        std::function<PhosphorZones::AssignmentEntry::Mode(const QString&, int, const QString&)>;
+    void setContextModeResolver(ContextModeResolver resolver)
+    {
+        m_contextModeResolver = std::move(resolver);
+    }
+
+    /// INERT, kept for ABI: nothing reads it since snap no longer defers an open to another engine's reclaim (the
+    /// reopen contract), and the daemon does not wire it. Clear with {} at teardown.
     using TilingEngineLiveResolver =
         std::function<bool(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId)>;
     void setTilingEngineLiveResolver(TilingEngineLiveResolver resolver)
@@ -1285,6 +1284,7 @@ private:
     std::unique_ptr<SnapEvacueePark> m_evacueePark;
     ExclusionAdmission m_exclusionAdmission{};
     std::unique_ptr<SnapPendingCarries> m_pendingCarries; // created by the first carry left for a hidden context
+    ContextModeResolver m_contextModeResolver{};
 };
 
 } // namespace PhosphorSnapEngine

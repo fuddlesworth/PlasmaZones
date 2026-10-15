@@ -1276,9 +1276,9 @@ public:
     }
     /// Re-seat @p windowId's contexts parked under @p parkedPhysicalId on @p returnedPhysicalId as a re-statement
     /// (no focus, no last-used), each in its own (screen, desktop, activity): its virtual screen on the returned
-    /// output (or the bare output), never the context in view. One whose own assignment left the engine's mode gets
-    /// nothing (snap also refuses one switched off, disabled or excluding the window). One out of view is seated
-    /// at once, or granted to the engine's arrival path on a screen not running the mode yet. True when any was.
+    /// output (or the bare output), never the context in view. One that no longer runs the engine's mode as the
+    /// daemon resolves it gets nothing (snap also refuses one switched off, disabled or excluding the window); one out
+    /// of view is seated at once, or granted to the arrival path on a screen not running the mode yet. True if any was.
     virtual bool readoptParked(const QString& windowId, const QString& parkedPhysicalId,
                                const QString& returnedPhysicalId)
     {

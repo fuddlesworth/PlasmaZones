@@ -225,6 +225,47 @@ private Q_SLOTS:
         QVERIFY(!m_engine->hasParked(w, kScreen));
     }
 
+    // With the daemon's resolver wired, the mode the parked context runs
+    // decides, not its raw assignment (F1137). A desktop assigned tiling that
+    // snaps (tiling off or disabled there) takes its zone back; the resolver
+    // answers Autotile for any other context, so a wrong key fails the row.
+    void aTilingAssignmentThatSnapsTakesItsZoneBack()
+    {
+        const QString w = QStringLiteral("app|runs-snapping");
+        snapOn(2, w, m_zoneIds[1]);
+        QCOMPARE(m_engine->parkOutput(kScreen), QStringList{w});
+        m_engine->pruneStatesForRemovedScreen(kScreen);
+        m_layoutManager->assignLayoutById(kScreen, 2, QString(), QStringLiteral("autotile:bsp"));
+        m_engine->setContextModeResolver([](const QString& screenId, int desktop, const QString& activity) {
+            return screenId == kScreen && desktop == 2 && activity.isEmpty()
+                ? PhosphorZones::AssignmentEntry::Mode::Snapping
+                : PhosphorZones::AssignmentEntry::Mode::Autotile;
+        });
+
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        QVERIFY(m_engine->readoptParked(w, kScreen, kScreen));
+        QCOMPARE(zonesOn(2, w), QStringList{m_zoneIds[1]});
+        QVERIFY(!m_engine->hasParked(w, kScreen));
+    }
+
+    // And a context assigned snapping that the daemon says does not snap (an
+    // opt-out tiling context answers Autotile, as the router does) gets
+    // nothing back (F1137).
+    void aContextResolvedAwayFromSnappingIsNotReseated()
+    {
+        const QString w = QStringLiteral("app|resolved-away");
+        snapOn(1, w, m_zoneIds[0]);
+        QCOMPARE(m_engine->parkOutput(kScreen), QStringList{w});
+        m_engine->pruneStatesForRemovedScreen(kScreen);
+        m_engine->setContextModeResolver([](const QString&, int, const QString&) {
+            return PhosphorZones::AssignmentEntry::Mode::Autotile;
+        });
+
+        QVERIFY(!m_engine->readoptParked(w, kScreen, kScreen));
+        QVERIFY(m_service->zoneForWindow(w).isEmpty());
+        QVERIFY(!m_engine->hasParked(w, kScreen));
+    }
+
     // A desktop the window left while parked drops that desktop's context
     // only; the rest stays parked and comes back.
     void dropByDesktopKeepsTheOtherContexts()

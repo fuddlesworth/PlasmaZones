@@ -102,16 +102,14 @@ public:
     /**
      * @brief Wire up the shared WindowRegistry.
      *
-     * Optional — tests construct the engine without a registry and fall back
-     * to string parsing (PhosphorIdentity::WindowId::extractAppId). Production daemons set this to
-     * the daemon-root registry so class lookups return the latest value after
-     * an Electron/CEF app renames itself mid-session.
+     * Optional — tests construct the engine without a registry and fall back to string parsing
+     * (PhosphorIdentity::WindowId::extractAppId). Production daemons set this to the daemon-root registry so
+     * class lookups return the latest value after an Electron/CEF app renames itself mid-session.
      *
-     * Side effect: installs a live-class resolver on every PhosphorTiles::TilingAlgorithm in
-     * the PhosphorTiles::AlgorithmRegistry so PhosphorTiles::LuauTileAlgorithm's lifecycle hooks see the
-     * current appId on each tiled window. Future algorithm registrations
-     * (hot-reloaded Luau algorithms) pick up the resolver from the
-     * algorithmRegistered signal bound inside this method.
+     * Side effect: installs a live-class resolver on every PhosphorTiles::TilingAlgorithm in the
+     * PhosphorTiles::AlgorithmRegistry so PhosphorTiles::LuauTileAlgorithm's lifecycle hooks see the current
+     * appId on each tiled window. Future algorithm registrations (hot-reloaded Luau algorithms) pick up the
+     * resolver from the algorithmRegistered signal bound inside this method.
      *
      * Must be set before start. Not owned.
      */
@@ -131,12 +129,10 @@ public:
      * @brief The virtual-desktop numbers any per-context entry names: a state,
      *        a parked context, a tuned flag, a stashed bag or a dirty memo.
      *
-     * Used by the daemon's desktop-count-changed handler to find stale
-     * desktops (entries on desktop > newCount) so they can be pruned via
-     * pruneStatesForDesktop(). The m_states map itself stays private; per-screen
-     * lookup is available through tilingStateForScreen(screenId). (Design notes
-     * on why the older screenStates() accessor was removed live above the
-     * definition in src/autotileengine/algorithm_state.cpp.)
+     * Used by the daemon's desktop-count-changed handler to find stale desktops (entries on desktop > newCount)
+     * so they can be pruned via pruneStatesForDesktop(). The m_states map itself stays private; per-screen lookup
+     * is available through tilingStateForScreen(screenId). (Design notes on why the older screenStates()
+     * accessor was removed live above the definition in src/autotileengine/algorithm_state.cpp.)
      */
     QSet<int> desktopsWithActiveState() const override;
 
@@ -150,9 +146,8 @@ public:
     /**
      * @brief Check if a window is currently tracked in any autotile state.
      *
-     * Used by the drag protocol (beginDrag) to decide whether to apply an
-     * immediate free-floating-size restore when a tiled window is picked up,
-     * and by the float/handoff routing in WindowTrackingAdaptor to choose
+     * Used by the drag protocol (beginDrag) to decide whether to apply an immediate free-floating-size restore
+     * when a tiled window is picked up, and by the float/handoff routing in WindowTrackingAdaptor to choose
      * between this engine and the adoption handoff.
      *
      * MEMBERSHIP-VERIFIED, not a bare reverse-map lookup. The reverse
@@ -624,18 +619,22 @@ public:
     bool hasPerScreenOverride(const QString& screenId, const QString& key) const;
     void updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value);
 
-    // Inject the per-context (window-rule) gap-override provider — forwarded to
-    // PerScreenConfigResolver. The daemon supplies the screen's current-context
-    // gap overrides so tiled windows honour context gap rules like snapping does.
+    // Inject the per-context (window-rule) gap-override provider, forwarded to PerScreenConfigResolver. The daemon
+    // supplies the screen's current-context gap overrides so tiled windows honour context gap rules like snapping does.
     void setContextGapProvider(std::function<QVariantMap(const QString& screenId)> provider);
 
-    /// INERT, kept for ABI: a scrolling-mode resolver invoked as (screenId,
-    /// virtualDesktop, activity). It fed windowOpened's cross-screen
-    /// tile-restore defer, which the reopen contract removed: a window
-    /// opening on an autotile screen is autotile's, and no engine defers a
-    /// window to another engine's restore on another screen. Nothing reads
-    /// the stored resolver and the daemon no longer wires it; a setter call
-    /// is harmless. Same clear-before-destroy contract as setContextGapProvider.
+    /// Whether a (screenId, desktop, activity) context tiles, as the daemon resolves it (feature switch, disabled
+    /// cascade, autotile:none): readoptParked seats or grants a parked context only when it does (F1137). Unset, the
+    /// raw assignment decides. A bool keeps the zones-layer mode type out of this header. Clear with {} at teardown.
+    using ContextTilesResolver = std::function<bool(const QString& screenId, int desktop, const QString& activity)>;
+    void setContextModeResolver(ContextTilesResolver resolver)
+    {
+        m_contextModeResolver = std::move(resolver);
+    }
+
+    /// INERT, kept for ABI: a scrolling-mode resolver that fed windowOpened's cross-screen tile-restore defer, which
+    /// the reopen contract removed (a window opening on an autotile screen is autotile's). Nothing reads the stored
+    /// resolver and the daemon no longer wires it; a setter call is harmless.
     void setScrollingModeResolver(
         std::function<bool(const QString& screenId, int desktop, const QString& activity)> resolver)
     {
@@ -2085,6 +2084,7 @@ private:
 
     // Appended last (installed header). Created by the first parkOutput.
     std::unique_ptr<TileEvacueePark> m_evacueePark;
+    ContextTilesResolver m_contextModeResolver;
 };
 
 } // namespace PhosphorTileEngine
