@@ -186,27 +186,29 @@ void NavigationHandler::clearWindowZone(const QString& windowId)
     }
 }
 
-void NavigationHandler::noteZoneNoticeTarget(const QString& daemonId, const QString& liveId)
+bool NavigationHandler::noteZoneNoticeTarget(const QString& daemonId, const QString& liveId)
 {
     if (liveId.isEmpty()) {
         m_zoneNoticeTargets.remove(daemonId);
-        return;
+        return true;
     }
     if (!::PhosphorIdentity::WindowId::sameWindowInstance(liveId, daemonId)) {
         // The window's own id filed its zone already, and that id speaks for
-        // it: a clear under this one must not unsnap it. The daemon emits the
-        // two ids' notices in no fixed order (a batch walks a hash, a commit
-        // follows the user), and either order ends with no target (F1140).
+        // it: neither this id's zone nor its clear may land on it. The daemon
+        // emits the two ids' notices in no fixed order (a batch walks a hash, a
+        // commit follows the user), and either order ends with the window's
+        // own zone and no target (F1140, F1152).
         if (m_zoneOwnNotices.contains(::PhosphorIdentity::WindowId::extractInstanceId(liveId))) {
             m_zoneNoticeTargets.remove(daemonId);
-        } else {
-            m_zoneNoticeTargets.insert(daemonId, liveId);
+            return false;
         }
-        return;
+        m_zoneNoticeTargets.insert(daemonId, liveId);
+        return true;
     }
     m_zoneNoticeTargets.remove(daemonId);
     forgetZoneNoticesOn(liveId);
     m_zoneOwnNotices.insert(::PhosphorIdentity::WindowId::extractInstanceId(liveId));
+    return true;
 }
 
 void NavigationHandler::forgetZoneNoticesOn(const QString& liveId)

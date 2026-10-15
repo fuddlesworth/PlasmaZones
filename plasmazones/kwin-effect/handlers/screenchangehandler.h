@@ -81,12 +81,12 @@ public:
     /// covered too.
     void trackDockWindow(KWin::EffectWindow* w);
 
-    /// True while a screen change is pending (debounce timer running, its
+    /// True while a screen change is pending (debounce timer running, a
     /// settle report in flight, or a reapply in progress). A crossing seen
     /// meanwhile is deferred to the settle (@ref deferCrossing).
     bool isScreenChangeInProgress() const
     {
-        return m_pendingScreenChange || m_settleInFlight || m_reapplyInProgress;
+        return m_pendingScreenChange || m_settlesInFlight > 0 || m_reapplyInProgress;
     }
 
     /// Record the state of every window on @p output as it goes away, under
@@ -212,8 +212,9 @@ private:
     {
         WindowSnapshot state; ///< S0: as it was when its output went away
         bool classified = false;
-        /// A settle the daemon answered carried it as its row's S0, which is
-        /// how the daemon's ledger entry for that output learns the uuid.
+        /// A settle report carried it as its row's S0, which is how the
+        /// daemon's ledger entry for that output learns the uuid. Set as the
+        /// report goes out (F1150).
         bool sentAsS0 = false;
     };
     using DeferredCrossings = QList<QPair<QPointer<KWin::EffectWindow>, QString>>;
@@ -250,6 +251,8 @@ private:
     /// @p w's announce on @p physicalId is in flight: a park of that output that the daemon settles now is the
     /// arrival re-seat's (readoptOnArrival).
     bool arrivalOn(KWin::EffectWindow* w, const QString& physicalId) const;
+    /// The physical id of the connected output with @p uuid, else empty.
+    QString connectedPhysicalId(const QString& uuid) const;
     /// KWin's output-update cascade begins: an output change made since the
     /// last one ended was not KWin's, and this one's result is sampled when
     /// its turn ends (F1009).
@@ -291,9 +294,15 @@ private:
     QSet<KWin::EffectWindow*> m_movedOutsideCascade;
     bool m_cascadeOpen = false;
     bool m_outputSetChanged = false;
-    bool m_settleInFlight = false;
-    /// Connected outputs whose park the daemon dropped while the settle
-    /// report was in flight, settled by its verdicts (forgetParkEntries).
+    /// Settle reports sent and not yet answered. The debounce can send a
+    /// second before the first is answered, and one is still out until the
+    /// last reply (F1149).
+    int m_settlesInFlight = 0;
+    /// Connected outputs whose park the daemon dropped while a settle report
+    /// was in flight, settled by the verdicts of the next reply
+    /// (forgetParkEntries). The daemon answers the reports in order and
+    /// emits a report's drops ahead of its reply, so each reply's verdicts
+    /// meet the drops of that report.
     QHash<KWin::EffectWindow*, QSet<QString>> m_settleParkDrops;
     /// The last parkReseated of an arrival re-seat: the window, the output's uuid, and the stamp of the announce
     /// it came in, so a seat whose entry stays parked never speaks for a later announce's drop.

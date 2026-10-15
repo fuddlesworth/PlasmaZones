@@ -91,9 +91,10 @@ public:
     /// A zone notice under @p daemonId was filed for the live window @p liveId (empty: none). One the app-id
     /// fallback reached, another instance than the id names (an id the daemon still holds from another session),
     /// is remembered, so the notice that clears it reaches the same window (F1130), unless that window's own id
-    /// filed its zone already (F1140). One that reached its own window forgets every other id's target on it,
-    /// since the daemon now speaks for it under its own.
-    void noteZoneNoticeTarget(const QString& daemonId, const QString& liveId);
+    /// filed its zone already (F1140): then the notice is refused, and false says the caller files no zone for it
+    /// (F1152). One that reached its own window forgets every other id's target on it, since the daemon now speaks
+    /// for it under its own.
+    [[nodiscard]] bool noteZoneNoticeTarget(const QString& daemonId, const QString& liveId);
     /// The live window a zone notice under @p daemonId was filed for, and forgets it.
     QString takeZoneNoticeTarget(const QString& daemonId);
     void clearAllZoneState()

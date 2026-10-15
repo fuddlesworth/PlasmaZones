@@ -898,7 +898,14 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
         }
     } else {
         live = findWindowById(windowId);
-        m_navigationHandler->noteZoneNoticeTarget(windowId, live ? getWindowId(live) : QString());
+        // A stale id's zone that the fallback hands to a window whose own id
+        // filed its zone is not that window's: written, the survivor's Zone
+        // field would follow whichever notice came last (F1152).
+        if (!m_navigationHandler->noteZoneNoticeTarget(windowId, live ? getWindowId(live) : QString())) {
+            qCDebug(lcEffect) << "slotWindowStateChanged: zone notice under" << windowId << "not filed on"
+                              << getWindowId(live) << "- its own id holds its zone";
+            return;
+        }
     }
     if (live) {
         liveWindowId = getWindowId(live);

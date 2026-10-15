@@ -312,6 +312,19 @@ void ScreenChangeHandler::dropEvacueeRecords()
     m_reseatedPark.reset();
 }
 
+QString ScreenChangeHandler::connectedPhysicalId(const QString& uuid) const
+{
+    if (uuid.isEmpty()) {
+        return QString();
+    }
+    for (const KWin::LogicalOutput* output : KWin::effects->screens()) {
+        if (output && output->uuid() == uuid) {
+            return m_effect->outputScreenId(output);
+        }
+    }
+    return QString();
+}
+
 bool ScreenChangeHandler::arrivalOn(KWin::EffectWindow* w, const QString& physicalId) const
 {
     const TilingHandler* const tiling = m_effect->m_tilingHandler.get();
@@ -331,18 +344,31 @@ void ScreenChangeHandler::slotParkReseated(const QString& windowId, const QStrin
     // An arrival re-seat (readoptOnArrival, inside the window's announce on
     // that output) has no verdict: what the verdict runs runs here, at the
     // seat, whether or not the daemon keeps the entry parked for a context
-    // granted there (F1147). The output is the record's, or the announced
-    // screen's when no record names the uuid.
+    // granted there (F1147). The output is the record's, else the connected
+    // output the uuid names, which must be the announced one for this to be
+    // the arrival's (F1156). A uuid that names nothing (the entry never
+    // learned one) is the announced screen's: readoptOnArrival picks the
+    // entry by the announced screen, and a settle's Readopt entry learns its
+    // uuid from that very row's S0 whenever this effect holds a record for
+    // the output, while with no record it holds no claim or minimize-float
+    // there to give back.
     TilingHandler* const tiling = m_effect->m_tilingHandler.get();
     const QString liveId = m_effect->getWindowId(w);
     const QString announced = tiling->notifiedScreenFor(liveId);
-    QString physicalId = announced;
+    QString physicalId;
     if (const auto records = m_evacueeRecords.constFind(w); records != m_evacueeRecords.cend()) {
         if (const auto record = records->constFind(outputUuid); record != records->cend()) {
             physicalId = record->state.screenId;
         }
     }
-    if ((!outputUuid.isEmpty() && !outputConnected(outputUuid)) || !arrivalOn(w, physicalId)) {
+    if (physicalId.isEmpty()) {
+        if (outputUuid.isEmpty()) {
+            physicalId = announced;
+        } else {
+            physicalId = connectedPhysicalId(outputUuid);
+        }
+    }
+    if (physicalId.isEmpty() || !arrivalOn(w, physicalId)) {
         return;
     }
     qCDebug(lcScreenChange) << "Park re-seat for" << windowId << "on" << physicalId
@@ -362,14 +388,29 @@ void ScreenChangeHandler::slotParkDropped(const QString& windowId, const QString
         && m_reseatedPark->outputUuid == outputUuid
         && m_reseatedPark->announce == m_effect->m_tilingHandler->announceGeneration(m_effect->getWindowId(w));
     m_reseatedPark.reset();
-    const auto it = w ? m_evacueeRecords.find(w) : m_evacueeRecords.end();
+    if (!w) {
+        return;
+    }
+    const auto it = m_evacueeRecords.find(w);
+    // No record names the output. A settle's Readopt that left a context
+    // parked there (a place granted for later) is one way: its verdict
+    // pruned the record of an output that is back, and a touch now drops
+    // that park. A connected output is named by its uuid, so the claim kept
+    // for it still goes (F1151). One still away with no record holds nothing
+    // here: adoptEvacuee files only for an output with a record.
+    if (!outputUuid.isEmpty() && (it == m_evacueeRecords.end() || !it->contains(outputUuid))) {
+        if (const QString physicalId = connectedPhysicalId(outputUuid); !physicalId.isEmpty()) {
+            forgetParkEntries(w, physicalId, outputUuid, reseated);
+        }
+        return;
+    }
     if (it == m_evacueeRecords.end()) {
         return;
     }
     // No uuid: the daemon's ledger entry takes its output's uuid only from a
     // settle row's S0 (reportOutputSettle), so a park dropped with none is
-    // for an output no answered row carried as S0: a touch before the first
-    // settle was answered, or the record a row did not carry when a window
+    // for an output no row sent so far carried as S0: a touch before the
+    // first settle report, or the record a row did not carry when a window
     // had several. Only records never sent as S0 can name it. One that was
     // sent names a park the daemon drops with its uuid, or one it still
     // holds, whose Readopt must still find its entries (F1141).
@@ -387,9 +428,7 @@ void ScreenChangeHandler::slotParkDropped(const QString& windowId, const QString
         }
         return;
     }
-    if (const auto entry = it->constFind(outputUuid); entry != it->cend()) {
-        forgetParkEntries(w, entry->state.screenId, outputUuid, reseated);
-    }
+    forgetParkEntries(w, it->value(outputUuid).state.screenId, outputUuid, reseated);
     it->remove(outputUuid);
     if (it->isEmpty()) {
         m_evacueeRecords.erase(it);
@@ -421,7 +460,7 @@ void ScreenChangeHandler::forgetParkEntries(KWin::EffectWindow* w, const QString
             }
             return;
         }
-        if (m_settleInFlight) {
+        if (m_settlesInFlight > 0) {
             qCDebug(lcScreenChange) << "Park drop for" << windowId << "on" << physicalId
                                     << "inside the settle: its verdict decides";
             m_settleParkDrops[w].insert(VirtualScreenId::extractPhysicalId(physicalId));
@@ -561,19 +600,37 @@ void ScreenChangeHandler::sendSettleReport()
     // Sent even with no rows when crossings wait: the reply orders their
     // replay after the virtual-screen configs requested just before this, so
     // a crossing inside a split monitor resolves against the new layout.
-    m_settleInFlight = true;
-    // The records each row carries as its S0, by window id and output uuid,
-    // and each row's source screen. The source is read here, not from the
-    // tiling handler at the verdict: the virtual-screen refresh requested
-    // just before this report answers first, and re-keys that handler's
-    // tracked screens to where KWin put each window (F1148).
-    QList<QPair<QString, QString>> sentS0;
+    ++m_settlesInFlight;
+    // Each row's source screen, read here, not from the tiling handler at the
+    // verdict: the virtual-screen refresh requested just before this report
+    // answers first, and re-keys that handler's tracked screens to where KWin
+    // put each window (F1148). A strip column is the exception: its row's
+    // source is the output KWin counts it on, which for a parked column is a
+    // neighbour, so the strip it is a member of names the output it left
+    // (F1157).
+    //
+    // The record a row carries as its S0 is marked sent now: the daemon writes
+    // the uuid into its entry as it reads the row, ahead of any drop it emits
+    // answering the report, so a drop with no uuid arriving before the reply
+    // can no longer be that output's (F1150). An error reply keeps the mark:
+    // from a live daemon it is a timeout on a call it still handles, and a
+    // daemon that went away takes every record with it (dropEvacueeRecords).
     QHash<QString, QString> sources;
+    const TilingHandler* const tiling = m_effect->m_tilingHandler.get();
     for (const OutputSettleRow& row : rows) {
-        if (row.hasS0) {
-            sentS0.append({row.windowId, row.s0Uuid});
+        const QString strip = tiling->scrollTrackedScreenFor(row.windowId);
+        sources.insert(row.windowId, strip.isEmpty() ? row.sourceScreenId : VirtualScreenId::extractPhysicalId(strip));
+        if (!row.hasS0) {
+            continue;
         }
-        sources.insert(row.windowId, row.sourceScreenId);
+        KWin::EffectWindow* const w = m_effect->findWindowByIdExact(row.windowId);
+        const auto records = w ? m_evacueeRecords.find(w) : m_evacueeRecords.end();
+        if (records == m_evacueeRecords.end()) {
+            continue;
+        }
+        if (const auto record = records->find(row.s0Uuid); record != records->end()) {
+            record->sentAsS0 = true;
+        }
     }
     QDBusPendingCall call =
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
@@ -581,28 +638,16 @@ void ScreenChangeHandler::sendSettleReport()
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     QPointer<ScreenChangeHandler> self(this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [self, crossings, skipped, sentS0, sources](QDBusPendingCallWatcher* pending) {
+            [self, crossings, skipped, sources](QDBusPendingCallWatcher* pending) {
                 pending->deleteLater();
                 if (!self || self->m_stopped) {
                     return;
                 }
-                self->m_settleInFlight = false;
+                self->m_settlesInFlight = std::max(0, self->m_settlesInFlight - 1);
                 QDBusPendingReply<PhosphorProtocol::OutputSettleVerdictList> reply = *pending;
                 if (!reply.isValid()) {
                     qCWarning(lcScreenChange) << "reportOutputSettle failed:" << reply.error().message()
                                               << "- replaying every crossing as a move";
-                } else {
-                    // Answered: the daemon's entry for each output carried has its uuid now.
-                    for (const auto& [windowId, uuid] : sentS0) {
-                        KWin::EffectWindow* const w = self->m_effect->findWindowByIdExact(windowId);
-                        const auto records = w ? self->m_evacueeRecords.find(w) : self->m_evacueeRecords.end();
-                        if (records == self->m_evacueeRecords.end()) {
-                            continue;
-                        }
-                        if (const auto record = records->find(uuid); record != records->end()) {
-                            record->sentAsS0 = true;
-                        }
-                    }
                 }
                 self->applySettleVerdicts(reply.isValid() ? reply.value() : PhosphorProtocol::OutputSettleVerdictList{},
                                           crossings, skipped, sources);
