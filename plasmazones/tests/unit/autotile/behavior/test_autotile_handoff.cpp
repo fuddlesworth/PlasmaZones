@@ -45,6 +45,17 @@ private:
     static constexpr auto Screen1 = "eDP-1";
     static constexpr auto Screen2 = "HDMI-1";
 
+    /// Whether @p spy (on windowFloatingStateSynced) heard @p windowId announced floating.
+    static bool heardFloating(const QSignalSpy& spy, const QString& windowId)
+    {
+        for (const QList<QVariant>& args : spy) {
+            if (args.at(0).toString() == windowId && args.at(1).toBool()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 private Q_SLOTS:
 
     void initTestCase()
@@ -539,9 +550,13 @@ private Q_SLOTS:
         engine.pruneStatesForRemovedScreen(screen);
         // The output comes back showing another desktop.
         engine.setCurrentDesktopForScreen(screen, 2);
+        QSignalSpy synced(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
         QVERIFY(engine.readoptParked(order.at(2), screen, screen));
         QVERIFY(engine.readoptParked(order.at(0), screen, screen));
         QVERIFY(engine.readoptParked(order.at(1), screen, screen));
+        // Held nowhere in view, the background float speaks for the window (F1121).
+        QVERIFY(heardFloating(synced, order.at(1)));
+        QVERIFY(!heardFloating(synced, order.at(0)));
         QVERIFY(engine.isWindowTracked(order.at(0)));
         QVERIFY(!engine.hasParked(order.at(0), QString()));
 
@@ -555,6 +570,42 @@ private Q_SLOTS:
         engine.windowOpened(order.at(0), screen);
         QCoreApplication::processEvents();
         QCOMPARE(state->windowOrder(), order);
+    }
+
+    // A window parked as a tile on the desktop in view and as a float on
+    // another comes back a tile in view, and the background float does not
+    // announce it floating over that tile (F1121).
+    void testEvacueePark_backgroundFloatKeepsQuietOverAnInViewTile()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        const QString window = QStringLiteral("win-1");
+        engine.setCurrentDesktopForScreen(screen, 1);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(window, screen);
+        engine.windowOpened(QStringLiteral("win-2"), screen);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* inView = engine.tilingStateForScreen(screen);
+        QVERIFY(inView->containsWindow(window));
+        QVERIFY(!inView->isFloating(window));
+        // Its float on desktop 2, as a window on both desktops holds one.
+        engine.setCurrentDesktopForScreen(screen, 2);
+        PhosphorTiles::TilingState* background = engine.tilingStateForScreen(screen);
+        QVERIFY(background && background != inView);
+        QVERIFY(background->addWindow(window));
+        background->setFloating(window, true);
+
+        engine.setCurrentDesktopForScreen(screen, 1);
+        engine.parkOutput(screen);
+        engine.pruneStatesForRemovedScreen(screen);
+        QSignalSpy synced(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+        QVERIFY(engine.readoptParked(window, screen, screen));
+
+        QVERIFY2(!heardFloating(synced, window), "the background float announced a tile in view as floating");
+        QVERIFY(!engine.tilingStateForScreen(screen)->isFloating(window));
+        QVERIFY(!engine.isWindowFloatingInAutotile(window));
+        engine.setCurrentDesktopForScreen(screen, 2);
+        QVERIFY(engine.tilingStateForScreen(screen)->isFloating(window));
     }
 
     // A parked desktop given another mode while the output was away gets
@@ -610,17 +661,22 @@ private Q_SLOTS:
 
     // The daemon's prune of a shrunk desktop count reaches only the desktops
     // desktopsWithActiveState lists, and a parked context has no live state
-    // left to list its desktop; the prune then takes it (F1100).
+    // left to list its desktop; the prune then takes it (F1100), and only it:
+    // a context parked on a desktop that stays is kept (F1132).
     void testEvacueePark_countPruneReachesAParkedContext()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
-        engine.setCurrentDesktopForScreen(screen, 3);
+        engine.setCurrentDesktopForScreen(screen, 1);
         engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win-2"), screen);
+        QCoreApplication::processEvents();
+        engine.setCurrentDesktopForScreen(screen, 3);
         engine.windowOpened(QStringLiteral("win-1"), screen);
         QCoreApplication::processEvents();
         engine.parkOutput(screen);
         engine.pruneStatesForRemovedScreen(screen);
+        QVERIFY(engine.hasParked(QStringLiteral("win-2"), screen));
 
         const QSet<int> desktops = engine.desktopsWithActiveState();
         QVERIFY(desktops.contains(3));
@@ -630,6 +686,7 @@ private Q_SLOTS:
             }
         }
         QVERIFY(!engine.hasParked(QStringLiteral("win-1"), QString()));
+        QVERIFY2(engine.hasParked(QStringLiteral("win-2"), QString()), "the count prune dropped a kept desktop's park");
     }
 
     // =========================================================================

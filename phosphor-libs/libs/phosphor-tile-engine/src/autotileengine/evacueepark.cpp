@@ -239,6 +239,11 @@ bool AutotileEngine::readoptParked(const QString& windowId, const QString& parke
             continue;
         }
         if (!state->containsWindow(canonical)) {
+            // The screen's effective algorithm speaks for this context too:
+            // every state of a screen follows it, and a switch to a desktop
+            // assigned another wipes the bags of all of them
+            // (wipeStateBagsOnEffectiveAlgorithmChange), so nothing written
+            // here is read under another algorithm (F1124).
             restoreParkedTuning(ctx, key, state, m_configResolver->effectiveAlgorithmId(key.screenId),
                                 m_userTunedSplitRatio, m_userTunedMasterCount);
             if (!state->addWindow(canonical, parkedInsertIndex(ctx, canonical, state))) {
@@ -246,7 +251,15 @@ bool AutotileEngine::readoptParked(const QString& windowId, const QString& parke
             }
             if (ctx.floating.contains(canonical)) {
                 state->setFloating(canonical, true);
-                Q_EMIT windowFloatingStateSynced(canonical, true, key.screenId);
+                // The daemon keeps one float bit per window, the one its
+                // primary context holds (isWindowFloatingInAutotile). Only a
+                // context that becomes the primary here announces: a window
+                // this walk seated in view as a tile stays a tile there, and
+                // the first context of a window held nowhere in view speaks
+                // for the rest (F1121).
+                if (!m_states.hasWindow(canonical) || m_states.keyForWindow(canonical) == key) {
+                    Q_EMIT windowFloatingStateSynced(canonical, true, key.screenId);
+                }
             } else {
                 notifyAlgorithmWindowAdded(state, key.screenId, canonical);
             }

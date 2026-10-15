@@ -447,6 +447,38 @@ private Q_SLOTS:
                  "the removed desktop's tuned flag shielded the desktop that took its number");
     }
 
+    // The daemon's prune of a shrunk desktop count reaches only the desktops
+    // desktopsWithActiveState lists, so a tuned flag no state holds lists its
+    // own (F1126).
+    void testRemovedDesktop_statelessTunedFlagReachesTheCountPrune_data()
+    {
+        QTest::addColumn<bool>("masterCount");
+        QTest::newRow("split ratio") << false;
+        QTest::newRow("master count") << true;
+    }
+
+    void testRemovedDesktop_statelessTunedFlagReachesTheCountPrune()
+    {
+        QFETCH(bool, masterCount);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setCurrentDesktopForScreen(screen, 3);
+        if (masterCount) {
+            engine.noteMasterCountUserTuned(screen);
+        } else {
+            engine.noteSplitRatioUserTuned(screen);
+        }
+
+        const QSet<int> desktops = engine.desktopsWithActiveState();
+        QVERIFY2(desktops.contains(3), "a stateless tuned flag left its desktop out of the count prune");
+        for (const int desktop : desktops) {
+            if (desktop > 2) {
+                engine.pruneStatesForDesktop(desktop);
+            }
+        }
+        QVERIFY(!engine.desktopsWithActiveState().contains(3));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Overflow behavior (Float <-> Unlimited)
     // ═══════════════════════════════════════════════════════════════════════════

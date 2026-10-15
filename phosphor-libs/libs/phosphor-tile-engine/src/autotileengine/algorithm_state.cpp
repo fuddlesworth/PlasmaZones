@@ -585,6 +585,19 @@ QSet<int> AutotileEngine::desktopsWithActiveState() const
             }
         }
     }
+    // So do the per-context entries no state need hold, which
+    // pruneStatesForDesktop drops as well: a tuned flag, a stashed bag or a
+    // dirty memo left on an unlisted desktop goes to the desktop that takes
+    // its number next (F1126).
+    for (const QSet<TilingStateKey>* keys :
+         {&m_userTunedSplitRatio, &m_userTunedMasterCount, &m_dirtyBackgroundContexts}) {
+        for (const TilingStateKey& key : *keys) {
+            out.insert(key.desktop);
+        }
+    }
+    for (const auto& entry : m_scriptStateStash) {
+        out.insert(entry.first.desktop);
+    }
     return out;
 }
 

@@ -610,6 +610,31 @@ private Q_SLOTS:
         QVERIFY(bagOn(engine, screen).isEmpty());
     }
 
+    /// The daemon's prune of a shrunk desktop count reaches only the desktops
+    /// desktopsWithActiveState lists, and the toggle-off took the state that
+    /// listed this one, so the stash lists it (F1126).
+    void testStashReachesTheCountPrune()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setCurrentDesktop(3);
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        QVERIFY(seedBag(engine, screen, sampleBag()));
+
+        engine.setAutotileScreens({});
+        const QSet<int> desktops = engine.desktopsWithActiveState();
+        QVERIFY2(desktops.contains(3), "a stashed bag left its desktop out of the count prune");
+        for (const int desktop : desktops) {
+            if (desktop > 2) {
+                engine.pruneStatesForDesktop(desktop);
+            }
+        }
+        engine.setAutotileScreens({screen});
+
+        QVERIFY(bagOn(engine, screen).isEmpty());
+    }
+
     /// Same for an activity that no longer exists. Keys with an empty activity
     /// are deliberately never pruned, so the context carries a named one.
     void testStashPrunedForRemovedActivity()

@@ -128,11 +128,11 @@ public:
     bool isEnabled() const noexcept override;
 
     /**
-     * @brief Return the set of virtual-desktop numbers that currently have
-     *        any tiling state.
+     * @brief The virtual-desktop numbers any per-context entry names: a state,
+     *        a parked context, a tuned flag, a stashed bag or a dirty memo.
      *
      * Used by the daemon's desktop-count-changed handler to find stale
-     * desktops (states on desktop > newCount) so they can be pruned via
+     * desktops (entries on desktop > newCount) so they can be pruned via
      * pruneStatesForDesktop(). The m_states map itself stays private; per-screen
      * lookup is available through tilingStateForScreen(screenId). (Design notes
      * on why the older screenStates() accessor was removed live above the
