@@ -26,8 +26,17 @@
 //      the wrapper ignores the device there.
 //
 // PLASMAZONES_KWIN_PAINT_RETURNS_BOOL is set by kwin-effect/CMakeLists.txt from
-// the KWin version it found. See that file for the condition under which the 6.7
-// half of this header is deleted.
+// the KWin version it found. CI compiles both halves: the Arch jobs in
+// .github/workflows/ci.yml build against Arch stable's KWin 6.8, and the `nix`
+// jobs build against nixpkgs' KWin 6.7.
+//
+// The 6.7 half is deleted once every channel the release pipeline builds for
+// (Debian unstable, Fedora, openSUSE Tumbleweed) and nixpkgs carries KWin 6.8.
+// .github/workflows/kwin-rebuild-watch.yml logs each release channel's current
+// KWin on every run. It does not probe nixpkgs: the `nix` jobs' configure step
+// prints the paint API it selected, and that reads "bool" once the locked
+// nixpkgs has moved to 6.8. See kwin-effect/CMakeLists.txt for the rest of the
+// cleanup.
 
 #include <effect/effecthandler.h>
 #include <effect/offscreeneffect.h>
