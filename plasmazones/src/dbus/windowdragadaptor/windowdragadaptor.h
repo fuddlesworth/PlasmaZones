@@ -8,7 +8,6 @@
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QDBusAbstractAdaptor>
-#include <QDBusContext>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QObject>
@@ -66,13 +65,14 @@ class WindowTrackingAdaptor;
  * - Overlay visibility based on modifiers
  * - Window snapping via KWin D-Bus
  *
- * Inherits @c QDBusContext so registerDropProxy can identify the peer that
- * registered a proxy and drop the registration when that peer dies. A proxy
- * outlives every individual drag by design, so without owner tracking a shell
- * that crashes rather than unregistering would keep hijacking snap drops over
- * its old rect for the daemon's whole lifetime.
+ * registerDropProxy identifies the peer that registered a proxy through the
+ * context of the object this adaptor is exported through
+ * (DbusHelpers::busCaller), and drops the registration when that peer dies.
+ * A proxy outlives every individual drag by design, so without owner
+ * tracking a shell that crashes rather than unregistering would keep
+ * hijacking snap drops over its old rect for the daemon's whole lifetime.
  */
-class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor, public QDBusContext
+class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowDrag")

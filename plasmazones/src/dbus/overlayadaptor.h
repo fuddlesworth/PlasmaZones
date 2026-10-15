@@ -7,10 +7,11 @@
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
-#include <QDBusContext>
 #include <QDBusUnixFileDescriptor>
 #include <QSet>
 #include <QString>
+
+#include <functional>
 
 class QDBusServiceWatcher;
 
@@ -42,12 +43,13 @@ class ISettings;
 /**
  * @brief D-Bus adaptor for overlay control operations.
  *
- * Inherits @c QDBusContext (in addition to @c QDBusAbstractAdaptor) so the
- * @c setSnapAssistThumbnail entry can authenticate its caller — that method
- * accepts an attacker-influenceable image payload from the unauthenticated
- * session bus and only @c kwin_wayland is meant to invoke it.
+ * The two thumbnail entries authenticate their caller: they accept an
+ * attacker-influenceable image payload from the unauthenticated session bus,
+ * and only @c kwin_wayland is meant to invoke them. The caller is read from
+ * the context of the object this adaptor is exported through
+ * (DbusHelpers::busContext), since Qt never sets one on the adaptor itself.
  */
-class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor, public QDBusContext
+class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Overlay")
@@ -58,6 +60,19 @@ public:
                             PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
                             QObject* parent = nullptr);
     ~OverlayAdaptor() override = default;
+
+    /// The process a thumbnail sender is held to (@ref trustIfCompositor).
+    struct Compositor
+    {
+        uint pid = 0; ///< 0 when there is none, which trusts nobody
+        bool trustsChildren = false; ///< a direct child of @c pid passes too
+    };
+    /// Replaces the production source, which reads the peer credentials of
+    /// this process's own Wayland connection (@ref compositor). A unit test,
+    /// which runs on no Wayland display, names the compositor with it.
+    /// Everything else in the check runs as it does in the daemon.
+    using CompositorResolver = std::function<Compositor()>;
+    void setCompositorResolverForTesting(CompositorResolver resolver);
 
 public Q_SLOTS:
     // Visibility control
@@ -116,20 +131,17 @@ Q_SIGNALS:
 
 private:
     /**
-     * @brief Authorise the caller of @ref setSnapAssistThumbnail.
+     * @brief Authorise the caller of @ref setSnapAssistThumbnail and
+     *        @ref setWindowThumbnailDmabuf.
      *
-     * The thumbnail-injection method is a UI-spoofing primitive in the
+     * The thumbnail-injection methods are a UI-spoofing primitive in the
      * wrong hands: any peer on the session bus could otherwise feed
      * arbitrary 256² ARGB32 buffers into the daemon's bounded thumbnail
      * cache, keyed on a compositor handle leaked through the
-     * @c snapAssistShown signal. We bind the call to @c kwin_wayland by
+     * @c snapAssistShown signal. We bind the call to the compositor by
      * resolving the sender's bus name to a PID via
-     * @c GetConnectionUnixProcessID and checking the basename of
-     * @c /proc/<pid>/exe against the accepted set. The @c /proc/<pid>/exe
-     * symlink is kernel-maintained and cannot be rewritten from userspace
-     * (unlike @c /proc/<pid>/comm, which @c prctl(PR_SET_NAME) can
-     * trivially spoof — that earlier comm-based check was replaced for
-     * exactly that reason). Verified bus names are cached so the
+     * @c GetConnectionUnixProcessID and holding it to the compositor's pid
+     * (@ref trustIfCompositor). Verified bus names are cached so the
      * steady-state cost is one set lookup; @c NameOwnerChanged
      * invalidates the cache so a kwin restart followed by a PID reuse
      * cannot inherit trust.
@@ -138,6 +150,10 @@ private:
      * already populated the cache before any thumbnail call arrives, so
      * this path runs only if a call races the pre-warm reply (or the
      * pre-warm failed because @c org.kde.KWin wasn't yet registered).
+     *
+     * A refused caller is answered with an AccessDenied error, so the slot's
+     * own return value never reaches it. A direct (non-D-Bus) call has no
+     * remote peer to authorise and passes.
      *
      * @return true if the sender has been authenticated as kwin.
      */
@@ -148,9 +164,9 @@ private:
      *        owner of @c org.kde.KWin.
      *
      * Inverts the original "first thumbnail pays the auth cost" pattern:
-     * resolve kwin's unique bus name and validate its @c /proc/<pid>/exe
-     * basename at adaptor construction (and again on any future kwin
-     * restart, via @ref m_kwinWatcher). By the time the kwin-effect posts
+     * resolve kwin's unique bus name and hold its pid to the compositor's
+     * (@ref trustIfCompositor) at adaptor construction (and again on any
+     * future kwin restart, via @ref m_kwinWatcher). By the time the kwin-effect posts
      * the first thumbnail of a snap-assist invocation, the sender's
      * unique name is already in @ref m_trustedKwinSenders and
      * @ref setSnapAssistThumbnail returns synchronously after a single
@@ -166,14 +182,30 @@ private:
 
     /// Async second leg of the pre-warm chain. Resolves @p uniqueName
     /// to a PID via @c GetConnectionUnixProcessID, then hands off to
-    /// @ref validateExeAndTrust. Factored out so the @c GetNameOwner
+    /// @ref trustIfCompositor. Factored out so the @c GetNameOwner
     /// reply lambda stays narrow.
     void resolvePidAndTrust(const QString& uniqueName);
 
     /**
-     * @brief Validate @c /proc/<pid>/exe and (on success) admit
-     *        @p uniqueName to @ref m_trustedKwinSenders with an arming
-     *        watcher.
+     * @brief Admit @p uniqueName to @ref m_trustedKwinSenders, with an
+     *        arming watcher, when @p pid is the compositor's.
+     *
+     * The compositor is the process serving this daemon's own Wayland
+     * connection, read from the kernel's peer credentials on its socket,
+     * which no other process can forge (@ref compositor). @p pid passes when
+     * it is that process, or a direct child of it when the compositor
+     * trusts its children, which only @c kwin_wayland_wrapper does: Plasma
+     * starts the wrapper, which holds the Wayland socket and runs
+     * @c kwin_wayland (where the effect lives) as its only child, and starts
+     * it again if it crashes. A grandchild never passes. With no compositor
+     * nothing passes.
+     *
+     * Of the sender's own @c /proc entry only the PPid line of
+     * @c /proc/<pid>/status is read, strictly parsed. Its executable is not
+     * consulted: @c kwin_wayland ships with a file capability
+     * (@c cap_sys_nice), which leaves it undumpable and its
+     * @c /proc/<pid>/exe unreadable to the daemon, so no check on it can
+     * admit the real compositor. Its status stays readable.
      *
      * Single source of truth for the trust-admission step shared by the
      * pre-warm path (@ref resolvePidAndTrust) and the sync fallback
@@ -182,7 +214,24 @@ private:
      *
      * @return true iff @p uniqueName is now in the trust cache.
      */
-    bool validateExeAndTrust(const QString& uniqueName, uint pid);
+    bool trustIfCompositor(const QString& uniqueName, uint pid);
+
+    /**
+     * @brief The compositor the thumbnail senders are held to.
+     *
+     * The process at the other end of this daemon's own Wayland socket, from
+     * @c SO_PEERCRED, and whether it trusts its children: only when its
+     * executable is @c kwin_wayland_wrapper (the wrapper carries no file
+     * capability, so its executable reads). Read once per Wayland
+     * connection: before the platform is up there is none and nothing is
+     * trusted, and when Qt reconnects to a restarted compositor
+     * (@c QT_WAYLAND_RECONNECT, which Plasma sets) the new connection is read
+     * again. Under the wrapper that answers the same process, which holds the
+     * socket across the restart, and the restarted @c kwin_wayland is again
+     * its child. Fails closed: no Wayland connection, or a socket that gives
+     * no peer credentials, answers pid 0.
+     */
+    Compositor compositor();
 
     IOverlayService* m_overlayService; // Interface type (DIP)
     PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP) - only for highlighting
@@ -206,6 +255,24 @@ private:
     /// chain. Parent-owned (this); destroyed automatically with the
     /// adaptor.
     QDBusServiceWatcher* m_kwinWatcher = nullptr;
+
+    /// setCompositorResolverForTesting; empty reads the Wayland
+    /// connection's peer credentials.
+    CompositorResolver m_compositorResolver;
+
+    /// The compositor read from the Wayland connection, and the connection
+    /// it was read from (its wl_display and socket fd). @ref compositor reads
+    /// it again only when the connection changed: once the platform is up,
+    /// and after Qt reconnected to a restarted compositor.
+    Compositor m_compositor;
+    const void* m_compositorDisplay = nullptr;
+    int m_compositorFd = -1;
+
+    /// The refusal warnings go out once each, not per call: a bus client
+    /// can call as often as it likes, and the AccessDenied it gets back is
+    /// the per-call answer. A compositor found again re-arms the first.
+    bool m_noCompositorLogged = false;
+    bool m_refusalLogged = false;
 };
 
 } // namespace PlasmaZones

@@ -10,6 +10,8 @@
 #include <QDBusContext>
 #include <QDBusMessage>
 #include <QGuiApplication>
+#include <QMetaClassInfo>
+#include <QMetaObject>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -68,12 +70,36 @@ QScreen* resolvePhysicalQScreen(PhosphorScreens::ScreenManager* mgr, const QStri
         PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
 }
 
-QString busCaller(const QObject* adaptor)
+const QDBusContext* busContext(const QObject* adaptor)
 {
     QObject* const host = adaptor ? adaptor->parent() : nullptr;
     // The lookup Qt itself uses to find the context it sets.
     const auto* context = host ? static_cast<const QDBusContext*>(host->qt_metacast("QDBusContext")) : nullptr;
-    return context && context->calledFromDBus() ? context->message().service() : QString();
+    return context && context->calledFromDBus() ? context : nullptr;
+}
+
+QString busCaller(const QObject* adaptor)
+{
+    const QDBusContext* const context = busContext(adaptor);
+    return context ? context->message().service() : QString();
+}
+
+bool sendBusError(const QObject* adaptor, QDBusError::ErrorType type, const QString& message)
+{
+    const QDBusContext* const context = busContext(adaptor);
+    if (!context || context->message().type() != QDBusMessage::MethodCallMessage) {
+        return false;
+    }
+    const QString called = context->message().interface();
+    if (!called.isEmpty()) {
+        const QMetaObject* const meta = adaptor->metaObject();
+        const int info = meta->indexOfClassInfo("D-Bus Interface");
+        if (info < 0 || called != QLatin1String(meta->classInfo(info).value())) {
+            return false;
+        }
+    }
+    context->sendErrorReply(type, message);
+    return true;
 }
 
 } // namespace DbusHelpers

@@ -13,12 +13,15 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 
+#include <QDBusError>
 #include <QRectF>
 #include <QScreen>
 #include <QString>
 #include <QUuid>
 
 #include <optional>
+
+class QDBusContext;
 
 namespace PhosphorScreens {
 class ScreenManager;
@@ -378,26 +381,50 @@ QRectF resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, PhosphorZones:
                              const QString& screenId);
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Bus caller (implemented in dbushelpers.cpp)
+// Bus context (implemented in dbushelpers.cpp)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * @brief The unique bus name of the sender of the bus message the object
- *        @p adaptor is exported through is serving now, or empty while it
- *        serves none (a direct call, as the unit tests make).
+ * @brief The context of the bus message the object @p adaptor is exported
+ *        through is serving now, or null while it serves none (a direct
+ *        call, as the unit tests make).
  *
  * That message is whatever the host is delivering: a call to this adaptor or
  * to another one on the same host, or a bus signal delivered to a host slot,
- * so code reached from any of those reads its sender, not only the code of
- * this adaptor's own slot.
+ * so code reached from any of those reads it, not only the code of this
+ * adaptor's own slot. The context's connection() is the connection that
+ * message came in on.
  *
  * Qt sets a call's QDBusContext on the object the adaptor is exported
  * through, its parent, never on the QDBusAbstractAdaptor itself (see the
  * QDBusContext documentation), so an adaptor that inherits QDBusContext reads
- * calledFromDBus() as false on every call. The parent has to inherit it
- * (Daemon does); a parent that does not answers empty.
+ * calledFromDBus() as false on every call and its sendErrorReply never
+ * reaches anyone. The parent has to inherit it (Daemon does); a parent that
+ * does not answers null.
  */
-QString busCaller(const QObject* adaptor);
+PLASMAZONES_EXPORT const QDBusContext* busContext(const QObject* adaptor);
+
+/**
+ * @brief The unique bus name of the sender of the message busContext()
+ *        reads, or empty while the host serves none.
+ */
+PLASMAZONES_EXPORT QString busCaller(const QObject* adaptor);
+
+/**
+ * @brief Answer the bus call @p adaptor is serving with the error @p type,
+ *        and report whether a reply went out.
+ *
+ * Only a method call addressed to @p adaptor's own D-Bus interface is
+ * answered, or one naming no interface, which Qt dispatches by member name.
+ * While a direct C++ call reaches this adaptor, the host may be serving a
+ * call to another of its adaptors or delivering a bus signal, and neither is
+ * this adaptor's to answer.
+ *
+ * On true Qt marks the reply delayed and discards whatever the slot returns,
+ * so the slot's return value matters only on false, where it is the answer:
+ * to a direct call, or to a bus call this adaptor does not own.
+ */
+PLASMAZONES_EXPORT bool sendBusError(const QObject* adaptor, QDBusError::ErrorType type, const QString& message);
 
 } // namespace DbusHelpers
 } // namespace PlasmaZones

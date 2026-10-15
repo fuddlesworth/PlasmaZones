@@ -19,6 +19,9 @@
  *     ApplySnap for that zone with the zone's geometry. The drag never
  *     touches a real zone: the stub detector answers nothing, so every
  *     target the test sees came through the proxy.
+ *  3. A proxy registered by a peer on the private test bus belongs to that
+ *     peer and retires when it leaves the bus. The adaptor is exported
+ *     through a host carrying the call context, as Daemon exports it.
  */
 
 #include <QGuiApplication>
@@ -47,6 +50,7 @@
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
+#include "helpers/BusPeer.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 #include "helpers/StubOverlayService.h"
@@ -54,6 +58,8 @@
 #include "helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::BusHost;
+using PlasmaZones::TestHelpers::BusPeer;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using PlasmaZones::TestHelpers::StubOverlayService;
 namespace Key = PhosphorProtocol::Service::DropProxyKey;
@@ -304,6 +310,42 @@ private Q_SLOTS:
         QVERIFY(outcome.zoneId.isEmpty());
     }
 
+    // A proxy registered over the bus belongs to the peer that registered it,
+    // read from the host's call context, and retires when that peer leaves
+    // the bus. A crashed shell would otherwise keep capturing snap drops over
+    // its old miniature for the daemon's whole life.
+    void adaptor_busRegisteredProxyRetiresWithItsOwner()
+    {
+        Fixture f;
+        QVERIFY(f.screen);
+        const QRect screenGeom = f.screen->geometry();
+        const QString zone0 = f.layout->zones().at(0)->id().toString();
+        BusPeer peer(&f.parent, QStringLiteral("DropProxy"));
+        QVERIFY(peer.ready());
+
+        const QDBusMessage reply =
+            peer.call(QStringLiteral("org.plasmazones.WindowDrag"), QStringLiteral("registerDropProxy"),
+                      {f.screenId, proxyJson(QRect(20, 20, 100, 90), {{zone0, QRect(20, 20, 100, 90)}})});
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+
+        const QPoint inCell = screenGeom.topLeft() + QPoint(60, 60);
+        const int ctrl = static_cast<int>(Qt::ControlModifier);
+        int drops = 0;
+        const auto dropInCell = [&] {
+            const QString windowId = QStringLiteral("app|drop%1").arg(++drops);
+            f.adaptor->beginDrag(windowId, screenGeom.x() + 400, screenGeom.y() + 300, 300, 200, f.screenId, 0);
+            f.adaptor->updateDragCursor(windowId, inCell.x(), inCell.y(), ctrl, 0);
+            return f.adaptor->endDrag(windowId, inCell.x(), inCell.y(), ctrl, 0, false).action;
+        };
+        QCOMPARE(dropInCell(), PhosphorProtocol::DragOutcome::ApplySnap);
+
+        peer.leave();
+
+        // The bus daemon announces the departure asynchronously, so each try
+        // drops a fresh window until the proxy is gone.
+        QTRY_VERIFY_WITH_TIMEOUT(dropInCell() != PhosphorProtocol::DragOutcome::ApplySnap, 5000);
+    }
+
     // A drag that began maximized started from the output rect, which is no
     // free spot: its drop into a zone records no float-back (F473; the
     // maximize edge pushes the real restore rect). The same drop of a window
@@ -421,7 +463,7 @@ private:
 
         IsolatedConfigGuard guard;
         PhosphorEngine::WindowRegistry registry; // outlives the parent-owned adaptors
-        QObject parent;
+        BusHost parent; // carries a bus call's context, as Daemon does
         RecordingOverlay overlay;
         StubZoneDetector detector;
         StubSettings settings;

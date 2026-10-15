@@ -1742,9 +1742,20 @@ add_test(NAME test_settings_schema COMMAND test_settings_schema)
 # keys into one SettingsAdaptor::getSettings call. If the daemon-side
 # batch drops known keys or propagates unknown keys, the editor silently
 # falls back to defaults.
-add_executable(test_settings_adaptor_batch dbus/test_settings_adaptor_batch.cpp)
+# helpers/BusPeer.h declares the Q_OBJECT BusHost; listing it as a source is
+# what makes AUTOMOC generate its metaobject, and Qt finds the call context
+# through that metaobject's qt_metacast.
+add_executable(test_settings_adaptor_batch dbus/test_settings_adaptor_batch.cpp helpers/BusPeer.h)
 target_link_libraries(test_settings_adaptor_batch PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_settings_adaptor_batch COMMAND test_settings_adaptor_batch)
+
+# A bus call's context reaches an adaptor through the object it is exported
+# through (DbusHelpers::busContext / busCaller / sendBusError), and
+# OverlayAdaptor's thumbnail gate refuses a bus peer that is not the
+# compositor. Called by a second connection on the private test bus.
+add_executable(test_adaptor_bus_context dbus/test_adaptor_bus_context.cpp helpers/BusPeer.h)
+target_link_libraries(test_adaptor_bus_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_adaptor_bus_context COMMAND test_adaptor_bus_context)
 
 add_executable(test_compositor_bridge dbus/test_compositor_bridge.cpp)
 target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
@@ -1901,8 +1912,10 @@ add_test(NAME test_windowdrag_cross_screen COMMAND test_windowdrag_cross_screen)
 # The shell's drop proxy on WindowDragAdaptor (registerDropProxy /
 # unregisterDropProxy, dropproxy.h): strict parsing and hit-testing of the
 # registry, and the drag path resolving a proxy cell to its real zone through
-# updateDragCursor / endDrag on the offscreen platform's screen.
-add_executable(test_windowdrag_drop_proxy dbus/test_windowdrag_drop_proxy.cpp)
+# updateDragCursor / endDrag on the offscreen platform's screen, and a proxy
+# registered over the bus retiring with its owner (helpers/BusPeer.h, listed
+# so AUTOMOC generates its BusHost metaobject).
+add_executable(test_windowdrag_drop_proxy dbus/test_windowdrag_drop_proxy.cpp helpers/BusPeer.h)
 target_link_libraries(test_windowdrag_drop_proxy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                                                          PhosphorSnapEngine::PhosphorSnapEngine)
 add_test(NAME test_windowdrag_drop_proxy COMMAND test_windowdrag_drop_proxy)
