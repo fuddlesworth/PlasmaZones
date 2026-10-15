@@ -7,9 +7,11 @@
  *        WindowTrackingAdaptor::resnapScreensToTheirLayouts. It populates
  *        the buffer for the switched screens, resnaps silently, then prunes
  *        and relays what the switch could not carry. Plus a layout deleted
- *        under its windows, and the two other re-applies with snapping
- *        switched off: SnapAdaptor::reapplySnapZones for a settings reflow
- *        and getUpdatedWindowGeometries for a resolution change.
+ *        under its windows, a switch to no layout that keeps the zones, the
+ *        two other re-applies with snapping switched off
+ *        (SnapAdaptor::reapplySnapZones for a settings reflow and
+ *        getUpdatedWindowGeometries for a resolution change), and the
+ *        resolution-change setting read live.
  */
 
 #include "wta_convenience_fixture.h"

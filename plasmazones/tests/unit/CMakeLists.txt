@@ -1655,8 +1655,9 @@ add_test(NAME test_wta_zone_prune COMMAND test_wta_zone_prune)
 
 # The layout-switch helper every switch caller runs: populate the switched
 # screens, resnap silently, prune and relay what did not fit (F474, F475,
-# F489). Plus a layout deleted under its windows (F403, F429, F1093), and the settings
-# reflow and resolution-change replay with snapping off (F469, F327).
+# F489). Plus a layout deleted under its windows (F403, F429, F1093), a switch
+# to no layout that keeps the zones, the settings reflow and resolution-change
+# replay with snapping off (F469), and the resolution setting read live (F327).
 add_executable(test_wta_layout_switch dbus/test_wta_layout_switch.cpp
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_wta_layout_switch PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
