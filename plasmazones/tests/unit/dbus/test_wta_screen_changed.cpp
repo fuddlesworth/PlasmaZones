@@ -356,6 +356,48 @@ private Q_SLOTS:
         QVERIFY(entry.isFloating);
     }
 
+    // A floating window moved onto a screen whose desktop in view is the tiling
+    // opt-out ("autotile:none") lands not floating: nothing adopts it, what it
+    // held on the screen it left goes, and the move is announced not floating
+    // (user decision autotile_none_float_owner). Mutation: drop the opt-out arm
+    // in windowScreenChanged and snap floats it on DP-2.
+    void testScreenChanged_floatingWindowOntoTheOptOutLandsNotFloating()
+    {
+        installPerScreenResolver();
+        m_wta->service()->setEngineFloatResolver([this](const QString& id) {
+            return m_snapEngine->isFloating(id);
+        });
+        const auto restore = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+            m_wta->service()->setSnapState(m_snapEngine->snapState());
+        });
+        const QString w = QStringLiteral("app|float-to-opt-out");
+        const QString other = QStringLiteral("DP-2");
+        PhosphorZones::AssignmentEntry optOut;
+        optOut.mode = PhosphorZones::AssignmentEntry::Autotile;
+        optOut.tilingAlgorithm = QString(PhosphorZones::NoTilingAlgorithm);
+        m_layoutManager->setAssignmentEntryDirect(other, 1, QString(), optOut);
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(other, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+        m_snapEngine->setWindowFloat(w, true, m_screenId);
+        QVERIFY(m_wta->service()->isWindowFloating(w));
+
+        QSignalSpy floatSpy(m_wta, &WindowTrackingAdaptor::windowFloatingChanged);
+        QSignalSpy stateSpy(m_wta, &WindowTrackingAdaptor::windowStateChanged);
+        m_wta->windowScreenChanged(w, other);
+
+        QVERIFY(!m_snapEngine->isFloating(w));
+        QVERIFY2(!m_snapEngine->isWindowTracked(w), "nothing adopts it on the opt-out");
+        QVERIFY(!floatSpy.isEmpty());
+        QVERIFY(!floatSpy.last().at(1).toBool());
+        QCOMPARE(stateSpy.count(), 1);
+        const auto entry = stateSpy.first().at(1).value<PhosphorProtocol::WindowStateEntry>();
+        QCOMPARE(entry.changeType, QStringLiteral("screen_changed"));
+        QCOMPARE(entry.screenId, other);
+        QVERIFY(!entry.isFloating);
+    }
+
     // A floating window moved onto a screen autotile runs is handed to
     // autotile as a float there, not left in snap (F850).
     void testScreenChanged_floatingWindowOntoAutotileIsHandedOverFloating()

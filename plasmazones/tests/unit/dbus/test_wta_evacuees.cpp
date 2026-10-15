@@ -474,6 +474,87 @@ private Q_SLOTS:
         QCOMPARE(m_snapEngine->screenForTrackedWindow(w), kB);
     }
 
+    // A snap float KWin moves onto an output whose desktop in view is the
+    // tiling opt-out ("autotile:none") lands not floating: no engine owns a
+    // float there, and the effect hears so. Its park stays for A's return (user
+    // decision autotile_none_float_owner). Mutation: drop the context test in
+    // SnapEngine::handoffReceive and snap floats it on B.
+    void aSnapFloatEvacueeOnTheOptOutLandsNotFloating()
+    {
+        const QString w = QStringLiteral("app|opt-out-evacuee");
+        const auto clear = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+            m_snapEngine->setContextModeResolver({});
+        });
+        QVERIFY(floatOnA(w));
+        optOutOnB(1);
+        QVERIFY(unplugA());
+        QSignalSpy floatSpy(m_wta, &WindowTrackingAdaptor::windowFloatingChanged);
+
+        QCOMPARE(verdictOf(m_wta->reportOutputSettle({unplugRow(w)}), w), int(OutputSettleVerdict::EvacueeFloat));
+
+        QVERIFY(!m_snapEngine->isFloating(w));
+        QVERIFY(!m_wta->service()->isWindowFloating(w));
+        QVERIFY(!floatSpy.isEmpty());
+        QVERIFY(!floatSpy.last().at(1).toBool());
+        QVERIFY2(m_snapEngine->hasParked(w, kA), "the park waits for A's return");
+    }
+
+    // The same on a hidden desktop of B given the opt-out. The daemon's own
+    // resolver says it runs snapping (nothing tiles there), so the settle
+    // states the evacuee in that desktop's store at once, and it holds no
+    // float there either. Mutation: drop the context test in
+    // SnapEngine::handoffReceive and snap floats it on B's desktop 2.
+    void aHiddenSnapFloatEvacueeOnTheOptOutHoldsNoFloat()
+    {
+        const QString w = QStringLiteral("app|hidden-opt-out-evacuee");
+        const auto clear = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+            m_wta->setContextModeResolver({});
+            m_snapEngine->setContextModeResolver({});
+        });
+        // As Daemon::runningModeForContext answers: no engine runs on the
+        // opt-out, so it snaps, and every other context here snaps too.
+        m_wta->setContextModeResolver([](const QString&, int, const QString&) {
+            return PhosphorZones::AssignmentEntry::Snapping;
+        });
+        QVERIFY(floatOnA(w));
+        placeOnDesktop(w, 2);
+        optOutOnB(2);
+        QVERIFY(unplugA());
+        OutputSettleRow row = unplugRow(w);
+        row.placeableNow = false;
+
+        QCOMPARE(verdictOf(m_wta->reportOutputSettle({row}), w), int(OutputSettleVerdict::EvacueeFloat));
+
+        const auto key = m_snapEngine->heldKeyForWindow(w);
+        QVERIFY(key.has_value());
+        QCOMPARE(key->desktop, 2);
+        QVERIFY(!m_snapEngine->isFloating(w));
+        QVERIFY(m_snapEngine->hasParked(w, kA));
+    }
+
+    // A float left waiting for its arrival, because its context could not be
+    // told when A went away, is owed nothing on the opt-out, and the bit the
+    // park kept in snap goes with it. Mutation: drop the opt-out test in
+    // adoptPendingEvacueeFloat and the arrival is reported floated.
+    void aPendingSnapFloatArrivingOnTheOptOutIsNotOwed()
+    {
+        const QString w = QStringLiteral("app|pending-opt-out");
+        const auto clear = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+            m_snapEngine->setContextModeResolver({});
+        });
+        QVERIFY(pendSnapFloatOnB(w));
+        m_layoutManager->setCurrentActivity(QStringLiteral("act-2"));
+        optOutOnB(1);
+
+        QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kB));
+
+        QVERIFY(!m_snapEngine->isFloating(w));
+        QVERIFY(!m_wta->service()->isWindowFloating(w));
+    }
+
     // A window announced on the output it is parked for, after an effect
     // reload lost the records that would have classified it, goes back into
     // its parked place.
@@ -655,6 +736,25 @@ private:
         OutputSettleRow row = unplugRow(windowId);
         row.placeableNow = false;
         return verdictOf(m_wta->reportOutputSettle({row}), windowId) == int(OutputSettleVerdict::EvacueeFloat);
+    }
+
+    /// Give desktop @p desktop of B the tiling opt-out ("autotile:none"), and
+    /// route snap's context modes as Daemon::routedModeForContext does: the
+    /// opt-out answers Autotile, any other context here snaps. The caller
+    /// clears snap's resolver, with a guard armed before the call.
+    void optOutOnB(int desktop)
+    {
+        PhosphorZones::AssignmentEntry optOut;
+        optOut.mode = PhosphorZones::AssignmentEntry::Autotile;
+        optOut.tilingAlgorithm = QString(PhosphorZones::NoTilingAlgorithm);
+        m_layoutManager->setAssignmentEntryDirect(kB, desktop, QString(), optOut);
+        m_snapEngine->setContextModeResolver([this](const QString& screen, int d, const QString& activity) {
+            const PhosphorZones::AssignmentEntry entry = m_layoutManager->assignmentEntryForScreen(screen, d, activity);
+            return entry.mode == PhosphorZones::AssignmentEntry::Autotile
+                    && entry.tilingAlgorithm == PhosphorZones::NoTilingAlgorithm
+                ? PhosphorZones::AssignmentEntry::Autotile
+                : PhosphorZones::AssignmentEntry::Snapping;
+        });
     }
 
     /// The daemon's retire for A: park, prune, release the parked slots.

@@ -19,10 +19,189 @@
 #include <PhosphorContext/IContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "dbus/dbushelpers.h"
 namespace PlasmaZones {
+
+bool WindowTrackingInternal::isOptOutContext(const WindowTrackingAdaptor& adaptor, const QString& screenId, int desktop,
+                                             const QString& activity)
+{
+    PhosphorZones::LayoutRegistry* const layouts = adaptor.layoutRegistry();
+    if (!layouts || screenId.isEmpty()) {
+        return false;
+    }
+    const PhosphorZones::AssignmentEntry entry =
+        layouts->assignmentEntryForScreen(screenId, desktop >= 1 ? desktop : shownDesktop(adaptor, screenId), activity);
+    return entry.mode == PhosphorZones::AssignmentEntry::Autotile
+        && entry.tilingAlgorithm == PhosphorZones::NoTilingAlgorithm;
+}
+
+bool WindowTrackingInternal::onOptOutContext(const WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                             const QString& screenId)
+{
+    const QString screen = screenId.isEmpty() ? adaptor.liveScreenForWindow(windowId) : screenId;
+    if (screen.isEmpty()) {
+        return false;
+    }
+    PhosphorZones::LayoutRegistry* const layouts = adaptor.layoutRegistry();
+    const QString activity = layouts ? layouts->currentActivity() : QString();
+    const std::optional<int> desktop =
+        ownDesktopOn(adaptor.windowDesktopContext(windowId), shownDesktop(adaptor, screen), activity);
+    return desktop && isOptOutContext(adaptor, screen, *desktop, activity);
+}
+
+void WindowTrackingInternal::dropOptOutFloat(WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                             const QString& screenId)
+{
+    PhosphorPlacement::WindowTrackingService* const service = adaptor.service();
+    if (!service || windowId.isEmpty()) {
+        return;
+    }
+    using PhosphorEngine::WindowPlacement;
+    const auto optOutKey = [&adaptor](const std::optional<PhosphorEngine::PlacementStateKey>& key) {
+        return key && isOptOutContext(adaptor, key->screenId, key->desktop, key->activity);
+    };
+    bool dropped = false;
+    if (PhosphorSnapEngine::SnapEngine* const snap = adaptor.snapEngine()) {
+        for (PhosphorSnapEngine::SnapState* state : snap->allSnapStates()) {
+            if (!snap->holdsWindowInState(windowId, state) || !optOutKey(snap->keyForState(state))) {
+                continue;
+            }
+            // The home goes with the float: a drag-out unsnap left one with no
+            // float bit, and an unfloat after a return to snapping would snap
+            // the window back into it.
+            dropped |= state->isFloating(windowId);
+            state->setFloating(windowId, false);
+            dropped |= state->clearPreFloatZone(windowId);
+        }
+        // The global holder's bit answers every snap float query for a window
+        // no store holds, wherever it is, and one beside an opt-out store too.
+        const auto own = snap->heldKeyForWindow(windowId);
+        if (snap->isFloating(windowId) && (!own || optOutKey(own))) {
+            snap->setFloating(windowId, false);
+            dropped = true;
+        }
+    }
+    // A floating snap slot the record keeps for an opt-out context would float
+    // the window again at its next open there.
+    if (const auto rec = service->placementStore().peekExact(service->canonicalizeForLookup(windowId)); rec
+        && rec->slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateFloating()
+        && isOptOutContext(adaptor, rec->screenId, rec->virtualDesktop, rec->activity)) {
+        service->releaseEngineSlot(windowId, WindowPlacement::snapEngineId());
+        dropped = true;
+    }
+    if (dropped) {
+        qCInfo(lcDbusWindow) << "dropOptOutFloat:" << windowId << "holds no float on the tiling opt-out" << screenId;
+    }
+    if (!service->isWindowFloating(windowId)) {
+        adaptor.relayWindowFloatingChanged(windowId, false, screenId);
+    }
+}
+
+void WindowTrackingInternal::dropOptOutFloats(WindowTrackingAdaptor* adaptor)
+{
+    PhosphorSnapEngine::SnapEngine* const snap = adaptor ? adaptor->snapEngine() : nullptr;
+    if (!snap) {
+        return;
+    }
+    // Collected first: the drop rewrites the stores walked here.
+    QHash<QString, QString> floats;
+    for (PhosphorSnapEngine::SnapState* state : snap->allSnapStates()) {
+        const QStringList floating = state->floatingWindows();
+        if (floating.isEmpty()) {
+            continue;
+        }
+        const auto key = snap->keyForState(state);
+        if (!key || !isOptOutContext(*adaptor, key->screenId, key->desktop, key->activity)) {
+            continue;
+        }
+        for (const QString& windowId : floating) {
+            if (snap->holdsWindowInState(windowId, state)) {
+                floats.insert(windowId, key->screenId);
+            }
+        }
+    }
+    for (auto it = floats.cbegin(); it != floats.cend(); ++it) {
+        dropOptOutFloat(*adaptor, it.key(), it.value());
+    }
+}
+
+void WindowTrackingInternal::releaseOptOutZones(WindowTrackingAdaptor* adaptor, const QSet<QString>& screens)
+{
+    const PhosphorSnapEngine::SnapEngine* const snap = adaptor ? adaptor->snapEngine() : nullptr;
+    PhosphorZones::LayoutRegistry* const layouts = adaptor ? adaptor->layoutRegistry() : nullptr;
+    if (!snap || !layouts) {
+        return;
+    }
+    const QString activity = layouts->currentActivity();
+    for (const QString& screenId : screens) {
+        if (!isOptOutContext(*adaptor, screenId, 0, activity)) {
+            continue;
+        }
+        // The store in view, not created here: a context snap never held
+        // anything in has nothing to release.
+        const auto* const state = static_cast<const PhosphorSnapEngine::SnapState*>(snap->stateForScreen(screenId));
+        if (!state) {
+            continue;
+        }
+        int released = 0;
+        for (const QString& windowId : state->snappedWindows()) {
+            if (!snap->holdsWindowInState(windowId, state)) {
+                continue;
+            }
+            Q_EMIT adaptor->windowStateChanged(windowId,
+                                               PhosphorProtocol::WindowStateEntry{windowId, QString(), screenId, false,
+                                                                                  QStringLiteral("unsnapped"),
+                                                                                  QStringList{}, false});
+            ++released;
+        }
+        if (released > 0) {
+            qCInfo(lcDbusWindow) << "releaseOptOutZones:" << released << "window(s) released in place on the tiling"
+                                 << "opt-out" << screenId << "- their zones kept for a return to snapping";
+        }
+    }
+}
+
+void WindowTrackingInternal::placeReleasedOnOptOut(WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                                   const QString& screenId, const QRect& freeGeometry)
+{
+    PhosphorPlacement::WindowTrackingService* const service = adaptor.service();
+    if (!service || windowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    // A screen with no geometry is gone (a prune-origin release): KWin has
+    // already put the window somewhere visible.
+    const QRect area = service->screenAvailableGeometry(screenId);
+    if (!area.isValid()) {
+        return;
+    }
+    QRect target;
+    if (freeGeometry.isValid() && service->geometryBelongsToScreen(freeGeometry, screenId)) {
+        target = freeGeometry;
+    } else {
+        // A strip rect can sit past the viewport: the window comes into the
+        // screen's available area at its own size, bounded by that area.
+        const QRect frame = adaptor.frameGeometry(windowId);
+        if (frame.isValid() && !area.contains(frame)) {
+            target = QRect(frame.topLeft(), frame.size().boundedTo(area.size()));
+            target.moveLeft(qBound(area.left(), target.left(), area.right() + 1 - target.width()));
+            target.moveTop(qBound(area.top(), target.top(), area.bottom() + 1 - target.height()));
+        }
+    }
+    if (!target.isValid()) {
+        return;
+    }
+    qCInfo(lcDbusWindow) << "placeReleasedOnOptOut:" << windowId << "on the tiling opt-out" << screenId << "at"
+                         << target
+                         << (target == freeGeometry ? "(its pre-scroll free geometry)" : "(brought on screen)");
+    Q_EMIT adaptor.applyGeometryRequested(windowId, target.x(), target.y(), target.width(), target.height(), QString(),
+                                          screenId, false,
+                                          static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
+}
 
 namespace {
 
@@ -180,6 +359,14 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
 void WindowTrackingAdaptor::syncWindowFloating(const QString& windowId, bool floating)
 {
     if (!validateWindowId(windowId, QStringLiteral("sync float state"))) {
+        return;
+    }
+    // A float recorded for a window on the tiling opt-out is dropped instead
+    // (user decision autotile_none_float_owner). The drag-out unsnap of a zone
+    // snap kept there from before snapping left the context sends one.
+    if (floating && WindowTrackingInternal::onOptOutContext(*this, windowId, QString())) {
+        qCInfo(lcDbusWindow) << "syncWindowFloating:" << windowId << "is on the tiling opt-out - not floating";
+        WindowTrackingInternal::dropOptOutFloat(*this, windowId, liveScreenForWindow(windowId));
         return;
     }
     // Suspension classification — see WindowTrackingService::isSuspensionFloat.
@@ -354,6 +541,18 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
                                  << "- refused for" << caller;
             return;
         }
+    }
+    // Nothing floats or unfloats on the tiling opt-out, since no engine owns a
+    // float there (user decision autotile_none_float_owner): neither the
+    // effect's minimize float of a zone snap kept there from before nor a bus
+    // verb. A float the window still carries goes, and the caller, whose float
+    // cache is pre-latched, hears that it is not floating.
+    if (WindowTrackingInternal::onOptOutContext(*this, windowId, effectiveScreenId)) {
+        qCInfo(lcDbusWindow) << "setWindowFloatingForScreen:" << windowId << "is on the tiling opt-out"
+                             << effectiveScreenId << "- nothing floats there";
+        m_service->clearSuspensionFloat(windowId);
+        WindowTrackingInternal::dropOptOutFloat(*this, windowId, effectiveScreenId);
+        return;
     }
 
     qCInfo(lcDbusWindow) << "setWindowFloatingForScreen: windowId=" << windowId << "floating=" << floating

@@ -235,7 +235,8 @@ Features:
 # than skipping, and the suite also needs a session D-Bus. Neither is a
 # reasonable BuildRequires for a distro package. Test evidence for this tree
 # comes from CI, which builds and runs the full suite on every push and pull
-# request, including one job against the next Plasma. Worth remembering when
+# request against Arch stable (KWin 6.8), and builds the KWin effect's 6.7 half
+# against nixpkgs (KWin 6.7) in the Nix jobs. Worth remembering when
 # changing the KWin floor: this is the path that compiles against Fedora's and
 # openSUSE's KWin, so it proves the build rather than the behaviour.
 %cmake \

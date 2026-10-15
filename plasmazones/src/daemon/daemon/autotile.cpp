@@ -19,6 +19,7 @@
 #include "config/settings.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -615,15 +616,12 @@ void Daemon::updateEngineScreens()
         }
     }
 
-    // Retile for existing screens whose overrides changed is handled by the
-    // deferred retile scheduled inside applyPerScreenConfig()/clearPerScreenConfig().
-    // This coalesces with deferred retiles from setAlgorithm() (called by
-    // applyEntry() after updateEngineScreens), producing a SINGLE retile pass
-    // with fully consistent state. An immediate retile() here would fire BEFORE
-    // setAlgorithm() updates the global algorithm/splitRatio, causing a second
-    // windowsTiled D-Bus signal whose stagger generation increment invalidates
-    // the first signal's pending stagger timers — leaving windows at old
-    // positions and producing the left-overlapping-right bug.
+    // Retile for existing screens whose overrides changed is handled by the deferred retile scheduled inside
+    // applyPerScreenConfig()/clearPerScreenConfig(). This coalesces with deferred retiles from setAlgorithm() (called
+    // by applyEntry() after updateEngineScreens), producing a SINGLE retile pass with fully consistent state. An
+    // immediate retile() here would fire BEFORE setAlgorithm() updates the global algorithm/splitRatio, causing a
+    // second windowsTiled D-Bus signal whose stagger generation increment invalidates the first signal's pending
+    // stagger timers — leaving windows at old positions and producing the left-overlapping-right bug.
 
     // The scrolling twin runs from the same recompute points so the two
     // engines' screen sets flip atomically per context switch; its body —
@@ -640,16 +638,15 @@ void Daemon::updateEngineScreens()
 
     qCDebug(lcDaemon) << "Updated autotile screens=" << autotileScreens << "scrolling screens=" << scrollingScreens;
 
-    // Drain the FLOAT half of the restore batch at the tail, for every
-    // caller — the leak class was "some caller has no downstream consumer,
-    // and the stale batch teleports windows when the NEXT consumer runs".
-    // Floats are excluded from every downstream resnap, so this batch is
-    // window-disjoint from whatever a consumer emits later. The snap-ZONE
-    // half is PRESERVED: the mode-toggle and autotile-disable consumers
-    // run after this recompute and feed it into preClaimedZoneIds and the
-    // batched restore — consuming it here strands previously-floated
-    // windows off their zones (found the hard way).
+    // Drain the FLOAT half of the restore batch at the tail, for every caller — the leak class was "some caller has
+    // no downstream consumer, and the stale batch teleports windows when the NEXT consumer runs". Floats are excluded
+    // from every downstream resnap, so this batch is window-disjoint from whatever a consumer emits later. The
+    // snap-ZONE half is PRESERVED: the mode-toggle and autotile-disable consumers run after this recompute and feed it
+    // into preClaimedZoneIds and the batched restore — consuming it here strands previously-floated windows off their
+    // zones (found the hard way).
     emitPendingSnapFloatRestoresForResnapBuffer(/*preserveZoneEntries=*/true);
+    // A desktop just given the tiling opt-out drops the floats snap held there (autotile_none_float_owner).
+    WindowTrackingInternal::dropOptOutFloats(m_windowTrackingAdaptor);
 
     // Push the per-screen RULES-VISIBLE active layout map to the effect so
     // window-domain (appearance/animation) rules can match Field::ActiveLayout
@@ -714,6 +711,8 @@ QSet<QString> Daemon::diffActiveAssignments()
     }
     // Replace wholesale so screens that went away drop out of the snapshot.
     m_activeAssignmentByScreen = std::move(next);
+    // A context that just became the tiling opt-out frees its snapped windows in place (autotile_none_float_owner).
+    WindowTrackingInternal::releaseOptOutZones(m_windowTrackingAdaptor, changed);
     // Mirror the fresh snapshot onto the bus-facing adaptor and broadcast the
     // screens that moved. This is the ONE resolution of "which layout is active
     // on which screen" in the daemon, and every edge that can move that value

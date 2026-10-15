@@ -11,11 +11,18 @@
 # this tree is version-conditional. Both versions are supported because the
 # distro channels reach 6.8 weeks apart, and a source tree that only built
 # against 6.8 would leave every lagging channel with no package at all.
-# The 6.7 half comes OUT once every channel has shipped 6.8. What answers that is
-# .github/workflows/kwin-rebuild-watch.yml, which already queries each channel's
-# current KWin on a schedule (arch, debian-unstable, fedora-<N>,
-# opensuse-tumbleweed): when none of them still reports 6.7, delete kwincompat.h,
-# fold the *Impl bodies back into the overrides, and raise the floor to 6.7.90.
+# CI compiles both halves: the Arch jobs in .github/workflows/ci.yml build
+# against Arch stable's KWin 6.8, and the `nix` jobs against nixpkgs' KWin 6.7.
+#
+# The 6.7 half comes OUT once every channel the release pipeline builds for
+# (Debian unstable, Fedora, openSUSE Tumbleweed) and nixpkgs carries KWin 6.8.
+# For the release channels that is answered by
+# .github/workflows/kwin-rebuild-watch.yml, which queries each one's current
+# KWin on a schedule (arch, debian-unstable, fedora-<N>, opensuse-tumbleweed).
+# It does not probe nixpkgs; for that, read the `nix` jobs' configure line below
+# ("bool paint API selected" once the locked nixpkgs has moved to 6.8). When
+# none of them still reports 6.7, delete kwincompat.h, fold the *Impl bodies
+# back into the overrides, and raise the floor here and in packaging/ to 6.8.
 #
 # Only included via add_subdirectory() from the top-level project; the
 # parent provides cmake_minimum_required, project(), ECM, and Qt. Calling

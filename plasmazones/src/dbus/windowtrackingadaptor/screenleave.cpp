@@ -262,7 +262,8 @@ bool WindowTrackingAdaptor::dragEndedOnScreen(const QString& windowId, const QSt
     // monitor left, a floating one floats on here with no home there.
     windowScreenChanged(windowId, releaseScreenId);
     // A snapped window dragged off without the trigger floats where it was
-    // dropped, as it would have on its own screen (F677).
+    // dropped, as it would have on its own screen (F677). On the tiling
+    // opt-out the receive takes it as a free window instead.
     if (floatIfSnapped && wasSnapped) {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
@@ -397,6 +398,20 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     // does not unfloat the window back on the screen it left. The receive
     // re-homes the window and forgets its pre-float home there.
     if (m_service->zoneForWindow(windowId).isEmpty() && m_service->isWindowFloating(windowId)) {
+        // Onto the tiling opt-out, the float goes with what the window held on
+        // the screen it left, and nothing adopts it: no engine owns a float
+        // there (user decision autotile_none_float_owner).
+        if (WindowTrackingInternal::onOptOutContext(*this, windowId, resolved)) {
+            qCInfo(lcDbusWindow) << "windowScreenChanged: floating window" << windowId
+                                 << "moved onto the tiling opt-out" << resolved << "- not floating there";
+            releaseLeftScreens(windowId, resolved, nullptr);
+            WindowTrackingInternal::dropOptOutFloat(*this, windowId, resolved);
+            Q_EMIT windowStateChanged(windowId,
+                                      PhosphorProtocol::WindowStateEntry{windowId, QString(), resolved, false,
+                                                                         QStringLiteral("screen_changed"),
+                                                                         QStringList{}, false});
+            return;
+        }
         const QString trackedSnap = m_snapEngine ? m_snapEngine->screenForTrackedWindow(windowId) : QString();
         const QString trackedAutotile =
             m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();

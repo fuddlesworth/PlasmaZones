@@ -12,11 +12,12 @@
  *        by side, a snap engine on per-screen stores, a stub tiling engine in
  *        the autotile slot and a window registry. Plus the float verbs that
  *        feed those writers: the bus setWindowFloating, its screen form and
- *        the in-process sync.
+ *        the in-process sync, none of which floats on the tiling opt-out.
  */
 
 #include "wta_float_back_fixture.h"
 
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "helpers/ScreenDisablingResolver.h"
 #include "helpers/VirtualScreenTestHelpers.h"
 #include "helpers/WindowPlacementBuilders.h"
@@ -666,7 +667,167 @@ private Q_SLOTS:
         QCOMPARE(floatedZone(onTile), std::optional<QString>(QString()));
     }
 
+    // ── The tiling opt-out ("autotile:none") owns no float ─────────────────
+    //
+    // User decision autotile_none_float_owner: no engine holds a window
+    // floating on a context assigned tiling with no algorithm.
+
+    // The float verbs do nothing there, whichever way they go, and the caller
+    // hears that the window is not floating. Once the context snaps again the
+    // same call floats it. Mutation: drop the opt-out test in
+    // setWindowFloatingForScreen and snap floats the window on the opt-out.
+    void busSetWindowFloatingFloatsNothingOnTheOptOut()
+    {
+        FloatBackFixture f;
+        readFloatsFromSnap(f);
+        const QString w = f.registerWindow(QStringLiteral("opt-out-float"));
+        f.setFrame(w, QRect(100, 100, 800, 600));
+        optOut(f, kLeft);
+        QSignalSpy floatSpy(f.wta, &WindowTrackingAdaptor::windowFloatingChanged);
+
+        f.wta->setWindowFloating(w, true);
+
+        QVERIFY(!f.snap->isFloating(w));
+        QCOMPARE(floatSpy.count(), 1);
+        QVERIFY(!floatSpy.first().at(1).toBool());
+
+        f.layouts->clearAssignment(kLeft, 1, QString());
+        f.wta->setWindowFloating(w, true);
+        QVERIFY(f.snap->isFloating(w));
+    }
+
+    // The drag-out unsnap of a zone snap kept from before the desktop was
+    // given the opt-out takes the window out of its zone without floating it,
+    // and the home it would unfloat into goes too. Mutation: drop the opt-out
+    // test in syncWindowFloating and the window floats.
+    void dragOutUnsnapOnTheOptOutFloatsNothing()
+    {
+        FloatBackFixture f;
+        readFloatsFromSnap(f);
+        const QString w = f.registerWindow(QStringLiteral("opt-out-drag-out"));
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        f.setFrame(w, f.zoneRect(0, kLeft));
+        optOut(f, kLeft);
+
+        f.wta->notifyDragOutUnsnap(w);
+
+        QVERIFY(f.wta->service()->zoneForWindow(w).isEmpty());
+        QVERIFY(!f.snap->isFloating(w));
+        QVERIFY2(f.wta->service()->preFloatZones(w).isEmpty(), "no home is kept to unfloat into");
+    }
+
+    // A desktop given the opt-out while snap floated windows on it drops those
+    // floats, homes and all, at the daemon's next engine-set recompute; a float
+    // on a desktop that still snaps stays. Mutations: skip the drop in
+    // dropOptOutFloats and the float on DP-1 stays; drop the opt-out test from
+    // both store walks (dropOptOutFloats' and dropOptOutFloat's) and the one on
+    // DP-2 goes too.
+    void theOptOutSweepDropsOnlyTheOptOutsFloats()
+    {
+        FloatBackFixture f;
+        readFloatsFromSnap(f);
+        const QString onOptOut = f.registerWindow(QStringLiteral("sweep-opt-out"));
+        const QString onSnapping = f.registerWindow(QStringLiteral("sweep-snapping"));
+        f.snapThenFloat(onOptOut, kLeft);
+        f.snapThenFloat(onSnapping, kRight);
+        QVERIFY(f.snap->isFloating(onOptOut));
+        QVERIFY(f.snap->isFloating(onSnapping));
+        optOut(f, kLeft);
+        QSignalSpy floatSpy(f.wta, &WindowTrackingAdaptor::windowFloatingChanged);
+
+        WindowTrackingInternal::dropOptOutFloats(f.wta);
+
+        QVERIFY(!f.snap->isFloating(onOptOut));
+        QVERIFY2(f.wta->service()->preFloatZones(onOptOut).isEmpty(), "the home goes with the float");
+        QVERIFY(f.snap->isFloating(onSnapping));
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(floatSpy.first().at(0).toString(), onOptOut);
+        QVERIFY(!floatSpy.first().at(1).toBool());
+    }
+
+    // Nor does snap own zones there. A desktop given the opt-out frees the
+    // windows snapped on it in place: each is announced unsnapped, nothing
+    // moves, and snap keeps the zone as frozen memory for a return to
+    // snapping, as it does for a desktop given to a tiling engine. A window
+    // snapped on a screen that still snaps is left alone. Mutations: drop the
+    // opt-out test in releaseOptOutZones and the window on DP-2 is announced
+    // too; drop the emit and nothing is.
+    void theOptOutReleasesItsSnappedWindowsInPlace()
+    {
+        FloatBackFixture f;
+        const QString onOptOut = f.registerWindow(QStringLiteral("release-opt-out"));
+        const QString onSnapping = f.registerWindow(QStringLiteral("release-snapping"));
+        f.snap->commitSnap(onOptOut, f.zone(0), kLeft);
+        f.snap->commitSnap(onSnapping, f.zone(1), kRight);
+        optOut(f, kLeft);
+        QSignalSpy stateSpy(f.wta, &WindowTrackingAdaptor::windowStateChanged);
+        QSignalSpy geometrySpy(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        WindowTrackingInternal::releaseOptOutZones(f.wta, {kLeft, kRight});
+
+        QCOMPARE(stateSpy.count(), 1);
+        QCOMPARE(stateSpy.first().at(0).toString(), onOptOut);
+        const auto entry = stateSpy.first().at(1).value<PhosphorProtocol::WindowStateEntry>();
+        QCOMPARE(entry.changeType, QStringLiteral("unsnapped"));
+        QVERIFY(entry.zoneId.isEmpty());
+        QCOMPARE(entry.screenId, kLeft);
+        QVERIFY2(geometrySpy.isEmpty(), "released in place");
+        QCOMPARE(f.wta->service()->zoneForWindow(onOptOut), f.zone(0));
+        QCOMPARE(f.wta->service()->zoneForWindow(onSnapping), f.zone(1));
+    }
+
+    // A window a scrolling strip let go of on the opt-out lands on screen:
+    // back at its pre-scroll free geometry when that lies on the screen, else
+    // moved into the screen at its size when its frame sits past the viewport,
+    // and left where it is when already on screen. Mutations: ignore the free
+    // geometry and the first window is not put back; drop the move and the
+    // second stays off screen.
+    void aStripWindowReleasedOnTheOptOutLandsOnScreen()
+    {
+        FloatBackFixture f;
+        QSignalSpy geometrySpy(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        const auto landed = [&geometrySpy](const QString& windowId) -> std::optional<QRect> {
+            for (const QList<QVariant>& args : std::as_const(geometrySpy)) {
+                if (args.at(0).toString() == windowId) {
+                    return QRect(args.at(1).toInt(), args.at(2).toInt(), args.at(3).toInt(), args.at(4).toInt());
+                }
+            }
+            return std::nullopt;
+        };
+        const QString freeSpot = f.registerWindow(QStringLiteral("strip-free-spot"));
+        f.setFrame(freeSpot, QRect(3000, 100, 800, 600));
+        const QString pastViewport = f.registerWindow(QStringLiteral("strip-past-viewport"));
+        f.setFrame(pastViewport, QRect(1500, 200, 900, 600));
+        const QString onScreen = f.registerWindow(QStringLiteral("strip-on-screen"));
+        f.setFrame(onScreen, QRect(200, 200, 800, 600));
+
+        WindowTrackingInternal::placeReleasedOnOptOut(*f.wta, freeSpot, kLeft, QRect(100, 100, 700, 500));
+        WindowTrackingInternal::placeReleasedOnOptOut(*f.wta, pastViewport, kLeft, QRect());
+        WindowTrackingInternal::placeReleasedOnOptOut(*f.wta, onScreen, kLeft, QRect());
+
+        QCOMPARE(landed(freeSpot), std::optional<QRect>(QRect(100, 100, 700, 500)));
+        QCOMPARE(landed(pastViewport), std::optional<QRect>(QRect(1020, 200, 900, 600)));
+        QCOMPARE(landed(onScreen), std::optional<QRect>());
+    }
+
 private:
+    /// Give desktop 1 of @p screen the tiling opt-out ("autotile:none").
+    static void optOut(FloatBackFixture& f, const QString& screen)
+    {
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        entry.tilingAlgorithm = QString(PhosphorZones::NoTilingAlgorithm);
+        f.layouts->setAssignmentEntryDirect(screen, 1, QString(), entry);
+    }
+    /// The service reads the float from the snap engine's stores, as the
+    /// daemon's float resolver does for a snapping window.
+    static void readFloatsFromSnap(FloatBackFixture& f)
+    {
+        f.wta->service()->setEngineFloatResolver([&f](const QString& windowId) {
+            return f.snap->isFloating(windowId);
+        });
+    }
+
     /// A stub tiling engine that logs every setWindowFloat it is asked for.
     struct FloatLoggingEngine : StubPlacementEngine
     {

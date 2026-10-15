@@ -229,6 +229,37 @@ private Q_SLOTS:
         QCOMPARE(zoneSpy.count(), 0);
     }
 
+    // A plain drag of a snapped window dropped on a monitor whose desktop in
+    // view is the tiling opt-out ("autotile:none") leaves its zone and lands
+    // not floating: snap's receive takes it as a free window there (user
+    // decision autotile_none_float_owner). The snap context resolver answers
+    // as Daemon::routedModeForContext does. Mutation: drop the context test in
+    // SnapEngine::handoffReceive and the window floats on DP-2.
+    void plainDropOnTheOptOutLandsNotFloating()
+    {
+        const QString w = QStringLiteral("app|plain-drop-opt-out");
+        const QString optOutScreen = QStringLiteral("DP-2");
+        const auto clear = qScopeGuard([this] {
+            m_snapEngine->setContextModeResolver({});
+        });
+        PhosphorZones::AssignmentEntry optOut;
+        optOut.mode = PhosphorZones::AssignmentEntry::Autotile;
+        optOut.tilingAlgorithm = QString(PhosphorZones::NoTilingAlgorithm);
+        m_layoutManager->setAssignmentEntryDirect(optOutScreen, 1, QString(), optOut);
+        m_snapEngine->setContextModeResolver([optOutScreen](const QString& screen, int, const QString&) {
+            return screen == optOutScreen ? PhosphorZones::AssignmentEntry::Autotile
+                                          : PhosphorZones::AssignmentEntry::Snapping;
+        });
+        m_snapEngine->setCurrentDesktopForScreen(m_screenId, 1);
+        m_snapEngine->setCurrentDesktopForScreen(optOutScreen, 1);
+        m_wta->service()->assignWindowToZone(w, m_zoneIds[0], m_screenId, 1);
+
+        QVERIFY(m_wta->dragEndedOnScreen(w, optOutScreen, /*floatIfSnapped=*/true));
+
+        QVERIFY(m_wta->service()->zoneForWindow(w).isEmpty());
+        QVERIFY(!m_snapEngine->isFloating(w));
+    }
+
     // The arm's two refusals keep the old outcome: a dead drag (snapping off
     // where it started) and a window the engine already holds on the drop
     // screen are the engine's own drag handling, and a refused adoption

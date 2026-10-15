@@ -650,9 +650,9 @@ void SettingsController::importLayout(const QString& filePath)
                                                 QStringLiteral("importLayout"), {safe});
     if (reply.type() == QDBusMessage::ErrorMessage) {
         // The transport itself failed: the daemon is not running, or the method
-        // is missing. The daemon's own rejections do NOT arrive here (it has no
-        // QDBusContext and never sends an error reply) — they come back as an
-        // empty id below.
+        // is missing. The daemon's own rejections do NOT arrive here (its
+        // importLayout sends no error reply) — they come back as an empty id
+        // below.
         qCWarning(lcCore) << "importLayout failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Failed to import layout: %1").arg(reply.errorMessage()));
     } else if (reply.arguments().isEmpty() || reply.arguments().first().toString().isEmpty()) {

@@ -955,8 +955,8 @@ void Daemon::initEnginesAndWiring()
     snapEngine->setLiveModeResolver([this](const QString& screenId) {
         return m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
     });
-    // readoptParked's mode gates, hidden contexts included (F1137): a parked zone goes back only where the router
-    // would answer Snapping (an opt-out context is not one), a parked tile only where autotile runs.
+    // Mode gates, hidden contexts included (F1137): snap re-seats a parked zone and takes a floating handoff only where
+    // the router would answer Snapping (an opt-out context is not one); autotile re-seats a parked tile where it runs.
     snapEngine->setContextModeResolver([this](const QString& screenId, int desktop, const QString& activity) {
         return routedModeForContext(screenId, desktop, activity);
     });

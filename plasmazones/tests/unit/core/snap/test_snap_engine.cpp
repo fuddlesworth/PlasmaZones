@@ -557,6 +557,41 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    // A floating arrival on a context the daemon answers another mode for (the
+    // tiling opt-out, "autotile:none") holds no float there: it arrives a free
+    // window and says so, while one handed to a snapping context floats (user
+    // decision autotile_none_float_owner). Mutation: drop the context test in
+    // handoffReceive and the first arrival floats.
+    void testHandoffReceive_floatingArrivalWhereSnappingDoesNotRunArrivesFree()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        m_wts->setSnapState(engine.snapState());
+        const QString optOut = QStringLiteral("DP-2");
+        engine.setContextModeResolver([optOut](const QString& screenId, int, const QString&) {
+            return screenId == optOut ? PhosphorZones::AssignmentEntry::Mode::Autotile
+                                      : PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
+        QSignalSpy floatSpy(&engine, &SnapEngine::windowFloatingChanged);
+
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = QStringLiteral("app|uuid-recv-opt-out");
+        ctx.toScreenId = optOut;
+        ctx.wasFloating = true;
+        engine.handoffReceive(ctx);
+        QVERIFY(!engine.isFloating(ctx.windowId));
+        QCOMPARE(engine.screenForTrackedWindow(ctx.windowId), optOut);
+        QCOMPARE(floatSpy.count(), 1);
+        QVERIFY(!floatSpy.first().at(1).toBool());
+
+        ctx.windowId = QStringLiteral("app|uuid-recv-snapping");
+        ctx.toScreenId = QStringLiteral("DP-1");
+        engine.handoffReceive(ctx);
+        QVERIFY(engine.isFloating(ctx.windowId));
+
+        engine.setContextModeResolver({});
+        m_wts->setSnapState(nullptr);
+    }
+
     void testHandoffReceive_emptyArgsIsNoop()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
