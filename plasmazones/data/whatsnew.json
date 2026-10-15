@@ -1,6 +1,21 @@
 {
     "releases": [
         {
+            "version": "3.4.20",
+            "date": "2026-10-11",
+            "highlights": [
+                "Changed: A floating window you move to another monitor forgets the zone it floated from. Unfloating it there snaps it into a zone of that monitor when \"Unfloat to a zone when there is no previous zone\" is on, and otherwise it stays floating. This reverses the 3.3.3 behaviour on purpose, so a window you moved is never pulled back to the monitor it left (#1125)",
+                "Changed: A window that reopens at login, after PlasmaZones restarts or when its app opens again is put back in its zone or tile only when that is on the monitor it opened on. Otherwise it stays where KWin put it. This reverses the old behaviour on purpose, so a window you see open on one monitor is never pulled to another (#1125)",
+                "Changed: A window you moved while PlasmaZones was off stays where you put it when PlasmaZones starts again, and its old zone or tile is forgotten. This reverses the old behaviour on purpose. A placement rule that snaps a window to a zone still applies when the window first opens (#1125)",
+                "Changed: When a monitor is unplugged or a sleeping monitor drops its connection, the windows KWin moves to a tiling or scrolling monitor float where they land, and on a snapping monitor they are no longer snapped, while a window that was floating keeps floating. They go back to their zone or tile when the monitor returns, unless you moved them in the meantime. This changes on purpose the 2.3.7 standby fix, which kept every window in its old zone while its monitor was gone (#1125)",
+                "Changed: A snapped window you maximized or made fullscreen stays that way when its zone is put back, after a layout or desktop switch, a screen change, a restart, a reopen or an unminimize. It returns to its zone when you unmaximize it or leave fullscreen. This reverses part of the 3.4.8 change on purpose (#1125)",
+                "Changed: With auto-assign on, a snapped window sent to another desktop running the same layout keeps its zone instead of taking the first empty one. This reverses part of the 3.4.3 and 3.4.19 changes on purpose (#1125)",
+                "Changed: A window dragged onto a tiling or scrolling monitor without the snap modifier floats where you let go, and the windows already tiled there do not move, during the drag or after it. Meta+F tiles it. This changes on purpose how such a drag ended before, when the monitor tiled the window as soon as it crossed over (#1125)",
+                "Changed: On a scrolling monitor, a column floated from the shell's placement map or dragged out of its strip stays where it is instead of jumping to where it last floated, the way it works on an autotile monitor. Floating it with Meta+F still sends it there. This changes the old behaviour on purpose (#1125)",
+                "Changed: When you remove a virtual desktop, window rules that name a desktop after it are renumbered with it, and a rule that named the removed desktop is switched off rather than deleted, so you can fix it in the rule editor (#1125)"
+            ]
+        },
+        {
             "version": "3.4.19",
             "date": "2026-09-21",
             "highlights": [

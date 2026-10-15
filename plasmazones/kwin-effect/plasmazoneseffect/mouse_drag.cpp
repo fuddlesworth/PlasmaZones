@@ -79,8 +79,9 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // windowFinishUserMovedResized wouldn't fire until ALL buttons are
             // released. forceEnd() gives immediate snap response on LMB release.
             //
-            // After forceEnd, applyWindowGeometry will defer (retry every 100 ms)
-            // until isUserMove() clears when the remaining buttons are released.
+            // After forceEnd, an apply that lands while KWin's move is still live
+            // (another button held) defers to one windowFinishUserMovedResized
+            // replay (applyWindowGeometry) and runs when the last button comes up.
             m_dragTracker->forceEnd(pos);
         } else if (modifiersChanged || buttonsChanged) {
             // Push modifier/button changes to daemon during drag immediately.
@@ -103,12 +104,14 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             const bool bypassed =
                 m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen
                 || m_dragBypassedForEngine;
-            const bool shouldForward =
-                bypassed || shouldForwardDragTicks() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;
+            const bool shouldForward = m_daemonGate.serviceRegistered
+                && (bypassed || shouldForwardDragTicks() || m_cachedZoneSelectorEnabled || !m_triggersLoaded);
             if (shouldForward) {
+                // The drag's point, not the pointer's: a touch or tablet drag leaves the pointer idle (F774).
+                const QPointF at = m_dragTracker->dragPoint();
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
-                    {m_dragTracker->draggedWindowId(), qRound(pos.x()), qRound(pos.y()),
+                    {m_dragTracker->draggedWindowId(), qRound(at.x()), qRound(at.y()),
                      static_cast<int>(m_currentModifiers), static_cast<int>(m_currentMouseButtons)},
                     QStringLiteral("updateDragCursor - modifier/button change"));
             }
@@ -150,9 +153,9 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     if (!m_dragTracker->isDragging() && output) {
         m_tilingHandler->handleCursorMoved(pos, effectiveScreenId);
         // Snapping FFM runs alongside autotile FFM. The two are disjoint: autotile FFM
-        // bails when the cursor screen is not an autotile screen, and snapping FFM only
-        // acts on windows in the snap tiled set (which live on snapping-mode screens), so
-        // at most one of them activates a window for any given cursor position.
+        // bails when the cursor screen is not an autotile screen, and snapping FFM bails
+        // when it is one (a tiling or scrolling screen), so at most one of them activates
+        // a window for any given cursor position.
         m_snapHandler->handleCursorMoved(pos, effectiveScreenId);
     }
 }

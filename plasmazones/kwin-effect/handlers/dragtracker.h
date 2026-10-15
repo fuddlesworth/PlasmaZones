@@ -64,6 +64,17 @@ public:
     {
         return m_lastCursorPos;
     }
+    /// True when the drag began with a pointer button held. KWin's keyboard
+    /// move (Window Move) holds none, and neither does a touch drag (F1010).
+    bool pointerDrag() const
+    {
+        return m_pointerDrag;
+    }
+    /// Where the drag is, for its drop and its modifier ticks: the pointer once
+    /// it has moved during the drag (a pointer drag, or a keyboard move, which
+    /// warps the pointer with the window), else the grab point carried with
+    /// the window, since a touch or tablet drag leaves the pointer idle (F774).
+    QPointF dragPoint() const;
 
     // Event-driven drag start/end detection via KWin's per-window signals.
     // Connected in setupWindowConnections() to windowStartUserMovedResized /
@@ -118,6 +129,14 @@ private:
     QPointer<KWin::EffectWindow> m_interactiveWindow;
     QString m_draggedWindowId;
     QPointF m_lastCursorPos;
+    // The drag's start, for the revert test at its finish (F752) and for the
+    // grab point a pointerless drag carries with the window (F774).
+    QRectF m_dragStartFrame;
+    QPointF m_dragStartAnchor;
+    int m_dragStartMaximizeMode = 0; ///< KWin's requested MaximizeMode at the start (F1014)
+    QString m_dragStartOutputId; ///< the uuid of KWin's move output at the start (F1072)
+    bool m_pointerMoved = false;
+    bool m_pointerDrag = false;
 
     // Throttle event-driven dragMoved signals to ~30Hz (32ms intervals).
     // Without throttling, 1000Hz mouse input would flood D-Bus.

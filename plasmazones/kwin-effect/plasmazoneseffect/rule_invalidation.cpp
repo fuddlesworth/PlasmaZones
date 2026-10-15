@@ -16,6 +16,9 @@
 // calls isDragging(), and unity batching must not be what supplies the type.
 #include "handlers/dragtracker.h"
 
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleSet.h>
+
 #include <effect/effecthandler.h>
 
 #include <QSet>
@@ -74,12 +77,44 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
     }
 }
 
-void PlasmaZonesEffect::invalidateRuleCachesForWindowGeometry(const QString& windowId, KWin::EffectWindow* w)
+void PlasmaZonesEffect::evictExclusionVerdicts(const QString& windowId)
+{
+    // A desktop, activity or monitor move changes the rule inputs, and the
+    // verdict cache is keyed on (windowId, rule-set revision), neither of
+    // which moves. The coalesced invalidation lands a turn later, after the
+    // adopt or the arrival drain has read the stale verdict, so the two
+    // exclusion caches are dropped here, synchronously (F233, F292).
+    m_snappingExclusionEvaluator.evictCached(windowId);
+    m_decorationExclusionEvaluator.evictCached(windowId);
+}
+
+void PlasmaZonesEffect::recomputeLiveFieldRuleGates(const PhosphorRules::RuleSet& rules)
+{
+    // Walked over the full parsed set once per rulesChanged, never per
+    // geometry tick or caption change (see the gates' member doc).
+    static const QSet<PhosphorRules::Field> kGeometryFields = {
+        PhosphorRules::Field::Width, PhosphorRules::Field::Height, PhosphorRules::Field::PositionX,
+        PhosphorRules::Field::PositionY};
+    static const QSet<PhosphorRules::Field> kCaptionFields = {PhosphorRules::Field::Title,
+                                                              PhosphorRules::Field::CaptionNormal};
+    m_hasGeometryScopedRules = false;
+    m_hasCaptionScopedRules = false;
+    for (const PhosphorRules::Rule& rule : rules.rules()) {
+        if (!rule.enabled) {
+            continue;
+        }
+        m_hasGeometryScopedRules = m_hasGeometryScopedRules || rule.match.referencesAnyField(kGeometryFields);
+        m_hasCaptionScopedRules = m_hasCaptionScopedRules || rule.match.referencesAnyField(kCaptionFields);
+    }
+}
+
+void PlasmaZonesEffect::invalidateRuleCachesForWindowFields(const QString& windowId, KWin::EffectWindow* w)
 {
     // See the header doc: per-window eviction only — never a global clear on
-    // this per-drag-tick edge. The three evictions cover every cached
-    // verdict a geometry-scoped rule can produce (appearance/animation
-    // overrides, placement exclusion, decoration exclusion).
+    // this per-drag-tick (or per-title-tick) edge. The evictions cover every
+    // cached verdict a geometry- or caption-scoped rule can produce
+    // (appearance/animation overrides, verdicts, placement exclusion,
+    // decoration exclusion).
     m_shaderManager.animationRuleEvaluator().evictCached(windowId);
     // The verdict evaluator caches per (windowId, revision) exactly like the
     // one above and resolves the same geometry-scoped match fields, so it
@@ -87,17 +122,17 @@ void PlasmaZonesEffect::invalidateRuleCachesForWindowGeometry(const QString& win
     // otherwise keep answering from the pre-resize verdict for the rest of
     // the window's life.
     m_shaderManager.effectVerdictRuleEvaluator().evictCached(windowId);
-    m_snappingExclusionEvaluator.evictCached(windowId);
-    m_decorationExclusionEvaluator.evictCached(windowId);
+    evictExclusionVerdicts(windowId);
     if (!w || w->isDeleted()) {
         return;
     }
     // Same per-window re-drive set as flushPendingRuleInvalidations' body.
-    // The liveId re-derivation is DEFENSIVE here, not load-bearing: today's
-    // only caller (flushPendingFrameGeometry) already keys by getWindowId,
-    // so this is a no-op — it exists so the helper stays correct if a
-    // future caller hands it a daemon-supplied id, the hazard the flush's
-    // findWindowById path documents.
+    // The liveId re-derivation is DEFENSIVE here, not load-bearing: the
+    // caller (flushPendingFrameGeometry, for both its frame batch and its
+    // caption evictions) already keys by getWindowId, so this is a no-op —
+    // it exists so the helper stays correct if a future caller hands it a
+    // daemon-supplied id, the hazard the flush's findWindowById path
+    // documents.
     const QString liveId = getWindowId(w);
     // Per-output, matching updateAllDecorations and every other decorate gate; see
     // desktopvisibility.h.
@@ -191,7 +226,7 @@ void PlasmaZonesEffect::drainDragSuppressedRuleInvalidations()
     // which would run the decoration rebuild the drag gate exists to defer.
     // Nothing is stranded by returning here: the successor always reaches
     // callEndDrag, whose drain picks these ids up.
-    if (m_dragTracker && m_dragTracker->isDragging()) {
+    if (m_dragTracker->isDragging()) {
         return;
     }
     // The suppressed ids were recorded by the cross-screen handlers, which stamp

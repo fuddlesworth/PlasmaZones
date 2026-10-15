@@ -236,7 +236,21 @@ if [ -n "${PZ_NESTED_KEEP_STATE:-}" ] && [ -d "$HOME_N" ]; then
     KEEP_STATE=1
     echo "keeping previous state home $HOME_N (PZ_NESTED_KEEP_STATE set)" >&2
 else
-    rm -rf "$HOME_N"
+    # A home that cannot be deleted is renamed aside rather than ending the
+    # run: a directory something else has mounted over (a sandbox masking a
+    # credential-store path such as data/kwalletd) refuses rmdir, but its
+    # parent can still be renamed, and the next session needs only a fresh
+    # path. Earlier leftovers are retried quietly; one that still refuses
+    # stays until the runtime dir is cleared at logout.
+    if ! rm -rf "$HOME_N" 2>/dev/null; then
+        mv "$HOME_N" "$NEST/stale-home.$(date +%s).$$"
+        echo "state home could not be deleted; renamed it aside" >&2
+    fi
+    for stale in "$NEST"/stale-home.*; do
+        if [ -e "$stale" ]; then
+            rm -rf "$stale" 2>/dev/null || true
+        fi
+    done
 fi
 # Stale control files must not survive into the new run: a daemon.sh run
 # against a previous session's env.sh would target a dead bus.
@@ -358,6 +372,16 @@ cat > "$SVC_DIR/org.plasmazones.service" <<SVC
 Name=org.plasmazones
 Exec=$NEST/activate-daemon.sh
 SVC
+# No wallet in a nested session. A GTK test client starts xdg-desktop-portal,
+# which activates the portal's KWallet backend (ksecretd), and that creates
+# \$XDG_DATA_HOME/kwalletd and outlives the compositor: it wrote into the next
+# run's wiped home and left a credential-store path that a sandbox masks. The
+# shadows resolve those names to a command that exits at once, so activation
+# fails cleanly and the portal carries on without a secret backend.
+for wallet_service in org.freedesktop.impl.portal.desktop.kwallet org.kde.kwalletd6 org.kde.kwalletd5 \
+    org.freedesktop.secrets; do
+    printf '[D-BUS Service]\nName=%s\nExec=/bin/false\n' "$wallet_service" > "$SVC_DIR/$wallet_service.service"
+done
 export XDG_DATA_DIRS="$NEST/dbus-services:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
 EXTRA_FLAGS=""

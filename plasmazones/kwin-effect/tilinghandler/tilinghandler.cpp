@@ -98,7 +98,7 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // naming a pre-event cursor position, and swallow the first move within
     // the resume radius once the condition cleared. Same reasoning as the
     // clears in setFocusFollowsMouse(false) and clearPerSessionDaemonState.
-    // ffmOffEverywhere(), not the two global flags: the scrolling half's
+    // ffmOffEverywhere(), not the global flags alone: the scrolling half's
     // authority is the daemon's resolved per-screen set, so a
     // SetScrollFocusFollowsMouse rule that turns the behaviour ON for one
     // monitor while the global setting is off must not be bailed out from
@@ -369,7 +369,7 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
     // The RAW set, deliberately, NOT the isScrollingScreen intersection. Both
     // consumers want the conservative answer: the paint clip / input filter,
     // and getWindowScreenId's engine-authoritative screen override (a parked
-    // column's frame centre lies inside the NEIGHBOUR output). The union and
+    // column lies below every output and resolves to the nearest, possibly a neighbour). The union and
     // the scrolling set arrive on independent signals, so intersecting made a
     // screen leaving scrolling lose clip AND override together for the frames
     // between them. The intersection belongs on the rule and verb consumers.
@@ -456,7 +456,7 @@ bool TilingHandler::rectAtScrollPark(const QRect& rect) const
     return !unionRect.isEmpty() && !unionRect.intersects(rect);
 }
 
-bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
+bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating, bool focusEligible)
 {
     // Deleted windows bail before getWindowId (cache-pollution hazard).
     if (!w || w->isDeleted()) {
@@ -486,27 +486,7 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
 
     // Only notify autotile daemon for windows on autotile screens
     if (m_managedScreens.contains(screenId)) {
-        // Consume the spawn-provenance marker UNCONDITIONALLY — a short-circuit
-        // (|| with remove second) would leave the entry behind whenever the
-        // caller already passed true, and a later RE-ADD that deliberately
-        // passes false would then flip to true off the stale entry.
-        const bool wasFresh = m_pendingFreshWindows.remove(windowId) > 0;
-        knownFreeFloating = knownFreeFloating || wasFresh;
-        m_notifiedWindows.insert(windowId);
-        m_notifiedWindowScreens[windowId] = screenId;
-        // Save pre-autotile geometry BEFORE the daemon tiles the window.
-        // Without this, a window launched directly into autotile has no saved
-        // geometry — floating it would leave it at its tiled position instead
-        // of restoring to its original free-floating size.
-        //
-        // knownFreeFloating is passed EXPLICITLY by every caller (no default
-        // argument): the genuine window-opened path passes true (the frame is
-        // KWin's spawn geometry and the FloatingCache is not yet populated,
-        // so the isWindowFloating() guard would drop the one-shot save).
-        // RE-ADD callers, and the fullscreen-exit announce of a never-tracked
-        // window (frame still the output rect), pass false so the floating
-        // guard runs and rejects a rect that is not free geometry.
-        saveAndRecordPreTileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
+        const bool wasFresh = trackWithoutAnnounce(w, screenId, knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
         // Seed the change-poll cache with the announced value so the batch
@@ -526,9 +506,11 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
         const quint64 announceGen = ++m_announceSeq;
         m_announceGen[windowId] = announceGen;
 
+        // Only a genuine open may take focus; a re-placement uses the verb that never does.
         auto* watcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Tiling,
-                                                       QStringLiteral("windowOpened"),
+                                                       focusEligible ? QStringLiteral("windowOpened")
+                                                                     : QStringLiteral("windowReannounced"),
                                                        {windowId, screenId, minSize.width(), minSize.height()}),
             this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this,
@@ -584,8 +566,8 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
                         m_announceGen.remove(windowId);
                     }
                 });
-        qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenId
-                          << "minSize:" << minSize.width() << "x" << minSize.height();
+        qCDebug(lcEffect) << "Notified autotile:" << (focusEligible ? "windowOpened" : "windowReannounced") << windowId
+                          << "on screen" << screenId << "minSize:" << minSize.width() << "x" << minSize.height();
         return true;
     }
     return false;
@@ -614,14 +596,14 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         }
 
         const QString windowId = m_effect->getWindowId(w);
-        // A caller-supplied id wins over the positional resolve, and is then
-        // the ONE value the filter, the notified-screen stamp, the pre-tile
-        // capture and the wire entry all read (see the header): the engine
-        // flip resolves under the pre-flip scrolling set, where a parked strip
-        // column is still attributed to its own output.
+        // A caller-supplied id wins over the positional resolve (where a moving
+        // window is GOING, not the output it leaves), and is then the ONE value
+        // the filter, the notified-screen stamp, the pre-tile capture and the
+        // wire entry read (see the header): the engine flip resolves under the
+        // pre-flip scrolling set, where a parked strip column is on its output.
         const auto overrideIt = screenOverrides.constFind(w);
         const QString screenId =
-            overrideIt != screenOverrides.constEnd() ? overrideIt.value() : m_effect->getWindowScreenId(w);
+            overrideIt != screenOverrides.constEnd() ? overrideIt.value() : m_effect->pendingWindowScreenId(w);
         if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
             continue;
         }
@@ -756,96 +738,90 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
     qCInfo(lcEffect) << "Notified autotile: windowsOpenedBatch with" << batchEntries.size() << "windows";
 }
 
-void TilingHandler::cleanupAutotileTracking(const QString& windowId)
+void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecisions::ClaimScope scope)
 {
+    // A scope that releases the monocle maximize does so first: the scrub below drops the membership the release
+    // reads (LiveDeparture, F675). A release that has to wait (fullscreen, a gesture) keeps its membership and owed
+    // restore past the scrub, for the fullscreen exit or the gesture end to pay (F1078). The monocle gesture hold
+    // goes with the tracking (F775).
+    bool monocleRetained = false;
+    if (ScrollDecisions::claimReleasesOn(ScrollDecisions::Claim::MonocleMaximize, scope)) {
+        unmaximizeMonocleWindow(windowId);
+        monocleRetained = m_monocleMaximizedWindows.contains(windowId);
+    }
+    m_monocleUnmaximizedInGesture.remove(windowId);
     // Compositor-agnostic state cleanup (shared helper).
     TilingStateHelpers::TilingWindowState windowState{
         m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_tileTargetZones,
         m_centeredWaylandZones, m_monocleMaximizedWindows, m_preTileGeometries};
     TilingStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
+    if (monocleRetained) {
+        m_monocleMaximizedWindows.insert(windowId);
+    } else {
+        m_monocleRestoreOwed.remove(windowId);
+    }
     m_minimizeFloatMarks.remove(windowId);
+    m_centeredWaylandFrames.remove(windowId); // its stamp went in the helper
     m_unfloatInFlight.remove(windowId);
     dropFullscreenHoldRecords(windowId);
-    // Same reasoning as the retry budget below: a dead id's entry must not
-    // outlive the window. Ids are unique per window, so the entry is a leak
-    // rather than a misattribution, and a window closing inside its own round
-    // trip would otherwise leave an armed entry behind for good.
-    //
-    // This funnel also serves the cross-output transfer of a LIVE window,
-    // where dropping the marker reopens the race for the remainder of a trip
-    // that is still genuinely in flight. Accepted rather than worked around:
-    // the window is changing screens, so the batch that would have been
-    // suppressed is describing the strip it is leaving, and the arriving
-    // strip answers on its own first batch.
+    // Same reasoning as the retry budget below: a dead id's entry must not outlive the window (a leak, not a
+    // misattribution: ids are unique). On the cross-output transfer of a LIVE window, dropping the marker reopens
+    // the race for the rest of a trip still in flight. Accepted: the batch it would have suppressed describes the
+    // strip being left, and the arriving strip answers on its own first batch. The claimed press goes with it.
     m_maximizeToggleInFlight.remove(windowId);
-    m_monocleRestoreOwed.remove(windowId);
-    // Retry budget and route/provenance markers die with the tracking: a dead
-    // id must not keep an exhausted budget around, and every direct
-    // caller of this cleanup (not just onWindowClosed) must drop the
-    // spawn-provenance entries or they leak past cross-mode moves.
+    m_claimedMaximizePresses.remove(windowId);
+    // Retry budget and route/provenance markers die with the tracking: a dead id must not keep an exhausted budget,
+    // and every caller of this cleanup must drop the spawn-provenance entries or they leak past mode moves.
     m_unfloatRetryAttempts.remove(windowId);
     m_pendingFreshWindows.remove(windowId);
     m_deferredWindowRoutes.remove(windowId);
-    // The tab-colour verdict dies with the window: the cache is per window
-    // and nothing else evicts it, so every close funnels through here (this
-    // is the one untrack funnel every caller passes).
+    // The tab-colour verdict dies with the window. The tab rebuilds evict a window that stops being a tab, but a
+    // close or untrack must evict too, and this is the one untrack funnel every caller passes.
     dropScrollTabColorsForWindow(windowId);
-    // The announce stamp dies with the tracking, and that erasure is what makes
-    // a late error reply for a CLOSED window harmless: the arm reads back 0,
-    // mismatches its captured stamp, and no-ops instead of re-inserting a
-    // spawn-provenance marker for a dead window, a leak until the tail prune.
-    // Safe to erase rather than tombstone because the stamps come
-    // from a session-global monotonic counter (the m_crossScreenRestoreGen
-    // contract).
+    // The announce stamp dies with the tracking, and that erasure is what makes a late error reply for a CLOSED
+    // window harmless: the arm reads back 0, mismatches its captured stamp, and no-ops instead of re-inserting a
+    // spawn-provenance marker for a dead window, a leak until the tail prune. Safe to erase rather than tombstone
+    // because the stamps come from a session-global monotonic counter (the m_crossScreenRestoreGen contract).
     m_announceGen.remove(windowId);
-    // The clip-loss dedupe entry dies with the window too: nothing else prunes
-    // it (the success-path re-arm only runs when the predicate answers), so a
-    // dead id's entry would sit in the map for the rest of the session.
+    // The clip-loss dedupe entry dies with the window too: nothing else prunes it (the success-path re-arm only
+    // runs when the predicate answers), so a dead id's entry would sit in the map for the rest of the session.
     m_scrollClipLossReported.remove(windowId);
-    // The commanded-rect entry dies with the tracking too: the cross-output
-    // transfer path otherwise leaves the OLD screen's rect behind, and once
-    // the window is re-announced onto another scrolling screen the
-    // counter-assert could fight one legitimate position with it before the
-    // first batch overwrites it. The parked paint hint goes with it for the
-    // same reason (inert off a scrolling output, but a stale relocation the
-    // moment the window returns to one).
-    //
-    // The relocation drop pairs with damage, like every other remover: it
-    // changes where the paint path draws the window. Not all of this funnel's
-    // callers are mid-drag (where KWin damages continuously and the gap would
-    // be invisible) — the cross-mode output handoff and the move-to-another-
-    // desktop path both reach here with a live window and nothing else
-    // scheduling a frame, so the last presented frame would keep the column at
-    // its dead strip position. Pairing here rather than at the call sites
-    // covers every caller at once.
-    m_effect->m_scrollCommandedRects.remove(windowId);
-    m_effect->m_scrollOfferedColumn.remove(windowId);
-    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
-        KWin::effects->addRepaintFull();
+    // The strip companions die with the tracking too: the cross-output transfer otherwise leaves the OLD screen's
+    // commanded rect behind for the counter-assert to fight a legitimate position with once the window is
+    // re-announced onto another strip, and the parked paint hint is a stale relocation the moment the window
+    // returns to one. The relocation drop repaints here rather than at the call sites: the cross-mode output
+    // handoff and the move to another desktop reach this funnel with a live window and nothing else scheduling a
+    // frame, so the last presented frame would keep the column at its dead strip position.
+    dropScrollCompanions(windowId);
+    // An evacuee's monocle claim and minimize-float, parked for its return, survive only its own scrub and re-seat
+    // (Evacuation); a close or a real move drops them (F685, F1046).
+    if (scope != ScrollDecisions::ClaimScope::Evacuation) {
+        m_evacueeMonocleClaims.remove(windowId);
+        m_evacueeMinimizeFloats.remove(windowId);
     }
-    // Windowed fullscreen dies with the tracking: this funnel serves the
-    // close path (where slotWindowClosed already removed the membership,
-    // making this belt) and the cross-output transfer (where nothing else
-    // does, and a window landing on a snapping screen would otherwise stay
-    // KWin-fullscreen forever — snapping emits no tile batch to un-flag
-    // it). Forget-then-release, membership first, so a synchronous
-    // re-entry from setFullScreen finds the entry already gone.
-    // UntrackFunnel, not StripExit: monocle deliberately does NOT release here
-    // — it rides cleanupClosedWindowState's scrub — and that blank is recorded
-    // in the scope table with its reasoning rather than quietly filled by the
-    // funnel. Both other claims answer, for the reason this path documents: on
-    // a cross-output transfer to a screen these engines do not manage, no later
-    // tile batch exists to hand the state back.
-    //
-    // The EffectWindow is resolved rather than dropped bare so the bit is
-    // handed back while the window is still alive, and so the release can
-    // re-seed the tracked-screen map after its suppressed move.
-    releaseAllClaims(windowId, m_effect->findWindowByIdExact(windowId), ScrollDecisions::ClaimScope::UntrackFunnel);
+    // The claims go back with the tracking, by the scope's row in claimReleasesOn. Windowed fullscreen dies here
+    // too: on the close path slotWindowClosed already removed the membership (this is belt), and on a cross-output
+    // transfer nothing else does, so a window landing on a snapping screen would stay KWin-fullscreen forever
+    // (snapping emits no tile batch to un-flag it). Forget-then-release, membership first, so a synchronous
+    // re-entry from setFullScreen finds the entry already gone. The default UntrackFunnel leaves monocle to
+    // cleanupClosedWindowState's scrub (the scope table records why); a scope that releases it did so at the top.
+    // The window is resolved so the bit goes back while it is alive and the release can re-seed the tracked-screen
+    // map after its suppressed move. An evacuee (Evacuation) releases nothing and is scrubbed bare instead: KWin
+    // keeps its maximize or fullscreen, so it can still return the window as it was when its output comes back.
+    KWin::EffectWindow* const liveWindow = m_effect->findWindowByIdExact(windowId);
+    releaseAllClaims(windowId, liveWindow, scope);
+    if (scope == ScrollDecisions::ClaimScope::Evacuation) {
+        scrubClaimsForEvacuation(windowId, liveWindow);
+    }
+    // Every caller is a genuine release, and a release is a command: a pending
+    // tile cascade entry (it applies to an untracked window by design) must not
+    // move it back into the tile it left before the daemon's retile does.
+    m_effect->m_daemonGate.commandStamps.bump(liveWindow);
+    m_effect->m_shaderManager.dropMonocleEcho(liveWindow); // no echo to absorb once released
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
-    // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared
-    // here — the desktop-move path stashes it immediately before close (consume
-    // site / clearDesktopMoveStash cover it). Also drop the unconsumed output-move
+    // KWin-specific cleanup. The desktop-move stash outlives the release on
+    // purpose; only close clears it. Also drop the unconsumed output-move
     // marker and the pending cross-screen-restore connection (a stale one could
     // fire a spurious applyWindowGeometry).
     m_savedNotifiedForDesktopReturn.remove(windowId);
@@ -863,9 +839,9 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // Every screen, not just the one passed. On a cross-output transfer the
     // caller passes the OLD screen, so the destination's saved order kept the
     // id, and other screens' orders can hold it from an earlier session. The
-    // replay resolves by exact id and skips misses, so a residue was inert —
-    // but it was also unbounded across a session, growing one dead id per
-    // screen per transfer.
+    // replay raises only a window still on that screen's desktop and activity
+    // in view, so a residue cannot raise it elsewhere (F722); the sweep keeps
+    // the map bounded, one dead id per screen per transfer otherwise.
     for (auto orderIt = m_savedAutotileStackingOrder.begin(); orderIt != m_savedAutotileStackingOrder.end();
          ++orderIt) {
         orderIt.value().removeAll(windowId);
@@ -904,9 +880,10 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     }
 }
 
-void TilingHandler::releaseWindowTracking(const QString& windowId, const QString& screenId)
+void TilingHandler::releaseWindowTracking(const QString& windowId, const QString& screenId,
+                                          ScrollDecisions::ClaimScope scope)
 {
-    cleanupAutotileTracking(windowId);
+    cleanupAutotileTracking(windowId, scope);
 
     if (m_managedScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Tiling,
@@ -918,7 +895,7 @@ void TilingHandler::releaseWindowTracking(const QString& windowId, const QString
 
 void TilingHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate)
 {
-    // Restore border and clear tiling state synchronously — don't wait for
+    // Clear tiling state synchronously — don't wait for
     // the daemon's async windowFloatingChanged signal, which may never arrive
     // (e.g., cross-screen drag where onWindowClosed removes daemon tracking
     // before setWindowFloatingForScreen processes).
@@ -1006,8 +983,8 @@ void TilingHandler::drainDeadSessionState()
     // signal — see the header for why draining any later destroyed the new
     // session's own state.
     //
-    // The scrolling set is a pure discriminator with no lifecycle attached,
-    // so clear the DEAD session's snapshot ahead of onDaemonReady's re-query:
+    // The scrolling set belongs to the dead session like the managed set, so
+    // clear its snapshot ahead of onDaemonReady's re-query:
     // an errored/timed-out Properties.Get (daemon still starting, or one
     // without org.plasmazones.Scrolling) is reply.isValid()-gated and would
     // otherwise leave the old set stamping Mode "scrolling" indefinitely.
@@ -1121,35 +1098,33 @@ void TilingHandler::onDaemonReady()
     // its query and the reply clears it — a false store first was dead.
     loadSettings();
 
-    // Re-send the effect's pre-autotile geometry cache to the freshly
-    // (re)connected daemon as a backstop. storePreTileGeometry lands in the
-    // unified WindowPlacementStore record (which IS persisted), but a record
-    // the store had not flushed before the daemon died — or a daemon started
-    // with wiped state — would leave already-tiled windows with no
-    // pre-autotile position to return to on autotile→snap or drag-to-float.
-    // The effect survives daemon restarts and still holds each window's true
-    // pre-autotile frame here. overwrite=false so anything the daemon
-    // restored from its own persisted records wins.
+    // Re-send the effect's pre-autotile geometry to the (re)connected daemon as
+    // a backstop: a record the store had not flushed before the daemon died, or
+    // a daemon started with wiped state, would leave tiled windows with no free
+    // position to return to. The effect survives daemon restarts and still
+    // holds each true frame. overwrite=false: the daemon's own records win.
     if (m_effect->m_daemonGate.serviceRegistered) {
         int resent = 0;
+        const auto resend = [this, &resent](const QString& windowId, const QString& screenId, const QRectF& geo) {
+            if (geo.width() <= 0 || geo.height() <= 0) {
+                return;
+            }
+            // qRound, not truncation: fractional-scale residue (the toRect() capture convention).
+            PhosphorProtocol::ClientHelpers::fireAndForget(
+                m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                {windowId, qRound(geo.x()), qRound(geo.y()), qRound(geo.width()), qRound(geo.height()), screenId,
+                 false},
+                QStringLiteral("storePreTileGeometry"));
+            ++resent;
+        };
         for (auto scrIt = m_preTileGeometries.constBegin(); scrIt != m_preTileGeometries.constEnd(); ++scrIt) {
-            const QString& screenId = scrIt.key();
             for (auto winIt = scrIt.value().constBegin(); winIt != scrIt.value().constEnd(); ++winIt) {
-                const QRectF& geo = winIt.value();
-                if (geo.width() <= 0 || geo.height() <= 0) {
-                    continue;
-                }
-                // qRound, not truncation: fractional-scale sub-pixel residue
-                // (matches the toRect() geometry-capture convention).
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                    QStringLiteral("storePreTileGeometry"),
-                    {winIt.key(), qRound(geo.x()), qRound(geo.y()), qRound(geo.width()), qRound(geo.height()), screenId,
-                     false},
-                    QStringLiteral("storePreTileGeometry"));
-                ++resent;
+                resend(winIt.key(), scrIt.key(), winIt.value());
             }
         }
+        // A window that left a tiling desktop holds its free frame only in the
+        // desktop-move stash, under the screen it was measured on (F952).
+        m_desktopMoveStash.forEach(resend);
         if (resent > 0) {
             qCInfo(lcEffect) << "Re-sent" << resent << "pre-autotile geometries to daemon after reconnect";
         }
@@ -1172,7 +1147,8 @@ void TilingHandler::clearPerSessionDaemonState()
     m_notifiedWindowScreens.clear();
     m_scrollClipLossReported.clear();
     m_savedNotifiedForDesktopReturn.clear();
-    m_savedPreTileForDesktopMove.clear();
+    // Not the desktop-move stash: its rects are the effect's own captures and
+    // onDaemonReady re-sends them (F952).
     // The per-session scroll maps the serviceUnregistered teardown
     // clears, repeated here so bring-up is authoritative on its own rather
     // than on what that edge left behind. A stale commanded rect
@@ -1196,16 +1172,14 @@ void TilingHandler::clearPerSessionDaemonState()
     m_effect->m_scrollCommandedRects.clear();
     m_effect->m_scrollOfferedColumn.clear();
     m_effect->m_lastReportedMinSize.clear();
-    // The announced-epoch memo is per-session for the same reason as its
-    // neighbours: it records what a PARTICULAR daemon said. Note this is
-    // symmetry and bookkeeping, not a repair — the epoch is derived from a
-    // seeded-at-zero hash of the context key, so a restarted daemon announces
-    // the SAME value for the same strip and a retained entry would compare
-    // equal rather than firing a spurious retire. Cleared because every other
-    // daemon-published map here is, and because a screen whose context moved
-    // while the daemon was down should be treated as a first epoch rather than
-    // compared against a memo from a session that is gone.
+    // The announced-epoch memo is per-session for the same reason as its neighbours: it records what a
+    // PARTICULAR daemon said. Symmetry and bookkeeping, not a repair: the epoch is a seeded-at-zero hash of the
+    // context key, so a restarted daemon announces the SAME value for the same strip and a retained entry would
+    // compare equal rather than firing a spurious retire. Cleared because every other daemon-published map here
+    // is, and because a screen whose context moved while the daemon was down is a first epoch, not one to
+    // compare against a memo from a session that is gone.
     m_stripEpochByScreen.clear();
+    m_stripScreenRectAtBatch.clear(); // goes with the commanded rects above (F815)
     // The tab-indicator model, colour verdicts and paint overrides describe
     // the dead session's strips. Without this drain the painter could keep
     // blitting pills for columns the new daemon never laid out: the replay
@@ -1237,20 +1211,20 @@ void TilingHandler::clearPerSessionDaemonState()
     // swallows the first cursor move that lands within the resume radius.
     m_ffmSuppressPending = false;
     // Centering state is per-retile transient: the restarted daemon has no
-    // memory of the zones these entries point at, and a stale
-    // m_centeredWaylandZones entry that happens to equal the first
+    // memory of these zones, and a stale centred stamp equal to the first
     // post-restart tile request would trip the skipMoveResize short-circuit
-    // in slotWindowsTileRequested against a freshly-restored decoration,
-    // leaving a title-bar-height gap because the geometry is never re-asserted.
+    // against a freshly-restored decoration, leaving a title-bar-height gap
+    // because the geometry is never re-asserted.
     m_tileTargetZones.clear();
     m_centeredWaylandZones.clear();
+    m_centeredWaylandFrames.clear();
     // Per-screen stagger generations describe the dead session's in-flight
     // batches. They are otherwise only ever inserted (one entry per distinct
     // screenId ever seen, never pruned), so resetting here both restarts the
     // staggered-apply epochs cleanly and keeps the map bounded across reconnects.
     //
-    // The GLOBAL epoch is bumped alongside the clear, and the bump is the part
-    // that actually retires the dead session's cascades. The clear alone puts
+    // The GLOBAL epoch is bumped alongside the clear, and the bump retires any
+    // cascade the loss teardown could not see. The clear alone puts
     // every per-screen value back to absent (reading 0), so the new session's
     // first batch on a screen re-derives 1 — exactly the value a pre-restart
     // batch still cascading captured. Both guard sites test the global epoch
@@ -1259,20 +1233,17 @@ void TilingHandler::clearPerSessionDaemonState()
     // batches by the per-screen term.
     ++m_tileStaggerGeneration;
     m_tileStaggerGenByScreen.clear();
-    // Daemon-owned cross-output move markers belong to the dead session. A
-    // stale one-shot armed before the restart (windowOutputMoveExpected fired,
-    // matching outputChanged not yet seen) would swallow the next genuine
-    // outputChanged for that window — taking the bookkeeping-only path and
-    // skipping the real transfer. Clear it like every other per-session map.
+    m_switchAnnounce = {}; // switches owed an announce by the dead session (F793)
+    // Daemon-owned cross-output move markers belong to the dead session. A stale one-shot armed before the
+    // restart (windowOutputMoveExpected fired, matching outputChanged not yet seen) would swallow the window's
+    // next genuine outputChanged, taking the bookkeeping-only path and skipping the real transfer.
     m_expectedOutputMove.clear();
-    // In-flight debounced minimize→float commits and minimize-float records
-    // belong to the dead daemon session — a timer firing now would issue a
-    // setWindowFloatingForScreen against state the new daemon never had, and
-    // a stale record would mis-route the next unminimize. Pending
-    // cross-screen size-restore connections are likewise per-session.
-    // clearAllPendingMinimizeFloats() also cancels the deferred unfloat timers
-    // and clears the fullscreen-float records; the explicit clears below keep
-    // the drain list self-evident (an escapee bails on the ownership miss).
+    // In-flight debounced minimize→float commits and minimize-float records belong to the dead daemon session — a
+    // timer firing now would issue a setWindowFloatingForScreen against state the new daemon never had, and a
+    // stale record would mis-route the next unminimize. Pending cross-screen size-restore connections are likewise
+    // per-session. clearAllPendingMinimizeFloats() also cancels the deferred unfloat timers and clears the
+    // fullscreen-float records; the explicit clears below keep the drain list self-evident (an escapee bails on
+    // the ownership miss).
     clearAllPendingMinimizeFloats();
     m_minimizeFloatedWindows.clear();
     m_fullscreenFloatedWindows.clear();
@@ -1281,6 +1252,8 @@ void TilingHandler::clearPerSessionDaemonState()
     m_unfloatInFlight.clear();
     m_unfloatRetryAttempts.clear();
     m_minimizeFloatMarks.clear();
+    m_evacueeMonocleClaims.clear(); // the daemon's evacuee park is per session (F685)
+    m_evacueeMinimizeFloats.clear();
     // Routes deferred against the dead daemon session and their provenance
     // markers must not survive into the new one: a stale m_pendingFreshWindows
     // entry silently upgrades a later re-add to knownFreeFloating=true, which

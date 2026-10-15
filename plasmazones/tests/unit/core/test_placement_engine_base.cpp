@@ -274,12 +274,76 @@ private Q_SLOTS:
         tracker.availableGeometry = QRect(0, 0, 1920, 1080);
         engine.restoreFreeSizeWhereItStands(&tracker, QStringLiteral("app|new"), s1, RestoreReason::Open, false, {});
         QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), QSize(1920, 1080));
-        // Screen-local: a rect the tracker places elsewhere is not a source.
+        // A rect the tracker places elsewhere still gives its size (F269),
+        // bounded the same way.
         tracker.belongsToScreen = [](const QRect&, const QString&) {
             return false;
         };
         engine.restoreFreeSizeWhereItStands(&tracker, QStringLiteral("app|new"), s1, RestoreReason::Open, false, {});
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), QSize(1920, 1080));
+    }
+
+    // With no rect on the opening screen, the size of a record's rect on
+    // another screen is used, refused when it is a size managed on the
+    // opening screen. A rect on the opening screen wins when one exists
+    // (F269).
+    void testFreeSize_takesTheSizeFromAnotherScreen()
+    {
+        QSet<QString> live{QStringLiteral("sib")};
+        ScrollTestUtils::StubWindowTracking tracker;
+        tracker.placementStore().setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
+        // S1 left of x = 1920, S2 right of it.
+        tracker.belongsToScreen = [](const QRect& rect, const QString& screen) {
+            return (rect.x() < 1920) == (screen == QLatin1String("S1"));
+        };
+        const QRect onS1(100, 100, 700, 500);
+        QVERIFY(tracker.placementStore().record(floatingRecord(QStringLiteral("app|sib"), onS1)));
+        ConcreteEngine engine;
+        QSignalSpy sizeSpy(&engine, &PlacementEngineBase::sizeRestoreRequested);
+        const QString s2 = QStringLiteral("S2");
+
+        engine.restoreFreeSizeWhereItStands(&tracker, QStringLiteral("app|new"), s2, RestoreReason::Open, false, {});
+        QCOMPARE(sizeSpy.count(), 1);
+        const QList<QVariant> args = sizeSpy.takeFirst();
+        QCOMPARE(args.at(1).toSize(), onS1.size());
+        QCOMPARE(args.at(2).toString(), s2);
+
+        engine.restoreFreeSizeWhereItStands(&tracker, QStringLiteral("app|new"), s2, RestoreReason::Open, false,
+                                            {onS1.size()});
         QCOMPARE(sizeSpy.count(), 0);
+
+        WindowPlacement both = floatingRecord(QStringLiteral("app|sib"), onS1);
+        const QRect onS2(2000, 100, 500, 400);
+        both.freeGeometryByScreen.insert(s2, onS2);
+        QVERIFY(tracker.placementStore().record(both));
+        engine.restoreFreeSizeWhereItStands(&tracker, QStringLiteral("app|new"), s2, RestoreReason::Open, false, {});
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), onS2.size());
+    }
+
+    // The managed-size refusal tests the size the window gets, after the
+    // clamp to the available area, and the other-screen pass tries each
+    // screen's rect in key order until one is not managed (F1094, F1038).
+    void testFreeSize_refusalTestsTheClampedSizeOnEveryScreen()
+    {
+        QSet<QString> live{QStringLiteral("sib")};
+        ScrollTestUtils::StubWindowTracking tracker;
+        tracker.placementStore().setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
+        tracker.availableGeometry = QRect(0, 0, 1920, 1080);
+        QVERIFY(tracker.placementStore().record(floatingRecord(QStringLiteral("app|sib"), QRect(0, 0, 2500, 1500))));
+        ConcreteEngine engine;
+        QSignalSpy sizeSpy(&engine, &PlacementEngineBase::sizeRestoreRequested);
+        engine.restoreFreeSizeWhereItStands(&tracker, QStringLiteral("app|new"), QStringLiteral("S1"),
+                                            RestoreReason::Open, false, {QSize(1920, 1080)});
+        QCOMPARE(sizeSpy.count(), 0);
+
+        // Opening on S9, which no record names: S1 sorts first and is managed there, S2 is not.
+        WindowPlacement two = floatingRecord(QStringLiteral("app|sib"), QRect(0, 0, 800, 600));
+        two.freeGeometryByScreen.insert(QStringLiteral("S2"), QRect(2000, 0, 500, 400));
+        QVERIFY(tracker.placementStore().record(two));
+        engine.restoreFreeSizeWhereItStands(&tracker, QStringLiteral("app|new"), QStringLiteral("S9"),
+                                            RestoreReason::Open, false, {QSize(800, 600)});
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), QSize(500, 400));
     }
 
     void testPlacedByPreviousLineage_requiresAnEngineSlot()

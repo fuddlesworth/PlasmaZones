@@ -15,6 +15,7 @@
 #include "daemon/daemon/seedorderfilter.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/StubPlacementEngine.h"
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
@@ -61,7 +62,7 @@ private Q_SLOTS:
     {
         m_registry->upsert(QStringLiteral("u1"), makeMeta(QStringLiteral("kate"), false));
         QStringList order{QStringLiteral("kate|u1")};
-        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId());
+        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId(), {});
         QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
@@ -74,7 +75,7 @@ private Q_SLOTS:
         m_registry->upsert(QStringLiteral("u1"), makeMeta(QStringLiteral("kate"), false));
         m_service->setWindowFloating(QStringLiteral("kate|u1"), true);
         QStringList order{QStringLiteral("kate|u1")};
-        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId());
+        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId(), {});
         QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
@@ -86,7 +87,7 @@ private Q_SLOTS:
         m_registry->upsert(QStringLiteral("u1"), makeMeta(QStringLiteral("kate"), true));
         m_service->setWindowFloating(QStringLiteral("kate|u1"), true);
         QStringList order{QStringLiteral("kate|u1")};
-        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId());
+        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId(), {});
         QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
@@ -109,7 +110,7 @@ private Q_SLOTS:
         QVERIFY(m_service->placementStore().record(p));
 
         QStringList order{QStringLiteral("kate|u1")};
-        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId());
+        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId(), {});
         QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
@@ -136,7 +137,7 @@ private Q_SLOTS:
         QVERIFY(m_service->placementStore().record(p));
 
         QStringList order{QStringLiteral("kate|u1")};
-        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId());
+        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId(), {});
         QVERIFY(order.isEmpty());
     }
 
@@ -165,14 +166,15 @@ private Q_SLOTS:
         // Arm 1 — seeding AUTOTILE. Autotile's own slot is absent, so the
         // window is admitted as a placeholder despite the floating snap slot.
         QStringList autotileOrder{QStringLiteral("kate|u1")};
-        filterEngineSeedOrder(autotileOrder, m_service, m_registry,
-                              PhosphorEngine::WindowPlacement::autotileEngineId());
+        filterEngineSeedOrder(autotileOrder, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId(),
+                              {});
         QCOMPARE(autotileOrder, QStringList{QStringLiteral("kate|u1")});
 
         // Arm 2 — seeding SCROLLING. Same window, same floating snap slot.
         // The snap verdict says nothing about scrolling, so it must survive.
         QStringList scrollOrder{QStringLiteral("kate|u1")};
-        filterEngineSeedOrder(scrollOrder, m_service, m_registry, PhosphorEngine::WindowPlacement::scrollingEngineId());
+        filterEngineSeedOrder(scrollOrder, m_service, m_registry, PhosphorEngine::WindowPlacement::scrollingEngineId(),
+                              {});
         QVERIFY2(scrollOrder == QStringList{QStringLiteral("kate|u1")},
                  "a floating SNAP slot must not drop the window from the SCROLL seed");
 
@@ -184,7 +186,7 @@ private Q_SLOTS:
         QVERIFY(m_service->placementStore().record(withScrollFloat));
         QStringList scrollFloated{QStringLiteral("kate|u1")};
         filterEngineSeedOrder(scrollFloated, m_service, m_registry,
-                              PhosphorEngine::WindowPlacement::scrollingEngineId());
+                              PhosphorEngine::WindowPlacement::scrollingEngineId(), {});
         QVERIFY2(scrollFloated.isEmpty(), "a floating SCROLL slot must drop the window from the SCROLL seed");
     }
 
@@ -194,7 +196,7 @@ private Q_SLOTS:
         // entry; the engine-side strict seed applies its own conservative
         // deferral for unknown windows.
         QStringList order{QStringLiteral("kate|ghost")};
-        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId());
+        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId(), {});
         QCOMPARE(order, QStringList{QStringLiteral("kate|ghost")});
     }
 
@@ -206,8 +208,57 @@ private Q_SLOTS:
         // the filter itself stays consistent with the non-minimized rule.
         m_service->setWindowFloating(QStringLiteral("kate|u1"), true);
         QStringList order{QStringLiteral("kate|u1")};
-        filterEngineSeedOrder(order, m_service, nullptr, PhosphorEngine::WindowPlacement::autotileEngineId());
+        filterEngineSeedOrder(order, m_service, nullptr, PhosphorEngine::WindowPlacement::autotileEngineId(), {});
         QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
+    }
+
+    // A saved order names every window that was in the context when it left
+    // the engine. One now on another screen (another virtual screen of the
+    // same monitor included), or on desktops without the seeded one, is not
+    // seeded back: a mode round trip would tile it onto a screen it left
+    // (F695). A window whose screen is unknown is kept.
+    void windowsThatLeftTheSeededContext_areDropped()
+    {
+        const QString seeded = QStringLiteral("DP-1/vs:0");
+        const QHash<QString, QString> screens{
+            {QStringLiteral("kate|here"), seeded},
+            {QStringLiteral("kate|other-monitor"), QStringLiteral("DP-2")},
+            {QStringLiteral("kate|other-vs"), QStringLiteral("DP-1/vs:1")},
+            {QStringLiteral("kate|other-desktop"), seeded},
+        };
+        for (const QString& instance :
+             {QStringLiteral("here"), QStringLiteral("other-monitor"), QStringLiteral("other-vs")}) {
+            PhosphorEngine::WindowMetadata meta = makeMeta(QStringLiteral("kate"), false);
+            meta.virtualDesktop = 1;
+            m_registry->upsert(instance, meta);
+        }
+        PhosphorEngine::WindowMetadata elsewhere = makeMeta(QStringLiteral("kate"), false);
+        elsewhere.virtualDesktop = 2;
+        m_registry->upsert(QStringLiteral("other-desktop"), elsewhere);
+        const SeedScope scope{seeded, 1, [&screens](const QString& windowId) {
+                                  return screens.value(windowId);
+                              }};
+
+        QStringList order{QStringLiteral("kate|here"), QStringLiteral("kate|other-monitor"),
+                          QStringLiteral("kate|other-vs"), QStringLiteral("kate|other-desktop"),
+                          QStringLiteral("kate|unknown")};
+        filterEngineSeedOrder(order, m_service, m_registry, PhosphorEngine::WindowPlacement::autotileEngineId(), scope);
+
+        QCOMPARE(order, (QStringList{QStringLiteral("kate|here"), QStringLiteral("kate|unknown")}));
+    }
+
+    // Where a window is, for the seed: a tiling engine's hold in view first,
+    // then snap's tracked screen, then the screen under its frame.
+    void seedWindowScreen_prefersTheEnginesOverTheFrame()
+    {
+        StubPlacementEngine autotile;
+        StubPlacementEngine snap;
+        const QString w = QStringLiteral("kate|u1");
+        QCOMPARE(seedWindowScreen(w, {&autotile}, &snap, QRect(), nullptr), QString());
+        snap.heldScreen.insert(w, QStringLiteral("DP-2"));
+        QCOMPARE(seedWindowScreen(w, {&autotile}, &snap, QRect(), nullptr), QStringLiteral("DP-2"));
+        autotile.heldScreen.insert(w, QStringLiteral("DP-1"));
+        QCOMPARE(seedWindowScreen(w, {&autotile}, &snap, QRect(), nullptr), QStringLiteral("DP-1"));
     }
 
 private:

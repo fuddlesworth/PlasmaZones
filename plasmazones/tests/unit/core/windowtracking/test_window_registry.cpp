@@ -17,8 +17,8 @@
  *  - clear emits windowDisappeared for every tracked id
  *  - canonical freeze: the first id seen for an instance is frozen and never
  *    re-seeded, including an appId-less "|instanceId" placeholder, so a
- *    window keeps ONE key for its whole life; an empty id is exempt and
- *    seeds nothing
+ *    window keeps ONE key for its whole life; an empty id, or one with no
+ *    instance part ("appId|"), is exempt and seeds nothing
  *  - canonical retirement: remove/clear emit before retiring the canonical
  *    record, and a subscriber-reseeded canonical survives the removal; a
  *    subscriber's re-UPSERT during a bulk clear does not, since the clear
@@ -26,22 +26,27 @@
  *    a clear the mapping IS kept, for the record that does get replayed
  *  - pruneStaleInstances fails closed on an empty alive set
  *  - wide metadata: windowRole / pid / virtualDesktop / activity / windowType
- *    round-trip and emit per-field change signals
+ *    round-trip and each change emits metadataChanged
  *  - rejection of an empty instance id, and appIdFor on an unknown instance
  *  - re-entrancy: nested clear/remove/upsert from signal receivers (including
  *    receiver-deletes-registry) leave the registry consistent and emit once
  *  - isMinimized resolves composite windowIds to the instance record
  *  - pruneStaleInstances sweeps absent records and orphaned canonicals
+ *  - remapDesktops moves the desktop numbers of the records not pushed since
+ *    beginDesktopRenumber, a removed desktop to its successor (F763)
  */
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 
 #include <algorithm>
 #include <functional>
 
+using PhosphorEngine::DesktopRemap;
 using PhosphorEngine::WindowMetadata;
 using PhosphorEngine::WindowRegistry;
 
@@ -103,6 +108,61 @@ private Q_SLOTS:
 
         QCOMPARE(appeared.size(), 0);
         QCOMPARE(changed.size(), 0);
+    }
+
+    // fillsOutputState: engaged true when maximize OR fullscreen is on, engaged
+    // false once either is known and neither is on, unknown otherwise. The snap
+    // engine skips recording such a window's frame as a float-back.
+    void fillsOutputState_combinesMaximizeAndFullscreen()
+    {
+        WindowRegistry reg;
+        QVERIFY(!reg.fillsOutputState(QStringLiteral("missing")).has_value());
+
+        PhosphorEngine::WindowMetadata meta = make(QStringLiteral("firefox"));
+        reg.upsert(QStringLiteral("u1"), meta);
+        QVERIFY(!reg.fillsOutputState(QStringLiteral("u1")).has_value());
+
+        // One state known off, the other unknown: not an answer (F141).
+        meta.isMaximized = false;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QVERIFY(!reg.fillsOutputState(QStringLiteral("u1")).has_value());
+
+        meta.isFullscreen = false;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u1")), std::optional<bool>(false));
+
+        meta.isFullscreen = true;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u1")), std::optional<bool>(true));
+
+        meta.isFullscreen = false;
+        meta.isMaximized = true;
+        reg.upsert(QStringLiteral("u1"), meta);
+        // A composite id resolves to the same instance record.
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("firefox|u1")), std::optional<bool>(true));
+
+        // Either state known on is an answer whatever the other one is (F47).
+        PhosphorEngine::WindowMetadata fullscreenOnly = make(QStringLiteral("firefox"));
+        fullscreenOnly.isFullscreen = true;
+        reg.upsert(QStringLiteral("u2"), fullscreenOnly);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u2")), std::optional<bool>(true));
+        PhosphorEngine::WindowMetadata maximizedOnly = make(QStringLiteral("firefox"));
+        maximizedOnly.isMaximized = true;
+        reg.upsert(QStringLiteral("u3"), maximizedOnly);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u3")), std::optional<bool>(true));
+
+        // Maximized on one axis only: its frame is the output's height or width,
+        // not a free position (F65), whatever the other two say.
+        PhosphorEngine::WindowMetadata axisOnly = make(QStringLiteral("firefox"));
+        axisOnly.isMaximized = false;
+        axisOnly.isFullscreen = false;
+        axisOnly.isAxisMaximized = true;
+        reg.upsert(QStringLiteral("u4"), axisOnly);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u4")), std::optional<bool>(true));
+        // An effect that never sends the axis field keeps today's answer.
+        axisOnly.isAxisMaximized.reset();
+        reg.upsert(QStringLiteral("u4"), axisOnly);
+        QCOMPARE(reg.fillsOutputState(QStringLiteral("u4")), std::optional<bool>(false));
     }
 
     void upsert_rejectsEmptyInstanceId()
@@ -189,7 +249,7 @@ private Q_SLOTS:
         reg.upsert(QStringLiteral("u3"), make(QStringLiteral("kate")));
 
         auto firefox = reg.instancesWithAppId(QStringLiteral("firefox"));
-        std::sort(firefox.begin(), firefox.end()); // QMultiHash::values is unordered
+        std::sort(firefox.begin(), firefox.end()); // most recently indexed first; sort for a stable compare
         QCOMPARE(firefox, (QStringList{QStringLiteral("u1"), QStringLiteral("u2")}));
 
         QCOMPARE(reg.instancesWithAppId(QStringLiteral("kate")), QStringList{QStringLiteral("u3")});
@@ -197,9 +257,8 @@ private Q_SLOTS:
 
     void instancesWithAppId_emptyClass_notIndexed()
     {
-        // Transient whitespace-only classes from Plasma shell surfaces show
-        // up in the log as " |uuid". The registry must not pollute the
-        // reverse index with empty keys.
+        // An empty class (normalizeAppId turns KWin's blank or whitespace-only
+        // classes into it) is not indexed: the reverse index takes no empty key.
         WindowRegistry reg;
         reg.upsert(QStringLiteral("u1"), make(QString()));
 
@@ -255,6 +314,32 @@ private Q_SLOTS:
         // The empty early return must not have seeded a mapping under an
         // empty instance id.
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("firefox|")), QStringLiteral("firefox|"));
+        // Nor does an id with no instance part.
+        QCOMPARE(reg.canonicalizeWindowId(QStringLiteral("firefox|")), QStringLiteral("firefox|"));
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("kate|")), QStringLiteral("kate|"));
+    }
+
+    // "appId|" names no window, so it is never frozen: a later "x|" is not
+    // mapped back to the first one (F207).
+    void canonicalizeLeavesAnInstanceLessIdAlone()
+    {
+        WindowRegistry reg;
+        QCOMPARE(reg.canonicalizeWindowId(QStringLiteral("a|")), QStringLiteral("a|"));
+        QCOMPARE(reg.canonicalizeWindowId(QStringLiteral("b|")), QStringLiteral("b|"));
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("c|")), QStringLiteral("c|"));
+    }
+
+    // Nothing is filed under the empty instance key, so a sweep never
+    // announces a window called "" as gone (F207).
+    void pruneNeverRemovesTheEmptyKey()
+    {
+        WindowRegistry reg;
+        reg.canonicalizeWindowId(QStringLiteral("a|"));
+        reg.canonicalizeWindowId(QStringLiteral("b|"));
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        QCOMPARE(reg.pruneStaleInstances({QStringLiteral("x")}), 0);
+        QCOMPARE(disappeared.size(), 0);
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -316,7 +401,7 @@ private Q_SLOTS:
         // Scoped to the re-UPSERT shape deliberately. A subscriber that seeds
         // a canonical for an instance that had NONE takes the
         // postEmit != canonical branch instead, which skips this retirement
-        // entirely and lets the fresh mapping live — that is a re-announce,
+        // entirely and lets the fresh mapping live — a defensive shape,
         // covered by remove_subscriberReseededCanonical_survivesRemoval, and
         // it is not what this gate governs. (A subscriber calling
         // canonicalizeWindowId for an instance that still HAS its mapping
@@ -410,13 +495,14 @@ private Q_SLOTS:
         WindowRegistry reg;
         const QString instanceId = QStringLiteral("reseed-instance");
         const QString freshCanonical = QStringLiteral("fresh|reseed-instance");
-        // A record WITHOUT a canonical mapping: the effect's metadata push
-        // seeds the canonical, but a record can arrive through other
-        // notifications first.
+        // A defensive row. Production never builds this shape, a record
+        // WITHOUT a canonical mapping: WindowTrackingAdaptor::setWindowMetadata
+        // seeds the canonical before its upsert. The row pins the registry's
+        // own contract for a caller that does not.
         reg.upsert(instanceId, make(QStringLiteral("old")));
         connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString&) {
-            // A re-announce racing the close seeds a fresh canonical for the
-            // same instance while the removal is in flight.
+            // A subscriber gives the instance its FIRST canonical while the
+            // removal is in flight.
             reg.canonicalizeWindowId(freshCanonical);
         });
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
@@ -465,9 +551,9 @@ private Q_SLOTS:
         reg.upsert(second, make(QStringLiteral("app")));
         connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
             if (removedId == first) {
-                // A subscriber tearing down a DIFFERENT window re-entrantly
-                // (grouped-close handlers do this) must not corrupt the
-                // outer removal's bookkeeping.
+                // remove()'s contract allows a subscriber to tear down a
+                // DIFFERENT window re-entrantly (no in-tree subscriber does
+                // today); it must not corrupt the outer removal's bookkeeping.
                 reg.remove(second);
             }
         });
@@ -564,6 +650,9 @@ private Q_SLOTS:
         QCOMPARE(reg.appIdFor(instanceId), QStringLiteral("new-app"));
         QVERIFY(reg.instancesWithAppId(QStringLiteral("old-app")).isEmpty());
         QCOMPARE(reg.instancesWithAppId(QStringLiteral("new-app")), QStringList{instanceId});
+        // The replay re-seeds no canonical the instance never had.
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("x|reappearing-instance")),
+                 QStringLiteral("x|reappearing-instance"));
     }
 
     void clear_receiverMayDeleteRegistry()
@@ -614,10 +703,13 @@ private Q_SLOTS:
         base.activity = QStringLiteral("act-a");
         base.windowType = PhosphorProtocol::WindowType::Normal;
 
-        // Each mutator changes exactly one non-appId field. The widened
-        // operator== must detect it so metadataChanged fires — the
-        // window-rule match engine relies on this for cache invalidation.
-        const QList<std::function<void(WindowMetadata&)>> mutators = {
+        // Each mutator changes exactly one non-appId field. upsert stores and
+        // signals only when operator== sees a difference, so a dropped term
+        // would leave the registry stale. Its subscribers are the shell
+        // mirror, the last-used-class retag, the per-window membership
+        // reconcile and the tab-colour relay.
+        // One mutator per operator== term besides appId, so dropping any term fails here.
+        QList<std::function<void(WindowMetadata&)>> mutators = {
             [](WindowMetadata& m) {
                 m.windowRole = QStringLiteral("popup");
             },
@@ -633,9 +725,6 @@ private Q_SLOTS:
             [](WindowMetadata& m) {
                 m.windowType = PhosphorProtocol::WindowType::Dialog;
             },
-            // Extended-field representatives, one per shape: the span list,
-            // an optional<int>, and an optional<bool> — pins that the widened
-            // operator== covers the extended block, not just the wide scalars.
             [](WindowMetadata& m) {
                 m.virtualDesktops = QList<int>{1, 2};
             },
@@ -645,7 +734,36 @@ private Q_SLOTS:
             [](WindowMetadata& m) {
                 m.isMinimized = true;
             },
+            [](WindowMetadata& m) {
+                m.desktopFile = QStringLiteral("firefox.desktop");
+            },
+            [](WindowMetadata& m) {
+                m.title = QStringLiteral("Mozilla Firefox");
+            },
+            [](WindowMetadata& m) {
+                m.captionNormal = QStringLiteral("Mozilla Firefox");
+            },
+            [](WindowMetadata& m) {
+                m.activities = QStringList{QStringLiteral("act-a"), QStringLiteral("act-b")};
+            },
         };
+        for (std::optional<bool> WindowMetadata::* term :
+             {&WindowMetadata::isDemandingAttention, &WindowMetadata::isFullscreen, &WindowMetadata::isSticky,
+              &WindowMetadata::isMaximized, &WindowMetadata::isFocused, &WindowMetadata::isTransient,
+              &WindowMetadata::isNotification, &WindowMetadata::keepAbove, &WindowMetadata::keepBelow,
+              &WindowMetadata::skipTaskbar, &WindowMetadata::skipPager, &WindowMetadata::skipSwitcher,
+              &WindowMetadata::isModal, &WindowMetadata::hasDecoration, &WindowMetadata::isResizable,
+              &WindowMetadata::isMovable, &WindowMetadata::isMaximizable, &WindowMetadata::isAxisMaximized}) {
+            mutators.append([term](WindowMetadata& m) {
+                m.*term = true;
+            });
+        }
+        for (std::optional<int> WindowMetadata::* term :
+             {&WindowMetadata::height, &WindowMetadata::positionX, &WindowMetadata::positionY}) {
+            mutators.append([term](WindowMetadata& m) {
+                m.*term = 7;
+            });
+        }
 
         // Accumulate failures instead of QCOMPARE-ing inside the loop: an
         // in-loop abort hides which LATER mutators also regressed.
@@ -755,6 +873,7 @@ private Q_SLOTS:
         reg.canonicalizeWindowId(QStringLiteral("konsole|u2"));
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
 
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing empty alive set")));
         const int pruned = reg.pruneStaleInstances({});
 
         QCOMPARE(pruned, 0);
@@ -763,13 +882,28 @@ private Q_SLOTS:
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|u2")), QStringLiteral("konsole|u2"));
     }
 
+    void pruneStaleInstances_emptySetWithACanonicalOnly_isRefused()
+    {
+        // A canonical mapping with no record is still tracked state: the
+        // guard holds for it too.
+        WindowRegistry reg;
+        reg.canonicalizeWindowId(QStringLiteral("konsole|u2"));
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing empty alive set")));
+        QCOMPARE(reg.pruneStaleInstances({}), 0);
+        QCOMPARE(disappeared.size(), 0);
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|u2")), QStringLiteral("konsole|u2"));
+    }
+
     void pruneStaleInstances_emptySetOnEmptyRegistry_isNoop()
     {
-        // The one legitimately-empty case: nothing tracked, nothing alive. It
-        // must fall through the guard rather than trip it.
+        // The one legitimately-empty case: nothing tracked, nothing alive. A
+        // trip also returns 0, so the row tells the two apart by the warning.
         WindowRegistry reg;
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
 
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("refusing empty alive set")));
         QCOMPARE(reg.pruneStaleInstances({}), 0);
         QCOMPARE(disappeared.size(), 0);
         QCOMPARE(reg.size(), 0);
@@ -822,6 +956,187 @@ private Q_SLOTS:
         reg->pruneStaleInstances({QStringLiteral("alive-1")});
 
         QVERIFY(reg.isNull());
+    }
+
+    // The desktops a window is on, as the restore and resnap readers take
+    // them: the span when it covers several, else its one desktop, and no
+    // answer for a window on all desktops or one never reported.
+    void desktopSet_answersTheWindowsDesktops()
+    {
+        PhosphorEngine::WindowDesktopContext one;
+        one.virtualDesktop = 2;
+        QCOMPARE(one.desktopSet(), std::optional<QSet<int>>(QSet<int>{2}));
+
+        PhosphorEngine::WindowDesktopContext span;
+        span.virtualDesktop = 1;
+        span.virtualDesktops = {1, 3};
+        QCOMPARE(span.desktopSet(), std::optional<QSet<int>>(QSet<int>{1, 3}));
+
+        PhosphorEngine::WindowDesktopContext sticky;
+        sticky.virtualDesktop = 2;
+        sticky.sticky = true;
+        QVERIFY(!sticky.desktopSet().has_value());
+
+        PhosphorEngine::WindowDesktopContext unknown;
+        QVERIFY(!unknown.desktopSet().has_value());
+
+        WindowRegistry reg;
+        WindowMetadata meta = make(QStringLiteral("kate"));
+        meta.virtualDesktop = 3;
+        reg.upsert(QStringLiteral("on-three"), meta);
+        const auto context = reg.desktopContext(QStringLiteral("kate|on-three"));
+        QVERIFY(context.has_value());
+        QCOMPARE(context->desktopSet(), std::optional<QSet<int>>(QSet<int>{3}));
+    }
+
+    // desktopContext hands over every desktop field of the record, and
+    // minimizedState answers only once a state was reported (F821).
+    void desktopContextCarriesEveryField()
+    {
+        WindowRegistry reg;
+        WindowMetadata meta = make(QStringLiteral("kate"));
+        meta.virtualDesktop = 2;
+        meta.virtualDesktops = {2, 3};
+        meta.isSticky = true;
+        meta.activity = QStringLiteral("a");
+        meta.activities = {QStringLiteral("a"), QStringLiteral("b")};
+        reg.upsert(QStringLiteral("every"), meta);
+        const auto context = reg.desktopContext(QStringLiteral("kate|every"));
+        QVERIFY(context.has_value());
+        QCOMPARE(context->virtualDesktop, 2);
+        QCOMPARE(context->virtualDesktops, (QList<int>{2, 3}));
+        QCOMPARE(context->sticky, std::optional<bool>(true));
+        QCOMPARE(context->activity, QStringLiteral("a"));
+        QCOMPARE(context->activities, (QStringList{QStringLiteral("a"), QStringLiteral("b")}));
+        QVERIFY(!reg.desktopContext(QStringLiteral("kate|unknown")).has_value());
+
+        QVERIFY(!reg.minimizedState(QStringLiteral("kate|every")).has_value());
+        meta.isMinimized = true;
+        reg.upsert(QStringLiteral("every"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|every")), std::optional<bool>(true));
+        meta.isMinimized = false;
+        reg.upsert(QStringLiteral("every"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|every")), std::optional<bool>(false));
+    }
+
+    // An unreported minimize state is unknown for both id forms, and the
+    // bool accessor collapses it to false (F832).
+    void minimizedState_unreportedIsUnknownForEveryIdForm()
+    {
+        WindowRegistry reg;
+        WindowMetadata meta = make(QStringLiteral("kate"));
+        reg.upsert(QStringLiteral("u1"), meta);
+        QVERIFY(!reg.minimizedState(QStringLiteral("u1")).has_value());
+        QVERIFY(!reg.minimizedState(QStringLiteral("kate|u1")).has_value());
+        QVERIFY(!reg.isMinimized(QStringLiteral("u1")));
+        QVERIFY(!reg.isMinimized(QStringLiteral("kate|u1")));
+
+        meta.isMinimized = true;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("u1")), std::optional<bool>(true));
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|u1")), std::optional<bool>(true));
+        meta.isMinimized = false;
+        reg.upsert(QStringLiteral("u1"), meta);
+        QCOMPARE(reg.minimizedState(QStringLiteral("u1")), std::optional<bool>(false));
+        QCOMPARE(reg.minimizedState(QStringLiteral("kate|u1")), std::optional<bool>(false));
+
+        QVERIFY(!reg.minimizedState(QStringLiteral("unknown")).has_value());
+        QVERIFY(!reg.minimizedState(QStringLiteral("kate|unknown")).has_value());
+    }
+
+    // Desktop renumber (F763). Desktop 2 of 4 removed. KWin re-desks only the windows ON it, so a record
+    // on a desktop above it is never pushed again and has to be moved here.
+    void remapDesktops_movesRecordsPushedBeforeTheChange()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), onDesktops(3));
+        reg.upsert(QStringLiteral("u2"), onDesktops(3, {3, 4}));
+        reg.upsert(QStringLiteral("u3"), onDesktops(1));
+        reg.upsert(QStringLiteral("u4"), onDesktops(0));
+        QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
+        reg.beginDesktopRenumber();
+
+        QCOMPARE(reg.remapDesktops(DesktopRemap::removal(2, 4)), 2);
+
+        QCOMPARE(reg.metadata(QStringLiteral("u1"))->virtualDesktop, 2);
+        QCOMPARE(reg.metadata(QStringLiteral("u2"))->virtualDesktop, 2);
+        QCOMPARE(reg.metadata(QStringLiteral("u2"))->virtualDesktops, (QList<int>{2, 3}));
+        QCOMPARE(reg.metadata(QStringLiteral("u3"))->virtualDesktop, 1);
+        QCOMPARE(reg.metadata(QStringLiteral("u4"))->virtualDesktop, 0);
+        QCOMPARE(changed.count(), 2);
+    }
+
+    // A push after the change began already speaks the new numbering, an
+    // identical one included, and is not moved a second time.
+    void remapDesktops_leavesAPushAfterTheChangeAlone()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), onDesktops(4));
+        reg.upsert(QStringLiteral("u2"), onDesktops(3));
+        reg.beginDesktopRenumber();
+        reg.upsert(QStringLiteral("u1"), onDesktops(3));
+        reg.upsert(QStringLiteral("u2"), onDesktops(3));
+
+        QCOMPARE(reg.remapDesktops(DesktopRemap::removal(2, 4)), 0);
+
+        QCOMPARE(reg.metadata(QStringLiteral("u1"))->virtualDesktop, 3);
+        QCOMPARE(reg.metadata(QStringLiteral("u2"))->virtualDesktop, 3);
+    }
+
+    // A window on the removed desktop goes where KWin sends it: the desktop
+    // that takes the number, or the one before when the last was removed.
+    void remapDesktops_removedDesktopGoesToItsSuccessor()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), onDesktops(4));
+        reg.upsert(QStringLiteral("u2"), onDesktops(2, {2, 4}));
+        reg.upsert(QStringLiteral("u3"), onDesktops(3, {3, 4}));
+        reg.beginDesktopRenumber();
+
+        reg.remapDesktops(DesktopRemap::removal(4, 4));
+
+        QCOMPARE(reg.metadata(QStringLiteral("u1"))->virtualDesktop, 3);
+        QCOMPARE(reg.metadata(QStringLiteral("u2"))->virtualDesktops, (QList<int>{2, 3}));
+        // {3, 4} folds onto 3 alone: a single desktop carries no list.
+        QCOMPARE(reg.metadata(QStringLiteral("u3"))->virtualDesktop, 3);
+        QVERIFY(reg.metadata(QStringLiteral("u3"))->virtualDesktops.isEmpty());
+    }
+
+    // A reorder moves numbers both ways.
+    void remapDesktops_followsAReorder()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), onDesktops(2));
+        reg.upsert(QStringLiteral("u2"), onDesktops(3));
+        reg.upsert(QStringLiteral("u3"), onDesktops(2, {2, 3}));
+        reg.beginDesktopRenumber();
+
+        reg.remapDesktops(DesktopRemap::fromIds({QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")},
+                                                {QStringLiteral("a"), QStringLiteral("c"), QStringLiteral("b")}));
+
+        QCOMPARE(reg.metadata(QStringLiteral("u1"))->virtualDesktop, 3);
+        QCOMPARE(reg.metadata(QStringLiteral("u2"))->virtualDesktop, 2);
+        QCOMPARE(reg.metadata(QStringLiteral("u3"))->virtualDesktop, 3);
+        QCOMPARE(reg.metadata(QStringLiteral("u3"))->virtualDesktops, (QList<int>{3, 2}));
+    }
+
+    // Without a snapshot there is nothing known to be stale: the records the
+    // effect pushes at start-up already carry KWin's current numbering.
+    void remapDesktops_withoutABeginChangesNothing()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), onDesktops(3));
+        QCOMPARE(reg.remapDesktops(DesktopRemap::removal(2, 4)), 0);
+        QCOMPARE(reg.metadata(QStringLiteral("u1"))->virtualDesktop, 3);
+    }
+
+private:
+    static WindowMetadata onDesktops(int desktop, const QList<int>& desktops = {})
+    {
+        WindowMetadata m = make(QStringLiteral("kate"));
+        m.virtualDesktop = desktop;
+        m.virtualDesktops = desktops;
+        return m;
     }
 };
 

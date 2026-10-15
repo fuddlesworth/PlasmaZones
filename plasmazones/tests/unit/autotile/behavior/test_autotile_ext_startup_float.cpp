@@ -224,9 +224,10 @@ private Q_SLOTS:
     }
 
     // A window that would float on its recorded home screen is not pulled
-    // home by the cross-screen claim (a float is screen-local), and once the
-    // dispatch reports every claim declined, the arrival screen adopts it
-    // instead of deferring to the record's home a second time.
+    // there by the reopen claim (a float is screen-local), and the arrival
+    // screen adopts it. The claim only ever reaches another virtual screen of
+    // the output the window opened on, so home and arrival are virtual screens
+    // of one output; a record on another output is never claimed at all.
     void testClaimCrossScreenReopen_declinesAFloat_thenArrivalAdopts()
     {
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
@@ -234,14 +235,26 @@ private Q_SLOTS:
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
         PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
         AutotileEngine engine(layoutManager.get(), &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        const QString home = QStringLiteral("DP-1");
-        const QString arrival = QStringLiteral("DP-2");
+        const QString home = QStringLiteral("DP-1/vs:0");
+        const QString arrival = QStringLiteral("DP-1/vs:1");
+        const QString otherOutput = QStringLiteral("DP-2");
         PhosphorZones::AssignmentEntry autotile;
         autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
         autotile.tilingAlgorithm = QStringLiteral("dwindle");
         layoutManager->setAssignmentEntryDirect(home, 0, QString(), autotile);
         layoutManager->setAssignmentEntryDirect(arrival, 0, QString(), autotile);
-        engine.setAutotileScreens({home, arrival});
+        layoutManager->setAssignmentEntryDirect(otherOutput, 0, QString(), autotile);
+        engine.setAutotileScreens({home, arrival, otherOutput});
+
+        // A record on another output is never claimed, whatever it holds.
+        // Distinct instance ids from the app|... pair below: the shared test
+        // registry canonicalizes by instance, so a shared one would merge them.
+        auto far = PlasmaZones::TestHelpers::makePlacement(QStringLiteral("far|farold"), QStringLiteral("far"),
+                                                           PhosphorEngine::WindowPlacement::stateTiled(),
+                                                           engine.engineId(), otherOutput);
+        QVERIFY(wts.placementStore().record(far));
+        QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("far|farnew"), arrival, 0, 0),
+                 "a record on another output must not pull the window across monitors");
 
         auto rec = PlasmaZones::TestHelpers::makePlacement(QStringLiteral("app|old"), QStringLiteral("app"),
                                                            PhosphorEngine::WindowPlacement::stateTiled(),
@@ -251,56 +264,31 @@ private Q_SLOTS:
             return screen == home;
         });
         QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("app|new"), arrival, 0, 0),
-                 "a float has nothing to pull home for");
+                 "a float has nothing to restore there");
         QVERIFY(!engine.isWindowTracked(QStringLiteral("app|new")));
         QVERIFY2(wts.placementStore().contains(QStringLiteral("app|old")), "a declined claim consumes nothing");
 
-        engine.noteCrossScreenClaimsExhausted(QStringLiteral("app|new"), true);
         engine.windowOpened(QStringLiteral("app|new"), arrival, 0, 0);
         QCoreApplication::processEvents();
         PhosphorTiles::TilingState* arrivalState = engine.tilingStateForScreen(arrival);
         QVERIFY(arrivalState);
-        QVERIFY2(arrivalState->containsWindow(QStringLiteral("app|new")),
-                 "with the claims exhausted the arrival screen must adopt the window");
+        QVERIFY2(arrivalState->containsWindow(QStringLiteral("app|new")), "the arrival screen must adopt the window");
 
-        // The verdict is per ANNOUNCE, not a sticky per-window mark: an
-        // announce whose claim round was suppressed states false, and that
-        // clears what a previous announce set. Observed through the defer
-        // gate, which needs something to defer TO — a record homed on a
-        // SCROLLING screen, the term that carries no extra liveness toggle.
+        // A record homed on a SCROLLING screen elsewhere does not keep a
+        // window out of this autotile screen either: nothing defers an open
+        // to another engine's record any more.
         PhosphorZones::AssignmentEntry scrolling;
         scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
         layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-3"), 0, QString(), scrolling);
-        engine.setScrollingModeResolver([](const QString& screen, int, const QString&) {
-            return screen == QStringLiteral("DP-3");
-        });
         auto scrolled = PlasmaZones::TestHelpers::makePlacement(
-            QStringLiteral("strip|old"), QStringLiteral("strip"), PhosphorEngine::WindowPlacement::stateTiled(),
+            QStringLiteral("strip|stripold"), QStringLiteral("strip"), PhosphorEngine::WindowPlacement::stateTiled(),
             QString(PhosphorEngine::WindowPlacement::scrollingEngineId()), QStringLiteral("DP-3"));
         QVERIFY(wts.placementStore().record(scrolled));
-
-        // Cleared verdict: the gate stands down for the scroll engine.
-        engine.noteCrossScreenClaimsExhausted(QStringLiteral("strip|new"), true);
-        engine.noteCrossScreenClaimsExhausted(QStringLiteral("strip|new"), false);
-        engine.windowOpened(QStringLiteral("strip|new"), arrival, 0, 0);
+        engine.windowOpened(QStringLiteral("strip|stripnew"), arrival, 0, 0);
         QCoreApplication::processEvents();
-        QVERIFY2(!arrivalState->containsWindow(QStringLiteral("strip|new")),
-                 "a cleared verdict must leave the defer gate free to stand down for the record's home engine");
-
-        // Stated verdict: the claims already ran and declined, so it adopts.
-        engine.noteCrossScreenClaimsExhausted(QStringLiteral("strip|new2"), true);
-        engine.windowOpened(QStringLiteral("strip|new2"), arrival, 0, 0);
-        QCoreApplication::processEvents();
-        QVERIFY2(arrivalState->containsWindow(QStringLiteral("strip|new2")),
-                 "an exhausted round must make the same gate adopt");
-
-        // NOT covered: the claim bodies also clear the verdict before the home
-        // open they re-enter. Two scenarios were built for it and neither
-        // reached the gate — the second produced no claim log line at all — so
-        // an assertion would have passed with the clear removed. The clear is
-        // defensive, and recorded as untested rather than assumed covered.
+        QVERIFY2(arrivalState->containsWindow(QStringLiteral("strip|stripnew")),
+                 "another engine's record on another output must not stop the adoption");
     }
-
     void testToggleWindowFloat_crossScreenFallback()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());

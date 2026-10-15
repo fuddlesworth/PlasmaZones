@@ -23,6 +23,7 @@
 #include "transition_types.h"
 
 #include <QRect>
+#include <QRectF>
 #include <QString>
 
 namespace PlasmaZones {
@@ -38,9 +39,12 @@ namespace PlasmaZones {
 struct EffectVirtualScreenDef
 {
     QString id; ///< e.g., "Dell:U2722D:115107/vs:0"
-    QRect geometry; ///< Absolute geometry in global compositor coords
+    QRectF region; ///< Fraction of the physical output (0..1), from the daemon
+    /// Absolute rect in global compositor coords, derived from region and
+    /// re-derived whenever the output's geometry changes (F806)
+    QRect geometry;
 
-    /// Both fields are the whole identity of a subdivision, so a defaulted
+    /// The fields are the whole identity of a subdivision, so a defaulted
     /// comparison is exact. It exists so the VS-config reply can tell a
     /// re-fetch that changed nothing from one that reshaped the screen-id
     /// keyspace, and skip the rule invalidation + decoration re-fold for the

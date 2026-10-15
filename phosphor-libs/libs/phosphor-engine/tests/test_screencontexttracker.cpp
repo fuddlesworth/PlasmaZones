@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/ScreenContextTracker.h>
 
 #include <QTest>
 
 using PhosphorEngine::ContextChange;
+using PhosphorEngine::DesktopRemap;
 using PhosphorEngine::PlacementStateKey;
 using PhosphorEngine::ScreenContextTracker;
 
@@ -23,7 +25,12 @@ private Q_SLOTS:
     void releaseScreenOwnership_keepsPerOutputDesktop();
     void removeScreensIf_byPredicate();
     void pruneDesktop_byValue();
+    void renumber_shiftsTheGlobalDesktop();
     void virtualScreen_followsItsParentOutput();
+    void remap_movesPinsAndShownDesktops();
+    void remap_lastRemovedMovesOutputsToThePrevious();
+    void remap_followsAReorder();
+    void highestDesktop_namesEveryStoredValue();
 };
 
 void TestScreenContextTracker::currentKeyForScreen_precedence()
@@ -224,7 +231,89 @@ void TestScreenContextTracker::pruneDesktop_byValue()
     t.pruneDesktop(5);
     QVERIFY(!t.hasStickyPin(QStringLiteral("S1"))); // pinned to removed desktop 5
     QVERIFY(t.hasStickyPin(QStringLiteral("S2"))); // desktop 6 survives
-    QCOMPARE(t.screenDesktop(QStringLiteral("S3")), 1); // per-output 5 gone
+    // Per-output 5 gone: S3 falls back to the global until the daemon re-seeds
+    // it (Daemon::reseedScreenDesktopsAfterRenumber).
+    QCOMPARE(t.screenDesktop(QStringLiteral("S3")), 1);
+}
+
+void TestScreenContextTracker::renumber_shiftsTheGlobalDesktop()
+{
+    // The global desktop names a desktop, not a number: removing one below it
+    // moves it down with the per-output entries, so an unpinned screen keeps
+    // resolving the desktop it was on (F799).
+    ScreenContextTracker t;
+    t.setCurrentDesktop(3);
+    t.setCurrentDesktopForScreen(QStringLiteral("S1"), 4);
+    t.renumberDesktopsAfterRemoval(2);
+    QCOMPARE(t.currentDesktop(), 2);
+    QCOMPARE(t.currentKeyForScreen(QStringLiteral("S2")).desktop, 2);
+    QCOMPARE(t.screenDesktop(QStringLiteral("S1")), 3);
+
+    // A removal above it leaves it alone.
+    t.renumberDesktopsAfterRemoval(5);
+    QCOMPARE(t.currentDesktop(), 2);
+}
+
+void TestScreenContextTracker::remap_movesPinsAndShownDesktops()
+{
+    // Desktop 2 of 4 removed. A pin on it goes (map); an output that showed it
+    // goes where KWin sends it, the desktop that takes its number (successor).
+    ScreenContextTracker t;
+    t.setCurrentDesktop(3);
+    t.setCurrentDesktopForScreen(QStringLiteral("A"), 4);
+    t.setCurrentDesktopForScreen(QStringLiteral("B"), 1);
+    t.setStickyPin(QStringLiteral("C"), 3);
+    t.setStickyPin(QStringLiteral("D"), 2);
+    t.remapDesktops(DesktopRemap::removal(2, 4));
+    QCOMPARE(t.currentDesktop(), 2);
+    QCOMPARE(t.screenDesktop(QStringLiteral("A")), 3);
+    QCOMPARE(t.screenDesktop(QStringLiteral("B")), 1);
+    QCOMPARE(t.stickyPinnedDesktop(QStringLiteral("C")), 2);
+    QVERIFY(!t.hasStickyPin(QStringLiteral("D")));
+}
+
+void TestScreenContextTracker::remap_lastRemovedMovesOutputsToThePrevious()
+{
+    // The LAST desktop removed: its successor is the one before it, so an
+    // output showing it lands on 3, not on the global fallback (1). A map()
+    // read would drop the entry.
+    ScreenContextTracker t;
+    t.setCurrentDesktop(1);
+    t.setCurrentDesktopForScreen(QStringLiteral("A"), 4);
+    t.remapDesktops(DesktopRemap::removal(4, 4));
+    QCOMPARE(t.screenDesktop(QStringLiteral("A")), 3);
+    QCOMPARE(t.currentDesktop(), 1);
+
+    ScreenContextTracker global;
+    global.setCurrentDesktop(4);
+    global.remapDesktops(DesktopRemap::removal(4, 4));
+    QCOMPARE(global.currentDesktop(), 3);
+}
+
+void TestScreenContextTracker::remap_followsAReorder()
+{
+    // c moved to the front: old 1 -> 2, old 2 -> 3, old 3 -> 1.
+    ScreenContextTracker t;
+    t.setCurrentDesktop(2);
+    t.setCurrentDesktopForScreen(QStringLiteral("A"), 3);
+    t.setStickyPin(QStringLiteral("B"), 1);
+    t.remapDesktops(DesktopRemap::fromIds({QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")},
+                                          {QStringLiteral("c"), QStringLiteral("a"), QStringLiteral("b")}));
+    QCOMPARE(t.currentDesktop(), 3);
+    QCOMPARE(t.screenDesktop(QStringLiteral("A")), 1);
+    QCOMPARE(t.stickyPinnedDesktop(QStringLiteral("B")), 2);
+}
+
+void TestScreenContextTracker::highestDesktop_namesEveryStoredValue()
+{
+    ScreenContextTracker t;
+    QCOMPARE(t.highestDesktop(), 1);
+    t.setCurrentDesktopForScreen(QStringLiteral("A"), 5);
+    QCOMPARE(t.highestDesktop(), 5);
+    t.setStickyPin(QStringLiteral("B"), 7);
+    QCOMPARE(t.highestDesktop(), 7);
+    t.setCurrentDesktop(9);
+    QCOMPARE(t.highestDesktop(), 9);
 }
 
 QTEST_MAIN(TestScreenContextTracker)

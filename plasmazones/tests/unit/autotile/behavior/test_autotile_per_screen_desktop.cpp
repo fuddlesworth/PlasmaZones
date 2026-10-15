@@ -23,6 +23,7 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -38,6 +39,34 @@ using namespace PhosphorTileEngine;
 namespace {
 const QString kS1 = QStringLiteral("DP-1");
 const QString kS2 = QStringLiteral("DP-2");
+
+/// KWin desktop ids, one per letter, in position order.
+QStringList desktopIds(const char* letters)
+{
+    QStringList ids;
+    for (const char* c = letters; *c; ++c) {
+        ids.append(QString(QLatin1Char(*c)));
+    }
+    return ids;
+}
+
+/// Open one window per (desktop, window) pair on kS1, each on its own desktop.
+void openOnDesktops(AutotileEngine& engine, const QList<std::pair<int, QString>>& windows)
+{
+    for (const auto& [desktop, windowId] : windows) {
+        engine.setCurrentDesktopForScreen(kS1, desktop);
+        engine.setAutotileScreens({kS1});
+        engine.windowOpened(windowId, kS1);
+        QCoreApplication::processEvents();
+    }
+}
+
+/// The desktop of the state holding @p windowId, or -1 when none does.
+int heldDesktop(const AutotileEngine& engine, const QString& windowId)
+{
+    const auto held = engine.heldKeyForWindow(windowId);
+    return held ? held->desktop : -1;
+}
 } // namespace
 
 class TestAutotilePerScreenDesktop : public QObject
@@ -390,6 +419,90 @@ private Q_SLOTS:
         QVERIFY(d2 != nullptr);
         QVERIFY2(d2->scriptState() != liveBag, "the live state's bag must not have been carried onto desktop 2");
         QCOMPARE(d2->scriptState(), staleBag);
+    }
+
+    // A desktop inserted in the middle moves every desktop after it up one:
+    // each state goes with its desktop, and the screen showing a moved desktop
+    // still shows the same stack (F763, F787).
+    void remap_anInsertMovesTheStatesAfterIt()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        openOnDesktops(engine,
+                       {{1, QStringLiteral("win-d1")}, {2, QStringLiteral("win-d2")}, {3, QStringLiteral("win-d3")}});
+
+        engine.remapDesktops(PhosphorEngine::DesktopRemap::fromIds(desktopIds("abc"), desktopIds("axbc")));
+
+        QCOMPARE(heldDesktop(engine, QStringLiteral("win-d1")), 1);
+        QCOMPARE(heldDesktop(engine, QStringLiteral("win-d2")), 3);
+        QCOMPARE(heldDesktop(engine, QStringLiteral("win-d3")), 4);
+        PhosphorTiles::TilingState* inView = engine.tilingStateForScreen(kS1);
+        QVERIFY(inView != nullptr);
+        QVERIFY2(inView->containsWindow(QStringLiteral("win-d3")), "the screen moved with its desktop");
+    }
+
+    // Two desktops trading places trade their states whole, through a scratch
+    // key: a straight move would land each on the other and the displacement
+    // would release its windows.
+    void remap_aReorderSwapsTheirStates()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        openOnDesktops(engine, {{2, QStringLiteral("win-d2")}, {3, QStringLiteral("win-d3")}});
+
+        engine.remapDesktops(PhosphorEngine::DesktopRemap::fromIds(desktopIds("abc"), desktopIds("acb")));
+
+        QVERIFY(engine.isWindowTracked(QStringLiteral("win-d2")));
+        QVERIFY(engine.isWindowTracked(QStringLiteral("win-d3")));
+        QCOMPARE(heldDesktop(engine, QStringLiteral("win-d2")), 3);
+        QCOMPARE(heldDesktop(engine, QStringLiteral("win-d3")), 2);
+    }
+
+    // A script bag with no live state follows its desktop through a reorder
+    // too, and two of them swapping do not land on each other.
+    void remap_aReorderSwapsStashesWithNoLiveState()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QJsonObject bag2{{QStringLiteral("marker"), QStringLiteral("desktop-2")}};
+        const QJsonObject bag3{{QStringLiteral("marker"), QStringLiteral("desktop-3")}};
+        for (const auto& [desktop, bag] : QList<std::pair<int, QJsonObject>>{{2, bag2}, {3, bag3}}) {
+            openOnDesktops(engine, {{desktop, QStringLiteral("win-d%1").arg(desktop)}});
+            PhosphorTiles::TilingState* state = engine.tilingStateForScreen(kS1);
+            QVERIFY(state != nullptr);
+            state->setScriptState(bag);
+            engine.setAutotileScreens({});
+            QCoreApplication::processEvents();
+        }
+
+        engine.remapDesktops(PhosphorEngine::DesktopRemap::fromIds(desktopIds("abc"), desktopIds("acb")));
+
+        engine.setCurrentDesktopForScreen(kS1, 2);
+        engine.setAutotileScreens({kS1});
+        PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(kS1);
+        QVERIFY(d2 != nullptr);
+        QCOMPARE(d2->scriptState(), bag3);
+        engine.setCurrentDesktopForScreen(kS1, 3);
+        engine.setAutotileScreens({kS1});
+        PhosphorTiles::TilingState* d3 = engine.tilingStateForScreen(kS1);
+        QVERIFY(d3 != nullptr);
+        QCOMPARE(d3->scriptState(), bag2);
+    }
+
+    // A removal and a move in one change, which no sequence of single removals
+    // can express: desktop 2 goes with its windows, 4 takes its number and 3
+    // keeps its own.
+    void remap_aRemovalAndAReorderAtOnce()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        openOnDesktops(engine,
+                       {{2, QStringLiteral("win-d2")}, {3, QStringLiteral("win-d3")}, {4, QStringLiteral("win-d4")}});
+
+        engine.remapDesktops(PhosphorEngine::DesktopRemap::fromIds(desktopIds("abcd"), desktopIds("adc")));
+
+        QVERIFY(!engine.isWindowTracked(QStringLiteral("win-d2")));
+        QCOMPARE(heldDesktop(engine, QStringLiteral("win-d3")), 3);
+        QCOMPARE(heldDesktop(engine, QStringLiteral("win-d4")), 2);
+        PhosphorTiles::TilingState* inView = engine.tilingStateForScreen(kS1);
+        QVERIFY(inView != nullptr);
+        QVERIFY2(inView->containsWindow(QStringLiteral("win-d4")), "the screen moved with its desktop");
     }
 };
 

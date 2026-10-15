@@ -155,6 +155,12 @@ void DaemonClient::notifyWindowActivated(const QString& windowId, const QString&
                                                 QStringLiteral("windowActivated"), {windowId, screenId});
 }
 
+void DaemonClient::notifyActiveWindowScreenChanged(const QString& windowId, const QString& screenId)
+{
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                QStringLiteral("activeWindowScreenChanged"), {windowId, screenId});
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Drag operations (plugin → daemon)
 // ═══════════════════════════════════════════════════════════════════════════════

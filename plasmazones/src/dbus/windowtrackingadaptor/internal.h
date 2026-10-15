@@ -24,8 +24,20 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "core/platform/logging.h"
 
+namespace PhosphorSnapEngine {
+class SnapEngine;
+}
+
 namespace PlasmaZones {
+class WindowTrackingAdaptor;
 namespace WindowTrackingInternal {
+
+/// The screen of a store that holds @p windowId as a member with a zone, on a
+/// screen other than @p excludeScreen; empty when there is none (screenleave.cpp).
+QString snapZoneScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& excludeScreen);
+/// Whether snap holds @p windowId in any store on another screen than
+/// @p keepScreenId (another virtual screen of the same monitor counts).
+bool snapHoldsOffScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& keepScreenId);
 
 /// Release @p windowId from @p source (when given and distinct from the
 /// destination) and receive it into @p dest, VERIFYING adoption.
@@ -45,12 +57,12 @@ namespace WindowTrackingInternal {
 ///
 /// PRECONDITION for that pre-tracked test: an engine must record an accepted
 /// arrival under a screen id that screensMatch() equates with the ctx.toScreenId
-/// it was handed. screensMatch absorbs connector-name / EDID-id spelling and the
-/// "/vs:" virtual-screen suffix, but an engine that re-resolved the arrival onto
-/// a genuinely DIFFERENT screen id (say, redirecting to a fallback output) would
-/// read here as a refusal — this helper would then re-home a window the
-/// destination actually adopted. No engine does that today; one that starts to
-/// must report the id it stored, not silently redirect.
+/// it was handed. screensMatch absorbs connector-name / EDID-id spelling, and a
+/// virtual-screen id matches only itself, so an engine must store the id it was
+/// handed. One that re-resolved the arrival onto a genuinely DIFFERENT screen id
+/// (say, a fallback output) would read here as a refusal, and this helper would
+/// re-home a window the destination adopted. No engine does that today; one that
+/// starts to must report the id it stored, not silently redirect.
 inline bool guardedHandoff(::PhosphorEngine::IPlacementEngine* source, ::PhosphorEngine::IPlacementEngine* dest,
                            ::PhosphorEngine::IPlacementEngine::HandoffContext ctx, const QString& recoverScreenId,
                            int recoverDesktop = 0)
@@ -118,6 +130,52 @@ inline QJsonObject rectToJsonObject(const QRect& rect)
     obj[::PhosphorZones::ZoneJsonKeys::Width] = rect.width();
     obj[::PhosphorZones::ZoneJsonKeys::Height] = rect.height();
     return obj;
+}
+
+/// Whether a window's own @p context is on another activity than
+/// @p currentActivity (empty: unknown). One on several activities is on the
+/// current one when it is any of them, not only its first (F1040), as
+/// WindowContext::effectiveActivity reads it.
+inline bool onAnotherActivity(const std::optional<::PhosphorEngine::WindowDesktopContext>& context,
+                              const QString& currentActivity)
+{
+    return context && !context->activity.isEmpty() && !currentActivity.isEmpty()
+        && (context->activities.size() > 1 ? !context->activities.contains(currentActivity)
+                                           : context->activity != currentActivity);
+}
+
+/// Where a window on @p desktops (nullopt: every one, or unknown) meets a
+/// screen showing @p shownDesktop (0: unknown): 0 when it is on that desktop,
+/// its one desktop when it is on a single other one, and nullopt when it is on
+/// several others.
+inline std::optional<int> desktopShowing(const std::optional<QSet<int>>& desktops, int shownDesktop)
+{
+    if (!desktops || shownDesktop < 1 || desktops->contains(shownDesktop)) {
+        return 0;
+    }
+    if (desktops->size() == 1) {
+        return *desktops->cbegin();
+    }
+    return std::nullopt;
+}
+
+/// The desktop @p screenId shows: the per-output value, else the global current
+/// one the layout registry holds; 0 ("unknown") with neither (queries.cpp).
+int shownDesktop(const WindowTrackingAdaptor& adaptor, const QString& screenId);
+
+/// Where a window's own context meets a screen showing @p shownDesktop (0:
+/// unknown) in @p currentActivity (empty: unknown): desktopShowing, and
+/// nullopt on another activity. An unknown @p context reads as in view.
+inline std::optional<int> ownDesktopOn(const std::optional<::PhosphorEngine::WindowDesktopContext>& context,
+                                       int shownDesktop, const QString& currentActivity)
+{
+    if (!context) {
+        return 0;
+    }
+    if (onAnotherActivity(context, currentActivity)) {
+        return std::nullopt;
+    }
+    return desktopShowing(context->desktopSet(), shownDesktop);
 }
 
 } // namespace WindowTrackingInternal

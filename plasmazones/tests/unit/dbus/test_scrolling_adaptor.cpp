@@ -35,7 +35,9 @@
  *  8. scrollingScreens answers sorted, across several screens.
  *  9. scrollingScreensChanged is gated on an actual change: the engine
  *     re-announces an identical set on every desktop switch, and a wire
- *     consumer comparing successive payloads must not see a phantom one.
+ *     consumer comparing successive payloads must not see a phantom one. It
+ *     also names the screens leaving for autotile (not those leaving for
+ *     snapping) and carries the context switch.
  * 10. clearEngine leaves every slot answering safely AND stops relaying.
  * 11. The scrollingScreens property never emits PropertiesChanged (change
  *     traffic rides the dedicated signal only).
@@ -463,6 +465,54 @@ private Q_SLOTS:
         QCOMPARE(m_adaptor->scrollingScreens(),
                  (QStringList{QStringLiteral("DP-1"), QStringLiteral("DP-2"), QStringLiteral("DVI-4"),
                               QStringLiteral("HDMI-3"), QStringLiteral("eDP-1")}));
+    }
+
+    // A screen leaving the set that runs autotile now is named, so the effect
+    // can tell an engine flip inside the tiling union from a move out of it
+    // (F286).
+    void testScreensChanged_namesTheScreensLeavingForAutotile()
+    {
+        m_adaptor->setAutotileScreenResolver([](const QString& screenId) {
+            return screenId == QLatin1String("DP-2");
+        });
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollingScreensChanged);
+        m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.last().at(2).toStringList(), QStringList{QStringLiteral("DP-2")});
+        m_adaptor->setAutotileScreenResolver({});
+    }
+
+    // A screen leaving for snapping is not listed: it leaves the union too.
+    void testScreensChanged_leavingForSnappingIsNotListed()
+    {
+        m_adaptor->setAutotileScreenResolver([](const QString&) {
+            return false;
+        });
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollingScreensChanged);
+        m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(spy.last().at(2).toStringList().isEmpty());
+        m_adaptor->setAutotileScreenResolver({});
+    }
+
+    // A change a desktop switch made is said to be one (F231); a plain change
+    // is not.
+    void testScreensChanged_carriesTheContextSwitch()
+    {
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollingScreensChanged);
+        m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        QCOMPARE(spy.last().at(1).toBool(), false);
+        // The first setCurrentDesktop primes the tracker; the second arms.
+        m_engine->setCurrentDesktop(2);
+        m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        m_engine->setCurrentDesktop(3);
+        m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        QCOMPARE(spy.last().at(0).toStringList(), QStringList{QStringLiteral("DP-1")});
+        QCOMPARE(spy.last().at(1).toBool(), true);
+        m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-3")});
+        QCOMPARE(spy.last().at(1).toBool(), false);
     }
 
     // The engine re-emits an unchanged screen set on every desktop switch for

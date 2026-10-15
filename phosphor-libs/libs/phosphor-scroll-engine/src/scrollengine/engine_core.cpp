@@ -9,11 +9,11 @@
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "enginelimits.h"
+#include "evacueepark_p.h"
 #include "scrollenginelogging.h"
 
-#include <algorithm>
-
 #include <QMetaObject>
+#include <algorithm>
 
 namespace PhosphorScrollEngine {
 
@@ -614,16 +614,12 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         // without focus — seen live as new firefox/ghostty windows landing at
         // the park row for the whole session. Exact-id claims above are
         // untouched: the id match is its own evidence.
-        // Half-open [0, grace): elapsed() < grace, deliberately NOT
-        // hasExpired(grace). hasExpired compares STRICTLY GREATER, so it
-        // holds a zero-length window OPEN for its whole first millisecond.
-        // At the shipped 60 s grace that difference is unobservable, but it
-        // makes a grace of 0 read as "still open" rather than "already
-        // closed" — and 0 is the one value that lets a test reach the refusal
-        // arm at all, since a test elapses well under a millisecond.
-        //
-        // isValid() still gates: an unstarted timer's elapsed() is
-        // meaningless, and an entry whose grace was never opened is closed.
+        // Half-open [0, grace): elapsed() < grace reads a grace of 0 as
+        // "already closed", the one value that lets a test reach the refusal
+        // arm. Deliberately NOT hasExpired(grace), which compares STRICTLY
+        // GREATER and so would hold a zero-length window OPEN for its first
+        // millisecond. isValid() still gates: an unstarted timer's elapsed()
+        // is meaningless, and a grace never opened is closed.
         const bool fuzzyGraceOpen =
             stashStrip.fuzzyClaimWindow.isValid() && stashStrip.fuzzyClaimWindow.elapsed() < m_fuzzyClaimGraceMs;
         if (!appPrefix.isEmpty() && !fuzzyGraceOpen) {
@@ -646,8 +642,12 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
                     // through an alias of the overwritten field silently
                     // broke the focus hand-over.
                     const QString candidate = stash.at(i).tiles.at(t).windowId;
+                    // A candidate the registry still holds is a window open
+                    // elsewhere, not a dead sibling: its column is its own (F648).
                     if (!candidate.startsWith(appPrefix) || consumed.contains(candidate)
-                        || state->strip().containsWindow(candidate)) {
+                        || state->strip().containsWindow(candidate)
+                        || (m_windowRegistry
+                            && m_windowRegistry->contains(PhosphorIdentity::WindowId::extractInstanceId(candidate)))) {
                         continue;
                     }
                     // STAGE the claim; do not commit it until the insert below

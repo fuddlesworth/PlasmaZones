@@ -5,7 +5,8 @@
 // behaviour suite pins: the lineage gate, the oversized and migration
 // refusals, the move-or-size exclusivity of the own-record restore, the
 // screen-containment gate on the move, the emit order the effect's float
-// handler depends on, and the cross-screen claim declining a float.
+// handler depends on, the cross-screen claim declining a float, and the
+// column rect a float keeps as the float-back guard.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
@@ -19,6 +20,7 @@
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
@@ -206,9 +208,8 @@ private Q_SLOTS:
         rig.engine->windowClosed(QStringLiteral("app|b2"));
 
         // Move opted in but the rect does not lie on this screen: the
-        // containment gate refuses it for the move AND as a size source (a
-        // size from another output says nothing about this one), so with no
-        // live sibling nothing is applied at all.
+        // containment gate refuses it for the move, and only its size is
+        // restored, the way a size from another output is (F269).
         rig.engine->setRestorePositionPredicate({});
         rig.tracker->belongsToScreen = [](const QRect&, const QString&) {
             return false;
@@ -218,7 +219,8 @@ private Q_SLOTS:
         rig.engine->windowOpened(QStringLiteral("app|c2"), kS1, 0, 0);
         QVERIFY(stateOn(rig.engine, kS1)->isFloating(QStringLiteral("app|c2")));
         QCOMPARE(geoSpy.count(), 0);
-        QCOMPARE(sizeSpy.count(), 0);
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), ownFree.size());
     }
 
     // A recorded rect of a live column's size is a spawn frame the window
@@ -247,6 +249,38 @@ private Q_SLOTS:
         // later reopen to trip over.
         QVERIFY(!rig.tracker->placementStore().contains(QStringLiteral("app|old")));
         QVERIFY(rig.tracker->placementStore().contains(QStringLiteral("app|new")));
+    }
+
+    // A floated strip tile keeps its column rect as lastManagedRect: the
+    // daemon samples the float-back after the float, and a frame still on
+    // the column rect must read as managed, not as a free spot (F580). The
+    // unfloat drops it, so the returning tile's first batch is not gated
+    // away by a rect equal to the one the strip resolves again.
+    void floatKeepsTheColumnRectUntilReadoption()
+    {
+        Rig rig;
+        build(rig);
+        const QString w = QStringLiteral("app|w");
+        rig.engine->windowOpened(w, kS1, 0, 0);
+        const QRect columnRect = rig.engine->lastManagedRect(w);
+        QVERIFY(columnRect.isValid());
+
+        rig.engine->toggleWindowFloat(w, kS1);
+        QVERIFY(stateOn(rig.engine, kS1)->isFloating(w));
+        QCOMPARE(rig.engine->lastManagedRect(w), columnRect);
+
+        QSignalSpy tiled(rig.engine, &ScrollEngine::windowsTiled);
+        rig.engine->toggleWindowFloat(w, kS1);
+        QVERIFY(stateOn(rig.engine, kS1)->strip().containsWindow(w));
+        bool carried = false;
+        for (const QList<QVariant>& args : std::as_const(tiled)) {
+            const QJsonArray batch = QJsonDocument::fromJson(args.at(0).toString().toUtf8()).array();
+            for (const QJsonValue& entry : batch) {
+                carried = carried || entry.toObject().value(QLatin1String("windowId")).toString() == w;
+            }
+        }
+        QVERIFY2(carried, "the returning tile must be in a windowsTiled batch");
+        QCOMPARE(rig.engine->lastManagedRect(w), columnRect);
     }
 
     // The size (or move) emit precedes the float sync: the effect's float
@@ -330,44 +364,74 @@ private Q_SLOTS:
     }
 
     // A window that would float on its recorded home screen is not pulled
-    // home by the cross-screen claim: a float is screen-local, and the
-    // arrival screen's open floats it where it stands.
+    // there by the reopen claim: a float is screen-local, and the arrival
+    // screen's open floats it where it stands. The claim only ever reaches
+    // another virtual screen of the output the window opened on, so the two
+    // screens here are virtual screens of one output.
     void crossScreenClaim_declinesAFloatOnTheHomeScreen()
     {
+        const QString vs0 = QStringLiteral("M/vs:0");
+        const QString vs1 = QStringLiteral("M/vs:1");
         Rig rig;
-        build(rig);
-        rig.engine->setScrollingModeResolver([](const QString& screen, int, const QString&) {
-            return screen == kS2;
+        rig.settings = new StubScrollSettings(&rig.owner);
+        rig.tracker = new StubWindowTracking(&rig.owner);
+        rig.tracker->placementStore().setLiveInstanceProbe([this](const QString& windowId) {
+            return m_live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        });
+        rig.engine = makeProviderEngine(&rig.owner, {vs0, vs1}, {}, {}, rig.tracker);
+        rig.engine->setEngineSettings(rig.settings);
+        rig.engine->refreshConfigFromSettings();
+        rig.engine->setScrollingModeResolver([](const QString&, int, const QString&) {
+            return true;
         });
         QVERIFY(rig.tracker->placementStore().record(record(rig.engine, QStringLiteral("app|old"),
-                                                            PhosphorEngine::WindowPlacement::stateTiled(), kS2,
+                                                            PhosphorEngine::WindowPlacement::stateTiled(), vs1,
                                                             QRect(10, 10, 500, 400))));
 
-        // Positive control: with nothing floating it, the claim pulls it home.
-        QVERIFY(rig.engine->claimCrossScreenReopen(QStringLiteral("app|home"), kS1, 0, 0));
-        QVERIFY(stateOn(rig.engine, kS2)->strip().containsWindow(QStringLiteral("app|home")));
+        // Positive control: with nothing floating it, the claim restores it
+        // on the other virtual screen of the same output.
+        QVERIFY(rig.engine->claimCrossScreenReopen(QStringLiteral("app|home"), vs0, 0, 0));
+        QVERIFY(stateOn(rig.engine, vs1)->strip().containsWindow(QStringLiteral("app|home")));
         rig.engine->windowClosed(QStringLiteral("app|home"));
 
         QVERIFY(rig.tracker->placementStore().record(record(rig.engine, QStringLiteral("app|old2"),
-                                                            PhosphorEngine::WindowPlacement::stateTiled(), kS2,
+                                                            PhosphorEngine::WindowPlacement::stateTiled(), vs1,
                                                             QRect(10, 10, 500, 400))));
         // Rule-floated on the home screen only.
-        rig.engine->setFloatPredicate([](const QString&, const QString& screen) {
-            return screen == kS2;
+        rig.engine->setFloatPredicate([vs1](const QString&, const QString& screen) {
+            return screen == vs1;
         });
-        QVERIFY2(!rig.engine->claimCrossScreenReopen(QStringLiteral("app|new"), kS1, 0, 0),
-                 "a float has nothing to pull home for");
+        QVERIFY2(!rig.engine->claimCrossScreenReopen(QStringLiteral("app|new"), vs0, 0, 0),
+                 "a float has nothing to restore there");
         QVERIFY(!rig.engine->isWindowTracked(QStringLiteral("app|new")));
         // The record was not consumed by the declined claim.
         QVERIFY(rig.tracker->placementStore().contains(QStringLiteral("app|old2")));
 
-        // The dispatch then tells the engine every claim declined, and the
-        // arrival screen's open adopts rather than deferring to the record's
-        // home a second time.
-        rig.engine->noteCrossScreenClaimsExhausted(QStringLiteral("app|new"), true);
+        // The arrival screen's open adopts it. No engine defers an open to
+        // a record's home any more, so nothing has to be told the claims
+        // declined first.
+        rig.engine->windowOpened(QStringLiteral("app|new"), vs0, 0, 0);
+        QVERIFY2(stateOn(rig.engine, vs0) && stateOn(rig.engine, vs0)->containsWindow(QStringLiteral("app|new")),
+                 "the arrival screen must adopt the window");
+    }
+
+    // The reopen contract: a record on ANOTHER output is never claimed, and
+    // the open stays on the output it arrived on.
+    void crossScreenClaim_neverReachesAnotherOutput()
+    {
+        Rig rig;
+        build(rig);
+        rig.engine->setScrollingModeResolver([](const QString&, int, const QString&) {
+            return true;
+        });
+        QVERIFY(rig.tracker->placementStore().record(record(rig.engine, QStringLiteral("app|old"),
+                                                            PhosphorEngine::WindowPlacement::stateTiled(), kS2,
+                                                            QRect(10, 10, 500, 400))));
+        QVERIFY2(!rig.engine->claimCrossScreenReopen(QStringLiteral("app|new"), kS1, 0, 0),
+                 "a record on another output must not pull the window there");
         rig.engine->windowOpened(QStringLiteral("app|new"), kS1, 0, 0);
-        QVERIFY2(stateOn(rig.engine, kS1) && stateOn(rig.engine, kS1)->containsWindow(QStringLiteral("app|new")),
-                 "with the claims exhausted the arrival screen must adopt the window");
+        QVERIFY(stateOn(rig.engine, kS1) && stateOn(rig.engine, kS1)->containsWindow(QStringLiteral("app|new")));
+        QVERIFY(!stateOn(rig.engine, kS2) || !stateOn(rig.engine, kS2)->containsWindow(QStringLiteral("app|new")));
     }
 };
 

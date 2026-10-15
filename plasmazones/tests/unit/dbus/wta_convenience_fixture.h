@@ -5,14 +5,14 @@
 
 /**
  * @file wta_convenience_fixture.h
- * @brief Shared fixture for the WindowTrackingAdaptor convenience-surface
- *        tests, split across test_wta_convenience.cpp (window-state and
- *        float-restore surface), test_wta_routing.cpp (open routing and
- *        cross-mode handoff), test_wta_screen_changed.cpp (the screen-report
- *        keep/unsnap arm) and test_compositor_bridge.cpp to stay under the
- *        file-size ceiling. Plain
- *        (non-QObject) base so each test class keeps QObject first; the
- *        derived class forwards its init()/cleanup() slots here.
+ * @brief Shared fixture for the WindowTrackingAdaptor tests that need one
+ *        adaptor, snap engine and layout but no screen manager, such as
+ *        test_wta_convenience.cpp (window-state, float and float-restore
+ *        surface, focus reports), test_wta_routing.cpp (open routing and
+ *        cross-mode handoff) and test_wta_screen_changed.cpp (the screen-report
+ *        keep/unsnap arm). Plain (non-QObject) base so each test class keeps
+ *        QObject first; the derived class forwards its init()/cleanup() slots
+ *        here.
  */
 
 #include <QTest>
@@ -25,6 +25,8 @@
 #include <QRectF>
 #include <memory>
 
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -123,6 +125,10 @@ protected:
             m_snapAdaptor->clearEngine();
         }
         m_snapAdaptor = nullptr;
+        if (m_registry) {
+            m_wta->setWindowRegistry(nullptr);
+            m_registry.reset();
+        }
         // WTA is owned by m_parent (QDBusAbstractAdaptor parent). Detach the
         // borrowed engine from the service BEFORE deleting it so the service
         // never holds a dangling SnapEngine* (the local-WTA tests below detach
@@ -145,7 +151,32 @@ protected:
         m_guard.reset();
     }
 
+    /// Per-screen stores need the full resolver; initFixture wires the
+    /// single-store convenience. Undo with setSnapState(snapState()).
+    void installPerScreenResolver()
+    {
+        m_wta->service()->setSnapStateResolver(PhosphorPlacement::snapStateResolverFor(m_snapEngine));
+    }
+
+    /// Opt-in window registry, for the paths that only act on a live window
+    /// (the bus snap gate). The other fixture users keep running without one.
+    void installRegistry()
+    {
+        m_registry = std::make_unique<PhosphorEngine::WindowRegistry>();
+        m_wta->setWindowRegistry(m_registry.get());
+    }
+    /// Register @p windowId's instance (with the composite's app id) as live.
+    QString registerWindow(const QString& windowId)
+    {
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        m_registry->upsert(PhosphorIdentity::WindowId::extractInstanceId(windowId), meta);
+        m_registry->canonicalizeWindowId(windowId);
+        return windowId;
+    }
+
     std::unique_ptr<IsolatedConfigGuard> m_guard;
+    std::unique_ptr<PhosphorEngine::WindowRegistry> m_registry;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsConvenience* m_settings = nullptr;
     StubZoneDetectorConvenience* m_zoneDetector = nullptr;

@@ -6,9 +6,10 @@
  * @brief Regression tests for the reactive metadataChanged path.
  *
  * WindowTrackingAdaptor subscribes to WindowRegistry::metadataChanged in
- * setWindowRegistry(). Per feedback_class_change_exclusion.md the handler
- * must update internal class tracking but NEVER retroactively unsnap,
- * re-snap, or re-evaluate rules on committed state.
+ * setWindowRegistry(), once for the shell-surface mirror and once for the
+ * class retag this file pins. The retag handler must update internal class
+ * tracking but NEVER retroactively unsnap, re-snap, or re-evaluate rules on
+ * committed state.
  *
  * Concretely: lastUsedZoneClass is a human-readable tag stamped on the
  * last-used-zone tracking when a user snaps a window. If that window later
@@ -163,7 +164,7 @@ private Q_SLOTS:
         QCOMPARE(service->lastUsedZoneClass(), classB);
         // PhosphorZones::Zone id unchanged — NOT a retroactive move.
         QCOMPARE(service->lastUsedZoneId(), m_zoneIds[0]);
-        // Committed snap state is preserved per feedback_class_change_exclusion.md.
+        // Committed snap state is preserved.
         QVERIFY(service->isWindowSnapped(instanceId));
         QCOMPARE(service->zoneForWindow(instanceId), m_zoneIds[0]);
     }

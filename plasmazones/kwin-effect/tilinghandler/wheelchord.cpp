@@ -171,7 +171,7 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     // but both sides are user-configurable now, and a user who binds the same
     // modifier to both would otherwise reflow the strip out from under the
     // window they are dragging, once per wheel notch.
-    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()) {
+    if (m_effect->m_dragTracker->isDragging()) {
         resetWheelAccumulators();
         return false;
     }

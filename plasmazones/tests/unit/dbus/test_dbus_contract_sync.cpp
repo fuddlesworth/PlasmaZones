@@ -20,7 +20,7 @@
  *     declared on the adaptor itself) appears in the XML — internal helpers
  *     must live in plain `public:` sections, never under Q_SLOTS.
  *  3. Signals match 1:1, modulo an explicit per-interface off-contract
- *     allowlist (e.g. WindowTracking's in-process windowClosedNotification).
+ *     allowlist.
  *  4. Q_PROPERTYs match the XML <property> entries (name, type, access).
  *
  * Bus-exposure model mirrors QDBusAbstractAdaptor's introspection: public
@@ -561,11 +561,9 @@ private Q_SLOTS:
 
     void testWindowTrackingContract()
     {
-        // windowClosedNotification and stalePruned are documented in-process
-        // Qt signals — bus-visible but deliberately off the published
-        // contract (see their doc comments in windowtrackingadaptor.h).
-        verifyContract(WindowTrackingAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.WindowTracking"),
-                       {QStringLiteral("windowClosedNotification"), QStringLiteral("stalePruned")});
+        // No allowlist: the in-process close and prune notices live on
+        // WindowLifecycleRelay, off the bus (F514).
+        verifyContract(WindowTrackingAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.WindowTracking"));
     }
 
     void testTilingContract()

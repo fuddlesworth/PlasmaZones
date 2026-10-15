@@ -4,18 +4,17 @@
 #include "compositorbridgeadaptor.h"
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
+#include "dbus/dbushelpers.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
-#include <QDBusMessage>
 #include <QUuid>
 
 namespace PlasmaZones {
 
 // Protocol version constants are the single source of truth in
-// PhosphorProtocol::Service (libs/phosphor-protocol). The effect links
-// compositor-common for its own constants; the daemon includes
-// PhosphorProtocol/ServiceConstants.h directly.
+// PhosphorProtocol::Service (libs/phosphor-protocol). The effect and the
+// daemon both read them from PhosphorProtocol/ServiceConstants.h.
 namespace {
 constexpr int DaemonApiVersion = PhosphorProtocol::Service::ApiVersion;
 constexpr int DaemonMinPeerApiVersion = PhosphorProtocol::Service::MinPeerApiVersion;
@@ -69,7 +68,7 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
     m_capabilities = capabilities;
     // Remember WHO registered, so a later reportGesture can be attributed.
     // A direct (non-D-Bus) call has no peer and leaves this empty.
-    m_bridgeService = calledFromDBus() ? message().service() : QString();
+    m_bridgeService = DbusHelpers::busCaller(this);
 
     qCInfo(lcDbusWindow) << "Compositor bridge registered:" << compositorName << "apiVersion=" << version
                          << "capabilities:" << capabilities;
@@ -104,13 +103,13 @@ void CompositorBridgeAdaptor::reportGesture(const QString& kind, const QString& 
         qCDebug(lcDbusWindow) << "reportGesture dropped: no bridge registered for gestures";
         return;
     }
-    if (calledFromDBus() && message().service() != m_bridgeService) {
+    if (const QString caller = DbusHelpers::busCaller(this); !caller.isEmpty() && caller != m_bridgeService) {
         // Warned, not logged at debug: this is either a peer trying to drive
         // the shell's surfaces, or the real bridge calling from a connection
         // it never registered — which would take out every gesture in the
         // session. Neither should be invisible at default log levels.
-        qCWarning(lcDbusWindow) << "reportGesture dropped: caller" << message().service()
-                                << "is not the registered bridge" << m_bridgeService;
+        qCWarning(lcDbusWindow) << "reportGesture dropped: caller" << caller << "is not the registered bridge"
+                                << m_bridgeService;
         return;
     }
     // Boundary validation: the vocabulary is closed, so anything else is a

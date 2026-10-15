@@ -97,7 +97,10 @@ bool TilingState::removeWindow(const QString& windowId)
     }
 
     m_windowOrder.removeAt(index);
-    syncTreeRemove(windowId);
+    // The tree holds tiled windows only: setFloating took a floating one out.
+    if (!m_floatingWindows.contains(windowId)) {
+        syncTreeRemove(windowId);
+    }
 
     // Clear the layer memories BEFORE any emission (matching setFloating's
     // ordering): a handler re-entering during floatingChanged must not read

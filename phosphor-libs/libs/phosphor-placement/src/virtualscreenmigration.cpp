@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Virtual-screen migration cluster for WindowTrackingService — the to/from
-// virtual-screen assignment rewrites and their pruning/scan helpers. Split
-// from lifecycle.cpp for SRP / file-size. Shared Zone/Layout validation
-// helpers live in placementvalidation_p.h.
+// virtual-screen assignment rewrites and their pruning/scan helpers, and the
+// rewrites an output move or identifier flip needs. Split from lifecycle.cpp
+// for SRP / file-size. Shared Zone/Layout validation helpers live in
+// placementvalidation_p.h.
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include "placementutils.h"
@@ -154,13 +155,14 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     bool anyStateMigrated = false;
     // Rewrite each per-screen store's OWN live-screen map in place. A window's
     // screen VALUE moves from the physical id (or an old virtual id) to the new
-    // virtual sub-screen its zone falls in; the store the window lives in is
-    // unchanged (per-window lookups key off the screen value + the reverse map, so
-    // a now-stale store key is benign and self-heals on the next genuine
-    // cross-monitor migration). Pushing the aggregated union onto the global holder
-    // instead would strand duplicate stale entries in every other store. The zone
-    // lookup reads the SAME store's zone map — a window's zones live alongside its
-    // screen entry, so no cross-store union is needed.
+    // virtual sub-screen its zone falls in, and the snap engine then re-files the
+    // window under the store for its new screen (F105, rekeyToRecordedScreens
+    // below): left on the physical key, the next commit there read as a move off
+    // the monitor and released the window's other desktops. Pushing the
+    // aggregated union onto the global holder instead would strand duplicate
+    // stale entries in every other store. The zone lookup reads the SAME store's
+    // zone map — a window's zones live alongside its screen entry, so no
+    // cross-store union is needed.
     for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
         QHash<QString, QString> assigns = state->screenAssignments();
         const QHash<QString, QStringList>& stateZones = state->zoneAssignments();
@@ -185,8 +187,8 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
     // Also migrate pre-float screen assignments (owned by SnapState). Rewritten
     // per store, in place, like the live-screen map above — the former
-    // union-then-redistribute round-trip re-homed appId-alias entries with no
-    // live window onto the global holder as a side effect; the per-state rewrite
+    // union-then-redistribute round-trip re-homed entries with no live window
+    // onto the global holder as a side effect; the per-state rewrite
     // leaves every entry in the store it lives in. The pre-float zone lookup
     // reads the same store: the zone and screen halves of a pre-float entry are
     // written together into the window's owning store.
@@ -216,25 +218,6 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
     }
 
-    // Also migrate pending restore queues — these have screenId per entry.
-    // Same guard as active assignments: skip entries that already have a valid
-    // virtual screen ID matching the current config. Re-migrating would run
-    // resolveVirtualScreen with zone coords relative to the virtual screen
-    // (not the physical screen), which can produce wrong results.
-    for (auto queueIt = m_pendingRestoreQueues.begin(); queueIt != m_pendingRestoreQueues.end(); ++queueIt) {
-        for (PendingRestore& entry : queueIt.value()) {
-            if (entry.screenId != physicalScreenId && !entry.screenId.startsWith(prefix)) {
-                continue;
-            }
-            if (PhosphorIdentity::VirtualScreenId::isVirtual(entry.screenId)
-                && virtualScreenIds.contains(entry.screenId)) {
-                continue;
-            }
-            entry.screenId = resolveVirtualScreen(entry.zoneIds, entry.screenId);
-            anyStateMigrated = true;
-        }
-    }
-
     // Migrate lastUsedScreenId per store: last-used is per-key, so rewrite the
     // stored screen on each store that points at the physical screen (or an old
     // virtual sub-screen on it) to the virtual screen its last-used zone falls in.
@@ -246,7 +229,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             continue;
         }
         // Already a valid VS in the CURRENT config — leave the SCREEN alone,
-        // like the three sibling loops above. Re-resolving would let a shared
+        // like the two sibling loops above. Re-resolving would let a shared
         // layout (zone present on every VS) silently rewrite a correct vs:1
         // last-used to the first candidate, and force a save for a no-op.
         //
@@ -265,7 +248,9 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         QString targetVs = virtualScreenIds.first(); // default
         if (!lastZoneId.isEmpty() && m_layoutManager) {
             for (const QString& vsId : virtualScreenIds) {
-                PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
+                // The store's own context's layout on that VS, not the
+                // desktop in view (F162).
+                PhosphorZones::Layout* vsLayout = lastUsedLayoutFor(state, vsId);
                 if (vsLayout) {
                     auto uuidOpt = parseUuid(lastZoneId);
                     if (uuidOpt && vsLayout->zoneById(*uuidOpt)) {
@@ -286,8 +271,21 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     {
         const int changed = m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
             // Point lookup against the window's OWNING store (canonicalizing),
-            // replacing the former flat-union copy.
-            const QStringList ptZoneIds = zonesForWindow(p.windowId);
+            // replacing the former flat-union copy. A window with no live
+            // zones (closed, or not yet re-announced after a daemon start) is
+            // placed by its record's snapped slot, else every closed record
+            // kept the whole monitor's id and reopened stretched across the
+            // split (F381). The slot's flat zones are the desktop in view at
+            // the last capture; a per-desktop slot without them answers its
+            // record's own desktop. A floating slot's pre-float zones say
+            // nothing of where the window floats, so it keeps the monitor's id.
+            QStringList ptZoneIds = zonesForWindow(p.windowId);
+            if (ptZoneIds.isEmpty()) {
+                const PhosphorEngine::EngineSlot slot = p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+                if (slot.state == PhosphorEngine::WindowPlacement::stateSnapped()) {
+                    ptZoneIds = slot.zoneIds.isEmpty() ? slot.zonesByDesktop.value(p.virtualDesktop) : slot.zoneIds;
+                }
+            }
             if (ptZoneIds.isEmpty()) {
                 return false; // No zone info — keep physical ID, don't guess VS
             }
@@ -303,7 +301,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
                 QString screen = it.key();
                 // Already a valid VS in the CURRENT config — leave it as its own
                 // identity source, exactly as the live-screen / pre-float /
-                // pending-restore / lastUsed loops do. Re-resolving on a VS
+                // lastUsed loops do. Re-resolving on a VS
                 // RECONFIGURATION would push a still-valid vs:1 key through
                 // resolveVirtualScreen, whose per-VS-layout candidate branch can
                 // return vs:0 for a zone that resolves uniquely there, silently
@@ -352,6 +350,13 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
     }
 
+    // Each store's key follows the screen values rewritten above before the
+    // prune judges the zones in it, so the prune and every later commit see
+    // the window filed under its virtual screen (F105).
+    if (m_snapResolver.rekeyToRecordedScreens) {
+        m_snapResolver.rekeyToRecordedScreens(physicalScreenId);
+    }
+
     // Validate each migrated window's zone assignment against its new
     // virtual-screen layout. Migration above moved the window's *screen*
     // onto a VS id, but its *zone* ids still reference the pre-subdivision
@@ -360,24 +365,26 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     // the window to the physical layout's zone geometry (full-monitor width)
     // instead of the VS layout, so windows resize to the wrong target.
     // Symmetric with the physical-layout validation in
-    // migrateScreenAssignmentsFromVirtual. Floating windows are skipped —
-    // their float state must survive a VS reconfigure.
+    // migrateScreenAssignmentsFromVirtual. Each membership is judged in its
+    // own store against the layout of that store's desktop and activity, not
+    // the context in view (F533), and a store holding the window floating
+    // keeps it: its float state must survive a VS reconfigure (F566, the
+    // store's own bit, not the routed primary's). A tiling or None context
+    // answers no layout and keeps its zones (F264).
     if (m_layoutManager) {
-        QStringList windowsToRemove;
-        forEachZoneAssignedWindow(
-            [&](const QString& windowId, const QStringList& zoneIds, const QString& winScreen, int /*desktop*/) {
-                if (!virtualScreenIds.contains(winScreen)) {
-                    return;
-                }
-                if (isWindowFloating(windowId)) {
-                    return;
-                }
-                PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(winScreen);
-                if (vsLayout && !allZonesExistInLayout(zoneIds, vsLayout)) {
-                    windowsToRemove.append(windowId);
-                }
-            });
-        anyStateMigrated |= pruneMigratedWindows(windowsToRemove);
+        QList<QPair<QString, PhosphorSnapEngine::SnapState*>> toRemove;
+        forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIds, const QString& winScreen,
+                                      int /*desktop*/, const QString& /*activity*/,
+                                      PhosphorSnapEngine::SnapState* store) {
+            if (!virtualScreenIds.contains(winScreen) || store->isFloating(windowId)) {
+                return;
+            }
+            PhosphorZones::Layout* layout = lastUsedLayoutFor(store, winScreen);
+            if (layout && !allZonesExistInLayout(zoneIds, layout)) {
+                toRemove.append({windowId, store});
+            }
+        });
+        anyStateMigrated |= pruneMigratedWindows(toRemove);
     }
 
     if (migrated > 0 || anyStateMigrated) {
@@ -436,16 +443,6 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         if (preFloatMigrated) {
             state->setPreFloatScreenAssignments(preFloatScreens);
             anyStateMigrated = true;
-        }
-    }
-
-    // Also migrate pending restore queues
-    for (auto queueIt = m_pendingRestoreQueues.begin(); queueIt != m_pendingRestoreQueues.end(); ++queueIt) {
-        for (PendingRestore& entry : queueIt.value()) {
-            if (entry.screenId.startsWith(prefix)) {
-                entry.screenId = physicalScreenId;
-                anyStateMigrated = true;
-            }
         }
     }
 
@@ -512,31 +509,32 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         anyStateMigrated = true;
     }
 
+    // The stores filed under a virtual id move back under the physical one,
+    // like the ToVirtual sibling's re-key (F105).
+    if (m_snapResolver.rekeyToRecordedScreens) {
+        m_snapResolver.rekeyToRecordedScreens(physicalScreenId);
+    }
+
     // Validate zone assignments against the physical screen's layout.
     // Virtual screen layouts may have zones that don't exist in the physical
-    // screen's layout, so remove any assignments referencing invalid zone IDs.
-    // Floating windows are preserved — their float state should survive VS removal
-    // even if their zone assignments are invalid in the physical layout.
-    PhosphorZones::Layout* physLayout =
-        m_layoutManager ? m_layoutManager->resolveLayoutForScreen(physicalScreenId) : nullptr;
-    if (physLayout) {
-        QStringList windowsToRemove;
-        forEachZoneAssignedWindow(
-            [&](const QString& windowId, const QStringList& zoneIds, const QString& winScreen, int /*desktop*/) {
-                if (winScreen != physicalScreenId) {
-                    return;
-                }
-                // Preserve floating windows — clearing float state here would make
-                // previously floating windows eligible for auto-snap again, which is
-                // a user-visible behavior change.
-                if (isWindowFloating(windowId)) {
-                    return;
-                }
-                if (!allZonesExistInLayout(zoneIds, physLayout)) {
-                    windowsToRemove.append(windowId);
-                }
-            });
-        anyStateMigrated |= pruneMigratedWindows(windowsToRemove);
+    // screen's layout, so remove any assignments referencing invalid zone IDs,
+    // each judged in its own store and context like the ToVirtual sibling.
+    // A store holding the window floating keeps it: clearing float state here
+    // would make a floating window eligible for auto-snap again.
+    if (m_layoutManager) {
+        QList<QPair<QString, PhosphorSnapEngine::SnapState*>> toRemove;
+        forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIds, const QString& winScreen,
+                                      int /*desktop*/, const QString& /*activity*/,
+                                      PhosphorSnapEngine::SnapState* store) {
+            if (winScreen != physicalScreenId || store->isFloating(windowId)) {
+                return;
+            }
+            PhosphorZones::Layout* layout = lastUsedLayoutFor(store, physicalScreenId);
+            if (layout && !allZonesExistInLayout(zoneIds, layout)) {
+                toRemove.append({windowId, store});
+            }
+        });
+        anyStateMigrated |= pruneMigratedWindows(toRemove);
     }
 
     if (migrated > 0 || anyStateMigrated) {
@@ -546,49 +544,37 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     }
 }
 
-bool WindowTrackingService::pruneMigratedWindows(const QStringList& windowsToRemove)
+bool WindowTrackingService::pruneMigratedWindows(const QList<QPair<QString, PhosphorSnapEngine::SnapState*>>& visits)
 {
-    bool lastUsedCleared = false;
-    for (const QString& wId : windowsToRemove) {
-        bool wasAssigned = false;
-        if (PhosphorSnapEngine::SnapState* store = snapForWindow(wId)) {
-            const QStringList removedZones = store->zonesForWindow(wId);
-            auto unResult = store->unassignWindow(wId);
-            lastUsedCleared |= unResult.lastUsedZoneCleared;
-            wasAssigned = unResult.wasAssigned;
-            // Scrub the disk-restored representative on the global holder too, as
-            // unassignWindow / unsnapForFloat do — a migrated-away zone must not
-            // linger as the global last-used.
-            lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, store);
+    for (const auto& visit : visits) {
+        const QString& wId = visit.first;
+        PhosphorSnapEngine::SnapState* store = visit.second;
+        // In the visited store, not through the primary (F533).
+        // unassignFromStore forgets that desktop's persisted zone, scrubs the
+        // global holder's disk-restored last-used and emits windowZoneChanged
+        // only when the primary lost its zone.
+        unassignFromStore(wId, store);
+        // The window is LIVE: only its zones did not survive the virtual
+        // screen change. Its free geometry (the float-back on every monitor)
+        // and its sticky flag stay, so it can float back and the sticky
+        // exclusion still holds (F441). A window floating in another store
+        // keeps the pre-float home that float returns to; otherwise the
+        // pre-float zone named a zone that is gone, and a window left with no
+        // zone anywhere gives up its record's snap slot too, or the next
+        // populate re-admits it into a zone the screen no longer runs.
+        const QList<PhosphorSnapEngine::SnapState*> states = snapAllStates();
+        const bool floatingElsewhere = std::any_of(states.cbegin(), states.cend(), [&](const auto* state) {
+            return state->isFloating(wId);
+        });
+        if (floatingElsewhere) {
+            continue;
         }
-        clearFreeGeometry(wId); // drop the record's shared free geometry
         clearPreFloatZone(wId);
-        // Canonical key, as windowClosed does: the sticky map is keyed on the
-        // first-seen composite (issue #628), so a window that renamed itself
-        // (Electron/CEF) would leak its entry if removed under the raw id.
-        m_windowStickyStates.remove(canonicalizeForLookup(wId));
-        // Notify zone-state consumers, as the interactive unassign path does
-        // (WindowTrackingService::unassignWindow) — a prune that lands in
-        // storage but never reaches listeners leaves them tracking a window
-        // this service no longer considers snapped.
-        //
-        // Emitted LAST, after this window's three clears, not from inside the
-        // store branch above. AutotileEngine::onWindowZoneChanged runs
-        // SYNCHRONOUSLY on an empty zoneId and calls onWindowRemoved, which
-        // relayouts; emitting mid-teardown would drive that relayout against a
-        // window whose free geometry and pre-float zone are still present but
-        // about to vanish. Gated on wasAssigned for the same reason the
-        // interactive path is: it is the store's own answer to "did this
-        // window actually hold a zone", so a window already unassigned raises
-        // no spurious removal.
-        if (wasAssigned) {
-            Q_EMIT windowZoneChanged(wId, QString());
+        if (!holdsAnyZone(wId)) {
+            releaseEngineSlot(wId, PhosphorEngine::WindowPlacement::snapEngineId());
         }
     }
-    if (lastUsedCleared) {
-        markDirty(DirtyLastUsedZone);
-    }
-    return !windowsToRemove.isEmpty();
+    return !visits.isEmpty();
 }
 
 QSet<QString>
@@ -622,11 +608,6 @@ WindowTrackingService::physicalScreensWithStaleVirtualAssignments(const QSet<QSt
             }
         }
     }
-    for (auto qit = m_pendingRestoreQueues.constBegin(); qit != m_pendingRestoreQueues.constEnd(); ++qit) {
-        for (const auto& entry : qit.value()) {
-            check(entry.screenId);
-        }
-    }
     for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
         for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
             check(it.key());
@@ -638,6 +619,152 @@ WindowTrackingService::physicalScreensWithStaleVirtualAssignments(const QSet<QSt
         check(p.screenId);
     }
     return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Output moves and identifier flips
+// ═══════════════════════════════════════════════════════════════════════════════
+
+std::optional<QPoint> WindowTrackingService::outputOrigin(const QString& screenId) const
+{
+    const auto it = m_outputGeometry.constFind(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+    if (it == m_outputGeometry.constEnd()) {
+        return std::nullopt;
+    }
+    return it->topLeft();
+}
+
+void WindowTrackingService::followOutputGeometry(const PhosphorScreens::PhysicalScreen& screen)
+{
+    if (!screen.isValid() || !screen.geometry.isValid()) {
+        return;
+    }
+    const QString outputId = screen.identifier.isEmpty() ? screen.name : screen.identifier;
+    // The frame the output's rects are in: its last geometry, or (0,0) for one
+    // this session has not seen, whose rects the load left relative to it.
+    const QRect before = m_outputGeometry.value(outputId);
+    m_outputGeometry.insert(outputId, screen.geometry);
+    const QPoint delta = screen.geometry.topLeft() - before.topLeft();
+    const bool resized = before.isValid() && before.size() != screen.geometry.size();
+    if (delta.isNull() && !resized) {
+        return;
+    }
+    // A remembered floating spot keeps its place ON ITS MONITOR (F814,
+    // l18_floatback_relative): a move carries every key of the output along,
+    // its virtual screens' included. A new size leaves alone a spot still on
+    // the output, since a size change can be transient (a wake, a mode set),
+    // and pulls one it left off back onto it, shrunk to fit.
+    const int moved = m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
+        bool any = false;
+        for (auto it = p.freeGeometryByScreen.begin(); it != p.freeGeometryByScreen.end(); ++it) {
+            if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) != outputId) {
+                continue;
+            }
+            QRect rect = it.value().translated(delta);
+            if (resized && !geometryOverlapsScreen(rect, it.key())) {
+                rect =
+                    clampToRect(QRect(rect.topLeft(), rect.size().boundedTo(screen.geometry.size())), screen.geometry);
+            }
+            if (rect != it.value()) {
+                it.value() = rect;
+                any = true;
+            }
+        }
+        return any;
+    });
+    if (moved > 0) {
+        qCInfo(lcPlacement) << "Output" << outputId << "now at" << screen.geometry << "- moved the floating spots of"
+                            << moved << "window(s) with it";
+        markDirty(DirtyWindowPlacements);
+    }
+}
+
+void WindowTrackingService::renameScreen(const QString& oldPhysicalId, const QString& newPhysicalId)
+{
+    if (oldPhysicalId.isEmpty() || newPhysicalId.isEmpty() || oldPhysicalId == newPhysicalId) {
+        return;
+    }
+    // An EDID twin's identifier flips between the bare and the connector-
+    // suffixed form when its twin connects or leaves (F189). The window never
+    // moved, so every stored id of the monitor is rewritten in place; left
+    // stale, a resnap's screen filters skipped the window and the snap engine
+    // read its next commit as a move off the monitor.
+    const QString oldPrefix = oldPhysicalId + PhosphorIdentity::VirtualScreenId::Separator;
+    const auto renamed = [&](const QString& screenId) -> QString {
+        if (screenId == oldPhysicalId) {
+            return newPhysicalId;
+        }
+        return screenId.startsWith(oldPrefix) ? newPhysicalId + screenId.mid(oldPhysicalId.size()) : QString();
+    };
+    int rewritten = 0;
+    if (const auto geometry = m_outputGeometry.take(oldPhysicalId); geometry.isValid()) {
+        m_outputGeometry.insert(newPhysicalId, geometry);
+    }
+    for (ResnapEntry& entry : m_resnapBuffer) {
+        if (const QString to = renamed(entry.screenId); !to.isEmpty()) {
+            entry.screenId = to;
+        }
+    }
+    if (m_pendingLastUsedZone) {
+        if (const QString to = renamed(m_pendingLastUsedZone->screenId); !to.isEmpty()) {
+            m_pendingLastUsedZone->screenId = to;
+        }
+    }
+    const auto renameValues = [&](QHash<QString, QString> values) -> std::optional<QHash<QString, QString>> {
+        bool any = false;
+        for (auto it = values.begin(); it != values.end(); ++it) {
+            if (const QString to = renamed(it.value()); !to.isEmpty()) {
+                it.value() = to;
+                any = true;
+                ++rewritten;
+            }
+        }
+        if (!any) {
+            return std::nullopt;
+        }
+        return values;
+    };
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        if (const auto screens = renameValues(state->screenAssignments())) {
+            state->setScreenAssignments(*screens);
+        }
+        if (const auto preFloat = renameValues(state->preFloatScreenAssignments())) {
+            state->setPreFloatScreenAssignments(*preFloat);
+        }
+        if (const QString to = renamed(state->lastUsedScreenId()); !to.isEmpty()) {
+            state->restoreLastUsedZone(state->lastUsedZoneId(), to, state->lastUsedZoneClass(),
+                                       state->lastUsedDesktop());
+            ++rewritten;
+        }
+    }
+    rewritten += m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
+        bool any = false;
+        if (const QString to = renamed(p.screenId); !to.isEmpty()) {
+            p.screenId = to;
+            any = true;
+        }
+        QHash<QString, QRect> keyed;
+        for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
+            const QString to = renamed(it.key());
+            if (to.isEmpty()) {
+                keyed.insert(it.key(), it.value());
+            } else if (!p.freeGeometryByScreen.contains(to)) {
+                // A key already under the new id wins, as in the virtual-screen folds.
+                keyed.insert(to, it.value());
+            }
+            any |= !to.isEmpty();
+        }
+        p.freeGeometryByScreen = keyed;
+        return any;
+    });
+    if (m_snapResolver.renameScreen) {
+        m_snapResolver.renameScreen(oldPhysicalId, newPhysicalId);
+    }
+    if (rewritten > 0) {
+        qCInfo(lcPlacement) << "Screen" << oldPhysicalId << "is now" << newPhysicalId << "- renamed" << rewritten
+                            << "stored screen id(s)";
+        scheduleSaveState();
+    }
 }
 
 } // namespace PhosphorPlacement

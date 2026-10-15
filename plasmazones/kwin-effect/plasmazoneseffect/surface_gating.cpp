@@ -283,10 +283,10 @@ bool PlasmaZonesEffect::decorationMayAnimate(KWin::EffectWindow* w) const
 // decorated, so the verdict is keyed on the output a window sits on rather than
 // on "is anything fullscreen anywhere".
 //
-// CURRENT DESKTOP ONLY. A fullscreen window parked on another virtual desktop
-// is not on screen and shades nothing, so it must not strip the desktop the
-// user is actually looking at. That is also why desktopChanged re-runs the
-// refresh.
+// THE DESKTOP ITS OWN OUTPUT SHOWS ONLY. A fullscreen window parked on a
+// desktop its monitor is not showing is not on screen and shades nothing, so it
+// must not strip the desktop the user is actually looking at. That is also why
+// desktopChanged, which KWin fires per output, re-runs the refresh.
 
 void PlasmaZonesEffect::refreshFullscreenSuppression()
 {
@@ -301,8 +301,8 @@ void PlasmaZonesEffect::refreshFullscreenSuppression()
             // behind show-desktop, and desktop membership is activity-blind in
             // KWin, so all four have to be asked separately: a window that is
             // not actually on screen must not keep its monitor undecorated.
-            if (!w || w->isDeleted() || !w->isFullScreen() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()
-                || w->isMinimized() || w->isHiddenByShowDesktop()) {
+            if (!w || w->isDeleted() || !w->isFullScreen() || !isOnOwnOutputCurrentDesktop(w)
+                || !w->isOnCurrentActivity() || w->isMinimized() || w->isHiddenByShowDesktop()) {
                 continue;
             }
             // A WINDOWED-FULLSCREEN strip column is fullscreen only as far as

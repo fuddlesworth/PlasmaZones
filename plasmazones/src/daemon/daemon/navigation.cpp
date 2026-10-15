@@ -91,16 +91,31 @@ bool Daemon::dragInsertSelectorForScreen(const QString& screenId) const
 // vs. snap-specific behaviour lives inside each engine's override.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// A placement verb on the window being dragged would commit a zone or a slot
+// the drop then overrides (F773). Refused silently, like every other shortcut
+// refusal.
+static bool refusesDraggedWindow(WindowTrackingAdaptor* wta, const QString& windowId, const char* shortcutName)
+{
+    if (!wta || !wta->isInteractiveDragWindow(windowId)) {
+        return false;
+    }
+    qCInfo(lcDaemon) << shortcutName << "shortcut: ignored," << windowId << "is being dragged";
+    return true;
+}
+
 // Local helper: build the navigation context for a shortcut handler.
 // Resolves the active screen and active window from WTA's compositor-layer
 // shadow, then fetches the IPlacementEngine for that screen from the
 // router. Returns nullptr if either step fails. Centralises the "no screen
 // info" early return and the context population so individual handlers
 // stay short and all shortcut dispatches use the same resolution logic.
+// @p placesFocusedWindow: the verb places the focused window, so it is refused
+// for the window being dragged.
 static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* router, WindowTrackingAdaptor* wta,
                                                               PhosphorScreens::ScreenManager* screenManager,
                                                               PhosphorEngine::NavigationContext& outCtx,
-                                                              const char* shortcutName)
+                                                              const char* shortcutName,
+                                                              bool placesFocusedWindow = false)
 {
     outCtx.screenId = resolveShortcutScreenId(screenManager, wta);
     if (outCtx.screenId.isEmpty()) {
@@ -109,6 +124,9 @@ static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* 
     }
     if (wta) {
         outCtx.windowId = wta->lastActiveWindowId();
+    }
+    if (placesFocusedWindow && refusesDraggedWindow(wta, outCtx.windowId, shortcutName)) {
+        return nullptr;
     }
     if (!router) {
         return nullptr;
@@ -190,7 +208,7 @@ void Daemon::handleFloat()
     // reaching back into WTA state.
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
-                                         "Float")) {
+                                         "Float", true)) {
         // Honor the per-context disable lists, same as handleSnap. Un-floating
         // a window re-runs commitSnap; without this gate that re-snaps the
         // window on a monitor / desktop / activity the user disabled
@@ -212,8 +230,8 @@ void Daemon::handleFloat()
 void Daemon::handleMove(NavigationDirection direction)
 {
     NavigationContext ctx;
-    auto* nav =
-        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Move");
+    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                     "Move", true);
     if (!nav) {
         return;
     }
@@ -251,8 +269,8 @@ void Daemon::handleSpan(NavigationDirection direction)
     }
 
     NavigationContext ctx;
-    auto* nav =
-        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Span");
+    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                     "Span", true);
     if (!nav) {
         return;
     }
@@ -291,7 +309,7 @@ void Daemon::handlePush()
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
-                                         "PushToEmptyZone")) {
+                                         "PushToEmptyZone", true)) {
         if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
@@ -306,7 +324,7 @@ void Daemon::handleRestore()
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
-                                         "Restore")) {
+                                         "Restore", true)) {
         // Autotile: toggle float (restore out of layout).
         // Snap: restore to captured pre-snap geometry.
         if (isFocusedContextGated(ctx.screenId)) {
@@ -319,8 +337,8 @@ void Daemon::handleRestore()
 void Daemon::handleSwap(NavigationDirection direction)
 {
     NavigationContext ctx;
-    auto* nav =
-        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Swap");
+    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                     "Swap", true);
     if (!nav) {
         return;
     }
@@ -339,7 +357,7 @@ void Daemon::handleSnap(int zoneNumber)
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
-                                         "SnapToZone")) {
+                                         "SnapToZone", true)) {
         // Honor the per-context disable lists. engineFor() routes purely on
         // mode and never consults them, so a keyboard snap-to-zone would
         // otherwise place a window on a monitor / desktop / activity the user
@@ -406,7 +424,29 @@ void Daemon::handleSnapAll()
 
 // DRY macro invocations for identical autotile-only handlers
 HANDLE_AUTOTILE_ONLY(FocusMaster, focusMaster())
-HANDLE_AUTOTILE_ONLY(SwapWithMaster, swapFocusedWithMaster())
+// HANDLE_AUTOTILE_ONLY's body plus the drag refusal: the swap places the
+// focused window (refusesDraggedWindow).
+void Daemon::handleSwapWithMaster()
+{
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled())
+        return;
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+    if (screenId.isEmpty() || !m_screenModeRouter || !m_screenModeRouter->isAutotileMode(screenId))
+        return;
+    if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
+        return;
+    if (m_windowTrackingAdaptor
+        && refusesDraggedWindow(m_windowTrackingAdaptor, m_windowTrackingAdaptor->lastActiveWindowId(),
+                                "SwapWithMaster"))
+        return;
+    if (!m_autotileEngine->isActiveOnScreen(screenId))
+        return;
+    const PhosphorEngine::IPlacementState* tilingState = m_autotileEngine->stateForScreen(screenId);
+    if (!tilingState || tilingState->tiledWindowCount() == 0)
+        return;
+    m_autotileEngine->setActiveScreenHint(screenId);
+    m_autotileEngine->swapFocusedWithMaster();
+}
 void Daemon::handleIncreaseMasterRatio()
 {
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
@@ -545,6 +585,7 @@ void Daemon::resnapIfManualMode()
     // Only skip resnap when the current screen is engine-managed.
     // Per-desktop assignments mean some screens can be engine-managed while
     // others are manual — a global check would block manual resnaps.
+    QSet<QString> switchedScreens;
     if (m_unifiedLayoutController) {
         const QString screenId = m_unifiedLayoutController->currentScreenName();
         if (screenId.isEmpty()) {
@@ -555,18 +596,15 @@ void Daemon::resnapIfManualMode()
         }
         if (currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Scrolling) {
             // A template apply changes only the strip's preset vocabulary;
-            // no window placement moved, so buffering every OTHER snapping
-            // screen and running resnapToNewLayout would reposition windows
-            // for a no-op and burn an OSD-suppression count.
+            // no window placement moved, so there is nothing to resnap.
             return;
         }
+        // Only the switched screen: the other screens' layouts did not move,
+        // and resnapping them collapsed their spans (F474).
+        switchedScreens.insert(screenId);
     }
-    // Populate the resnap buffer before resnapping. UnifiedLayoutController::applyEntry()
-    // blocks activeLayoutChanged (QSignalBlocker) to prevent whole-screen recalculation,
-    // which also prevents onLayoutChanged() from populating the resnap buffer.
-    // Additionally, when the global active layout is already the target (e.g. second
-    // screen cycling to the same layout), setActiveLayout is a no-op and no signal fires.
-    // Explicitly populating here mirrors the KCM's assignmentChangesApplied path.
+    // One switch helper for every layout-switch caller: populate, resnap
+    // silently, prune and relay what the switch could not carry.
     if (m_windowTrackingAdaptor) {
         // Exclude EVERY engine-managed screen, not just autotile: the
         // resnap's only mode gate is this exclude set, and resnapping a
@@ -588,16 +626,7 @@ void Daemon::resnapIfManualMode()
         // osd.cpp) for the null-safe VDM read — the same pattern used
         // by every daemon-side site that needs the current desktop
         // (autotile.cpp, signals.cpp, osd.cpp, start.cpp).
-        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens, {},
-                                                                              currentDesktop());
-    }
-    // Co-locate the suppress pre-arm with the resnap call so a null
-    // m_snapAdaptor doesn't leave the counter armed for the next
-    // unrelated navigationFeedback. Mirrors the other armResnapOsdSuppression
-    // call sites (a line number into another TU rots on every file split).
-    if (m_snapAdaptor) {
-        armResnapOsdSuppression(1);
-        m_snapAdaptor->resnapToNewLayout();
+        m_windowTrackingAdaptor->resnapScreensToTheirLayouts(engineManagedScreens, switchedScreens, currentDesktop());
     }
     // Restore snap-float positions for windows the picker/cycle just released
     // from autotile — the resnap above (buffer-based) cannot cover floating
@@ -675,7 +704,6 @@ void Daemon::emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntrie
         return;
     }
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-        armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
         concreteSnap->emitBatchedResnap(floatEntries);
     } else {
         qCWarning(lcDaemon) << "emitPendingSnapFloatRestoresForResnapBuffer: dropping" << floatEntries.size()
@@ -727,7 +755,6 @@ void Daemon::flushPendingSnapZoneRestores()
     }
     qCInfo(lcDaemon) << "flushPendingSnapZoneRestores: restoring" << zoneEntries.size()
                      << "windows to their snap zones";
-    armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
     concreteSnap->emitBatchedResnap(zoneEntries);
 }
 

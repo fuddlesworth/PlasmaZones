@@ -42,10 +42,8 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     // engine knowingly gave up, and a stale scrolling TILED slot left in the
     // unified record is not memory but a false home — paired with a stale
     // record-level screenId (which an engine-miss capture can leave behind),
-    // the cross-screen reclaim would later yank the window back out from
-    // under its new engine, and that engine's defer gate would read the same
-    // stale record and stand down. Ordinary close deliberately KEEPS the
-    // slot; only the handoff clears it.
+    // a stale managed slot would read as a restorable home at the next open.
+    // Ordinary close deliberately KEEPS the slot; only the handoff clears it.
     if (m_windowTracker) {
         m_windowTracker->releaseEngineSlot(windowId, engineId());
     }
@@ -93,6 +91,11 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // Same preview hygiene as handoffRelease: an arriving window that a
     // live preview still names would be double-placed at commit.
     dropClosedWindowFromDragPreview(windowId);
+    // The window has left every other screen: a column stashed for it on one
+    // is given up, as insertOpenedWindow does for an arrival (F648).
+    forgetStashedWindowWhere(windowId, [&ctx](const PhosphorEngine::PlacementStateKey& key) {
+        return key.screenId != ctx.toScreenId;
+    });
     PhosphorEngine::PlacementStateKey key = currentKeyForScreen(ctx.toScreenId);
     if (ctx.toDesktop > 0) {
         key.desktop = ctx.toDesktop;

@@ -48,10 +48,7 @@ public:
             Q_EMIT windowZoneChanged(windowId, zoneId);
         }
 
-        // Track last used zone (skip zoneselector- prefixed IDs)
-        if (!zoneId.startsWith(QStringLiteral("zoneselector-"))) {
-            m_lastUsedZoneId = zoneId;
-        }
+        m_lastUsedZoneId = zoneId;
     }
 
     void windowUnsnapped(const QString& windowId)
@@ -345,20 +342,6 @@ private Q_SLOTS:
         // Unsnapping window1 should NOT clear lastUsedZone (it's zoneB, not zoneA)
         m_tracker->windowUnsnapped(window1);
         QCOMPARE(m_tracker->getLastUsedZoneId(), zoneB);
-    }
-
-    void testLastUsedZone_zoneSelectorIgnored()
-    {
-        QString windowId = QStringLiteral("app:window:12345");
-        QString normalZone = QUuid::createUuid().toString();
-        QString selectorZone = QStringLiteral("zoneselector-preview-123");
-
-        m_tracker->windowSnapped(windowId, normalZone);
-        QCOMPARE(m_tracker->getLastUsedZoneId(), normalZone);
-
-        // PhosphorZones::Zone selector snaps should NOT update last used zone
-        m_tracker->windowSnapped(windowId, selectorZone);
-        QCOMPARE(m_tracker->getLastUsedZoneId(), normalZone);
     }
 
 private:

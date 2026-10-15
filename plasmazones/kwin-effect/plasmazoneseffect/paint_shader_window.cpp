@@ -434,7 +434,7 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                 // which is continuous and is where the grab actually is.
                 //
                 // Gated on `heldMove &&`, the IDENTITY flag, exactly like the
-                // drag-start and release handlers in window_connections.cpp.
+                // drag-start and release handlers in window_moveresize_connections.cpp.
                 // `holdUntilRelease` alone is not that test: it is the flag
                 // the drag-start path historically set on whatever leg was
                 // live, most reachably the `window.focus` leg the click that
@@ -1085,7 +1085,7 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
         // Race window: between this queue and the lambda firing, a
         // fresh `beginShaderTransition` may install a SUCCESSOR at
         // the same EffectWindow* (e.g. window.focus retriggers while
-        // window.maximize was on its expiry frame). Without the
+        // a placement leg was on its expiry frame). Without the
         // generation check the lambda would call
         // `endShaderTransition` on the successor and kill it before
         // it ever paints. Mirrors the timer-driven teardown pattern

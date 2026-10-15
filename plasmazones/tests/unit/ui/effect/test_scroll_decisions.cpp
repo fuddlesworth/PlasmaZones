@@ -7,8 +7,12 @@
 // column-maximize 3-way batch decision (with its toggle-in-flight marker and
 // the two threaded stale-batch walks), the counter-assert burst budget, the
 // compositor-claim release table (which claim answers to which exit scope,
-// the teardown ordering rule, and the retain-on-fullscreen-skip policy), and
-// the size-continuity carry-forward table. Same header-only reach as
+// the teardown ordering rule, and the retain-on-fullscreen-skip policy), the
+// size-continuity carry-forward table, the engine-flip screen set, the
+// wire screen-list filter, the maximize-membership and claimed-press answers,
+// the view-carried origin, the passive float scope, the user Monocle
+// unmaximize read, the restore-rect output check and the KWin move off a
+// strip. Same header-only reach as
 // test_anchor_uniforms:
 // kwin-effect has no linkable test target, so the pure halves are extracted
 // into a header this test includes directly.
@@ -431,6 +435,22 @@ private Q_SLOTS:
         QTest::newRow("teardown/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::Teardown) << true;
         QTest::newRow("teardown/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::Teardown) << true;
         QTest::newRow("teardown/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::Teardown) << true;
+
+        // An evacuee keeps KWin's state: no claim releases (the ledgers are scrubbed bare).
+        QTest::newRow("evacuation/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::Evacuation) << false;
+        QTest::newRow("evacuation/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::Evacuation) << false;
+        QTest::newRow("evacuation/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::Evacuation) << false;
+
+        // A snap placement handed every claim back already, at its own rect.
+        QTest::newRow("snapPlacement/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::SnapPlacement) << false;
+        QTest::newRow("snapPlacement/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::SnapPlacement) << false;
+        QTest::newRow("snapPlacement/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::SnapPlacement) << false;
+
+        // A live window that left the context in view hands every claim back,
+        // the monocle maximize included (F675).
+        QTest::newRow("liveDeparture/monocle") << c(Claim::MonocleMaximize) << s(ClaimScope::LiveDeparture) << true;
+        QTest::newRow("liveDeparture/wfs") << c(Claim::WindowedFullscreen) << s(ClaimScope::LiveDeparture) << true;
+        QTest::newRow("liveDeparture/column") << c(Claim::MaximizedToEdges) << s(ClaimScope::LiveDeparture) << true;
     }
 
     void claimReleaseTable()
@@ -521,6 +541,206 @@ private Q_SLOTS:
         QFETCH(QSize, column);
         QFETCH(bool, carries);
         QCOMPARE(mayCarryCommittedSize(declaredRect, columnAnswered, committed, column), carries);
+    }
+
+    // The engine flip inside the tiling union (F231, F286, F1004): only a
+    // screen that stays in the union while it changes engine is re-announced.
+    void engineFlip_autotileToScrolling()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QCOMPARE(engineFlipScreens({}, s, s, false, {}), s);
+    }
+    void engineFlip_scrollingToAutotile()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QCOMPARE(engineFlipScreens(s, {}, s, false, s), s);
+    }
+    void engineFlip_scrollingToSnapping()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QVERIFY(engineFlipScreens(s, {}, s, false, {}).isEmpty());
+    }
+    void engineFlip_contextSwitchFlipsNothing()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QVERIFY(engineFlipScreens(s, {}, s, true, s).isEmpty());
+        QVERIFY(engineFlipScreens({}, s, s, true, {}).isEmpty());
+    }
+    void engineFlip_snappingToScrollingIsNotManaged()
+    {
+        const QSet<QString> s{QStringLiteral("S")};
+        QVERIFY(engineFlipScreens({}, s, {}, false, {}).isEmpty());
+    }
+
+    // The scrolling-set boundary (F359): an empty wire id is dropped, and the
+    // rest collapse to a set.
+    void nonEmptyIdSet_dropsEmpty()
+    {
+        const QStringList ids{QStringLiteral("A"), QString(), QStringLiteral("A"), QStringLiteral("B")};
+        QCOMPARE(nonEmptyIdSet(ids), (QSet<QString>{QStringLiteral("A"), QStringLiteral("B")}));
+    }
+    void nonEmptyIdSet_allEmpty()
+    {
+        QVERIFY(nonEmptyIdSet(QStringList{QString()}).isEmpty());
+    }
+
+    // A maximize Apply arm takes the claim only for a window KWin will
+    // maximize, or one already held at MaximizeFull (F680). The arms used to
+    // take it unconditionally.
+    void takesMaximizeMembership_refusedNotMaximized_false()
+    {
+        QVERIFY(!takesMaximizeMembership(/*maximizable=*/false, /*alreadyFull=*/false));
+    }
+    void takesMaximizeMembership_alreadyFull_true()
+    {
+        QVERIFY(takesMaximizeMembership(/*maximizable=*/false, /*alreadyFull=*/true));
+    }
+    void takesMaximizeMembership_maximizable_true()
+    {
+        QVERIFY(takesMaximizeMembership(/*maximizable=*/true, /*alreadyFull=*/false));
+    }
+
+    // The answer to a claimed titlebar maximize finds KWin already maximized
+    // and writes no bit; it still anchors at the press (F989).
+    void answersClaimedPress_maximizeAnswer()
+    {
+        QVERIFY(answersClaimedPress(MaximizeAction::Apply, /*kwinMaximized=*/true, /*markerLive=*/true));
+    }
+    // The answer to a claimed restore finds KWin already restored, and rides placeOut.
+    void answersClaimedPress_restoreAnswer()
+    {
+        QVERIFY(answersClaimedPress(MaximizeAction::Release, /*kwinMaximized=*/false, /*markerLive=*/true));
+    }
+    // An Apply that writes the bit itself (the shortcut path) or a Release that
+    // writes it back is not the answer to a claimed press, and leaves the marker.
+    void answersClaimedPress_armThatWritesIsNot()
+    {
+        QVERIFY(!answersClaimedPress(MaximizeAction::Apply, /*kwinMaximized=*/false, /*markerLive=*/true));
+        QVERIFY(!answersClaimedPress(MaximizeAction::Release, /*kwinMaximized=*/true, /*markerLive=*/true));
+        QVERIFY(!answersClaimedPress(MaximizeAction::None, /*kwinMaximized=*/true, /*markerLive=*/true));
+    }
+    // The answer to a claimed press owes its leg even when KWin's flip already
+    // commanded the batch's rect (F989): maximize from the column, restore from
+    // the maximize area.
+    void claimedPressOwesLeg_atTargetStillAnimates()
+    {
+        QVERIFY(claimedPressOwesLeg(true, QRectF(8, 8, 500, 752), QRect(0, 0, 1024, 768)));
+        QVERIFY(claimedPressOwesLeg(true, QRectF(0, 0, 1024, 768), QRect(8, 8, 500, 752)));
+    }
+    // Any other apply at its target stays a no-op, and so does one with no
+    // departure of its own.
+    void claimedPressOwesLeg_otherwiseNoOp()
+    {
+        QVERIFY(!claimedPressOwesLeg(false, QRectF(8, 8, 500, 752), QRect(0, 0, 1024, 768)));
+        QVERIFY(!claimedPressOwesLeg(true, QRectF(0, 0, 1024, 768), QRect(0, 0, 1024, 768)));
+        QVERIFY(!claimedPressOwesLeg(true, QRectF(), QRect(0, 0, 1024, 768)));
+    }
+    // A view-carried leg starts a view delta behind where it should first
+    // paint, along the strip's axis only: the X11 maximize of the second column
+    // (the view slides 508) departs from the column the press left, 516,8,
+    // and paints there on its first frame (F989).
+    void viewCarriedOrigin_horizontalBacksOutX()
+    {
+        QCOMPARE(viewCarriedOrigin(QRectF(516, 8, 500, 752), 508, /*vertical=*/false), QRect(8, 8, 500, 752));
+    }
+    void viewCarriedOrigin_verticalBacksOutY()
+    {
+        QCOMPARE(viewCarriedOrigin(QRectF(8, 516, 752, 500), 508, /*vertical=*/true), QRect(8, 8, 752, 500));
+    }
+    // Rounded, so sub-pixel residue makes no leg of a pure scroll.
+    void viewCarriedOrigin_roundsResidue()
+    {
+        QCOMPARE(viewCarriedOrigin(QRectF(516.4, 7.6, 499.6, 752.4), 0, false), QRect(516, 8, 500, 752));
+    }
+    // No live marker: the effect-restart adopt (Apply over a held bit) is no press.
+    void answersClaimedPress_noMarkerIsNot()
+    {
+        QVERIFY(!answersClaimedPress(MaximizeAction::Apply, /*kwinMaximized=*/true, /*markerLive=*/false));
+    }
+
+    // The passive float channel on a scrolling screen releases every claim,
+    // monocle included: no strip batch owns a monocle membership (F723).
+    void passiveFloatScope_scrollingReleasesMonocle()
+    {
+        const ClaimScope scope = passiveFloatScope(/*onScrollingScreen=*/true);
+        QCOMPARE(static_cast<int>(scope), static_cast<int>(ClaimScope::StripExit));
+        QVERIFY(claimReleasesOn(Claim::MonocleMaximize, scope));
+        QVERIFY(claimReleasesOn(Claim::WindowedFullscreen, scope));
+        QVERIFY(claimReleasesOn(Claim::MaximizedToEdges, scope));
+    }
+    // Off a strip the autotile monocle batch owns the membership, so the
+    // passive float leaves it (the PassiveFloat blank stays).
+    void passiveFloatScope_autotileKeepsMonocle()
+    {
+        const ClaimScope scope = passiveFloatScope(/*onScrollingScreen=*/false);
+        QCOMPARE(static_cast<int>(scope), static_cast<int>(ClaimScope::PassiveFloat));
+        QVERIFY(!claimReleasesOn(Claim::MonocleMaximize, scope));
+        QVERIFY(claimReleasesOn(Claim::WindowedFullscreen, scope));
+        QVERIFY(claimReleasesOn(Claim::MaximizedToEdges, scope));
+    }
+
+    // A Restore commit while KWin still holds the Full request is the late ack
+    // of a superseded configure, not the user (F1013).
+    void userMonocleUnmaximize_supersededRestoreAck_false()
+    {
+        QVERIFY(!isUserMonocleUnmaximize(/*committedH=*/false, /*committedV=*/false, /*requestedFull=*/true));
+    }
+    void userMonocleUnmaximize_restoreRequested_true()
+    {
+        QVERIFY(isUserMonocleUnmaximize(/*committedH=*/false, /*committedV=*/false, /*requestedFull=*/false));
+    }
+    void userMonocleUnmaximize_axisStillMaximized_false()
+    {
+        QVERIFY(!isUserMonocleUnmaximize(/*committedH=*/true, /*committedV=*/false, /*requestedFull=*/false));
+    }
+
+    // A monocle member's restore rect must lead back onto its stack's output
+    // (F1011): one left on the strip's monitor is re-seated.
+    void restoreRectOnOutput_onTheOutput_true()
+    {
+        QVERIFY(restoreRectOnOutput(QRectF(1928, 8, 500, 752), QRectF(1920, 0, 1920, 1080)));
+    }
+    void restoreRectOnOutput_otherOutput_false()
+    {
+        QVERIFY(!restoreRectOnOutput(QRectF(8, 8, 500, 752), QRectF(1920, 0, 1920, 1080)));
+    }
+    void restoreRectOnOutput_invalid_false()
+    {
+        QVERIFY(!restoreRectOnOutput(QRectF(), QRectF(0, 0, 1920, 1080)));
+    }
+
+    // KWin's own Move to Screen of a strip tile is a real move; the engine's
+    // handoffs, a parked column, a drag and a straddling column are not (F738).
+    void kwinMoveOffStrip_frameOnAnotherOutput_true()
+    {
+        QVERIFY(isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
+                                   /*parked=*/false, /*userMove=*/false));
+    }
+    void kwinMoveOffStrip_engineHandoff_false()
+    {
+        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/true,
+                                    /*parked=*/false, /*userMove=*/false));
+    }
+    void kwinMoveOffStrip_parkedColumn_false()
+    {
+        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
+                                    /*parked=*/true, /*userMove=*/false));
+    }
+    void kwinMoveOffStrip_drag_false()
+    {
+        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
+                                    /*parked=*/false, /*userMove=*/true));
+    }
+    void kwinMoveOffStrip_straddlingColumn_false()
+    {
+        // Centre on the neighbour, but still overlapping the commanded output.
+        QVERIFY(!isKWinMoveOffStrip(QRectF(1700, 8, 600, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
+                                    /*parked=*/false, /*userMove=*/false));
+    }
+    void kwinMoveOffStrip_noCommandedRect_false()
+    {
+        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(), /*markerArmed=*/false, /*parked=*/false,
+                                    /*userMove=*/false));
     }
 };
 

@@ -7,4 +7,17 @@ namespace PhosphorSnapEngine {
 
 IZoneAdjacencyResolver::~IZoneAdjacencyResolver() = default;
 
+QString IZoneAdjacencyResolver::getAdjacentZoneOutside(const QStringList& zoneIds, const QString& direction,
+                                                       const QString& screenId) const
+{
+    return zoneIds.isEmpty() ? QString() : getAdjacentZone(zoneIds.first(), direction, screenId);
+}
+
+QString IZoneAdjacencyResolver::getFirstZoneInDirectionOnDesktop(const QString& direction, const QString& screenId,
+                                                                 int desktop) const
+{
+    Q_UNUSED(desktop)
+    return getFirstZoneInDirection(direction, screenId);
+}
+
 } // namespace PhosphorSnapEngine

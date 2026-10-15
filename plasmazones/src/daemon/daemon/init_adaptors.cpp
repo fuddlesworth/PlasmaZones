@@ -212,6 +212,27 @@ void Daemon::initCoreAdaptors()
     // Full rule set for per-window RestorePosition evaluation (overrides the
     // per-engine *RestoreFloatedWindowsOnLogin settings for matched windows).
     m_windowTrackingAdaptor->setRuleStore(m_ruleStore.get());
+    // The effect's settle report can name an output gone before the daemon's
+    // own screen-removed handler runs; both retire it the same way.
+    m_windowTrackingAdaptor->setOutputRetirer([this](const QString& physicalScreenId) {
+        retireOutputPlacements(physicalScreenId);
+    });
+    // A window that left a screen leaves the saved engine orders of the
+    // screens it left, or a mode round trip there tiles it back (F695).
+    m_windowTrackingAdaptor->setWindowLeftScreenHook([this](const QString& windowId, const QString& keepScreenId) {
+        pruneEngineOrdersForWindow(PhosphorIdentity::WindowId::extractInstanceId(windowId), keepScreenId);
+    });
+    // The compositor bridge's screen-form floats act on the window where it
+    // is; any other bus caller's are gated as the screenless verb is (F1108).
+    m_windowTrackingAdaptor->setBridgeCallerCheck([this](const QString& busName) {
+        return m_compositorBridge && m_compositorBridge->isBridgeService(busName);
+    });
+    // An evacuee on a hidden desktop floats by the mode that desktop runs,
+    // decided as the engine screen sets decide it in view (F1122).
+    m_windowTrackingAdaptor->setContextModeResolver(
+        [this](const QString& screenId, int desktop, const QString& activity) {
+            return runningModeForContext(screenId, desktop, activity);
+        });
 
     // Drop closed windows from m_lastEngineOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would

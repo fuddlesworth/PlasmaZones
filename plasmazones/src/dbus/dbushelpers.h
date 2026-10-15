@@ -377,5 +377,27 @@ QScreen* resolvePhysicalQScreen(PhosphorScreens::ScreenManager* mgr, const QStri
 QRectF resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* layout,
                              const QString& screenId);
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Bus caller (implemented in dbushelpers.cpp)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief The unique bus name of the sender of the bus message the object
+ *        @p adaptor is exported through is serving now, or empty while it
+ *        serves none (a direct call, as the unit tests make).
+ *
+ * That message is whatever the host is delivering: a call to this adaptor or
+ * to another one on the same host, or a bus signal delivered to a host slot,
+ * so code reached from any of those reads its sender, not only the code of
+ * this adaptor's own slot.
+ *
+ * Qt sets a call's QDBusContext on the object the adaptor is exported
+ * through, its parent, never on the QDBusAbstractAdaptor itself (see the
+ * QDBusContext documentation), so an adaptor that inherits QDBusContext reads
+ * calledFromDBus() as false on every call. The parent has to inherit it
+ * (Daemon does); a parent that does not answers empty.
+ */
+QString busCaller(const QObject* adaptor);
+
 } // namespace DbusHelpers
 } // namespace PlasmaZones

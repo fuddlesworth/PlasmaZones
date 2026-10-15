@@ -155,16 +155,16 @@ bool TilingHandler::parkFullscreenHoldForDesktopSwitch(const QString& windowId)
     m_savedNotifiedForDesktopReturn.insert(windowId);
     // The per-window companions a demotion sheds; the enter branch cleared
     // most of them already, so these are belts.
-    m_tileTargetZones.remove(windowId);
-    m_centeredWaylandZones.remove(windowId);
-    m_effect->m_scrollCommandedRects.remove(windowId);
-    m_effect->m_scrollOfferedColumn.remove(windowId);
-    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
-        KWin::effects->addRepaintFull();
-    }
+    dropCenteringTarget(windowId);
+    dropScrollCompanions(windowId);
     clearWindowTiledAllScreens(windowId);
     qCInfo(lcEffect) << "Parked own-fullscreen hold for desktop switch:" << windowId;
     return true;
+}
+
+bool TilingHandler::holdsFullscreenFloat(const QString& windowId) const
+{
+    return m_fullscreenFloatedWindows.contains(windowId);
 }
 
 void TilingHandler::dropFullscreenHoldRecords(const QString& windowId)

@@ -16,8 +16,10 @@
  */
 
 #include <QPoint>
+#include <QRegularExpression>
 #include <QTest>
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 
 using namespace PhosphorEngine;
@@ -96,6 +98,22 @@ public:
     }
 };
 
+/// The minimal engine plus a record of the per-removal pair, the two hooks
+/// the remapDesktops default decomposes a single removal into.
+class RenumberRecordingEngine : public MinimalEngine
+{
+public:
+    void pruneStatesForDesktop(int removedDesktop) override
+    {
+        calls.append(QStringLiteral("prune %1").arg(removedDesktop));
+    }
+    void renumberDesktopsAfterRemoval(int removedDesktop) override
+    {
+        calls.append(QStringLiteral("renumber %1").arg(removedDesktop));
+    }
+    QStringList calls;
+};
+
 } // namespace
 
 class TestIPlacementEngineDefaults : public QObject
@@ -149,6 +167,38 @@ private Q_SLOTS:
         QVERIFY(engine.engineId().isEmpty());
         QVERIFY(!engine.isEnabled());
         QVERIFY(engine.algorithmId().isEmpty());
+    }
+
+    void remapDesktops_defaultDecomposesRemovals()
+    {
+        // An engine without its own remap still follows the change the daemon
+        // used to drive by hand: prune the removed desktop, then shift the rest
+        // down, in that order (F763). Several removals go highest first, so
+        // each later position is still the one the map names.
+        RenumberRecordingEngine engine;
+        engine.remapDesktops(DesktopRemap::removal(2, 4));
+        QCOMPARE(engine.calls, (QStringList{QStringLiteral("prune 2"), QStringLiteral("renumber 2")}));
+
+        engine.calls.clear();
+        engine.remapDesktops(DesktopRemap::fromIds(
+            {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d"), QStringLiteral("e")},
+            {QStringLiteral("a"), QStringLiteral("c"), QStringLiteral("e")}));
+        QCOMPARE(engine.calls,
+                 (QStringList{QStringLiteral("prune 4"), QStringLiteral("renumber 4"), QStringLiteral("prune 2"),
+                              QStringLiteral("renumber 2")}));
+
+        // A rename or an append moves no number: nothing runs.
+        engine.calls.clear();
+        engine.remapDesktops(DesktopRemap::fromIds({QStringLiteral("a"), QStringLiteral("b")},
+                                                   {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
+        QVERIFY(engine.calls.isEmpty());
+
+        // A reorder is not a removal: the pair cannot apply it, so the default
+        // applies nothing and says so.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("remapDesktops:.*has no remap")));
+        engine.remapDesktops(DesktopRemap::fromIds({QStringLiteral("a"), QStringLiteral("b")},
+                                                   {QStringLiteral("b"), QStringLiteral("a")}));
+        QVERIFY(engine.calls.isEmpty());
     }
 };
 

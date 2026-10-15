@@ -15,6 +15,10 @@
 
 #include <optional>
 
+namespace PhosphorEngine {
+class DesktopRemap;
+}
+
 namespace PhosphorSnapEngine {
 
 /// Per-screen snap placement state.
@@ -231,9 +235,9 @@ public:
     /// of this store and INTO @p target, rewriting the LIVE screen assignment to
     /// @p newScreenId so target->screenForWindow(windowId) reports the destination
     /// monitor (the #724 cross-monitor determinism requirement). The pre-float
-    /// zone/screen ride along UNCHANGED: they name the SOURCE monitor's home zone,
-    /// preserved so an unfloat on any monitor restores the home zone (cross-monitor
-    /// restore is allowed; there is no refusal guard). The global-scalar fields
+    /// zone/screen move UNCHANGED: only a move to another monitor drops them (and
+    /// the zone) first, and a re-key on the same monitor (another desktop, a
+    /// split, an EDID rename) keeps them. The global-scalar fields
     /// (last-used-zone, user-snapped classes) are NOT moved — they stay global.
     /// No-op when @p target is null/this or the window has no entry in this store.
     void migrateWindowTo(SnapState* target, const QString& windowId, const QString& newScreenId);
@@ -281,6 +285,15 @@ public:
     {
         return m_lastUsedDesktop;
     }
+    /// Shift every desktop number this store records (each window's desktop
+    /// and the last-used zone's) the way Plasma renumbers desktops when
+    /// @p removedDesktop goes: higher numbers move down by one, and a value ON
+    /// the removed desktop reads as unknown (0).
+    void renumberDesktopsAfterRemoval(int removedDesktop);
+    /// The same for any change of KWin's desktop list: every number moves to the
+    /// position @p remap gives its desktop, and one on a removed desktop reads as
+    /// unknown (0). A number outside the old list is left as it is.
+    void remapDesktops(const PhosphorEngine::DesktopRemap& remap);
     /// Monotonic stamp bumped every time this store's last-used zone is set to a
     /// non-empty value (via updateLastUsedZone / restoreLastUsedZone). 0 means
     /// "never set". The facade compares stamps across stores to pick the single
@@ -352,9 +365,8 @@ private:
     /// stable instance id, WITHOUT seeding — the daemon seeds once per window in
     /// WindowTrackingAdaptor::setWindowMetadata, so every snap accessor here only
     /// looks up. Returns the input verbatim when the instance has no canonical
-    /// entry (or no registry is attached, e.g. unit tests), which also makes the
-    /// bare-appId alias writes (addPreFloat*/clearPreFloatZone) safe. See the
-    /// .cpp header comment.
+    /// entry (or no registry is attached, e.g. unit tests). See the .cpp
+    /// header comment.
     QString canonicalizeForLookup(const QString& rawWindowId) const;
 
     /// Shared body of unassignWindow / unsnapForFloat. Removes the window's

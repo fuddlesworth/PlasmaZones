@@ -57,11 +57,12 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
             m_floatRestore[windowId].fullscreenHold = true;
         }
         m_scrollFloatedWindows.insert(windowId);
-        // Drop the same three per-window memories the main float path below
-        // drops: a retained rect that happens to equal the one the strip
-        // later resolves defeats applyLayout's emit-on-change gate
-        // (reachable — the drag-preview heal that manufactures this residue
-        // clears neither memory), a stale park edge would anchor the
+        // Drop the per-window memories, the rect included (the main path keeps
+        // it as the float-back guard, but a residue has no column rect worth
+        // keeping): a retained rect equal to the one the strip later resolves
+        // defeats applyLayout's emit-on-change gate (reachable: the
+        // drag-preview heal that manufactures this residue clears neither
+        // memory), a stale park edge would anchor the
         // arrival animation to the wrong side, and the windowed-fs memory
         // goes as a symmetry belt (a stale entry there is a set-vs-bool
         // compare that can only force one redundant emit, never suppress).
@@ -137,7 +138,10 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     restore.fullscreenHold = fullscreenHold;
     m_floatRestore.insert(windowId, restore);
     m_scrollFloatedWindows.insert(windowId);
-    m_lastAppliedRect.remove(windowId);
+    // m_lastAppliedRect is KEPT: it is the column rect the float-back refusal
+    // compares against (lastManagedRect), and the daemon samples the float-back
+    // after this float. unfloatWindowInternal drops it on re-adoption.
+    //
     // A float leaves the strip, so a remembered park edge is orphaned: the
     // aliveness prune never reclaims it (the window stays alive), and the
     // stale entry would anchor the arrival animation to the wrong side when
@@ -330,6 +334,10 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     // announcement's screen (both current callers pass a matching screen;
     // this pins the contract).
     announceFloat(announce, windowId, false, contextScreen);
+    // The rect the float kept as the float-back guard: the window is a tile
+    // again, and a kept rect equal to the one the strip resolves now would
+    // gate away its first windowsTiled batch (handoffReceive's reason).
+    m_lastAppliedRect.remove(windowId);
     // Batch callers (snapAllWindows) relayout once for the whole batch.
     if (applyAfter) {
         // Background-context guard, same terms as floatWindowInternal:
@@ -345,6 +353,16 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
 }
 
 void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, const QString& screenId)
+{
+    // The tracking adaptor's entry (minimize, a drag float, the shell map): an
+    // engine-side transition that leaves the window where it is (F557,
+    // shell_map_float). The float verbs announce Active through
+    // setWindowFloatAnnounced themselves (F578).
+    setWindowFloatAnnounced(rawWindowId, shouldFloat, screenId, FloatAnnounce::Passive);
+}
+
+void ScrollEngine::setWindowFloatAnnounced(const QString& rawWindowId, bool shouldFloat, const QString& screenId,
+                                           FloatAnnounce announce)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
     PhosphorEngine::PlacementStateKey key;
@@ -422,9 +440,9 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
     }
 
     if (shouldFloat) {
-        floatWindowInternal(state, key, windowId, screenId);
+        floatWindowInternal(state, key, windowId, screenId, announce);
     } else {
-        unfloatWindowInternal(state, windowId, key.screenId);
+        unfloatWindowInternal(state, windowId, key.screenId, true, announce);
     }
 }
 
@@ -521,8 +539,10 @@ void ScrollEngine::settleReannouncedFullscreenHold(const QString& windowId)
             }
             // The deferred apply emits placementChanged only when the anchor
             // moved; the strip's structure changed regardless, and this is
-            // the dirty mark's sole producer (windowOpened's burst path emits
-            // it unconditionally for the same reason).
+            // the engine's only way to mark DirtyScrollStrips (the tracking
+            // service's scheduleSaveState, DirtyAll, also sets that bit).
+            // windowOpened's burst path emits it unconditionally for the same
+            // reason.
             Q_EMIT placementChanged(key.screenId);
         }
         return;
@@ -532,7 +552,7 @@ void ScrollEngine::settleReannouncedFullscreenHold(const QString& windowId)
 
 void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& screenId)
 {
-    // setWindowFloat canonicalizes its own input; canonicalizeForLookup is
+    // setWindowFloatAnnounced canonicalizes its own input; canonicalizeForLookup is
     // idempotent, so passing the resolved id through is a single-pass
     // pipeline, not a second translation.
     const QString windowId = canonicalizeForLookup(rawWindowId);
@@ -540,7 +560,7 @@ void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& 
     if (!state) {
         // Report instead of absorbing the press silently: a toggle aimed at
         // an untracked window would resolve floating=false below and
-        // setWindowFloat's no-state arm silently rejects the float. Every
+        // setWindowFloatAnnounced's no-state arm silently rejects the float. Every
         // other navigation shortcut produces feedback, and a silent
         // shortcut reads as broken — mirrors SnapEngine::toggleWindowFloat
         // and the autotile facade's not_managed report. Direct callers only:
@@ -554,7 +574,7 @@ void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& 
         return;
     }
     const bool floating = state->isFloating(windowId);
-    setWindowFloat(windowId, !floating, screenId);
+    setWindowFloatAnnounced(windowId, !floating, screenId, FloatAnnounce::Active);
 }
 
 } // namespace PhosphorScrollEngine

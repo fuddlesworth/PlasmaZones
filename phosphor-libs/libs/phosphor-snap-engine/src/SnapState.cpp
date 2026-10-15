@@ -3,6 +3,10 @@
 
 #include <PhosphorSnapEngine/SnapState.h>
 
+#include <PhosphorEngine/DesktopRemap.h>
+
+#include <algorithm>
+
 namespace PhosphorSnapEngine {
 
 SnapState::SnapState(const QString& screenId, QObject* parent)
@@ -29,11 +33,8 @@ SnapState::~SnapState() = default;
 // SnapState only ever LOOKS UP (never seeds): the daemon seeds the canonical
 // mapping once per window in WindowTrackingAdaptor::setWindowMetadata (the
 // universal window-open choke point), so by the time any snap accessor runs the
-// window already has a canonical entry. Looking up (rather than seeding) here is
-// also what keeps the appId-alias writes safe — the pre-float session-restore
-// fallback passes a BARE appId (no instance id) to addPreFloat*/clearPreFloatZone,
-// and a no-seed lookup returns it verbatim instead of polluting the registry's
-// instance map with an appId-keyed entry that would never be released.
+// window already has a canonical entry. A lookup also never mints a registry
+// entry for an id that is not a window's, which a seeding call would.
 
 QString SnapState::canonicalizeForLookup(const QString& rawWindowId) const
 {
@@ -227,6 +228,40 @@ void SnapState::recordResidence(const QString& rawWindowId, const QString& scree
     }
     if (m_windowDesktopAssignments.value(windowId, -1) != virtualDesktop) {
         m_windowDesktopAssignments[windowId] = virtualDesktop;
+        changed = true;
+    }
+    if (changed) {
+        Q_EMIT stateChanged();
+    }
+}
+
+void SnapState::renumberDesktopsAfterRemoval(int removedDesktop)
+{
+    if (removedDesktop < 1) {
+        return;
+    }
+    // The removal map has to reach every number this store holds, or one
+    // above its old count would read as outside the list and keep its number.
+    int highest = std::max(removedDesktop, m_lastUsedDesktop);
+    for (const int desktop : std::as_const(m_windowDesktopAssignments)) {
+        highest = std::max(highest, desktop);
+    }
+    remapDesktops(PhosphorEngine::DesktopRemap::removal(removedDesktop, highest));
+}
+
+void SnapState::remapDesktops(const PhosphorEngine::DesktopRemap& remap)
+{
+    // In place: each value is one window's desktop, so no write can land on
+    // an entry not yet visited.
+    bool changed = false;
+    for (auto it = m_windowDesktopAssignments.begin(); it != m_windowDesktopAssignments.end(); ++it) {
+        if (const int next = remap.map(it.value()); next != it.value()) {
+            it.value() = next;
+            changed = true;
+        }
+    }
+    if (const int next = remap.map(m_lastUsedDesktop); next != m_lastUsedDesktop) {
+        m_lastUsedDesktop = next;
         changed = true;
     }
     if (changed) {
@@ -530,8 +565,8 @@ void SnapState::migrateWindowTo(SnapState* target, const QString& rawWindowId, c
         target->m_floatingWindows.insert(windowId);
         moved = true;
     }
-    // Pre-float zone/screen carry over UNCHANGED (they name the source monitor's
-    // home zone — behaviour A).
+    // Pre-float zone/screen carry over UNCHANGED: a move to another monitor
+    // has already dropped them, and a re-key on the same one keeps them.
     if (const auto it = m_preFloatZoneAssignments.constFind(windowId); it != m_preFloatZoneAssignments.constEnd()) {
         target->m_preFloatZoneAssignments[windowId] = it.value();
         m_preFloatZoneAssignments.remove(windowId);

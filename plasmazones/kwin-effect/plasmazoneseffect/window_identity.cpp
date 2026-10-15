@@ -80,6 +80,49 @@ QString PlasmaZonesEffect::getWindowAppId(KWin::EffectWindow* w) const
     return ::PhosphorIdentity::WindowId::normalizeAppId(window->desktopFileName(), w->windowClass());
 }
 
+WindowContextFields PlasmaZonesEffect::liveContextFields(KWin::EffectWindow* w)
+{
+    WindowContextFields fields;
+    if (!w) {
+        return fields;
+    }
+    // virtualDesktop: 0 = on all desktops / unknown; otherwise the 1-based x11
+    // desktop number of the window's first desktop. A window spanning several
+    // (but not all) desktops reports its first here and the FULL list too, so
+    // the daemon's per-window mode resolution can prefer whichever spanned
+    // desktop the screen currently shows instead of pinning to the first. Null
+    // desktop entries are skipped on BOTH derivations, keeping the
+    // "virtualDesktop equals the span list's first entry" invariant even if
+    // KWin hands back a null pointer. The list is an explicit QVariantList: a
+    // QVariant wrapping QList<int> would not survive the daemon's .toList()
+    // readback.
+    if (KWin::Window* const window = w->window()) {
+        const QList<KWin::VirtualDesktop*> desktops = window->desktops();
+        for (const KWin::VirtualDesktop* vd : desktops) {
+            if (!vd) {
+                continue;
+            }
+            if (fields.virtualDesktop == 0) {
+                fields.virtualDesktop = static_cast<int>(vd->x11DesktopNumber());
+            }
+            if (desktops.size() > 1) {
+                fields.desktops.append(static_cast<int>(vd->x11DesktopNumber()));
+            }
+        }
+    }
+    // activity: empty = on all activities / unknown; otherwise the first UUID,
+    // and every activity when the window is on several, so the daemon does not
+    // model it on the first alone (F426).
+    const QStringList activities = w->activities();
+    fields.activity = activities.isEmpty() ? QString() : activities.first();
+    if (activities.size() > 1) {
+        for (const QString& activityId : activities) {
+            fields.activities.append(activityId);
+        }
+    }
+    return fields;
+}
+
 void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeExtended)
 {
     if (!w) {
@@ -114,28 +157,15 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     const int rawPid = static_cast<int>(w->pid());
     const int pid = rawPid > 0 ? rawPid : 0;
 
-    // virtualDesktop: 0 = on all desktops / unknown; otherwise the 1-based x11
-    // desktop number of the window's first desktop. A window spanning several
-    // (but not all) desktops reports its first here and the FULL list via the
-    // VirtualDesktops extended key below, so the daemon's per-window mode
-    // resolution can prefer whichever spanned desktop the screen currently
-    // shows instead of pinning to the first. Null desktop entries are skipped
-    // on BOTH derivations, keeping the "virtualDesktop equals the span list's
-    // first entry" invariant even if KWin hands back a null pointer.
-    int virtualDesktop = 0;
-    if (window) {
-        const QList<KWin::VirtualDesktop*> desktops = window->desktops();
-        for (const KWin::VirtualDesktop* vd : desktops) {
-            if (vd) {
-                virtualDesktop = static_cast<int>(vd->x11DesktopNumber());
-                break;
-            }
-        }
-    }
-
-    // activity: empty = on all activities / unknown; otherwise the first UUID.
-    const QStringList activities = w->activities();
-    const QString activity = activities.isEmpty() ? QString() : activities.first();
+    // While a gesture or an output change holds the window's desktop or
+    // activity edit, every push (full or caption-only, from any handler)
+    // reports the context it had before, so no daemon reconcile carries the
+    // window into a context mid-move (F665, F622, F652); the release pushes the
+    // new one.
+    const auto hold = m_contextHold.holds.constFind(w);
+    const WindowContextFields context = (m_resizeHold.window == w && m_resizeHold.heldAxes != 0) ? m_resizeHold.context
+        : (hold != m_contextHold.holds.cend() && hold->heldAxes != 0)                            ? stampContextFields(w)
+                                                                                                 : liveContextFields(w);
 
     const int windowType = static_cast<int>(windowTypeFor(w));
 
@@ -204,6 +234,13 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         if (props.isMaximized) {
             extended.insert(Key::IsMaximized, *props.isMaximized);
         }
+        // Maximized on one axis (Maximize Vertically / Horizontally) fills the
+        // output that way, so its frame is no free position (F65). Read off
+        // KWin::Window like urgency: it is not a rule-matchable field.
+        if (window) {
+            const KWin::MaximizeMode mode = window->maximizeMode();
+            extended.insert(Key::IsAxisMaximized, mode == KWin::MaximizeVertical || mode == KWin::MaximizeHorizontal);
+        }
         if (props.isFocused) {
             extended.insert(Key::IsFocused, *props.isFocused);
         }
@@ -258,37 +295,36 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         if (props.captionNormal) {
             extended.insert(Key::CaptionNormal, *props.captionNormal);
         }
-        // Multi-desktop span list. Collected here (not with virtualDesktop
-        // above) so a caption-only refresh skips the walk along with the rest
-        // of the extended build. Built as an explicit QVariantList — a
-        // QVariant wrapping QList<int> would not survive the daemon's
-        // .toList() readback.
-        if (window) {
-            const QList<KWin::VirtualDesktop*> desktops = window->desktops();
-            if (desktops.size() > 1) {
-                QVariantList desktopsList;
-                desktopsList.reserve(desktops.size());
-                for (const KWin::VirtualDesktop* vd : desktops) {
-                    if (vd) {
-                        desktopsList.append(static_cast<int>(vd->x11DesktopNumber()));
-                    }
-                }
-                if (!desktopsList.isEmpty()) {
-                    extended.insert(Key::VirtualDesktops, desktopsList);
-                }
-            }
+        // The multi-desktop and multi-activity span lists, present only for a
+        // window on several (see liveContextFields).
+        if (!context.desktops.isEmpty()) {
+            extended.insert(Key::VirtualDesktops, context.desktops);
+        }
+        if (!context.activities.isEmpty()) {
+            extended.insert(Key::Activities, context.activities);
         }
     }
 
     // Fire-and-forget — the daemon side is idempotent.
-    PhosphorProtocol::ClientHelpers::fireAndForget(
-        this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setWindowMetadata"),
-        {instanceId, appId, desktopFile, title, windowRole, pid, virtualDesktop, activity, windowType, extended},
-        QStringLiteral("setWindowMetadata"));
+    PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("setWindowMetadata"),
+                                                   {instanceId, appId, desktopFile, title, windowRole, pid,
+                                                    context.virtualDesktop, context.activity, windowType, extended},
+                                                   QStringLiteral("setWindowMetadata"));
+    // Every caption the daemon is sent, by either push, so pushCaptionOnly's
+    // de-dupe compares against what the daemon holds (F170, F345).
+    m_lastPushedCaption.insert(w, title);
 }
 
 void PlasmaZonesEffect::flushPendingFrameGeometry()
 {
+    // Caption changes queued by pushCaptionOnly when a rule reads the title
+    // (F864). Ids are live window ids; a window gone since drops out here.
+    for (const QString& id : std::exchange(m_pendingCaptionEvictions, {})) {
+        if (KWin::EffectWindow* const w = findWindowByIdExact(id); w && !w->isDeleted()) {
+            invalidateRuleCachesForWindowFields(id, w);
+        }
+    }
     if (m_pendingFrameGeometry.isEmpty()) {
         return;
     }
@@ -296,15 +332,16 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
     // disturb the iteration.
     const auto batch = std::exchange(m_pendingFrameGeometry, {});
     for (auto it = batch.constBegin(); it != batch.constEnd(); ++it) {
-        // The shouldHandleWindow exclusion gate runs HERE, once per debounced
-        // flush, rather than on every windowFrameGeometryChanged tick — it is
-        // an uncached rule resolve over a freshly built ruleQuery, and
-        // animated geometry fired it hundreds of times per second
-        // (discussion #816). The decoration resync deliberately stayed per
-        // tick in the stash lambda (window_connections.cpp): it is cheap and
-        // deferring it let a re-decorated title bar flash for the throttle
-        // window. QPointer nulls if the window died since the stash; a dead
-        // or excluded window contributes no daemon push.
+        // The shouldHandleWindow gate runs HERE, once per window per throttled
+        // 50 ms flush, rather than on every windowFrameGeometryChanged tick,
+        // which an interactive move or resize fires every frame (discussion
+        // #816). Its rule step is a per-window cached verdict,
+        // rebuilt on a miss (the eviction below forces one when a
+        // geometry-scoped rule exists). The decoration resync deliberately
+        // stayed per tick in the stash lambda (window_connections.cpp): it is
+        // cheap and deferring it let a re-decorated title bar flash for the
+        // throttle window. QPointer nulls if the window died since the stash;
+        // a dead window contributes no daemon push.
         KWin::EffectWindow* w = it.value().window.data();
         if (!w || w->isDeleted()) {
             continue;
@@ -320,9 +357,16 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
         // helper: that helper's flush clears the GLOBAL animation match
         // cache, and this edge repeats for a drag's whole duration.
         if (m_hasGeometryScopedRules) {
-            invalidateRuleCachesForWindowGeometry(it.key(), w);
+            invalidateRuleCachesForWindowFields(it.key(), w);
         }
-        if (!shouldHandleWindow(w)) {
+        // The shadow is the daemon's live frame for every window its verbs
+        // accept: a window the user keeps above is one (the own-keep-above
+        // reject is waived), an Exclude-matched one is not, so its close
+        // records no float-back (F923). The eviction above still runs with no
+        // daemon; the push does not, and nothing is lost: the bring-up seeds
+        // every shadow (F573).
+        if (!shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/false, /*exemptOwnKeepAbove=*/true)
+            || !m_daemonGate.serviceRegistered) {
             continue;
         }
         const QRect& geo = it.value().geometry;

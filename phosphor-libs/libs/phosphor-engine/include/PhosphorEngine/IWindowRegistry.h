@@ -5,22 +5,44 @@
 
 #include <phosphorengine_export.h>
 #include <QList>
+#include <QSet>
 #include <QString>
+#include <QStringList>
 
 #include <optional>
 
 namespace PhosphorEngine {
 
 /// The contexts the compositor last reported a window on, as far as the
-/// registry knows them. A restore or membership decision reads this instead
-/// of the SCREEN's current desktop, which is not the window's when the window
-/// is being placed onto a background desktop.
+/// registry knows them, in KWin's current desktop numbering: a renumber moves
+/// the numbers of records not reported since (WindowRegistry::remapDesktops).
+/// A restore or membership decision reads this instead of the SCREEN's current
+/// desktop, which is not the window's when the window is being placed onto a
+/// background desktop.
 struct WindowDesktopContext
 {
     int virtualDesktop = 0; ///< 1-based x11 desktop; 0 = all desktops / unknown
     QList<int> virtualDesktops; ///< full list when the window spans several desktops
     std::optional<bool> sticky; ///< on all desktops; disengaged when never reported
     QString activity; ///< empty = all activities / unknown
+    QStringList activities{}; ///< full list when on several activities; appended last (F426)
+
+    /// The desktops the window is on, or nullopt when it is on all of them or
+    /// they are unknown: the full list for a window spanning several, else
+    /// its one desktop.
+    std::optional<QSet<int>> desktopSet() const
+    {
+        if (sticky.value_or(false)) {
+            return std::nullopt;
+        }
+        if (!virtualDesktops.isEmpty()) {
+            return QSet<int>(virtualDesktops.cbegin(), virtualDesktops.cend());
+        }
+        if (virtualDesktop >= 1) {
+            return QSet<int>{virtualDesktop};
+        }
+        return std::nullopt;
+    }
 };
 
 class PHOSPHORENGINE_EXPORT IWindowRegistry
@@ -45,7 +67,8 @@ public:
      * not finished mapping). Callers needing a window's app identity must ask
      * appIdFor / currentAppIdFor, which read the metadata record and
      * self-correct when the class arrives, rather than parsing it back out of
-     * the frozen id.
+     * the frozen id. An empty id, or one with no instance part ("appId|"),
+     * names no window and comes back unchanged without being frozen.
      */
     virtual QString canonicalizeWindowId(const QString& rawWindowId) = 0;
     virtual QString canonicalizeForLookup(const QString& rawWindowId) const = 0;
@@ -69,7 +92,7 @@ public:
      * hidden windows into tiling layouts and persists minimize-suspension
      * floats. CAPTURE-side consumers may deliberately require engaged-true
      * (`.value_or(false)`) when their traffic is causally ordered after the
-     * minimize edge's metadata push (recordFreeGeometry / recordFloatingClose
+     * minimize edge's metadata push (the snap pre-snap capture / recordFloatingClose
      * document this per site) — refusing a capture on unknown would lose
      * genuine free positions, the opposite failure.
      *
@@ -84,10 +107,29 @@ public:
 
     /// The desktop set and activity last reported for @p windowId (bare
     /// instance id or composite `appId|instanceId`), or nullopt when the
-    /// window is unknown. Default reports unknown, like minimizedState, so a
-    /// registry-less engine or a test fake falls back to the screen's current
-    /// context rather than inventing one.
+    /// window is unknown. Default reports unknown, like minimizedState.
+    /// Consumers then treat the window's desktops as unknown instead of
+    /// inventing them: the snap restore, for one, takes the record's own desktop
+    /// when it names a zone there, else the screen's, and the persisted-zone
+    /// seed drops none of the desktops the record names.
     virtual std::optional<WindowDesktopContext> desktopContext(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return std::nullopt;
+    }
+
+    // New virtuals go below this line: this interface is installed and
+    // exported, and its vtable order is part of the ABI a released build
+    // shipped.
+
+    /// Whether @p windowId is maximized on either axis or fullscreen as last
+    /// reported: engaged true when any of those is on, engaged false when the
+    /// full maximize and fullscreen are both known off, nullopt when either was
+    /// never delivered or the window is unknown. Such a window's frame is the
+    /// output (on one axis at least), not a free position, and
+    /// only the compositor knows its restore rect. Default reports unknown,
+    /// like minimizedState.
+    virtual std::optional<bool> fillsOutputState(const QString& windowId) const
     {
         Q_UNUSED(windowId)
         return std::nullopt;

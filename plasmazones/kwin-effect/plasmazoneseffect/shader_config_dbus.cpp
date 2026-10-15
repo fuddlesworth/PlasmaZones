@@ -419,7 +419,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // across the two paths.
     //
     // Caller-owned memoisation slot, the applyWindowGeometry pattern
-    // (drag_snap.cpp): when the gate builds the WindowQuery for its rule
+    // (window_geometry_apply.cpp): when the gate builds the WindowQuery for its rule
     // probes, the resolver pass below reuses it instead of walking the ~30
     // KWin accessors a second time per animated event.
     std::optional<PhosphorRules::WindowQuery> sharedQuery;
@@ -792,7 +792,7 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
                                     // provider is warm before the first transition needs it.
                                     scheduleEffectAudioSync();
                                     // It can also assign or clear any suppression-owning pack
-                                    // (`desktop.peek`, `window.minimize`, `window.maximize`);
+                                    // (`desktop.peek`, `window.minimize`, placeIn / placeOut for maximize);
                                     // keep KWin's own stock effects unloaded exactly while
                                     // ours owns the event.
                                     syncStockEffectSuppression();
@@ -803,11 +803,11 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
 
 void PlasmaZonesEffect::slotRulesChanged()
 {
-    // Coalesce burst signals: the daemon emits one `rulesChanged` per per-rule
-    // mutation, so a 50-rule batch edit would otherwise drive 50 sequential
-    // `getAllRules` round-trips + JSON parses + filter walks. The timer is a
-    // single-shot 50ms debounce (set up in the constructor); each call here
-    // re-arms it, so only the trailing edge of the burst triggers a refresh.
+    // Coalesce burst signals (one `rulesChanged` per per-rule mutation) behind a
+    // re-armed 50ms single-shot debounce, so a batch edit drives one getAllRules
+    // fetch and one restore-cache refetch (the timer's second connection): a
+    // saved rule can refuse the zone restore (SetRestoreToZoneOnLogin), and the
+    // daemon then answers "{}" (F703, F625).
     m_animationRulesRefreshDebounce.start();
 }
 
@@ -1064,21 +1064,9 @@ void PlasmaZonesEffect::fetchAllRulesOnce()
             withoutNeverStampedRules(PhosphorRules::ExclusionRules::excludeDecorationsRulesFrom(*setOpt).rules(),
                                      layoutsSeeded, &activeLayoutWithheld));
 
-        // Recompute the geometry-scoped-rules gate for the frame-geometry
-        // flush (see the member doc). Walked over the full parsed set, once
-        // per rulesChanged — never per geometry tick.
-        {
-            static const QSet<PhosphorRules::Field> kGeometryFields = {
-                PhosphorRules::Field::Width, PhosphorRules::Field::Height, PhosphorRules::Field::PositionX,
-                PhosphorRules::Field::PositionY};
-            m_hasGeometryScopedRules = false;
-            for (const PhosphorRules::Rule& rule : setOpt->rules()) {
-                if (rule.enabled && rule.match.referencesAnyField(kGeometryFields)) {
-                    m_hasGeometryScopedRules = true;
-                    break;
-                }
-            }
-        }
+        // The geometry- and caption-scoped rule gates for the frame-geometry
+        // flush's per-window evictions (see the member doc).
+        recomputeLiveFieldRuleGates(*setOpt);
 
         // Per-window border / title-bar rules ride the same animation rule set
         // (Tag::Effect admits them). Refresh borders so an edited /

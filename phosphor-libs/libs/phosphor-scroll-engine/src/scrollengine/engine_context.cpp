@@ -7,13 +7,15 @@
 // (pruneStaleWindows) or because a context or an output died. Split out of
 // engine_core.cpp, which was over its size ceiling; the two halves share
 // nothing but the members. The sticky-desktop pin pass lives in
-// engine_stickypin.cpp.
+// engine_stickypin.cpp, the desktop renumber in engine_desktopremap.cpp and
+// the strip stash's aliveness sweep in engine_stashleave.cpp.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 
+#include "evacueepark_p.h"
 #include "scrollenginelogging.h"
 
 namespace PhosphorScrollEngine {
@@ -42,9 +44,6 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
-    m_crossScreenClaimsExhausted.removeIf([&aliveWindowIds](const QString& id) {
-        return !aliveWindowIds.contains(id);
-    });
     // Same treatment for the column-maximize leg, which is maintained
     // alongside it everywhere.
     for (auto it = m_lastAppliedMaximizedToEdges.begin(); it != m_lastAppliedMaximizedToEdges.end();) {
@@ -56,8 +55,8 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     }
     // The remembered park edge is written only while a window sits parked and
     // consumed when it scrolls back on screen. windowClosed drops the entry
-    // (with the fs memory above) at close, and every path that drops
-    // m_lastAppliedRect for a still-alive window (float, handoff,
+    // (with the fs memory above) at close, and every path that takes a
+    // still-alive window off the strip (float, handoff,
     // cross-screen move, drag commit/cancel, the context sweeps) drops the
     // edge beside it — so this sweep, which fires exactly ONCE per session
     // at bring-up, is a belt for ids that died while this engine was not
@@ -177,122 +176,15 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         }
     }
 
-    // The strip stash needs the same treatment, but keyed on ALIVENESS rather
-    // than on `dead` — same reasoning as the m_lastAppliedRect sweep above.
-    // A stash tile is unreachable by the `dead` loop above, which only walks
-    // the seed lists. (Not because a stashed window is never tracked — one
-    // stashed for context K1 can be live and tracked in a different context
-    // K2, and would then appear in `dead`. That duplication is exactly what
-    // serializeStripState's live-wins filter exists for.) And the stash is
-    // keyed by CONTEXT, so the existing
-    // sweepStripStash calls (desktop, activity and output prunes) never reach
-    // a stash whose context is still perfectly live. Between the two, a window
-    // that closes while its screen sits in another mode was reachable by
-    // nothing: its tile could never satisfy the all-consumed drop condition,
-    // so the entry was immortal — re-walked on every later open for that
-    // context, written out by serializeStripState, and, through the
-    // cross-session appId claim, able to hand an unrelated same-app window the
-    // dead tile's slot, width and display.
-    //
-    // The empty-alive-set bail below protects the STASH specifically — the
-    // one collection that cannot be rebuilt once wiped. It is a second,
-    // narrower belt: the boundary that actually refuses an empty alive set
-    // is the adaptor (WindowTrackingAdaptor::pruneStaleWindows returns
-    // before reaching this function), so in production the destructive dead
-    // loop above never runs against an empty set. An embedder calling this
-    // exported API directly with an empty set WOULD tear down every strip
-    // while the stash survived; hoisting the bail to cover the dead loop is
-    // a public-API behaviour change deliberately not taken here.
-    //
-    // A tile staged straight from the persisted blob is EXEMPT until it is
-    // claimed. Its id belongs to last session, so no alive set can contain it
-    // and the sweep would read it as closed — wiping the structure/focus/
-    // anchor restore on the very first prune after login, since the effect
-    // fires one at bringup right after the daemon stages it. The exemption is
-    // PER TILE and lives in the removeIf below: an entry-wide lift on the
-    // first claim let this prune erase an unclaimed co-tenant's slot, which is
-    // precisely the case StashedTile::unclaimedSessions exists to lease out
-    // gradually instead. See StashedTile::stagedFromPersistence.
-    if (!aliveWindowIds.isEmpty()) {
-        for (auto stashIt = m_stripStash.begin(); stashIt != m_stripStash.end();) {
-            // Captured before the sweep below can empty the entry, because the
-            // zero-tile reap needs to tell two look-alike shapes apart: an
-            // entry BORN cursor-only (stashStripStructure's all-floated arm,
-            // which never had columns) is a live carrier and must survive to
-            // the arrival that consumes it, while an entry that DECAYED to
-            // zero tiles here is one whose windows are demonstrably gone —
-            // that context comes back to an empty strip and is supposed to
-            // restart its blueprint, so retaining its cursor would be the bug.
-            const bool bornCursorOnly = stashIt->columns.isEmpty();
-            // Dead tiles are erased outright, consumed ones included. Retaining
-            // a consumed-then-closed tile to protect restoreFromStripStash's
-            // positional math is NOT necessary: both of its counters test LIVE
-            // STRIP membership (columnOfWindow / indexOfWindow), so a dead tile
-            // answers -1 and contributes 0 either way — erasing it removes a
-            // zero-contribution entry and decrements colIdx by the same one.
-            // Retaining them only inflates `remaining` below, which is what
-            // keeps an entry from ever reaching the all-consumed drop.
-            for (auto colIt = stashIt->columns.begin(); colIt != stashIt->columns.end();) {
-                colIt->tiles.removeIf([&aliveWindowIds](const StashedTile& tile) {
-                    // The per-tile persistence exemption, and the ONLY one:
-                    // an unclaimed staged tile names last session's id, which
-                    // no alive set can hold.
-                    return !tile.stagedFromPersistence && !aliveWindowIds.contains(tile.windowId);
-                });
-                colIt = colIt->tiles.isEmpty() ? stashIt->columns.erase(colIt) : std::next(colIt);
-            }
-            if (!stashIt->focusedWindowId.isEmpty()) {
-                // The focus is dropped only when NO surviving tile still
-                // names it — an id that is merely absent from the alive set
-                // may belong to a staged tile the sweep just exempted.
-                bool focusSurvives = false;
-                for (const StashedColumn& col : std::as_const(stashIt->columns)) {
-                    for (const StashedTile& tile : col.tiles) {
-                        if (tile.windowId == stashIt->focusedWindowId) {
-                            focusSurvives = true;
-                            break;
-                        }
-                    }
-                    if (focusSurvives) {
-                        break;
-                    }
-                }
-                if (!focusSurvives) {
-                    stashIt->focusedWindowId.clear();
-                }
-            }
-            // Keep the consumed set a subset of the (now shorter) tile list so
-            // the all-consumed drop condition below stays exact.
-            auto stashConsumedIt = m_stripStashConsumed.find(stashIt.key());
-            if (stashConsumedIt != m_stripStashConsumed.end()) {
-                stashConsumedIt->removeIf([&aliveWindowIds](const QString& consumed) {
-                    return !aliveWindowIds.contains(consumed);
-                });
-            }
-            const int remaining = stashIt->tileCount();
-            // A cursor-only carrier has no tiles by construction, so the
-            // zero-tile arm would reap it on the bring-up prune the effect
-            // fires before any window has announced — retiring the entry
-            // before the arrival it exists for. Scoped to entries that were
-            // ALREADY column-less on entry AND actually carry a cursor;
-            // everything else reaps exactly as before.
-            const bool cursorOnlyCarrier = bornCursorOnly && stashIt->blueprintCursor > 0;
-            if (!cursorOnlyCarrier
-                && (remaining == 0
-                    || (stashConsumedIt != m_stripStashConsumed.end() && stashConsumedIt->size() >= remaining))) {
-                m_stripStashConsumed.remove(stashIt.key());
-                stashIt = m_stripStash.erase(stashIt);
-            } else {
-                ++stashIt;
-            }
-        }
-    }
+    // The stash on aliveness, and the restart arm for a window moved while the
+    // daemon was down: see sweepStripStashForAliveness (engine_stashleave.cpp).
+    sweepStripStashForAliveness(aliveWindowIds);
     for (const QString& screenId : affectedScreens) {
         scheduleRetileForScreen(screenId);
-        // The strip structure mutated durably (a column may have closed) and
-        // placementChanged is the sole producer of DirtyScrollStrips — the
-        // prune path is exactly the no-windowClosed case, so nothing else
-        // marks the save.
+        // The strip structure mutated durably (a column may have closed).
+        // placementChanged is this engine's only way to mark DirtyScrollStrips;
+        // the tracking service's scheduleSaveState (DirtyAll) also sets that
+        // bit, but a prune is not a windowClosed whose DirtyAll covers it.
         Q_EMIT placementChanged(screenId);
     }
     return pruned;
@@ -529,6 +421,19 @@ QSet<int> ScrollEngine::desktopsWithActiveState() const
     for (auto it = states.cbegin(); it != states.cend(); ++it) {
         desktops.insert(it.key().desktop);
     }
+    // A parked strip and a grant sit where the prune of the output took the
+    // state, and the daemon's count prune reaches only the desktops listed
+    // here (F1100).
+    if (m_evacueePark) {
+        for (const auto& contexts : std::as_const(m_evacueePark->byOutput)) {
+            for (auto it = contexts.cbegin(); it != contexts.cend(); ++it) {
+                desktops.insert(it.key().desktop);
+            }
+        }
+        for (auto it = m_evacueePark->grants.cbegin(); it != m_evacueePark->grants.cend(); ++it) {
+            desktops.insert(it.key().desktop);
+        }
+    }
     return desktops;
 }
 
@@ -685,6 +590,13 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     sweepStripStash([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
     });
+    // A strip parked for an output's return on this desktop goes with it: the
+    // sweep just took its stash, and its context never comes into view again.
+    if (m_evacueePark) {
+        m_evacueePark->dropContextsWhere([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
+            return key.desktop == removedDesktop;
+        });
+    }
     // The override map is keyed per CONTEXT, so a destroyed desktop leaves
     // entries no live context can ever resolve. They are not merely dead
     // weight: KWin renumbers desktops on removal, so the index is handed out
@@ -705,171 +617,12 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     });
 }
 
-void ScrollEngine::renumberDesktopsAfterRemoval(int removedDesktop)
-{
-    if (removedDesktop < 1) {
-        return;
-    }
-    // ASCENDING, and the sort is load-bearing. pruneStatesForDesktop ran
-    // first, so removedDesktop is vacant when removedDesktop+1 moves in and
-    // each later target was vacated by the step before it. Descending collides
-    // at every step. desktopsWithActiveState is a QSet with unspecified
-    // iteration order, so it cannot be walked directly.
-    QList<int> desktops;
-    for (const int desktop : desktopsWithActiveState()) {
-        if (desktop > removedDesktop) {
-            desktops.append(desktop);
-        }
-    }
-    // The context-keyed side maps OUTLIVE their states: a strip stash is
-    // written as the state is torn down, and the override map is pushed per
-    // context whether or not one exists. migrateStateKey moves only the
-    // entries whose key still has a live state, so the rest are shifted here —
-    // otherwise they keep the number their desktop had before, and
-    // pruneStatesForDesktop's own comment says what that costs ("the index is
-    // handed out again, and the next desktop to take it would resolve the
-    // template of the one the user deleted").
-    //
-    // Restricted to keys with NO live state so nothing moves twice, and built
-    // into fresh containers so an entry shifting down cannot land on one not
-    // yet visited.
-    // Only the KEYS are collected here. The moves happen AFTER the state loop:
-    // shifting first would put an entry on a key the loop then migrates again,
-    // moving it twice, and for m_pendingFocusEmitContexts migrateStateKey
-    // REMOVES the old key rather than moving it, so a shifted context landing
-    // there would be deleted outright.
-    //
-    // Keys rather than taken-out VALUES, unlike the autotile twin. Every mover
-    // in this engine's migrateStateKey is move-only-if-vacant, so the loop
-    // cannot destroy an entry sitting at a destination; autotile's has an
-    // else-arm that ERASES the destination when the moving state has no bag of
-    // its own, which is why it has to hold the values locally. What both need
-    // is the re-check inside moveStatelessDown below: the loop CAN put a live
-    // state's entry on a key collected here, and that entry is not ours.
-    // ASCENDING, for the same reason the state loop below is: the prune left
-    // removedDesktop vacant, so the lowest entry lands safely and each later
-    // target was vacated by the step before it. Descending would find every
-    // destination still occupied by the entry that has not moved yet.
-    const auto sortAscending = [](QList<PhosphorEngine::PlacementStateKey>& keys) {
-        std::sort(keys.begin(), keys.end(),
-                  [](const PhosphorEngine::PlacementStateKey& a, const PhosphorEngine::PlacementStateKey& b) {
-                      return a.desktop < b.desktop;
-                  });
-        return keys;
-    };
-    const auto statelessHashKeys = [&](const auto& map) {
-        QList<PhosphorEngine::PlacementStateKey> keys;
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-            if (it.key().desktop > removedDesktop && !m_states.containsKey(it.key())) {
-                keys.append(it.key());
-            }
-        }
-        return sortAscending(keys);
-    };
-    const QList<PhosphorEngine::PlacementStateKey> statelessStash = statelessHashKeys(m_stripStash);
-    const QList<PhosphorEngine::PlacementStateKey> statelessStashConsumed = statelessHashKeys(m_stripStashConsumed);
-    const QList<PhosphorEngine::PlacementStateKey> statelessBurst = statelessHashKeys(m_burstPendingApplies);
-    const QList<PhosphorEngine::PlacementStateKey> statelessOverrides = statelessHashKeys(m_perScreenOverrides);
-    QList<PhosphorEngine::PlacementStateKey> statelessFocusContexts;
-    for (const PhosphorEngine::PlacementStateKey& key : std::as_const(m_pendingFocusEmitContexts)) {
-        if (key.desktop > removedDesktop && !m_states.containsKey(key)) {
-            statelessFocusContexts.append(key);
-        }
-    }
-    sortAscending(statelessFocusContexts);
-
-    // No early return when there is no live state above the removal: the
-    // stateless moves below still have to run, and that is the common case
-    // rather than a corner — a stash outlives the state it was written for.
-    // Sorting and walking an empty list costs nothing.
-    std::sort(desktops.begin(), desktops.end());
-
-    QStringList displacedWindows;
-    QSet<QString> displacedScreens;
-    QSet<QString> touchedScreens;
-    for (const int desktop : std::as_const(desktops)) {
-        // Snapshot the keys at this desktop before moving any of them: the
-        // move mutates the very map states() iterates.
-        QList<PhosphorEngine::PlacementStateKey> atDesktop;
-        for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
-            if (it.key().desktop == desktop) {
-                atDesktop.append(it.key());
-            }
-        }
-        for (const PhosphorEngine::PlacementStateKey& oldKey : std::as_const(atDesktop)) {
-            const PhosphorEngine::PlacementStateKey newKey{oldKey.screenId, oldKey.desktop - 1, oldKey.activity};
-            if (migrateStateKey(oldKey, newKey, displacedWindows, displacedScreens)) {
-                touchedScreens.insert(oldKey.screenId);
-            }
-        }
-    }
-    finishDisplacedRelease(displacedWindows, displacedScreens);
-
-    // NOW the stateless entries, with every state-owned move already done so
-    // the loop cannot pick one up a second time. Only onto a VACANT key: an
-    // entry still there after the ascending walk belongs to a live state the
-    // loop placed there, and that outranks a stateless leftover the prunes
-    // would have reaped anyway.
-    const auto moveStatelessDown = [this](auto& map, const QList<PhosphorEngine::PlacementStateKey>& keys) {
-        for (const PhosphorEngine::PlacementStateKey& oldKey : keys) {
-            // Re-check statelessness HERE, not just at collection time: the
-            // state loop above may have migrated a live state onto this key and
-            // brought its own entry with it, and that entry belongs to the
-            // state rather than to the leftover we collected.
-            if (m_states.containsKey(oldKey)) {
-                continue;
-            }
-            const auto it = map.constFind(oldKey);
-            if (it == map.constEnd()) {
-                continue;
-            }
-            const PhosphorEngine::PlacementStateKey newKey{oldKey.screenId, oldKey.desktop - 1, oldKey.activity};
-            if (!map.contains(newKey)) {
-                map.insert(newKey, it.value());
-            }
-            map.remove(oldKey);
-        }
-    };
-    moveStatelessDown(m_stripStash, statelessStash);
-    moveStatelessDown(m_stripStashConsumed, statelessStashConsumed);
-    moveStatelessDown(m_burstPendingApplies, statelessBurst);
-    moveStatelessDown(m_perScreenOverrides, statelessOverrides);
-    for (const PhosphorEngine::PlacementStateKey& oldKey : statelessFocusContexts) {
-        if (m_states.containsKey(oldKey)) {
-            continue;
-        }
-        if (!m_pendingFocusEmitContexts.remove(oldKey)) {
-            continue;
-        }
-        m_pendingFocusEmitContexts.insert(
-            PhosphorEngine::PlacementStateKey{oldKey.screenId, oldKey.desktop - 1, oldKey.activity});
-    }
-
-    // The pins and the per-output desktop map index the same numbering as the
-    // keys just moved, so they shift together or they name a position whose
-    // content moved.
-    m_context.renumberDesktopsAfterRemoval(removedDesktop);
-
-    if (!touchedScreens.isEmpty()) {
-        qCInfo(lcScrollEngine) << "renumberDesktopsAfterRemoval: shifted strips above desktop" << removedDesktop
-                               << "down one on" << touchedScreens.size() << "screen(s)";
-        // A screen now showing a re-keyed strip has a layout the compositor
-        // has never seen under this numbering, and the emit-on-change gate
-        // would swallow it — the same pairing the unpin migration makes.
-        for (const QString& screenId : std::as_const(touchedScreens)) {
-            if (!m_scrollingScreens.contains(screenId)) {
-                continue;
-            }
-            if (announceStripContextIfChanged(screenId)) {
-                m_forceEmitScreens.insert(screenId);
-            }
-            scheduleRetileForScreen(screenId);
-        }
-    }
-}
-
 void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
 {
+    // Empty is the activity service going away, not every activity removed (F423).
+    if (validActivities.isEmpty()) {
+        return;
+    }
     const auto stale = [&validActivities](const QString& activity) {
         return !activity.isEmpty() && !validActivities.contains(activity);
     };
@@ -897,6 +650,14 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     sweepStripStash([&stale](const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
     });
+    // And the parked strips of a removed activity, on the desktop prune's
+    // terms: left standing, hasParked keeps answering true for their windows
+    // and readoptParked grants a context that never comes into view.
+    if (m_evacueePark) {
+        m_evacueePark->dropContextsWhere([&stale](const PhosphorEngine::PlacementStateKey& key) {
+            return stale(key.activity);
+        });
+    }
     // Per-context override entries for a deleted activity, on the same terms
     // as the desktop prune's sweep: no live context resolves them again, and
     // an activity id can be reused by a restore from backup.
@@ -964,8 +725,16 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     m_states.removeWindowsIf([&matches](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
     });
-    sweepStripStash([&matches](const PhosphorEngine::PlacementStateKey& key) {
-        return matches(key.screenId);
+    // A readoptParked grant on the dying output goes first: its window is
+    // tracked nowhere here, so the park taken before this prune never saw it,
+    // and nothing could claim it back. The stash it kept parked goes with it.
+    if (m_evacueePark) {
+        m_evacueePark->dropGrantsWhere(QString(), [&matches](const PhosphorEngine::PlacementStateKey& key) {
+            return matches(key.screenId);
+        });
+    }
+    sweepStripStash([this, &matches](const PhosphorEngine::PlacementStateKey& key) {
+        return matches(key.screenId) && !isEvacueeParkedKey(key); // a parked strip outlives the output
     });
     // Standalone sweep for STATELESS sub-screens too: a virtual sub-screen
     // of the removed monitor can carry a seed or a rule override without

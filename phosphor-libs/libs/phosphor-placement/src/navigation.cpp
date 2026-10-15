@@ -43,34 +43,37 @@ namespace PhosphorPlacement {
 QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFilter, int desktopFilter) const
 {
     QSet<QUuid> occupiedZoneIds;
-    forEachZoneAssignedWindow(
-        [&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen, int windowDesktop) {
-            // Skip floating windows — they have preserved zone assignments (for resnap
-            // on mode switch) but should not make zones appear occupied.
-            if (isWindowFloating(windowId)) {
-                return;
+    const QString currentActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
+    forEachZoneAssignedWindow([&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen,
+                                  int windowDesktop, const QString& activity, PhosphorSnapEngine::SnapState*) {
+        // Another activity's store is not in view (F311).
+        if (!activityInView(activity, currentActivity)) {
+            return;
+        }
+        // A window the engine of its tracked screen floats does not occupy the
+        // zone. A snap float holds no zone here (assignWindowToZones clears the
+        // store's bit), so this skips only a window another engine floats.
+        if (isWindowFloating(windowId)) {
+            return;
+        }
+        // When screen filter is set, only count zones from windows on that screen.
+        // This prevents windows on other screens (or desktops sharing the same layout)
+        // from making zones appear occupied on the target screen.
+        if (!screenFilter.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(windowScreen, screenFilter)) {
+            return;
+        }
+        // When desktop filter is set, only count zones from windows on that desktop.
+        // Desktop 0 means "all desktops" (pinned window) — always include those.
+        if (!desktopMatchesFilter(windowDesktop, desktopFilter)) {
+            return;
+        }
+        for (const QString& zoneId : zoneIds) {
+            auto uuid = parseUuid(zoneId);
+            if (uuid) {
+                occupiedZoneIds.insert(*uuid);
             }
-            // When screen filter is set, only count zones from windows on that screen.
-            // This prevents windows on other screens (or desktops sharing the same layout)
-            // from making zones appear occupied on the target screen.
-            if (!screenFilter.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(windowScreen, screenFilter)) {
-                return;
-            }
-            // When desktop filter is set, only count zones from windows on that desktop.
-            // Desktop 0 means "all desktops" (pinned window) — always include those.
-            if (!desktopMatchesFilter(windowDesktop, desktopFilter)) {
-                return;
-            }
-            for (const QString& zoneId : zoneIds) {
-                if (zoneId.startsWith(kZoneSelectorIdPrefix)) {
-                    continue;
-                }
-                auto uuid = parseUuid(zoneId);
-                if (uuid) {
-                    occupiedZoneIds.insert(*uuid);
-                }
-            }
-        });
+        }
+    });
     return occupiedZoneIds;
 }
 

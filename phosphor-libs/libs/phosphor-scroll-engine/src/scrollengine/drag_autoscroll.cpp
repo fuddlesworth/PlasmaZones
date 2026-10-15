@@ -131,9 +131,10 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
     };
 
     // The preview's screen, spelled the preview's way: screensMatch accepts
-    // a virtual/physical spelling difference, and everything below resolves
-    // layout params per screen id, so the caller's spelling could scroll a
-    // work area the commit path never uses. Same rule as the hit-test's.
+    // a connector-name / EDID-id spelling difference, and everything below
+    // resolves layout params per screen id, so the caller's spelling could
+    // scroll a work area the commit path never uses. Same rule as the
+    // hit-test's.
     //
     // Disarms rather than returning bare: dragAutoScrollActive() carries no
     // screen, so a mismatched tick that kept ownership would block the

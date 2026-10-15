@@ -9,6 +9,7 @@
 
 #include <QColor>
 #include <QJsonArray>
+#include <QSet>
 #include <QUuid>
 #include <algorithm>
 
@@ -222,9 +223,10 @@ QHash<QString, int> buildGlobalZonePositionMap(const QList<Layout*>& layouts)
             // The merge assumes zone UUIDs are unique across all layouts
             // — break that invariant and the resnap path silently uses
             // whatever position the later layout assigned, which can
-            // place windows into the wrong zone. Assert in debug builds
-            // so a future change (e.g. layout import / cloning that
-            // duplicates IDs) is caught immediately. Release builds
+            // place windows into the wrong zone. The registry's directory
+            // load and import re-mint a copied id (reissueTakenZoneIds,
+            // F552); assert in debug builds so an ingress that skips it is
+            // caught immediately. Release builds
             // accept the last-write-wins semantic to avoid crashing on
             // legitimate-but-degenerate state.
             Q_ASSERT_X(!map.contains(it.key()) || map.value(it.key()) == it.value(), "buildGlobalZonePositionMap",
@@ -256,6 +258,77 @@ bool contextLayoutHoldsZones(const IZoneLayoutRegistry* registry, const QString&
     // the one the zone came from: geometry resolution answers for whichever
     // layout holds the id, so it cannot tell the two apart.
     return layoutHoldsZones(registry->layoutForScreen(screenId, virtualDesktop, activity), zoneIds);
+}
+
+QStringList sameNumberedZones(const QStringList& zoneIds, const Layout* target, const QHash<QString, int>& positions)
+{
+    if (!target || zoneIds.isEmpty()) {
+        return {};
+    }
+    if (layoutHoldsZones(target, zoneIds)) {
+        return zoneIds;
+    }
+    // Position, not zone number: the 1-based index among the zones sorted by
+    // number, the scheme the resnap buffer and the cross-desktop move use.
+    const int position = positions.value(zoneIds.first(), 0);
+    QVector<Zone*> zones = target->zones();
+    if (position < 1 || position > zones.size()) {
+        return {};
+    }
+    sortZonesByNumber(zones);
+    return {zones.at(position - 1)->id().toString()};
+}
+
+int reissueTakenZoneIds(QJsonObject& layoutJson, const QList<Layout*>& loaded)
+{
+    using namespace ::PhosphorZones::ZoneJsonKeys;
+    const QUuid layoutId = QUuid::fromString(layoutJson.value(Id).toString());
+    QSet<QUuid> taken;
+    for (const Layout* other : loaded) {
+        if (!other || (!layoutId.isNull() && other->id() == layoutId)) {
+            continue;
+        }
+        for (const Zone* zone : other->zones()) {
+            taken.insert(zone->id());
+        }
+    }
+    // A document whose id is not a UUID gets a fresh one from Layout::fromJson,
+    // so its zone ids derive from a random namespace: from the null one, every
+    // such document handed the same taken zone the same new id (F1052).
+    const QUuid nameSpace = layoutId.isNull() ? QUuid::createUuid() : layoutId;
+    QJsonArray zones = layoutJson.value(Zones).toArray();
+    QSet<QUuid> seen;
+    int reissued = 0;
+    for (qsizetype i = 0; i < zones.size(); ++i) {
+        QJsonObject zone = zones.at(i).toObject();
+        const QUuid id = QUuid::fromString(zone.value(Id).toString());
+        if (id.isNull()) {
+            continue; // Zone::fromJson mints one
+        }
+        if (!taken.contains(id) && !seen.contains(id)) {
+            seen.insert(id);
+            continue;
+        }
+        // Name-based on (layout, old id, position), so a reload of the same
+        // document lands on the same ids whichever copy of it wins. A derived
+        // id can itself be taken, or equal one this document keeps or was
+        // given above, so it is re-derived with a counter until it is free
+        // (F1052): the first try is the plain name, which keeps every id this
+        // gave before.
+        const QString name = id.toString() + QLatin1Char('#') + QString::number(i);
+        QUuid fresh = QUuid::createUuidV5(nameSpace, name);
+        for (int attempt = 1; taken.contains(fresh) || seen.contains(fresh); ++attempt) {
+            fresh = QUuid::createUuidV5(nameSpace, name + QLatin1Char('#') + QString::number(attempt));
+        }
+        zone[Id] = fresh.toString();
+        zones[i] = zone;
+        seen.insert(fresh);
+        ++reissued;
+    }
+    if (reissued > 0) {
+        layoutJson[Zones] = zones;
+    }
+    return reissued;
 }
 
 } // namespace LayoutUtils

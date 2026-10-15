@@ -278,7 +278,7 @@ void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const
     // Same staleness policy as setWindowFloat's unfloat arm: the window's
     // min size may have changed while floating, and a stale entry can
     // inflate enforceMinSizes past the user's split ratio. The effect
-    // re-discovers and re-reports a live one on the next retile.
+    // re-reports a live one when the window is tiled again.
     if (!isNowFloating) {
         m_windowMinSizes.remove(windowId);
     }
@@ -474,9 +474,8 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     const auto key = *primary;
     if (PhosphorTiles::TilingState* state = m_states.stateForKey(key)) {
         // Tracking-only release: drop from layout, drop from floating set.
-        // No retile of the rest is requested here — the orchestrator will
-        // call receiveWindow on the destination engine which (if also
-        // autotile) will retile its own state.
+        // The destination engine places the window; the tiles it leaves
+        // behind close up on the retile scheduled at the end (F1005).
         // Keep the memory algorithm's bookkeeping consistent (e.g.
         // dwindle-memory's split tree) — same lifecycle hook every other
         // removal path runs before removeWindow.
@@ -497,10 +496,9 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     // same clear): a released window is one this engine knowingly gave up,
     // and a stale autotile TILED slot left in the unified record is not
     // memory but a false home — paired with a stale record-level screenId
-    // (which an engine-miss capture can leave behind), the cross-screen
-    // reclaim would later yank the window back out from under its new
-    // engine. Ordinary close deliberately KEEPS the slot; only the handoff
-    // clears it.
+    // (which an engine-miss capture can leave behind), it would stand as this
+    // engine's verdict on the window at the next open. Ordinary close
+    // deliberately KEEPS the slot; only the handoff clears it.
     if (m_windowTracker) {
         m_windowTracker->releaseEngineSlot(canonical, engineId());
     }
@@ -527,6 +525,18 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     // engine now owns must not replay on this screen's next applyTiling.
     purgeFromPendingOrders(canonical);
     purgePendingFocusForWindow(canonical);
+    // The screen the window left still tiles the rest, which keep the slots
+    // they had beside it until they are retiled: a window snapped onto
+    // another monitor left its old neighbours a quarter of theirs (F1005).
+    // The context in view retiles now, unless the screen is leaving
+    // autotile, whose windows the new mode places. A release out of another
+    // desktop's state is memoed like releaseMembership's, since the
+    // identical-set switch back retiles nothing on its own (F1031).
+    if (key != currentKeyForScreen(key.screenId)) {
+        m_dirtyBackgroundContexts.insert(key);
+    } else if (isAutotileScreen(key.screenId)) {
+        scheduleRetileForScreen(key.screenId);
+    }
 }
 
 void AutotileEngine::sweepPhantomTracking(const QString& windowId)

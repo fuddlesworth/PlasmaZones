@@ -183,7 +183,7 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT AlgorithmInfoEntry
 
 using AlgorithmInfoList = QList<AlgorithmInfoEntry>;
 
-/// D-Bus struct for pre-tile geometry entries: (siiiis)
+/// D-Bus struct for pre-tile geometry entries: (siiiiss)
 /// Replaces the JSON blob previously returned by getPreTileGeometriesJson.
 struct PHOSPHORPROTOCOLTYPES_EXPORT PreTileGeometryEntry
 {
@@ -193,6 +193,9 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT PreTileGeometryEntry
     int width = 0;
     int height = 0;
     QString screenId;
+    /// The window whose record this is (the registry's canonical composite);
+    /// the consumer applies the entry to that window only (F627).
+    QString windowId;
 
     QRect toRect() const
     {

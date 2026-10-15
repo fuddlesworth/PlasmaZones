@@ -52,4 +52,16 @@ inline bool isOnOwnOutputCurrentDesktop(const KWin::EffectWindow* w)
     return shownHere ? w->isOnDesktop(shownHere) : w->isOnCurrentDesktop();
 }
 
+/// Whether the window is on the desktop @p output is showing, for a decision
+/// that belongs to that output rather than to the one the window is on (a tile
+/// batch for a screen). Falls back like the two above without an output.
+inline bool isOnDesktopShownOn(const KWin::EffectWindow* w, KWin::LogicalOutput* output)
+{
+    if (!w) {
+        return false;
+    }
+    KWin::VirtualDesktop* const shown = output && KWin::effects ? KWin::effects->currentDesktop(output) : nullptr;
+    return shown ? w->isOnDesktop(shown) : w->isOnCurrentDesktop();
+}
+
 } // namespace PlasmaZones

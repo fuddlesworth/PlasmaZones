@@ -161,6 +161,15 @@ pse_add_test(test_scrollengine_stripcontext test_scrollengine_stripcontext.cpp)
 # window present on several desktops, the per-screen scoping and the float
 # carry.
 pse_add_test(test_scrollengine_membership test_scrollengine_membership.cpp)
+# The evacuee park: a strip parked across an output's disconnect, its save
+# exemption, and the exact-id re-seat on the output's return.
+pse_add_test(test_scrollengine_evacuee test_scrollengine_evacuee.cpp)
+# A window that left the context a mode-round-trip stash remembers (another
+# monitor, desktop or activity) gives up its stashed column there.
+pse_add_test(test_scrollengine_stashleave test_scrollengine_stashleave.cpp)
+# The desktop renumber: strips, stashes and per-context overrides follow a
+# removal, an insert or a reorder of KWin's desktop list.
+pse_add_test(test_scrollengine_desktopremap test_scrollengine_desktopremap.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrollstubsettings.h)
@@ -191,6 +200,8 @@ pse_add_test(test_scrollengine_maximize test_scrollengine_maximize.cpp)
 # The compositor's fullscreen hold: a strip tile held out for its own
 # fullscreen with a passive announcement, and what returns it.
 pse_add_test(test_scrollengine_fullscreenfloat test_scrollengine_fullscreenfloat.cpp)
+# Which float transitions announce active and which passive (F557, F578).
+pse_add_test(test_scrollengine_floatannounce test_scrollengine_floatannounce.cpp)
 # The tile-focus family: cycleTab and focusTab, plus the float refusal and the
 # panned-view hand-back they share with focusWindowTop/Bottom. Its own file
 # rather than more of the smoke suite, which is past the size ceiling.

@@ -133,7 +133,7 @@ void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const Q
     // drop can no longer land in, and nothing else would clear it — the
     // teardown paths only know the screen recorded here.
     // screensMatch, not raw !=, defensively: the recorded id and an incoming
-    // one can spell the same output as a physical id or a virtual one, and a
+    // one can spell the same output as a connector name or an EDID id, and a
     // raw compare would read a spelling change as a screen change — pushing a
     // hide the very next line un-hides. Every sibling comparison in
     // windowdragadaptor.cpp already uses it.
