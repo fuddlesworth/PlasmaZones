@@ -25,8 +25,6 @@
 #include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ShaderProfileTree.h>
-#include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>

@@ -12,33 +12,16 @@
 #include "windowtrackingadaptor.h"
 #include "lifecyclerelay.h"
 #include "internal.h"
-#include "core/resolve/daemongeometryresolver.h"
-#include "persistenceworker.h"
-#include "dbus/zonedetectionadaptor.h"
-#include "config/configbackends.h"
 #include "core/platform/logging.h"
-#include "core/resolve/screenmoderouter.h"
 #include "core/utils/utils.h"
 #include "core/utils/dbusvariantutils.h"
-#include "core/types/types.h"
 
-#include <PhosphorPlacement/PlacementConfig.h>
-#include <PhosphorSnapEngine/snapnavigationtargets.h>
-#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
-#include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorZones/Layout.h>
-#include <PhosphorScreens/Manager.h>
-#include <PhosphorWorkspaces/ActivityManager.h>
-#include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorEngine/WindowRegistry.h>
 // Complete type required for the m_ruleEvaluator->evictCached calls below.
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 #include <utility>
 

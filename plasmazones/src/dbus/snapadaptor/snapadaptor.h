@@ -12,8 +12,6 @@
 #include <QStringList>
 #include <QVector>
 
-#include <functional>
-
 namespace PhosphorContext {
 class IContextResolver;
 } // namespace PhosphorContext

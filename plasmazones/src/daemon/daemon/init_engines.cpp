@@ -11,7 +11,6 @@
 // wired into the placement service.
 
 #include "daemon/daemon.h"
-#include "helpers.h"
 #include "enginerouting.h"
 #include "stripzones.h"
 #include "common/stripcardserialize.h"
@@ -20,24 +19,12 @@
 #include "daemon/controllers/shortcutmanager.h"
 #include "daemon/controllers/enginefactory.h"
 #include "daemon/controllers/contextresolverwiring.h"
-#include "daemon/rendering/zoneentryscaffold.h"
-#include "daemon/rendering/zoneshadernoderhi.h"
-#include "config/configbackends.h"
-#include "config/configdefaults.h"
 #include "config/settingsconfigstore.h"
 #include "config/settings.h"
-#include "core/types/baselinecleanup.h"
-#include "core/types/constants.h"
 #include "core/resolve/crosssurfaceresolver.h"
 #include "core/resolve/animationbootstrap.h"
 #include "core/resolve/screenmoderouter.h"
 #include "core/utils/geometryutils.h"
-#include "core/utils/utils.h"
-#include "core/platform/logging.h"
-#include "core/interfaces/shaderregistry.h"
-#include "common/screenidresolver.h"
-#include "common/layoutbundlebuilder.h"
-#include "phosphor_i18n.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -46,45 +33,19 @@
 #include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/scrollingadaptor/scrollingadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
-#include "dbus/shaderadaptor.h"
-#include "dbus/compositorbridgeadaptor.h"
 #include "dbus/controladaptor.h"
 #include "dbus/ruleadaptor.h"
 
-#include <PhosphorServiceIdle/IdleService.h>
-#include <PhosphorAnimation/CurveLoader.h>
-#include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorAnimation/PhosphorProfileRegistry.h>
-#include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAnimation/PhosphorCurve.h>
-#include <PhosphorAnimation/QtQuickClockManager.h>
-#include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorSurface/SurfaceShaderRegistry.h>
-#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorZones/IZoneLayoutRegistry.h>
-#include <PhosphorZones/ZonesLayoutSource.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/ZoneDetector.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/AutotileConstants.h>
-#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
-#include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorEngine/WindowRegistry.h>
-#include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorContext/ContextResolver.h>
-#include <PhosphorScreens/DBusScreenAdaptor.h>
 #include <PhosphorScreens/Swapper.h>
-#include <PhosphorScreens/PlasmaPanelSource.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorRules/ActionTypes.h>
@@ -98,7 +59,6 @@
 #include <QSet>
 #include <QTimer>
 #include <algorithm>
-#include <array>
 
 namespace PlasmaZones {
 

@@ -21,6 +21,9 @@
 #include "tilinghandler/tilinghandler.h"
 
 #include <core/output.h>
+// The strip clip maps through the viewport the effect is handed, which the
+// effect headers only forward-declare.
+#include <core/renderviewport.h>
 
 namespace PlasmaZones {
 
