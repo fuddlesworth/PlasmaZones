@@ -1655,7 +1655,8 @@ add_test(NAME test_wta_zone_prune COMMAND test_wta_zone_prune)
 
 # The layout-switch helper every switch caller runs: populate the switched
 # screens, resnap silently, prune and relay what did not fit (F474, F475,
-# F489).
+# F489). Plus a layout deleted under its windows (F403, F429, F1093), and the settings
+# reflow and resolution-change replay with snapping off (F469, F327).
 add_executable(test_wta_layout_switch dbus/test_wta_layout_switch.cpp
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_wta_layout_switch PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
@@ -1665,8 +1666,10 @@ target_link_libraries(test_wta_layout_switch PRIVATE Qt6::Test Qt6::Core Qt6::DB
                       PhosphorWorkspaces::PhosphorWorkspaces)
 add_test(NAME test_wta_layout_switch COMMAND test_wta_layout_switch)
 
-# The desktop-arrival restore: the held-zone arm (F493), the re-apply reason
-# that places nothing new (F415), the arrival screen's own rules (F332).
+# The desktop-arrival restore: the held-zone arm (F493) and what it passes over
+# (a floating window's zones, a tiling screen, snapping off, a disabled
+# context), the re-apply reason that places nothing new (F415), the arrival
+# screen's own rules (F332).
 add_executable(test_wta_desktop_arrival dbus/test_wta_desktop_arrival.cpp
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_wta_desktop_arrival PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)

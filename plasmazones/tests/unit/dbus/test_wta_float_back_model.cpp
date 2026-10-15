@@ -17,6 +17,7 @@
 
 #include "wta_float_back_fixture.h"
 
+#include "helpers/ScreenDisablingResolver.h"
 #include "helpers/WindowPlacementBuilders.h"
 
 #include <QDBusConnection>
@@ -454,6 +455,62 @@ private Q_SLOTS:
         QVERIFY2(tile.floatCalls.isEmpty(), "desktop 2 is not the one in view");
 
         f.layouts->setCurrentVirtualDesktop(2);
+        f.wta->setWindowFloating(w, true);
+        QCOMPARE(tile.floatCalls.size(), 1);
+    }
+
+    // So is a window on another activity than the one in view (F1048).
+    void busSetWindowFloatingRefusesAWindowOnAnotherActivity()
+    {
+        FloatBackFixture f;
+        FloatLoggingEngine tile;
+        tile.activeScreens = {kRight};
+        f.wta->setEngines(f.snap.get(), &tile, nullptr);
+        const auto restore = qScopeGuard([&f] {
+            f.wta->setEngines(f.snap.get(), &f.tiling, nullptr);
+        });
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.isMinimized = false;
+        meta.virtualDesktop = 1;
+        meta.activity = QStringLiteral("act-2");
+        f.registry.upsert(QStringLiteral("f1048-activity"), meta);
+        const QString w = QStringLiteral("app|f1048-activity");
+        f.registry.canonicalizeWindowId(w);
+        tile.heldScreen.insert(w, kRight);
+        f.setFrame(w, QRect(2100, 100, 800, 600));
+        f.layouts->setCurrentActivity(QStringLiteral("act-1"));
+
+        f.wta->setWindowFloating(w, true);
+        QVERIFY2(tile.floatCalls.isEmpty(), "act-2 is not the activity in view");
+
+        f.layouts->setCurrentActivity(QStringLiteral("act-2"));
+        f.wta->setWindowFloating(w, true);
+        QCOMPARE(tile.floatCalls.size(), 1);
+    }
+
+    // And a window in a context the user disabled PlasmaZones in (F1048).
+    void busSetWindowFloatingRefusesADisabledContext()
+    {
+        FloatBackFixture f;
+        FloatLoggingEngine tile;
+        tile.activeScreens = {kRight};
+        PlasmaZones::TestHelpers::ScreenDisablingResolver resolver;
+        resolver.m_disabled.insert(kRight);
+        f.wta->setEngines(f.snap.get(), &tile, nullptr);
+        f.wta->setContextResolver(&resolver);
+        const auto restore = qScopeGuard([&f] {
+            f.wta->setContextResolver(nullptr);
+            f.wta->setEngines(f.snap.get(), &f.tiling, nullptr);
+        });
+        const QString w = f.registerWindow(QStringLiteral("f1048-disabled"));
+        tile.heldScreen.insert(w, kRight);
+        f.setFrame(w, QRect(2100, 100, 800, 600));
+
+        f.wta->setWindowFloating(w, true);
+        QVERIFY2(tile.floatCalls.isEmpty(), "DP-2 is disabled");
+
+        resolver.m_disabled.clear();
         f.wta->setWindowFloating(w, true);
         QCOMPARE(tile.floatCalls.size(), 1);
     }

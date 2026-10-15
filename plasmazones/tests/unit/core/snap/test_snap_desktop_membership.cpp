@@ -807,13 +807,13 @@ private Q_SLOTS:
         QVERIFY2(!persisted.value(1).contains(m_zoneIds[1]), "the first screen's desktop 1 zone must be forgotten");
         QVERIFY2(!persisted.value(2).contains(m_zoneIds[1]), "the first screen's desktop 2 zone must be forgotten");
 
-        // Desktop 2 in view on the second screen: the context the stale zone
-        // would be adopted into.
+        // Desktop 2 of the second screen in view: where the stale zone would land.
         m_engine->setCurrentDesktopForScreen(kScreen2, 2);
         m_engine->setCurrentActivity(QStringLiteral("activity-y"));
         m_engine->reconcileDesktopMemberships(kScreen2, spanOf(sticky()));
         SnapState* there = static_cast<SnapState*>(m_engine->stateForScreen(kScreen2));
-        QVERIFY(!there || !there->zonesForWindow(kWindow).contains(m_zoneIds[1]));
+        QVERIFY(there);
+        QVERIFY(!there->zonesForWindow(kWindow).contains(m_zoneIds[1]));
         m_engine->setCurrentActivity(QString());
     }
 

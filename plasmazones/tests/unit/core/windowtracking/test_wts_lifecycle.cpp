@@ -888,7 +888,7 @@ private Q_SLOTS:
         snap.state = PhosphorEngine::WindowPlacement::stateSnapped();
         snap.zoneIds = QStringList{m_zoneIds[0]};
         p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
-        m_service->placementStore().record(p);
+        QVERIFY(m_service->placementStore().record(p));
 
         QVERIFY(m_service->recordedSnapZones(QStringLiteral("firefox|other")).isEmpty());
         QCOMPARE(m_service->recordedSnapZones(liveId), QStringList{m_zoneIds[0]});

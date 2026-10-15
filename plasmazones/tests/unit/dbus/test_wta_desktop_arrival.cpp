@@ -9,14 +9,16 @@
  * DesktopArrival is the continuation of an open: it may run the whole restore
  * chain, and it answers a zone the window already holds on the arrival
  * context with that zone's rect (F493 pins that arm). DesktopReapply is every
- * other move: it re-applies a held zone and places nothing new (F415). And an
- * open's continuation resolves its rules against the arrival screen, not a
- * verdict cached at the spawn screen (F332).
+ * other move: it re-applies a held zone and places nothing new (F415). The
+ * held-zone arm passes over a floating window's zones, which are its pre-float
+ * memory, and answers nothing on a screen a tiling engine runs, with snapping
+ * off, or in a disabled context. And an open's continuation resolves its rules
+ * against the arrival screen, not a verdict cached at the spawn screen (F332).
  */
 
 #include "wta_convenience_fixture.h"
+#include "helpers/ScreenDisablingResolver.h"
 
-#include <PhosphorContext/IContextResolver.h>
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
@@ -31,61 +33,6 @@ struct Answer
     QRect rect;
 };
 } // namespace
-
-// Named, not anonymous: the test class below holds one as a member.
-namespace WtaDesktopArrivalTest {
-/// Answers MonitorDisabled for the screens in m_disabled.
-class ScreenDisablingResolver : public PhosphorContext::IContextResolver
-{
-public:
-    QSet<QString> m_disabled;
-
-    PhosphorContext::ContextHandle handleFor(const QString& screenId) const override
-    {
-        PhosphorContext::ContextHandle h;
-        h.screenId = screenId;
-        return h;
-    }
-    PhosphorContext::ContextHandle globalHandle() const override
-    {
-        return {};
-    }
-    PhosphorContext::ContextHandle handleForMode(const QString& screenId,
-                                                 PhosphorZones::AssignmentEntry::Mode mode) const override
-    {
-        PhosphorContext::ContextHandle h;
-        h.screenId = screenId;
-        h.mode = mode;
-        return h;
-    }
-    PhosphorContext::ContextHandle handleForPersisted(const QString& screenId, int virtualDesktop,
-                                                      const QString& activity) const override
-    {
-        PhosphorContext::ContextHandle h;
-        h.screenId = screenId;
-        h.virtualDesktop = virtualDesktop;
-        h.activity = activity;
-        return h;
-    }
-    int currentVirtualDesktop() const override
-    {
-        return 1;
-    }
-    QString currentActivity() const override
-    {
-        return QString();
-    }
-    PhosphorContext::DisabledReason disabledReason(const PhosphorContext::ContextHandle& h) const override
-    {
-        return m_disabled.contains(h.screenId) ? PhosphorContext::DisabledReason::MonitorDisabled
-                                               : PhosphorContext::DisabledReason::NotDisabled;
-    }
-    bool isLocked(const PhosphorContext::ContextHandle&) const override
-    {
-        return false;
-    }
-};
-} // namespace WtaDesktopArrivalTest
 
 class TestWtaDesktopArrival : public QObject, protected WtaConvenienceFixture
 {
@@ -253,7 +200,7 @@ private:
     }
 
     std::unique_ptr<PhosphorRules::RuleStore> m_store;
-    WtaDesktopArrivalTest::ScreenDisablingResolver m_resolver;
+    PlasmaZones::TestHelpers::ScreenDisablingResolver m_resolver;
 };
 
 QTEST_MAIN(TestWtaDesktopArrival)

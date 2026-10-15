@@ -95,9 +95,9 @@ private Q_SLOTS:
     void untouchedWindowReturnsToItsZone()
     {
         const QString w = QStringLiteral("app|round-trip");
-        snapOnA(w);
+        QVERIFY(snapOnA(w));
         m_wta->service()->placementStore().record(*m_snapEngine->capturePlacement(w));
-        unplugA();
+        QVERIFY(unplugA());
         QVERIFY(m_snapEngine->hasParked(w, kA));
         const auto rec = m_wta->service()->placementStore().peekExact(w);
         QVERIFY(rec.has_value());
@@ -121,8 +121,8 @@ private Q_SLOTS:
     void touchedWindowIsTheUsersMove()
     {
         const QString w = QStringLiteral("app|touched");
-        snapOnA(w);
-        unplugA();
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
         m_wta->reportOutputSettle({unplugRow(w)});
 
         QSignalSpy dropped(m_wta, &WindowTrackingAdaptor::parkDropped);
@@ -139,8 +139,8 @@ private Q_SLOTS:
     void snapCommitWhileAwayIsReasserted()
     {
         const QString w = QStringLiteral("app|placed-on-b");
-        snapOnA(w);
-        unplugA();
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
         m_wta->reportOutputSettle({unplugRow(w)});
 
         m_snapEngine->commitSnap(w, m_zoneIds[1], kB);
@@ -155,8 +155,8 @@ private Q_SLOTS:
     void closeDropsThePark()
     {
         const QString w = QStringLiteral("app|closed");
-        snapOnA(w);
-        unplugA();
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
         QSignalSpy dropped(m_wta, &WindowTrackingAdaptor::parkDropped);
         m_wta->windowClosed(w, 0, kB);
         QVERIFY(!m_snapEngine->hasParked(w, QString()));
@@ -170,11 +170,11 @@ private Q_SLOTS:
     void aMinimizedSnapFloatEvacueeFloatsAtTheSettle()
     {
         const QString w = QStringLiteral("app|minimized-evacuee");
-        floatOnA(w);
         const auto clearResolver = qScopeGuard([this] {
             m_wta->service()->setEngineFloatResolver({});
         });
-        unplugA();
+        QVERIFY(floatOnA(w));
+        QVERIFY(unplugA());
         OutputSettleRow row = unplugRow(w);
         row.placeableNow = false;
         QCOMPARE(verdictOf(m_wta->reportOutputSettle({row}), w), int(OutputSettleVerdict::EvacueeFloat));
@@ -187,10 +187,10 @@ private Q_SLOTS:
     void aSnapFloatOnAnotherActivityFloatsAtItsArrival()
     {
         const QString w = QStringLiteral("app|other-activity-evacuee");
-        pendSnapFloatOnB(w);
         const auto clearResolver = qScopeGuard([this] {
             m_wta->service()->setEngineFloatResolver({});
         });
+        QVERIFY(pendSnapFloatOnB(w));
         QVERIFY(m_wta->adoptPendingEvacueeFloat(w, kB));
         QVERIFY(m_snapEngine->isFloating(w));
         QCOMPARE(m_snapEngine->screenForTrackedWindow(w), kB);
@@ -199,16 +199,25 @@ private Q_SLOTS:
 
     // A snapped (not floating) evacuee out of view on a snapping output is
     // owed no float: snapping floats only a window it held floating (F1047).
+    // Nothing waits either: a tiling engine on B by the arrival would take a
+    // float left owed.
     void aSnappedEvacueeOutOfViewOnASnappingOutputOwesNoFloat()
     {
         const QString w = QStringLiteral("app|snapped-hidden-evacuee");
-        snapOnA(w);
-        unplugA();
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
         OutputSettleRow row = unplugRow(w);
         row.placeableNow = false;
-        m_wta->reportOutputSettle({row});
-        QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kB));
+        QCOMPARE(verdictOf(m_wta->reportOutputSettle({row}), w), int(OutputSettleVerdict::EvacueeFloat));
         QVERIFY(!m_snapEngine->isFloating(w));
+        StubPlacementEngine tile;
+        tile.activeScreens = {kB};
+        m_wta->setEngines(m_snapEngine, &tile, nullptr);
+        const auto restore = qScopeGuard([this] {
+            m_wta->setEngines(m_snapEngine, nullptr, nullptr);
+        });
+        QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kB));
+        QVERIFY(tile.received.isEmpty());
     }
 
     // The float is owed only on the output the window landed on: an arrival
@@ -216,10 +225,10 @@ private Q_SLOTS:
     void aPendingFloatIsOwedOnlyWhereItLanded()
     {
         const QString w = QStringLiteral("app|moved-evacuee");
-        pendSnapFloatOnB(w);
         const auto clearResolver = qScopeGuard([this] {
             m_wta->service()->setEngineFloatResolver({});
         });
+        QVERIFY(pendSnapFloatOnB(w));
         QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kA));
         QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kB));
     }
@@ -230,17 +239,20 @@ private Q_SLOTS:
     void aPendingFloatOfUnknownModeFloatsInPlaceOnATilingArrival()
     {
         const QString w = QStringLiteral("app|unknown-mode-evacuee");
-        pendSnapFloatOnB(w);
+        const auto clearResolver = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+        });
+        QVERIFY(pendSnapFloatOnB(w));
         StubPlacementEngine tile;
         tile.activeScreens = {kB};
         m_wta->setEngines(m_snapEngine, &tile, nullptr);
         const auto restore = qScopeGuard([this] {
             m_wta->setEngines(m_snapEngine, nullptr, nullptr);
-            m_wta->service()->setEngineFloatResolver({});
         });
         QVERIFY(m_wta->adoptPendingEvacueeFloat(w, kB));
         QCOMPARE(tile.received.size(), 1);
         QVERIFY(tile.received.first().wasFloating);
+        QVERIFY2(!m_wta->adoptPendingEvacueeFloat(w, kB), "the float is owed once");
     }
 
     // The mode is the window's own context's, not the one in view: an
@@ -250,7 +262,10 @@ private Q_SLOTS:
     void aHiddenEvacueeOnATilingDesktopFloatsAtItsArrivalThere()
     {
         const QString w = QStringLiteral("app|hidden-tiling-evacuee");
-        pendOnTilingDesktopOfB(w);
+        const auto clearResolver = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+        });
+        QVERIFY(pendOnTilingDesktopOfB(w));
         const auto key = m_snapEngine->heldKeyForWindow(w);
         QVERIFY2(!key || key->screenId != kB, "no snap float stated on B's desktop 2");
         StubPlacementEngine tile;
@@ -258,25 +273,35 @@ private Q_SLOTS:
         m_wta->setEngines(m_snapEngine, &tile, nullptr);
         const auto restore = qScopeGuard([this] {
             m_wta->setEngines(m_snapEngine, nullptr, nullptr);
-            m_wta->service()->setEngineFloatResolver({});
         });
         QVERIFY(m_wta->adoptPendingEvacueeFloat(w, kB));
         QCOMPARE(tile.received.size(), 1);
         QVERIFY(tile.received.first().wasFloating);
+        QVERIFY2(!m_wta->adoptPendingEvacueeFloat(w, kB), "the float is owed once");
     }
 
     // And that tiling float is spent, not floated, when it arrives where
-    // snapping runs (float is per mode, F1047).
+    // snapping runs (float is per mode, F1047): a later arrival on B, with a
+    // tiling engine running it by then, is owed nothing either.
     void aPendingTilingFloatIsNotOwedOnASnappingArrival()
     {
         const QString w = QStringLiteral("app|mode-flipped-evacuee");
-        pendOnTilingDesktopOfB(w);
         const auto clearResolver = qScopeGuard([this] {
             m_wta->service()->setEngineFloatResolver({});
         });
+        QVERIFY(pendOnTilingDesktopOfB(w));
         QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kB));
         const auto key = m_snapEngine->heldKeyForWindow(w);
         QVERIFY(!key || key->screenId != kB);
+
+        StubPlacementEngine tile;
+        tile.activeScreens = {kB};
+        m_wta->setEngines(m_snapEngine, &tile, nullptr);
+        const auto restore = qScopeGuard([this] {
+            m_wta->setEngines(m_snapEngine, nullptr, nullptr);
+        });
+        QVERIFY2(!m_wta->adoptPendingEvacueeFloat(w, kB), "the first arrival spent the float");
+        QVERIFY(tile.received.isEmpty());
     }
 
     // The reverse: B tiles in view, but the window's own hidden desktop there
@@ -285,15 +310,17 @@ private Q_SLOTS:
     void aHiddenSnapFloatOnASnappingDesktopIsStatedThere()
     {
         const QString w = QStringLiteral("app|hidden-snapping-evacuee");
-        floatOnA(w);
+        const auto clearResolver = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+        });
+        QVERIFY(floatOnA(w));
         placeOnDesktop(w, 2);
-        unplugA();
+        QVERIFY(unplugA());
         StubPlacementEngine tile;
         tile.activeScreens = {kB};
         m_wta->setEngines(m_snapEngine, &tile, nullptr);
         const auto restore = qScopeGuard([this] {
             m_wta->setEngines(m_snapEngine, nullptr, nullptr);
-            m_wta->service()->setEngineFloatResolver({});
         });
         OutputSettleRow row = unplugRow(w);
         row.placeableNow = false;
@@ -311,10 +338,10 @@ private Q_SLOTS:
     void aReadoptSpendsThePendingFloat()
     {
         const QString w = QStringLiteral("app|returned-evacuee");
-        pendSnapFloatOnB(w);
         const auto clearResolver = qScopeGuard([this] {
             m_wta->service()->setEngineFloatResolver({});
         });
+        QVERIFY(pendSnapFloatOnB(w));
         m_snapEngine->setCurrentDesktopForScreen(kA, 1);
         m_wta->reportOutputSettle({redockRow(w)});
         QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kB));
@@ -326,8 +353,8 @@ private Q_SLOTS:
     void aPlacementMarkReassertsOnlyAPullBackOntoTheAwayOutput()
     {
         const QString w = QStringLiteral("app|placed-then-moved");
-        snapOnA(w);
-        unplugA();
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
         m_wta->reportOutputSettle({unplugRow(w)});
         m_snapEngine->commitSnap(w, m_zoneIds[1], kB);
         OutputSettleRow moved = redockRow(w, 4);
@@ -344,8 +371,8 @@ private Q_SLOTS:
     {
         const QString w = QStringLiteral("app|placed-twice");
         const QString kC = QStringLiteral("DP-3");
-        snapOnA(w);
-        unplugA();
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
         m_snapEngine->commitSnap(w, m_zoneIds[1], kB);
         QVERIFY(!m_wta->parkOutput(kB).isEmpty());
         m_snapEngine->pruneStatesForRemovedScreen(kB);
@@ -370,8 +397,8 @@ private Q_SLOTS:
     void closeDropsThePlacementMark()
     {
         const QString w = QStringLiteral("app|placed-then-closed");
-        snapOnA(w);
-        unplugA();
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
         m_wta->reportOutputSettle({unplugRow(w)});
         m_snapEngine->commitSnap(w, m_zoneIds[1], kB);
         m_wta->windowClosed(w, 0, kB);
@@ -385,11 +412,11 @@ private Q_SLOTS:
     void aSnapFloatEvacueeFloatsOnTheSnappingOutput()
     {
         const QString w = QStringLiteral("app|float-evacuee");
-        floatOnA(w);
         const auto clearResolver = qScopeGuard([this] {
             m_wta->service()->setEngineFloatResolver({});
         });
-        unplugA();
+        QVERIFY(floatOnA(w));
+        QVERIFY(unplugA());
         for (int settle = 0; settle < 2; ++settle) {
             const QByteArray which = QByteArray("settle ") + QByteArray::number(settle);
             QVERIFY2(verdictOf(m_wta->reportOutputSettle({unplugRow(w)}), w) == int(OutputSettleVerdict::EvacueeFloat),
@@ -404,11 +431,11 @@ private Q_SLOTS:
     void aTouchedSnapFloatEvacueeStillFloatsOnB()
     {
         const QString w = QStringLiteral("app|touched-float-evacuee");
-        floatOnA(w);
         const auto clearResolver = qScopeGuard([this] {
             m_wta->service()->setEngineFloatResolver({});
         });
-        unplugA();
+        QVERIFY(floatOnA(w));
+        QVERIFY(unplugA());
         OutputSettleRow row = unplugRow(w);
         row.moveResizeCount = 4;
         QCOMPARE(verdictOf(m_wta->reportOutputSettle({row}), w), int(OutputSettleVerdict::EvacueeFloat));
@@ -423,8 +450,8 @@ private Q_SLOTS:
     void anAnnounceOnTheParkedOutputReseats()
     {
         const QString w = QStringLiteral("app|reannounced");
-        snapOnA(w);
-        unplugA();
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
         m_snapEngine->setCurrentDesktopForScreen(kA, 1);
         QVERIFY(m_wta->readoptOnArrival(w, kA));
         QCOMPARE(m_wta->service()->zoneForWindow(w), m_zoneIds[0]);
@@ -453,31 +480,36 @@ private Q_SLOTS:
     }
 
 private:
-    void snapOnA(const QString& windowId)
+    // The helpers answer whether they did what they name, for the row to
+    // QVERIFY: a QVERIFY inside one would return from the helper only.
+
+    [[nodiscard]] bool snapOnA(const QString& windowId)
     {
         m_snapEngine->setCurrentDesktopForScreen(kA, 1);
         m_wta->service()->assignWindowToZone(windowId, m_zoneIds[0], kA, 1);
-        QCOMPARE(m_wta->service()->zoneForWindow(windowId), m_zoneIds[0]);
+        return m_wta->service()->zoneForWindow(windowId) == m_zoneIds[0];
     }
 
     /// Snap @p windowId on A and float it there, with the daemon's float
     /// resolver (the snap engine's answer), so the service reads the float
-    /// from the engine's stores as it does in the daemon. The caller clears it.
-    void floatOnA(const QString& windowId)
+    /// from the engine's stores as it does in the daemon. The caller clears
+    /// it, with a guard armed before the call.
+    [[nodiscard]] bool floatOnA(const QString& windowId)
     {
-        snapOnA(windowId);
+        if (!snapOnA(windowId)) {
+            return false;
+        }
         m_wta->service()->setEngineFloatResolver([this](const QString& id) {
             return m_snapEngine->isFloating(id);
         });
         m_snapEngine->setWindowFloat(windowId, true, kA);
-        QVERIFY(m_snapEngine->isFloating(windowId));
-        QVERIFY(m_wta->service()->isWindowFloating(windowId));
+        return m_snapEngine->isFloating(windowId) && m_wta->service()->isWindowFloating(windowId);
     }
 
     /// @p windowId snap-floated on A, on activity act-2 while act-1 is in view,
-    /// and evacuated minimized onto B: its float waits for its arrival there.
-    /// The caller clears the float resolver.
-    void pendSnapFloatOnB(const QString& windowId)
+    /// and evacuated minimized onto B: its float waits for its arrival there,
+    /// which the rows' adopts read. The caller clears the float resolver.
+    [[nodiscard]] bool pendSnapFloatOnB(const QString& windowId)
     {
         installRegistry();
         PhosphorEngine::WindowMetadata meta;
@@ -485,12 +517,13 @@ private:
         meta.activity = QStringLiteral("act-2");
         m_registry->upsert(PhosphorIdentity::WindowId::extractInstanceId(windowId), meta);
         m_registry->canonicalizeWindowId(windowId);
-        floatOnA(windowId);
-        unplugA();
+        if (!floatOnA(windowId) || !unplugA()) {
+            return false;
+        }
         m_layoutManager->setCurrentActivity(QStringLiteral("act-1"));
         OutputSettleRow row = unplugRow(windowId);
         row.placeableNow = false;
-        m_wta->reportOutputSettle({row});
+        return verdictOf(m_wta->reportOutputSettle({row}), windowId) == int(OutputSettleVerdict::EvacueeFloat);
     }
 
     /// Put @p windowId on @p desktop in the window registry (desktop 1 is in view).
@@ -507,26 +540,32 @@ private:
     /// @p windowId snap-floated on A and evacuated onto B while on desktop 2,
     /// which tiles on B, with desktop 1 (snapping) in view: its float waits
     /// for its arrival there. The caller clears the float resolver.
-    void pendOnTilingDesktopOfB(const QString& windowId)
+    [[nodiscard]] bool pendOnTilingDesktopOfB(const QString& windowId)
     {
-        floatOnA(windowId);
+        if (!floatOnA(windowId)) {
+            return false;
+        }
         placeOnDesktop(windowId, 2);
         PhosphorZones::AssignmentEntry tiled;
         tiled.mode = PhosphorZones::AssignmentEntry::Autotile;
         tiled.tilingAlgorithm = QStringLiteral("dwindle");
         m_layoutManager->setAssignmentEntryDirect(kB, 2, QString(), tiled);
-        unplugA();
+        if (!unplugA()) {
+            return false;
+        }
         OutputSettleRow row = unplugRow(windowId);
         row.placeableNow = false;
-        QCOMPARE(verdictOf(m_wta->reportOutputSettle({row}), windowId), int(OutputSettleVerdict::EvacueeFloat));
+        return verdictOf(m_wta->reportOutputSettle({row}), windowId) == int(OutputSettleVerdict::EvacueeFloat);
     }
 
     /// The daemon's retire for A: park, prune, release the parked slots.
-    void unplugA()
+    /// Answers whether the park took anything.
+    [[nodiscard]] bool unplugA()
     {
-        QVERIFY(!m_wta->parkOutput(kA).isEmpty());
+        const bool parked = !m_wta->parkOutput(kA).isEmpty();
         m_snapEngine->pruneStatesForRemovedScreen(kA);
         m_wta->releaseParkedSlots(kA);
+        return parked;
     }
 };
 

@@ -17,8 +17,8 @@
 #include "helpers/VirtualScreenTestHelpers.h"
 #include "dbus/controladaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
+#include "helpers/ScreenDisablingResolver.h"
 
-#include <PhosphorContext/IContextResolver.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/WindowPlacement.h>
@@ -29,57 +29,7 @@
 
 namespace {
 
-/// Answers MonitorDisabled for the screens in m_disabled.
-class ScreenDisablingResolver : public PhosphorContext::IContextResolver
-{
-public:
-    QSet<QString> m_disabled;
-
-    PhosphorContext::ContextHandle handleFor(const QString& screenId) const override
-    {
-        PhosphorContext::ContextHandle h;
-        h.screenId = screenId;
-        return h;
-    }
-    PhosphorContext::ContextHandle globalHandle() const override
-    {
-        return {};
-    }
-    PhosphorContext::ContextHandle handleForMode(const QString& screenId,
-                                                 PhosphorZones::AssignmentEntry::Mode mode) const override
-    {
-        PhosphorContext::ContextHandle h;
-        h.screenId = screenId;
-        h.mode = mode;
-        return h;
-    }
-    PhosphorContext::ContextHandle handleForPersisted(const QString& screenId, int virtualDesktop,
-                                                      const QString& activity) const override
-    {
-        PhosphorContext::ContextHandle h;
-        h.screenId = screenId;
-        h.virtualDesktop = virtualDesktop;
-        h.activity = activity;
-        return h;
-    }
-    int currentVirtualDesktop() const override
-    {
-        return 1;
-    }
-    QString currentActivity() const override
-    {
-        return QString();
-    }
-    PhosphorContext::DisabledReason disabledReason(const PhosphorContext::ContextHandle& h) const override
-    {
-        return m_disabled.contains(h.screenId) ? PhosphorContext::DisabledReason::MonitorDisabled
-                                               : PhosphorContext::DisabledReason::NotDisabled;
-    }
-    bool isLocked(const PhosphorContext::ContextHandle&) const override
-    {
-        return false;
-    }
-};
+using PlasmaZones::TestHelpers::ScreenDisablingResolver;
 
 struct GateFixture : FloatBackFixture
 {

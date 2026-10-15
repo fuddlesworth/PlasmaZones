@@ -169,17 +169,17 @@ private Q_SLOTS:
         const QString claimedId = QStringLiteral("claimed|11111111-0000-0000-0000-000000000001");
         const QString openId = QStringLiteral("open|22222222-0000-0000-0000-000000000002");
         WindowPlacementStore store;
-        store.record(snappedOn(kWindow, {{3, {kZoneC}}}));
+        QVERIFY(store.record(snappedOn(kWindow, {{3, {kZoneC}}})));
         WindowPlacement claimed = snappedOn(claimedId, {{3, {kZoneC}}});
         claimed.appId = QStringLiteral("claimed");
-        store.record(claimed);
+        QVERIFY(store.record(claimed));
         WindowPlacement open = snappedOn(openId, {{3, {kZoneC}}});
         open.appId = QStringLiteral("open");
-        store.record(open);
+        QVERIFY(store.record(open));
         const quint64 restoredUpTo = store.sequence();
         const quint64 restoredStamp = recordFor(store, kWindow)->sequence;
 
-        store.record(snappedOn(kSibling, {{3, {kZoneB}}}));
+        QVERIFY(store.record(snappedOn(kSibling, {{3, {kZoneB}}})));
         const QString claimer = QStringLiteral("claimed|99999999-0000-0000-0000-000000000009");
         QVERIFY(store.claimForOpen(claimer, claimed.appId).has_value());
         store.setLiveInstanceProbe([openId](const QString& windowId) {
@@ -204,15 +204,15 @@ private Q_SLOTS:
         WindowPlacementStore store;
         WindowPlacement released = snappedOn(kWindow, {{3, {kZoneC}}});
         released.virtualDesktop = 3;
-        store.record(released);
+        QVERIFY(store.record(released));
         WindowPlacement floated = snappedOn(kSibling, {{3, {kZoneB}}});
         floated.virtualDesktop = 3;
         floated.freeGeometryByScreen.insert(kScreen, QRect(10, 20, 300, 400));
-        store.record(floated);
+        QVERIFY(store.record(floated));
         const QString wipedId = QStringLiteral("app|33333333-0000-0000-0000-000000000003");
         WindowPlacement wiped = snappedOn(wipedId, {{3, {kZoneA}}});
         wiped.freeGeometryByScreen.insert(kScreen, QRect(10, 20, 300, 400));
-        store.record(wiped);
+        QVERIFY(store.record(wiped));
         const quint64 restoredUpTo = store.sequence();
 
         QVERIFY(store.releaseEngineSlot(kWindow, WindowPlacement::snapEngineId()));
@@ -241,7 +241,7 @@ private Q_SLOTS:
         WindowPlacementStore store;
         WindowPlacement restored = snappedOn(kWindow, {{3, {kZoneC}}});
         restored.virtualDesktop = 3;
-        store.record(restored);
+        QVERIFY(store.record(restored));
         const quint64 restoredUpTo = store.sequence();
 
         QVERIFY(!store.record(restored));

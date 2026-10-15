@@ -6,7 +6,10 @@
  * @brief The one layout-switch helper every switch caller runs:
  *        WindowTrackingAdaptor::resnapScreensToTheirLayouts. It populates
  *        the buffer for the switched screens, resnaps silently, then prunes
- *        and relays what the switch could not carry.
+ *        and relays what the switch could not carry. Plus a layout deleted
+ *        under its windows, and the two other re-applies with snapping
+ *        switched off: SnapAdaptor::reapplySnapZones for a settings reflow
+ *        and getUpdatedWindowGeometries for a resolution change.
  */
 
 #include "wta_convenience_fixture.h"
@@ -14,6 +17,8 @@
 
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorZones/LayoutUtils.h>
+
+#include <QScopeGuard>
 
 class TestWtaLayoutSwitch : public QObject, protected WtaConvenienceFixture
 {
@@ -268,6 +273,9 @@ private Q_SLOTS:
         FloatBackFixture f;
         QObject adaptorParent; // dies before the fixture's engine and adaptor
         auto* snapAdaptor = new SnapAdaptor(f.snap.get(), f.wta, &f.settings, &adaptorParent);
+        const auto detach = qScopeGuard([snapAdaptor] {
+            snapAdaptor->clearEngine();
+        });
         const QString w = f.registerWindow(QStringLiteral("reflow"));
         f.snap->commitSnap(w, f.zone(0), kLeft);
 
