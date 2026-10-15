@@ -451,12 +451,16 @@ private Q_SLOTS:
 
         engine.parkOutput(screen);
         engine.pruneStatesForRemovedScreen(screen);
-        // The output comes back showing another desktop, so the places are granted.
+        // The output comes back showing another desktop before it tiles
+        // again, so the places are granted.
+        engine.setAutotileScreens({});
         engine.setCurrentDesktopForScreen(screen, 2);
         for (const QString& windowId : order) {
             QVERIFY(engine.readoptParked(windowId, screen, screen));
         }
+        QVERIFY(!engine.isWindowTracked(order.at(0)));
 
+        engine.setAutotileScreens({screen});
         engine.setCurrentDesktopForScreen(screen, 1);
         for (const QString& windowId : order) {
             engine.windowOpened(windowId, screen);
@@ -510,6 +514,122 @@ private Q_SLOTS:
         engine.pruneStatesForActivities({QStringLiteral("activity-b")});
         QVERIFY(!engine.hasParked(QStringLiteral("win-1"), QString()));
         QVERIFY(!engine.readoptParked(QStringLiteral("win-1"), screen, screen));
+    }
+
+    // A context out of view when its output returns, on a screen that still
+    // tiles, takes its windows back at once, in their order and with their
+    // float bits: nothing announces them when that desktop is shown, and an
+    // announce that does come adds nothing (F1099).
+    void testEvacueePark_outOfViewContextIsSeatedAtOnce()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setCurrentDesktopForScreen(screen, 1);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win-1"), screen);
+        engine.windowOpened(QStringLiteral("win-2"), screen);
+        engine.windowOpened(QStringLiteral("win-3"), screen);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        const QStringList order = state->windowOrder();
+        QCOMPARE(order.size(), 3);
+        state->setFloating(order.at(1), true);
+
+        engine.parkOutput(screen);
+        engine.pruneStatesForRemovedScreen(screen);
+        // The output comes back showing another desktop.
+        engine.setCurrentDesktopForScreen(screen, 2);
+        QVERIFY(engine.readoptParked(order.at(2), screen, screen));
+        QVERIFY(engine.readoptParked(order.at(0), screen, screen));
+        QVERIFY(engine.readoptParked(order.at(1), screen, screen));
+        QVERIFY(engine.isWindowTracked(order.at(0)));
+        QVERIFY(!engine.hasParked(order.at(0), QString()));
+
+        engine.setCurrentDesktopForScreen(screen, 1);
+        QCoreApplication::processEvents();
+        state = engine.tilingStateForScreen(screen);
+        QCOMPARE(state->windowOrder(), order);
+        QVERIFY(state->isFloating(order.at(1)));
+        QVERIFY(!state->isFloating(order.at(0)));
+
+        engine.windowOpened(order.at(0), screen);
+        QCoreApplication::processEvents();
+        QCOMPARE(state->windowOrder(), order);
+    }
+
+    // A parked desktop given another mode while the output was away gets
+    // nothing back when it is not in view, whether or not the screen tiles
+    // yet. One that still tiles comes back, whatever the desktop in view
+    // runs (F1102).
+    void testEvacueePark_outOfViewContextInAnotherModeGetsNothing_data()
+    {
+        QTest::addColumn<bool>("tilingYet");
+        QTest::addColumn<bool>("parkedTiles");
+        QTest::newRow("parked desktop now snaps, screen tiling") << true << false;
+        QTest::newRow("parked desktop now snaps, screen not tiling yet") << false << false;
+        QTest::newRow("parked desktop still tiles") << true << true;
+    }
+
+    void testEvacueePark_outOfViewContextInAnotherModeGetsNothing()
+    {
+        QFETCH(bool, tilingYet);
+        QFETCH(bool, parkedTiles);
+        // root parents the registry so it outlives the engine that borrows it.
+        QObject root;
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        PhosphorZones::LayoutRegistry* layout =
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
+        AutotileEngine engine(layout, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        layout->setAssignmentEntryDirect(screen, 1, QString(), autotile);
+        engine.setCurrentDesktopForScreen(screen, 1);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win-1"), screen);
+        QCoreApplication::processEvents();
+        engine.parkOutput(screen);
+        engine.pruneStatesForRemovedScreen(screen);
+
+        // Desktop 1 holds the parked context; desktop 2, shown on the return,
+        // keeps the registry's snapping default in every row.
+        if (!parkedTiles) {
+            PhosphorZones::AssignmentEntry snapping;
+            snapping.mode = PhosphorZones::AssignmentEntry::Snapping;
+            layout->setAssignmentEntryDirect(screen, 1, QString(), snapping);
+        }
+        if (!tilingYet) {
+            engine.setAutotileScreens({});
+        }
+        engine.setCurrentDesktopForScreen(screen, 2);
+
+        QCOMPARE(engine.readoptParked(QStringLiteral("win-1"), screen, screen), parkedTiles);
+        QCOMPARE(engine.isWindowTracked(QStringLiteral("win-1")), parkedTiles);
+        QVERIFY(!engine.hasParked(QStringLiteral("win-1"), QString()));
+    }
+
+    // The daemon's prune of a shrunk desktop count reaches only the desktops
+    // desktopsWithActiveState lists, and a parked context has no live state
+    // left to list its desktop; the prune then takes it (F1100).
+    void testEvacueePark_countPruneReachesAParkedContext()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setCurrentDesktopForScreen(screen, 3);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win-1"), screen);
+        QCoreApplication::processEvents();
+        engine.parkOutput(screen);
+        engine.pruneStatesForRemovedScreen(screen);
+
+        const QSet<int> desktops = engine.desktopsWithActiveState();
+        QVERIFY(desktops.contains(3));
+        for (const int desktop : desktops) {
+            if (desktop > 2) {
+                engine.pruneStatesForDesktop(desktop);
+            }
+        }
+        QVERIFY(!engine.hasParked(QStringLiteral("win-1"), QString()));
     }
 
     // =========================================================================

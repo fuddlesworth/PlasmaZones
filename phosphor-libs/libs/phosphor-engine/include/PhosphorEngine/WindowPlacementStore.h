@@ -519,14 +519,15 @@ private:
     QHash<QString, QString> m_openPairing;
     QHash<QString, QString> m_claimedBy;
 
-    /// The records a downgrade (releaseEngineSlot, clearFreeGeometry) changed
-    /// this session, by record windowId. A downgrade keeps the record's stamp,
-    /// since a loss is not newer truth, so this is what tells
-    /// remapRestoredDesktopZones that a live window touched it. Dropped with
-    /// the record (forgetRemovedRecord) and on deserialize. TRANSIENT, never
-    /// serialized. The slot that once held the inert m_movedLiveInstances, so
-    /// the layout is unchanged.
-    QSet<QString> m_downgradedThisSession;
+    /// The records a live window touched this session without a fresh stamp,
+    /// by record windowId: a downgrade (releaseEngineSlot, clearFreeGeometry),
+    /// which keeps the stamp since a loss is not newer truth, and a re-capture
+    /// identical to the record, which record() leaves untouched. This is what
+    /// tells remapRestoredDesktopZones the record is in the live numbering.
+    /// Dropped with the record (forgetRemovedRecord) and by deserialize, after
+    /// its replay. TRANSIENT, never serialized. The slot that once held the
+    /// inert m_movedLiveInstances, so the layout is unchanged.
+    QSet<QString> m_touchedThisSession;
 
     /// The one claim walk both claimForOpen overloads share. @p ownRecordFinal
     /// makes a captured own record final (claimed or nothing); otherwise a

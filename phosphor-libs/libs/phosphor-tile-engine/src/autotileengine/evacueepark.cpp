@@ -13,6 +13,8 @@
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "evacueepark_p.h"
 #include "tileenginelogging.h"
 
@@ -159,7 +161,12 @@ bool AutotileEngine::readoptParked(const QString& windowId, const QString& parke
     }
     const QString canonical = canonicalizeWindowId(windowId);
     bool seated = false;
-    for (ParkedTileContext& ctx : outIt.value()) {
+    // Out-of-view contexts on a screen this engine tiles, by index into the
+    // output's contexts, seated once the walk is done.
+    QList<std::pair<qsizetype, TilingStateKey>> outOfView;
+    QVector<ParkedTileContext>& contexts = outIt.value();
+    for (qsizetype i = 0; i < contexts.size(); ++i) {
+        ParkedTileContext& ctx = contexts[i];
         if (!ctx.pending.contains(canonical)) {
             continue;
         }
@@ -167,8 +174,30 @@ bool AutotileEngine::readoptParked(const QString& windowId, const QString& parke
         const QString screen = translateOntoOutput(ctx.key.screenId, returnedPhysicalId, m_screenManager);
         const TilingStateKey key{screen, ctx.key.desktop, ctx.key.activity};
         if (key != currentKeyForScreen(screen)) {
-            // Out of view: the place is granted, and taken when the window
-            // arrives in that context (insertWindow).
+            // A context given another mode while the output was away gets
+            // nothing back, like one in view below. isAutotileScreen speaks
+            // only for the context in view, so its own assignment decides
+            // (F1102).
+            if (m_layoutManager
+                && m_layoutManager->modeForScreen(screen, key.desktop, key.activity)
+                    != PhosphorZones::AssignmentEntry::Mode::Autotile) {
+                continue;
+            }
+            if (isAutotileScreen(screen)) {
+                // Seated straight into that context after the walk. Nothing
+                // announces the window when its desktop is shown (the effect
+                // tracked it at the re-adopt without an announce), and the
+                // desktop switch's reconcile walks only windows this engine
+                // tracks, so a place left to that arrival was never taken
+                // (F1099).
+                outOfView.append({i, key});
+                continue;
+            }
+            // The screen is not tiling yet: the place is granted, and taken
+            // when the window arrives in that context (insertWindow). It does
+            // arrive: the screen's return to autotile drops the effect's
+            // tracking of every window on it and announces those in view, and
+            // the switch to an out-of-view context announces the rest.
             ctx.granted.insert(canonical, key);
             seated = true;
             continue;
@@ -197,6 +226,33 @@ bool AutotileEngine::readoptParked(const QString& windowId, const QString& parke
         if (!state->containsWindow(canonical)) {
             continue;
         }
+        seated = true;
+    }
+    // After the walk, so the in-view re-seat (whose handoffReceive makes its
+    // context the window's primary) has run first. A background context: no
+    // retile and no focus. The memo retiles it when it comes into view, and a
+    // later announce there finds the window held and inserts nothing.
+    for (const auto& [index, key] : std::as_const(outOfView)) {
+        ParkedTileContext& ctx = contexts[index];
+        PhosphorTiles::TilingState* state = tilingStateForKey(key);
+        if (!state) {
+            continue;
+        }
+        if (!state->containsWindow(canonical)) {
+            restoreParkedTuning(ctx, key, state, m_configResolver->effectiveAlgorithmId(key.screenId),
+                                m_userTunedSplitRatio, m_userTunedMasterCount);
+            if (!state->addWindow(canonical, parkedInsertIndex(ctx, canonical, state))) {
+                continue;
+            }
+            if (ctx.floating.contains(canonical)) {
+                state->setFloating(canonical, true);
+                Q_EMIT windowFloatingStateSynced(canonical, true, key.screenId);
+            } else {
+                notifyAlgorithmWindowAdded(state, key.screenId, canonical);
+            }
+            m_dirtyBackgroundContexts.insert(key);
+        }
+        m_states.addMembership(canonical, key);
         seated = true;
     }
     dropEmptyContexts(m_evacueePark->byOutput);

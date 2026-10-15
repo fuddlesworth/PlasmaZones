@@ -904,10 +904,10 @@ public:
         m_snappingModeResolver = std::move(resolver);
     }
 
-    /// Scrolling-mode resolver for claimCrossScreenReopen: whether the
-    /// RECORDED context resolves to Scrolling mode, the same-mode half of the
-    /// reopen contract (a FIFO record on another virtual screen of the opening
-    /// output). Unset → this engine never claims (headless/test path).
+    /// Scrolling-mode resolver: whether a context resolves to Scrolling mode.
+    /// claimCrossScreenReopen asks it of the RECORDED context (unset: it never
+    /// claims), and readoptParked of a context not in view, which gets nothing
+    /// back once it stopped scrolling (unset: every context still scrolls).
     void setScrollingModeResolver(ModeResolver resolver)
     {
         m_scrollingModeResolver = std::move(resolver);

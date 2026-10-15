@@ -435,6 +435,28 @@ QSet<int> SnapEngine::desktopsWithActiveState() const
             out.insert(it.key().desktop);
         }
     }
+    // A parked context, a waiting carry and an owed float-back can sit on a
+    // desktop with no live state, and the daemon's count prune reaches only
+    // the desktops listed here (F1100).
+    if (m_evacueePark) {
+        for (const auto& windows : std::as_const(m_evacueePark->byOutput)) {
+            for (const QVector<ParkedSnapContext>& contexts : windows) {
+                for (const ParkedSnapContext& ctx : contexts) {
+                    out.insert(ctx.key.desktop);
+                }
+            }
+        }
+    }
+    if (m_pendingCarries) {
+        for (const PendingActivityCarry& carry : std::as_const(m_pendingCarries->byWindow)) {
+            for (auto it = carry.zonesByDesktop.cbegin(); it != carry.zonesByDesktop.cend(); ++it) {
+                out.insert(it.key());
+            }
+        }
+        for (const OwedFloatBack& owed : std::as_const(m_pendingCarries->owedFloatBacks)) {
+            out.insert(owed.key.desktop);
+        }
+    }
     return out;
 }
 

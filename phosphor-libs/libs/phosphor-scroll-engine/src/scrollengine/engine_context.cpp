@@ -421,6 +421,19 @@ QSet<int> ScrollEngine::desktopsWithActiveState() const
     for (auto it = states.cbegin(); it != states.cend(); ++it) {
         desktops.insert(it.key().desktop);
     }
+    // A parked strip and a grant sit where the prune of the output took the
+    // state, and the daemon's count prune reaches only the desktops listed
+    // here (F1100).
+    if (m_evacueePark) {
+        for (const auto& contexts : std::as_const(m_evacueePark->byOutput)) {
+            for (auto it = contexts.cbegin(); it != contexts.cend(); ++it) {
+                desktops.insert(it.key().desktop);
+            }
+        }
+        for (auto it = m_evacueePark->grants.cbegin(); it != m_evacueePark->grants.cend(); ++it) {
+            desktops.insert(it.key().desktop);
+        }
+    }
     return desktops;
 }
 

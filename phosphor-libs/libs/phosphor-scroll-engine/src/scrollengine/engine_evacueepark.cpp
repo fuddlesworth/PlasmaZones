@@ -254,19 +254,26 @@ bool ScrollEngine::readoptParked(const QString& windowId, const QString& parkedP
                 setOpenFocusEligible(focusEligible);
             }
             seated = seated || isWindowTracked(canonical);
+        } else if (m_scrollingModeResolver && !m_scrollingModeResolver(key.screenId, key.desktop, key.activity)) {
+            // A context given another mode while the output was away gets
+            // nothing back, as snap's re-adopt refuses a desktop no longer
+            // snapping. m_scrollingScreens speaks only for the contexts in
+            // view, so the context's own assignment decides (F1102).
         } else if (m_scrollingScreens.contains(screen)) {
             // Out of view on a screen this engine scrolls: seated straight into
             // that context, after the walk. Nothing announces the window again
-            // when its desktop is shown (the effect announced it long ago), so
-            // a claim left to that arrival never ran and the strip came back
-            // empty.
+            // when its desktop is shown (the effect tracked it at the re-adopt
+            // without an announce), so a claim left to that arrival never ran
+            // and the strip came back empty.
             if (!outOfView.contains(key)) {
                 outOfView.append(key);
             }
-            seated = true;
         } else {
             // The screen is not scrolling yet: the stash under that key claims
-            // the window by exact id when it arrives there. A window parked
+            // the window by exact id when it arrives there. It does arrive: the
+            // screen's return to scrolling drops the effect's tracking of every
+            // window on it and announces those in view, and the switch to an
+            // out-of-view context announces the rest (F1099). A window parked
             // floating has no tile there, so its grant carries the verdict
             // instead, and the arrival seats it floating like the in-view arm
             // above. A tile's grant keeps the stash parked until the tile
@@ -302,7 +309,13 @@ bool ScrollEngine::readoptParked(const QString& windowId, const QString& parkedP
     const bool parkedFloating = m_evacueePark->floating.contains(canonical);
     for (const PhosphorEngine::PlacementStateKey& key : std::as_const(outOfView)) {
         ScrollState* state = stateForKey(key, true);
-        if (!state || state->containsWindow(canonical)) {
+        if (!state) {
+            continue;
+        }
+        // Seated counts only a context that holds the window: forgetUnowed below
+        // takes the float verdict and the clamp either way (F1104).
+        if (state->containsWindow(canonical)) {
+            seated = true;
             continue;
         }
         if (!isWindowTracked(canonical)) {
@@ -330,6 +343,7 @@ bool ScrollEngine::readoptParked(const QString& windowId, const QString& parkedP
                 state->strip().setWindowMinimumSize(canonical, minSize.width(), minSize.height());
             }
         }
+        seated = true;
         Q_EMIT placementChanged(key.screenId);
     }
     m_evacueePark->forgetUnowed(canonical);

@@ -326,6 +326,26 @@ private Q_SLOTS:
         QVERIFY(zonesOn(2, w).isEmpty());
     }
 
+    // The daemon's prune of a shrunk desktop count reaches only the desktops
+    // desktopsWithActiveState lists, and a parked context has no live state
+    // left to list its desktop (F1100).
+    void aCountPruneReachesAParkedContext()
+    {
+        const QString w = QStringLiteral("app|count-pruned");
+        snapOn(2, w, m_zoneIds[1]);
+        QCOMPARE(m_engine->parkOutput(kScreen), QStringList{w});
+        m_engine->pruneStatesForRemovedScreen(kScreen);
+
+        const QSet<int> desktops = m_engine->desktopsWithActiveState();
+        QVERIFY(desktops.contains(2));
+        for (const int desktop : desktops) {
+            if (desktop > 1) {
+                m_engine->pruneStatesForDesktop(desktop);
+            }
+        }
+        QVERIFY(!m_engine->hasParked(w, kScreen));
+    }
+
     // So does a removed activity (F1024).
     void aRemovedActivityTakesItsParkedContext()
     {

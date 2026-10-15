@@ -118,6 +118,9 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
             if (!appIdChanged && merged.sameContentAs(bucket.at(i))) {
                 // Content-identical re-capture (sequence aside): leave the existing
                 // record untouched and report "no change" so the save loop settles.
+                // It is unstamped, so the mark is what says a live window saw it in
+                // the live numbering (remapRestoredDesktopZones, F1103).
+                m_touchedThisSession.insert(stored.windowId);
                 return false;
             }
             merged.appId = incoming.appId;
@@ -707,7 +710,7 @@ bool WindowPlacementStore::releaseEngineSlot(const QString& windowId, const QStr
             slotIt->order = -1;
             // No fresh stamp (a loss is not newer truth), so the mark is what
             // says a live window touched it (remapRestoredDesktopZones).
-            m_downgradedThisSession.insert(p.windowId);
+            m_touchedThisSession.insert(p.windowId);
             changed = true;
         }
     }
@@ -832,7 +835,7 @@ int WindowPlacementStore::remapRestoredDesktopZones(const DesktopRemap& remap, q
             // downgrade changed it without a stamp, an opening window claimed
             // it, or it is an open window's own record (a daemon restart inside
             // one KWin session keeps the ids).
-            if (p.sequence > restoredUpTo || m_downgradedThisSession.contains(p.windowId)
+            if (p.sequence > restoredUpTo || m_touchedThisSession.contains(p.windowId)
                 || m_claimedBy.contains(p.windowId) || isLiveInstance(p.windowId)) {
                 continue;
             }
@@ -910,7 +913,7 @@ bool WindowPlacementStore::clearFreeGeometry(const QString& windowId)
         for (WindowPlacement& p : it.value()) {
             if (sameWindowInstance(p.windowId, windowId) && !p.freeGeometryByScreen.isEmpty()) {
                 p.freeGeometryByScreen.clear();
-                m_downgradedThisSession.insert(p.windowId);
+                m_touchedThisSession.insert(p.windowId);
                 cleared = true;
             }
         }
@@ -932,7 +935,7 @@ bool WindowPlacementStore::clearFreeGeometry(const QString& windowId, const QStr
     for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
         for (WindowPlacement& p : it.value()) {
             if (sameWindowInstance(p.windowId, windowId) && p.freeGeometryByScreen.remove(screenId) > 0) {
-                m_downgradedThisSession.insert(p.windowId);
+                m_touchedThisSession.insert(p.windowId);
                 cleared = true;
             }
         }

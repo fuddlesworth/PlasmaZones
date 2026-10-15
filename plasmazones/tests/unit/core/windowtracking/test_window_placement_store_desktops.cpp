@@ -231,6 +231,35 @@ private Q_SLOTS:
         QCOMPARE(zonesByDesktopOf(store, wipedId), (QHash<int, QStringList>{{2, {kZoneA}}}));
     }
 
+    // A live window's re-capture identical to its restored record changes
+    // nothing and takes no stamp, and still says the record is in the live
+    // numbering. A load forgets that, including a mark its own replay makes
+    // merging a persisted duplicate (F1103).
+    void remapRestoredDesktopZones_skipsARecordAnIdenticalCaptureSaw()
+    {
+        const auto removal = PhosphorEngine::DesktopRemap::removal(2, 3);
+        WindowPlacementStore store;
+        WindowPlacement restored = snappedOn(kWindow, {{3, {kZoneC}}});
+        restored.virtualDesktop = 3;
+        store.record(restored);
+        const quint64 restoredUpTo = store.sequence();
+
+        QVERIFY(!store.record(restored));
+        QVERIFY(recordFor(store, kWindow)->sequence <= restoredUpTo);
+        QCOMPARE(store.remapRestoredDesktopZones(removal, restoredUpTo), 0);
+        QCOMPARE(recordFor(store, kWindow)->virtualDesktop, 3);
+        QCOMPARE(zonesByDesktopOf(store, kWindow), (QHash<int, QStringList>{{3, {kZoneC}}}));
+
+        QJsonObject saved = store.serialize();
+        QJsonArray entries = saved.value(kApp).toArray();
+        entries.append(entries.first());
+        saved.insert(kApp, entries);
+        store.deserialize(saved);
+        QCOMPARE(store.size(), 1);
+        QCOMPARE(store.remapRestoredDesktopZones(removal, store.sequence()), 1);
+        QCOMPARE(recordFor(store, kWindow)->virtualDesktop, 2);
+    }
+
     // The whole point of the map is surviving a restart.
     void serializeRoundTrip_keepsZonesByDesktop()
     {

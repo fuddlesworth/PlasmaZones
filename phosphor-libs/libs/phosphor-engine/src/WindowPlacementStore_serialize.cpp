@@ -184,11 +184,9 @@ void WindowPlacementStore::deserialize(const QJsonObject& stored, const OutputOr
     // record their engines restore from.
     m_byApp.clear();
     m_sequence = 0;
-    // Every claim and every downgrade mark named a record in the store being
-    // replaced.
+    // Every claim named a record in the store being replaced.
     m_openPairing.clear();
     m_claimedBy.clear();
-    m_downgradedThisSession.clear();
     QList<WindowPlacement> loaded;
     // Persisted ARRAY positions, keyed per (bucket, instance) — NOT a global
     // index into the flattened list: a renamed duplicate persisted under an
@@ -244,6 +242,10 @@ void WindowPlacementStore::deserialize(const QJsonObject& stored, const OutputOr
     for (WindowPlacement& placement : loaded) {
         record(std::move(placement));
     }
+    // Every touch mark named a record in the store replaced, and the replay
+    // marks a persisted duplicate it merges unchanged, which no live window
+    // touched (F1103).
+    m_touchedThisSession.clear();
 
     // Restore each bucket to its persisted array order (merged duplicates sit
     // at their earliest persisted position within THIS bucket — FIFO

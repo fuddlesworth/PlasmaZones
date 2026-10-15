@@ -396,6 +396,95 @@ private Q_SLOTS:
         QVERIFY2(!engine->isWindowFloatingInScroll(window), "the dropped park's float verdict does not linger");
         QCOMPARE(columnsOf(engine, kS1), QList<QStringList>{QStringList{window}});
     }
+
+    // A parked desktop given another mode while the output was away gets
+    // nothing back when it is not in view, whether or not the screen scrolls
+    // yet. One that still scrolls comes back, whatever the desktop in view
+    // runs (F1102).
+    void outOfViewContextInAnotherModeGetsNothing_data()
+    {
+        QTest::addColumn<bool>("scrollingYet");
+        QTest::addColumn<bool>("parkedScrolls");
+        QTest::newRow("parked desktop now snaps, screen scrolling") << true << false;
+        QTest::newRow("parked desktop now snaps, screen not scrolling yet") << false << false;
+        QTest::newRow("parked desktop still scrolls") << true << true;
+    }
+
+    void outOfViewContextInAnotherModeGetsNothing()
+    {
+        QFETCH(bool, scrollingYet);
+        QFETCH(bool, parkedScrolls);
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 2);
+        const QString window = QStringLiteral("app|window");
+        engine->windowOpened(window, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        // Desktop 2 holds the parked strip; desktop 1, shown on the return,
+        // resolves to another mode in every row.
+        engine->setScrollingModeResolver([parkedScrolls](const QString&, int desktop, const QString&) {
+            return desktop == 2 && parkedScrolls;
+        });
+        if (scrollingYet) {
+            returnOutput(engine);
+        }
+
+        QCOMPARE(engine->readoptParked(window, kS1, kS1), parkedScrolls);
+        QCOMPARE(engine->isWindowTracked(window), parkedScrolls);
+        if (parkedScrolls) {
+            // An announce that does come when the desktop is shown adds nothing.
+            engine->setCurrentDesktopForScreen(kS1, 2);
+            engine->windowOpened(window, kS1, 0, 0);
+            QCoreApplication::processEvents();
+            QCOMPARE(columnsOf(engine, kS1), QList<QStringList>{QStringList{window}});
+        }
+    }
+
+    // The daemon's prune of a shrunk desktop count reaches only the desktops
+    // desktopsWithActiveState lists, and neither a parked strip nor a grant
+    // has a live state left to list its desktop (F1100).
+    void countPruneReachesAParkedStrip_data()
+    {
+        QTest::addColumn<bool>("granted");
+        QTest::newRow("parked") << false;
+        QTest::newRow("granted") << true;
+    }
+
+    void countPruneReachesAParkedStrip()
+    {
+        QFETCH(bool, granted);
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 3);
+        const QString window = QStringLiteral("app|window");
+        engine->windowOpened(window, kS1, 0, 0);
+        engine->setWindowFloat(window, true, kS1);
+        QCoreApplication::processEvents();
+        engine->parkOutput(kS1);
+        engine->pruneStatesForRemovedScreen(kS1);
+        if (granted) {
+            // Returned before the screen scrolls again: its float is granted.
+            QVERIFY(engine->readoptParked(window, kS1, kS1));
+            QVERIFY(!engine->hasParked(window, QString()));
+        }
+
+        const QSet<int> desktops = engine->desktopsWithActiveState();
+        QVERIFY(desktops.contains(3));
+        for (const int desktop : desktops) {
+            if (desktop > 2) {
+                engine->pruneStatesForDesktop(desktop);
+            }
+        }
+        QVERIFY(!engine->hasParked(window, QString()));
+        // A desktop 3 made later gives the window nothing: no float grant.
+        returnOutput(engine);
+        engine->setCurrentDesktopForScreen(kS1, 3);
+        engine->windowOpened(window, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY(!engine->isWindowFloatingInScroll(window));
+    }
 };
 
 QTEST_MAIN(TestScrollEngineEvacuee)

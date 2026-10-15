@@ -88,6 +88,10 @@ public:
 
 Q_SIGNALS:
     void currentDesktopChanged(int desktop);
+    /// A GROWING count goes out as KWin reports it, ahead of the snapshot that
+    /// carries the new desktop (F1022), so desktopIds() and desktopNames() still
+    /// hold the old list here. desktopsChanged follows once that snapshot
+    /// commits, and is the signal a consumer of the names listens to (F1101).
     void desktopCountChanged(int count);
     /// The desktop LIST changed — a desktop was added, removed, reordered,
     /// or renamed. Distinct from desktopCountChanged, which a rename does

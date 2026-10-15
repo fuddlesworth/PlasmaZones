@@ -1113,8 +1113,8 @@ public:
     QString heldScreenForWindow(const QString& windowId) const override;
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
 
-    // Evacuee park (src/autotileengine/evacueepark.cpp; IPlacementEngine's contract). A context
-    // out of view is granted, and insertWindow seats the window there when it arrives.
+    // Evacuee park (src/autotileengine/evacueepark.cpp; IPlacementEngine's contract). A context out of view is
+    // seated at once on a screen this engine tiles, else granted for insertWindow to seat on the window's arrival.
     QStringList parkOutput(const QString& physicalScreenId) override;
     bool readoptParked(const QString& windowId, const QString& parkedPhysicalId,
                        const QString& returnedPhysicalId) override;
@@ -2043,13 +2043,11 @@ private:
     // consumed by another screen's batch and activate the wrong window.
     QHash<QString, QString> m_pendingFocusByScreen;
 
-    // Focus-before-track reseed: a windowFocused() notification can arrive before
-    // the window it names is tracked in a TilingState — most visibly on daemon
-    // restart, where the effect re-notifies the active window during bring-up but
-    // the window re-announce (windowsOpenedBatch) lands afterwards. onWindowFocused
-    // would otherwise drop that focus, leaving a focus-driven layout (Theater) with
-    // no focused window until the user clicks around. Stash the dropped id here and
-    // replay it in onWindowAdded once the window is tracked.
+    // Focus-before-track reseed: a windowFocused() can name a window not yet tracked in a TilingState, most
+    // visibly on daemon restart, where the effect re-notifies the active window during bring-up and the
+    // re-announce (windowsOpenedBatch) lands afterwards. onWindowFocused would drop that focus, leaving a
+    // focus-driven layout (Theater) with no focused window until the user clicks around. Stash the dropped id
+    // here and replay it in onWindowAdded once the window is tracked.
     QString m_pendingFocusReseedWindowId;
 
     // DragInsertPreview moved to AutotileEngineTypes.h; alias keeps the
@@ -2082,6 +2080,8 @@ private:
     std::optional<std::pair<int, bool>> takeGrantedParkedPlace(const QString& windowId,
                                                                const PhosphorEngine::TilingStateKey& key,
                                                                PhosphorTiles::TilingState* state);
+    /// tilingStateForScreen's lookup for any context of a known screen, in view or not, made when missing.
+    PhosphorTiles::TilingState* tilingStateForKey(const PhosphorEngine::TilingStateKey& key);
 
     // Appended last (installed header). Created by the first parkOutput.
     std::unique_ptr<TileEvacueePark> m_evacueePark;
