@@ -563,13 +563,64 @@ private Q_SLOTS:
         QVERIFY(!refused.isError());
         QVERIFY2(tile.floatCalls.isEmpty(), "another caller may not float a window on a hidden desktop");
 
-        wta->setBridgeCallerCheck([&peer](const QString& busName) {
-            return busName == peer.baseService();
+        wta->setBridgeCallerCheck([service = peer.baseService()](const QString& busName) {
+            return busName == service;
         });
         QDBusPendingCall bridged = peer.asyncCall(call, 5000);
         QTRY_VERIFY(bridged.isFinished());
         QVERIFY(!bridged.isError());
         QCOMPARE(tile.floatCalls.size(), 1);
+    }
+
+    // And to the screen the window is on: the engine of another output would
+    // adopt it there (F1123). Naming its own screen floats it.
+    void busSetWindowFloatingForScreenRefusesAnotherScreenForAnotherCaller()
+    {
+        FloatBackFixture f;
+        FloatLoggingEngine tile;
+        tile.activeScreens = {kLeft, kRight};
+        BusHost host;
+        auto* wta =
+            new WindowTrackingAdaptor(f.layouts, &f.detector, f.screenMgr.get(), &f.settings, nullptr, nullptr, &host);
+        wta->setWindowRegistry(&f.registry);
+        wta->setEngines(nullptr, &tile, nullptr);
+        const auto detach = qScopeGuard([wta] {
+            wta->setEngines(nullptr, nullptr, nullptr);
+            wta->setWindowRegistry(nullptr);
+        });
+        const QString w = f.registerWindow(QStringLiteral("f1123"));
+        tile.heldScreen.insert(w, kLeft);
+        wta->setFrameGeometry(w, 100, 100, 800, 600);
+
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        QVERIFY(bus.isConnected());
+        const QString path = QStringLiteral("/TestWtaF1123");
+        const QString peerName = QStringLiteral("f1123-peer");
+        QVERIFY(bus.registerObject(path, &host));
+        QDBusConnection peer = QDBusConnection::connectToBus(QDBusConnection::SessionBus, peerName);
+        const auto unregister = qScopeGuard([&bus, &path, &peerName] {
+            bus.unregisterObject(path);
+            QDBusConnection::disconnectFromBus(peerName);
+        });
+        QVERIFY(peer.isConnected());
+        const auto floatOn = [&](const QString& screen) {
+            QDBusMessage call = QDBusMessage::createMethodCall(bus.baseService(), path,
+                                                               QStringLiteral("org.plasmazones.WindowTracking"),
+                                                               QStringLiteral("setWindowFloatingForScreen"));
+            call << w << screen << true;
+            return peer.asyncCall(call, 5000);
+        };
+
+        QDBusPendingCall refused = floatOn(kRight);
+        QTRY_VERIFY(refused.isFinished());
+        QVERIFY(!refused.isError());
+        QVERIFY2(tile.floatCalls.isEmpty(), "the window is on DP-1, not DP-2");
+
+        QDBusPendingCall own = floatOn(kLeft);
+        QTRY_VERIFY(own.isFinished());
+        QVERIFY(!own.isError());
+        QCOMPARE(tile.floatCalls.size(), 1);
+        QCOMPARE(tile.floatCalls.first(), (FloatLoggingEngine::Call{w, true, kLeft}));
     }
 
     // On a snapping monitor the verb takes the window out of its zone, as a

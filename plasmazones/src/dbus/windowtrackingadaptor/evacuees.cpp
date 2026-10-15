@@ -149,6 +149,12 @@ void WindowTrackingAdaptor::setOutputRetirer(std::function<void(const QString&)>
     m_evacuees->retirer = std::move(retirer);
 }
 
+void WindowTrackingAdaptor::setContextModeResolver(
+    std::function<PhosphorZones::AssignmentEntry::Mode(const QString&, int, const QString&)> resolver)
+{
+    m_contextModeResolver = std::move(resolver);
+}
+
 PhosphorProtocol::OutputSettleVerdictList
 WindowTrackingAdaptor::reportOutputSettle(const PhosphorProtocol::OutputSettleRowList& rows)
 {
@@ -350,17 +356,18 @@ void WindowTrackingAdaptor::floatEvacuee(const OutputSettleRow& row, bool snapFl
     const QString activity = layouts ? layouts->currentActivity() : QString();
     std::optional<int> ownDesktop = 0;
     if (!row.placeableNow) {
-        const int perOutput = currentDesktopForScreen(screen);
         ownDesktop = WindowTrackingInternal::ownDesktopOn(
-            windowDesktopContext(windowId),
-            perOutput >= 1 ? perOutput : (layouts ? layouts->currentVirtualDesktop() : 0), activity);
+            windowDesktopContext(windowId), WindowTrackingInternal::shownDesktop(*this, screen), activity);
     }
-    // The mode of that context, not the one in view: a hidden desktop can
-    // run another (F1105).
+    // The mode that context runs, not the one in view: a hidden desktop can
+    // run another (F1105), and a tiling mode switched off or disabled there
+    // runs snapping, as it would in view (F1122).
     bool tiling = false;
     if (ownDesktop && *ownDesktop >= 1) {
-        const PhosphorZones::AssignmentEntry::Mode mode =
-            layouts ? layouts->modeForScreen(screen, *ownDesktop, activity) : PhosphorZones::AssignmentEntry::Snapping;
+        const PhosphorZones::AssignmentEntry::Mode mode = m_contextModeResolver
+            ? m_contextModeResolver(screen, *ownDesktop, activity)
+            : (layouts ? layouts->modeForScreen(screen, *ownDesktop, activity)
+                       : PhosphorZones::AssignmentEntry::Snapping);
         tiling = mode == PhosphorZones::AssignmentEntry::Autotile || mode == PhosphorZones::AssignmentEntry::Scrolling;
     } else if (ownDesktop) {
         tiling = (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screen))
@@ -584,7 +591,10 @@ void WindowTrackingAdaptor::noteEvacueeTouched(const QString& windowId, const QS
         return;
     }
     // Added to a mark an earlier placement left, and only for outputs still
-    // away: one already back has had its pull-back (F1107).
+    // away: one already back has had its pull-back (F1107). KWin pulls its
+    // windows back inside the Workspace::updateOutputs call that adds the
+    // output, before any client hears of it, so a placement made once the
+    // daemon sees the output lands after that pull-back (F1125).
     PhosphorScreens::ScreenManager* const mgr = m_service ? m_service->screenManager() : nullptr;
     QStringList awayOutputs = m_evacuees->placedAfterEvacuation.value(canonical);
     for (const EvacueeLedger::Entry& entry : it.value()) {

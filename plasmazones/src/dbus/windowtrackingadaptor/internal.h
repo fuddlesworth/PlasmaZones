@@ -29,6 +29,7 @@ class SnapEngine;
 }
 
 namespace PlasmaZones {
+class WindowTrackingAdaptor;
 namespace WindowTrackingInternal {
 
 /// The screen of a store that holds @p windowId as a member with a zone, on a
@@ -157,6 +158,10 @@ inline std::optional<int> desktopShowing(const std::optional<QSet<int>>& desktop
     }
     return std::nullopt;
 }
+
+/// The desktop @p screenId shows: the per-output value, else the global current
+/// one the layout registry holds; 0 ("unknown") with neither (queries.cpp).
+int shownDesktop(const WindowTrackingAdaptor& adaptor, const QString& screenId);
 
 /// Where a window's own context meets a screen showing @p shownDesktop (0:
 /// unknown) in @p currentActivity (empty: unknown): desktopShowing, and

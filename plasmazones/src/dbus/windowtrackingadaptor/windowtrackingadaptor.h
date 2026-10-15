@@ -197,16 +197,13 @@ public:
     }
 
     /**
-     * @brief Wire the scrolling strip-structure snapshot provider.
-     *
-     * saveState() calls it under DirtyScrollStrips to fetch
-     * ScrollEngine::serializeStripState's blob at write time (the engine is
-     * constructed after this adaptor, so the provider is late-bound like
-     * setEngines). Pass {} during shutdown teardown, but only AFTER the final
-     * saveStateOnShutdown(): an absent provider makes saveState SKIP the
-     * strips write entirely (it cannot answer, so it leaves the stored blob
-     * alone rather than deleting it), so clearing early silently drops every
-     * strip mutation from the last debounce window.
+     * @brief Wire the scrolling strip-structure snapshot provider, which
+     * saveState() calls under DirtyScrollStrips for
+     * ScrollEngine::serializeStripState's blob (late-bound like setEngines).
+     * Pass {} at teardown only AFTER the final saveStateOnShutdown(): an
+     * absent provider makes saveState SKIP the strips write (leaving the
+     * stored blob alone), so clearing early silently drops every strip
+     * mutation from the last debounce window.
      */
     void setScrollStripStateProvider(std::function<QJsonObject()> provider)
     {
@@ -869,6 +866,10 @@ public:
     void setWindowLeftScreenHook(std::function<void(const QString&, const QString&)> hook);
     /// Whether a unique bus name is the registered compositor bridge's, whose screen-form float is not gated (F1108).
     void setBridgeCallerCheck(std::function<bool(const QString&)> check);
+    /// The mode a (screen, desktop, activity) context runs, hidden or not, the feature switches and the disabled gate
+    /// included (Daemon::runningModeForContext). Unset, the configured mode answers (F1122).
+    void setContextModeResolver(
+        std::function<PhosphorZones::AssignmentEntry::Mode(const QString&, int, const QString&)> resolver);
     /// An evacuee that could not be adopted floating when its output went away, arriving on the output it
     /// landed on in a mode that owes it the float: floated there now. Taken once on any arrival. True when floated.
     bool adoptPendingEvacueeFloat(const QString& windowId, const QString& screenId);
@@ -1377,7 +1378,8 @@ public Q_SLOTS:
      * with a not-floating broadcast. The suspension-float classification is
      * stamped before routing. Used by minimize/unminimize, drag-to-float, the
      * monocle unmaximize and the shell placement map; a tiling engine answers it passively.
-     * A bus caller other than the compositor bridge is refused (logged) as setWindowFloating is (F1108).
+     * A bus caller other than the compositor bridge is held to setWindowFloating's gate, and refused (logged) unless
+     * it names the screen the window is on (F1108, F1123).
      */
     void setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating);
 
@@ -1670,18 +1672,15 @@ private:
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager;
     ISettings* m_settings;
-    /// Non-owning resolver pointer, late-bound via setContextResolver after
-    /// Daemon constructs `m_contextResolver`. Replaces the previous
-    /// `(m_screenModeRouter->modeFor → currentVirtualDesktop → currentActivity
-    /// → isContextDisabled)` cascade rebuild in `saveload.cpp`.
+    /// Non-owning, late-bound via setContextResolver after Daemon constructs its resolver.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
-    /// Late-bound scrolling strip-snapshot provider (setScrollStripStateProvider)
-    /// and the blob the last loadState() read for the daemon to hand to the
-    /// engine once it exists.
+    /// setScrollStripStateProvider's provider, and the blob the last loadState() read for the engine once it exists.
     std::function<QJsonObject()> m_scrollStripStateProvider;
     std::function<void(const PhosphorProtocol::WindowOpenedEntry&)> m_routedOpenDispatcher;
     std::function<void(const QString&, const QString&)> m_windowLeftScreenHook;
     std::function<bool(const QString&)> m_isBridgeCaller; ///< setBridgeCallerCheck
+    std::function<PhosphorZones::AssignmentEntry::Mode(const QString&, int, const QString&)>
+        m_contextModeResolver; ///< setContextModeResolver
     QJsonObject m_loadedScrollStripState;
     QStringList m_knownDesktopIds;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;

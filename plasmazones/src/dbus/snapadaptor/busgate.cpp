@@ -22,25 +22,10 @@
 
 namespace PlasmaZones {
 
-namespace {
-/// The desktop @p screenId shows: the per-output value, else the global current
-/// one the layout registry holds (a WindowTrackingAdaptor with no desktop
-/// manager answers 0, "unknown").
-int shownDesktop(WindowTrackingAdaptor* adaptor, const QString& screenId)
-{
-    const int perOutput = adaptor->currentDesktopForScreen(screenId);
-    if (perOutput >= 1) {
-        return perOutput;
-    }
-    PhosphorZones::LayoutRegistry* const layouts = adaptor->layoutRegistry();
-    return layouts ? layouts->currentVirtualDesktop() : 0;
-}
-} // namespace
-
 std::optional<int> SnapAdaptor::landingDesktop(const QString& windowId, const QString& screenId,
                                                int pinnedDesktop) const
 {
-    const int shown = shownDesktop(m_adaptor, screenId);
+    const int shown = WindowTrackingInternal::shownDesktop(*m_adaptor, screenId);
     const auto context = m_adaptor->windowDesktopContext(windowId);
     const std::optional<QSet<int>> set = context ? context->desktopSet() : std::nullopt;
     if (pinnedDesktop >= 1) {
@@ -78,7 +63,8 @@ std::optional<SnapAdaptor::BusSnapTarget> SnapAdaptor::validBusSnapTarget(const 
     const QString activity = layouts ? layouts->currentActivity() : QString();
     const auto holds = [&](const QString& screen, int desktop) {
         return PhosphorZones::LayoutUtils::contextLayoutHoldsZones(
-            layouts, screen, desktop >= 1 ? desktop : shownDesktop(m_adaptor, screen), activity, zoneIds);
+            layouts, screen, desktop >= 1 ? desktop : WindowTrackingInternal::shownDesktop(*m_adaptor, screen),
+            activity, zoneIds);
     };
     QString screen;
     if (!screenHint.isEmpty()) {
@@ -224,7 +210,8 @@ void SnapAdaptor::moveWindowToZoneNumberOnScreen(const QString& windowId, int zo
     }
     PhosphorZones::LayoutRegistry* const layouts = m_adaptor->layoutRegistry();
     PhosphorZones::Layout* const layout = layouts
-        ? layouts->layoutForScreen(screen, *desktop >= 1 ? *desktop : shownDesktop(m_adaptor, screen),
+        ? layouts->layoutForScreen(screen,
+                                   *desktop >= 1 ? *desktop : WindowTrackingInternal::shownDesktop(*m_adaptor, screen),
                                    layouts->currentActivity())
         : nullptr;
     PhosphorZones::Zone* const zone = layout ? layout->zoneByNumber(zoneNumber) : nullptr;

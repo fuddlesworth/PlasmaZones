@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "windowtrackingadaptor.h"
+#include "internal.h"
 #include "core/resolve/daemongeometryresolver.h"
 #include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
@@ -93,6 +94,16 @@ QString WindowTrackingAdaptor::resolveBusScreen(const QString& reported, const Q
         }
     }
     return {};
+}
+
+int WindowTrackingInternal::shownDesktop(const WindowTrackingAdaptor& adaptor, const QString& screenId)
+{
+    const int perOutput = adaptor.currentDesktopForScreen(screenId);
+    if (perOutput >= 1) {
+        return perOutput;
+    }
+    PhosphorZones::LayoutRegistry* const layouts = adaptor.layoutRegistry();
+    return layouts ? layouts->currentVirtualDesktop() : 0;
 }
 
 int WindowTrackingAdaptor::desktopCount() const

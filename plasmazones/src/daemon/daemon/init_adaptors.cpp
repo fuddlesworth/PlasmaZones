@@ -227,6 +227,12 @@ void Daemon::initCoreAdaptors()
     m_windowTrackingAdaptor->setBridgeCallerCheck([this](const QString& busName) {
         return m_compositorBridge && m_compositorBridge->isBridgeService(busName);
     });
+    // An evacuee on a hidden desktop floats by the mode that desktop runs,
+    // decided as the engine screen sets decide it in view (F1122).
+    m_windowTrackingAdaptor->setContextModeResolver(
+        [this](const QString& screenId, int desktop, const QString& activity) {
+            return runningModeForContext(screenId, desktop, activity);
+        });
 
     // Drop closed windows from m_lastEngineOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would

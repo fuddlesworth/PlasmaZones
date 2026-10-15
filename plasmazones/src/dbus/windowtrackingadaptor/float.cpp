@@ -35,9 +35,8 @@ const char* busFloatRefusal(const WindowTrackingAdaptor& adaptor, const Phosphor
                             const QString& windowId, const QString& screen)
 {
     PhosphorZones::LayoutRegistry* const layouts = adaptor.layoutRegistry();
-    const int perOutput = adaptor.currentDesktopForScreen(screen);
-    const int shown = perOutput >= 1 ? perOutput : (layouts ? layouts->currentVirtualDesktop() : 0);
-    if (WindowTrackingInternal::ownDesktopOn(adaptor.windowDesktopContext(windowId), shown,
+    if (WindowTrackingInternal::ownDesktopOn(adaptor.windowDesktopContext(windowId),
+                                             WindowTrackingInternal::shownDesktop(adaptor, screen),
                                              layouts ? layouts->currentActivity() : QString())
         != 0) {
         return "is not on the desktop and activity its screen shows";
@@ -335,11 +334,21 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     }
     // A bus caller other than the compositor bridge, such as the shell's
     // placement map, which draws desktops not in view, is held to the
-    // screenless verb's gate (F1108). The bridge floats a window where it is
-    // (minimize, drag, overflow), and a call the daemon makes outside a bus
-    // call is not gated.
+    // screenless verb's gate (F1108), and to the screen the window is on: the
+    // engine of another one would adopt it there (F1123). A split monitor's
+    // physical id names the half the window is on. The bridge floats a window
+    // where it is (minimize, drag, overflow), and a call the daemon makes
+    // outside a bus call is not gated.
     if (const QString caller = DbusHelpers::busCaller(this);
         !caller.isEmpty() && !(m_isBridgeCaller && m_isBridgeCaller(caller))) {
+        const QString named = resolveBusScreen(effectiveScreenId, windowId);
+        const QString live = isRegistryTracked(windowId) ? liveScreenForWindow(windowId) : QString();
+        if (named.isEmpty() || named != live) {
+            qCInfo(lcDbusWindow) << "setWindowFloatingForScreen:" << windowId << "is on" << live << "not"
+                                 << effectiveScreenId << "- refused for" << caller;
+            return;
+        }
+        effectiveScreenId = named;
         if (const char* refusal = busFloatRefusal(*this, m_contextResolver, windowId, effectiveScreenId)) {
             qCInfo(lcDbusWindow) << "setWindowFloatingForScreen:" << windowId << refusal << "on" << effectiveScreenId
                                  << "- refused for" << caller;

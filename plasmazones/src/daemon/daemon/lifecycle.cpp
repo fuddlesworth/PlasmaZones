@@ -553,11 +553,14 @@ void Daemon::stop()
     }
 
     // Null the WindowTrackingAdaptor's engine borrows for the same reason, and
-    // its two `this`-capturing daemon hooks (the contract of the block below).
+    // every late-bound `this`-capturing daemon hook it holds (the contract of
+    // the block below).
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr, nullptr);
         m_windowTrackingAdaptor->setOutputRetirer({});
         m_windowTrackingAdaptor->setWindowLeftScreenHook({});
+        m_windowTrackingAdaptor->setBridgeCallerCheck({});
+        m_windowTrackingAdaptor->setContextModeResolver({});
     }
 
     // Clear the late-bound WTS float / mode callbacks. All but the tiled predicate reach `this`

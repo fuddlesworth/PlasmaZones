@@ -304,6 +304,28 @@ private Q_SLOTS:
         QVERIFY(tile.received.isEmpty());
     }
 
+    // A hidden desktop assigned tiling that cannot tile (the feature switched
+    // off, or the context disabled) runs snapping, as the daemon's resolver
+    // says: the snap float is stated in that desktop's store at the settle,
+    // not left waiting for a tiling arrival that is never owed it (F1122).
+    void aHiddenEvacueeOnADesktopThatCannotTileIsStatedASnapFloat()
+    {
+        const QString w = QStringLiteral("app|tiling-off-evacuee");
+        const auto clear = qScopeGuard([this] {
+            m_wta->service()->setEngineFloatResolver({});
+            m_wta->setContextModeResolver({});
+        });
+        m_wta->setContextModeResolver([](const QString&, int, const QString&) {
+            return PhosphorZones::AssignmentEntry::Snapping;
+        });
+        QVERIFY(pendOnTilingDesktopOfB(w));
+        const auto key = m_snapEngine->heldKeyForWindow(w);
+        QVERIFY(key.has_value());
+        QCOMPARE(key->screenId, kB);
+        QCOMPARE(key->desktop, 2);
+        QVERIFY(!m_wta->adoptPendingEvacueeFloat(w, kB));
+    }
+
     // The reverse: B tiles in view, but the window's own hidden desktop there
     // snaps, so its snap float is stated in that desktop's store at the
     // settle and nothing waits (F1105).
@@ -539,7 +561,8 @@ private:
 
     /// @p windowId snap-floated on A and evacuated onto B while on desktop 2,
     /// which tiles on B, with desktop 1 (snapping) in view: its float waits
-    /// for its arrival there. The caller clears the float resolver.
+    /// for its arrival there, unless a context-mode resolver says desktop 2
+    /// runs snapping. The caller clears the float resolver.
     [[nodiscard]] bool pendOnTilingDesktopOfB(const QString& windowId)
     {
         if (!floatOnA(windowId)) {

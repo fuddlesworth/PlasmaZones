@@ -406,11 +406,8 @@ private:
     /**
      * @brief Resolve the current mode for @p screenId via the router with
      * the same "null router → Snapping" fallback DaemonScreenModeAdapter
-     * applies. Single point of truth for daemon-internal mode lookups
-     * that don't have the ContextResolver handle in hand (signal
-     * handlers, OSD paths). Eliminates the open-coded
-     * `m_screenModeRouter ? m_screenModeRouter->modeFor(...) : Snapping`
-     * rebuild that used to sit inline.
+     * applies: the daemon-internal mode lookup for sites without a
+     * ContextResolver handle in hand (signal handlers, OSD paths).
      */
     PhosphorZones::AssignmentEntry::Mode currentModeFor(const QString& screenId) const;
 
@@ -735,16 +732,19 @@ private:
     void showOsdForScreens(const QStringList& screenIds, const QString& activity);
 
     /**
-     * @brief Recompute BOTH tiling-family engines' screen sets from the cascade
-     *
-     * Reads every screen's assignment, derives the autotile and scrolling
-     * sets in one walk, and pushes them through the shared
-     * capture-all → seed-all → apply-all phase (captureScrollingOrders /
-     * updateScrollingScreens run in the same pass so a same-flip
-     * autotile↔scrolling transition replays window order AND the focused
-     * window deterministically).
+     * @brief Recompute BOTH tiling-family engines' screen sets in one walk of
+     * runningModeForContext, pushed through the shared capture-all → seed-all
+     * → apply-all phase (captureScrollingOrders / updateScrollingScreens run
+     * in the same pass so a same-flip autotile↔scrolling transition replays
+     * window order AND the focused window deterministically).
      */
     void updateEngineScreens();
+    /// The mode a (screen, desktop, activity) context runs, in view or hidden: Scrolling or Autotile only with that
+    /// feature on, not disabled there and, for autotile, an algorithm to tile with (into @p algorithmId, empty for the
+    /// global default); else Snapping. The WTA's context-mode resolver answers through it (F1122).
+    PhosphorZones::AssignmentEntry::Mode runningModeForContext(const QString& screenId, int desktop,
+                                                               const QString& activity,
+                                                               QString* algorithmId = nullptr) const;
 
     /**
      * @brief React to a rule change that may have altered active assignments.
