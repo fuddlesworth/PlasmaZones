@@ -302,9 +302,12 @@ struct WindowCommandStamps
     /// After a command that sets no rect (a skipped float-restore): the answer
     /// an armed StaleAck owes is still owed, so it follows @p w's current
     /// stamp, as a repeat of its rect does in applyWindowGeometry (F1115).
-    void carryStaleAck(const KWin::EffectWindow* w)
+    /// @p previous is the stamp that was current before that command: only
+    /// an ack still current then is carried, and one a command in between
+    /// already voided stays void (F1131).
+    void carryStaleAck(const KWin::EffectWindow* w, quint64 previous)
     {
-        if (const auto stale = staleAcks.find(w); stale != staleAcks.end()) {
+        if (const auto stale = staleAcks.find(w); stale != staleAcks.end() && stale->stamp == previous) {
             stale->stamp = current(w);
         }
     }

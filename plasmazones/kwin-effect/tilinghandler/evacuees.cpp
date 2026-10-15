@@ -54,7 +54,7 @@ void TilingHandler::scrubClaimsForEvacuation(const QString& windowId, KWin::Effe
     m_maximizedToEdgesWindows.remove(windowId);
 }
 
-void TilingHandler::adoptEvacuee(KWin::EffectWindow* w, const QString& screenId)
+void TilingHandler::adoptEvacuee(KWin::EffectWindow* w, const QString& screenId, const QSet<QString>& parkedOutputs)
 {
     if (!w || w->isDeleted()) {
         return;
@@ -78,24 +78,19 @@ void TilingHandler::adoptEvacuee(KWin::EffectWindow* w, const QString& screenId)
     // touch while the window was away sends no Readopt, so its entries would
     // otherwise ride a later evacuation into that one's return, unfloating
     // what the user floated since (F1113) or claiming a maximize the user took
-    // since (F1120). A window untracked where it was held neither there.
+    // since (F1120). A window untracked where it was held neither there, and
+    // one whose park the daemon dropped in this same settle (a touch, whose
+    // parkDropped lands before the verdict) has no return to wait for (F1128).
     const QString departed =
         PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_notifiedWindowScreens.value(windowId));
     cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::Evacuation);
-    if (heldMonocle && !departed.isEmpty()) {
-        m_evacueeMonocleClaims[windowId].insert(departed);
-    } else if (const auto claims = m_evacueeMonocleClaims.find(windowId); claims != m_evacueeMonocleClaims.end()) {
-        claims->remove(departed);
-        if (claims->isEmpty()) {
-            m_evacueeMonocleClaims.erase(claims);
+    forgetEvacueeParksOn(windowId, departed);
+    if (!departed.isEmpty() && parkedOutputs.contains(departed)) {
+        if (heldMonocle) {
+            m_evacueeMonocleClaims[windowId].insert(departed);
         }
-    }
-    if (heldMinimizeFloat && !departed.isEmpty()) {
-        m_evacueeMinimizeFloats[windowId].insert(departed, untiledMinimizeFloat);
-    } else if (const auto parks = m_evacueeMinimizeFloats.find(windowId); parks != m_evacueeMinimizeFloats.end()) {
-        parks->remove(departed);
-        if (parks->isEmpty()) {
-            m_evacueeMinimizeFloats.erase(parks);
+        if (heldMinimizeFloat) {
+            m_evacueeMinimizeFloats[windowId].insert(departed, untiledMinimizeFloat);
         }
     }
     // The daemon floated it in place on a tiling destination. Tracked here so
@@ -164,6 +159,46 @@ void TilingHandler::forgetEvacueeParks(const QString& windowId)
     // would have its first monocle batch claim a maximize the user took.
     m_evacueeMonocleClaims.remove(windowId);
     m_evacueeMinimizeFloats.remove(windowId);
+}
+
+void TilingHandler::forgetEvacueeParksOn(const QString& windowId, const QString& physicalId)
+{
+    // One output's half of forgetEvacueeParks: the entries another output's
+    // park keeps still wait for that output's return.
+    const QString output = PhosphorIdentity::VirtualScreenId::extractPhysicalId(physicalId);
+    if (const auto claims = m_evacueeMonocleClaims.find(windowId); claims != m_evacueeMonocleClaims.end()) {
+        claims->remove(output);
+        if (claims->isEmpty()) {
+            m_evacueeMonocleClaims.erase(claims);
+        }
+    }
+    if (const auto parks = m_evacueeMinimizeFloats.find(windowId); parks != m_evacueeMinimizeFloats.end()) {
+        parks->remove(output);
+        if (parks->isEmpty()) {
+            m_evacueeMinimizeFloats.erase(parks);
+        }
+    }
+}
+
+void TilingHandler::forgetEvacueeParksAway(const QString& windowId)
+{
+    // Every output the window holds entries for that has no output now.
+    const QSet<QString>& connected = m_effect->connectedPhysicalIds();
+    QSet<QString> away;
+    for (const QString& output : m_evacueeMonocleClaims.value(windowId)) {
+        if (!connected.contains(output)) {
+            away.insert(output);
+        }
+    }
+    const QHash<QString, bool> parks = m_evacueeMinimizeFloats.value(windowId);
+    for (auto it = parks.cbegin(); it != parks.cend(); ++it) {
+        if (!connected.contains(it.key())) {
+            away.insert(it.key());
+        }
+    }
+    for (const QString& output : std::as_const(away)) {
+        forgetEvacueeParksOn(windowId, output);
+    }
 }
 
 bool TilingHandler::takeEvacueeMonocleClaim(const QString& windowId, const QString& screenId)

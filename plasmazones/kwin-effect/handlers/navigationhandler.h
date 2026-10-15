@@ -6,6 +6,7 @@
 #include <PhosphorCompositor/FloatingCache.h>
 #include <PhosphorCompositor/ZoneCache.h>
 
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -82,11 +83,20 @@ public:
     /// Mode are match fields). Out-of-line so the invalidation is welded to the
     /// write; bulk re-seeds use the cache directly (see the .cpp).
     void setWindowZone(const QString& windowId, const QString& zoneId);
-    /// Remove @p windowId's zone entry, re-resolving its rules iff one existed.
+    /// Remove @p windowId's zone entry, re-resolving its rules iff one existed. A zone notice target naming it goes
+    /// too: its entry is gone, and a clear sent to it later would have nothing to clear.
     void clearWindowZone(const QString& windowId);
+    /// A zone notice under @p daemonId was filed for the live window @p liveId (empty: none). One the app-id
+    /// fallback reached, another instance than the id names (an id the daemon still holds from another session),
+    /// is remembered, so the notice that clears it reaches the same window (F1130). One that reached its own
+    /// window forgets every other id's target on it, since the daemon now speaks for it under its own.
+    void noteZoneNoticeTarget(const QString& daemonId, const QString& liveId);
+    /// The live window a zone notice under @p daemonId was filed for, and forgets it.
+    QString takeZoneNoticeTarget(const QString& daemonId);
     void clearAllZoneState()
     {
         m_zoneCache.clear();
+        m_zoneNoticeTargets.clear();
     }
     int zoneEntryCount() const
     {
@@ -94,9 +104,12 @@ public:
     }
 
 private:
+    void forgetZoneNoticeTargetsOn(const QString& liveId); ///< every daemon id's target that names @p liveId
+
     PlasmaZonesEffect* m_effect;
     FloatingCache m_floatingCache;
     ZoneCache m_zoneCache;
+    QHash<QString, QString> m_zoneNoticeTargets; ///< daemon id -> live id, see noteZoneNoticeTarget
 };
 
 } // namespace PlasmaZones

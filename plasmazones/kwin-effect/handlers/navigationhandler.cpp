@@ -7,6 +7,7 @@
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 
@@ -172,9 +173,34 @@ void NavigationHandler::setWindowZone(const QString& windowId, const QString& zo
 
 void NavigationHandler::clearWindowZone(const QString& windowId)
 {
+    forgetZoneNoticeTargetsOn(windowId);
     if (m_zoneCache.remove(windowId)) {
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }
+}
+
+void NavigationHandler::noteZoneNoticeTarget(const QString& daemonId, const QString& liveId)
+{
+    if (!liveId.isEmpty() && !::PhosphorIdentity::WindowId::sameWindowInstance(liveId, daemonId)) {
+        m_zoneNoticeTargets.insert(daemonId, liveId);
+        return;
+    }
+    m_zoneNoticeTargets.remove(daemonId);
+    if (!liveId.isEmpty()) {
+        forgetZoneNoticeTargetsOn(liveId);
+    }
+}
+
+void NavigationHandler::forgetZoneNoticeTargetsOn(const QString& liveId)
+{
+    m_zoneNoticeTargets.removeIf([&liveId](const QHash<QString, QString>::iterator it) {
+        return ::PhosphorIdentity::WindowId::sameWindowInstance(it.value(), liveId);
+    });
+}
+
+QString NavigationHandler::takeZoneNoticeTarget(const QString& daemonId)
+{
+    return m_zoneNoticeTargets.take(daemonId);
 }
 
 } // namespace PlasmaZones

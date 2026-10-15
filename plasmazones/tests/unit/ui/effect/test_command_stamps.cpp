@@ -6,7 +6,7 @@
  * @brief WindowCommandStamps (plasmazoneseffect/effect_state.h): a daemon loss
  *        supersedes every deferred apply at once (F405), while a zero stamp
  *        stays current as before, and a command that sets no rect carries an
- *        owed stale-ack answer (F1115).
+ *        owed stale-ack answer (F1115), never one already voided (F1131).
  */
 
 #include "plasmazoneseffect/effect_state.h"
@@ -69,19 +69,35 @@ private Q_SLOTS:
         WindowCommandStamps stamps;
         const auto* w1 = fakeWindow(0x10);
         const QRect target(0, 0, 100, 100);
-        stamps.staleAcks.insert(w1, WindowCommandStamps::StaleAck{target, stamps.bump(w1)});
+        const quint64 armed = stamps.bump(w1);
+        stamps.staleAcks.insert(w1, WindowCommandStamps::StaleAck{target, armed});
         stamps.bump(w1);
-        stamps.carryStaleAck(w1);
+        stamps.carryStaleAck(w1, armed);
         QVERIFY(stamps.isCurrent(w1, stamps.staleAcks.value(w1).stamp));
         QCOMPARE(stamps.staleAcks.value(w1).target, target);
+    }
+
+    // A command between the arm and the one that sets no rect already voided
+    // the owed answer, and the carry must not bring it back (F1131).
+    void carryStaleAck_leavesAVoidedAckVoid()
+    {
+        WindowCommandStamps stamps;
+        const auto* w1 = fakeWindow(0x10);
+        const quint64 armed = stamps.bump(w1);
+        stamps.staleAcks.insert(w1, WindowCommandStamps::StaleAck{QRect(0, 0, 100, 100), armed});
+        const quint64 voiding = stamps.bump(w1);
+        stamps.bump(w1);
+        stamps.carryStaleAck(w1, voiding);
+        QVERIFY(!stamps.isCurrent(w1, stamps.staleAcks.value(w1).stamp));
     }
 
     void carryStaleAck_armsNothing()
     {
         WindowCommandStamps stamps;
         const auto* w1 = fakeWindow(0x10);
+        const quint64 previous = stamps.bump(w1);
         stamps.bump(w1);
-        stamps.carryStaleAck(w1);
+        stamps.carryStaleAck(w1, previous);
         QVERIFY(stamps.staleAcks.isEmpty());
     }
 };

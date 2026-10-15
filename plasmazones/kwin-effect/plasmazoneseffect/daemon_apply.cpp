@@ -351,8 +351,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // still owes that answer: the frame hook would otherwise drop it as stale
     // and let the older size land (F1056, F1115).
     if (skipGeometry) {
+        const quint64 previous = m_daemonGate.commandStamps.current(w);
         beginGeometryCommand(w);
-        m_daemonGate.commandStamps.carryStaleAck(w);
+        m_daemonGate.commandStamps.carryStaleAck(w, previous);
     }
     qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "(live:" << liveWindowId << ") geo:" << geometry
                      << "zoneId:" << zoneId << "screen:" << screenId << "floating:" << isWindowFloating(liveWindowId)
@@ -884,10 +885,21 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
     // closed window's notice, or a stale pre-restore id the daemon still holds beside the
     // window's own, to the sole surviving same-app window, which the daemon has not unsnapped.
     // Only a notice that names a zone re-keys through the fallback, where the drift is what
-    // the rule fields need covered.
+    // the rule fields need covered. The window such a notice reached through the fallback is
+    // remembered under the daemon's id, and the notice that clears it under that id goes to
+    // the same window, so the write and its clear resolve alike (F1130).
     QString liveWindowId = windowId;
-    KWin::EffectWindow* const live =
-        state.zoneId.isEmpty() ? findWindowByInstanceId(windowId) : findWindowById(windowId);
+    KWin::EffectWindow* live = nullptr;
+    if (state.zoneId.isEmpty()) {
+        live = findWindowByInstanceId(windowId);
+        const QString target = m_navigationHandler->takeZoneNoticeTarget(windowId);
+        if (!live) {
+            live = findWindowByInstanceId(target);
+        }
+    } else {
+        live = findWindowById(windowId);
+        m_navigationHandler->noteZoneNoticeTarget(windowId, live ? getWindowId(live) : QString());
+    }
     if (live) {
         liveWindowId = getWindowId(live);
     }
@@ -901,7 +913,7 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
     // A window KWin moved to another screen, or one whose zone a layout change
     // removed, is no longer snapped: a snapped mark left behind keeps its snap
     // decoration and has a later minimize floated as a snap suspension (F328).
-    // Both notices state no zone, so the id is the instance one resolved above.
+    // Both notices state no zone, so the id is the one the clear resolved above.
     if (state.changeType == QLatin1String("screen_changed") || state.changeType == QLatin1String("unsnapped")) {
         m_snapHandler->clearWindowSnapped(liveWindowId);
     }

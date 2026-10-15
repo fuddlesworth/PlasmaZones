@@ -312,15 +312,31 @@ void ScreenChangeHandler::dropEvacueeRecords()
 void ScreenChangeHandler::slotParkDropped(const QString& windowId, const QString& outputUuid)
 {
     KWin::EffectWindow* const w = m_effect->findWindowByIdExact(windowId);
+    // No uuid: the daemon never learned which output the park was for. Its
+    // ledger entry takes the uuid only from a settle row's S0, so a park
+    // dropped before any row carried one for that output comes with none: a
+    // touch before the first settle, the second of two outputs that went in
+    // one settle (a row carries one S0), or a window with no record here.
+    // Nothing narrower than the window can be named, so the tiling handler's
+    // entries for every output still away go, as their Readopt cannot come
+    // now (F1128). A connected output's stay for its Readopt.
+    if (outputUuid.isEmpty()) {
+        if (w) {
+            m_effect->m_tilingHandler->forgetEvacueeParksAway(m_effect->getWindowId(w));
+            m_evacueeRecords.remove(w);
+        }
+        return;
+    }
     const auto it = w ? m_evacueeRecords.find(w) : m_evacueeRecords.end();
     if (it == m_evacueeRecords.end()) {
         return;
     }
-    // No uuid: the daemon never learned which output the park was for, so
-    // nothing narrower than the window can be named.
-    if (outputUuid.isEmpty()) {
-        m_evacueeRecords.erase(it);
-        return;
+    // The tiling handler's claim and minimize-float for an output still away
+    // waited for a Readopt that will not come now: a touch dropped every park
+    // (F1128). A connected output's stay, since a Readopt drops its park just
+    // before the verdict that hands them back.
+    if (const auto entry = it->constFind(outputUuid); entry != it->cend() && !outputConnected(outputUuid)) {
+        m_effect->m_tilingHandler->forgetEvacueeParksOn(m_effect->getWindowId(w), entry->state.screenId);
     }
     it->remove(outputUuid);
     if (it->isEmpty()) {
@@ -532,8 +548,12 @@ void ScreenChangeHandler::applySettleVerdicts(const PhosphorProtocol::OutputSett
         // (an EvacueeFloat, since the drag is a touch), which answers its move
         // off that output. Its held crossing now starts where the verdict left
         // it, so the drop settles only the user's own move from there, never a
-        // replay from the dead screen (F1112).
-        if (const auto held = m_heldDragCrossings.find(w); held != m_heldDragCrossings.end() && placed.contains(w)) {
+        // replay from the dead screen (F1112). Only a crossing held from a
+        // screen that went away: one held from a live screen is a move the
+        // verdict did not answer, and the drop still reports it, so that
+        // screen's engine lets the window go (F1129).
+        if (const auto held = m_heldDragCrossings.find(w);
+            held != m_heldDragCrossings.end() && placed.contains(w) && !m_effect->outputForScreenId(*held)) {
             *held = verdict.screenId.isEmpty() ? m_effect->pendingWindowScreenId(w) : verdict.screenId;
         }
         if (verdict.verdict != OutputSettleVerdict::EvacueeFloat) {
@@ -661,7 +681,14 @@ void ScreenChangeHandler::applyEvacuee(KWin::EffectWindow* w, const QString& scr
         }
     }
     const QString current = screenId.isEmpty() ? m_effect->getWindowScreenId(w) : screenId;
-    m_effect->m_tilingHandler->adoptEvacuee(w, current);
+    // The outputs whose park the daemon still holds. One it dropped in this
+    // settle (a touch) lost its record to the parkDropped ahead of the
+    // verdict, and keeps nothing for a return (F1128).
+    QSet<QString> parkedOutputs;
+    for (const EvacueeRecord& record : m_evacueeRecords.value(w)) {
+        parkedOutputs.insert(VirtualScreenId::extractPhysicalId(record.state.screenId));
+    }
+    m_effect->m_tilingHandler->adoptEvacuee(w, current, parkedOutputs);
     m_effect->m_trackedScreenPerWindow[w] = m_effect->pendingWindowScreenId(w);
     m_effect->invalidateRuleCacheForStateChange(windowId);
 }

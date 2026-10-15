@@ -168,13 +168,14 @@ public:
     /// order). Claims release by @p scope; an evacuee passes ClaimScope::Evacuation and is scrubbed, not released.
     void cleanupAutotileTracking(const QString& windowId,
                                  ScrollDecisions::ClaimScope scope = ScrollDecisions::ClaimScope::UntrackFunnel);
-    /// The settle's evacuee and returned-window verdicts (evacuees.cpp): what
-    /// the effect held for @p w is let go of without handing KWin's state
-    /// back, and @p w is tracked on @p screenId when it is managed, with no
-    /// announce (the daemon already placed it).
-    void adoptEvacuee(KWin::EffectWindow* w, const QString& screenId);
+    /// The settle's evacuee and returned-window verdicts (evacuees.cpp): what the effect held for @p w is let go of
+    /// without handing KWin's state back, and @p w is tracked on @p screenId when it is managed, with no announce
+    /// (the daemon already placed it). @p parkedOutputs: the physical outputs whose park the daemon still holds.
+    void adoptEvacuee(KWin::EffectWindow* w, const QString& screenId, const QSet<QString>& parkedOutputs);
     void readoptEvacuee(KWin::EffectWindow* w, const QString& screenId);
     void forgetEvacueeParks(const QString& windowId); ///< the daemon holds none for it any more (F1120, evacuees.cpp)
+    void forgetEvacueeParksOn(const QString& windowId, const QString& physicalId); ///< that output's park only (F1128)
+    void forgetEvacueeParksAway(const QString& windowId); ///< every output not connected now (F1128)
     /// The windows tiled in @p screenId's strip, wherever their frames sit.
     QStringList stripMembersOn(const QString& screenId) const;
     /// Drop @p windowId from the minimize-float set and cancel EITHER deferred edge — the minimize debounce and
@@ -196,17 +197,14 @@ public:
         return m_minimizeFloatedWindows.contains(windowId) || m_unfloatInFlight.contains(windowId);
     }
 
-    /// Take ownership of a minimize-float relinquished by the snap handler
-    /// (cross-mode countermand / hand-off on a screen autotile now owns).
-    /// @p untiled marks the window's rect as belonging to the prior mode so
-    /// its unminimize commits immediately instead of through the animation
-    /// grace.
+    /// Take ownership of a minimize-float relinquished by the snap handler (cross-mode countermand / hand-off on a
+    /// screen autotile now owns). @p untiled marks the window's rect as belonging to the prior mode so its
+    /// unminimize commits immediately instead of through the animation grace.
     void adoptMinimizeFloated(const QString& windowId, bool untiled);
 
-    /// Retry-budget hand-off for cross-mode adoptions: the budget is a
-    /// per-WINDOW cap on daemon unfloat attempts, and it must survive the
-    /// ownership hop or a persistently-refused unfloat ping-ponging between
-    /// handlers resets to a fresh budget on every bounce.
+    /// Retry-budget hand-off for cross-mode adoptions: the budget is a per-WINDOW cap on daemon unfloat attempts,
+    /// and it must survive the ownership hop or a persistently-refused unfloat ping-ponging between handlers resets
+    /// to a fresh budget on every bounce.
     int unfloatRetryBudgetUsed(const QString& windowId) const;
     void seedUnfloatRetryBudget(const QString& windowId, int attemptsUsed);
     bool hasPendingUnminimizeUnfloat(const QString& windowId) const;
@@ -1937,7 +1935,9 @@ private:
     QSet<QString> m_monocleRestoreOwed;
     QSet<QString> m_monocleUnmaximizedInGesture; ///< restore-on-drag un-maximizes awaiting the gesture's end (F775)
     /// Monocle claims an evacuee held, per physical output it left, taken back by the first monocle batch on that
-    /// output (F685, F1120); dropped by a close or a real move (cleanupAutotileTracking) and at bring-up.
+    /// output (F685, F1120). Dropped by a close or a real move (cleanupAutotileTracking), at bring-up, by a Reassert
+    /// or UserMove verdict (forgetEvacueeParks), and per output by the next evacuation off it (adoptEvacuee) and by
+    /// the daemon's park drop for an output still away (ScreenChangeHandler::slotParkDropped, F1128).
     QHash<QString, QSet<QString>> m_evacueeMonocleClaims;
     bool takeEvacueeMonocleClaim(const QString& windowId, const QString& screenId); ///< evacuees.cpp; consumes it
     /// Minimize-floats an evacuee held, per physical output it left (the value is its untiled mark), given back by
