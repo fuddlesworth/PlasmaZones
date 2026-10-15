@@ -23981,7 +23981,7 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="330"/>
         <source>%1 copy</source>
         <comment>@info default name for a duplicated preset, %1 is the original</comment>
-        <translation>%1 (копия)</translation>
+        <translation>Копия %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="340"/>
