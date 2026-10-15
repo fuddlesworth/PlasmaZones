@@ -810,6 +810,11 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           PhosphorProtocol::Service::Interface::WindowTracking,
                                           QStringLiteral("parkDropped"), m_screenChangeHandler.get(),
                                           SLOT(slotParkDropped(QString, QString)));
+    // The daemon seated a window back into its park, just ahead of that park's drop (F1147)
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("parkReseated"), m_screenChangeHandler.get(),
+                                          SLOT(slotParkReseated(QString, QString)));
 
     // The daemon's pending restores changed: the instant-restore cache refetches
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,

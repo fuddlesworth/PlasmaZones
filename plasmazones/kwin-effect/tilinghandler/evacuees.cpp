@@ -8,6 +8,7 @@
 // announce and no claim handed back to KWin. Part of TilingHandler.
 
 #include "tilinghandler.h"
+#include "compositor/effectlogging.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -54,7 +55,8 @@ void TilingHandler::scrubClaimsForEvacuation(const QString& windowId, KWin::Effe
     m_maximizedToEdgesWindows.remove(windowId);
 }
 
-void TilingHandler::adoptEvacuee(KWin::EffectWindow* w, const QString& screenId, const QSet<QString>& parkedOutputs)
+void TilingHandler::adoptEvacuee(KWin::EffectWindow* w, const QString& screenId, const QString& departedScreenId,
+                                 const QSet<QString>& parkedOutputs)
 {
     if (!w || w->isDeleted()) {
         return;
@@ -72,26 +74,40 @@ void TilingHandler::adoptEvacuee(KWin::EffectWindow* w, const QString& screenId,
     // there (F643, evacuee_floats). Its return gives it back (F1046).
     const bool heldMinimizeFloat = isMinimizeFloated(windowId);
     const bool untiledMinimizeFloat = m_minimizeFloatMarks.isUntiled(windowId);
-    // Both are kept per output it left, like the daemon's park, which this
-    // tracking still names before the funnel wipes it. Every evacuation off an
-    // output re-states that output's entries: a park the daemon dropped on a
-    // touch while the window was away sends no Readopt, so its entries would
-    // otherwise ride a later evacuation into that one's return, unfloating
-    // what the user floated since (F1113) or claiming a maximize the user took
-    // since (F1120). A window untracked where it was held neither there, and
-    // one whose park the daemon dropped in this same settle (a touch, whose
-    // parkDropped lands before the verdict) has no return to wait for (F1128).
-    const QString departed =
-        PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_notifiedWindowScreens.value(windowId));
+    // Both are kept per output it left, like the daemon's park. Every
+    // evacuation off an output re-states that output's entries: a park the
+    // daemon dropped on a touch while the window was away sends no Readopt,
+    // so its entries would otherwise ride a later evacuation into that one's
+    // return, unfloating what the user floated since (F1113) or claiming a
+    // maximize the user took since (F1120). A window untracked here held
+    // neither, and one whose park the daemon dropped in this same settle (a
+    // touch, whose parkDropped lands before the verdict) has no return to
+    // wait for (F1128).
+    //
+    // The output it left is the settle's, not this handler's tracked screen:
+    // the virtual-screen refresh the settle requests ahead of its report
+    // (reresolveTrackedScreens) answers before the verdicts and re-keys the
+    // tracked screen to where KWin put the window, so read here it named the
+    // destination and nothing was ever filed (F1148). The tracked screen
+    // stands in only for a settle that named no source.
+    const QString departed = PhosphorIdentity::VirtualScreenId::extractPhysicalId(
+        departedScreenId.isEmpty() ? m_notifiedWindowScreens.value(windowId) : departedScreenId);
+    const bool tracked = m_notifiedWindows.contains(windowId);
     cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::Evacuation);
     forgetEvacueeParksOn(windowId, departed);
-    if (!departed.isEmpty() && parkedOutputs.contains(departed)) {
+    if (tracked && !departed.isEmpty() && parkedOutputs.contains(departed)) {
         if (heldMonocle) {
             m_evacueeMonocleClaims[windowId].insert(departed);
         }
         if (heldMinimizeFloat) {
             m_evacueeMinimizeFloats[windowId].insert(departed, untiledMinimizeFloat);
         }
+        qCDebug(lcEffect) << "Evacuee" << windowId << "parked for" << departed << "monocle claim:" << heldMonocle
+                          << "minimize-float:" << heldMinimizeFloat;
+    } else {
+        qCDebug(lcEffect) << "Evacuee" << windowId << "files nothing: departed" << departed << "tracked:" << tracked
+                          << "parked outputs:" << parkedOutputs.values() << "monocle claim:" << heldMonocle
+                          << "minimize-float:" << heldMinimizeFloat;
     }
     // The daemon floated it in place on a tiling destination. Tracked here so
     // the destination's engine owns it, and never announced: an announce
@@ -138,6 +154,9 @@ void TilingHandler::readoptEvacuee(KWin::EffectWindow* w, const QString& screenI
     if (parks->isEmpty()) {
         m_evacueeMinimizeFloats.erase(parks);
     }
+    qCDebug(lcEffect) << "Evacuee minimize-float of" << windowId << "on" << returned
+                      << "taken for its return, given back:" << m_notifiedWindows.contains(windowId)
+                      << "minimized:" << w->isMinimized();
     if (!m_notifiedWindows.contains(windowId)) {
         return;
     }
@@ -157,8 +176,13 @@ void TilingHandler::forgetEvacueeParks(const QString& windowId)
     // window (a touch dropped it, or it never had one), so neither half here
     // has a return to wait for. Left, a window KWin pulled back after a touch
     // would have its first monocle batch claim a maximize the user took.
-    m_evacueeMonocleClaims.remove(windowId);
-    m_evacueeMinimizeFloats.remove(windowId);
+    const QSet<QString> claims = m_evacueeMonocleClaims.take(windowId);
+    const QHash<QString, bool> minimizeFloats = m_evacueeMinimizeFloats.take(windowId);
+    if (!claims.isEmpty() || !minimizeFloats.isEmpty()) {
+        qCDebug(lcEffect) << "Evacuee parks forgotten for" << windowId
+                          << "on every output, monocle claims:" << claims.values()
+                          << "minimize-floats:" << minimizeFloats.keys();
+    }
 }
 
 void TilingHandler::forgetEvacueeParksOn(const QString& windowId, const QString& physicalId)
@@ -166,38 +190,23 @@ void TilingHandler::forgetEvacueeParksOn(const QString& windowId, const QString&
     // One output's half of forgetEvacueeParks: the entries another output's
     // park keeps still wait for that output's return.
     const QString output = PhosphorIdentity::VirtualScreenId::extractPhysicalId(physicalId);
+    bool claimDropped = false;
+    bool minimizeFloatDropped = false;
     if (const auto claims = m_evacueeMonocleClaims.find(windowId); claims != m_evacueeMonocleClaims.end()) {
-        claims->remove(output);
+        claimDropped = claims->remove(output);
         if (claims->isEmpty()) {
             m_evacueeMonocleClaims.erase(claims);
         }
     }
     if (const auto parks = m_evacueeMinimizeFloats.find(windowId); parks != m_evacueeMinimizeFloats.end()) {
-        parks->remove(output);
+        minimizeFloatDropped = parks->remove(output);
         if (parks->isEmpty()) {
             m_evacueeMinimizeFloats.erase(parks);
         }
     }
-}
-
-void TilingHandler::forgetEvacueeParksAway(const QString& windowId)
-{
-    // Every output the window holds entries for that has no output now.
-    const QSet<QString>& connected = m_effect->connectedPhysicalIds();
-    QSet<QString> away;
-    for (const QString& output : m_evacueeMonocleClaims.value(windowId)) {
-        if (!connected.contains(output)) {
-            away.insert(output);
-        }
-    }
-    const QHash<QString, bool> parks = m_evacueeMinimizeFloats.value(windowId);
-    for (auto it = parks.cbegin(); it != parks.cend(); ++it) {
-        if (!connected.contains(it.key())) {
-            away.insert(it.key());
-        }
-    }
-    for (const QString& output : std::as_const(away)) {
-        forgetEvacueeParksOn(windowId, output);
+    if (claimDropped || minimizeFloatDropped) {
+        qCDebug(lcEffect) << "Evacuee park on" << output << "forgotten for" << windowId
+                          << "monocle claim:" << claimDropped << "minimize-float:" << minimizeFloatDropped;
     }
 }
 
@@ -208,13 +217,19 @@ bool TilingHandler::takeEvacueeMonocleClaim(const QString& windowId, const QStri
     // Not gated on the Readopt verdict, which can reach the effect after the
     // re-seat batch the daemon emitted while answering the settle.
     const auto claims = m_evacueeMonocleClaims.find(windowId);
-    if (claims == m_evacueeMonocleClaims.end()
-        || !claims->remove(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId))) {
+    if (claims == m_evacueeMonocleClaims.end()) {
+        return false;
+    }
+    const QString output = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+    if (!claims->remove(output)) {
+        qCDebug(lcEffect) << "Evacuee monocle claim of" << windowId << "not taken on" << output << "- held for"
+                          << claims->values();
         return false;
     }
     if (claims->isEmpty()) {
         m_evacueeMonocleClaims.erase(claims);
     }
+    qCDebug(lcEffect) << "Evacuee monocle claim of" << windowId << "taken back on" << output;
     return true;
 }
 

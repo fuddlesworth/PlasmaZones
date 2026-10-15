@@ -126,6 +126,10 @@ void NavigationHandler::syncZonesFromDaemon()
                 // carry an older class spelling, and parked under the live id
                 // the arrival drain resolves by (F1079).
                 KWin::EffectWindow* window = m_effect->findWindowByInstanceId(state.windowId);
+                // Filed under the window's own id, as a live notice would be (F1140).
+                if (window) {
+                    m_zoneOwnNotices.insert(::PhosphorIdentity::WindowId::extractInstanceId(state.windowId));
+                }
                 if (window && (!isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity())) {
                     m_effect->snapHandler()->armDesktopArrivalRestore(m_effect->getWindowId(window),
                                                                       DesktopArrivalParks::Cause::ReapplyOnly);
@@ -166,6 +170,9 @@ void NavigationHandler::setWindowFloating(const QString& windowId, bool floating
 
 void NavigationHandler::setWindowZone(const QString& windowId, const QString& zoneId)
 {
+    if (zoneId.isEmpty()) {
+        forgetZoneNoticesOn(windowId);
+    }
     if (m_zoneCache.setZone(windowId, zoneId)) {
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }
@@ -173,7 +180,7 @@ void NavigationHandler::setWindowZone(const QString& windowId, const QString& zo
 
 void NavigationHandler::clearWindowZone(const QString& windowId)
 {
-    forgetZoneNoticeTargetsOn(windowId);
+    forgetZoneNoticesOn(windowId);
     if (m_zoneCache.remove(windowId)) {
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }
@@ -181,18 +188,30 @@ void NavigationHandler::clearWindowZone(const QString& windowId)
 
 void NavigationHandler::noteZoneNoticeTarget(const QString& daemonId, const QString& liveId)
 {
-    if (!liveId.isEmpty() && !::PhosphorIdentity::WindowId::sameWindowInstance(liveId, daemonId)) {
-        m_zoneNoticeTargets.insert(daemonId, liveId);
+    if (liveId.isEmpty()) {
+        m_zoneNoticeTargets.remove(daemonId);
+        return;
+    }
+    if (!::PhosphorIdentity::WindowId::sameWindowInstance(liveId, daemonId)) {
+        // The window's own id filed its zone already, and that id speaks for
+        // it: a clear under this one must not unsnap it. The daemon emits the
+        // two ids' notices in no fixed order (a batch walks a hash, a commit
+        // follows the user), and either order ends with no target (F1140).
+        if (m_zoneOwnNotices.contains(::PhosphorIdentity::WindowId::extractInstanceId(liveId))) {
+            m_zoneNoticeTargets.remove(daemonId);
+        } else {
+            m_zoneNoticeTargets.insert(daemonId, liveId);
+        }
         return;
     }
     m_zoneNoticeTargets.remove(daemonId);
-    if (!liveId.isEmpty()) {
-        forgetZoneNoticeTargetsOn(liveId);
-    }
+    forgetZoneNoticesOn(liveId);
+    m_zoneOwnNotices.insert(::PhosphorIdentity::WindowId::extractInstanceId(liveId));
 }
 
-void NavigationHandler::forgetZoneNoticeTargetsOn(const QString& liveId)
+void NavigationHandler::forgetZoneNoticesOn(const QString& liveId)
 {
+    m_zoneOwnNotices.remove(::PhosphorIdentity::WindowId::extractInstanceId(liveId));
     m_zoneNoticeTargets.removeIf([&liveId](const QHash<QString, QString>::iterator it) {
         return ::PhosphorIdentity::WindowId::sameWindowInstance(it.value(), liveId);
     });

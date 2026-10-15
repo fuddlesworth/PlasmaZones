@@ -8,10 +8,13 @@
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <QHash>
 #include <QObject>
+#include <QPair>
 #include <QPointer>
 #include <QRect>
 #include <QSet>
 #include <QTimer>
+
+#include <optional>
 
 namespace KWin {
 class EffectWindow;
@@ -158,6 +161,9 @@ public Q_SLOTS:
     void slotReapplyWindowGeometriesRequested();
     /// The daemon dropped @p windowId's park for the output @p outputUuid.
     void slotParkDropped(const QString& windowId, const QString& outputUuid);
+    /// The daemon seated @p windowId back into its park for @p outputUuid. The park's drop follows at once when
+    /// nothing is left parked there.
+    void slotParkReseated(const QString& windowId, const QString& outputUuid);
 
     /// Latch the screen-change-in-progress flag and take the settle's
     /// baseline as soon as KWin emits screenAdded / screenRemoved, before the
@@ -206,6 +212,9 @@ private:
     {
         WindowSnapshot state; ///< S0: as it was when its output went away
         bool classified = false;
+        /// A settle the daemon answered carried it as its row's S0, which is
+        /// how the daemon's ledger entry for that output learns the uuid.
+        bool sentAsS0 = false;
     };
     using DeferredCrossings = QList<QPair<QPointer<KWin::EffectWindow>, QString>>;
 
@@ -216,20 +225,31 @@ private:
     /// the daemon's verdicts and replay the crossings it calls user moves.
     void sendSettleReport();
     PhosphorProtocol::OutputSettleRowList buildSettleRows() const;
+    /// @p sources: each reported window's screen when the change began (its row's source), by window id.
     void applySettleVerdicts(const PhosphorProtocol::OutputSettleVerdictList& verdicts,
-                             const DeferredCrossings& crossings, const QList<QPointer<KWin::EffectWindow>>& skipped);
+                             const DeferredCrossings& crossings, const QList<QPointer<KWin::EffectWindow>>& skipped,
+                             const QHash<QString, QString>& sources = {});
     /// Replay crossings deferred since the last settle, once nothing is in progress.
     void replayDeferredCrossings();
     void replayCrossing(KWin::EffectWindow* w, const QString& oldScreenId);
     /// Release the edits held for @p w's crossing, once no crossing of it waits any more.
     void releaseSettleHold(KWin::EffectWindow* w);
-    /// An evacuee: it floats where KWin put it, keeping KWin's state.
-    void applyEvacuee(KWin::EffectWindow* w, const QString& screenId);
+    /// An evacuee: it floats where KWin put it, keeping KWin's state. @p sourceScreenId: where it was when the
+    /// change began, the output it left.
+    void applyEvacuee(KWin::EffectWindow* w, const QString& screenId, const QString& sourceScreenId);
     /// KWin returned it to the output it was parked for, and the daemon
     /// re-seated it there.
     void applyReadopt(KWin::EffectWindow* w, const QString& screenId);
     /// Route the placeholder opens a real output has taken (F750).
     void routePlaceholderOpens();
+    /// The daemon dropped @p w's park for @p physicalId (output @p uuid): the
+    /// tiling handler's claim and minimize-float for it go, unless a Readopt
+    /// for that output may still answer the drop (F1128, F1139). @p reseated:
+    /// a parkReseated came just ahead of the drop (F1147).
+    void forgetParkEntries(KWin::EffectWindow* w, const QString& physicalId, const QString& uuid, bool reseated);
+    /// @p w's announce on @p physicalId is in flight: a park of that output that the daemon settles now is the
+    /// arrival re-seat's (readoptOnArrival).
+    bool arrivalOn(KWin::EffectWindow* w, const QString& physicalId) const;
     /// KWin's output-update cascade begins: an output change made since the
     /// last one ended was not KWin's, and this one's result is sampled when
     /// its turn ends (F1009).
@@ -272,6 +292,18 @@ private:
     bool m_cascadeOpen = false;
     bool m_outputSetChanged = false;
     bool m_settleInFlight = false;
+    /// Connected outputs whose park the daemon dropped while the settle
+    /// report was in flight, settled by its verdicts (forgetParkEntries).
+    QHash<KWin::EffectWindow*, QSet<QString>> m_settleParkDrops;
+    /// The last parkReseated of an arrival re-seat: the window, the output's uuid, and the stamp of the announce
+    /// it came in, so a seat whose entry stays parked never speaks for a later announce's drop.
+    struct ReseatMark
+    {
+        QString windowId;
+        QString outputUuid;
+        quint64 announce = 0;
+    };
+    std::optional<ReseatMark> m_reseatedPark;
 };
 
 } // namespace PlasmaZones

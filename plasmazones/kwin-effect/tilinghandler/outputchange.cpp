@@ -49,6 +49,11 @@ bool TilingHandler::announceInFlight(const QString& id) const
     return m_announceGen.contains(id);
 }
 
+quint64 TilingHandler::announceGeneration(const QString& id) const
+{
+    return m_announceGen.value(id);
+}
+
 void TilingHandler::updateNotifiedScreen(const QString& windowId, const QString& newScreenId)
 {
     auto it = m_notifiedWindowScreens.find(windowId);

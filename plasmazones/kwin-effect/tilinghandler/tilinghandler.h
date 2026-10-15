@@ -168,14 +168,14 @@ public:
     /// order). Claims release by @p scope; an evacuee passes ClaimScope::Evacuation and is scrubbed, not released.
     void cleanupAutotileTracking(const QString& windowId,
                                  ScrollDecisions::ClaimScope scope = ScrollDecisions::ClaimScope::UntrackFunnel);
-    /// The settle's evacuee and returned-window verdicts (evacuees.cpp): what the effect held for @p w is let go of
-    /// without handing KWin's state back, and @p w is tracked on @p screenId when it is managed, with no announce
-    /// (the daemon already placed it). @p parkedOutputs: the physical outputs whose park the daemon still holds.
-    void adoptEvacuee(KWin::EffectWindow* w, const QString& screenId, const QSet<QString>& parkedOutputs);
+    /// The settle's evacuee and returned-window verdicts (evacuees.cpp): what the effect held for @p w goes without
+    /// handing KWin's state back, and it is tracked on @p screenId when managed, unannounced. @p departed: the
+    /// output it left, as the settle saw it; @p parkedOutputs: the outputs whose park the daemon still holds.
+    void adoptEvacuee(KWin::EffectWindow* w, const QString& screenId, const QString& departed,
+                      const QSet<QString>& parkedOutputs);
     void readoptEvacuee(KWin::EffectWindow* w, const QString& screenId);
     void forgetEvacueeParks(const QString& windowId); ///< the daemon holds none for it any more (F1120, evacuees.cpp)
     void forgetEvacueeParksOn(const QString& windowId, const QString& physicalId); ///< that output's park only (F1128)
-    void forgetEvacueeParksAway(const QString& windowId); ///< every output not connected now (F1128)
     /// The windows tiled in @p screenId's strip, wherever their frames sit.
     QStringList stripMembersOn(const QString& screenId) const;
     /// Drop @p windowId from the minimize-float set and cancel EITHER deferred edge — the minimize debounce and
@@ -211,8 +211,8 @@ public:
     bool hasUnfloatInFlight(const QString& windowId) const;
     void clearDesktopMoveStash(const QString& windowId); ///< a destroyed window's stash (only destruction may)
     void deferWindowRouting(KWin::EffectWindow* window);
-    /// An announce is in flight (see SnapHandler::hasOpenResolveInFlight).
-    bool announceInFlight(const QString& id) const;
+    bool announceInFlight(const QString& id) const; ///< see SnapHandler::hasOpenResolveInFlight
+    quint64 announceGeneration(const QString& id) const; ///< the stamp of the announce in flight, 0 when none
     /// Flags-settle backstop, wired in wireOutputChangeHandlers: a window's keep-above, skip-switcher, transient or
     /// modal state changed (WindowFlagEdges::actionsFor). An announced window no longer tileable is released from its
     /// engine at its captured spawn frame; an unannounced one now tileable on a managed screen in view is tiled at
@@ -1935,9 +1935,9 @@ private:
     QSet<QString> m_monocleRestoreOwed;
     QSet<QString> m_monocleUnmaximizedInGesture; ///< restore-on-drag un-maximizes awaiting the gesture's end (F775)
     /// Monocle claims an evacuee held, per physical output it left, taken back by the first monocle batch on that
-    /// output (F685, F1120). Dropped by a close or a real move (cleanupAutotileTracking), at bring-up, by a Reassert
-    /// or UserMove verdict (forgetEvacueeParks), and per output by the next evacuation off it (adoptEvacuee) and by
-    /// the daemon's park drop for an output still away (ScreenChangeHandler::slotParkDropped, F1128).
+    /// output (F685, F1120). Dropped by a close or real move (cleanupAutotileTracking), at bring-up, by Reassert or
+    /// UserMove (forgetEvacueeParks), and per output by the next evacuation off it (adoptEvacuee) and by the daemon's
+    /// park drop unless a Readopt answers it (ScreenChangeHandler::forgetParkEntries, F1128, F1139).
     QHash<QString, QSet<QString>> m_evacueeMonocleClaims;
     bool takeEvacueeMonocleClaim(const QString& windowId, const QString& screenId); ///< evacuees.cpp; consumes it
     /// Minimize-floats an evacuee held, per physical output it left (the value is its untiled mark), given back by
