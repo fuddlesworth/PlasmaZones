@@ -1378,7 +1378,9 @@ target_include_directories(test_window_screen_decisions PRIVATE ${CMAKE_SOURCE_D
 add_test(NAME test_window_screen_decisions COMMAND test_window_screen_decisions)
 
 # The effect's per-window command stamps (plasmazoneseffect/effect_state.h): a
-# daemon loss supersedes every deferred apply at once. Header-only reach.
+# daemon loss supersedes every deferred apply at once, and a command that sets
+# no rect carries an owed stale-ack answer (F1115), never a voided one (F1131).
+# Header-only reach.
 add_executable(test_command_stamps ui/effect/test_command_stamps.cpp)
 target_link_libraries(test_command_stamps PRIVATE Qt6::Test Qt6::Core PhosphorCompositor::PhosphorCompositor)
 target_include_directories(test_command_stamps PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
@@ -1655,7 +1657,8 @@ add_test(NAME test_wta_zone_prune COMMAND test_wta_zone_prune)
 
 # The layout-switch helper every switch caller runs: populate the switched
 # screens, resnap silently, prune and relay what did not fit (F474, F475,
-# F489). Plus a layout deleted under its windows (F403, F429, F1093), a switch
+# F489), with one pendingRestoresChanged per pass or burst of passes (F625).
+# Plus a layout deleted under its windows (F403, F429, F1093), a switch
 # to no layout that keeps the zones, the settings reflow and resolution-change
 # replay with snapping off (F469), and the resolution setting read live (F327).
 add_executable(test_wta_layout_switch dbus/test_wta_layout_switch.cpp

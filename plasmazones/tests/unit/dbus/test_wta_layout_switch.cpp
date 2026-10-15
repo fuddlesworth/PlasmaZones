@@ -6,7 +6,8 @@
  * @brief The one layout-switch helper every switch caller runs:
  *        WindowTrackingAdaptor::resnapScreensToTheirLayouts. It populates
  *        the buffer for the switched screens, resnaps silently, then prunes
- *        and relays what the switch could not carry. Plus a layout deleted
+ *        and relays what the switch could not carry, announcing the pending
+ *        restores once per pass or burst of passes. Plus a layout deleted
  *        under its windows, a switch to no layout that keeps the zones, the
  *        two other re-applies with snapping switched off
  *        (SnapAdaptor::reapplySnapZones for a settings reflow and
