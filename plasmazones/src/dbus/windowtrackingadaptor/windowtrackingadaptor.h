@@ -1202,10 +1202,7 @@ public:
      */
     void pruneExcludedPlacements(const QStringList& patterns);
 
-    /**
-     * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles).
-     * Not a D-Bus method; used internally so the daemon timer can trigger the signal.
-     */
+    /// Emit reapplyWindowGeometriesRequested (the daemon's timer after geometry settles); not a D-Bus method.
     void requestReapplyWindowGeometries();
 
 Q_SIGNALS:
@@ -1213,6 +1210,8 @@ Q_SIGNALS:
 
     /// The daemon no longer keeps @p windowId parked for @p outputUuid (empty: any output).
     void parkDropped(const QString& windowId, const QString& outputUuid);
+    /// @p windowId seated back on @p outputUuid; its parkDropped follows unless a context stays parked there (F1147).
+    void parkReseated(const QString& windowId, const QString& outputUuid);
 
     /**
      * @brief A window's floating state changed from what was last broadcast.

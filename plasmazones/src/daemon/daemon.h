@@ -731,13 +731,9 @@ private:
      */
     void showOsdForScreens(const QStringList& screenIds, const QString& activity);
 
-    /**
-     * @brief Recompute BOTH tiling-family engines' screen sets in one walk of
-     * runningModeForContext, pushed through the shared capture-all → seed-all
-     * → apply-all phase (captureScrollingOrders / updateScrollingScreens run
-     * in the same pass so a same-flip autotile↔scrolling transition replays
-     * window order AND the focused window deterministically).
-     */
+    /// Recompute BOTH tiling-family engines' screen sets in one walk of runningModeForContext, through the shared
+    /// capture-all → seed-all → apply-all phase, so a same-flip autotile↔scrolling transition replays window order
+    /// AND the focused window deterministically (captureScrollingOrders / updateScrollingScreens run in the pass).
     void updateEngineScreens();
     /// The mode a (screen, desktop, activity) context runs, in view or hidden: Scrolling or Autotile only with that
     /// feature on, not disabled there and, for autotile, an algorithm to tile with (into @p algorithmId, empty for the
@@ -745,6 +741,10 @@ private:
     PhosphorZones::AssignmentEntry::Mode runningModeForContext(const QString& screenId, int desktop,
                                                                const QString& activity,
                                                                QString* algorithmId = nullptr) const;
+    /// runningModeForContext, but "autotile:none" answers Autotile as ScreenModeRouter::modeFor does: the lens of the
+    /// out-of-view float routing and the engines' readopt gates, which must agree with the router in view (F1134).
+    PhosphorZones::AssignmentEntry::Mode routedModeForContext(const QString& screenId, int desktop,
+                                                              const QString& activity) const;
 
     /**
      * @brief React to a rule change that may have altered active assignments.

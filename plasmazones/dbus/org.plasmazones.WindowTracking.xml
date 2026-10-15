@@ -288,12 +288,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <method name="setWindowFloatingForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state explicitly (directional, not toggle) on the engine that runs the screen: autotile, scrolling or snapping. Used by minimize and unminimize, drag-to-float, the monocle unmaximize and the Phosphor shell placement map. A tiling engine floats or tiles the window where it is, with no float-back geometry and no OSD. A caller other than the registered compositor bridge is refused, with a log line, for a window off the desktop or activity the screen shows or in a disabled context, as setWindowFloating is."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state explicitly (directional, not toggle) on the engine that runs the screen: autotile, scrolling or snapping. Used by minimize and unminimize, drag-to-float, the monocle unmaximize and the Phosphor shell placement map. A tiling engine floats or tiles the window where it is, with no float-back geometry and no OSD. A caller other than the registered compositor bridge is refused, with a log line, when it names a screen the window is not on, and for a window off the desktop or activity the screen shows or in a disabled context, as setWindowFloating is."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier (from KWin)."/>
             </arg>
             <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located. Empty uses the screen the daemon tracks it on. From a caller other than the compositor bridge, a split monitor's physical id names the virtual screen the window is on."/>
             </arg>
             <arg name="floating" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True to float, false to unfloat."/>
@@ -587,6 +587,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
             <arg name="outputUuid" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="KWin's uuid of the output the window was parked for. Empty when the daemon never learned it, which means every record of the window."/>
+            </arg>
+        </signal>
+        <signal name="parkReseated">
+            <annotation name="org.gtk.GDBus.DocString" value="The window was put back into its parked place on an output that returned. When nothing else stays parked for it there, parkDropped for the same window and output follows at once. Sent alone, the window is still parked there for another desktop or activity. A parkDropped with no parkReseated just ahead of it put nothing back, for example when the window's desktop was given another mode while the output was away, and the window is then placed as any opening window is."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="The window."/>
+            </arg>
+            <arg name="outputUuid" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="KWin's uuid of the output, as parkDropped carries it. Empty when the daemon never learned it."/>
             </arg>
         </signal>
         <method name="activateWindow">

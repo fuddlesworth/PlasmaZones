@@ -32,7 +32,9 @@ struct Inputs
     /// The desktop and activity the window's own context resolves to on a
     /// screen (its own desktop, span or stickiness, else the screen's current).
     std::function<WindowPlace(const QString& windowId, const QString& screenId)> placeOnScreen;
-    /// The configured mode of a (screen, desktop, activity) context.
+    /// The mode a (screen, desktop, activity) context runs, as the router would
+    /// answer it in view (the daemon wires Daemon::routedModeForContext). Read
+    /// for a window out of view, where liveMode cannot speak.
     std::function<Mode(const QString& screenId, int desktop, const QString& activity)> configuredMode;
     /// The mode a screen runs now (the router: live engine sets first, a
     /// disabled engine downgraded). Answers for the context in view only.

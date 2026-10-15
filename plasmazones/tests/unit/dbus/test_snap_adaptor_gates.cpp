@@ -557,6 +557,21 @@ private Q_SLOTS:
         QVERIFY(!f.snap->isFloating(w));
     }
 
+    // Nor does it act on a screen the window is not on: DP-2 is snapping, but
+    // the window is on DP-1 (F1138). Naming DP-1 floats it.
+    void floatToggleRefusesAScreenTheWindowIsNotOn()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("fother-1"), 1);
+        f.snap->commitSnap(w, f.zone(0), kLeft);
+        f.adaptor->toggleFloatForWindow(w, kRight);
+        QVERIFY(!f.snap->isFloating(w));
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+
+        f.adaptor->toggleFloatForWindow(w, kLeft);
+        QVERIFY(f.snap->isFloating(w));
+    }
+
     // A window snapping does not track yet floats on the monitor its frame
     // is on, not the one last focused (F28).
     void setWindowFloatUsesTheWindowsScreen()

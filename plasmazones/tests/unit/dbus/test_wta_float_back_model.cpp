@@ -18,6 +18,7 @@
 #include "wta_float_back_fixture.h"
 
 #include "helpers/ScreenDisablingResolver.h"
+#include "helpers/VirtualScreenTestHelpers.h"
 #include "helpers/WindowPlacementBuilders.h"
 
 #include <QDBusConnection>
@@ -580,10 +581,7 @@ private Q_SLOTS:
         FloatLoggingEngine tile;
         tile.activeScreens = {kLeft, kRight};
         BusHost host;
-        auto* wta =
-            new WindowTrackingAdaptor(f.layouts, &f.detector, f.screenMgr.get(), &f.settings, nullptr, nullptr, &host);
-        wta->setWindowRegistry(&f.registry);
-        wta->setEngines(nullptr, &tile, nullptr);
+        WindowTrackingAdaptor* const wta = hostedAdaptor(f, tile, host);
         const auto detach = qScopeGuard([wta] {
             wta->setEngines(nullptr, nullptr, nullptr);
             wta->setWindowRegistry(nullptr);
@@ -591,36 +589,45 @@ private Q_SLOTS:
         const QString w = f.registerWindow(QStringLiteral("f1123"));
         tile.heldScreen.insert(w, kLeft);
         wta->setFrameGeometry(w, 100, 100, 800, 600);
+        BusPeer peer(&host, QStringLiteral("F1123"));
+        QVERIFY(peer.ready());
 
-        QDBusConnection bus = QDBusConnection::sessionBus();
-        QVERIFY(bus.isConnected());
-        const QString path = QStringLiteral("/TestWtaF1123");
-        const QString peerName = QStringLiteral("f1123-peer");
-        QVERIFY(bus.registerObject(path, &host));
-        QDBusConnection peer = QDBusConnection::connectToBus(QDBusConnection::SessionBus, peerName);
-        const auto unregister = qScopeGuard([&bus, &path, &peerName] {
-            bus.unregisterObject(path);
-            QDBusConnection::disconnectFromBus(peerName);
-        });
-        QVERIFY(peer.isConnected());
-        const auto floatOn = [&](const QString& screen) {
-            QDBusMessage call = QDBusMessage::createMethodCall(bus.baseService(), path,
-                                                               QStringLiteral("org.plasmazones.WindowTracking"),
-                                                               QStringLiteral("setWindowFloatingForScreen"));
-            call << w << screen << true;
-            return peer.asyncCall(call, 5000);
-        };
-
-        QDBusPendingCall refused = floatOn(kRight);
-        QTRY_VERIFY(refused.isFinished());
-        QVERIFY(!refused.isError());
+        QVERIFY(peer.floatOn(w, kRight));
         QVERIFY2(tile.floatCalls.isEmpty(), "the window is on DP-1, not DP-2");
 
-        QDBusPendingCall own = floatOn(kLeft);
-        QTRY_VERIFY(own.isFinished());
-        QVERIFY(!own.isError());
+        QVERIFY(peer.floatOn(w, kLeft));
         QCOMPARE(tile.floatCalls.size(), 1);
         QCOMPARE(tile.floatCalls.first(), (FloatLoggingEngine::Call{w, true, kLeft}));
+    }
+
+    // A split monitor's physical id names the half the window is on, and the
+    // float is routed to that half; the other half is refused (F1123, F1144).
+    void busSetWindowFloatingForScreenRoutesASplitMonitorToTheWindowsHalf()
+    {
+        FloatBackFixture f;
+        QVERIFY(f.screenMgr->setVirtualScreenConfig(kRight, PlasmaZones::TestHelpers::makeSplitConfig(kRight)));
+        const QString vs0 = QStringLiteral("DP-2/vs:0");
+        const QString vs1 = QStringLiteral("DP-2/vs:1");
+        FloatLoggingEngine tile;
+        tile.activeScreens = {vs0, vs1};
+        BusHost host;
+        WindowTrackingAdaptor* const wta = hostedAdaptor(f, tile, host);
+        const auto detach = qScopeGuard([wta] {
+            wta->setEngines(nullptr, nullptr, nullptr);
+            wta->setWindowRegistry(nullptr);
+        });
+        const QString w = f.registerWindow(QStringLiteral("f1144"));
+        tile.heldScreen.insert(w, vs1);
+        wta->setFrameGeometry(w, 3000, 200, 400, 300);
+        BusPeer peer(&host, QStringLiteral("F1144"));
+        QVERIFY(peer.ready());
+
+        QVERIFY(peer.floatOn(w, vs0));
+        QVERIFY2(tile.floatCalls.isEmpty(), "the window is on the right half");
+
+        QVERIFY(peer.floatOn(w, kRight));
+        QCOMPARE(tile.floatCalls.size(), 1);
+        QCOMPARE(tile.floatCalls.first(), (FloatLoggingEngine::Call{w, true, vs1}));
     }
 
     // On a snapping monitor the verb takes the window out of its zone, as a
@@ -696,6 +703,61 @@ private:
         {
             floatCalls.append({windowId, floating, screenId});
         }
+    };
+
+    /// A second adaptor on the fixture's outputs, exported through @p host as
+    /// Daemon's are, with @p tile in the autotile slot and nothing else.
+    static WindowTrackingAdaptor* hostedAdaptor(FloatBackFixture& f, FloatLoggingEngine& tile, BusHost& host)
+    {
+        auto* wta =
+            new WindowTrackingAdaptor(f.layouts, &f.detector, f.screenMgr.get(), &f.settings, nullptr, nullptr, &host);
+        wta->setWindowRegistry(&f.registry);
+        wta->setEngines(nullptr, &tile, nullptr);
+        return wta;
+    }
+
+    /// Another bus connection calling the screen-form float on the object
+    /// @p host exports at /TestWta<name>, unregistered when it goes.
+    struct BusPeer
+    {
+        BusPeer(QObject* host, const QString& name)
+            : path(QStringLiteral("/TestWta") + name)
+            , peerName(name + QStringLiteral("-peer"))
+            , registered(bus.registerObject(path, host))
+            , peer(QDBusConnection::connectToBus(QDBusConnection::SessionBus, peerName))
+        {
+        }
+        ~BusPeer()
+        {
+            bus.unregisterObject(path);
+            QDBusConnection::disconnectFromBus(peerName);
+        }
+        bool ready() const
+        {
+            return bus.isConnected() && registered && peer.isConnected();
+        }
+        /// Floats @p windowId on @p screen; true once answered without an
+        /// error (a refusal answers too, silent toward the caller).
+        bool floatOn(const QString& windowId, const QString& screen)
+        {
+            QDBusMessage call = QDBusMessage::createMethodCall(bus.baseService(), path,
+                                                               QStringLiteral("org.plasmazones.WindowTracking"),
+                                                               QStringLiteral("setWindowFloatingForScreen"));
+            call << windowId << screen << true;
+            const QDBusPendingCall pending = peer.asyncCall(call, 5000);
+            return QTest::qWaitFor(
+                       [&pending] {
+                           return pending.isFinished();
+                       },
+                       5000)
+                && !pending.isError();
+        }
+
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        const QString path;
+        const QString peerName;
+        const bool registered;
+        QDBusConnection peer;
     };
 
     /// @p w tiled on DP-1 by the stub engine, which emitted the whole right

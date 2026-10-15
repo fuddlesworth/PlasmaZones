@@ -323,6 +323,14 @@ bool WindowTrackingAdaptor::readoptEvacuee(const QString& windowId, const QStrin
             ++it;
             continue;
         }
+        // Every seat is said, ahead of any drop: alone when a context stays
+        // parked there (a place granted for later), followed by parkDropped
+        // when the entry retires. An arrival that seated nothing (its context
+        // runs another mode now) is placed by its open, and the effect must
+        // not give back a float as at a re-seat (F1147).
+        if (seated) {
+            Q_EMIT parkReseated(windowId, it->outputUuid);
+        }
         // Retired only once no engine keeps a context of it parked there (F771).
         const bool stillParked = std::any_of(engines.cbegin(), engines.cend(), [&](auto* engine) {
             return engine && engine->hasParked(canonical, parkedPhysicalId);

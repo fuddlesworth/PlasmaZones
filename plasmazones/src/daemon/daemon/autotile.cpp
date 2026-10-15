@@ -108,15 +108,13 @@ PhosphorZones::AssignmentEntry::Mode Daemon::runningModeForContext(const QString
     }
     // The disable cascade for the context named in the mode asked about, not
     // the screen's current desktop and routing: a hidden desktop has entries
-    // of its own (F1122). One cascade path, the resolver's (see
-    // libs/phosphor-context-resolver/README.md).
+    // of its own (F1122). No resolver entry point takes all four axes, and
+    // each comes from the caller here, so the handle is built directly; one
+    // from handleForPersisted would pay a router resolve for a mode thrown
+    // away (F1136).
     const auto disabledFor = [&](Mode mode) {
-        if (!m_contextResolver) {
-            return false;
-        }
-        PhosphorContext::ContextHandle handle = m_contextResolver->handleForPersisted(screenId, desktop, activity);
-        handle.mode = mode;
-        return m_contextResolver->isDisabled(handle);
+        return m_contextResolver
+            && m_contextResolver->isDisabled(PhosphorContext::ContextHandle{screenId, desktop, activity, mode});
     };
     // Scrolling-mode assignment is resolved from the same cascade; it has
     // no layout id of its own, so the mode lookup is the discriminator.
@@ -173,6 +171,22 @@ PhosphorZones::AssignmentEntry::Mode Daemon::runningModeForContext(const QString
         *algorithmId = algoId;
     }
     return Mode::Autotile;
+}
+
+PhosphorZones::AssignmentEntry::Mode Daemon::routedModeForContext(const QString& screenId, int desktop,
+                                                                  const QString& activity) const
+{
+    // The opt-out is the one context the router answers Autotile for while no
+    // engine claims it (ScreenModeRouter::modeFor), and a reader that must
+    // agree with the router in view answers it the same out of view.
+    if (m_layoutManager) {
+        const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
+        if (entry.mode == PhosphorZones::AssignmentEntry::Autotile
+            && entry.tilingAlgorithm == PhosphorZones::NoTilingAlgorithm) {
+            return PhosphorZones::AssignmentEntry::Autotile;
+        }
+    }
+    return runningModeForContext(screenId, desktop, activity);
 }
 
 void Daemon::updateEngineScreens()
@@ -366,33 +380,18 @@ void Daemon::updateEngineScreens()
     // seed-all → apply-all; the map is shared between the engines by design.
     captureScrollingOrders(scrollingScreens);
 
-    // Third capture arm: screens entering scrolling from SNAPPING.
-    //
-    // The two arms above capture from a departing ENGINE, so a screen leaving
-    // snapping is in neither and would enter the strip with no focus seed at
-    // all. The strip then anchors on whichever column it adopted first, which
-    // is exactly the symptom the seed exists to prevent — and snapping is
-    // likely the most common flip into scrolling, so leaving it out would ship
-    // a fix covering two of the three mode pairs while its own comment claims
-    // the general case.
-    //
-    // SnapEngine cannot report this itself: it keeps no focus memory, because
-    // it has no view of its own to anchor. The daemon does track compositor
-    // focus, in the same adaptor member that fills HandoffContext::heldFocus,
-    // and a window that took focus just before the flip has already been
-    // reported through windowActivated.
-    //
-    // Guarded three ways. Only screens claimed by neither engine, so a real
-    // engine capture is never second-guessed. Only when the pass has not
-    // already seeded that screen, so the arms above always win. And only when
-    // the adaptor's focused window is actually ON this screen — the member is
-    // global, one focused window session-wide. screensMatch so a connector
-    // name and an EDID id of one output compare equal; it never equates a
-    // virtual-screen id with its physical output (a mixed pair is false).
-    //
-    // A wrong or stale id degrades to today's behaviour rather than misfiring:
-    // the engine drops a seed naming a window its strip does not contain, and
-    // drains it either way.
+    // Third capture arm: screens entering scrolling from SNAPPING. The arms
+    // above capture from a departing ENGINE, so such a screen would enter the
+    // strip with no focus seed and anchor on whichever column it adopted
+    // first, the symptom the seed exists to prevent. SnapEngine keeps no focus
+    // memory, but the daemon tracks compositor focus in the adaptor member
+    // that fills HandoffContext::heldFocus. Guarded three ways: only screens
+    // neither engine claims, only when the pass has not seeded that screen (the
+    // arms above win), and only when the focused window is ON this screen (the
+    // member is session-wide). screensMatch equates a connector name and an
+    // EDID id of one output, never a virtual-screen id with its physical
+    // output. A wrong or stale id degrades harmlessly: the engine drops a seed
+    // naming a window its strip does not contain, and drains it either way.
     if (m_windowTrackingAdaptor && m_scrollEngine) {
         const QString focusedId = m_windowTrackingAdaptor->lastActiveWindowId();
         if (!focusedId.isEmpty()) {

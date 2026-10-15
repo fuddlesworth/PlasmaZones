@@ -315,9 +315,13 @@ private Q_SLOTS:
             m_wta->service()->setEngineFloatResolver({});
             m_wta->setContextModeResolver({});
         });
-        m_wta->setContextModeResolver([](const QString&, int, const QString&) {
-            return PhosphorZones::AssignmentEntry::Snapping;
-        });
+        // Only the window's own context snaps: a resolver asked about another
+        // one (the desktop in view, the output it left) answers the assignment.
+        m_wta->setContextModeResolver(
+            [activity = m_layoutManager->currentActivity()](const QString& screen, int desktop, const QString& act) {
+                return screen == kB && desktop == 2 && act == activity ? PhosphorZones::AssignmentEntry::Snapping
+                                                                       : PhosphorZones::AssignmentEntry::Autotile;
+            });
         QVERIFY(pendOnTilingDesktopOfB(w));
         const auto key = m_snapEngine->heldKeyForWindow(w);
         QVERIFY(key.has_value());
@@ -475,9 +479,66 @@ private Q_SLOTS:
         QVERIFY(snapOnA(w));
         QVERIFY(unplugA());
         m_snapEngine->setCurrentDesktopForScreen(kA, 1);
+        QStringList heard;
+        QObject listener;
+        connect(m_wta, &WindowTrackingAdaptor::parkReseated, &listener, [&heard](const QString& id, const QString&) {
+            heard.append(QStringLiteral("reseated:") + id);
+        });
+        connect(m_wta, &WindowTrackingAdaptor::parkDropped, &listener, [&heard](const QString& id, const QString&) {
+            heard.append(QStringLiteral("dropped:") + id);
+        });
         QVERIFY(m_wta->readoptOnArrival(w, kA));
         QCOMPARE(m_wta->service()->zoneForWindow(w), m_zoneIds[0]);
+        // The re-seat is said ahead of the drop (F1147).
+        QCOMPARE(heard, (QStringList{QStringLiteral("reseated:") + w, QStringLiteral("dropped:") + w}));
         QVERIFY(!m_wta->readoptOnArrival(w, kA));
+    }
+
+    // An arrival whose context runs another mode now seats nothing: its park
+    // still goes, but no re-seat is said, so the effect leaves the window to
+    // its open (F1147).
+    void anAnnounceThatSeatsNothingSaysNoReseat()
+    {
+        const QString w = QStringLiteral("app|reannounced-elsewhere");
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
+        m_snapEngine->setCurrentDesktopForScreen(kA, 1);
+        m_snapEngine->setContextModeResolver([](const QString&, int, const QString&) {
+            return PhosphorZones::AssignmentEntry::Autotile;
+        });
+        const auto clear = qScopeGuard([this] {
+            m_snapEngine->setContextModeResolver({});
+        });
+        QSignalSpy reseated(m_wta, &WindowTrackingAdaptor::parkReseated);
+        QSignalSpy dropped(m_wta, &WindowTrackingAdaptor::parkDropped);
+        QVERIFY(!m_wta->readoptOnArrival(w, kA));
+        QVERIFY(m_wta->service()->zoneForWindow(w).isEmpty());
+        QCOMPARE(dropped.count(), 1);
+        QVERIFY2(reseated.isEmpty(), "nothing was put back");
+    }
+
+    // A seat that leaves another context parked on that output (another
+    // engine still holds a place there) is said all the same, and the park
+    // stays: parkReseated alone means seated and still parked (F1147).
+    void aSeatThatLeavesAContextParkedSaysTheReseatAlone()
+    {
+        const QString w = QStringLiteral("app|reseated-still-parked");
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
+        StillParkedEngine holder;
+        holder.physicalId = kA;
+        m_wta->setEngines(m_snapEngine, &holder, nullptr);
+        const auto restore = qScopeGuard([this] {
+            m_wta->setEngines(m_snapEngine, nullptr, nullptr);
+        });
+        m_snapEngine->setCurrentDesktopForScreen(kA, 1);
+        QSignalSpy reseated(m_wta, &WindowTrackingAdaptor::parkReseated);
+        QSignalSpy dropped(m_wta, &WindowTrackingAdaptor::parkDropped);
+        QVERIFY(m_wta->readoptOnArrival(w, kA));
+        QCOMPARE(m_wta->service()->zoneForWindow(w), m_zoneIds[0]);
+        QCOMPARE(reseated.count(), 1);
+        QCOMPARE(reseated.first().at(0).toString(), w);
+        QVERIFY2(dropped.isEmpty(), "a context is still parked on A");
     }
 
     // A settle row that names an output gone before the daemon's own
@@ -502,6 +563,17 @@ private Q_SLOTS:
     }
 
 private:
+    /// A tiling engine that keeps a context of every window parked for
+    /// @p physicalId and seats nothing itself.
+    struct StillParkedEngine : StubPlacementEngine
+    {
+        QString physicalId;
+        bool hasParked(const QString&, const QString& physicalScreenId) const override
+        {
+            return physicalScreenId.isEmpty() || physicalScreenId == physicalId;
+        }
+    };
+
     // The helpers answer whether they did what they name, for the row to
     // QVERIFY: a QVERIFY inside one would return from the helper only.
 

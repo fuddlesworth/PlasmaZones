@@ -200,38 +200,29 @@ void Daemon::initEnginesAndWiring()
                 m_settings.get(), screenId);
         });
 
-    // Own-mode resolver for the scroll engine: does a context still resolve to Scrolling mode? The reopen claim
-    // (claimCrossScreenReopen) asks it for the RECORDED context, the same-mode half of the reopen contract (a FIFO
-    // record on another virtual screen of the opening output); readoptParked asks it for an out-of-view parked
-    // context before seating or granting it (F1102). The scrolling master switch is not part of this verdict.
+    // Own-mode resolver for the scroll engine: does a context still run Scrolling (routedModeForContext: the master
+    // switch and the disabled check included, F1137)? The reopen claim (claimCrossScreenReopen) asks it for the
+    // RECORDED context, the same-mode half of the reopen contract (a FIFO record on another virtual screen of the
+    // opening output); readoptParked asks it for an out-of-view parked context before seating or granting it (F1102).
     // (The engine's Snapping and Autotile resolvers fed the cross-screen defer gates, which are gone; not wired.)
     scrollEngine->setScrollingModeResolver([this](const QString& screenId, int desktop, const QString& activity) {
-        return m_layoutManager
-            && m_layoutManager->modeForScreen(screenId, desktop, activity)
-            == PhosphorZones::AssignmentEntry::Mode::Scrolling;
+        return routedModeForContext(screenId, desktop, activity) == PhosphorZones::AssignmentEntry::Mode::Scrolling;
     });
 
-    // Scroll "zone numbers" for the navigation OSD: a strip window's zone
-    // number is its 1-based VISIBLE tile slot — the same sequential
-    // strip-order number the previews label and the Snap-to-Zone digits
-    // drive through moveFocusedToPosition. A window with no visible tile
-    // gets no entry, which covers off-screen columns, the hidden tabs of a
-    // tabbed column, parked columns, and any tile whose work-area
-    // intersection comes out empty; the OSD falls back to direction-only
-    // copy for those. This keeps the "Zone %1" copy meaningful on scrolling
-    // screens, which have no zone layout of their own, for the arms that
-    // actually render zone copy — the focus, cycle and digit-success arms,
-    // each of which hands the OSD a landed window id. The move and swap
-    // arms pass an empty targetZoneId and render direction copy regardless
-    // of what this provider returns.
+    // Scroll "zone numbers" for the navigation OSD: a strip window's zone number is its 1-based VISIBLE tile slot,
+    // the sequential strip-order number the previews label and the Snap-to-Zone digits drive through
+    // moveFocusedToPosition. A window with no visible tile (off-screen columns, hidden tabs of a tabbed column,
+    // parked columns, a tile whose work-area intersection is empty) gets no entry, and the OSD falls back to
+    // direction-only copy. This keeps "Zone %1" meaningful on scrolling screens for the arms that render zone copy
+    // (focus, cycle and digit-success, each handing the OSD a landed window id); move and swap pass an empty
+    // targetZoneId and render direction copy regardless.
     //
     // The number comes off the TILE (VisibleTile::zoneNumber, which ScrollEngine::visibleTiles stamps on
     // the walk the digits use), not a loop index, so this list, the strip preview card (osd.cpp's
     // zoneMapsForTiles) and the Snap-to-Zone digits cannot disagree.
     //
-    // m_overlayService is constructed in the Daemon constructor and never
-    // reset, so it is non-null for the daemon's whole lifetime. Stated once
-    // here for this file: that is why this deref and the later ones in
+    // m_overlayService is constructed in the Daemon constructor and never reset, so it is non-null for the daemon's
+    // whole lifetime. Stated once here for this file: that is why this deref and the later ones in
     // initEnginesAndWiring carry no null guard.
     m_overlayService->setScrollZonesProvider([this](const QString& screenId) -> QVariantList {
         const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
@@ -678,11 +669,12 @@ void Daemon::initEnginesAndWiring()
             place.inView = place.desktop == screenCurrent && place.activity == activityNow;
             return place;
         };
-        if (m_layoutManager) {
-            routing.configuredMode = [this](const QString& screenId, int desktop, const QString& activity) {
-                return m_layoutManager->modeForScreen(screenId, desktop, activity);
-            };
-        }
+        // Out of view, the mode the context runs as the router would answer it
+        // in view: a desktop assigned tiling that snaps holds its floats in
+        // snap (F1134).
+        routing.configuredMode = [this](const QString& screenId, int desktop, const QString& activity) {
+            return routedModeForContext(screenId, desktop, activity);
+        };
         routing.liveMode = [this](const QString& screenId) {
             return m_screenModeRouter ? m_screenModeRouter->modeFor(screenId)
                                       : PhosphorZones::AssignmentEntry::Snapping;
@@ -1002,6 +994,14 @@ void Daemon::initEnginesAndWiring()
     // in stop() before the router is destroyed.
     snapEngine->setLiveModeResolver([this](const QString& screenId) {
         return m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+    });
+    // readoptParked's mode gates, hidden contexts included (F1137): a parked zone goes back only where the router
+    // would answer Snapping (an opt-out context is not one), a parked tile only where autotile runs.
+    snapEngine->setContextModeResolver([this](const QString& screenId, int desktop, const QString& activity) {
+        return routedModeForContext(screenId, desktop, activity);
+    });
+    autotileEngine->setContextModeResolver([this](const QString& screenId, int desktop, const QString& activity) {
+        return runningModeForContext(screenId, desktop, activity) == PhosphorZones::AssignmentEntry::Autotile;
     });
 
     // Create the engine D-Bus adaptors. SnapAdaptor, AutotileAdaptor and ScrollingAdaptor take their

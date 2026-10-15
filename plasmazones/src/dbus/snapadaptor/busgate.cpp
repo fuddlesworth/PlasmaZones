@@ -181,10 +181,15 @@ QString SnapAdaptor::admitBusFloat(const QString& windowId, const QString& scree
     if (m_adaptor->isInteractiveDragWindow(windowId)) {
         return refuse("it is being dragged", QString()); // F773
     }
-    const QString screen = screenHint.isEmpty() ? m_adaptor->liveScreenForWindow(windowId)
-                                                : m_adaptor->resolveBusScreen(screenHint, windowId);
+    const QString live = m_adaptor->liveScreenForWindow(windowId);
+    const QString screen = screenHint.isEmpty() ? live : m_adaptor->resolveBusScreen(screenHint, windowId);
     if (screen.isEmpty()) {
         return refuse("unknown screen", screenHint);
+    }
+    // A screen the window is not on would unfloat it into a zone there, as
+    // the screen-form WindowTracking float refuses it (F1123, F1138).
+    if (screen != live) {
+        return refuse("the window is not on", screen);
     }
     if (!m_engine->isActiveOnScreen(screen)) {
         return refuse("snapping does not run", screen);

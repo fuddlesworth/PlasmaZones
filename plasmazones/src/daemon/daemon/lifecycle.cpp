@@ -651,6 +651,7 @@ void Daemon::stop()
         // closure null-checks the router, but clearing it here keeps the
         // teardown grep-discoverable like every other late-bound borrow.
         concreteSnap->setLiveModeResolver({});
+        concreteSnap->setContextModeResolver({});
         // The window-registry borrow, cleared in every engine block. Member
         // order already makes the registry outlive the engines. The engine-settings
         // borrow (setEngineSettings refuses null) and snap's autotile borrow die
@@ -678,8 +679,9 @@ void Daemon::stop()
         m_windowTrackingAdaptor->setWindowRegistry(nullptr);
     }
 
-    // Clear the autotile context-gap provider, which captures `this` (Daemon, via
-    // m_layoutManager / currentDesktopForScreen / currentActivity). No live deref
+    // Clear the autotile context-gap provider and context-mode resolver, which
+    // capture `this` (Daemon, via m_layoutManager / currentDesktopForScreen /
+    // currentActivity, and runningModeForContext). No live deref
     // can occur today — m_autotileEngine is destroyed on the running path below
     // while `this` is still alive — but clearing it keeps the engine-side clears
     // complete and grep-discoverable (ScrollingAdaptor's step and gate providers
@@ -689,6 +691,7 @@ void Daemon::stop()
     // setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
+        concreteAutotile->setContextModeResolver({});
         // The cross-surface resolver borrow all three engines took (enginefactory.cpp).
         concreteAutotile->setCrossSurfaceResolver(nullptr);
         concreteAutotile->setPersistenceDelegate({}, {});
