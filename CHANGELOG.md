@@ -10,6 +10,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.5.1] - 2026-10-16
+
+### Fixed
+
+- **Dialog window animations stay upright on Plasma 6.8**: popups such as KDialog message boxes no longer show their contents upside down while opening or closing.
+
 ## [3.5.0] - 2026-10-15
 
 ### Added
@@ -2719,7 +2725,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.0...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.1...HEAD
+[3.5.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.0...v3.5.1
 [3.5.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.18...v3.5.0
 [3.4.18]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.17...v3.4.18
 [3.4.17]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.16...v3.4.17

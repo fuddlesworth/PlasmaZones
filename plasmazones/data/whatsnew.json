@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.5.1",
+            "date": "2026-10-16",
+            "highlights": [
+                "Fixed: Dialog popups such as KDialog message boxes stay upright while their window animations play on Plasma 6.8"
+            ]
+        },
+        {
             "version": "3.5.0",
             "date": "2026-10-15",
             "highlights": [
