@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "kwincompat.h"
 #include "shader_internal.h"
 #include "compositor/effectlogging.h"
 
@@ -408,16 +409,14 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
     //     name-only and would mismatch our `texCoord` vs KWin's
     //     `texcoord`).
     //
-    // texCoord is flipped to a Y-down screen UV. KWin's
-    // `OffscreenData::paint` populates the texCoord attribute from its
-    // bottom-origin offscreen FBO (Y-up). The shader contract — and the
-    // daemon's `kDefaultVertexShaderSource` — expect `vTexCoord` Y-down
-    // (y = 0 at the top), so flip here. The redirected window texture
+    // KWin 6.7 supplies bottom-up offscreen texcoords, while 6.8 supplies
+    // top-down texcoords. The shader contract expects `vTexCoord` Y-down
+    // (y = 0 at the top), so flip only the 6.7 input. The redirected window texture
     // is Y-up to match KWin's FBO, which is why shaders read it through
     // `surfaceColor()` (which re-flips the sample coordinate) instead
     // of sampling `uTexture0` directly — see the canonical header
     // `data/animations/shared/animation_uniforms.glsl`. Without the
-    // flip, `vTexCoord` is Y-up on this path: the window still composes
+    // normalisation, `vTexCoord` is Y-up on this path: the window still composes
     // upright (the Y-up texture cancels it) but every screen-space
     // effect — matrix rain direction, directional wipes — renders
     // inverted. The other kwin-vs-daemon difference is `gl_Position`:
@@ -426,7 +425,7 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
     //
     // Authors that ship a per-shader vertex stage via metadata's
     // `vertexShader` field own the matrix / attribute contract
-    // themselves: emit the same `vTexCoord` flip under
+    // themselves: call `animationScreenUv(texCoord)` under
     // `#ifdef PLASMAZONES_KWIN` and multiply `position` by
     // modelViewProjectionMatrix on the kwin path. See the canonical
     // GLSL header (`data/animations/shared/animation_uniforms.glsl`).
@@ -441,7 +440,11 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
         "uniform mat4 modelViewProjectionMatrix;\n"
         "\n"
         "void main() {\n"
+        "#ifdef PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN\n"
+        "    vTexCoord = texCoord;\n"
+        "#else\n"
         "    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);\n"
+        "#endif\n"
         "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
         "}\n");
 
@@ -563,13 +566,17 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
         // `#version` other than whitespace and comments — so the helper
         // below splices it between the version directive and the rest of
         // the source.
-        const QByteArray fragWithKwinDefine = injectKwinDefineAfterVersion(expanded);
+        const QString offscreenOrientationDefine = KWinCompat::OFFSCREEN_TEXCOORDS_TOP_DOWN
+            ? QStringLiteral("#define PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN 1\n")
+            : QString();
+        const QByteArray fragWithKwinDefine = injectKwinDefineAfterVersion(expanded, offscreenOrientationDefine);
 
         // Route the built-in default vertex source through the same injection
         // as custom vertex stages so it gets the layout(location) extension
         // enables (it uses explicit locations too, and KWin compiles it at
         // #version 140 — see injectKwinDefineAfterVersion).
-        QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(QString::fromUtf8(kKwinDefaultVertexSource));
+        QByteArray vertWithKwinDefine =
+            injectKwinDefineAfterVersion(QString::fromUtf8(kKwinDefaultVertexSource), offscreenOrientationDefine);
         if (!eff.vertexShaderPath.isEmpty()) {
             QFile vertFile(eff.vertexShaderPath);
             if (!vertFile.open(QIODevice::ReadOnly)) {
@@ -598,7 +605,7 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
                         // the transition silently never installed.
                         const QString vertWithParams = PhosphorShaders::spliceAfterVersion(
                             expandedVert, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
-                        vertWithKwinDefine = injectKwinDefineAfterVersion(vertWithParams);
+                        vertWithKwinDefine = injectKwinDefineAfterVersion(vertWithParams, offscreenOrientationDefine);
                     }
                 }
             }

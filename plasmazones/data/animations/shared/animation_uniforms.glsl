@@ -30,9 +30,9 @@
 // the TOP of the surface — on BOTH runtimes, so effect-space math may
 // use it directly. The vertex stage is what guarantees that: the
 // daemon's Qt-RHI quad emits texCoord Y-down already and passes it
-// through (`vTexCoord = texCoord`); the kwin path receives texCoord
-// from KWin's Y-up offscreen FBO and flips it
-// (`vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y)`). `gl_Position`
+// through (`vTexCoord = texCoord`); KWin 6.7 supplies bottom-up texcoords
+// and KWin 6.8 supplies top-down texcoords. `animationScreenUv()` normalises
+// either input. `gl_Position`
 // also differs only in WHICH matrix: the kwin path multiplies `position` by
 // `modelViewProjectionMatrix`, the daemon by `qt_Matrix`. Neither emits
 // clip-space directly.
@@ -68,6 +68,22 @@
 
 #ifndef PLASMAZONES_ANIMATION_UNIFORMS_GLSL
 #define PLASMAZONES_ANIMATION_UNIFORMS_GLSL
+
+#ifdef GL_ES
+// KWin can compile the vertex and fragment stages with different default int
+// precision. Shared uniforms must have the same precision to link on GLES.
+precision highp int;
+#endif
+
+// KWin 6.8 supplies top-down offscreen-quad texcoords. Earlier KWin versions
+// supply bottom-up texcoords. Keep effect-space coordinates top-down on both.
+vec2 animationScreenUv(vec2 uv) {
+#if defined(PLASMAZONES_KWIN) && !defined(PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN)
+    return vec2(uv.x, 1.0 - uv.y);
+#else
+    return uv;
+#endif
+}
 
 #ifdef PLASMAZONES_KWIN
 

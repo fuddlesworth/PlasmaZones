@@ -14,7 +14,7 @@
 // destination settles first, trailing rows lag by `spread` and catch up.
 //
 // apply() emits texcoords relative to the destination FRAME (v = 0 at the
-// window's top before KWin's upload flip — see the re-flip note in main()).
+// window's top before KWin applies its offscreen texture convention).
 // Because the texcoords are destination-frame-relative, a vertex's natural
 // position already equals its settled position, so the displacement below is
 // purely the pull back toward the old rect (iFromRect), which vanishes as
@@ -42,15 +42,12 @@ uniform vec4 iToRect;
 layout(location = 1) out vec3 vFlow;
 
 void main() {
-    // apply() emits the grid texcoords as card uv, but KWin's window-quad
-    // texcoord convention is Y-flipped on upload (the same reason the
-    // single-quad surface path probes handedness), so re-apply the
-    // canonical `1.0 - texCoord.y` flip here — exactly as the shared kwin
-    // vertex stage and window-morph's vert do. The result is card uv with
+    // KWin's offscreen quad convention differs between 6.7 and 6.8.
+    // Normalise it here, as the shared KWin vertex stage does. The result is card uv with
     // y = 0 at the window's top (Y-down), used for both the geometry
     // displacement and the content sampling so they stay aligned.
 #ifdef PLASMAZONES_KWIN
-    vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
+    vec2 cuv = animationScreenUv(texCoord);
 #else
     // The Qt-RHI quad's texCoord is Y-down already — no re-flip.
     // ...and spans the captured canvas: fold the anchor sub-rect so cuv is

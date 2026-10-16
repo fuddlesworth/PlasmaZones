@@ -52,10 +52,9 @@ layout(location = 1) out vec3 vGenie;
 
 void main() {
 #ifdef PLASMAZONES_KWIN
-    // apply() emits the grid texcoords as card uv, Y-flipped on upload by
-    // KWin's window-quad convention — re-apply the canonical flip, same
-    // as flow and the shared kwin vertex stage.
-    vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
+    // Normalise the KWin offscreen quad's version-dependent texcoords to
+    // top-down card uv, as flow and the shared vertex stage do.
+    vec2 cuv = animationScreenUv(texCoord);
 #else
     // The Qt-RHI quad's texCoord is Y-down already — no re-flip.
     vec2 cuv = texCoord;

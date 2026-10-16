@@ -31,14 +31,12 @@
 // It compiles both stages the runtime's KWin path touches — the fragment stage
 // always, and, for packs that ship a custom `effect.vert`, the vertex stage too
 // (a vertex-driven pack like wobble reads its `p_<id>` params in the VERT, whose
-// PLASMAZONES_KWIN branch the daemon qsb bake never compiles either). No link —
-// enough to surface every compile-time error in each branch.
+// PLASMAZONES_KWIN branch the daemon qsb bake never compiles either). A
+// separate GLES check links the move shader stages to catch uniform precision
+// mismatches that compiling each stage cannot detect.
 //
-// Skips cleanly when no desktop OpenGL >= 4.5 offscreen context is available
-// (headless CI without a GL driver): a skip is not a pass, but it never blocks
-// a machine that legitimately can't create the context. On a real Plasma /
-// Wayland session (where the effect actually runs) the context is available and
-// the bake executes.
+// Skips the desktop bake when no OpenGL >= 4.5 offscreen context is available,
+// and skips the link check when no GLES 3.2 context is available.
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
@@ -87,9 +85,10 @@ class TestAnimationShaderKwinBake : public QObject
     // accepting a dialect the compositor rejects. Equivalent to calling that
     // injector for every bundled pack, which all lead with a bare
     // `#version 450`.
-    static QString kwinDefineBlock()
+    static QString kwinDefineBlock(bool topDownTexcoords)
     {
-        return PhosphorShaders::kwinDefineBlock();
+        return PhosphorShaders::kwinDefineBlock()
+            + (topDownTexcoords ? QStringLiteral("#define PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN 1\n") : QString());
     }
 
     QOffscreenSurface* m_surface = nullptr;
@@ -147,6 +146,7 @@ private Q_SLOTS:
     void testEveryAnimationShaderBakesOnKwinPath_data()
     {
         QTest::addColumn<QString>("dir");
+        QTest::addColumn<bool>("topDownTexcoords");
         const QString animationsDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
         QDir dir(animationsDir);
         if (!dir.exists()) {
@@ -160,7 +160,8 @@ private Q_SLOTS:
             const QString packDir = animationsDir + QLatin1Char('/') + sub;
             if (QFileInfo::exists(packDir + QStringLiteral("/effect.frag"))
                 && QFileInfo::exists(packDir + QStringLiteral("/metadata.json"))) {
-                QTest::newRow(qPrintable(sub)) << packDir;
+                QTest::newRow(qPrintable(sub + QStringLiteral("-kwin67"))) << packDir << false;
+                QTest::newRow(qPrintable(sub + QStringLiteral("-kwin68"))) << packDir << true;
                 any = true;
             }
         }
@@ -175,6 +176,7 @@ private Q_SLOTS:
             QSKIP("no desktop OpenGL >= 4.5 offscreen context available — cannot compile the KWin variant");
         }
         QFETCH(QString, dir);
+        QFETCH(bool, topDownTexcoords);
         const AnimationShaderEffect eff = loadEffect(dir);
         QVERIFY2(eff.isValid(), qPrintable(QStringLiteral("failed to load effect: ") + dir));
 
@@ -198,7 +200,7 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("include expand failed: ") + dir + QStringLiteral(" — ") + err));
 
         src = PhosphorShaders::spliceAfterVersion(src, AnimationShaderRegistry::paramPreamble(eff));
-        src = PhosphorShaders::spliceAfterVersion(src, kwinDefineBlock());
+        src = PhosphorShaders::spliceAfterVersion(src, kwinDefineBlock(topDownTexcoords));
 
         QString log;
         const bool ok = compileStage(GL_FRAGMENT_SHADER, src, &log);
@@ -220,12 +222,92 @@ private Q_SLOTS:
                 !vsrc.isEmpty(),
                 qPrintable(QStringLiteral("vertex include expand failed: ") + dir + QStringLiteral(" — ") + vertErr));
             vsrc = PhosphorShaders::spliceAfterVersion(vsrc, AnimationShaderRegistry::paramPreamble(eff));
-            vsrc = PhosphorShaders::spliceAfterVersion(vsrc, kwinDefineBlock());
+            vsrc = PhosphorShaders::spliceAfterVersion(vsrc, kwinDefineBlock(topDownTexcoords));
             QString vlog;
             const bool vok = compileStage(GL_VERTEX_SHADER, vsrc, &vlog);
             QVERIFY2(vok,
                      qPrintable(QStringLiteral("KWin-path vert bake failed: ") + dir + QStringLiteral("\n") + vlog));
         }
+    }
+
+    void testMoveShaderLinksOnGles()
+    {
+        QSurfaceFormat fmt;
+        fmt.setRenderableType(QSurfaceFormat::OpenGLES);
+        fmt.setVersion(3, 2);
+        QOffscreenSurface surface;
+        surface.setFormat(fmt);
+        surface.create();
+        QOpenGLContext context;
+        context.setFormat(fmt);
+        if (!surface.isValid() || !context.create() || !context.makeCurrent(&surface) || !context.isOpenGLES()
+            || context.format().version() < QPair<int, int>(3, 2)) {
+            QSKIP("no OpenGL ES 3.2 offscreen context available");
+        }
+
+        const QString dir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations/phosphor-stream");
+        const AnimationShaderEffect eff = loadEffect(dir);
+        QVERIFY(eff.isValid());
+        const QStringList includePaths = {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations/shared")};
+        auto sourceFor = [&](const QString& path, bool fragment) {
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                return QString();
+            }
+            QString source = QString::fromUtf8(file.readAll());
+            if (fragment) {
+                source = PhosphorShaders::assembleEntryPoint(source, AnimationShaderRegistry::animationEntryPrologue(),
+                                                             AnimationShaderRegistry::animationEntryCandidates());
+            }
+            QString error;
+            source = PhosphorShaders::ShaderIncludeResolver::expandIncludes(source, QFileInfo(path).absolutePath(),
+                                                                            includePaths, &error);
+            source.replace(QStringLiteral("#version 450"), QStringLiteral("#version 320 es"));
+            source = PhosphorShaders::spliceAfterVersion(source, AnimationShaderRegistry::paramPreamble(eff));
+            return PhosphorShaders::spliceAfterVersion(
+                source, kwinDefineBlock(true) + QStringLiteral("precision highp float;\n"));
+        };
+        const QString vertex = sourceFor(eff.vertexShaderPath, false);
+        const QString fragment = sourceFor(eff.fragmentShaderPath, true);
+        QVERIFY(!vertex.isEmpty());
+        QVERIFY(!fragment.isEmpty());
+
+        QOpenGLFunctions* f = context.functions();
+        auto compile = [&](GLenum stage, const QString& source) {
+            const GLuint shader = f->glCreateShader(stage);
+            const QByteArray bytes = source.toUtf8();
+            const char* text = bytes.constData();
+            const GLint length = bytes.size();
+            f->glShaderSource(shader, 1, &text, &length);
+            f->glCompileShader(shader);
+            return shader;
+        };
+        const GLuint vert = compile(GL_VERTEX_SHADER, vertex);
+        const GLuint frag = compile(GL_FRAGMENT_SHADER, fragment);
+        auto stageStatus = [&](GLuint shader) {
+            GLint status = 0;
+            f->glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+            return status != 0;
+        };
+        QVERIFY2(stageStatus(vert), "phosphor-stream vertex shader failed to compile on GLES");
+        QVERIFY2(stageStatus(frag), "phosphor-stream fragment shader failed to compile on GLES");
+        const GLuint program = f->glCreateProgram();
+        f->glAttachShader(program, vert);
+        f->glAttachShader(program, frag);
+        f->glLinkProgram(program);
+        GLint linked = 0;
+        f->glGetProgramiv(program, GL_LINK_STATUS, &linked);
+        if (!linked) {
+            GLint length = 0;
+            f->glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+            QByteArray log(length, '\0');
+            f->glGetProgramInfoLog(program, length, nullptr, log.data());
+            QVERIFY2(linked, log.constData());
+        }
+        f->glDeleteProgram(program);
+        f->glDeleteShader(vert);
+        f->glDeleteShader(frag);
+        context.doneCurrent();
     }
 
 private:

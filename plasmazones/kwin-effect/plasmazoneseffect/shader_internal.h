@@ -102,7 +102,7 @@ private:
 /// (jumbo) target, where duplicate anonymous-namespace definitions collide.
 /// Full behavioural notes (BOM strip, comment-aware #version scan, missing
 /// #version synthesis) live at the definition.
-QByteArray injectKwinDefineAfterVersion(const QString& source);
+QByteArray injectKwinDefineAfterVersion(const QString& source, const QString& extraDefines = {});
 
 /// The `pzFinalizeColor` splice that converts a shader's sRGB output into the
 /// render target's colour description on the compositor: KWin's

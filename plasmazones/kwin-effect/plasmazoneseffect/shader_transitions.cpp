@@ -114,7 +114,7 @@ const QString& ShaderInternal::kwinFinalizeColorBlock()
     return block;
 }
 
-QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
+QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source, const QString& extraDefines)
 {
     // Strip a leading UTF-8 BOM (U+FEFF) before anything else. The BOM
     // is not a Unicode whitespace category, so QString::trimmed() does
@@ -156,7 +156,7 @@ QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
     // the ones returning before the cache is touched at all — a missing or
     // empty shader file, or an include-expansion error — which re-run the full
     // read and assemble on the compositor thread every transition.
-    const QString defineLine = PhosphorShaders::kwinDefineBlock(eol);
+    const QString defineLine = PhosphorShaders::kwinDefineBlock(eol) + extraDefines;
 
     // The comment-aware, BOM-tolerant finder shared with spliceAfterVersion.
     // A naive `indexOf("#version")` would match inside a `//` or `/* */`
