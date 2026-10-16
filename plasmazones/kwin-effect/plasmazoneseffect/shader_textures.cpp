@@ -411,15 +411,14 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
     //
     // KWin 6.7 supplies bottom-up offscreen texcoords, while 6.8 supplies
     // top-down texcoords. The shader contract expects `vTexCoord` Y-down
-    // (y = 0 at the top), so flip only the 6.7 input. The redirected window texture
-    // is Y-up to match KWin's FBO, which is why shaders read it through
-    // `surfaceColor()` (which re-flips the sample coordinate) instead
-    // of sampling `uTexture0` directly — see the canonical header
+    // (y = 0 at the top), so flip only the 6.7 input. The redirected window
+    // texture's sampler orientation also varies by KWin version. Shaders read
+    // it through `surfaceColor()` instead of sampling `uTexture0` directly —
+    // see the canonical header
     // `data/animations/shared/animation_uniforms.glsl`. Without the
-    // normalisation, `vTexCoord` is Y-up on this path: the window still composes
-    // upright (the Y-up texture cancels it) but every screen-space
-    // effect — matrix rain direction, directional wipes — renders
-    // inverted. The other kwin-vs-daemon difference is `gl_Position`:
+    // normalisation, `vTexCoord` is Y-up on the 6.7 path and screen-space
+    // effects — matrix rain direction, directional wipes — render inverted.
+    // The other kwin-vs-daemon difference is `gl_Position`:
     // KWin needs the modelViewProjectionMatrix to place the redirected
     // quad, the daemon emits clip-space directly.
     //
