@@ -7,7 +7,7 @@
 // 6.8 shape and compiles unchanged on both, because these wrappers give 6.7 the
 // same signatures.
 //
-// Three things changed in 6.8 (KWin 6.7.90, Plasma 6.8 Beta 1):
+// Four things changed in 6.8 (KWin 6.7.90, Plasma 6.8 Beta 1):
 //
 //   1. Effect::paintScreen / paintWindow / drawWindow return bool instead of
 //      void. False means the paint FAILED, in practice a GPU reset, and upstream's
@@ -24,6 +24,10 @@
 //   3. Scene::renderer() became renderer(RenderDevice*), because an ItemRenderer
 //      is now per render device rather than per scene. 6.7 keeps exactly one, so
 //      the wrapper ignores the device there.
+//
+//   4. OffscreenData now renders into an imported EGL swapchain texture whose
+//      FlipY content transform makes the present quad's texcoords top-down.
+//      The 6.7 GLTexture path supplied bottom-up texcoords instead.
 //
 // PLASMAZONES_KWIN_PAINT_RETURNS_BOOL is set by kwin-effect/CMakeLists.txt from
 // the KWin version it found. CI compiles both halves: the Arch jobs in
@@ -63,6 +67,8 @@ class RenderDevice;
 }
 
 namespace PlasmaZones::KWinCompat {
+
+inline constexpr bool OFFSCREEN_TEXCOORDS_TOP_DOWN = PLASMAZONES_KWIN_PAINT_RETURNS_BOOL != 0;
 
 /// The return type of this effect's own paint hooks: bool on 6.8, void on 6.7.
 /// The overrides are thin adapters over *Impl() methods that always return bool,

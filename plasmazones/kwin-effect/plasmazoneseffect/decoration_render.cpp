@@ -42,6 +42,8 @@ namespace PlasmaZones {
 // redirect shader so OffscreenData::paint presents the pre-composited final FBO
 // at window geometry — the vertex applies modelViewProjectionMatrix (set by
 // OffscreenData) exactly like the pack default vertex, so the geometry matches.
+// KWin 6.8 supplies top-down texcoords from its imported EGL swapchain, while
+// our composite FBO is bottom-origin. Its present vertex flips Y at that seam.
 KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
 {
     if (m_surfacePresentShader) {
@@ -61,15 +63,17 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
     m_surfacePresentFailed = true; // pessimistic until the compile succeeds
 
     static const QByteArray kPresentVertex = QByteArrayLiteral(
-        "#version 450\n\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n\n"
-        "layout(location = 0) out vec2 vTexCoord;\n\n"
-        "uniform mat4 modelViewProjectionMatrix;\n\n"
-        "void main() {\n"
-        "    vTexCoord = texCoord;\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n");
+                                                 "#version 450\n\n"
+                                                 "layout(location = 0) in vec2 position;\n"
+                                                 "layout(location = 1) in vec2 texCoord;\n\n"
+                                                 "layout(location = 0) out vec2 vTexCoord;\n\n"
+                                                 "uniform mat4 modelViewProjectionMatrix;\n\n"
+                                                 "void main() {\n")
+        + (KWinCompat::OFFSCREEN_TEXCOORDS_TOP_DOWN
+               ? QByteArrayLiteral("    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);\n")
+               : QByteArrayLiteral("    vTexCoord = texCoord;\n"))
+        + QByteArrayLiteral("    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
+                            "}\n");
     static const QByteArray kPresentFragment = QByteArrayLiteral(
         "#version 450\n\n"
         "layout(location = 0) in vec2 vTexCoord;\n\n"
