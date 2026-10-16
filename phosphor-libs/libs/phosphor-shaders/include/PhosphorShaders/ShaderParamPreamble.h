@@ -124,11 +124,12 @@ PHOSPHORSHADERS_EXPORT int versionDirectiveEnd(const QString& source);
 /// source, newline-terminated with @p eol and ready for `spliceAfterVersion`.
 ///
 /// `#define PLASMAZONES_KWIN` is the ABI switch itself: the shared uniform
-/// headers key their default-block-uniform branch off it. The two ARB
-/// directives ride along because KWin 6.7's `generateCustomShader` recompiles
-/// custom effect shaders at GLSL `#version 140`, where the `layout(location =
-/// N)` qualifiers our vertex stages declare are illegal without them (NVIDIA
-/// error C7548). They are a harmless no-op in the fragment stage.
+/// headers key their default-block-uniform branch off it. Desktop GLSL 140
+/// needs the two ARB extensions for our `layout(location = N)` qualifiers
+/// (NVIDIA error C7548). KWin 6.8 can compile the same source as GLSL ES 300,
+/// where those qualifiers are built in and KWin's precision declarations come
+/// before this block. Guard the desktop extensions so the ES compiler does not
+/// reject their placement (NVIDIA error C7621).
 ///
 /// Shared because THREE places must agree on it exactly and they are in
 /// different link units: the compositor's own

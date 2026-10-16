@@ -147,7 +147,7 @@ QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
     // The ARB `#extension` pair and the `#define PLASMAZONES_KWIN` ABI switch
     // come from PhosphorShaders so the offline validator and the GPU bake test
     // splice the identical block; `kwinDefineBlock`'s declaration carries why
-    // each directive is needed (KWin 6.7 recompiles at #version 140). Only the
+    // the extension directives are guarded for desktop GLSL. Only the
     // #version-finding walk below is this function's own.
     //
     // Cost of getting it wrong, since that is compositor-specific: a failed

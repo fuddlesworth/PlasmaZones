@@ -129,9 +129,9 @@ QString buildParamPreamble(const QList<PreambleParam>& params)
 
 QString kwinDefineBlock(const QString& eol)
 {
-    return QStringLiteral("#extension GL_ARB_explicit_attrib_location : enable") + eol
-        + QStringLiteral("#extension GL_ARB_separate_shader_objects : enable") + eol
-        + QStringLiteral("#define PLASMAZONES_KWIN") + eol;
+    return QStringLiteral("#ifndef GL_ES") + eol + QStringLiteral("#extension GL_ARB_explicit_attrib_location : enable")
+        + eol + QStringLiteral("#extension GL_ARB_separate_shader_objects : enable") + eol + QStringLiteral("#endif")
+        + eol + QStringLiteral("#define PLASMAZONES_KWIN") + eol;
 }
 
 int versionDirectiveEnd(const QString& source)
