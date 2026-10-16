@@ -75,19 +75,11 @@ Item {
         return root._isPointer ? root.bridge.pointerPreviewController : root.bridge.previewController;
     }
 
-    // Session-local "the user opened the chain editor" latch, mirroring
-    // AnimationEventCard._editingTiming: flipping the toggle ON sets this and
-    // writes NOTHING — an override is created only when the user actually
-    // edits the chain. Without it the toggle had to commit a snapshot
-    // override just to stay visually on, and an engaged (even empty) chain at
-    // a category root suppresses the shipped seed decorations on its leaves.
-    // Cleared by the toggle's OFF path, and by refresh() when an EXTERNAL
-    // clear moves _hasOverride from true to false. Not persisted.
+    // Keeps the editor open while an empty direct override is written.
+    // That override stores no chain field, so inherited chains stay live.
     property bool _editorLatch: false
 
-    // True when this card edits its own DIRECT profile: an alwaysEnabled root
-    // always does; a leaf when its override is engaged or the editor is
-    // latched open for this session.
+    // True when this card edits its own direct profile.
     // An "explicitly undecorated" override (engaged, empty chain) is what OFF
     // persists on a seeded surface, so it must NOT read back as ON here — the
     // override exists precisely to say the surface draws nothing.
@@ -232,17 +224,10 @@ Item {
         gateBodyOnToggle: false
         onToggleClicked: function (checked) {
             if (checked) {
-                // Open the chain editor, write nothing. An override is created
-                // only when the user edits the chain — committing a snapshot
-                // here pinned an (often empty) chain override the user never
-                // asked for, and an engaged chain at a category root
-                // suppresses the shipped seed decorations on its leaves.
-                root._editorLatch = true;
-                // A seeded surface that was switched OFF carries the empty-chain
-                // marker; drop it so the shipped chain flows back in rather than
-                // the editor opening on an empty chain the user never chose.
-                if (root.bridge)
-                    root.bridge.clearUndecorated(root.surfacePath);
+                // Persist the switch with an empty profile, leaving inherited
+                // chain and parameters unpinned until they are edited.
+                if (root.bridge && root.bridge.engageOverride(root.surfacePath))
+                    root._editorLatch = true;
             } else {
                 root._editorLatch = false;
                 if (root.bridge)

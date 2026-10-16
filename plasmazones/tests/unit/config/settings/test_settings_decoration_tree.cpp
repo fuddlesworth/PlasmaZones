@@ -283,6 +283,24 @@ private Q_SLOTS:
         QVERIFY(a.committedDecorationProfileTree() == a.decorationProfileTree());
     }
 
+    void testEmptyOverridePersistsWithoutPinningInheritedChain()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        auto tree = settings.decorationProfileTree();
+        tree.setOverride(QStringLiteral("window.tiled"), PhosphorSurfaceShaders::DecorationProfile{});
+        settings.setDecorationProfileTree(tree);
+
+        QVERIFY(settings.decorationProfileTree().hasOverride(QStringLiteral("window.tiled")));
+        QVERIFY(!settings.committedDecorationProfileTree().hasOverride(QStringLiteral("window.tiled")));
+        QVERIFY(settings.isKeyModified(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey()));
+
+        settings.save();
+        Settings reopened;
+        QVERIFY(reopened.decorationProfileTree().hasOverride(QStringLiteral("window.tiled")));
+        QVERIFY(reopened.decorationProfileTree().directOverride(QStringLiteral("window.tiled")).toJson().isEmpty());
+    }
+
     /// The card chrome is a read-side seed layer, not stored data: a persisted
     /// blob that never mentions the seeded paths (a user edit elsewhere in the
     /// tree, or a config written before the defaults existed) still renders

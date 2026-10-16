@@ -590,9 +590,14 @@ bool AnimationsPageController::revertPendingUnder(const QStringList& eventPaths)
         if (!isRemovableEventPath(path))
             continue;
         const QJsonObject baseline = treeProfileForPath(committed, path);
-        if (treeProfileForPath(live, path) == baseline)
+        const bool baselinePresent = treeHasOverrideForPath(committed, path);
+        if (treeHasOverrideForPath(live, path) == baselinePresent && treeProfileForPath(live, path) == baseline)
             continue; // not staged
-        live = treeWithOverrideForPath(live, path, baseline);
+        if (baselinePresent && baseline.isEmpty()) {
+            live = treeWithEngagedOverrideForPath(treeWithOverrideForPath(live, path, {}), path);
+        } else {
+            live = treeWithOverrideForPath(live, path, baseline);
+        }
         restored.append(path);
     }
     if (restored.isEmpty())

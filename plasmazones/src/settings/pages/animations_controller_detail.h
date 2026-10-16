@@ -372,6 +372,18 @@ inline QVariantMap treeWithOverrideForPath(const QVariantMap& tree, const QStrin
     return out;
 }
 
+/// Record an explicit override without pinning any inherited timing field.
+inline QVariantMap treeWithEngagedOverrideForPath(const QVariantMap& tree, const QString& path)
+{
+    if (treeHasOverrideForPath(tree, path))
+        return tree;
+    QVariantMap out = tree;
+    QVariantList overrides = out.value(TreeOverridesKey).toList();
+    overrides.append(QVariantMap{{TreePathKey, path}, {TreeProfileKey, QVariantMap{}}});
+    out.insert(TreeOverridesKey, overrides);
+    return out;
+}
+
 /// Convert a `Profile` value to its `toJson()` shape as a QVariantMap.
 /// Sparse — only engaged fields appear, matching the wire format.
 inline QVariantMap profileToVariantMap(const PhosphorAnimation::Profile& profile)

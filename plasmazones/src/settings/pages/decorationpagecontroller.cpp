@@ -410,6 +410,20 @@ bool DecorationPageController::hasOverride(const QString& path) const
     return tree().hasOverride(path);
 }
 
+bool DecorationPageController::engageOverride(const QString& path)
+{
+    if (!m_settings || path.isEmpty() || !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
+        return false;
+    if (isExplicitlyUndecorated(path))
+        return clearUndecorated(path);
+    DecorationProfileTree current = tree();
+    if (current.hasOverride(path))
+        return true;
+    current.setOverride(path, DecorationProfile{});
+    m_settings->setDecorationProfileTree(current);
+    return true;
+}
+
 // ── Chain mutators ───────────────────────────────────────────────────────────
 
 QStringList DecorationPageController::chainAt(const QString& path) const

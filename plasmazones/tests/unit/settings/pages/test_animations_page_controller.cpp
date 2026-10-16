@@ -304,6 +304,28 @@ private Q_SLOTS:
         QVERIFY(c.hasOverride(QStringLiteral("editor.snapIn")));
     }
 
+    void engageOverrides_stagesToggleWithoutPinningInheritedTiming()
+    {
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
+        const QString path = QStringLiteral("editor.snapIn");
+        const QVariantMap inherited = c.resolvedProfile(path);
+        QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
+
+        QVERIFY(c.engageOverridesUnder({path}));
+        QVERIFY(c.hasOverride(path));
+        QVERIFY(c.rawProfile(path).isEmpty());
+        QCOMPARE(c.resolvedProfile(path), inherited);
+        QVERIFY(c.hasPendingChanges() && c.hasScopedPendingOverrides({path}));
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(c.engageOverridesUnder({path}));
+        QCOMPARE(spy.count(), 1);
+
+        QVERIFY(c.revertPendingUnder({path}));
+        QVERIFY(!c.hasOverride(path));
+        QVERIFY(!c.hasPendingChanges() && !c.hasScopedPendingOverrides({path}));
+    }
+
     void rawProfile_roundTripsProfileFieldsStripsName()
     {
         QTemporaryDir tmp;

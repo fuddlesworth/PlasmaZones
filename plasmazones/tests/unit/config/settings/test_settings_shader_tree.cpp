@@ -585,6 +585,23 @@ private Q_SLOTS:
         a.setMotionProfileTree(stored);
         QCOMPARE(a.motionProfileTree(), stored);
     }
+
+    void testMotionProfileTree_emptyOverrideSurvivesSave()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QVariantMap entry{{QStringLiteral("path"), QStringLiteral("window.open")},
+                                {QStringLiteral("profile"), QVariantMap{}}};
+        const QVariantMap tree{{QStringLiteral("overrides"), QVariantList{entry}}};
+
+        settings.setMotionProfileTree(tree);
+        QCOMPARE(settings.motionProfileTree(), tree);
+        QVERIFY(settings.isKeyModified(ConfigDefaults::animationsGroup(), ConfigDefaults::motionProfileTreeKey()));
+        settings.save();
+
+        Settings reopened;
+        QCOMPARE(reopened.motionProfileTree(), tree);
+    }
 };
 
 QTEST_MAIN(TestSettingsShaderTree)

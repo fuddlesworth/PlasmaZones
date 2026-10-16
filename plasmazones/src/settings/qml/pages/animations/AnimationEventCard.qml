@@ -128,20 +128,9 @@ Item {
     // independently across timing-mode toggles so the user doesn't
     // lose their easing curve when previewing spring physics.
     property bool overrideEnabled: false
-    /// Session-local "the user opened the timing editor" latch. Flipping the
-    /// card's Override toggle ON sets this and writes NOTHING — a direct
-    /// override is only created when the user actually edits a control, and
-    /// then only for the field they edited. Without the latch the toggle had
-    /// to commit a snapshot of the inherited values just to stay visually on
-    /// (overrideEnabled is derived from stored state), which silently pinned
-    /// a copy of the Global curve and duration the moment it was flipped.
-    /// Set by the toggle's ON path AND by a successful per-field revert (which
-    /// would otherwise collapse the editor the user is working in, once the
-    /// last stored field goes). Cleared by the toggle's OFF path, and by
-    /// `refreshFromTree` when an EXTERNAL clear moves `overrideEnabled` from
-    /// true to false — a transition, not just a false reading, because the
-    /// broadcasts every card accepts would otherwise close an editor another
-    /// card's edit had nothing to do with. Not persisted.
+    /// Keeps the editor open during writes and after a per-field revert.
+    /// The card switch persists an empty timing override without pinning
+    /// inherited fields; actual field edits remain sparse.
     property bool _editingTiming: false
     /// "The timing editor is open." Spelled once, because it drives the toggle,
     /// the section's visibility AND both edit guards — a fifth site that
@@ -585,7 +574,7 @@ Item {
         // once per write path inside a refresh that runs at drag rate.
         root._anyWritePathOwnsShaderPack = settingsController.animationsPage.anyPathOwnsShaderPack(root._writePaths);
         const wasEnabled = root.overrideEnabled;
-        root.overrideEnabled = Boolean(hasRaw) || hasShader;
+        root.overrideEnabled = settingsController.animationsPage.hasOverride(root.eventPath) || hasShader;
         // A clear that did not come through the toggle's OFF arm — a page
         // Discard, a profile switch, another surface writing this path — drops
         // overrideEnabled without touching the latch, leaving the toggle
@@ -770,11 +759,7 @@ Item {
         anchors.fill: parent
         headerText: root.eventLabel
         showToggle: true
-        // Checked = any direct override exists, OR the user has opened the
-        // timing editor this session without pinning anything yet (the
-        // _editingTiming latch). The latch half keeps the toggle honest about
-        // what flipping it ON now does: it opens the editor and writes
-        // nothing.
+        // Checked when this event has a direct override or the editor is open.
         toggleChecked: root._timingEditorOpen
         // The toggle REPORTS whether this event has any direct override; it is
         // not a precondition for making one. Gating the body on it would
@@ -795,14 +780,10 @@ Item {
         collapsible: root.collapsible
         onToggleClicked: function (checked) {
             if (checked) {
-                // Open the timing editor, write nothing. The old behaviour
-                // (committing a snapshot of the inherited values so the
-                // derived toggle state would stick) is what silently pinned a
-                // copy of the Global curve and duration here the moment the
-                // toggle was flipped — an override the user never asked for.
-                // An override is now created only by editing a control, and
-                // only for the edited field.
-                root._editingTiming = true;
+                // Persist an empty timing override so Save sees the switch,
+                // without pinning inherited duration or curve values.
+                if (settingsController.animationsPage.engageOverridesUnder(root._writePaths))
+                    root._editingTiming = true;
             } else {
                 // The toggle reports whether this event has ANY direct
                 // override (refreshFromTree: hasRaw || hasShader), so turning

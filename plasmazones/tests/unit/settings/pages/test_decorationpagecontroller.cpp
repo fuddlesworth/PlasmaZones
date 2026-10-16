@@ -223,6 +223,11 @@ private Q_SLOTS:
 
         QVERIFY(c.hasOverride(QStringLiteral("window.tiled")));
         QVERIFY(!c.hasOverride(QStringLiteral("window.snapped")));
+        QVERIFY(c.engageOverride(QStringLiteral("window.snapped")));
+        QVERIFY(c.hasOverride(QStringLiteral("window.snapped")));
+        QVERIFY(c.rawProfile(QStringLiteral("window.snapped")).isEmpty());
+        QCOMPARE(c.chainAt(QStringLiteral("window.snapped")), QStringList{QStringLiteral("border")});
+        QVERIFY(c.clearOverride(QStringLiteral("window.snapped")));
         QVERIFY2(!c.hasOverride(QString()), "the baseline is not an override");
         QVERIFY2(!c.hasOverride(QStringLiteral("not.a.surface")), "unsupported path is never an override");
     }
