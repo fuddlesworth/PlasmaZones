@@ -667,7 +667,23 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     const KWin::Window* const kwOffer = safeW->window();
                     const bool atRest = kwOffer && kwOffer->requestedMaximizeMode() == KWin::MaximizeRestore
                         && !kwOffer->isRequestedFullScreen() && !kwOffer->isFullScreen();
-                    if (atRest && live.intersects(offered) && live.size() != offered.size() && !live.size().isEmpty()) {
+                    // A Wayland resize ack can re-anchor a parked tab just
+                    // inside the output, even though the offer was below all
+                    // outputs. Re-seat it after the resize has settled. A
+                    // size-preserving moveResize reaches the requested park;
+                    // move() applies KWin's keep-visible constraint instead.
+                    const bool parkOffscreen =
+                        KWin::effects && offered.top() > KWin::effects->virtualScreenGeometry().bottom();
+                    const bool resizeSettled = kwOffer && kwOffer->moveResizeGeometry().toRect().size() == live.size();
+                    if (atRest && parkOffscreen && resizeSettled && !live.size().isEmpty()) {
+                        const QPoint parked(offered.x() + qMax(0, offered.width() - live.width()) / 2,
+                                            offered.y() + qMax(0, offered.height() - live.height()) / 2);
+                        if (live.topLeft() != parked) {
+                            const auto restoreGate = geometryApplyScope();
+                            safeW->window()->moveResize(QRectF(QPointF(parked), QSizeF(live.size())));
+                        }
+                    } else if (atRest && live.intersects(offered) && live.size() != offered.size()
+                               && !live.size().isEmpty()) {
                         // Same centring as the strip apply and the paint
                         // resolver: the same toRect() rounding, and the
                         // same clamp at zero, so a frame whose minimum

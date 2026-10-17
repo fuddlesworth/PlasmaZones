@@ -62,15 +62,20 @@ void moveResizeAnsweringStaleAck(KWin::EffectWindow* window, KWin::Window* kw, c
     }
 }
 
-// move() @p window to @p target, which has the size already commanded. move()
-// sends no configure either, so a superseded configure an earlier apply armed
+// Move @p window to @p target, which has the size already commanded. A park
+// uses moveResize() to bypass KWin's keep-visible move constraint. Neither
+// size-preserving path sends a configure, so a superseded configure an earlier apply armed
 // an answer for is still outstanding: the answer follows this command, at its
 // rect and stamp. Left on the older stamp, the ack found it stale, dropped it
 // with no re-issue, and the superseded size landed at this rect.
 void moveCarryingStaleAck(KWin::EffectWindow* window, KWin::Window* kw, const QRectF& target, quint64 stamp,
-                          WindowCommandStamps& stamps)
+                          WindowCommandStamps& stamps, bool useMoveResize)
 {
-    kw->move(target.topLeft());
+    if (useMoveResize) {
+        kw->moveResize(target);
+    } else {
+        kw->move(target.topLeft());
+    }
     if (auto stale = stamps.staleAcks.find(window); stale != stamps.staleAcks.end()) {
         *stale = {target.toRect(), stamp};
     }
@@ -462,6 +467,13 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         armPzCrossing(window, geo);
     }
 
+    // KWin's move() keeps part of a window visible when the destination lies
+    // below every output. A scrolling park uses moveResize() in both apply
+    // branches, including when its size is unchanged. A Wayland resize ack
+    // that later shifts the frame is corrected in window_connections.cpp.
+    const bool scrollPark =
+        KWin::effects && geo.top() > KWin::effects->virtualScreenGeometry().bottom() && scrollManagedOutputFor(window);
+
     // Animation: moveResize to the final geometry immediately, then morph
     // the window visually from its old position/size to the new one using
     // translate + scale in paintWindow(). This follows the standard KDE
@@ -592,7 +604,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 m_daemonGate.animatedApplyCommit = prevCommit;
             });
             if (targetFrame.toRect().size() == commandedRectOf(window).size()) {
-                moveCarryingStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps);
+                moveCarryingStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps, scrollPark);
             } else {
                 moveResizeAnsweringStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps);
             }
@@ -951,7 +963,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // sub-pixel residue, so an exact QSizeF equality would miss and send a
         // size-preserving placement down the configure path anyway.
         if (geo.size() == commandedRectOf(window).size()) {
-            moveCarryingStaleAck(window, kwinWindow, QRectF(geo), commandStamp, m_daemonGate.commandStamps);
+            moveCarryingStaleAck(window, kwinWindow, QRectF(geo), commandStamp, m_daemonGate.commandStamps, scrollPark);
         } else {
             moveResizeAnsweringStaleAck(window, kwinWindow, QRectF(geo), commandStamp, m_daemonGate.commandStamps);
         }
