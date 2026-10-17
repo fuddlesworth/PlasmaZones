@@ -292,10 +292,14 @@ private:
             return 0;
         }
         src = PhosphorShaders::spliceAfterVersion(src, AnimationShaderRegistry::paramPreamble(eff));
-        src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
-        const QString vert = PhosphorShaders::spliceAfterVersion(
-            QString::fromLatin1(PlasmaZones::TransitionPass::kOutputQuadVertexSource),
-            PhosphorShaders::kwinDefineBlock());
+        src = PhosphorShaders::stripVaryingLocations(
+            PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock()),
+            PhosphorShaders::ShaderStage::Fragment);
+        const QString vert = PhosphorShaders::stripVaryingLocations(
+            PhosphorShaders::spliceAfterVersion(
+                QString::fromLatin1(PlasmaZones::TransitionPass::kOutputQuadVertexSource),
+                PhosphorShaders::kwinDefineBlock()),
+            PhosphorShaders::ShaderStage::Vertex);
 
         QOpenGLExtraFunctions* f = m_ctx->extraFunctions();
         const GLuint vs = compileStage(GL_VERTEX_SHADER, vert);

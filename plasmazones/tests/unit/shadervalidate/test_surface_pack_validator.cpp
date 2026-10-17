@@ -269,7 +269,11 @@ private Q_SLOTS:
 
         QJsonObject obj = surfacePack(QStringLiteral("sf-binding-ok"), QJsonArray{});
         obj.insert(QStringLiteral("needsBackdrop"), true);
-        const QString body = QStringLiteral("layout(binding = 15) uniform sampler2D uBackdrop;\n")
+        // Both branches, the way surface_backdrop.glsl declares it: GLSL ES 300,
+        // which KWin 6.8 compiles the compositor branch as, has no binding
+        // qualifier, and the compositor binds the sampler by name anyway.
+        const QString body = QStringLiteral("#ifdef PLASMAZONES_KWIN\nuniform sampler2D uBackdrop;\n#else\n")
+            + QStringLiteral("layout(binding = 15) uniform sampler2D uBackdrop;\n#endif\n")
             + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return texture(uBackdrop, uv);\n}\n");
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-binding-ok"), obj, body);

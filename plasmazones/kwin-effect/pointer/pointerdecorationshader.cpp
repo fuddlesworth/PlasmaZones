@@ -339,14 +339,17 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
     expanded = PhosphorShaders::spliceAfterVersion(expanded, ShaderInternal::kwinFinalizeColorBlock());
     // Select the PLASMAZONES_KWIN branch of pointer_uniforms.glsl (classic-GL
     // default-block uniforms).
-    const QByteArray fragWithKwinDefine = injectKwinDefineAfterVersion(expanded);
+    const QByteArray fragWithKwinDefine =
+        injectKwinDefineAfterVersion(expanded, PhosphorShaders::ShaderStage::Fragment);
 
     // The vertex stage travels the same define path as the fragment: KWin
-    // rewrites #version 450 down to the GL context core version (140), where
-    // the layout(location = N) qualifiers are illegal without the ARB
-    // extensions the inject helper enables. Passing raw source here made
-    // frag-only surface packs fail to link on NVIDIA (error C7548).
-    QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(PPS::PointerShaderRegistry::compositorVertexSource());
+    // rewrites #version 450 to desktop GLSL 140 on 6.7 and GLSL ES 300 on 6.8,
+    // and the layout(location = N) qualifiers are legal in neither until the
+    // inject helper has enabled the ARB extension and stripped the varying's
+    // qualifier. Passing raw source here made frag-only surface packs fail to
+    // link on NVIDIA (error C7548).
+    QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(PPS::PointerShaderRegistry::compositorVertexSource(),
+                                                                 PhosphorShaders::ShaderStage::Vertex);
     if (!eff.vertexShaderPath.isEmpty()) {
         // Every failure below warns and KEEPS the default vertex stage rather
         // than failing the whole pack for a vertex-only defect — the same
@@ -372,7 +375,8 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
                     qCWarning(lcEffect) << "Failed to expand pointer vertex-shader includes for" << eff.id << ":"
                                         << vertIncErr << "— falling back to the default pointer vertex stage";
                 } else {
-                    vertWithKwinDefine = injectKwinDefineAfterVersion(expandedVert);
+                    vertWithKwinDefine =
+                        injectKwinDefineAfterVersion(expandedVert, PhosphorShaders::ShaderStage::Vertex);
                 }
             }
         }
@@ -497,7 +501,8 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
                 allCompiled = false;
                 break;
             }
-            const QByteArray bufFrag = injectKwinDefineAfterVersion(bufExpanded);
+            const QByteArray bufFrag =
+                injectKwinDefineAfterVersion(bufExpanded, PhosphorShaders::ShaderStage::Fragment);
             auto bufShader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture,
                                                                                    vertWithKwinDefine, bufFrag);
             if (!bufShader) {

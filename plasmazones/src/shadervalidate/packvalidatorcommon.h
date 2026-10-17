@@ -244,9 +244,20 @@ int reportPresetLints(QTextStream& out, const QStringList& lints);
 /// PATH. Resolved once per run.
 QString glslangValidatorPath();
 
-/// Compile @p source as @p stage through `glslangValidator` at @p toolPath and
-/// print OK/ERROR under @p label. @p stage is the glslang `-S` token ("frag" /
-/// "vert"). Returns 1 on failure, 0 on success.
+/// Finish @p source the way the compositor does, then compile it through
+/// `glslangValidator` at @p toolPath in both dialects KWin compiles it in, and
+/// print one OK/ERROR line per dialect under @p label. @p stage is the glslang
+/// `-S` token ("frag" / "vert"). Returns 1 when either dialect fails, 0 when
+/// both compile.
+///
+/// @p source is the assembled stage BEFORE the KWin define block. This splices
+/// the block and drops the varying location qualifiers, the two things the
+/// compositor's injectKwinDefineAfterVersion does. The `(compositor)` arm then
+/// compiles it at the pack's own `#version`, and the `(compositor GLES)` arm
+/// after KWin 6.8's rewrite to GLSL ES 300 (PhosphorShaders::kwinGlesDialect).
+/// The second arm is driver-independent: glslang holds ES 300 to the spec where
+/// a lenient driver would not, which is how varying locations reached a release
+/// compiling on NVIDIA and failing on Mesa.
 ///
 /// @p sourcePaths is the include resolver's source-string legend. This is the
 /// arm where it matters: glslang run directly preserves the `#line` source id,

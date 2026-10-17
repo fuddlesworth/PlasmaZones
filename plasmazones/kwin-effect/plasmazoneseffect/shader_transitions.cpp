@@ -114,7 +114,8 @@ const QString& ShaderInternal::kwinFinalizeColorBlock()
     return block;
 }
 
-QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source, const QString& extraDefines)
+QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source, PhosphorShaders::ShaderStage stage,
+                                                        const QString& extraDefines)
 {
     // Strip a leading UTF-8 BOM (U+FEFF) before anything else. The BOM
     // is not a Unicode whitespace category, so QString::trimmed() does
@@ -125,7 +126,11 @@ QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source, c
     // `#define PLASMAZONES_KWIN\n﻿#version 450...`, which the
     // GLSL compiler rejects because `#version` must be the first
     // non-comment token of the source.
-    QString working = source;
+    //
+    // The varying location qualifiers go in the same pass. Every caller hands
+    // in include-expanded source, so this reaches the varyings a shared header
+    // declares as well as the pack's own.
+    QString working = PhosphorShaders::stripVaryingLocations(source, stage);
     if (working.startsWith(QChar(0xFEFF))) {
         working.remove(0, 1);
     }
@@ -144,7 +149,7 @@ QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source, c
     // CRLF appears in the source, emit "\r\n"; otherwise plain "\n".
     const bool useCrlf = working.contains(QStringLiteral("\r\n"));
     const QString eol = useCrlf ? QStringLiteral("\r\n") : QStringLiteral("\n");
-    // The ARB `#extension` pair and the `#define PLASMAZONES_KWIN` ABI switch
+    // The ARB `#extension` and the `#define PLASMAZONES_KWIN` ABI switch
     // come from PhosphorShaders so the offline validator and the GPU bake test
     // splice the identical block; `kwinDefineBlock`'s declaration carries why
     // the extension directives are guarded for desktop GLSL. Only the

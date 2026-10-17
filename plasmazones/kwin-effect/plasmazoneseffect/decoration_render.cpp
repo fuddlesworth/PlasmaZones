@@ -156,8 +156,10 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
     // actually does — do not delete the GLSL believing the trait drives it.
     auto shader = KWin::ShaderManager::instance()->generateCustomShader(
         KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::TransformColorspace,
-        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentVertex)),
-        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentFragment)));
+        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentVertex),
+                                                     PhosphorShaders::ShaderStage::Vertex),
+        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentFragment),
+                                                     PhosphorShaders::ShaderStage::Fragment));
     // KWin 6.7 removed GLShader::isValid(); generateCustomShader returns nullptr
     // when compilation or linking fails, so a null check is the validity test.
     if (!shader) {

@@ -294,10 +294,10 @@ QString nameDiagnosticSource(const QString& line, const QString& label, const QS
     return shown;
 }
 
-} // namespace
-
-int reportCompositorCompile(QTextStream& out, const QString& label, const QString& stage, const QString& source,
-                            const QString& toolPath, const QStringList& sourcePaths)
+/// One dialect of reportCompositorCompile: compile the finished @p source and
+/// print its OK/ERROR line, tagged with @p arm.
+int compileCompositorArm(QTextStream& out, const QString& label, const QString& stage, const QString& source,
+                         const QString& toolPath, const QStringList& sourcePaths, const QString& arm)
 {
     // glslang reads the stage from the file extension unless -S says otherwise;
     // -S is passed below, so the temp file name only has to be unique. A
@@ -305,22 +305,22 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
     // takes the file with it on scope exit.
     QTemporaryDir tmp;
     if (!tmp.isValid()) {
-        out << "  " << padLabel(label) << "ERROR (compositor)\n    cannot create a temporary directory for the "
+        out << "  " << padLabel(label) << "ERROR (" << arm << ")\n    cannot create a temporary directory for the "
             << "compositor bake\n";
         return 1;
     }
     const QString srcPath = tmp.filePath(QStringLiteral("kwin.") + stage);
     QFile srcFile(srcPath);
     if (!srcFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        out << "  " << padLabel(label) << "ERROR (compositor)\n    cannot write " << srcPath << "\n";
+        out << "  " << padLabel(label) << "ERROR (" << arm << ")\n    cannot write " << srcPath << "\n";
         return 1;
     }
     // Checked: a short write stages a TRUNCATED shader, and glslang would then
     // report a syntax error the author's file does not contain.
     const QByteArray encoded = source.toUtf8();
     if (srcFile.write(encoded) != encoded.size()) {
-        out << "  " << padLabel(label)
-            << "ERROR (compositor)\n    could not stage the shader for compilation: " << srcFile.errorString() << "\n";
+        out << "  " << padLabel(label) << "ERROR (" << arm
+            << ")\n    could not stage the shader for compilation: " << srcFile.errorString() << "\n";
         return 1;
     }
     srcFile.close();
@@ -340,22 +340,22 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
         // execute bit, the wrong ELF class) fails here too, and reporting
         // that as a timeout sends the reader after the wrong problem.
         if (proc.error() == QProcess::FailedToStart) {
-            out << "  " << padLabel(label) << "ERROR (compositor)\n    could not run " << toolPath << ": "
+            out << "  " << padLabel(label) << "ERROR (" << arm << ")\n    could not run " << toolPath << ": "
                 << proc.errorString() << "\n";
             return 1;
         }
         proc.kill();
         proc.waitForFinished(1000);
-        out << "  " << padLabel(label) << "ERROR (compositor)\n    " << toolPath << " timed out\n";
+        out << "  " << padLabel(label) << "ERROR (" << arm << ")\n    " << toolPath << " timed out\n";
         return 1;
     }
     const QString log =
         QString::fromUtf8(proc.readAllStandardOutput()) + QString::fromUtf8(proc.readAllStandardError());
     if (proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0) {
-        out << "  " << padLabel(label) << "OK (compositor)\n";
+        out << "  " << padLabel(label) << "OK (" << arm << ")\n";
         return 0;
     }
-    out << "  " << padLabel(label) << "ERROR (compositor)\n";
+    out << "  " << padLabel(label) << "ERROR (" << arm << ")\n";
     // glslang leads with the temp file name and then one line per diagnostic.
     // Drop the echoed name so the report shows the author's errors and nothing
     // about where the file happened to be staged.
@@ -376,6 +376,24 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
         out << "    " << nameDiagnosticSource(trimmed, label, sourcePaths) << "\n";
     }
     return 1;
+}
+
+} // namespace
+
+int reportCompositorCompile(QTextStream& out, const QString& label, const QString& stage, const QString& source,
+                            const QString& toolPath, const QStringList& sourcePaths)
+{
+    const auto shaderStage =
+        stage == QLatin1String("vert") ? PhosphorShaders::ShaderStage::Vertex : PhosphorShaders::ShaderStage::Fragment;
+    const QString finished = PhosphorShaders::stripVaryingLocations(
+        PhosphorShaders::spliceAfterVersion(source, PhosphorShaders::kwinDefineBlock()), shaderStage);
+    // Both arms run whatever the first returns, so a pack broken in both
+    // dialects reports both at once.
+    const int desktop =
+        compileCompositorArm(out, label, stage, finished, toolPath, sourcePaths, QStringLiteral("compositor"));
+    const int gles = compileCompositorArm(out, label, stage, PhosphorShaders::kwinGlesDialect(finished), toolPath,
+                                          sourcePaths, QStringLiteral("compositor GLES"));
+    return (desktop || gles) ? 1 : 0;
 }
 
 QString padLabel(const QString& label)

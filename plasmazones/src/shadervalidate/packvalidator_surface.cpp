@@ -117,9 +117,8 @@ int bakeCompositorStage(QTextStream& out, const SurfaceShaderEffect& eff, const 
         // reference a p_<id> that fails on both paths that ship.
         src = PhosphorShaders::spliceAfterVersion(src, SurfaceShaderRegistry::paramPreamble(eff));
     }
-    // LAST, so the define block lands above the preamble, which is what
-    // injectKwinDefineAfterVersion produces at runtime.
-    src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
+    // reportCompositorCompile splices the define block LAST, so it lands above
+    // the preamble, which is what injectKwinDefineAfterVersion produces at runtime.
     return reportCompositorCompile(out, label, stage, src, tool, sourcePaths);
 }
 

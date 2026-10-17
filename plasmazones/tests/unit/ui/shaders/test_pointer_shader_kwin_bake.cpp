@@ -191,6 +191,7 @@ private Q_SLOTS:
 
         src = PhosphorShaders::spliceAfterVersion(src, PointerShaderRegistry::paramPreamble(eff));
         src = PhosphorShaders::spliceAfterVersion(src, kwinDefineBlock());
+        src = PhosphorShaders::stripVaryingLocations(src, PhosphorShaders::ShaderStage::Fragment);
 
         QString log;
         const bool ok = compileStage(GL_FRAGMENT_SHADER, src, &log);
@@ -210,6 +211,7 @@ private Q_SLOTS:
                      qPrintable(QStringLiteral("buffer include expand failed: ") + bufPath + QStringLiteral(" — ")
                                 + bufErr));
             bsrc = PhosphorShaders::spliceAfterVersion(bsrc, kwinDefineBlock());
+            bsrc = PhosphorShaders::stripVaryingLocations(bsrc, PhosphorShaders::ShaderStage::Fragment);
             QString blog;
             const bool bok = compileStage(GL_FRAGMENT_SHADER, bsrc, &blog);
             QVERIFY2(
@@ -237,6 +239,7 @@ private Q_SLOTS:
                 vsrc = PointerShaderRegistry::compositorVertexSource();
             }
             vsrc = PhosphorShaders::spliceAfterVersion(vsrc, kwinDefineBlock());
+            vsrc = PhosphorShaders::stripVaryingLocations(vsrc, PhosphorShaders::ShaderStage::Vertex);
             QString vlog;
             const bool vok = compileStage(GL_VERTEX_SHADER, vsrc, &vlog);
             QVERIFY2(vok,

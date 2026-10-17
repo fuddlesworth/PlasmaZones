@@ -210,6 +210,65 @@ private Q_SLOTS:
         QVERIFY(out.startsWith(block));
     }
 
+    // A vertex stage loses the location on its outputs, which GLSL ES 300
+    // forbids (#1142), and keeps it on its inputs, which ES 300 allows.
+    void testStripVaryingLocationsVertex()
+    {
+        const QString src = QStringLiteral(
+            "#version 450\n"
+            "layout(location = 0) in vec2 position;\n"
+            "layout(location = 1) in vec2 texCoord;\n"
+            "layout(location = 0) out vec2 vTexCoord;\n"
+            "layout (location=3) flat out int vId;\n"
+            "layout(std140, binding = 0) uniform U { float x; };\n"
+            "void main() {}\n");
+        const QString out = PhosphorShaders::stripVaryingLocations(src, PhosphorShaders::ShaderStage::Vertex);
+        QVERIFY2(out.contains(QStringLiteral("layout(location = 0) in vec2 position;")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("layout(location = 1) in vec2 texCoord;")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("\nout vec2 vTexCoord;\n")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("\nflat out int vId;\n")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("layout(std140, binding = 0) uniform U")), qPrintable(out));
+        QCOMPARE(out.count(QLatin1Char('\n')), src.count(QLatin1Char('\n')));
+    }
+
+    // A fragment stage loses the location on its inputs and keeps it on its
+    // output, which ES 300 allows and a multi-output pack needs.
+    void testStripVaryingLocationsFragment()
+    {
+        const QString src = QStringLiteral(
+            "#version 450\n"
+            "layout(location = 0) in vec2 vTexCoord;\n"
+            "layout(location = 0) out vec4 fragColor;\n"
+            "void main() {}\n");
+        const QString out = PhosphorShaders::stripVaryingLocations(src, PhosphorShaders::ShaderStage::Fragment);
+        QVERIFY2(out.contains(QStringLiteral("\nin vec2 vTexCoord;\n")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("layout(location = 0) out vec4 fragColor;")), qPrintable(out));
+    }
+
+    // A qualifier on a line of its own goes, and the newline after it stays, so
+    // the compile log keeps the author's line numbers.
+    void testStripVaryingLocationsKeepsLineNumbers()
+    {
+        const QString src = QStringLiteral("#version 450\nlayout(location = 0)\nout vec2 vTexCoord;\nvoid main() {}\n");
+        const QString out = PhosphorShaders::stripVaryingLocations(src, PhosphorShaders::ShaderStage::Vertex);
+        QCOMPARE(out, QStringLiteral("#version 450\n\nout vec2 vTexCoord;\nvoid main() {}\n"));
+    }
+
+    // The ES rewrite drops the #version line and leads with KWin 6.8's own
+    // prologue, the order a GLSL ES compiler then sees.
+    void testKwinGlesDialect()
+    {
+        const QString src = QStringLiteral("#version 450\n#define PLASMAZONES_KWIN\nvoid main() {}\n");
+        const QString out = PhosphorShaders::kwinGlesDialect(src);
+        QVERIFY2(out.startsWith(QStringLiteral("#version 300 es\n")), qPrintable(out));
+        QCOMPARE(out.count(QStringLiteral("#version")), 1);
+        QVERIFY2(out.contains(QStringLiteral("precision highp float;\n")), qPrintable(out));
+        QVERIFY2(out.indexOf(QStringLiteral("precision highp sampler3D;"))
+                     < out.indexOf(QStringLiteral("#define PLASMAZONES_KWIN")),
+                 qPrintable(out));
+        QVERIFY2(out.endsWith(QStringLiteral("void main() {}\n")), qPrintable(out));
+    }
+
     // Zone-side T1.1: ShaderRegistry::paramPreamble maps each declared param's
     // EXPLICIT slot to the SAME GLSL accessor ParameterInfo::uniformName() /
     // translateParamsToUniforms upload to — scalar slot N → customParams[N/4].

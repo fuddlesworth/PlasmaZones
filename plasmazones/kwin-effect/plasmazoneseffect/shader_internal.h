@@ -7,6 +7,7 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorShaders/ShaderBindings.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QByteArray>
 #include <QRectF>
@@ -93,16 +94,19 @@ private:
 };
 
 /// Splice `#define PLASMAZONES_KWIN` (plus the ARB explicit-location
-/// extension enables) after the shader's `#version` directive, selecting the
+/// extension enable) after the shader's `#version` directive, selecting the
 /// classic-GL default-block branch of the shared uniform headers that
-/// KWin::GLShader requires. Called from every family's compile path (animation
-/// through pointer; no file count, it drifts) and defined in
+/// KWin::GLShader requires, and drop the location qualifiers from the varyings
+/// of @p stage (PhosphorShaders::stripVaryingLocations), which KWin 6.8's
+/// GLSL ES 300 compile rejects on Mesa. Called from every family's compile
+/// path (animation through pointer; no file count, it drifts) and defined in
 /// shader_transitions.cpp; it has external linkage here rather than an
 /// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
 /// (jumbo) target, where duplicate anonymous-namespace definitions collide.
 /// Full behavioural notes (BOM strip, comment-aware #version scan, missing
 /// #version synthesis) live at the definition.
-QByteArray injectKwinDefineAfterVersion(const QString& source, const QString& extraDefines = {});
+QByteArray injectKwinDefineAfterVersion(const QString& source, PhosphorShaders::ShaderStage stage,
+                                        const QString& extraDefines = {});
 
 /// The `pzFinalizeColor` splice that converts a shader's sRGB output into the
 /// render target's colour description on the compositor: KWin's

@@ -334,7 +334,6 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
     if (scaffold) {
         src = PhosphorShaders::spliceAfterVersion(src, PointerShaderRegistry::paramPreamble(eff));
     }
-    src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
     return reportCompositorCompile(out, label, stage, src, tool, sourcePaths);
 }
 

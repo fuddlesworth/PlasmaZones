@@ -124,12 +124,15 @@ PHOSPHORSHADERS_EXPORT int versionDirectiveEnd(const QString& source);
 /// source, newline-terminated with @p eol and ready for `spliceAfterVersion`.
 ///
 /// `#define PLASMAZONES_KWIN` is the ABI switch itself: the shared uniform
-/// headers key their default-block-uniform branch off it. Desktop GLSL 140
-/// needs the two ARB extensions for our `layout(location = N)` qualifiers
-/// (NVIDIA error C7548). KWin 6.8 can compile the same source as GLSL ES 300,
-/// where those qualifiers are built in and KWin's precision declarations come
-/// before this block. Guard the desktop extensions so the ES compiler does not
-/// reject their placement (NVIDIA error C7621).
+/// headers key their default-block-uniform branch off it. KWin 6.7 recompiles
+/// custom shaders as desktop GLSL 140, where the `layout(location = N)`
+/// qualifiers left on vertex inputs and fragment outputs need
+/// GL_ARB_explicit_attrib_location (NVIDIA error C7548). The qualifiers on
+/// varyings are gone by then (see `stripVaryingLocations`), so nothing needs
+/// GL_ARB_separate_shader_objects. KWin 6.8 compiles as GLSL ES 300, where the
+/// remaining qualifiers are built in and KWin's precision declarations come
+/// before this block. The desktop extension is guarded so the ES compiler does
+/// not reject its placement (NVIDIA error C7621).
 ///
 /// Shared because THREE places must agree on it exactly and they are in
 /// different link units: the compositor's own
@@ -139,5 +142,44 @@ PHOSPHORSHADERS_EXPORT int versionDirectiveEnd(const QString& source);
 /// gates that pass source the compositor would reject, or reject source it
 /// accepts — the exact failure a reproduce-the-runtime gate exists to rule out.
 PHOSPHORSHADERS_EXPORT QString kwinDefineBlock(const QString& eol = QStringLiteral("\n"));
+
+/// The pipeline stage a source is compiled for, as `stripVaryingLocations`
+/// needs to tell a varying from a vertex input or a fragment output.
+enum class ShaderStage {
+    Vertex,
+    Fragment,
+};
+
+/// Remove the `layout(location = N)` qualifier from every varying of @p source:
+/// the `out` declarations of a vertex stage and the `in` declarations of a
+/// fragment stage. Vertex inputs and fragment outputs keep theirs.
+///
+/// The compositor branch of a pack must not carry them. KWin 6.8 compiles every
+/// custom shader as GLSL ES 300, which allows a location only on vertex inputs
+/// and fragment outputs. A location on a varying needs ES 310 or
+/// GL_EXT_separate_shader_objects, and that extension cannot be enabled because
+/// KWin's precision declarations precede anything a shader splices in. Mesa
+/// rejects the source outright ("shader output explicit location requires
+/// GL_EXT_separate_shader_objects extension or GLSL ES 3.10"), while NVIDIA
+/// accepts it, so the failure only shows on AMD and Intel. The qualifier is
+/// redundant there anyway: KWin links both stages into one program, which
+/// matches varyings by name.
+///
+/// The daemon branch keeps the qualifiers, because qsb's SPIR-V target requires
+/// them, so the pack files declare them and this runs only on the compositor
+/// path: `ShaderInternal::injectKwinDefineAfterVersion`, the offline
+/// validator's compositor bake and the GPU bake tests, for the same reason
+/// `kwinDefineBlock` is shared. Run it on include-expanded source. Each
+/// qualifier is removed within its own line, so line numbers are unchanged.
+PHOSPHORSHADERS_EXPORT QString stripVaryingLocations(const QString& source, ShaderStage stage);
+
+/// @p source as KWin 6.8 hands it to the driver: every line that starts with
+/// `#version` dropped, and KWin's GLSL ES 300 prologue (the version line, the
+/// GL_OES_EGL_image_external require and three default precisions) prepended.
+/// A copy of what `KWin::GLShader::preprocess` does at the top level on a
+/// GLES 3 context, for the gates that compile the compositor branch offline:
+/// the validator's GLES arm and the GPU bake tests. The runtime never calls it,
+/// since KWin applies the real rewrite itself.
+PHOSPHORSHADERS_EXPORT QString kwinGlesDialect(const QString& source);
 
 } // namespace PhosphorShaders

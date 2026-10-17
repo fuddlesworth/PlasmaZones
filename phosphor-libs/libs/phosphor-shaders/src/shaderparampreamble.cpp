@@ -5,7 +5,9 @@
 
 #include <PhosphorShaders/CustomParamsKey.h>
 
+#include <QRegularExpression>
 #include <QSet>
+#include <QStringList>
 #include <QStringView>
 
 namespace PhosphorShaders {
@@ -130,8 +132,46 @@ QString buildParamPreamble(const QList<PreambleParam>& params)
 QString kwinDefineBlock(const QString& eol)
 {
     return QStringLiteral("#ifndef GL_ES") + eol + QStringLiteral("#extension GL_ARB_explicit_attrib_location : enable")
-        + eol + QStringLiteral("#extension GL_ARB_separate_shader_objects : enable") + eol + QStringLiteral("#endif")
-        + eol + QStringLiteral("#define PLASMAZONES_KWIN") + eol;
+        + eol + QStringLiteral("#endif") + eol + QStringLiteral("#define PLASMAZONES_KWIN") + eol;
+}
+
+QString stripVaryingLocations(const QString& source, ShaderStage stage)
+{
+    // The qualifier, then any interpolation or auxiliary qualifiers, then the
+    // storage qualifier that makes the declaration a varying. The lookahead
+    // keeps the interpolation qualifiers and the `in`/`out` in place, and may
+    // cross a newline, since a qualifier on a line of its own is legal GLSL.
+    // The removed text itself is blanks only, never \s, so a match cannot
+    // swallow a newline and shift the line numbers a compile error reports.
+    static const QRegularExpression vertexOut(QStringLiteral(
+        R"(\blayout[ \t]*\([ \t]*location[ \t]*=[ \t]*\d+[ \t]*\)[ \t]*(?=\s*(?:(?:flat|smooth|noperspective|centroid)\s+)*out\b))"));
+    static const QRegularExpression fragmentIn(QStringLiteral(
+        R"(\blayout[ \t]*\([ \t]*location[ \t]*=[ \t]*\d+[ \t]*\)[ \t]*(?=\s*(?:(?:flat|smooth|noperspective|centroid)\s+)*in\b))"));
+    QString out = source;
+    out.remove(stage == ShaderStage::Vertex ? vertexOut : fragmentIn);
+    return out;
+}
+
+QString kwinGlesDialect(const QString& source)
+{
+    // KWin tests the raw line with startsWith, untrimmed, and splits on '\n'
+    // alone, so a CRLF source keeps its '\r' on every line it passes through.
+    QString out = QStringLiteral(
+        "#version 300 es\n"
+        "#extension GL_OES_EGL_image_external : require\n"
+        "precision highp float;\n"
+        "precision highp sampler2D;\n"
+        "precision highp sampler3D;\n");
+    const QStringList lines = source.split(QLatin1Char('\n'));
+    for (int i = 0; i < lines.size(); ++i) {
+        if (!lines.at(i).startsWith(QLatin1String("#version"))) {
+            out += lines.at(i);
+        }
+        if (i + 1 < lines.size()) {
+            out += QLatin1Char('\n');
+        }
+    }
+    return out;
 }
 
 int versionDirectiveEnd(const QString& source)

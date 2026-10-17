@@ -290,7 +290,8 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // Select the PLASMAZONES_KWIN branch of surface_uniforms.glsl (classic-GL
     // default-block uniforms; KWin::GLShader has no UBO bind path), exactly as
     // the animation compile path does.
-    const QByteArray fragWithKwinDefine = injectKwinDefineAfterVersion(expanded);
+    const QByteArray fragWithKwinDefine =
+        injectKwinDefineAfterVersion(expanded, PhosphorShaders::ShaderStage::Fragment);
 
     // Default surface vertex stage for frag-only packs (the border ships none).
     // Passthrough texcoord, NO Y-flip: the fragment reconstructs the top-down
@@ -310,12 +311,14 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         "}\n");
     // Wrap the default vertex source through injectKwinDefineAfterVersion just
     // like the custom-vertex branch below (and the animation default vertex):
-    // KWin rewrites our #version 450 down to the GL context core version (140),
-    // where the `layout(location = N)` qualifiers are illegal without the ARB
-    // extensions the inject helper enables. Passing the raw source here made
-    // frag-only packs (the border ships no vertex stage) fail to compile on
-    // NVIDIA (error C7548), latching the pack failed every frame.
-    QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(QString::fromUtf8(kSurfaceDefaultVertexSource));
+    // KWin rewrites our #version 450 to desktop GLSL 140 on 6.7 and GLSL ES 300
+    // on 6.8, and the `layout(location = N)` qualifiers are legal in neither
+    // until the inject helper has enabled the ARB extension and stripped the
+    // varying's qualifier. Passing the raw source here made frag-only packs (the
+    // border ships no vertex stage) fail to compile on NVIDIA (error C7548),
+    // latching the pack failed every frame.
+    QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(QString::fromUtf8(kSurfaceDefaultVertexSource),
+                                                                 PhosphorShaders::ShaderStage::Vertex);
     if (!eff.vertexShaderPath.isEmpty()) {
         // Every failure below (unreadable / empty file, include expansion
         // error) warns and KEEPS the already-assigned default vertex stage,
@@ -339,7 +342,8 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
                     qCWarning(lcEffect) << "Failed to expand surface vertex-shader includes for" << packId << ":"
                                         << vertIncErr << "— falling back to the default surface vertex stage";
                 } else {
-                    vertWithKwinDefine = injectKwinDefineAfterVersion(expandedVert);
+                    vertWithKwinDefine =
+                        injectKwinDefineAfterVersion(expandedVert, PhosphorShaders::ShaderStage::Vertex);
                 }
             }
         }
@@ -533,7 +537,8 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         // The declared-stage contract is documented on
         // SurfaceShaderEffect::vertexShaderPath: a buffer frag must read no
         // varying beyond vTexCoord. No bundled pack declares a vertex stage.
-        const QByteArray bufVert = injectKwinDefineAfterVersion(QString::fromUtf8(kFullscreenQuadVertexSource));
+        const QByteArray bufVert = injectKwinDefineAfterVersion(QString::fromUtf8(kFullscreenQuadVertexSource),
+                                                                PhosphorShaders::ShaderStage::Vertex);
 
         std::vector<CompiledSurfaceBufferPass> passes;
         passes.reserve(static_cast<size_t>(eff.bufferShaderPaths.size()));
@@ -569,7 +574,8 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
             // keeping all three buffer-pass compile paths identical. The raw
             // customParams/customColors locations are still cached below because
             // buffer passes read those uniforms directly.
-            const QByteArray bufFrag = injectKwinDefineAfterVersion(bufExpanded);
+            const QByteArray bufFrag =
+                injectKwinDefineAfterVersion(bufExpanded, PhosphorShaders::ShaderStage::Fragment);
             auto bufShader =
                 KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, bufVert, bufFrag);
             if (!bufShader) {

@@ -568,14 +568,16 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
         const QString offscreenOrientationDefine = KWinCompat::OFFSCREEN_TEXCOORDS_TOP_DOWN
             ? QStringLiteral("#define PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN 1\n")
             : QString();
-        const QByteArray fragWithKwinDefine = injectKwinDefineAfterVersion(expanded, offscreenOrientationDefine);
+        const QByteArray fragWithKwinDefine =
+            injectKwinDefineAfterVersion(expanded, PhosphorShaders::ShaderStage::Fragment, offscreenOrientationDefine);
 
         // Route the built-in default vertex source through the same injection
-        // as custom vertex stages so it gets the layout(location) extension
-        // enables (it uses explicit locations too, and KWin compiles it at
-        // #version 140 — see injectKwinDefineAfterVersion).
+        // as custom vertex stages so its layout(location) qualifiers are made
+        // legal for the dialect KWin compiles it in (desktop #version 140 on
+        // 6.7, GLSL ES 300 on 6.8 — see injectKwinDefineAfterVersion).
         QByteArray vertWithKwinDefine =
-            injectKwinDefineAfterVersion(QString::fromUtf8(kKwinDefaultVertexSource), offscreenOrientationDefine);
+            injectKwinDefineAfterVersion(QString::fromUtf8(kKwinDefaultVertexSource),
+                                         PhosphorShaders::ShaderStage::Vertex, offscreenOrientationDefine);
         if (!eff.vertexShaderPath.isEmpty()) {
             QFile vertFile(eff.vertexShaderPath);
             if (!vertFile.open(QIODevice::ReadOnly)) {
@@ -604,7 +606,8 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
                         // the transition silently never installed.
                         const QString vertWithParams = PhosphorShaders::spliceAfterVersion(
                             expandedVert, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
-                        vertWithKwinDefine = injectKwinDefineAfterVersion(vertWithParams, offscreenOrientationDefine);
+                        vertWithKwinDefine = injectKwinDefineAfterVersion(
+                            vertWithParams, PhosphorShaders::ShaderStage::Vertex, offscreenOrientationDefine);
                     }
                 }
             }

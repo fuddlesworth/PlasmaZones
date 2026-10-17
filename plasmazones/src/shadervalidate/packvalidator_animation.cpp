@@ -94,14 +94,13 @@ QString withoutLineComments(const QString& source)
 // COVERAGE BOUNDARY, so this is not read as more than it is. Four things the
 // live compositor does that this bake cannot reproduce:
 //
-// 1. The source is handed to glslang with the pack's own `#version 450`
-//    intact, while KWin's generateCustomShader recompiles at the GL context's
-//    core version (140 on the 6.7 path this dialect exists for). So a
-//    construct legal at 450 and illegal at 140 still passes here and still
-//    fails live — which is the class the ARB extension block in
-//    kwinDefineBlock was added to fix. Rewriting the version line before the
-//    bake would close it, and would need a trial run against every bundled
-//    compositor-only pack first, since it can only make the gate stricter.
+// 1. The `(compositor)` arm hands glslang the pack's own `#version 450`
+//    intact, while KWin 6.7's generateCustomShader recompiles at the GL
+//    context's core version (140). So a construct legal at 450 and illegal at
+//    140 still passes that arm and still fails live on 6.7, which is the class
+//    the ARB extension block in kwinDefineBlock was added to fix. The
+//    `(compositor GLES)` arm has no such gap for KWin 6.8: it compiles the
+//    exact GLSL ES 300 rewrite KWin applies there (kwinGlesDialect).
 // 2. The per-window path splices KWin's colour-management block, which
 //    `#include`s a KWin resource. The bake splices an identity stand-in
 //    (finalizeColorStub) that declares the same symbols, so a symbol collision
@@ -179,7 +178,6 @@ static int bakeCompositorStage(QTextStream& out, const QString& raw, const QStri
     if (finalizeColor) {
         src = PhosphorShaders::spliceAfterVersion(src, finalizeColorStub());
     }
-    src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
     return reportCompositorCompile(out, label, stage, src, tool, sourcePaths);
 }
 

@@ -10,6 +10,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Window borders and decorations draw again on AMD and Intel graphics with Plasma 6.8**: Plasma 6.8 compiles effect shaders in a stricter dialect, and on the Mesa drivers AMD and Intel use, the shader every decorated window is drawn through failed to build. No window got its border, rounded corners or border colours, and animation packs with their own vertex stage, such as Window Morph, did not play. NVIDIA accepted the same shaders, which is why only some systems were affected. The pack validator now compiles every pack in that dialect as well, so a pack that would fail this way is caught before it ships. ([#1142](https://github.com/fuddlesworth/PlasmaZones/discussions/1142))
+
 ## [3.5.1] - 2026-10-16
 
 ### Fixed

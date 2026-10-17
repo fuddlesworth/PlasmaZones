@@ -18,8 +18,8 @@
 // test compiles that branch through the driver, closing the gap.
 //
 // It assembles the variant the way the runtime does: entry scaffold → include
-// expansion → param preamble → the KWin `#extension`/`#define` block. That
-// final block comes from PhosphorShaders::kwinDefineBlock(), the same function
+// expansion → param preamble → the KWin `#extension`/`#define` block → the
+// varying-location strip. That block comes from PhosphorShaders::kwinDefineBlock(), the same function
 // the compositor's injector and the offline validator splice, so this gate
 // cannot drift into accepting a dialect the compositor rejects. It splices the
 // block with plain spliceAfterVersion rather than linking
@@ -201,6 +201,7 @@ private Q_SLOTS:
 
         src = PhosphorShaders::spliceAfterVersion(src, AnimationShaderRegistry::paramPreamble(eff));
         src = PhosphorShaders::spliceAfterVersion(src, kwinDefineBlock(topDownTexcoords));
+        src = PhosphorShaders::stripVaryingLocations(src, PhosphorShaders::ShaderStage::Fragment);
 
         QString log;
         const bool ok = compileStage(GL_FRAGMENT_SHADER, src, &log);
@@ -223,6 +224,7 @@ private Q_SLOTS:
                 qPrintable(QStringLiteral("vertex include expand failed: ") + dir + QStringLiteral(" — ") + vertErr));
             vsrc = PhosphorShaders::spliceAfterVersion(vsrc, AnimationShaderRegistry::paramPreamble(eff));
             vsrc = PhosphorShaders::spliceAfterVersion(vsrc, kwinDefineBlock(topDownTexcoords));
+            vsrc = PhosphorShaders::stripVaryingLocations(vsrc, PhosphorShaders::ShaderStage::Vertex);
             QString vlog;
             const bool vok = compileStage(GL_VERTEX_SHADER, vsrc, &vlog);
             QVERIFY2(vok,
@@ -262,10 +264,13 @@ private Q_SLOTS:
             QString error;
             source = PhosphorShaders::ShaderIncludeResolver::expandIncludes(source, QFileInfo(path).absolutePath(),
                                                                             includePaths, &error);
-            source.replace(QStringLiteral("#version 450"), QStringLiteral("#version 320 es"));
             source = PhosphorShaders::spliceAfterVersion(source, AnimationShaderRegistry::paramPreamble(eff));
-            return PhosphorShaders::spliceAfterVersion(
-                source, kwinDefineBlock(true) + QStringLiteral("precision highp float;\n"));
+            source = PhosphorShaders::spliceAfterVersion(source, kwinDefineBlock(true));
+            source = PhosphorShaders::stripVaryingLocations(
+                source, fragment ? PhosphorShaders::ShaderStage::Fragment : PhosphorShaders::ShaderStage::Vertex);
+            // KWin 6.8's own rewrite to GLSL ES 300, not a hand-picked ES
+            // version: 320 accepts the varying locations 300 rejects.
+            return PhosphorShaders::kwinGlesDialect(source);
         };
         const QString vertex = sourceFor(eff.vertexShaderPath, false);
         const QString fragment = sourceFor(eff.fragmentShaderPath, true);
