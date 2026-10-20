@@ -4,11 +4,12 @@
 // The pointer arm of plasmazones-shader-validate — see packvalidators.h.
 // Reproduces the pointer runtime's GLSL assembly (PointerShaderEffect + the
 // pPointer entry scaffold + the generated p_<id> preamble + include expansion
-// over PointerShaderRegistry::includePathsFor) and bakes every stage TWICE:
-// once on the preview (Qt-RHI, UBO) dialect through headless QShaderBaker,
-// and once on the compositor (PLASMAZONES_KWIN, default-block uniforms)
-// dialect through glslang in default mode, because the compositor is where
-// every pointer pack actually ships and the two dialects do not declare the
+// over the pack's {shared, root} pair) and bakes every stage on the preview
+// (Qt-RHI, UBO) dialect through headless QShaderBaker, and on the compositor
+// (PLASMAZONES_KWIN, default-block uniforms) in both of KWin's dialects through
+// glslang in default mode (reportCompositorCompile), linking each fragment
+// against the vertex stage the compositor runs it with. The compositor is where
+// every pointer pack actually ships, and the two branches do not declare the
 // same identifiers.
 //
 // The pointer-specific lints are the fields no sibling family has: the `layer`
@@ -32,14 +33,12 @@
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
-#include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSet>
@@ -51,6 +50,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
+#include <vector>
 
 using PhosphorPointerShaders::PointerShaderEffect;
 using PhosphorPointerShaders::PointerShaderRegistry;
@@ -105,6 +106,12 @@ QString withoutComments(const QString& source)
                 out[i++] = QLatin1Char(' ');
             }
         } else if (out[i] == QLatin1Char('/') && out[i + 1] == QLatin1Char('*')) {
+            // Blank the opener first and search for the close after it, so
+            // `/*/` is the start of a comment, as GLSL and C read it, and not
+            // a comment that opens and closes on one shared star.
+            out[i] = QLatin1Char(' ');
+            out[i + 1] = QLatin1Char(' ');
+            i += 2;
             while (i < n) {
                 const bool end = i < n - 1 && out[i] == QLatin1Char('*') && out[i + 1] == QLatin1Char('/');
                 if (out[i] != QLatin1Char('\n')) {
@@ -253,88 +260,22 @@ QString readStage(const QString& path)
     return QString::fromUtf8(f.readAll());
 }
 
-// Assemble one stage on the COMPOSITOR dialect exactly as
-// pointerdecorationshader.cpp does and compile it through glslangValidator.
-// Returns 1 on failure, 0 on success.
-//
-// The main fragment gets the pPointer entry scaffold, include expansion, the
-// p_<id> preamble and then the shared KWin define block after #version. A
-// buffer pass and a declared vertex stage get include expansion and the
-// define block only: the compositor splices NO preamble into them (buffer
-// sources address parameters by raw customParams slot, by contract), so
-// splicing one here would pass a buffer that fails live.
-// The splice order mirrors the runtime: each spliceAfterVersion lands its
-// block immediately below #version, so splicing the preamble first and the
-// define block second leaves the define block ABOVE the preamble, which is
-// what the compositor produces.
-//
-// COVERAGE BOUNDARY, the same one the animation arm records: the source goes to
-// glslang with the pack's `#version 450` intact, while KWin recompiles at the GL
-// context's core version, so a construct legal at 450 and illegal there still
-// passes. KWin's own colour-management block is not reproduced here either, so an
-// identifier colliding with it passes and fails live. What IS covered is every
-// identifier the two dialects disagree on, the class that shipped uncaught while
-// only the preview branch was baked.
-//
-// INCLUDES are expanded the way the compositor expands them, through the
-// resolver with the registry roots alone: the angle form searches only those
-// roots, and only the quoted form looks beside the including file. The preview
-// bake (ShaderCompiler::expandSource) is more forgiving and lets an angle include
-// find a pack-local file, so a pack written that way baked clean everywhere and
-// then failed include expansion where it ships.
-int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const QString& path, const QString& label,
-                        const QString& stage, const QStringList& includePaths, bool scaffold)
+// How pointerdecorationshader.cpp assembles a pack's MAIN fragment for the
+// compositor: the pPointer entry scaffold, the p_<id> preamble and the
+// colour-management block finalizeColorStub stands in for. A buffer pass and a
+// declared vertex stage take a default CompositorAssembly: the compositor
+// splices NO preamble into them (buffer sources address parameters by raw
+// customParams slot, by contract), so splicing one would pass a buffer that
+// fails live. Includes expand the way the compositor expands them, which the
+// preview bake does not (see assembleCompositorStage).
+CompositorAssembly pointerMainAssembly(const PointerShaderEffect& eff)
 {
-    if (!QFile::exists(path)) {
-        return 0; // an absent stage is already linted by the caller
-    }
-    const QString tool = glslangValidatorPath();
-    if (tool.isEmpty()) {
-        // Hard failure rather than a skip, for the reason the animation arm
-        // gives: a pack cannot reach a release with the branch it ships on
-        // uncompiled, and a quiet degrade is how that happened before.
-        // Explained once per run, as the animation arm does; every stage
-        // still counts the error.
-        static bool explained = false;
-        out << "  " << padLabel(label) << "ERROR (compositor)\n";
-        if (!explained) {
-            explained = true;
-            out << "    neither glslangValidator nor glslang found on PATH. One of them is required to "
-                   "compile the compositor dialect every pointer pack ships on (install the glslang package)\n";
-        }
-        return 1;
-    }
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        out << "  " << padLabel(label) << "ERROR\n    cannot read " << path << "\n";
-        return 1;
-    }
-    const QString raw = QString::fromUtf8(f.readAll());
-    const QString assembled = scaffold
-        ? PhosphorShaders::assembleEntryPoint(raw, PointerShaderRegistry::pointerEntryPrologue(),
-                                              PointerShaderRegistry::pointerEntryCandidates())
-        : raw;
-    QString err;
-    QStringList sourcePaths;
-    QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
-                                                                         includePaths, &err, nullptr, &sourcePaths);
-    if (src.isEmpty()) {
-        // The resolver returns empty for any failure — a missing file, an
-        // unreadable one, a malformed directive, a cycle. Naming the
-        // angle-versus-quoted case as THE cause sent an author with a simple
-        // typo off changing bracket style, so it is offered as the likely
-        // explanation rather than asserted, and the resolver's own message
-        // leads.
-        out << "  " << padLabel(label) << "ERROR (compositor)\n    include expansion failed the way the compositor "
-            << "expands it: " << err
-            << "\n    (if the file sits beside this one, note that the compositor resolves an angle include only "
-            << "against the registry roots; the quoted form is the pack-local one)\n";
-        return 1;
-    }
-    if (scaffold) {
-        src = PhosphorShaders::spliceAfterVersion(src, PointerShaderRegistry::paramPreamble(eff));
-    }
-    return reportCompositorCompile(out, label, stage, src, tool, sourcePaths);
+    CompositorAssembly assembly;
+    assembly.entryPrologue = PointerShaderRegistry::pointerEntryPrologue();
+    assembly.entryCandidates = PointerShaderRegistry::pointerEntryCandidates();
+    assembly.preamble = PointerShaderRegistry::paramPreamble(eff);
+    assembly.finalizeColor = true;
+    return assembly;
 }
 
 } // namespace
@@ -343,13 +284,14 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
 // runtime's fragment assembly — the pPointer entry scaffold (an entry-only
 // pack gets a generated main(); a pack with its own main() passes through
 // unchanged) + include expansion + the generated p_<id> preamble — and bakes
-// it on BOTH dialects. Returns the error count.
+// it on the preview dialect and on both of the compositor's. Returns the error
+// count.
 //
-// Unlike the animation and surface arms, the compositor branch (`#define
-// PLASMAZONES_KWIN`, default-block uniforms) IS baked here, out of process
-// through glslang in default mode, and it is the bake that matters: every
-// shipping pointer pack compiles through that branch, while the Qt-RHI #else
-// branch is only the settings preview. The two declare different identifiers (the
+// The compositor branch (`#define PLASMAZONES_KWIN`, default-block uniforms) is
+// baked out of process through glslang in default mode, as on the animation
+// and surface arms, and it is the bake that matters here: every shipping
+// pointer pack compiles through that branch, while the Qt-RHI #else branch is
+// only the settings preview. The two declare different identifiers (the
 // preview's UBO carries qt_Matrix, qt_Opacity and the rest of BaseUniforms), so a
 // pack that bakes clean on the preview can still fail on the path that ships. The
 // preview bake stays too: a pack that previews as a compile error is broken in
@@ -358,18 +300,11 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
 
-    QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-    if (!metaFile.open(QIODevice::ReadOnly)) {
-        out << name << "\n  metadata       ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
+    const std::optional<QJsonObject> metadata = readPackMetadata(out, packDir);
+    if (!metadata) {
         return 1;
     }
-    QJsonParseError perr{};
-    const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &perr);
-    if (doc.isNull() || !doc.isObject()) {
-        out << name << "\n  metadata       ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
-        return 1;
-    }
-    const QJsonObject root = doc.object();
+    const QJsonObject& root = *metadata;
 
     // Parse WITHOUT a source dir so every declared path stays verbatim, then
     // confine each one here: passing packDir would let fromJson's own guard
@@ -386,13 +321,23 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                "rejected)\n  → 1 error\n\n";
         return 1;
     }
-    for (QString& b : eff.bufferShaderPaths) {
+    // Every offender named, as the surface arm names them, not just the first.
+    QStringList escapingBuffers;
+    for (qsizetype i = 0; i < eff.bufferShaderPaths.size(); ++i) {
+        QString& b = eff.bufferShaderPaths[i];
+        const QString declared = b;
         if (!confineToPack(b)) {
-            out << name
-                << "\n  metadata       ERROR\n    bufferShaders path escapes the pack directory (path traversal "
-                   "rejected)\n  → 1 error\n\n";
-            return 1;
+            escapingBuffers << QStringLiteral("bufferShaders[%1]: %2").arg(QString::number(i), declared);
         }
+    }
+    if (!escapingBuffers.isEmpty()) {
+        out << name << "\n  " << padLabel(QStringLiteral("metadata"))
+            << "ERROR\n    bufferShaders path escapes the pack directory (path traversal rejected)\n";
+        for (const QString& e : escapingBuffers) {
+            out << "      " << e << "\n";
+        }
+        out << "  → " << escapingBuffers.size() << (escapingBuffers.size() == 1 ? " error" : " errors") << "\n\n";
+        return static_cast<int>(escapingBuffers.size());
     }
     if (!confineToPack(eff.vertexShaderPath)) {
         out << name
@@ -406,9 +351,13 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     }
     const QString fragLabel = QFileInfo(eff.fragmentShaderPath).fileName();
 
-    out << name << "  (" << eff.parameters.size() << " param" << (eff.parameters.size() == 1 ? "" : "s") << ", "
-        << eff.textures.size() << " texture" << (eff.textures.size() == 1 ? "" : "s") << ", "
-        << (eff.isMultipass ? "multipass" : "single-pass") << ")\n";
+    // RAW counts, as the surface arm prints them: fromJson caps and drops, so the
+    // parsed sizes are what SURVIVED rather than what the author wrote.
+    const qsizetype rawParamCount = root.value(QLatin1String("parameters")).toArray().size();
+    const qsizetype rawTextureCount = root.value(QLatin1String("textures")).toArray().size();
+    out << name << "  (" << rawParamCount << " param" << (rawParamCount == 1 ? "" : "s") << ", " << rawTextureCount
+        << " texture" << (rawTextureCount == 1 ? "" : "s") << ", " << (eff.isMultipass ? "multipass" : "single-pass")
+        << ")\n";
 
     int errors = 0;
     QStringList lints;
@@ -500,24 +449,24 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                                            [&eff](const PointerShaderEffect::ParameterInfo& p) {
                                                return p.id == eff.reachParam;
                                            });
+        // ONE multi-argument .arg per message, numbers pre-formatted: reachParam
+        // is author-controlled, and a chained .arg after it would substitute
+        // into a `%1` the author wrote instead of the next marker.
         if (declared == eff.parameters.cend()) {
             lints << QStringLiteral("reachParam '%1' names no declared parameter (reach falls back to %2 at load)")
-                         .arg(eff.reachParam)
-                         .arg(eff.reach);
+                         .arg(eff.reachParam, QString::number(eff.reach));
         } else if (declared->type != QLatin1String("float") && declared->type != QLatin1String("int")) {
             lints << QStringLiteral(
                          "reachParam '%1' has type '%2', which is not float or int (reach falls back to %3 "
                          "at load)")
-                         .arg(eff.reachParam, declared->type)
-                         .arg(eff.reach);
+                         .arg(eff.reachParam, declared->type, QString::number(eff.reach));
         } else {
             if (declared->maxValue.isValid() && declared->maxValue.toDouble() > PointerShaderEffect::kMaxReach) {
                 lints << QStringLiteral(
                              "reachParam '%1' allows up to %2, past the %3 reach cap (clamped at load, so the "
                              "pack paints outside its damage rect)")
-                             .arg(eff.reachParam)
-                             .arg(declared->maxValue.toDouble())
-                             .arg(PointerShaderEffect::kMaxReach);
+                             .arg(eff.reachParam, QString::number(declared->maxValue.toDouble()),
+                                  QString::number(PointerShaderEffect::kMaxReach));
             }
             // The floor matters as much as the cap: a reach the user can drag
             // down to a few pixels clips the pack to nothing around the path.
@@ -526,9 +475,8 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                              "reachParam '%1' allows a minimum of %2 logical px, below the %3 px floor (a reach "
                              "that small clips the pack to nothing: the damage rect is the path inflated by "
                              "the reach, and nothing painted outside it reaches the screen)")
-                             .arg(eff.reachParam)
-                             .arg(declared->minValue.toDouble())
-                             .arg(kUsableReachFloor);
+                             .arg(eff.reachParam, QString::number(declared->minValue.toDouble()),
+                                  QString::number(kUsableReachFloor));
             }
         }
     }
@@ -748,9 +696,8 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             lints << QStringLiteral(
                          "trailWindowParam '%1' allows up to %2 s but trailSeconds is %3 s, so at the "
                          "top of its range the pack reads further back than it stays live for")
-                         .arg(eff.trailWindowParam)
-                         .arg(declared->maxValue.toDouble())
-                         .arg(eff.trailSeconds);
+                         .arg(eff.trailWindowParam, QString::number(declared->maxValue.toDouble()),
+                              QString::number(eff.trailSeconds));
         }
     }
     if (eff.trailWindowSeconds > 0.0 && !eff.trailWindowParam.isEmpty()) {
@@ -839,10 +786,15 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
 
     // ── textures ──
     const QJsonArray declaredTextures = root.value(QLatin1String("textures")).toArray();
-    if (declaredTextures.size() > PointerShaderContract::kMaxUserTextureSlots) {
+    // fromJson drops an empty-path entry before the cap and caps the rest, so the
+    // cap and the slots count the entries the loader KEEPS (empties linted below).
+    const int keptTextures =
+        static_cast<int>(std::count_if(declaredTextures.cbegin(), declaredTextures.cend(), [](const QJsonValue& v) {
+            return !v.toObject().value(QLatin1String("path")).toString().isEmpty();
+        }));
+    if (keptTextures > PointerShaderContract::kMaxUserTextureSlots) {
         lints << QStringLiteral("too many textures: %1 declared, cap is %2 (surplus dropped at load)")
-                     .arg(static_cast<int>(declaredTextures.size()))
-                     .arg(PointerShaderContract::kMaxUserTextureSlots);
+                     .arg(QString::number(keptTextures), QString::number(PointerShaderContract::kMaxUserTextureSlots));
     }
     for (const QJsonValue& v : declaredTextures) {
         const QString texPath = v.toObject().value(QLatin1String("path")).toString();
@@ -870,11 +822,11 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // Slot use against the declaration, both ways: uTexture<N> without a
     // declared slot N is the same unit-0 read the cursor lint describes, and
     // a declared slot nothing samples is an image decoded and uploaded for
-    // nothing. Counted from the RAW array, since that is what fromJson slots
-    // (an over-cap entry is dropped and its sampler is unbound).
+    // nothing. Counted over the entries fromJson keeps and slots, in order: an
+    // empty entry takes no slot, and an over-cap entry is dropped and its
+    // sampler is unbound.
     if (anyStage) {
-        const int declaredSlots =
-            std::min(static_cast<int>(declaredTextures.size()), PointerShaderContract::kMaxUserTextureSlots);
+        const int declaredSlots = std::min(keptTextures, PointerShaderContract::kMaxUserTextureSlots);
         static const QStringList kTextureSamplers = {QString::fromLatin1(PointerShaderContract::kUTexture1),
                                                      QString::fromLatin1(PointerShaderContract::kUTexture2),
                                                      QString::fromLatin1(PointerShaderContract::kUTexture3)};
@@ -903,16 +855,20 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     const bool declaredMultipass = root.value(QLatin1String("multipass")).toBool(false);
     const bool declaredFeedback = root.value(QLatin1String("bufferFeedback")).toBool(false);
     const QJsonArray declaredBuffers = root.value(QLatin1String("bufferShaders")).toArray();
+    // The entries fromJson keeps (it drops every empty one and caps the rest), so
+    // an array of empty strings turns multipass off at load like an empty one.
+    const auto nonEmpty = std::count_if(declaredBuffers.cbegin(), declaredBuffers.cend(), [](const QJsonValue& v) {
+        return !v.toString().isEmpty();
+    });
     if (declaredMultipass) {
-        if (declaredBuffers.isEmpty()) {
+        if (nonEmpty == 0) {
             lints << QStringLiteral(
                 "multipass is true but no bufferShaders are declared (multipass is turned off at "
                 "load)");
         }
-        if (declaredBuffers.size() > PointerShaderContract::kMaxBufferPasses) {
+        if (nonEmpty > PointerShaderContract::kMaxBufferPasses) {
             lints << QStringLiteral("too many buffer shaders: %1 declared, cap is %2 (surplus dropped at load)")
-                         .arg(static_cast<int>(declaredBuffers.size()))
-                         .arg(PointerShaderContract::kMaxBufferPasses);
+                         .arg(QString::number(nonEmpty), QString::number(PointerShaderContract::kMaxBufferPasses));
         }
         for (const QJsonValue& v : declaredBuffers) {
             const QString bufName = v.toString();
@@ -922,6 +878,9 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             }
             const auto confined = confinedPackPath(packDir, bufName);
             if (!confined) {
+                // Reached only for an entry past the pass cap: an escaping entry
+                // fromJson keeps already ended the report at the confinement
+                // exit above, which names every one of them.
                 lints << QStringLiteral(
                              "buffer shader path escapes the pack directory: %1 (multipass is turned off at "
                              "load)")
@@ -977,10 +936,6 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             // above), and everything past kMaxBufferPasses is dropped too. Without
             // the cap a pack declaring three non-empty buffers was told it had
             // three passes when two run.
-            const auto nonEmpty =
-                std::count_if(declaredBuffers.cbegin(), declaredBuffers.cend(), [](const QJsonValue& v) {
-                    return !v.toString().isEmpty();
-                });
             const auto livePasses = std::min<qsizetype>(nonEmpty, PointerShaderContract::kMaxBufferPasses);
             if (declaredFeedback && livePasses > 1) {
                 lints << QStringLiteral(
@@ -993,7 +948,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     } else {
         // Both of these are silently dropped by fromJson when multipass is off,
         // so an author who set one and forgot the switch gets no signal at all.
-        if (!declaredBuffers.isEmpty()) {
+        if (nonEmpty > 0) {
             lints << QStringLiteral("bufferShaders declared without `multipass: true` (ignored at load)");
         }
         if (declaredFeedback) {
@@ -1028,6 +983,16 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                      "by the built-in one")
                      .arg(QFileInfo(eff.vertexShaderPath).fileName());
     }
+    // The main pass routes the generated main()'s fragColor through
+    // PZ_FINALIZE_COLOR (HDR colour management), as the animation arm lints: a
+    // main() pack that skips it renders dim on an HDR output, unreported.
+    if (!fragText.isEmpty() && PhosphorShaders::definesMain(fragText)
+        && !mentionsToken(fragText, QStringLiteral("PZ_FINALIZE_COLOR"))) {
+        lints << QStringLiteral(
+            "fragment shader defines main() but never routes fragColor through PZ_FINALIZE_COLOR (it renders "
+            "without HDR colour management on the compositor. Write an entry-only pack, or assign "
+            "`fragColor = PZ_FINALIZE_COLOR(color)`)");
+    }
 
     if (lints.isEmpty()) {
         out << "  " << padLabel(QStringLiteral("metadata")) << "OK\n";
@@ -1039,22 +1004,25 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
         }
     }
 
-    // The runtime include roots for this pack: {<packRoot>/shared, <packRoot>}
-    // plus the installed shared helpers.
-    const QStringList includePaths = PointerShaderRegistry::includePathsFor(QDir(packDir).absolutePath());
+    // {<packRoot>/shared, <packRoot>}, the runtime's pair, with the shared half
+    // from packSharedRoots as on every arm: PointerShaderRegistry::includePathsFor
+    // always appends the installed shared/, so a header missing from the tree
+    // would resolve from a stale install on a developer machine and fail in CI.
+    const QStringList includePaths = QStringList(packSharedRoots(packDir)) << QFileInfo(packDir).absolutePath();
     const QStringList paramNames = declaredParamNames(eff.parameters);
     errors += reportPresetLints(out, rawPresetLints(root) + presetLints(packDir, eff.presets, eff.parameters));
     // A stage with no p_<id> preamble cannot use any, so no did-you-mean hint.
     const QStringList noParams;
 
-    // ── fragment stage, preview dialect (reproduce the runtime assembly) ──
-    if (QFile::exists(eff.fragmentShaderPath)) {
-        QFile frag(eff.fragmentShaderPath);
-        if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << padLabel(fragLabel) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
+    // The compositor stages that compiled, for the links at the end.
+    std::optional<CompositorStage> mainFrag;
+    std::vector<CompositorStage> bufferStages;
+
+    // ── fragment stage (reproduce the runtime assembly) ──
+    if (QString raw; QFile::exists(eff.fragmentShaderPath)) {
+        if (!readStageSource(out, fragLabel, eff.fragmentShaderPath, raw)) {
             ++errors;
         } else {
-            const QString raw = QString::fromUtf8(frag.readAll());
             QString err;
             // Assemble an entry-only pack (a `vec4 pPointer(vec2 uv)` body, no
             // main()) into a full TU before expansion, identical to both
@@ -1072,27 +1040,26 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                 const ShaderCompiler::Result result = ShaderCompiler::compile(spliced.toUtf8(), QShader::FragmentStage);
                 errors += reportCompile(out, fragLabel, result, paramNames);
             }
+            // The compositor dialects of the same stage, from the same read.
+            mainFrag = bakeCompositorStage(out, errors, fragLabel, PhosphorShaders::ShaderStage::Fragment, raw,
+                                           eff.fragmentShaderPath, includePaths, pointerMainAssembly(eff));
         }
     }
-    // ── fragment stage, compositor dialect ──
-    errors += bakeCompositorStage(out, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"), includePaths,
-                                  /*scaffold=*/true);
 
     // ── multipass buffer passes ──
     // Buffer passes carry their own main() (no entry scaffold, no param
-    // preamble), same as the surface and overlay arms, on both dialects.
+    // preamble), same as the surface and overlay arms, on the preview dialect
+    // and both compositor ones.
     for (const QString& buf : eff.bufferShaderPaths) {
         if (!QFile::exists(buf)) {
             continue; // missing buffers already linted above
         }
         const QString label = QFileInfo(buf).fileName();
-        QFile bufFile(buf);
-        if (!bufFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << padLabel(label) << "ERROR\n    cannot read " << buf << "\n";
+        QString rawBuf;
+        if (!readStageSource(out, label, buf, rawBuf)) {
             ++errors;
             continue;
         }
-        const QString rawBuf = QString::fromUtf8(bufFile.readAll());
         QString err;
         const QString expanded =
             ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), includePaths, &err);
@@ -1103,8 +1070,11 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             const ShaderCompiler::Result result = ShaderCompiler::compile(expanded.toUtf8(), QShader::FragmentStage);
             errors += reportCompile(out, label, result, noParams);
         }
-        errors += bakeCompositorStage(out, eff, buf, label, QStringLiteral("frag"), includePaths,
-                                      /*scaffold=*/false);
+        if (std::optional<CompositorStage> stage =
+                bakeCompositorStage(out, errors, label, PhosphorShaders::ShaderStage::Fragment, rawBuf, buf,
+                                    includePaths, CompositorAssembly{})) {
+            bufferStages.push_back(std::move(*stage));
+        }
     }
 
     // ── vertex stage ──
@@ -1113,10 +1083,10 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // from the include paths. It ships its own main(), so no scaffold and no
     // param preamble apply.
     //
-    // Only a DECLARED vertex stage is baked on the compositor dialect. The
-    // shared pointer.vert is the preview's stage alone: the compositor never
-    // compiles it and uses its own TU-local vertex source instead, so baking
-    // it there would fail every pack on a stage that never runs there.
+    // Only a DECLARED vertex stage is baked on the compositor dialects. The
+    // shared pointer.vert is the preview's stage alone: the compositor uses
+    // compositorVertexSource, so baking it would fail every pack needlessly.
+    DeclaredVertex declaredVert;
     {
         QString vertPath = eff.vertexShaderPath;
         if (vertPath.isEmpty()) {
@@ -1134,14 +1104,13 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                 }
             }
         }
-        if (!vertPath.isEmpty() && QFile::exists(vertPath)) {
+        if (QString rawVert; !vertPath.isEmpty() && QFile::exists(vertPath)) {
             const QString label = QFileInfo(vertPath).fileName();
-            QFile vertFile(vertPath);
-            if (!vertFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << padLabel(label) << "ERROR\n    cannot read " << vertPath << "\n";
+            if (!readStageSource(out, label, vertPath, rawVert)) {
                 ++errors;
+                // An unreadable declared stage: the compositor falls back to its
+                // built-in one, which the link below then uses.
             } else {
-                const QString rawVert = QString::fromUtf8(vertFile.readAll());
                 QString err;
                 const QString expanded =
                     ShaderCompiler::expandSource(rawVert, QFileInfo(vertPath).absolutePath(), includePaths, &err);
@@ -1153,11 +1122,27 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                         ShaderCompiler::compile(expanded.toUtf8(), QShader::VertexStage);
                     errors += reportCompile(out, label, result, noParams);
                 }
+                if (vertPath == eff.vertexShaderPath) {
+                    declaredVert =
+                        bakeDeclaredVertex(out, errors, label, rawVert, vertPath, includePaths, CompositorAssembly{});
+                }
             }
         }
-        if (!eff.vertexShaderPath.isEmpty()) {
-            errors += bakeCompositorStage(out, eff, eff.vertexShaderPath, QFileInfo(eff.vertexShaderPath).fileName(),
-                                          QStringLiteral("vert"), includePaths, /*scaffold=*/false);
+    }
+
+    // ── links ──
+    // Unlike the surface family, the pointer compositor reuses the main pass's
+    // vertex stage for every buffer pass: the declared one when it compiled, the
+    // built-in when it would have fallen back, none when the declared one failed.
+    if (const std::optional<CompositorStage> vertex = linkedVertex(
+            declaredVert,
+            builtinCompositorStage(QStringLiteral("the built-in vertex stage"), PhosphorShaders::ShaderStage::Vertex,
+                                   PointerShaderRegistry::compositorVertexSource()))) {
+        if (mainFrag) {
+            errors += reportCompositorLink(out, *vertex, *mainFrag);
+        }
+        for (const CompositorStage& buffer : bufferStages) {
+            errors += reportCompositorLink(out, *vertex, buffer);
         }
     }
 

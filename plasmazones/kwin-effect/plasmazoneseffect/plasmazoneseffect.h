@@ -2004,7 +2004,7 @@ private:
     ///
     /// False for compositor teardown (no `KWin::effects`) and for a failed make-current:
     /// GL is going away in the first, and there is no context to delete against in the
-    /// second. Callers that DISCARD the result proceed either way; two branch on it.
+    /// second. Callers that DISCARD the result proceed either way; the rest branch on it.
     bool ensureGlContextCurrent() const
     {
         return KWin::effects && KWin::effects->makeOpenGLContextCurrent();
@@ -3199,7 +3199,6 @@ private:
     /// straight into the unguarded path with no diagnostic, and the entry it just
     /// inserted is precisely the one the sweep would take.
     void evictLruTextureIfOverBound(const ShaderTransition* pending);
-    void warmUserTextureAsync(const QString& absolutePath);
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;

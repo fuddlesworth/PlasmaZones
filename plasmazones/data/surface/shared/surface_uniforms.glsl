@@ -37,6 +37,13 @@
 #ifndef PLASMAZONES_SURFACE_UNIFORMS_GLSL
 #define PLASMAZONES_SURFACE_UNIFORMS_GLSL
 
+#ifdef GL_ES
+// GLSL ES defaults int to highp in the vertex stage and mediump in the
+// fragment stage, and a uniform both stages declare must agree on precision
+// to link. A pack with its own vertex stage includes this header in both.
+precision highp int;
+#endif
+
 #ifdef PLASMAZONES_KWIN
 
 // ── Compositor branch — classic default-block uniforms ──────────────────────

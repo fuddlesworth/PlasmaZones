@@ -106,11 +106,6 @@ void drawOutputQuad(const KWin::RenderViewport& viewport)
     vbo->render(GL_TRIANGLE_STRIP);
 }
 
-const char* outputQuadVertexSource()
-{
-    return kOutputQuadVertexSource;
-}
-
 void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                      KWin::RenderDevice* device)
 {

@@ -319,11 +319,10 @@ float pointerCurveBulge(vec2 c0, vec2 c1, vec2 c2, vec2 c3) {
 //
 // It expands to four statements, so it needs a braced body: never write it as
 // the whole of a brace-less `if`, or only the first assignment is conditional.
-#define pointerCurveAdvance(nextIndex, live, smoothing) \
-    c0 = c1;                                           \
-    c1 = c2;                                           \
-    c2 = c3;                                           \
-    c3 = pointerSmoothedAt((nextIndex), (live), (smoothing))
+//
+// One line, not backslash-continued: line continuation arrived in GLSL 4.20 and
+// ES 3.00, and KWin 6.7 compiles the compositor branch as desktop GLSL 140.
+#define pointerCurveAdvance(nextIndex, live, smoothing) c0 = c1; c1 = c2; c2 = c3; c3 = pointerSmoothedAt((nextIndex), (live), (smoothing))
 
 // Point at `t` in 0..1 along the Catmull-Rom span between c1 and c2, with c0
 // and c3 the neighbours that set the tangents. A caller at either end of the

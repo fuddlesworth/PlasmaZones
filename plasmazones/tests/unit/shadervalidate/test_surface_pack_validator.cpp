@@ -21,8 +21,8 @@
 // deliberately-broken packs in a temp dir and assert the diagnostic, with a
 // clean pack alongside. The clean pack is what catches a lint that fires on
 // EVERYTHING; it cannot catch a lint that stopped running, which is what the
-// negative slots are for. Two lints carry their own quiet control besides; the
-// rest share the one clean pack.
+// negative slots are for. Many slots also carry a quiet control of their own
+// for the lint they test; the rest share the one clean pack.
 
 #include <QtTest>
 
@@ -58,6 +58,8 @@ private Q_SLOTS:
         const PackResult r =
             validateSurface(tmp, QStringLiteral("sf-clean"), obj, surfaceBodyReading({QStringLiteral("width")}));
         QVERIFY2(r.report.contains(QStringLiteral("metadata       OK")), qPrintable(r.report));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("effect.frag"), QStringLiteral("OK (compositor GLES link)")),
+                 qPrintable(r.report));
         QCOMPARE(r.errors, 0);
     }
 
@@ -87,6 +89,8 @@ private Q_SLOTS:
         // nothing from this lint: an unused declaration is the type lint's business.
         obj.remove(QStringLiteral("presets"));
         const PackResult quiet = validateSurface(tmp, QStringLiteral("sf-image-preset"), obj, surfaceBodyReading({}));
+        QVERIFY2(quiet.report.contains(QStringLiteral("unknown param type")),
+                 qPrintable(quiet.report)); // positive control: the pack was validated
         QVERIFY2(!quiet.report.contains(QStringLiteral("is dropped at load")), qPrintable(quiet.report));
     }
 
@@ -224,13 +228,17 @@ private Q_SLOTS:
         REQUIRE_SURFACE_FIXTURE(tmp);
 
         const QJsonObject obj = surfacePack(QStringLiteral("sf-binding"), QJsonArray{});
-        const QString body = QStringLiteral("layout(binding = 3) uniform sampler2D uMine;\n")
+        // The binding on the daemon branch only, which is all the lint reflects:
+        // neither compositor dialect has a binding qualifier.
+        const QString body = QStringLiteral(
+                                 "#ifdef PLASMAZONES_KWIN\nuniform sampler2D uMine;\n#else\n"
+                                 "layout(binding = 3) uniform sampler2D uMine;\n#endif\n")
             + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return texture(uMine, uv);\n}\n");
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-binding"), obj, body);
         QVERIFY2(r.report.contains(QStringLiteral("binding layout: sampler uMine declared at binding 3")),
                  qPrintable(r.report));
-        QVERIFY(r.errors > 0);
+        QCOMPARE(r.errors, 1);
     }
 
     /// The contract samplers must sit at their table slot: a pack that re-declares
@@ -243,15 +251,17 @@ private Q_SLOTS:
 
         const QJsonObject obj = surfacePack(QStringLiteral("sf-binding-drift"), QJsonArray{});
         // uBackdrop belongs at the wallpaper slot (15); declare it at a consumer
-        // slot so the compile itself stays clean and only the table disagrees.
-        const QString body = QStringLiteral("layout(binding = 20) uniform sampler2D uBackdrop;\n")
+        // slot, on the daemon branch only, so only the table disagrees.
+        const QString body = QStringLiteral(
+                                 "#ifdef PLASMAZONES_KWIN\nuniform sampler2D uBackdrop;\n#else\n"
+                                 "layout(binding = 20) uniform sampler2D uBackdrop;\n#endif\n")
             + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return texture(uBackdrop, uv);\n}\n");
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-binding-drift"), obj, body);
         QVERIFY2(r.report.contains(
                      QStringLiteral("sampler uBackdrop declared at binding 20, but the contract puts it at 15")),
                  qPrintable(r.report));
-        QVERIFY(r.errors > 0);
+        QCOMPARE(r.errors, 1);
     }
 
     /// The POSITIVE control for the two binding lints above, which the shared
@@ -269,9 +279,10 @@ private Q_SLOTS:
 
         QJsonObject obj = surfacePack(QStringLiteral("sf-binding-ok"), QJsonArray{});
         obj.insert(QStringLiteral("needsBackdrop"), true);
-        // Both branches, the way surface_backdrop.glsl declares it: GLSL ES 300,
-        // which KWin 6.8 compiles the compositor branch as, has no binding
-        // qualifier, and the compositor binds the sampler by name anyway.
+        // Both branches, the way surface_backdrop.glsl declares it: neither
+        // dialect KWin compiles the compositor branch in (desktop GLSL 140,
+        // GLSL ES 300) has a binding qualifier, and the compositor binds the
+        // sampler by name anyway.
         const QString body = QStringLiteral("#ifdef PLASMAZONES_KWIN\nuniform sampler2D uBackdrop;\n#else\n")
             + QStringLiteral("layout(binding = 15) uniform sampler2D uBackdrop;\n#endif\n")
             + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return texture(uBackdrop, uv);\n}\n");
@@ -299,13 +310,15 @@ private Q_SLOTS:
         const QJsonObject obj = surfacePack(QStringLiteral("sf-binding-consumer"), QJsonArray{});
         // 20 sits squarely inside the consumer range, so this fixture collides
         // with no contract slot and fails ONLY on the rule under test.
-        const QString body = QStringLiteral("layout(binding = 20) uniform sampler2D uMine;\n")
+        const QString body = QStringLiteral(
+                                 "#ifdef PLASMAZONES_KWIN\nuniform sampler2D uMine;\n#else\n"
+                                 "layout(binding = 20) uniform sampler2D uMine;\n#endif\n")
             + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return texture(uMine, uv);\n}\n");
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-binding-consumer"), obj, body);
         QVERIFY2(r.report.contains(QStringLiteral("sampler uMine declared at binding 20, which nothing will bind")),
                  qPrintable(r.report));
-        QVERIFY(r.errors > 0);
+        QCOMPARE(r.errors, 1);
     }
 
     /// fromJson drops a second declaration of the same parameter id with only a
@@ -524,7 +537,7 @@ private Q_SLOTS:
         // "multipass buffer shader missing" and makes the absence assertion below pass
         // vacuously. The helper is idempotent, so calling it twice costs one rewrite.
         r = validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-wrap"), obj, surfaceBodyReading({}));
-        QVERIFY2(!r.report.contains(QStringLiteral("the compositor ignores")), qPrintable(r.report));
+        QVERIFY_ACCEPTED_WITHOUT(r, QStringLiteral("the compositor ignores"));
     }
 
     /// Boolean keys are read with toBool(default), which answers the DEFAULT for
@@ -865,13 +878,17 @@ private Q_SLOTS:
                             packVertexBody(QStringLiteral("    gl_Position = vec4(position, 0.0, 1.0);\n")));
         // BOTH branches, which is what the slot name claims. The daemon line is
         // asserted with the compositor marker excluded, for the nesting reason the
-        // buffer-pass siblings below spell out: "OK (compositor)" contains "OK", so a
-        // plain match is satisfied by the compositor line alone and the Qt-RHI half
+        // buffer-pass siblings below spell out: every compositor line contains "OK",
+        // so a plain match is satisfied by a compositor line alone and the Qt-RHI half
         // goes untested. errors == 0 would hold with the daemon vertex bake deleted.
-        QVERIFY2(reportLineHasWithout(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK"),
-                                      QStringLiteral("(compositor)")),
+        QVERIFY2(reportLineHasWithout(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK"), kCompositorMarker),
                  qPrintable(QStringLiteral("probe.vert has no daemon OK line\n") + r.report));
         QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK (compositor)")),
+                 qPrintable(r.report));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK (compositor GLES)")),
+                 qPrintable(r.report));
+        // And the program the compositor builds: the fragment linked against it.
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("effect.frag"), QStringLiteral("OK (compositor GLES link)")),
                  qPrintable(r.report));
         QCOMPARE(r.errors, 0);
     }
@@ -896,8 +913,11 @@ private Q_SLOTS:
             "#endif\n");
         const PackResult r =
             validateSurface(tmp, QStringLiteral("sf-vert-kwin"), obj, surfaceBodyReading({}), packVertexBody(assign));
-        QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK")), qPrintable(r.report));
+        QVERIFY2(reportLineHasWithout(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK"), kCompositorMarker),
+                 qPrintable(r.report));
         QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("ERROR (compositor)")),
+                 qPrintable(r.report));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("ERROR (compositor GLES)")),
                  qPrintable(r.report));
         QVERIFY(r.errors > 0);
     }
@@ -917,8 +937,7 @@ private Q_SLOTS:
         const QJsonObject obj = surfacePack(QStringLiteral("sf-vert-fallback"), QJsonArray{});
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-vert-fallback"), obj, surfaceBodyReading({}));
         QVERIFY2(reportLineHas(r.report, QStringLiteral("surface.vert"), QStringLiteral("OK")), qPrintable(r.report));
-        QVERIFY2(!reportLineHas(r.report, QStringLiteral("surface.vert"), QStringLiteral("(compositor)")),
-                 qPrintable(r.report));
+        QVERIFY2(!reportLineHas(r.report, QStringLiteral("surface.vert"), kCompositorMarker), qPrintable(r.report));
         QCOMPARE(r.errors, 0);
     }
 
@@ -952,20 +971,14 @@ private Q_SLOTS:
         const PackResult ok =
             validateSurface(tmp, QStringLiteral("sf-orphan-vert"), declared, surfaceBodyReading({}),
                             packVertexBody(QStringLiteral("    gl_Position = vec4(position, 0.0, 1.0);\n")));
-        QVERIFY2(!ok.report.contains(QStringLiteral("surface.vert sits beside the fragment")), qPrintable(ok.report));
+        QVERIFY_ACCEPTED_WITHOUT(ok, QStringLiteral("surface.vert sits beside the fragment"));
     }
 
-    /// The builtin gaussian pair is compiled by NOTHING in the tree. No bundled
-    /// pack declares builtin:gaussian-h or -v, so neither shader_validate_surface
-    /// nor any other gate ever bakes them, and the only other in-tree references
-    /// (in the registry and decoration-preview tests) exercise TOKEN RESOLUTION
-    /// and stop there. They are kept for third-party packs that declare them, so
-    /// a pack outside this repo is currently the first thing to compile them.
-    ///
-    /// Declaring them from a fixture pack is what puts the REAL shared files
-    /// through both bakes. The kawase chain is baked by the bufferScales slot
-    /// below for the same reason, which is why only the gaussian pair needs its
-    /// own slot here.
+    /// No bundled pack declares builtin:gaussian-h or -v (they are kept for
+    /// third-party packs), so the gate never bakes them. test_surface_blur_chain_lints
+    /// bakes them in passing, but this is the one slot that ASSERTS both stages'
+    /// OK lines on every host. The kawase chain needs no slot of its own: the
+    /// bundled blur and glass packs declare it, so the gate bakes it.
     void theBuiltinGaussianPairStillBakesOnBothHosts()
     {
         QTemporaryDir tmp;
@@ -990,16 +1003,21 @@ private Q_SLOTS:
         // Both stages, on both hosts. reportLineHas rather than a bare contains,
         // because the fragment's own OK lines are in the same report and would
         // satisfy a whole-report match whether or not these stages ran at all.
-        // The DAEMON line is asserted with the compositor marker EXCLUDED. The two
-        // markers nest ("OK (compositor)" contains "OK"), so a plain
-        // reportLineHas(stage, "OK") is satisfied by the compositor line alone and
+        // The DAEMON line is asserted with the compositor marker EXCLUDED. The
+        // markers nest (every compositor line contains "OK"), so a plain
+        // reportLineHas(stage, "OK") is satisfied by a compositor line alone and
         // the Qt-RHI half goes untested: deleting the whole daemon buffer-pass loop
-        // left the old form of these four assertions green.
+        // left the old form of these assertions green.
         for (const QString& stage : {QStringLiteral("gaussian_h.frag"), QStringLiteral("gaussian_v.frag")}) {
-            QVERIFY2(reportLineHasWithout(r.report, stage, QStringLiteral("OK"), QStringLiteral("(compositor)")),
+            QVERIFY2(reportLineHasWithout(r.report, stage, QStringLiteral("OK"), kCompositorMarker),
                      qPrintable(stage + QStringLiteral(" has no daemon OK line\n") + r.report));
             QVERIFY2(reportLineHas(r.report, stage, QStringLiteral("OK (compositor)")),
                      qPrintable(stage + QStringLiteral(" has no compositor OK line\n") + r.report));
+            QVERIFY2(reportLineHas(r.report, stage, QStringLiteral("OK (compositor GLES)")),
+                     qPrintable(stage + QStringLiteral(" has no compositor GLES OK line\n") + r.report));
+            // Linked against the built-in quad every compositor buffer pass uses.
+            QVERIFY2(reportLineHas(r.report, stage, QStringLiteral("OK (compositor GLES link)")),
+                     qPrintable(stage + QStringLiteral(" has no link line\n") + r.report));
         }
         QCOMPARE(r.errors, 0);
     }
@@ -1081,7 +1099,7 @@ private Q_SLOTS:
                        QJsonArray{PhosphorShaders::kMinBufferScale, PhosphorShaders::kMaxBufferScale});
             const PackResult r =
                 validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-edge"), obj, surfaceBodyReading({}));
-            QVERIFY2(!r.report.contains(QStringLiteral("out of range")), qPrintable(r.report));
+            QVERIFY_ACCEPTED_WITHOUT(r, QStringLiteral("out of range"));
         }
 
         // THE PASS BUDGET. One past kMaxBufferPasses, and the surplus is
@@ -1122,7 +1140,7 @@ private Q_SLOTS:
             obj.insert(QStringLiteral("bufferScales"), scales);
             const PackResult r =
                 validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-atcap"), obj, surfaceBodyReading({}));
-            QVERIFY2(!r.report.contains(QStringLiteral("pass budget")), qPrintable(r.report));
+            QVERIFY_ACCEPTED_WITHOUT(r, QStringLiteral("pass budget"));
         }
     }
 };

@@ -18,6 +18,9 @@
 #include "shader_resolve.h"
 #include "surface_fold.h"
 
+#include <PhosphorShaders/ShaderParamPreamble.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
+
 #include <QByteArray>
 #include <QLoggingCategory>
 #include <QVector2D>
@@ -62,18 +65,10 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
     }
     m_surfacePresentFailed = true; // pessimistic until the compile succeeds
 
-    static const QByteArray kPresentVertex = QByteArrayLiteral(
-                                                 "#version 450\n\n"
-                                                 "layout(location = 0) in vec2 position;\n"
-                                                 "layout(location = 1) in vec2 texCoord;\n\n"
-                                                 "layout(location = 0) out vec2 vTexCoord;\n\n"
-                                                 "uniform mat4 modelViewProjectionMatrix;\n\n"
-                                                 "void main() {\n")
-        + (KWinCompat::OFFSCREEN_TEXCOORDS_TOP_DOWN
-               ? QByteArrayLiteral("    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);\n")
-               : QByteArrayLiteral("    vTexCoord = texCoord;\n"))
-        + QByteArrayLiteral("    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-                            "}\n");
+    // The vertex stage is PhosphorSurfaceShaders::SurfaceShaderRegistry::
+    // compositorPresentVertexSource(), so the offline validator can compile
+    // it. Its orientation flip keys off the same top-down define the
+    // animation path passes, spliced in below on KWin 6.8.
     static const QByteArray kPresentFragment = QByteArrayLiteral(
         "#version 450\n\n"
         "layout(location = 0) in vec2 vTexCoord;\n\n"
@@ -141,12 +136,14 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
         "}\n");
 
     // Route BOTH stages through injectKwinDefineAfterVersion, exactly like
-    // every pack shader: KWin rewrites our #version 450 down to the GL context
-    // core version (140), where the `layout(location = N)` qualifiers are
-    // illegal without the ARB extensions the inject helper enables. Passing
-    // the raw sources here failed the present compile on NVIDIA (error C7548)
-    // and latched multi-pack / padded decoration off for the whole session —
-    // the same failure mode surface_compile.cpp documents for frag-only packs.
+    // every pack shader: KWin compiles our #version 450 as desktop GLSL 140 on
+    // a 6.7 desktop context and as GLSL ES 300 on a GLES one (every context on
+    // 6.8), and the `layout(location = N)` qualifiers are legal in neither
+    // until the inject helper has enabled the ARB extension (140) and stripped
+    // the varying's qualifier (ES 300). Passing the raw sources failed the
+    // present compile on NVIDIA under 6.7 (error C7548), and on Mesa under 6.8
+    // (#1142), and either latched multi-pack / padded decoration off for the
+    // whole session.
     // TransformColorspace is DECLARATIVE ONLY here. With a custom fragment source
     // `generateCustomShader` uses the traits for nothing but `listDefines`, and
     // colormanagement.glsl does not read TRAIT_TRANSFORM_COLORSPACE at all (only
@@ -156,8 +153,10 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
     // actually does — do not delete the GLSL believing the trait drives it.
     auto shader = KWin::ShaderManager::instance()->generateCustomShader(
         KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::TransformColorspace,
-        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentVertex),
-                                                     PhosphorShaders::ShaderStage::Vertex),
+        ShaderInternal::injectKwinDefineAfterVersion(
+            PhosphorSurfaceShaders::SurfaceShaderRegistry::compositorPresentVertexSource(),
+            PhosphorShaders::ShaderStage::Vertex,
+            KWinCompat::OFFSCREEN_TEXCOORDS_TOP_DOWN ? PhosphorShaders::kwinTopDownTexcoordsDefine() : QString()),
         ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentFragment),
                                                      PhosphorShaders::ShaderStage::Fragment));
     // KWin 6.7 removed GLShader::isValid(); generateCustomShader returns nullptr
@@ -210,14 +209,15 @@ void PlasmaZonesEffect::reconcileDecorationShader(const QString& windowId, KWin:
         KWin::GLShader* const redirectShader = surfacePresentShader();
         if (!redirectShader) {
             // Through releaseDecorationGl, the single owner of this teardown, rather than
-            // hand-rolling setShader(nullptr)+unredirect here. It matters on this exact
-            // path: the only non-latching way surfacePresentShader() returns null is
-            // makeOpenGLContextCurrent() having FAILED, so the context is guaranteed not
-            // current — and destroying KWin's OffscreenData (texture and framebuffer)
-            // without one is the hazard releaseDecorationGl's ensureGlContextCurrent
-            // exists to prevent. It also damages what the dead decoration was covering
-            // (this branch used to leave the stale decorated frame on screen) and honours
-            // the live-transition guard, which the hand-rolled version stole the slot from.
+            // hand-rolling setShader(nullptr)+unredirect here. That buys two things on
+            // this path: it damages what the dead decoration was covering (this branch
+            // used to leave the stale decorated frame on screen), and it honours the
+            // live-transition guard, which the hand-rolled version stole the slot from.
+            // It does NOT buy a current context. The only non-latching way
+            // surfacePresentShader() returns null is makeOpenGLContextCurrent() having
+            // failed, so releaseDecorationGl's own ensureGlContextCurrent fails again
+            // here and the release proceeds without one, as it does by design whenever
+            // no context can be had.
             releaseDecorationGl(w, it->outerPadding);
             it->shaderApplied = false;
             return;

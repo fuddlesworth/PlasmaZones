@@ -36,12 +36,11 @@
 // also differs only in WHICH matrix: the kwin path multiplies `position` by
 // `modelViewProjectionMatrix`, the daemon by `qt_Matrix`. Neither emits
 // clip-space directly.
-// See `kKwinDefaultVertexSource` in
-// `kwin-effect/plasmazoneseffect/shader_textures.cpp` and
+// See `AnimationShaderRegistry::compositorVertexSource()` and
 // `kDefaultVertexShaderSource` in
-// `libs/phosphor-rendering/src/shadereffect.cpp`. The desktop-switch pass
-// is a THIRD source of the same invariant: `TransitionPass::kOutputQuadVertexSource`
-// (`kwin-effect/transitions/transitionpasspure.h`) passes texCoord
+// `libs/phosphor-rendering/src/shadereffect.cpp`. The screen-level passes
+// hold the same invariant another way:
+// `AnimationShaderRegistry::compositorScreenVertexSource()` passes texCoord
 // through unflipped and gets Y-down from the blend quad's own vertex
 // texcoords instead.
 //

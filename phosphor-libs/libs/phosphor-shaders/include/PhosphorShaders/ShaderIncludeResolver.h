@@ -30,6 +30,12 @@ public:
     static constexpr const char* GeneratedPreambleInclude = "p_generated.glsl";
 
     /// Expand #include directives in @p source.
+    ///
+    /// Each inlined include is bracketed by `PhosphorShaders::lineDirective`
+    /// re-anchors. A re-anchor of that shape that @p source already carries for
+    /// its own source string, such as the one `assembleEntryPoint` emits after
+    /// a family prologue, is honoured: the parent's re-anchor after a later
+    /// include counts from it rather than from the top of the text.
     /// @param source Raw shader source (may contain #include "..." or #include <...>)
     /// @param currentFileDir Directory of the file that contains @p source
     /// @param includePaths Directories to search for includes

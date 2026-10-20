@@ -1,12 +1,20 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Pins buildParamPreamble() — the generated `#define p_<id> <accessor>` block
-// that lets shader authors read parameters by name instead of hand-decoding a
+// Pins the source transforms in PhosphorShaders/ShaderParamPreamble.h.
+//
+// buildParamPreamble() is the generated `#define p_<id> <accessor>` block that
+// lets shader authors read parameters by name instead of hand-decoding a
 // customParams[N].xyzw lane. Auto-slotting must match the lane the runtime
 // uploads to, so these tests pin the declaration-order numbering, the
 // independent scalar/color/image pools, explicit-slot honouring, and the
 // skip-don't-break behaviour for bad input.
+//
+// The rest are the splices every compile path shares: versionDirectiveEnd and
+// spliceAfterVersion with the lineDirective re-anchor they emit, the
+// compositor's kwinDefineBlock, stripVaryingLocations and kwinCompositorSource,
+// the offline gates' kwinGlesDialect and kwinDesktopDialect, and the
+// pack-path containment of the zone metadata parser.
 
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorShaders/ShaderRegistry.h>
@@ -139,37 +147,119 @@ private Q_SLOTS:
     }
 
     // spliceAfterVersion inserts the block right after #version and emits a
-    // `#line 2 0` so the author's line 2 keeps its number.
+    // re-anchor to line 2 so the author's line 2 keeps its number. The whole
+    // output is pinned, so a block landing on the wrong side of the directive
+    // or a missing re-anchor cannot pass.
     void testSpliceAfterVersion()
     {
         const QString src = QStringLiteral("#version 450\nvoid main() {}\n");
         const QString out = PhosphorShaders::spliceAfterVersion(src, QStringLiteral("#define p_x customParams[0].x\n"));
-        // #version stays first.
-        QVERIFY2(out.startsWith(QStringLiteral("#version 450\n")), qPrintable(out));
-        // Block present, then the #line fixup, then the author line.
-        const int defPos = out.indexOf(QStringLiteral("#define p_x"));
-        const int linePos = out.indexOf(QStringLiteral("#line 2 0"));
-        const int mainPos = out.indexOf(QStringLiteral("void main()"));
-        QVERIFY2(defPos > 0, qPrintable(out));
-        QVERIFY2(linePos > defPos, qPrintable(out));
-        QVERIFY2(mainPos > linePos, qPrintable(out));
+        QCOMPARE(out,
+                 QStringLiteral("#version 450\n#define p_x customParams[0].x\n") + PhosphorShaders::lineDirective(2, 0)
+                     + QStringLiteral("void main() {}\n"));
     }
 
-    // An empty block is a no-op.
+    // The re-anchor numbers the next line N under desktop 330+ and every GLSL
+    // ES version, and N under desktop pre-330 too by defining its macro one
+    // lower there, since `#line N` meant "the next line is N+1" before 330.
+    void testLineDirectiveShape()
+    {
+        QCOMPARE(PhosphorShaders::lineDirective(7, 2),
+                 QStringLiteral("#if !defined(GL_ES) && __VERSION__ < 330\n"
+                                "#define PZ_LINE_2_7 6\n"
+                                "#else\n"
+                                "#define PZ_LINE_2_7 7\n"
+                                "#endif\n"
+                                "#line PZ_LINE_2_7 2\n"));
+        QVERIFY(PhosphorShaders::lineDirective(1, 0, QStringLiteral("\r\n")).endsWith(QStringLiteral(" 0\r\n")));
+        QCOMPARE(PhosphorShaders::lineDirective(1, 0, QStringLiteral("\r\n")).count(QStringLiteral("\r\n")), 6);
+    }
+
+    // An empty block is a no-op, apart from the BOM, which never survives.
     void testSpliceEmptyBlock()
     {
         const QString src = QStringLiteral("#version 450\nvoid main() {}\n");
         QCOMPARE(PhosphorShaders::spliceAfterVersion(src, QString()), src);
+        QCOMPARE(PhosphorShaders::spliceAfterVersion(QChar(0xFEFF) + src, QString()), src);
     }
 
-    // The #line fixup uses the actual #version line number, not a hardcoded 2,
+    // The re-anchor uses the actual #version line number, not a hardcoded 2,
     // so a leading comment block before #version is handled.
     void testSpliceVersionNotOnFirstLine()
     {
         const QString src = QStringLiteral("// banner\n// more\n#version 450\nvoid main() {}\n");
         const QString out = PhosphorShaders::spliceAfterVersion(src, QStringLiteral("#define p_x customParams[0].x\n"));
         // #version is line 3, so the author's next line is renumbered to 4.
-        QVERIFY2(out.contains(QStringLiteral("#line 4 0")), qPrintable(out));
+        QVERIFY2(out.contains(PhosphorShaders::lineDirective(4, 0)), qPrintable(out));
+    }
+
+    // A CRLF source keeps CRLF on everything the splice itself emits, and a
+    // BOM in front of the directive is dropped rather than left ahead of it.
+    void testSpliceCrlfAndBom()
+    {
+        const QString src = QChar(0xFEFF) + QStringLiteral("#version 450\r\nvoid main() {}\r\n");
+        const QString out = PhosphorShaders::spliceAfterVersion(src, QStringLiteral("#define A\r\n"));
+        QCOMPARE(out,
+                 QStringLiteral("#version 450\r\n#define A\r\n")
+                     + PhosphorShaders::lineDirective(2, 0, QStringLiteral("\r\n"))
+                     + QStringLiteral("void main() {}\r\n"));
+    }
+
+    // A directive on the last line with no newline after it still gets the
+    // block BELOW it, behind a newline of the splice's own.
+    void testSpliceVersionAtEndOfFile()
+    {
+        const QString out =
+            PhosphorShaders::spliceAfterVersion(QStringLiteral("// c\n#version 450"), QStringLiteral("#define A\n"));
+        QCOMPARE(out, QStringLiteral("// c\n#version 450\n#define A\n") + PhosphorShaders::lineDirective(3, 0));
+    }
+
+    // Every documented answer of the shared #version finder.
+    void testVersionDirectiveEnd_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<int>("expected");
+        const QString plain = QStringLiteral("#version 450\nvoid main() {}\n");
+        QTest::newRow("plain") << plain << 12;
+        QTest::newRow("bom") << QString(QChar(0xFEFF) + plain) << 13;
+        QTest::newRow("crlf") << QStringLiteral("#version 450\r\nx\r\n") << 13;
+        QTest::newRow("indented") << QStringLiteral("  #version 450\nx\n") << 14;
+        QTest::newRow("at-eof") << QStringLiteral("#version 450") << 12;
+        QTest::newRow("none") << QStringLiteral("void main() {}\n") << -1;
+        QTest::newRow("line-comment") << QStringLiteral("// #version 100\n#version 450\n") << 28;
+        QTest::newRow("same-line-block-comment") << QStringLiteral("/* #version 100 */\n#version 450\n") << 31;
+        QTest::newRow("spanning-block-comment") << QStringLiteral("/* banner\n#version 100 */\n#version 450\n") << 38;
+        // A directive that opens a comment it does not close is refused, or a
+        // splice after it would land inside the comment.
+        QTest::newRow("opens-unclosed-comment") << QStringLiteral("#version 450 /* banner\ncontinues */\nx\n") << -1;
+        // Documented as unsupported rather than guessed at.
+        QTest::newRow("space-after-hash") << QStringLiteral("# version 450\n") << -1;
+    }
+
+    void testVersionDirectiveEnd()
+    {
+        QFETCH(QString, source);
+        QFETCH(int, expected);
+        QCOMPARE(PhosphorShaders::versionDirectiveEnd(source), expected);
+    }
+
+    // The block selects the compositor branch. Every #extension sits inside
+    // the desktop-only guard, because one after KWin's ES precision lines is
+    // rejected by Mesa and NVIDIA while glslang accepts it. This pins the
+    // block's exact text. The validators' GLES link arm is the behavioural
+    // check, and it would fail every bundled pack without the guard.
+    void testKwinDefineBlockShape()
+    {
+        const QString block = PhosphorShaders::kwinDefineBlock();
+        QCOMPARE(block,
+                 QStringLiteral("#ifndef GL_ES\n"
+                                "#extension GL_ARB_explicit_attrib_location : enable\n"
+                                "#extension GL_ARB_separate_shader_objects : enable\n"
+                                "#endif\n"
+                                "#define PLASMAZONES_KWIN\n"));
+        const QString crlf = PhosphorShaders::kwinDefineBlock(QStringLiteral("\r\n"));
+        QCOMPARE(crlf.count(QStringLiteral("\r\n")), crlf.count(QLatin1Char('\n')));
+        QCOMPARE(crlf.count(QLatin1Char('\n')), block.count(QLatin1Char('\n')));
     }
 
     // A param whose id isn't a valid GLSL identifier must claim NO lane even when
@@ -254,19 +344,117 @@ private Q_SLOTS:
         QCOMPARE(out, QStringLiteral("#version 450\n\nout vec2 vTexCoord;\nvoid main() {}\n"));
     }
 
-    // The ES rewrite drops the #version line and leads with KWin 6.8's own
-    // prologue, the order a GLSL ES compiler then sees.
+    // One declaration per row, exact before and after. Covers every qualifier
+    // the lookahead lists, both orders of an interpolation qualifier against
+    // the layout, a CRLF line, the identifiers that merely start with `in` or
+    // `out`, and the shapes deliberately left alone, so widening or narrowing
+    // the pattern is a visible change here rather than a silent one.
+    void testStripVaryingLocationsShapes_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<bool>("vertex");
+        QTest::addColumn<QString>("expected");
+        const auto row = [](const char* name, const QString& source, bool vertex, const QString& expected) {
+            QTest::newRow(name) << source << vertex << expected;
+        };
+        row("smooth-out", QStringLiteral("layout(location = 0) smooth out vec2 v;"), true,
+            QStringLiteral("smooth out vec2 v;"));
+        row("noperspective-out", QStringLiteral("layout(location = 0) noperspective out vec2 v;"), true,
+            QStringLiteral("noperspective out vec2 v;"));
+        row("centroid-out", QStringLiteral("layout(location = 0) centroid out vec2 v;"), true,
+            QStringLiteral("centroid out vec2 v;"));
+        row("invariant-out", QStringLiteral("layout(location = 0) invariant out vec2 v;"), true,
+            QStringLiteral("invariant out vec2 v;"));
+        row("flat-before-layout", QStringLiteral("flat layout(location = 1) out int v;"), true,
+            QStringLiteral("flat out int v;"));
+        row("flat-in", QStringLiteral("layout(location = 1) flat in int v;"), false, QStringLiteral("flat in int v;"));
+        row("crlf", QStringLiteral("layout(location = 0) out vec2 v;\r\n"), true, QStringLiteral("out vec2 v;\r\n"));
+        // A vertex INPUT whose qualifier sits on its own line keeps it: the
+        // lookahead may cross the newline, and must still see `in`, not `out`.
+        row("vertex-input-split", QStringLiteral("layout(location = 0)\nin vec2 position;"), true,
+            QStringLiteral("layout(location = 0)\nin vec2 position;"));
+        row("int-is-not-in", QStringLiteral("layout(location = 0) int x;"), false,
+            QStringLiteral("layout(location = 0) int x;"));
+        row("inout-is-not-in", QStringLiteral("layout(location = 0) inout vec4 c;"), false,
+            QStringLiteral("layout(location = 0) inout vec4 c;"));
+        row("outColor-is-not-out", QStringLiteral("layout(location = 0) outColor;"), true,
+            QStringLiteral("layout(location = 0) outColor;"));
+        row("second-member-kept", QStringLiteral("layout(location = 1, component = 0) out float v;"), true,
+            QStringLiteral("layout(location = 1, component = 0) out float v;"));
+        row("macro-location-kept", QStringLiteral("layout(location = LOC) out vec2 v;"), true,
+            QStringLiteral("layout(location = LOC) out vec2 v;"));
+        row("comment-between-kept", QStringLiteral("layout(location = 0) /* uv */ out vec2 v;"), true,
+            QStringLiteral("layout(location = 0) /* uv */ out vec2 v;"));
+        row("no-layout", QStringLiteral("out vec2 v;\nvoid main() {}\n"), true,
+            QStringLiteral("out vec2 v;\nvoid main() {}\n"));
+    }
+
+    void testStripVaryingLocationsShapes()
+    {
+        QFETCH(QString, source);
+        QFETCH(bool, vertex);
+        QFETCH(QString, expected);
+        const auto stage = vertex ? PhosphorShaders::ShaderStage::Vertex : PhosphorShaders::ShaderStage::Fragment;
+        QCOMPARE(PhosphorShaders::stripVaryingLocations(source, stage), expected);
+    }
+
+    // The ES rewrite blanks the #version line (keeping its newline, so every
+    // line number moves by exactly the prologue's height) and leads with KWin
+    // 6.8's own prologue, the order a GLSL ES compiler then sees. Pinned whole.
     void testKwinGlesDialect()
     {
         const QString src = QStringLiteral("#version 450\n#define PLASMAZONES_KWIN\nvoid main() {}\n");
-        const QString out = PhosphorShaders::kwinGlesDialect(src);
-        QVERIFY2(out.startsWith(QStringLiteral("#version 300 es\n")), qPrintable(out));
-        QCOMPARE(out.count(QStringLiteral("#version")), 1);
-        QVERIFY2(out.contains(QStringLiteral("precision highp float;\n")), qPrintable(out));
-        QVERIFY2(out.indexOf(QStringLiteral("precision highp sampler3D;"))
-                     < out.indexOf(QStringLiteral("#define PLASMAZONES_KWIN")),
-                 qPrintable(out));
-        QVERIFY2(out.endsWith(QStringLiteral("void main() {}\n")), qPrintable(out));
+        QCOMPARE(PhosphorShaders::kwinGlesDialect(src),
+                 QStringLiteral("#version 300 es\n"
+                                "#extension GL_OES_EGL_image_external : require\n"
+                                "precision highp float;\n"
+                                "precision highp sampler2D;\n"
+                                "precision highp sampler3D;\n"
+                                "\n"
+                                "#define PLASMAZONES_KWIN\n"
+                                "void main() {}\n"));
+    }
+
+    // KWin's rewrite is a raw startsWith on each '\n'-split line: an indented
+    // directive survives it, a CRLF line keeps its '\r', and a directive that
+    // is not on the first line is still blanked.
+    void testKwinRewriteIsRaw()
+    {
+        const QString out = PhosphorShaders::kwinDesktopDialect(
+            QStringLiteral("// banner\r\n#version 450\r\n  #version 450\r\nvoid main() {}\r\n"));
+        QCOMPARE(out, QStringLiteral("#version 140\n// banner\r\n\n  #version 450\r\nvoid main() {}\r\n"));
+    }
+
+    // The compositor branch, built the one way every caller builds it: block
+    // and extras after #version, varyings stripped, line numbers re-anchored.
+    void testKwinCompositorSource()
+    {
+        const QString src = QStringLiteral("#version 450\nlayout(location = 0) out vec2 v;\nvoid main() {}\n");
+        bool synthesized = true;
+        const QString out = PhosphorShaders::kwinCompositorSource(src, PhosphorShaders::ShaderStage::Vertex,
+                                                                  QStringLiteral("#define EXTRA 1\n"), &synthesized);
+        QVERIFY(!synthesized);
+        QCOMPARE(out,
+                 QStringLiteral("#version 450\n") + PhosphorShaders::kwinDefineBlock()
+                     + QStringLiteral("#define EXTRA 1\n") + PhosphorShaders::lineDirective(2, 0)
+                     + QStringLiteral("out vec2 v;\nvoid main() {}\n"));
+    }
+
+    // A source with no #version gets one synthesized, reported to the caller,
+    // and the author's first line keeps the number 1. A CRLF source gets its
+    // extras re-terminated to CRLF too.
+    void testKwinCompositorSourceSynthesizesVersion()
+    {
+        bool synthesized = false;
+        const QString out = PhosphorShaders::kwinCompositorSource(QStringLiteral("void main() {}\r\n"),
+                                                                  PhosphorShaders::ShaderStage::Fragment,
+                                                                  QStringLiteral("#define EXTRA 1\n"), &synthesized);
+        QVERIFY(synthesized);
+        const QString eol = QStringLiteral("\r\n");
+        QCOMPARE(out,
+                 QStringLiteral("#version 450") + eol + PhosphorShaders::kwinDefineBlock(eol)
+                     + QStringLiteral("#define EXTRA 1") + eol + PhosphorShaders::lineDirective(1, 0, eol)
+                     + QStringLiteral("void main() {}\r\n"));
     }
 
     // Zone-side T1.1: ShaderRegistry::paramPreamble maps each declared param's
@@ -315,10 +503,13 @@ private Q_SLOTS:
     /// Write a pack whose metadata.json is @p meta, and return its parse.
     ///
     /// `qFatal` rather than a silent `return {}`, because a QVERIFY in a static
-    /// helper cannot abort the CALLER: five slots below assert that a field came
-    /// back EMPTY, and every one of them would pass vacuously if the metadata was
-    /// never written at all. Failing loudly here is the difference between those
-    /// assertions pinning the refusal and pinning nothing.
+    /// helper cannot abort the CALLER: the slots below that assert a field came
+    /// back EMPTY would every one pass vacuously if the metadata was never
+    /// written, or was written and then refused whole. A schema failure, an
+    /// oversize file or bad JSON returns an empty ShaderInfo, which empties
+    /// every field at once, so a parse error is fatal here too. Failing loudly
+    /// is the difference between those assertions pinning the refusal of ONE
+    /// path and pinning nothing.
     static ShaderRegistry::ShaderInfo parsePack(const QTemporaryDir& tmp, const QByteArray& meta)
     {
         QFile f(tmp.filePath(QStringLiteral("metadata.json")));
@@ -329,7 +520,12 @@ private Q_SLOTS:
             qFatal("parsePack: short write to metadata.json");
         }
         f.close();
-        return ShaderRegistry::parsePackMetadata(tmp.path());
+        QString error;
+        ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(tmp.path(), &error);
+        if (!error.isEmpty()) {
+            qFatal("parsePack: the fixture was refused whole: %s", qPrintable(error));
+        }
+        return info;
     }
 
     void packMetadataRefusesAnAbsoluteFragmentShaderPath()

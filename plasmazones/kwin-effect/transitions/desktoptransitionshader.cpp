@@ -86,9 +86,10 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
         ShaderInternal::injectKwinDefineAfterVersion(expanded, PhosphorShaders::ShaderStage::Fragment);
 
     // Full-screen quad vertex stage, shared with the strip pass — see
-    // TransitionPass::outputQuadVertexSource for the projection rationale.
+    // AnimationShaderRegistry::compositorScreenVertexSource for the projection rationale.
     const QByteArray vertWithKwinDefine = ShaderInternal::injectKwinDefineAfterVersion(
-        QString::fromUtf8(TransitionPass::outputQuadVertexSource()), PhosphorShaders::ShaderStage::Vertex);
+        PhosphorAnimationShaders::AnimationShaderRegistry::compositorScreenVertexSource(),
+        PhosphorShaders::ShaderStage::Vertex);
 
     std::unique_ptr<KWin::GLShader> shader = KWin::ShaderManager::instance()->generateCustomShader(
         KWin::ShaderTrait::MapTexture, vertWithKwinDefine, fragWithKwinDefine);

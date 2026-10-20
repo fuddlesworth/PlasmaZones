@@ -84,13 +84,13 @@ inline bool linkSharedIncludes(const QTemporaryDir& tmp)
 }
 
 /// The pointer twin of `linkSharedIncludes`. The pointer entry prologue always
-/// emits `#include <pointer_lib.glsl>`, and `includePathsFor` searches the
-/// pack's PARENT directory and its `shared/` sibling before falling back to the
-/// INSTALLED tree under the XDG data dirs. A temp packs-root has neither, so
-/// without this every pointer fixture silently resolved the helpers from
-/// whatever version happened to be installed on the machine — which meant the
-/// suite baked against a different `shared/` than the one in the working tree,
-/// and passed while the branch's own helper changes went unexercised.
+/// emits `#include <pointer_lib.glsl>`, and the pointer arm searches the pack's
+/// `shared/` sibling and its PARENT directory, the pair the runtime registry
+/// resolves against. A temp packs-root has no `shared/`, so without this every
+/// pointer fixture failed the include. Before the arm resolved through
+/// packSharedRoots it also fell back to the INSTALLED tree, so a fixture
+/// silently baked against whatever helpers happened to be installed rather
+/// than the ones in the working tree.
 ///
 /// Returns false when the source tree is not available, which is the caller's
 /// cue to skip rather than fail.
@@ -349,13 +349,21 @@ inline bool reportLineHas(const QString& report, const QString& stage, const QSt
     return false;
 }
 
+/// The text every compositor arm's report line contains: "(compositor)",
+/// "(compositor GLES)", "(compositor GLES 6.7)", "(compositor GLES link)" and
+/// "(compositor, both dialects)". Excluding "(compositor)" with its closing paren would let the
+/// GLES lines through.
+inline const QString kCompositorMarker = QStringLiteral("(compositor");
+
 /// As `reportLineHas`, but the line must ALSO not contain @p excluded.
 ///
-/// Needed because the two host markers NEST: a compositor line reads
-/// "OK (compositor)", which contains "OK", so asserting `reportLineHas(stage,
-/// "OK")` is SUBSUMED by the compositor assertion beside it and the Qt-RHI half
-/// goes untested. Deleting the whole daemon buffer-pass loop left both of those
-/// assertions satisfied. Use this for the daemon side of any both-hosts claim.
+/// Needed because the host markers NEST: every compositor line reads "OK
+/// (compositor)", "OK (compositor GLES)" or "OK (compositor GLES link)", each of
+/// which contains "OK", so asserting `reportLineHas(stage, "OK")` is SUBSUMED by
+/// the compositor assertions beside it and the Qt-RHI half goes untested.
+/// Deleting the whole daemon buffer-pass loop left both of those assertions
+/// satisfied. Use this for the daemon side of any both-hosts claim, excluding
+/// kCompositorMarker.
 inline bool reportLineHasWithout(const QString& report, const QString& stage, const QString& marker,
                                  const QString& excluded)
 {
@@ -369,6 +377,17 @@ inline bool reportLineHasWithout(const QString& report, const QString& stage, co
 }
 
 } // namespace PackValidatorTest
+
+/// Assert that @p needle is absent from the report of a pack the validator
+/// ACCEPTED. The error count is the half that matters: a fixture failure
+/// returns errors -1 and a report naming the fixture, which satisfies any
+/// absence on its own. A macro because QVERIFY and QCOMPARE return from the
+/// CALLING slot.
+#define QVERIFY_ACCEPTED_WITHOUT(result, needle)                                                                       \
+    do {                                                                                                               \
+        QVERIFY2(!(result).report.contains(needle), qPrintable((result).report));                                      \
+        QCOMPARE((result).errors, 0);                                                                                  \
+    } while (false)
 
 /// The preconditions every slot that runs the ANIMATION validator shares. The
 /// validator bakes every animation pack's fragment for the compositor through

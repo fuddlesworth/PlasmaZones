@@ -38,7 +38,7 @@ namespace {
 /// already-bound shader as a triangle strip. texcoord [0,1] maps to the bound
 /// FBO directly (bottom-origin), so a passthrough buffer reproduces uTexture0's
 /// layout. This is the SOLE buffer-pass draw site; the matching vertex SOURCE
-/// (kFullscreenQuadVertexSource) lives in surface_compile.cpp, which only
+/// (SurfaceShaderRegistry::compositorBufferVertexSource) is compiled in surface_compile.cpp, which only
 /// compiles the buffer-pass shaders. Kept file-local — under the Unity build a
 /// duplicate anonymous-namespace definition elsewhere would collide.
 /// The caller owns the ShaderBinder.

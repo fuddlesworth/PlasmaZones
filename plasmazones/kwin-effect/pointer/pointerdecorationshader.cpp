@@ -8,6 +8,9 @@
 // plasmazoneseffect/surface_compile.cpp step for step, because the two
 // families share the same assembly contract (entry-point assembly, param
 // preamble spliced after #version, include expansion, KWin define injection).
+// Where they differ (the vertex stage of the buffer passes, what a failed
+// buffer pass costs, and the colour finalize on the main pass) is set out
+// below, at each step.
 
 #include "pointerdecorationpass.h"
 
@@ -50,23 +53,28 @@ namespace PSC = PhosphorPointerShaders::PointerShaderContract;
 using ShaderInternal::injectKwinDefineAfterVersion;
 using ShaderInternal::kCustomColorsElementNames;
 using ShaderInternal::kCustomParamsElementNames;
+using ShaderInternal::loadUserTextureImage;
 
 namespace {
 
-// The vertex stage of BOTH the main pointer pass and every buffer stage is
-// PPS::PointerShaderRegistry::compositorVertexSource(). It lives in the
-// library rather than here so the KWin-branch bake test compiles the exact
-// stage the compositor does; the pack-facing pointer.vert in shared/ is the
-// PREVIEW's stage and is deliberately never compiled by the effect.
+// The vertex stage of the main pointer pass is the pack's DECLARED vertex
+// stage when it ships one, and PPS::PointerShaderRegistry::compositorVertexSource()
+// otherwise. Every buffer stage reuses whichever of the two the main pass got,
+// with an identity MVP because their quad is already in clip space, which is
+// what the daemon does with a pack's loaded stage too. So a declared stage
+// drives the buffer passes as well, and the buffer fragments may read the
+// varyings it writes. The default lives in the library rather than here so the
+// KWin-branch bake test and the validator compile the exact stage the
+// compositor does; the pack-facing pointer.vert in shared/ is the PREVIEW's
+// stage and is deliberately never compiled by the effect.
 //
 // Positions arrive in the RenderViewport's device coordinate space and are
 // projected by KWin's own matrix, which encodes RenderTarget::transform() (the
 // output rotation/flip combined with the buffer's FlipY) and the render
 // offset. Emitting clip-space directly is only equivalent on an unrotated
 // output with a zero offset, so the projection is applied unconditionally,
-// exactly as TransitionPass::outputQuadVertexSource explains for the
-// screen-level transition passes. The BUFFER stages reuse it with an identity
-// MVP: their quad is already in clip space.
+// exactly as AnimationShaderRegistry::compositorScreenVertexSource explains for
+// the screen-level transition passes.
 
 // Element names for the pointer contract's indexed uniforms. The literals
 // must match the declarations in data/pointer/shared/pointer_uniforms.glsl;
@@ -342,18 +350,21 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
     const QByteArray fragWithKwinDefine =
         injectKwinDefineAfterVersion(expanded, PhosphorShaders::ShaderStage::Fragment);
 
-    // The vertex stage travels the same define path as the fragment: KWin
-    // rewrites #version 450 to desktop GLSL 140 on 6.7 and GLSL ES 300 on 6.8,
-    // and the layout(location = N) qualifiers are legal in neither until the
-    // inject helper has enabled the ARB extension and stripped the varying's
-    // qualifier. Passing raw source here made frag-only surface packs fail to
-    // link on NVIDIA (error C7548).
+    // The vertex stage travels the same define path as the fragment. On a 6.7
+    // desktop context KWin compiles #version 450 as desktop GLSL 140, where the
+    // input locations need the ARB extension the inject helper enables. On a
+    // GLES context (every context on 6.8) it compiles GLSL ES 300, where the
+    // inputs are legal but the varying's location is not, so the helper
+    // strips it. Raw source on this path made frag-only pointer packs fail to
+    // link on NVIDIA under 6.7 (error C7548).
     QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(PPS::PointerShaderRegistry::compositorVertexSource(),
                                                                  PhosphorShaders::ShaderStage::Vertex);
     if (!eff.vertexShaderPath.isEmpty()) {
         // Every failure below warns and KEEPS the default vertex stage rather
         // than failing the whole pack for a vertex-only defect — the same
-        // graceful degradation the surface path applies. NOTE the bundled
+        // graceful degradation the surface path applies, with the same limit:
+        // a fragment that reads a varying only the declared stage writes
+        // cannot link against the default and still fails. NOTE the bundled
         // data/pointer/shared/pointer.vert is the PREVIEW's stage (it reads
         // qt_Matrix from the UBO) and is deliberately not the default here; a
         // pack that names its own vertex shader is expected to write one that
@@ -436,7 +447,11 @@ PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(
         if (texSlot.path.isEmpty()) {
             continue;
         }
-        const QImage img(texSlot.path);
+        // Through the shared loader, as the surface and animation paths load
+        // theirs: it rasterises SVG without the image plugin and holds every
+        // decode to the byte budget, so a large pack image is never decoded
+        // at full size inside the compositor process.
+        const QImage img = loadUserTextureImage(texSlot.path);
         if (img.isNull()) {
             qCWarning(lcEffect) << "Pointer pack" << eff.id << "texture slot" << slot << "failed to load"
                                 << texSlot.path << "— sampler reads transparent";

@@ -20,11 +20,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QJsonDocument>
 #include <QLatin1String>
-#include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
-#include <QTemporaryDir>
 #include <QTextStream>
 
 #include <algorithm>
@@ -64,6 +63,28 @@ std::optional<QString> confinedPackPath(const QString& packDir, const QString& r
                                                     PhosphorFsLoader::AbsolutePathPolicy::Reject);
 }
 
+std::optional<QJsonObject> readPackMetadata(QTextStream& out, const QString& packDir)
+{
+    const QString name = QFileInfo(packDir).fileName();
+    QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
+    if (!metaFile.open(QIODevice::ReadOnly)) {
+        out << name << "\n  " << padLabel(QStringLiteral("metadata"))
+            << "ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
+        return std::nullopt;
+    }
+    QJsonParseError perr{};
+    const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &perr);
+    if (doc.isNull() || !doc.isObject()) {
+        // perr describes parse failures only, so a root that parses but is not
+        // an object needs its own reason.
+        const QString reason = doc.isNull() ? QStringLiteral("invalid JSON: ") + perr.errorString()
+                                            : QStringLiteral("metadata root is not a JSON object");
+        out << name << "\n  " << padLabel(QStringLiteral("metadata")) << "ERROR\n    " << reason << "\n  → 1 error\n\n";
+        return std::nullopt;
+    }
+    return doc.object();
+}
+
 bool confinePackPathInPlace(const QString& packDir, QString& path)
 {
     if (path.isEmpty()) {
@@ -92,6 +113,8 @@ QString poolName(const QString& type)
     }
     return QStringLiteral("scalar");
 }
+
+namespace {
 
 // Cheap Levenshtein for the "did you mean" hint on an undeclared p_ symbol.
 int editDistance(const QString& a, const QString& b)
@@ -137,12 +160,10 @@ void appendDidYouMean(QTextStream& out, const QString& diagnostic, const QString
         }
         // Only suggest if the typo is plausibly a typo (within ~1/3 of length).
         if (!best.isEmpty() && bestDist <= std::max(2, static_cast<int>(used.size()) / 3)) {
-            out << "    (did you mean '" << best << "'? — declared in metadata.json)\n";
+            out << "    (did you mean '" << best << "'? It is declared in metadata.json)\n";
         }
     }
 }
-
-namespace {
 
 /// The family directory names the runtime registries scan under
 /// `plasmazones/`. An installed pack always sits directly inside one of them,
@@ -230,32 +251,6 @@ std::optional<PackModel> detectPackModel(const QString& packDir)
     return std::nullopt;
 }
 
-QString glslangValidatorPath()
-{
-    // BOTH upstream spellings, in the order a distro is likely to carry them.
-    // glslang renamed its binary to plain `glslang` and kept `glslangValidator`
-    // as a compatibility symlink that upstream documents as deprecated, so a
-    // lookup pinned to either name alone is a time bomb: the old name breaks
-    // wherever the symlink has been dropped, and the new one is missing on
-    // anything older. Both resolve to the same program and take the same
-    // arguments.
-    //
-    // Resolved once: a run validates up to a few hundred packs and the PATH
-    // walk is the same answer every time.
-    static const QString path = [] {
-        for (const QString& name : {QStringLiteral("glslangValidator"), QStringLiteral("glslang")}) {
-            const QString found = QStandardPaths::findExecutable(name);
-            if (!found.isEmpty()) {
-                return found;
-            }
-        }
-        return QString();
-    }();
-    return path;
-}
-
-namespace {
-
 /// Replace the source-string ID a glslang diagnostic leads with by the name of
 /// the file it stands for.
 ///
@@ -292,108 +287,6 @@ QString nameDiagnosticSource(const QString& line, const QString& label, const QS
     QString shown = line;
     shown.replace(match.capturedStart(2), match.capturedLength(2), named);
     return shown;
-}
-
-/// One dialect of reportCompositorCompile: compile the finished @p source and
-/// print its OK/ERROR line, tagged with @p arm.
-int compileCompositorArm(QTextStream& out, const QString& label, const QString& stage, const QString& source,
-                         const QString& toolPath, const QStringList& sourcePaths, const QString& arm)
-{
-    // glslang reads the stage from the file extension unless -S says otherwise;
-    // -S is passed below, so the temp file name only has to be unique. A
-    // per-call QTemporaryDir keeps concurrent invocations from colliding and
-    // takes the file with it on scope exit.
-    QTemporaryDir tmp;
-    if (!tmp.isValid()) {
-        out << "  " << padLabel(label) << "ERROR (" << arm << ")\n    cannot create a temporary directory for the "
-            << "compositor bake\n";
-        return 1;
-    }
-    const QString srcPath = tmp.filePath(QStringLiteral("kwin.") + stage);
-    QFile srcFile(srcPath);
-    if (!srcFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        out << "  " << padLabel(label) << "ERROR (" << arm << ")\n    cannot write " << srcPath << "\n";
-        return 1;
-    }
-    // Checked: a short write stages a TRUNCATED shader, and glslang would then
-    // report a syntax error the author's file does not contain.
-    const QByteArray encoded = source.toUtf8();
-    if (srcFile.write(encoded) != encoded.size()) {
-        out << "  " << padLabel(label) << "ERROR (" << arm
-            << ")\n    could not stage the shader for compilation: " << srcFile.errorString() << "\n";
-        return 1;
-    }
-    srcFile.close();
-
-    // DEFAULT mode on purpose — no -V and no -G. Both of those select a SPIR-V
-    // target, which reimposes the very rules this dialect breaks (a -G run
-    // rejects the shared headers' default-block uniforms with "non-opaque
-    // uniform variables need a layout(location=L)"). Bare glslang validates
-    // OpenGL-dialect GLSL and is what matches the compositor's own compile.
-    QProcess proc;
-    proc.start(toolPath, {QStringLiteral("-S"), stage, srcPath});
-    // Well under the 120s ctest timeout on the shader_validate_* gates, so a
-    // wedged invocation names the pack it wedged on instead of ctest killing
-    // the whole run with nothing to point at.
-    if (!proc.waitForFinished(15000)) {
-        // A binary that cannot be executed at all (a broken symlink, no
-        // execute bit, the wrong ELF class) fails here too, and reporting
-        // that as a timeout sends the reader after the wrong problem.
-        if (proc.error() == QProcess::FailedToStart) {
-            out << "  " << padLabel(label) << "ERROR (" << arm << ")\n    could not run " << toolPath << ": "
-                << proc.errorString() << "\n";
-            return 1;
-        }
-        proc.kill();
-        proc.waitForFinished(1000);
-        out << "  " << padLabel(label) << "ERROR (" << arm << ")\n    " << toolPath << " timed out\n";
-        return 1;
-    }
-    const QString log =
-        QString::fromUtf8(proc.readAllStandardOutput()) + QString::fromUtf8(proc.readAllStandardError());
-    if (proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0) {
-        out << "  " << padLabel(label) << "OK (" << arm << ")\n";
-        return 0;
-    }
-    out << "  " << padLabel(label) << "ERROR (" << arm << ")\n";
-    // glslang leads with the temp file name and then one line per diagnostic.
-    // Drop the echoed name so the report shows the author's errors and nothing
-    // about where the file happened to be staged.
-    const QStringList lines = log.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-    for (const QString& line : lines) {
-        const QString trimmed = line.trimmed();
-        // glslang echoes the source file name as its first output line. That is
-        // the staging path under a temp dir, which is noise at best and a
-        // different string on every run at worst (it would make the report
-        // unstable for anything diffing it). Both the bare name and the full
-        // path are matched, since which one is echoed follows the argument.
-        if (trimmed.isEmpty() || trimmed == srcPath || trimmed == QFileInfo(srcPath).fileName()) {
-            continue;
-        }
-        if (trimmed.startsWith(QLatin1String("SPIR-V is not generated"))) {
-            continue;
-        }
-        out << "    " << nameDiagnosticSource(trimmed, label, sourcePaths) << "\n";
-    }
-    return 1;
-}
-
-} // namespace
-
-int reportCompositorCompile(QTextStream& out, const QString& label, const QString& stage, const QString& source,
-                            const QString& toolPath, const QStringList& sourcePaths)
-{
-    const auto shaderStage =
-        stage == QLatin1String("vert") ? PhosphorShaders::ShaderStage::Vertex : PhosphorShaders::ShaderStage::Fragment;
-    const QString finished = PhosphorShaders::stripVaryingLocations(
-        PhosphorShaders::spliceAfterVersion(source, PhosphorShaders::kwinDefineBlock()), shaderStage);
-    // Both arms run whatever the first returns, so a pack broken in both
-    // dialects reports both at once.
-    const int desktop =
-        compileCompositorArm(out, label, stage, finished, toolPath, sourcePaths, QStringLiteral("compositor"));
-    const int gles = compileCompositorArm(out, label, stage, PhosphorShaders::kwinGlesDialect(finished), toolPath,
-                                          sourcePaths, QStringLiteral("compositor GLES"));
-    return (desktop || gles) ? 1 : 0;
 }
 
 QString padLabel(const QString& label)
@@ -586,7 +479,16 @@ QStringList imageParamPresetLints(const QJsonObject& root)
     if (presetsValue.isObject()) {
         const QJsonObject presets = presetsValue.toObject();
         for (auto it = presets.constBegin(); it != presets.constEnd(); ++it) {
-            presetValueKeys += it.value().toObject().keys();
+            const QJsonObject values = it.value().toObject();
+            for (auto vit = values.constBegin(); vit != values.constEnd(); ++vit) {
+                // A null value is dropped at load for its own reason, which
+                // rawPresetLints reports. Counting it here would lint the one
+                // entry twice, the second time with a reason that is not why it
+                // drops.
+                if (!vit.value().isNull()) {
+                    presetValueKeys << vit.key();
+                }
+            }
         }
     }
     for (const QJsonValue& value : root.value(QLatin1String("parameters")).toArray()) {
@@ -607,10 +509,12 @@ QStringList imageParamPresetLints(const QJsonObject& root)
     return lints;
 }
 
+namespace {
+
 /// A preset value for a message, never blank. `QVariant::toString()` answers empty for a
 /// container, and a lint that names no value leaves the author guessing which entry it
 /// meant, so fall back to the type name.
-static QString describeVariant(const QVariant& value)
+QString describeVariant(const QVariant& value)
 {
     const QString shown = value.toString();
     if (!shown.isEmpty()) {
@@ -627,6 +531,8 @@ static QString describeVariant(const QVariant& value)
     }
     return QStringLiteral("an empty string");
 }
+
+} // namespace
 
 QStringList rawPresetLints(const QJsonObject& root)
 {
@@ -661,7 +567,7 @@ QStringList rawPresetLints(const QJsonObject& root)
             }
         }
         if (usablePresets > kMaxPackPresets) {
-            lints << QStringLiteral("declares %1 presets; only the first %2 are loaded and the rest are dropped")
+            lints << QStringLiteral("declares %1 presets, and only the first %2 are loaded. The rest are dropped")
                          .arg(QString::number(usablePresets), QString::number(kMaxPackPresets));
         }
         for (auto it = presets.constBegin(); it != presets.constEnd(); ++it) {
@@ -672,7 +578,7 @@ QStringList rawPresetLints(const QJsonObject& root)
             // Same discipline one level down. The loader's per-preset budget tests
             // the map it is BUILDING, and a JSON null never enters that map, so a
             // null value costs no slot. The one divergence left is an image value
-            // the loader refuses, which reportImageParamPresets lints on its own.
+            // the loader refuses, which imageParamPresetLints lints on its own.
             int usableValues = 0;
             for (auto vit = values.constBegin(); vit != values.constEnd(); ++vit) {
                 if (vit.value().isNull()) {
@@ -680,7 +586,7 @@ QStringList rawPresetLints(const QJsonObject& root)
                     // default", because carrying a null through would read as 0 and
                     // PIN the parameter. Worth a line: the author wrote something.
                     lints << QStringLiteral(
-                                 "preset '%1' sets '%2' to null, which is dropped at load; remove the "
+                                 "preset '%1' sets '%2' to null, which is dropped at load. Remove the "
                                  "entry to leave the parameter at its default")
                                  .arg(it.key(), vit.key());
                     continue;
@@ -694,7 +600,7 @@ QStringList rawPresetLints(const QJsonObject& root)
                 // have its own name rewritten by the next argument. The multi-arg
                 // overload substitutes every placeholder against the original string
                 // in one pass.
-                lints << QStringLiteral("preset '%1' sets %2 values; only the first %3 are loaded")
+                lints << QStringLiteral("preset '%1' sets %2 values, and only the first %3 are loaded")
                              .arg(it.key(), QString::number(usableValues), QString::number(kMaxPackPresetValues));
             }
         }
@@ -772,7 +678,7 @@ QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>
                          .arg(presetName);
         } else if (presetName.size() > PhosphorShaders::ShaderPreset::MaxNameChars) {
             lints << QStringLiteral(
-                         "preset '%1' has a %2-character id; the picker truncates the NAME it renders at %3 "
+                         "preset '%1' has a %2-character id. The picker truncates the NAME it renders at %3 "
                          "characters while an assignment stores the full key, so two presets agreeing up to "
                          "that point render as the same row and resolve differently")
                          .arg(presetName, QString::number(presetName.size()),
@@ -809,7 +715,7 @@ QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>
                     // QVariantMap or QVariantList, and QVariant::toString() returns
                     // empty for both. The message then read "sets 'flag' to ; a bool
                     // parameter wants true or false", naming no value at all.
-                    lints << QStringLiteral("preset '%1' sets '%2' to %3; a bool parameter wants true or false")
+                    lints << QStringLiteral("preset '%1' sets '%2' to %3, but a bool parameter wants true or false")
                                  .arg(presetName, vit.key(), describeVariant(value));
                 }
                 continue;
@@ -851,20 +757,17 @@ QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>
                 // `"tex": "../../../etc/passwd"` reaches this loop with no `tex` entry
                 // at all.
                 //
-                // That is one of FOUR gaps with the same shape, all of them drops the parse
-                // makes before this lint runs, each leaving only a log line: an escaping
-                // texture path, a JSON `null` value, a non-object preset BODY (which drops
-                // the whole preset), and — on the ANIMATION and SURFACE arms only — every
-                // image-typed value, because both parse the metadata BEFORE stamping
-                // sourceDir, so parsePackPresets' fail-closed refuseAllImages guard fires
-                // for the whole pack. That last one mirrors the runtime exactly (the
-                // registries stamp sourceDir after fromJson too), so it is not a
-                // validator-vs-runtime divergence; it is an unreported runtime fallback,
-                // and the arms lint the DECLARATION instead (see reportImageParamPresets).
-                // All four land the author in the same "the preset did nothing" state, and
-                // closing the first three means surfacing refusals out of
-                // `parsePackPresets` rather than re-deriving them here, where they cannot
-                // fire.
+                // The parse makes several drops of this shape before this lint runs,
+                // each landing the author in the same "the preset did nothing" state.
+                // Most are reported elsewhere: rawPresetLints reports a JSON `null`
+                // value and a non-object preset BODY from the raw JSON, and
+                // imageParamPresetLints reports the image-typed values the ANIMATION
+                // and SURFACE arms lose wholesale (both parse the metadata BEFORE
+                // stamping sourceDir, so parsePackPresets' fail-closed refuseAllImages
+                // guard fires for the whole pack, exactly as at runtime). The one still
+                // reported nowhere is an escaping texture path in a preset value, and
+                // closing it means surfacing that refusal out of `parsePackPresets`
+                // rather than re-deriving it here, where it cannot fire.
                 //
                 // EXISTENCE this can check, and nothing did: a value that survives the
                 // parse is an absolute in-pack path, and a preset naming a texture the
@@ -1017,38 +920,37 @@ QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>
     return presetLints(packDir, presets, toLintParams(declared));
 }
 
+namespace {
+
+// The `p_<id>` name list for any family's ParameterInfo, all of which carry an id.
+template<typename Param>
+QStringList pIdNames(const QList<Param>& params)
+{
+    QStringList declared;
+    for (const Param& p : params) {
+        declared << QStringLiteral("p_") + p.id;
+    }
+    return declared;
+}
+
+} // namespace
+
 // Build the `p_<id>` name list a pack declares, for the did-you-mean hint.
 QStringList declaredParamNames(const QList<ShaderRegistry::ParameterInfo>& params)
 {
-    QStringList declared;
-    for (const ShaderRegistry::ParameterInfo& p : params) {
-        declared << QStringLiteral("p_") + p.id;
-    }
-    return declared;
+    return pIdNames(params);
 }
 QStringList declaredParamNames(const QList<AnimationShaderEffect::ParameterInfo>& params)
 {
-    QStringList declared;
-    for (const AnimationShaderEffect::ParameterInfo& p : params) {
-        declared << QStringLiteral("p_") + p.id;
-    }
-    return declared;
+    return pIdNames(params);
 }
 QStringList declaredParamNames(const QList<SurfaceShaderEffect::ParameterInfo>& params)
 {
-    QStringList declared;
-    for (const SurfaceShaderEffect::ParameterInfo& p : params) {
-        declared << QStringLiteral("p_") + p.id;
-    }
-    return declared;
+    return pIdNames(params);
 }
 QStringList declaredParamNames(const QList<PointerShaderEffect::ParameterInfo>& params)
 {
-    QStringList declared;
-    for (const PointerShaderEffect::ParameterInfo& p : params) {
-        declared << QStringLiteral("p_") + p.id;
-    }
-    return declared;
+    return pIdNames(params);
 }
 
 // Compile one ZONE stage through the exact runtime assembly and print OK/ERROR.

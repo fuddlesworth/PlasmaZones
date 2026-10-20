@@ -122,7 +122,8 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
         ShaderInternal::injectKwinDefineAfterVersion(expanded, PhosphorShaders::ShaderStage::Fragment);
 
     const QByteArray vertWithKwinDefine = ShaderInternal::injectKwinDefineAfterVersion(
-        QString::fromUtf8(TransitionPass::outputQuadVertexSource()), PhosphorShaders::ShaderStage::Vertex);
+        PhosphorAnimationShaders::AnimationShaderRegistry::compositorScreenVertexSource(),
+        PhosphorShaders::ShaderStage::Vertex);
 
     std::unique_ptr<KWin::GLShader> shader = KWin::ShaderManager::instance()->generateCustomShader(
         KWin::ShaderTrait::MapTexture, vertWithKwinDefine, fragWithKwinDefine);

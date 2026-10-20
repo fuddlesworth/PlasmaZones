@@ -820,10 +820,62 @@ private Q_SLOTS:
 
     /// The preset lint runs on THIS arm too.
     ///
-    /// `reportPresetProblems` is wired into all four validator arms, and every test
+    /// `reportPresetLints` is wired into all four validator arms, and every test
     /// that exercised it drove the animation or overlay one, so deleting the call from
     /// the pointer arm left the whole suite green. Every executable here compiles all
     /// four arms, so that deletion also failed no link.
+    /// The pointer compositor reuses the main pass's vertex stage for every
+    /// buffer pass, so each of them is compiled in KWin's GLES dialect and
+    /// linked against it. A fragment reading a varying the built-in stage
+    /// does not write fails the link with advice an author can act on, since
+    /// they cannot rename a built-in stage's output.
+    void thePointerCompositorArmLinksEveryStage()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_POINTER_FIXTURE(tmp);
+        const QString buffer = QStringLiteral(
+            "#version 450\n"
+            "uniform sampler2D iChannel0;\n"
+            "layout(location = 0) in vec2 vTexCoord;\n"
+            "layout(location = 0) out vec4 fragColor;\n"
+            "void main() { fragColor = texture(iChannel0, vTexCoord); }\n");
+        const auto multipassPack = [](const QString& id) {
+            QJsonObject obj = pointerPackWithGate(id, 0.0);
+            obj.insert(QStringLiteral("multipass"), true);
+            obj.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer.frag")}));
+            return obj;
+        };
+
+        QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-link"), QStringLiteral("buffer.frag"), buffer));
+        const PackResult good = validatePointer(
+            tmp, QStringLiteral("pt-link"), multipassPack(QStringLiteral("pt-link")),
+            QStringLiteral("uniform sampler2D iChannel0;\n"
+                           "vec4 pPointer(vec2 uv) { return texture(iChannel0, uv) * p_activationSpeed; }\n"));
+        for (const QString& stage : {QStringLiteral("effect.frag"), QStringLiteral("buffer.frag")}) {
+            QVERIFY2(reportLineHas(good.report, stage, QStringLiteral("OK (compositor GLES)")),
+                     qPrintable(good.report));
+            QVERIFY2(reportLineHas(good.report, stage, QStringLiteral("OK (compositor GLES link)")),
+                     qPrintable(good.report));
+        }
+
+        QVERIFY(writePointerBuffer(tmp, QStringLiteral("pt-link-bad"), QStringLiteral("buffer.frag"), buffer));
+        const PackResult bad =
+            validatePointer(tmp, QStringLiteral("pt-link-bad"), multipassPack(QStringLiteral("pt-link-bad")),
+                            QStringLiteral("uniform sampler2D iChannel0;\n"
+                                           "layout(location = 3) in vec2 vNotWritten;\n"
+                                           "vec4 pPointer(vec2 uv) {\n"
+                                           "    return texture(iChannel0, vNotWritten) * p_activationSpeed;\n"
+                                           "}\n"));
+        QVERIFY2(
+            reportLineHas(bad.report, QStringLiteral("effect.frag"), QStringLiteral("ERROR (compositor GLES link)")),
+            qPrintable(bad.report));
+        QVERIFY2(bad.report.contains(QStringLiteral("reads the varying vNotWritten")), qPrintable(bad.report));
+        QVERIFY2(bad.report.contains(QStringLiteral("declare a vertexShader that writes vNotWritten")),
+                 qPrintable(bad.report));
+        QVERIFY2(reportLineHas(bad.report, QStringLiteral("buffer.frag"), QStringLiteral("OK (compositor GLES link)")),
+                 qPrintable(bad.report));
+    }
+
     void thePointerArmLintsPresetsToo()
     {
         QTemporaryDir tmp;

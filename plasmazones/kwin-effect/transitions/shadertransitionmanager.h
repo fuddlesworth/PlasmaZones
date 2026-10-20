@@ -24,7 +24,6 @@
 #include <QSet>
 #include <QSize>
 #include <QString>
-#include <QThreadPool>
 #include <QVector4D>
 
 #include <cstdint>
@@ -63,7 +62,8 @@ public:
     explicit ShaderTransitionManager(PlasmaZonesEffect* effect);
     ~ShaderTransitionManager();
 
-    // Non-copyable, non-movable (contains QThreadPool, pointers into effect)
+    // Non-copyable, non-movable: holds pointers into the effect, and its
+    // transitions hold raw pointers into its own texture cache.
     ShaderTransitionManager(const ShaderTransitionManager&) = delete;
     ShaderTransitionManager& operator=(const ShaderTransitionManager&) = delete;
 
@@ -266,7 +266,7 @@ public:
 
     // NOTE: Shader transition methods (beginShaderTransition, endShaderTransition,
     // tryBeginShaderForEvent, loadShaderRegistryFromDbus, loadShaderProfileFromDbus,
-    // warmUserTextureAsync, evictLruTextureIfOverBound) are declared on
+    // evictLruTextureIfOverBound) are declared on
     // PlasmaZonesEffect and operate on m_shaderManager state via friend access.
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -500,9 +500,6 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
     std::map<QString, CachedTexture> m_textureCache;
 
-    QThreadPool m_textureLoaderPool;
-    QSet<QString> m_textureLoadsInFlight;
-    quint64 m_textureCacheGeneration = 0;
     quint64 m_textureCacheAccessTick = 0;
     static constexpr std::size_t kTextureCacheSoftBound = 32;
 
