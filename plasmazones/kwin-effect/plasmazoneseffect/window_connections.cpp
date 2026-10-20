@@ -455,8 +455,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
 
     // One windowFrameGeometryChanged lambda for the effect-side
     // per-tick work, in the order the bodies run: the answer to a superseded
-    // configure's late ack (Body -1.5), a strip-animation retarget
-    // onto the rect the client actually committed (Body -1), the offered-column
+    // configure's late ack (Body -1.5), a strip-animation retarget onto the
+    // rect the client actually committed, unless that is a park (Body -1), the offered-column
     // centring for a client that would not take its column (Body -0.5),
     // deferred maximize completion (Body 0), first-frame suppression release
     // (Body 1), and the throttled daemon push (Body 2). Keeping the last two
@@ -513,6 +513,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // from the client's, so KWin sends a real configure. Void once
             // a newer command has landed (a size-equal move carries the
             // answer forward instead) or the user has the frame.
+            //
+            // An answer whose superseded configure the client acked at the
+            // target size stays armed for the rest of its command: KWin hands
+            // an effect no configure serials, and an ack that moves nothing
+            // emits no frame change to consume it on. What it can still do is
+            // re-issue its own command's rect, once, against a later resize
+            // the client makes on its own while that command is current.
             if (const auto staleIt = m_daemonGate.commandStamps.staleAcks.find(safeW.data());
                 staleIt != m_daemonGate.commandStamps.staleAcks.end() && !m_daemonGate.inGeometryApply) {
                 const WindowCommandStamps::StaleAck stale = *staleIt;
@@ -574,10 +581,21 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // relocates a window away from its committed rect, so it is
             // the only one where a divergent commit desynchronises the
             // leg from where the window will actually be.
+            //
+            // NOT for a commit at a park. A leaving column's leg ends at the
+            // screen edge while its commit is the park (visualTargetOverride
+            // in applyWindowGeometry), so a park commit landing mid-leg is
+            // the split working, not a client that refused its rect: a
+            // size-changing park lands there on its ack, and on KWin 6.8 the
+            // counter-assert re-seats a park the client's ack pulled back on
+            // screen. Retargeting onto it swept the leaving leg down off the
+            // screen instead of out past the edge. Asked last, because it
+            // walks the outputs.
             if (m_windowAnimator->hasAnimation(safeW.data()) && scrollManagedOutputFor(safeW.data())
                 && m_daemonGate.animatedApplyCommit != safeW.data()) {
                 const QRectF committed = safeW->frameGeometry();
-                if (!committed.isEmpty() && !m_windowAnimator->isAnimatingToTarget(safeW.data(), committed)) {
+                if (!committed.isEmpty() && !m_windowAnimator->isAnimatingToTarget(safeW.data(), committed)
+                    && !m_tilingHandler->rectAtScrollPark(committed.toRect())) {
                     // PreservePosition: the leg keeps the pixels it is
                     // already showing and bends toward the true rect.
                     // Velocity carried across would re-scale to a
@@ -622,9 +640,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // the client's own size rule, which is not knowable up front.
             //
             // A pure move(), so it cannot renegotiate the size it just
-            // settled on and cannot be re-anchored by a queued configure.
-            // Converges in one step: the guard compares against the
-            // position it is about to install, so the synchronous
+            // settled on. It also retargets the configures still queued to
+            // the centred position (KWin 6.7 drops their position, 6.8 moves
+            // their bounds there anchored at the top-left), so a queued resize
+            // acks at that top-left with its new size and this body centres
+            // it again on that ack. Each step converges: the guard compares
+            // against the position it is about to install, so the synchronous
             // frameGeometryChanged this emits re-enters and does nothing.
             //
             // Cheapest test first, and the ordering is load-bearing for

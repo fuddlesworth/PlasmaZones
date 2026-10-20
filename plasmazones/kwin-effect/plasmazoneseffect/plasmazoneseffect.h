@@ -2891,17 +2891,17 @@ private:
     /// apply re-reports it past this cache whenever the window enters a screen's tiling, because the engines
     /// drop their copy on a float, an unminimize and a handoff (F911).
     QHash<QString, QSize> m_lastReportedMinSize;
-    /// Per scroll-managed X11 window, and per Wayland one while its column is
-    /// maximized to the edges: the rect the last batch commanded, so an
+    /// Per scroll-managed X11 window, and per Wayland one maximized to the edges
+    /// or placed outside its output: the rect the last batch commanded, so an
     /// EXTERNAL move can be detected and countered. X11 clients reposition
     /// themselves through ConfigureRequests KWin honors (a Wine game
     /// re-asserting its saved position was seen undoing the strip's parks),
-    /// and KWin re-runs its maximize placement over a MaximizeFull column on
-    /// both platforms. Written by the batch apply, consumed by
-    /// TilingHandler::slotWindowFrameGeometryChanged (counter-assert
-    /// RATE-LIMITED to 3 per rolling second, re-armed by every fresh batch
-    /// command). A plain Wayland strip tile is centred through
-    /// m_scrollOfferedColumn instead; m_tileTargetZones holds no strip entry.
+    /// KWin re-runs its maximize placement over a MaximizeFull column, and
+    /// KWin 6.8 clamps an out-of-view column back on screen on a commit that
+    /// acks or reshapes. Consumed by TilingHandler::slotWindowFrameGeometryChanged
+    /// (RATE-LIMITED to 3 per rolling second where a counter can loop, re-armed
+    /// by every batch command). A plain Wayland strip tile is centred within
+    /// m_scrollOfferedColumn; m_tileTargetZones holds no strip entry.
     /// Dropped on close, the deleted backstop, float cleanup
     /// (both channels), the untrack funnel (cleanupAutotileTracking), the
     /// per-batch disarm when the commit deferred or the fullscreen bail

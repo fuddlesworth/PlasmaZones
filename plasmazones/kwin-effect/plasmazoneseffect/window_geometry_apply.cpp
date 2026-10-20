@@ -49,11 +49,24 @@ QRect commandedRectOf(KWin::EffectWindow* window)
 // the client already has while a different size is still in flight
 // (XdgSurfaceWindow::moveResizeInternal sends no configure for an equal client
 // size), so the in-flight configure's ack would otherwise land the stale size.
+//
+// @p leavingPark: a Wayland window at a strip park, or commanded to one and not
+// there yet, and @p target is not a park. A configure queued while it was
+// parked (its deactivation, a suspend, the park itself) still carries the park
+// as its bounds, and a resize leaves those alone, so its ack would land the
+// window back at the park, or on KWin 6.8 pulled up from it to the bottom of
+// the screen. A move() first retargets them to @p target; the size test above
+// is unaffected because a move keeps the size. The window then shows at
+// @p target with its parked size until the client acks the resize, which is
+// deliberate: left at the park, it would wait there off screen for that ack.
 void moveResizeAnsweringStaleAck(KWin::EffectWindow* window, KWin::Window* kw, const QRectF& target, quint64 stamp,
-                                 WindowCommandStamps& stamps)
+                                 WindowCommandStamps& stamps, bool leavingPark)
 {
     const QSize committed = window->frameGeometry().toRect().size();
     const bool supersedesUnacked = commandedRectOf(window).size() != committed && target.toRect().size() == committed;
+    if (leavingPark) {
+        kw->move(target.topLeft());
+    }
     kw->moveResize(target);
     if (supersedesUnacked) {
         stamps.staleAcks.insert(window, {target.toRect(), stamp});
@@ -67,13 +80,18 @@ void moveResizeAnsweringStaleAck(KWin::EffectWindow* window, KWin::Window* kw, c
 // an answer for is still outstanding: the answer follows this command, at its
 // rect and stamp. Left on the older stamp, the ack found it stale, dropped it
 // with no re-issue, and the superseded size landed at this rect.
+//
+// Carried BEFORE the move: the move emits frameGeometryChanged synchronously,
+// and outside a geometryApplyScope the frame hook's stale-ack body runs on that
+// re-entry, finds the entry on the stamp this command already superseded, and
+// erases it before a later carry could reach it.
 void moveCarryingStaleAck(KWin::EffectWindow* window, KWin::Window* kw, const QRectF& target, quint64 stamp,
                           WindowCommandStamps& stamps)
 {
-    kw->move(target.topLeft());
     if (auto stale = stamps.staleAcks.find(window); stale != stamps.staleAcks.end()) {
         *stale = {target.toRect(), stamp};
     }
+    kw->move(target.topLeft());
 }
 } // namespace
 
@@ -129,31 +147,30 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
     // re-commit in slotWindowFullScreenChanged, a raw moveResize that routes
     // through here so it and applyWindowGeometry read the column rect alike.
     //
-    // Five comparisons against this rect are sanctioned, all in
-    // applyWindowGeometry. The first four compare against commandedRectOf()
-    // (KWin's moveResizeGeometry, `.toRect()`) so they share one rounding rule
-    // and see a still-unacked resize as the window's size:
+    // The comparisons sanctioned against this rect, each against
+    // commandedRectOf() (KWin's moveResizeGeometry, `.toRect()`) so they share
+    // one rounding rule and see a still-unacked resize as the window's size,
+    // and what a MISS costs in each:
     //
-    //   1. the already-at-target no-op skip, on the whole rect;
-    //   2. the size-preserving move()/moveResize() split on the non-animated
-    //      arm, on the size alone;
-    //   3. the same split on the animated arm;
-    //   4. moveResizeAnsweringStaleAck's test that the request asks for the
-    //      committed size while another is in flight.
+    //   - the already-at-target no-op skip, on the whole rect: a redundant
+    //     moveResize, which KWin treats as a no-op at matching geometry;
+    //   - the size-preserving move()/moveResize() split on both arms, on the
+    //     size alone: the ordinary configure path;
+    //   - the split-target bail on the animated arm, on the whole rect: a
+    //     re-commit of the same park and a retarget of the running leg;
+    //   - moveResizeAnsweringStaleAck's test that the request asks for the
+    //     committed size while another is in flight (it compares the
+    //     committed frame against the request): no stale-ack answer armed,
+    //     which is how every apply behaved before that answer existed.
     //
-    // The fifth, the split-target bail on the animated arm, compares the
-    // committed frame (frameGeometry().toRect()) on purpose: it asks whether
-    // the park already landed.
+    // None of those can put the window at a wrong position. The divergences
+    // documented above can defeat these comparisons; they cannot make one
+    // fire on the wrong window position, which is what makes the failure
+    // direction acceptable. The repeat-rect stale-ack carry near the top of
+    // applyWindowGeometry compares this function's result against the answer's
+    // recorded target, which was recorded from this function's result too.
     //
-    // All five are safe for the same reason: a MISS costs only the more
-    // conservative route — a redundant moveResize (KWin's own moveResize is
-    // internally a no-op at matching geometry) for the first, and the ordinary
-    // configure path for the other two. None can produce a wrong rect. The
-    // divergences documented above can defeat these comparisons; they cannot
-    // make one fire on the wrong window position, which is what makes the
-    // failure direction acceptable.
-    //
-    // A sixth comparand needs the same argument made explicitly, and it must
+    // A new comparand needs the same argument made explicitly, and it must
     // compare against toRect() rather than qRound()-ing the extent separately —
     // QRectF::toRect derives the integer size from the rect's POSITION too, so
     // the two disagree by a pixel exactly where fractional-scale residue lives.
@@ -264,6 +281,11 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         return;
     }
 
+    // For X11/XWayland windows, pre-compute the size KWin will actually commit
+    // and center it in the zone — see constrainTileGeometry. Ahead of the
+    // stale-ack carry below, whose recorded target is a constrained rect.
+    geo = constrainTileGeometry(window, geo);
+
     // This is now the window's latest geometry command, whatever becomes of it
     // below: the fullscreen bail, the no-op skip and an immediate mid-drag
     // commit are commands too. Every deferred apply scheduled for the window
@@ -305,10 +327,6 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     if (!window->isDeleted()) {
         m_tilingHandler->dropCenteringTarget(getWindowId(window));
     }
-
-    // For X11/XWayland windows, pre-compute the size KWin will actually commit
-    // and center it in the zone — see constrainTileGeometry.
-    geo = constrainTileGeometry(window, geo);
 
     // A window held invisible until repositioned on open (RestoreSuppression)
     // gets the resolved rect stamped as its settle target, which the frame
@@ -462,6 +480,17 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         armPzCrossing(window, geo);
     }
 
+    // A resize that brings a parked strip window back onto an output (see
+    // moveResizeAnsweringStaleAck). Asked only on the resize branches, and the
+    // raw scrolling-set probe first so a session with no strip pays nothing.
+    // Wayland only: an X11 configure lands synchronously, so nothing is queued
+    // to retarget, and the extra move would only show the client a passing rect.
+    const auto leavesScrollPark = [this](KWin::EffectWindow* w, const QRect& target) {
+        return w->isWaylandClient() && m_tilingHandler->hasScrollingScreens()
+            && (m_tilingHandler->atScrollPark(w) || m_tilingHandler->rectAtScrollPark(commandedRectOf(w)))
+            && !m_tilingHandler->rectAtScrollPark(target);
+    };
+
     // Animation: moveResize to the final geometry immediately, then morph
     // the window visually from its old position/size to the new one using
     // translate + scale in paintWindow(). This follows the standard KDE
@@ -528,18 +557,21 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // hot path of rapid drag retargets).
         //
         // When the caller SPLIT the visual target from the committed frame
-        // (leaving scroll columns), the bail must ALSO require the committed
-        // frame to already match: two successive leaving-column batches can
+        // (leaving scroll columns), the bail must ALSO require this park to be
+        // the one already commanded: two successive leaving-column batches can
         // share an animTarget (derived from the screen edge and the window's
         // size) while carrying DIFFERENT park rects — bailing on animTarget
-        // alone would skip the moveResize and strand the committed geometry
-        // at the previous park. Without a split, animTarget IS geo and the
-        // extra term is deliberately not evaluated: frameGeometry() can lag
-        // a size-changing moveResize until the client acks, and a defeated
-        // bail would fall through to a retarget that re-anchors the running
-        // animation on every rapid identical retarget.
+        // alone would skip the moveResize and strand the window at the
+        // previous park. The COMMANDED rect answers that, not the committed
+        // frame: the frame lags a size-changing park until the client acks,
+        // and a defeated bail falls through to a retarget that re-anchors the
+        // running leg on every repeat of the same batch. A park KWin 6.8
+        // pulled back on screen rewrites the commanded rect too when no other
+        // configure is pending, so that one misses and is committed again.
+        // Without a split, animTarget IS geo and the extra term is
+        // deliberately not evaluated.
         if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, animTarget)
-            && (!visualTargetOverride.isValid() || window->frameGeometry().toRect() == geo)) {
+            && (!visualTargetOverride.isValid() || commandedRectOf(window) == geo)) {
             // Release the open-restore suppression on the way out, like the
             // other early returns that commit nothing here (the invalid-rect,
             // fullscreen, no-op and null-Window bails); the deferral keeps it for
@@ -573,8 +605,8 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         }
         // Same size-preserving split as the non-animated arm at the tail of
         // this function, and for the same reason: a pure move() takes KWin's
-        // Move branch, which clears the pending-position flag on queued
-        // configures, so a client that acks a superseded configure cannot be
+        // Move branch, which retargets the configures still queued to the new
+        // position, so a client that acks a superseded configure cannot be
         // re-anchored to where that older request would have put it. A strip
         // step-scroll is animated by default, so this is the arm the drifting
         // Picture-in-Picture case actually takes — fixing only the sibling left
@@ -594,7 +626,8 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             if (targetFrame.toRect().size() == commandedRectOf(window).size()) {
                 moveCarryingStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps);
             } else {
-                moveResizeAnsweringStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps);
+                moveResizeAnsweringStaleAck(window, kw, targetFrame, commandStamp, m_daemonGate.commandStamps,
+                                            leavesScrollPark(window, geo));
             }
         }
 
@@ -927,12 +960,21 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // moveResize(), and the difference is not cosmetic.
         //
         // Both apply the new position immediately, but only move() takes
-        // KWin's MoveResizeMode::Move branch, which additionally CLEARS the
-        // pending-position flag on every configure event still queued for the
-        // client (xdgshellwindow.cpp, moveResizeInternal). moveResize() leaves
-        // those armed, and when the client later acks one, KWin re-anchors the
-        // window through gravity.apply() against the bounds rect snapshotted
-        // when THAT configure was sent — not against what we just asked for.
+        // KWin's MoveResizeMode::Move branch, which additionally retargets
+        // every configure event still queued for the client
+        // (XdgSurfaceWindow::moveResizeInternal): KWin 6.7 clears their
+        // pending-position flag, and 6.8 moves their bounds to the new
+        // position and anchors them at its top-left. moveResize() leaves them alone,
+        // and when the client later acks one, KWin re-anchors the window
+        // through gravity.apply() against the bounds rect snapshotted when
+        // THAT configure was sent — not against what we just asked for.
+        //
+        // Neither call keeps a window on screen. KWin 6.8 does that at the
+        // client's next commit that acks a configure or changes its geometry
+        // (XdgToplevelWindow::handleRoleCommit runs confineInteractiveMove),
+        // whichever call placed the window, and
+        // the counter-assert in TilingHandler::slotWindowFrameGeometryChanged
+        // puts a strip column it pulled in back where the strip parked it.
         //
         // Harmless for a client that acks promptly, because the stale bounds
         // and the fresh request agree. Not harmless for one that renegotiates
@@ -953,7 +995,8 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         if (geo.size() == commandedRectOf(window).size()) {
             moveCarryingStaleAck(window, kwinWindow, QRectF(geo), commandStamp, m_daemonGate.commandStamps);
         } else {
-            moveResizeAnsweringStaleAck(window, kwinWindow, QRectF(geo), commandStamp, m_daemonGate.commandStamps);
+            moveResizeAnsweringStaleAck(window, kwinWindow, QRectF(geo), commandStamp, m_daemonGate.commandStamps,
+                                        leavesScrollPark(window, geo));
         }
         // removeAnimation runs no completion, and an animator-driven shader
         // leg (durationMs == 0, the default window-morph on the placement

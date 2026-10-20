@@ -152,6 +152,7 @@ f1138-float-toggle-screen-hint f1138-float-toggle-screen-hint.sh 2 -
 f1139-readopt-keeps-claim f1139-readopt-keeps-claim.sh 2 -
 f1140-stale-zone-notice-clear f1140-stale-zone-notice.sh 1 - PZ_F1140_RUN=a
 f1140-stale-zone-notice-write f1140-stale-zone-notice.sh 1 - PZ_F1140_RUN=d
+f1141-parked-tab-offscreen f1141-parked-tab-offscreen.sh 1 S
 f1147-arrival-minimize-float f1147-arrival-minimize-float.sh 2 -
 f1149-overlapping-settle-reports f1149-overlapping-settle-reports.sh 4 -
 f1151-touch-forgets-claim f1151-touch-forgets-claim.sh 2 -

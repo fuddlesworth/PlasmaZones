@@ -1100,7 +1100,7 @@ private:
     /// |---|---|---|---|
     /// | `m_scrollVisualDelta` | where the window sits ON the strip | no | retire |
     /// | `StripViewAnimator` motion | how far THIS strip's view travelled | no | retire |
-    /// | `m_scrollCommandedRects` | we commanded R and the client is arguing | yes | keep |
+    /// | `m_scrollCommandedRects` | we commanded R and an external mover is arguing | yes | keep |
     /// | `m_scrollOfferedColumn` | the column rect its strip offered it | no (strip coordinate) | keep, see below |
     /// | `m_scrollTabPayloadByScreen` | the pills for THIS strip's columns | no | keep anyway, see below |
     /// | `m_scrollTabScreensByWindow` | reverse index of the above | no | keep anyway, see below |
