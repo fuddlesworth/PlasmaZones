@@ -398,7 +398,7 @@ private Q_SLOTS:
         presets.insert(QStringLiteral("Bad"), QJsonValue(7));
         obj.insert(QStringLiteral("presets"), presets);
         PackResult r = validate(tmp, QStringLiteral("preset-counting"), obj);
-        QVERIFY2(!r.report.contains(QStringLiteral("only the first 64 are loaded and the rest are dropped")),
+        QVERIFY2(!r.report.contains(QStringLiteral("only the first 64 are loaded. The rest are dropped")),
                  qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("preset 'Bad' is not an object")), qPrintable(r.report));
 
@@ -411,7 +411,7 @@ private Q_SLOTS:
         fat.insert(QStringLiteral("nulled"), QJsonValue());
         obj.insert(QStringLiteral("presets"), QJsonObject{{QStringLiteral("Fat"), fat}});
         r = validate(tmp, QStringLiteral("preset-counting"), obj);
-        QVERIFY2(!r.report.contains(QStringLiteral("values; only the first")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("values, and only the first")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("sets 'nulled' to null")), qPrintable(r.report));
     }
 

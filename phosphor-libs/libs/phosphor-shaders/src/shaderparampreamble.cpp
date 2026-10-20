@@ -5,7 +5,9 @@
 
 #include <PhosphorShaders/CustomParamsKey.h>
 
+#include <QRegularExpression>
 #include <QSet>
+#include <QStringList>
 #include <QStringView>
 
 namespace PhosphorShaders {
@@ -47,11 +49,13 @@ bool isValidParamId(const QString& id)
 /// to the upload numbering in each family's translate*Params, and those skip on
 /// !isValidParamId alone, so skipping on one side desyncs every later lane, which
 /// is worse than the compile error it would prevent. Closing it properly means
-/// skipping in all four places at once.
+/// skipping in AnimationShaderRegistry::paramPreamble (before it calls
+/// buildParamPreamble) and translateAnimationParams together. buildParamPreamble
+/// itself serves every family, and only the animation header reserves these.
 bool isReservedAnimationParamId(const QString& id)
 {
     // Kept in step with the `#define p_...` lines in
-    // data/animations/shared/animation_uniforms.glsl by hand: that header is data,
+    // plasmazones/data/animations/shared/animation_uniforms.glsl by hand: that header is data,
     // not a compiled input, so nothing can assert the pairing. A grep for
     // "^#define p_" across plasmazones/data/*/shared is what enumerates it.
     return id == QLatin1String("reversed");
@@ -134,6 +138,104 @@ QString kwinDefineBlock(const QString& eol)
         + eol + QStringLiteral("#define PLASMAZONES_KWIN") + eol;
 }
 
+QString stripVaryingLocations(const QString& source, ShaderStage stage)
+{
+    // The qualifier, then any interpolation or auxiliary qualifiers, then the
+    // storage qualifier that makes the declaration a varying. The lookahead
+    // keeps those qualifiers and the `in`/`out` in place, and may cross a
+    // newline, since a qualifier on a line of its own is legal GLSL. The
+    // whitespace the match itself consumes is blanks only, never \s, so a
+    // match cannot swallow a newline and shift the line numbers a compile
+    // error reports.
+    static const QRegularExpression vertexOut(QStringLiteral(
+        R"(\blayout[ \t]*\([ \t]*location[ \t]*=[ \t]*\d+[ \t]*\)[ \t]*(?=\s*(?:(?:flat|smooth|noperspective|centroid|sample|invariant|precise)\s+)*out\b))"));
+    static const QRegularExpression fragmentIn(QStringLiteral(
+        R"(\blayout[ \t]*\([ \t]*location[ \t]*=[ \t]*\d+[ \t]*\)[ \t]*(?=\s*(?:(?:flat|smooth|noperspective|centroid|sample|invariant|precise)\s+)*in\b))"));
+    QString out = source;
+    out.remove(stage == ShaderStage::Vertex ? vertexOut : fragmentIn);
+    return out;
+}
+
+namespace {
+
+/// KWin's own top-level rewrite: @p prologue, then @p source with every line
+/// that starts with `#version` blanked. KWin tests the raw line with
+/// startsWith, untrimmed, and splits on '\n' alone, so a CRLF source keeps its
+/// '\r' on every line it passes through, and a blanked line keeps its newline.
+QString kwinRewrite(const QString& prologue, const QString& source)
+{
+    QString out = prologue;
+    const QStringList lines = source.split(QLatin1Char('\n'));
+    for (int i = 0; i < lines.size(); ++i) {
+        if (!lines.at(i).startsWith(QLatin1String("#version"))) {
+            out += lines.at(i);
+        }
+        if (i + 1 < lines.size()) {
+            out += QLatin1Char('\n');
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+QString kwinGlesDialect(const QString& source)
+{
+    return kwinRewrite(QStringLiteral("#version 300 es\n"
+                                      "#extension GL_OES_EGL_image_external : require\n"
+                                      "precision highp float;\n"
+                                      "precision highp sampler2D;\n"
+                                      "precision highp sampler3D;\n"),
+                       source);
+}
+
+QString kwinDesktopDialect(const QString& source)
+{
+    return kwinRewrite(QStringLiteral("#version 140\n"), source);
+}
+
+QString kwinTopDownTexcoordsDefine(const QString& eol)
+{
+    return QStringLiteral("#define PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN 1") + eol;
+}
+
+QString lineDirective(int line, int sourceString, const QString& eol)
+{
+    const QString name = QStringLiteral("PZ_LINE_%1_%2").arg(QString::number(sourceString), QString::number(line));
+    return QStringLiteral("#if !defined(GL_ES) && __VERSION__ < 330") + eol + QStringLiteral("#define ") + name
+        + QLatin1Char(' ') + QString::number(line - 1) + eol + QStringLiteral("#else") + eol
+        + QStringLiteral("#define ") + name + QLatin1Char(' ') + QString::number(line) + eol + QStringLiteral("#endif")
+        + eol + QStringLiteral("#line ") + name + QLatin1Char(' ') + QString::number(sourceString) + eol;
+}
+
+QString kwinCompositorSource(const QString& source, ShaderStage stage, const QString& extraDefines,
+                             bool* synthesizedVersion)
+{
+    QString working = source;
+    if (working.startsWith(QChar(0xFEFF))) {
+        working.remove(0, 1);
+    }
+    const QString eol = working.contains(QStringLiteral("\r\n")) ? QStringLiteral("\r\n") : QStringLiteral("\n");
+    QString extra = extraDefines;
+    if (eol.size() == 2) {
+        extra.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+        extra.replace(QLatin1Char('\n'), eol);
+    }
+    const QString block = kwinDefineBlock(eol) + extra;
+    const bool hasVersion = versionDirectiveEnd(working) >= 0;
+    if (synthesizedVersion) {
+        *synthesizedVersion = !hasVersion;
+    }
+    // A missing directive is synthesized rather than prepended around: GLSL
+    // requires `#version` first, and the compositor's core and ES contexts
+    // reject a source without one. The re-anchor keeps the author's first line
+    // numbered 1, since the directive is not theirs.
+    const QString finished = hasVersion
+        ? spliceAfterVersion(working, block)
+        : QStringLiteral("#version 450") + eol + block + lineDirective(1, 0, eol) + working;
+    return stripVaryingLocations(finished, stage);
+}
+
 int versionDirectiveEnd(const QString& source)
 {
     // The BOM is not a Unicode whitespace category, so trimmed() would leave
@@ -181,7 +283,10 @@ int versionDirectiveEnd(const QString& source)
         }
         // trimmed() also drops a CRLF source's trailing '\r'.
         if (stripped.trimmed().startsWith(QLatin1String("#version"))) {
-            return lineStop;
+            // A directive line that leaves a block comment open would put
+            // every splice after it inside that comment. Refuse it as a
+            // directive rather than hand back an insertion point there.
+            return inBlockComment ? -1 : lineStop;
         }
         if (lineEnd < 0) {
             break;
@@ -193,21 +298,21 @@ int versionDirectiveEnd(const QString& source)
 
 QString spliceAfterVersion(const QString& source, const QString& block)
 {
-    if (block.isEmpty()) {
-        return source;
-    }
-
-    // Strip a leading BOM once. This splice runs BEFORE the compositor's
-    // injectKwinDefineAfterVersion on the pointer, surface and animation
-    // paths, and that step strips a BOM of its own; a preamble left in front
-    // of BOM+#version would make it see no directive and synthesize a second
-    // `#version`, which fails to compile.
+    // Strip a leading BOM once, before the empty-block early return so the
+    // result never carries one either way. This splice runs BEFORE the
+    // compositor's kwinCompositorSource on the pointer, surface and animation
+    // paths, and a preamble left in front of BOM+#version would make that step
+    // see no directive and synthesize a second `#version`, which fails to
+    // compile.
     QString working = source;
     if (working.startsWith(QChar(0xFEFF))) {
         working.remove(0, 1);
     }
-    // Emit the source's own line-ending convention, as the compositor's inject
-    // step does, so a CRLF pack does not end up mixed.
+    if (block.isEmpty()) {
+        return working;
+    }
+    // The newline and re-anchor emitted below follow the source's own
+    // line-ending convention. The block is spliced as the caller built it.
     const QString eol = working.contains(QStringLiteral("\r\n")) ? QStringLiteral("\r\n") : QStringLiteral("\n");
 
     const int versionEnd = versionDirectiveEnd(working);
@@ -230,7 +335,7 @@ QString spliceAfterVersion(const QString& source, const QString& block)
         out += eol;
     }
     out += block; // newline-terminated by buildParamPreamble
-    out += QStringLiteral("#line %1 0").arg(versionLineNo + 1) + eol;
+    out += lineDirective(versionLineNo + 1, 0, eol);
     out += QStringView(working).mid(insertPos);
     return out;
 }

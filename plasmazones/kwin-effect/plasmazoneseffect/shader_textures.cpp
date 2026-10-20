@@ -24,13 +24,10 @@
 #include <QImageReader>
 #include <QLoggingCategory>
 #include <QPainter>
-#include <QPointer>
-#include <QRunnable>
 #include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QSvgRenderer>
-#include <QThreadPool>
 
 #include <cmath>
 #include <limits>
@@ -49,7 +46,7 @@ using ShaderInternal::loadUserTextureImage;
 
 /// Load a user-texture file into a QImage. Mirrors the daemon-side path
 /// in `PhosphorRendering::ShaderEffect::setShaderParams`: PNG/JPG/etc.
-/// load via `QImage`; `.svg` / `.svgz` rasterise via `QSvgRenderer` at
+/// decode via `QImageReader`; `.svg` / `.svgz` rasterise via `QSvgRenderer` at
 /// the requested max-axis dimension (defaulting to 1024 to match
 /// ZoneShaderItem's pre-unification SVG size). The `QImage::Format_RGBA8888`
 /// conversion ensures `KWin::GLTexture::upload` always sees a consistent
@@ -144,39 +141,6 @@ QImage ShaderInternal::loadUserTextureImage(const QString& path, int svgMaxDim)
     return reader.read().convertToFormat(QImage::Format_RGBA8888);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Async texture pre-warm.
-//
-// Pattern: a `QRunnable` posted to `m_shaderManager.m_textureLoaderPool` performs the
-// CPU-bound load (`loadUserTextureImage` — QImage decode for raster
-// formats, QSvgRenderer rasterise for SVG/SVGZ) on a worker thread,
-// producing a `QImage` in `Format_RGBA8888`. The worker then dispatches
-// a queued slot back to `this` via `QMetaObject::invokeMethod(...,
-// Qt::QueuedConnection)` so the GL upload (`KWin::GLTexture::upload`)
-// runs on the GL-context thread (the compositor thread). The cache
-// insert and in-flight set bookkeeping happen entirely on the
-// compositor thread, so no locking is needed against
-// `m_shaderManager.m_textureCache` or `m_shaderManager.m_textureLoadsInFlight`.
-//
-// Thread-safety notes:
-//   • The worker only reads the captured path string (`m_path`) and
-//     `m_svgMaxDim` — both POD captured-by-value at submission time.
-//     It NEVER touches `m_shaderManager.m_textureCache` or `m_shaderManager.m_textureLoadsInFlight`;
-//     all access to those members happens on the compositor thread,
-//     either at submission time or inside the queued upload lambda.
-//     The submission-time generation captured into the worker lets
-//     the queued lambda detect a hot-reload that cleared the cache
-//     and discard the upload before touching `m_shaderManager.m_textureLoadsInFlight`.
-//   • `QSvgRenderer` is NOT thread-safe across instances (it owns
-//     mutable rasteriser state during `render()` per Qt docs).
-//     `loadUserTextureImage` constructs a fresh `QSvgRenderer` per
-//     call, so each worker invocation gets its own renderer — safe.
-//   • `QImage(path)` (PNG/JPG/etc. decode) is thread-safe across
-//     instances per Qt docs.
-//   • `KWin::GLTexture::upload` MUST run on the GL thread; that's
-//     why the upload is dispatched back via QueuedConnection rather
-//     than completed inline on the worker.
-// ─────────────────────────────────────────────────────────────────────────────
 void PlasmaZonesEffect::evictLruTextureIfOverBound(const ShaderTransition* pending)
 {
     // Build the set of cache pointers currently referenced by any
@@ -237,150 +201,12 @@ void PlasmaZonesEffect::evictLruTextureIfOverBound(const ShaderTransition* pendi
     }
 }
 
-void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
-{
-    if (absolutePath.isEmpty()) {
-        return;
-    }
-    // Already warm — fast path, no allocation.
-    if (m_shaderManager.m_textureCache.find(absolutePath) != m_shaderManager.m_textureCache.end()) {
-        return;
-    }
-    // Already in flight — a worker is mid-load; deduplicate to avoid
-    // duplicate GPU uploads when several transitions request the
-    // same path before the first one completes.
-    if (m_shaderManager.m_textureLoadsInFlight.contains(absolutePath)) {
-        return;
-    }
-    m_shaderManager.m_textureLoadsInFlight.insert(absolutePath);
-
-    // SVG default size matches `loadUserTextureImage`'s 1024 max-axis.
-    // Captured by value into the worker. The cache is path-keyed; if
-    // we ever need per-asset size variants the cache key must include
-    // the rasterised dimension, otherwise two callers requesting the
-    // same SVG at different sizes would race on whichever one wins.
-    constexpr int svgMaxDim = 1024;
-
-    // Capture the cache generation at submission time. The queued
-    // upload lambda compares this against the live
-    // `m_shaderManager.m_textureCacheGeneration` and discards if mismatched — i.e. a
-    // hot-reload (`effectsChanged`) bumped the generation between
-    // submission and upload, so this worker's bytes are stale and
-    // must not re-populate the cleared cache.
-    const quint64 submissionGeneration = m_shaderManager.m_textureCacheGeneration;
-
-    class Loader : public QRunnable
-    {
-    public:
-        Loader(QPointer<PlasmaZonesEffect> effect, QString path, int svgMaxDim, quint64 submissionGeneration)
-            : m_effect(std::move(effect))
-            , m_path(std::move(path))
-            , m_svgMaxDim(svgMaxDim)
-            , m_submissionGeneration(submissionGeneration)
-        {
-        }
-        void run() override
-        {
-            QImage img = loadUserTextureImage(m_path, m_svgMaxDim);
-            QPointer<PlasmaZonesEffect> effect = m_effect;
-            QString path = m_path;
-            const quint64 submissionGeneration = m_submissionGeneration;
-            // Bounce back to the compositor thread for the GL upload.
-            // The QPointer guards against the effect being destroyed
-            // while the worker was running — destructor's
-            // `m_shaderManager.m_textureLoaderPool.waitForDone()` already protects
-            // against this for the in-process teardown case, but the
-            // QPointer is defence-in-depth for any future caller that
-            // schedules this without owning the pool's lifetime.
-            QMetaObject::invokeMethod(
-                effect.data(),
-                [effect, path, img = std::move(img), submissionGeneration]() mutable {
-                    if (!effect) {
-                        return;
-                    }
-                    // Generation check FIRST — before touching
-                    // `m_shaderManager.m_textureCache` or `m_shaderManager.m_textureLoadsInFlight`. If
-                    // the cache was cleared underneath us by a hot-
-                    // reload (`effectsChanged`) the in-flight set was
-                    // already cleared too; touching it now would mean
-                    // racing with state the lambda has no business
-                    // mutating. Discard cleanly.
-                    if (submissionGeneration != effect->m_shaderManager.m_textureCacheGeneration) {
-                        qCDebug(lcEffect) << "warmUserTextureAsync: discarding stale upload for" << path
-                                          << "(generation mismatch — cache cleared during load)";
-                        return;
-                    }
-                    effect->m_shaderManager.m_textureLoadsInFlight.remove(path);
-                    if (img.isNull()) {
-                        qCWarning(lcEffect) << "warmUserTextureAsync: load failed for" << path;
-                        return;
-                    }
-                    // This lands from the EVENT LOOP, between frames — not inside a
-                    // paint cycle — so the compositor's GL context is not guaranteed
-                    // current. Everything below is GL: the upload, the filter/wrap
-                    // state, and the LRU sweep, whose eviction destroys a GLTexture and
-                    // therefore calls glDeleteTextures. Issuing any of that against no
-                    // context (or, worse, another thread's) is undefined. Every other
-                    // off-paint GL site in the effect makes the context current first
-                    // and says so; this one was missed. Bail rather than latch: the next
-                    // use of the path loads it synchronously inside a paint.
-                    if (!KWin::effects || !KWin::effects->makeOpenGLContextCurrent()) {
-                        qCWarning(lcEffect)
-                            << "warmUserTextureAsync: no current GL context, discarding upload for" << path;
-                        return;
-                    }
-                    // Re-check the cache: another transition may have
-                    // synchronously loaded this path while we were on
-                    // the worker. Honour the existing entry; dropping
-                    // ours avoids a redundant GPU upload.
-                    if (effect->m_shaderManager.m_textureCache.find(path)
-                        != effect->m_shaderManager.m_textureCache.end()) {
-                        return;
-                    }
-                    std::unique_ptr<KWin::GLTexture> gpuTex = KWin::GLTexture::upload(img);
-                    if (!gpuTex) {
-                        qCWarning(lcEffect) << "warmUserTextureAsync: GLTexture::upload failed for" << path;
-                        return;
-                    }
-                    gpuTex->setFilter(GL_LINEAR);
-                    gpuTex->setWrapMode(GL_CLAMP_TO_EDGE);
-                    CachedTexture cachedTex;
-                    cachedTex.texture = std::move(gpuTex);
-                    cachedTex.lastAppliedWrap = GL_CLAMP_TO_EDGE;
-                    cachedTex.lastAccessTick = ++effect->m_shaderManager.m_textureCacheAccessTick;
-                    effect->m_shaderManager.m_textureCache.emplace(path, std::move(cachedTex));
-                    // No `pending` to guard: this is a WARM, not a bind. Nothing holds a
-                    // pointer to the entry we just inserted, so the worst the sweep can do
-                    // is discard the warm we just paid for — which is exactly what being
-                    // over the bound means. A live transition's slots are protected by the
-                    // shaderTransitions() scan inside.
-                    effect->evictLruTextureIfOverBound(/*pending=*/nullptr);
-                    qCDebug(lcEffect) << "warmUserTextureAsync: cached" << path;
-                },
-                Qt::QueuedConnection);
-        }
-
-    private:
-        QPointer<PlasmaZonesEffect> m_effect;
-        QString m_path;
-        int m_svgMaxDim;
-        quint64 m_submissionGeneration;
-    };
-
-    // Pass `this` as a QPointer so the conversion happens at the call
-    // site (where `this` is known live), not inside the ctor body where
-    // a freed `effect` mid-construction would silently degrade to a raw
-    // pointer that never registers with QPointer's tracker.
-    auto* loader = new Loader(QPointer<PlasmaZonesEffect>(this), absolutePath, svgMaxDim, submissionGeneration);
-    loader->setAutoDelete(true);
-    m_shaderManager.m_textureLoaderPool.start(loader);
-}
-
 const CachedShader*
 PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
                                                 const PhosphorAnimationShaders::AnimationShaderEffect& eff)
 {
-    // KWin-specific default vertex stage. Hardcoded here rather than
+    // KWin-specific default vertex stage, AnimationShaderRegistry::
+    // compositorVertexSource(). Built in rather than
     // loaded from `data/animations/shared/animation.vert` because that
     // file is shared with the daemon's RHI surface pipeline, which
     // requires all uniforms to live in UBOs (default-block uniforms
@@ -428,25 +254,6 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
     // `#ifdef PLASMAZONES_KWIN` and multiply `position` by
     // modelViewProjectionMatrix on the kwin path. See the canonical
     // GLSL header (`data/animations/shared/animation_uniforms.glsl`).
-    static const QByteArray kKwinDefaultVertexSource = QByteArrayLiteral(
-        "#version 450\n"
-        "\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n"
-        "\n"
-        "layout(location = 0) out vec2 vTexCoord;\n"
-        "\n"
-        "uniform mat4 modelViewProjectionMatrix;\n"
-        "\n"
-        "void main() {\n"
-        "#ifdef PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN\n"
-        "    vTexCoord = texCoord;\n"
-        "#else\n"
-        "    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);\n"
-        "#endif\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n");
-
     auto cacheIt = m_shaderManager.m_shaderCache.find(effectId);
     if (cacheIt == m_shaderManager.m_shaderCache.end()) {
         // Diagnostic-once-per-compile: log multipass degradation when the
@@ -565,18 +372,25 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
         // `#version` other than whitespace and comments — so the helper
         // below splices it between the version directive and the rest of
         // the source.
-        const QString offscreenOrientationDefine = KWinCompat::OFFSCREEN_TEXCOORDS_TOP_DOWN
-            ? QStringLiteral("#define PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN 1\n")
-            : QString();
-        const QByteArray fragWithKwinDefine = injectKwinDefineAfterVersion(expanded, offscreenOrientationDefine);
+        const QString offscreenOrientationDefine =
+            KWinCompat::OFFSCREEN_TEXCOORDS_TOP_DOWN ? PhosphorShaders::kwinTopDownTexcoordsDefine() : QString();
+        const QByteArray fragWithKwinDefine =
+            injectKwinDefineAfterVersion(expanded, PhosphorShaders::ShaderStage::Fragment, offscreenOrientationDefine);
 
         // Route the built-in default vertex source through the same injection
-        // as custom vertex stages so it gets the layout(location) extension
-        // enables (it uses explicit locations too, and KWin compiles it at
-        // #version 140 — see injectKwinDefineAfterVersion).
+        // as custom vertex stages so its layout(location) qualifiers are made
+        // legal for the dialect KWin compiles it in (desktop GLSL 140 on a 6.7
+        // desktop context, GLSL ES 300 on a GLES one — see
+        // PhosphorShaders::kwinDefineBlock and stripVaryingLocations).
         QByteArray vertWithKwinDefine =
-            injectKwinDefineAfterVersion(QString::fromUtf8(kKwinDefaultVertexSource), offscreenOrientationDefine);
+            injectKwinDefineAfterVersion(PhosphorAnimationShaders::AnimationShaderRegistry::compositorVertexSource(),
+                                         PhosphorShaders::ShaderStage::Vertex, offscreenOrientationDefine);
         if (!eff.vertexShaderPath.isEmpty()) {
+            // Every failure below warns and keeps the default stage. That only
+            // degrades gracefully for a fragment that reads no varying beyond
+            // vTexCoord: a pack whose fragment reads one only its declared
+            // stage writes (vFold, vGenie and the like) cannot link against
+            // the default, and caches as a failed compile.
             QFile vertFile(eff.vertexShaderPath);
             if (!vertFile.open(QIODevice::ReadOnly)) {
                 qCWarning(lcEffect) << "Failed to open vertex shader" << eff.vertexShaderPath << "for effect"
@@ -604,7 +418,8 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
                         // the transition silently never installed.
                         const QString vertWithParams = PhosphorShaders::spliceAfterVersion(
                             expandedVert, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
-                        vertWithKwinDefine = injectKwinDefineAfterVersion(vertWithParams, offscreenOrientationDefine);
+                        vertWithKwinDefine = injectKwinDefineAfterVersion(
+                            vertWithParams, PhosphorShaders::ShaderStage::Vertex, offscreenOrientationDefine);
                     }
                 }
             }

@@ -30,7 +30,7 @@ uniform mat4 modelViewProjectionMatrix;
 void main() {
     // texCoord -> Y-down screen UV. The daemon's Qt-RHI quad delivers
     // it Y-down already; KWin's offscreen quad orientation depends on its
-    // version. Mirrors `kKwinDefaultVertexSource` and the canonical
+    // version. Mirrors `AnimationShaderRegistry::compositorVertexSource()` and the
     // header's vertex-stage contract. gl_Position also differs: KWin
     // needs the MVP matrix, the daemon emits clip space.
 #ifdef PLASMAZONES_KWIN

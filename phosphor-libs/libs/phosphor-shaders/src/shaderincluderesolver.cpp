@@ -3,6 +3,8 @@
 
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 
+#include <PhosphorShaders/ShaderParamPreamble.h>
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -15,6 +17,10 @@ namespace PhosphorShaders {
 namespace {
 
 static const QRegularExpression includeRegex(QStringLiteral("^\\s*#include\\s+([\"<])([^\">]+)[\">]\\s*$"));
+
+// The `#line` line PhosphorShaders::lineDirective ends with, which names the
+// source string twice: in the macro and as the directive's second operand.
+static const QRegularExpression lineDirectiveRegex(QStringLiteral("^#line PZ_LINE_(\\d+)_(\\d+) (\\d+)\\s*$"));
 
 QString tryReadFile(const QString& path, QString* outError)
 {
@@ -49,9 +55,23 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
     QString result;
     const QStringList lines = source.split(QLatin1Char('\n'));
 
-    // `li` is the 0-based index into `lines`; source line number is `li + 1`.
+    // `li` is the 0-based index into `lines`; source line number is
+    // `li + 1 + lineOffset`. The offset is zero until the source re-anchors
+    // itself with a lineDirective, as assembleEntryPoint does after a family
+    // prologue so the author's first line is line 1. Re-anchoring the parent
+    // after an include by physical index alone would undo that and number
+    // every later author line by the prologue's length.
+    int lineOffset = 0;
     for (int li = 0; li < lines.size(); ++li) {
         const QString& line = lines.at(li);
+        if (line.startsWith(QLatin1String("#line PZ_LINE_"))) {
+            const QRegularExpressionMatch anchor = lineDirectiveRegex.match(line);
+            if (anchor.hasMatch() && anchor.captured(1) == anchor.captured(3)
+                && anchor.captured(1).toInt() == thisSourceIndex) {
+                // The next line, index li + 1, is the anchored line.
+                lineOffset = anchor.captured(2).toInt() - (li + 2);
+            }
+        }
         // Cheap reject before the regex: the vast majority of shader lines are
         // not #include directives, and QRegularExpression::match() allocates a
         // fresh pcre2 match-data block per call. A substring pre-check skips the
@@ -159,24 +179,26 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
             return QString();
         seenCanonical.remove(resolvedPath);
 
-        // Bracket the inlined include with #line directives:
-        //   • `#line 1 <child>`     — the include's first line is line 1 of its
-        //                             own source string.
-        //   • `#line <li+2> <this>` — the parent resumes at the line *after* the
-        //                             #include directive. The directive is the
-        //                             1-based source line `li+1`, so the next
-        //                             parent line is `li+2`.
+        // Bracket the inlined include with two re-anchors:
+        //   • line 1 of <child>    — the include's first line is line 1 of its
+        //                            own source string.
+        //   • line li+2 of <this>  — the parent resumes at the line *after* the
+        //                            #include directive. The directive is the
+        //                            1-based source line `li+1`, so the next
+        //                            parent line is `li+2`, shifted by any
+        //                            re-anchor the parent made of itself.
         // Integer source-string numbers (not filenames) keep this portable
         // across glslang and the GL drivers the kwin-effect path compiles
         // through; callers map the number back to a path via outSourcePaths.
         // These directives only ever follow earlier source lines (every shader
         // opens with its own `#version`, and includes come after), so no #line
-        // is ever emitted before `#version`.
-        result += QStringLiteral("#line 1 %1\n").arg(childSourceIndex);
+        // is ever emitted before `#version`. PhosphorShaders::lineDirective
+        // spells each one so it numbers correctly under pre-330 GLSL too.
+        result += PhosphorShaders::lineDirective(1, childSourceIndex);
         result += expanded;
         if (!expanded.endsWith(QLatin1Char('\n')))
             result += QLatin1Char('\n');
-        result += QStringLiteral("#line %1 %2\n").arg(li + 2).arg(thisSourceIndex);
+        result += PhosphorShaders::lineDirective(li + 2 + lineOffset, thisSourceIndex);
     }
 
     return result;

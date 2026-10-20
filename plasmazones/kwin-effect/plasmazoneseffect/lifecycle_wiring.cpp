@@ -66,13 +66,6 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     // per-frame toggle keeps both properties: crisp at rest, smooth in
     // motion.
 
-    // Single-worker pool for off-loading user-texture loads. See the
-    // header docstring for `m_shaderManager.m_textureLoaderPool` for the rationale —
-    // serialised loads keep the dedupe cheap and avoid duplicate GPU
-    // uploads if multiple shader transitions reference the same file
-    // in quick succession.
-    m_shaderManager.m_textureLoaderPool.setMaxThreadCount(1);
-
     // Populate per-output clocks from the currently-known output set.
     // Subsequent hotplug events land in onScreenAdded / onScreenRemoved.
     //
@@ -246,30 +239,10 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
                 // a fresh upload to pick up the new contents. The cache
                 // is keyed by absolute path; without this clear a
                 // file-content change with no path change would never
-                // refresh.
-                //
-                // Bump the cache generation rather than draining the
-                // loader pool synchronously. `waitForDone()` on the GL
-                // thread would block the compositor for tens of ms when
-                // a worker is mid-rasterise of a 1024x1024 SVG (the
-                // worst case for `loadUserTextureImage`). Workers
-                // already in flight will complete their CPU rasterise,
-                // but their queued GL upload checks the generation
-                // captured at submission time against
-                // `m_shaderManager.m_textureCacheGeneration` and discards if mismatched
-                // — so no stale (pre-reload) bytes can re-populate the
-                // cleared cache. Clear immediately so the next
-                // `beginShaderTransition` hits the synchronous fallback
-                // path and uploads fresh content.
-                //
-                // The generation bump and the in-flight set are unconditional:
-                // neither frees anything a residual transition points at, and
-                // retiring the in-flight loads is what keeps pre-reload bytes
-                // out of the cache whether or not the cache itself is cleared.
-                // The cache clear rides the same `drained` gate as the shader
-                // cache above, for the userTextures pointers.
-                ++m_shaderManager.m_textureCacheGeneration;
-                m_shaderManager.m_textureLoadsInFlight.clear();
+                // refresh. The next `beginShaderTransition` then loads and
+                // uploads fresh content. The clear rides the same `drained`
+                // gate as the shader cache above, for the userTextures
+                // pointers a residual transition still holds.
                 if (drained) {
                     m_shaderManager.m_textureCache.clear();
                 }

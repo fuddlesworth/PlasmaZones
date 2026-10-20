@@ -86,7 +86,10 @@ PHOSPHORSHADERS_EXPORT QString composeEntryPoint(const QString& expandedSource,
 
 /// Convenience wrapper for the full assembly: when @p candidates is empty or
 /// @p raw already defines `main()`, returns @p raw unchanged; otherwise returns
-/// `composeEntryPoint(prologue + raw, candidates)`. This is the single assembly
+/// `composeEntryPoint(prologue + raw, candidates)`. When @p prologue carries the
+/// `#version` line, a `lineDirective` goes between the two, so a diagnostic
+/// names the author's own line rather than one counted from the top of the
+/// prologue. This is the single assembly
 /// entry point shared by the daemon bake layer and the kwin-effect path so both
 /// produce the identical pre-expansion source for an entry-only pack. Apply it
 /// to RAW (pre-expansion) source so the prologue's `#include` is then resolved.

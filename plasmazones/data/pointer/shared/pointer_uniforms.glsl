@@ -45,6 +45,13 @@
 #ifndef PLASMAZONES_POINTER_UNIFORMS_GLSL
 #define PLASMAZONES_POINTER_UNIFORMS_GLSL
 
+#ifdef GL_ES
+// GLSL ES defaults int to highp in the vertex stage and mediump in the
+// fragment stage, and a uniform both stages declare must agree on precision
+// to link. A pack with its own vertex stage includes this header in both.
+precision highp int;
+#endif
+
 #ifdef PLASMAZONES_KWIN
 
 // ── Compositor branch — classic default-block uniforms ──────────────────────
@@ -81,7 +88,7 @@ uniform vec2 iResolution;
 uniform vec4 iMouse;
 
 // Pack-specific tweakable parameters (declared in metadata.json, addressed by
-// `#define p_<id> customParamsN_x` / `customColorN` preambles the registry
+// `#define p_<id> customParams[N].x` / `customColors[N]` preambles the registry
 // generates — identical to the other families).
 uniform vec4 customParams[8];
 uniform vec4 customColors[16];

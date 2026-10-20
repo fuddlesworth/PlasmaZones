@@ -31,7 +31,21 @@ tasks:
   # it reads phosphor-surface-quick's shipped QML (SurfaceDecoration.qml is the
   # only library host that drives a guarded texture property), so an edit there
   # changes what it asserts while marking only `phosphor-libs` affected.
+  #
+  # phosphor-shaders is the same again: its preamble, include resolver and
+  # entry-point assembly are pinned by test_shader_param_preamble,
+  # test_shader_include_resolver and test_shader_entry_point, which live in
+  # this tier, and the shader validator gates and GPU bake tests here compile
+  # every bundled pack through them. The compositor vertex stages the
+  # animation, surface and pointer registries carry are compiled by those same
+  # gates and by test_animation_pack_bakes and the GPU bake tests, and by no
+  # test in phosphor-libs.
   test:
     inputs:
       - '/phosphor-libs/libs/phosphor-tiles/src/pluau/pluau.luau'
       - '/phosphor-libs/libs/phosphor-surface-quick/qml/**/*.qml'
+      - '/phosphor-libs/libs/phosphor-shaders/src/**/*'
+      - '/phosphor-libs/libs/phosphor-shaders/include/**/*'
+      - '/phosphor-libs/libs/phosphor-animation/src/animationshaderregistry.cpp'
+      - '/phosphor-libs/libs/phosphor-surface/src/surfaceshaderregistry.cpp'
+      - '/phosphor-libs/libs/phosphor-pointer/src/pointershaderregistry.cpp'

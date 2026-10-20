@@ -103,19 +103,6 @@ std::unique_ptr<KWin::GLTexture> allocateOutputTexture(const QSize& deviceSize, 
 /// projection is applied.
 void drawOutputQuad(const KWin::RenderViewport& viewport);
 
-/// The GLSL vertex stage shared by the screen-level passes. This is what
-/// drawOutputQuad's vertices feed into. Positions arrive in the
-/// RenderViewport's device coordinate space and are projected by KWin's own
-/// matrix, which encodes RenderTarget::transform() (the output rotation/flip,
-/// combined with the buffer's FlipY) and the render offset. Emitting
-/// clip-space directly is only equivalent when the transform is exactly FlipY
-/// and the offset is zero — the default, unrotated configuration; on a
-/// rotated output the target framebuffer is panel-oriented while the captures
-/// are logical-oriented, so a pass that skipped the projection painted
-/// unrotated and stretched. Callers splice their KWin define in themselves
-/// (ShaderInternal::injectKwinDefineAfterVersion).
-const char* outputQuadVertexSource();
-
 /// Render the scene's own cursor item into the CURRENT target, at the live
 /// pointer position. Only meaningful while the caller holds the compositor's
 /// cursor hidden (EffectsHandler::hideCursor): a screen-level pass that

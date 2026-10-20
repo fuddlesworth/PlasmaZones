@@ -3,6 +3,8 @@
 
 #include <PhosphorShaders/ShaderEntryPoint.h>
 
+#include <PhosphorShaders/ShaderParamPreamble.h>
+
 #include <QRegularExpression>
 
 namespace PhosphorShaders {
@@ -122,7 +124,20 @@ QString assembleEntryPoint(const QString& raw, const QString& prologue, const QL
     if (candidates.isEmpty() || definesMain(raw)) {
         return raw;
     }
-    return composeEntryPoint(prologue + raw, candidates);
+    // Re-anchor after the prologue so the author's first line is line 1 of
+    // source string 0 again. Without it every diagnostic in an entry-only
+    // pack named a line the prologue's length past the fault. Only after a
+    // prologue that carries the `#version` itself: a `#line` ahead of the
+    // version directive is rejected by every compiler, and a prologue without
+    // one leaves the version to the raw source below it.
+    QString prefix = prologue;
+    if (versionDirectiveEnd(prefix) >= 0) {
+        if (!prefix.endsWith(QLatin1Char('\n'))) {
+            prefix.append(QLatin1Char('\n'));
+        }
+        prefix += lineDirective(1, 0);
+    }
+    return composeEntryPoint(prefix + raw, candidates);
 }
 
 } // namespace PhosphorShaders

@@ -838,4 +838,57 @@ QList<PhosphorShaders::EntryCandidate> SurfaceShaderRegistry::surfaceEntryCandid
     return {PhosphorShaders::EntryCandidate{QStringLiteral("pSurface"), surfaceMain}};
 }
 
+QString SurfaceShaderRegistry::compositorVertexSource()
+{
+    return QStringLiteral(
+        "#version 450\n"
+        "\n"
+        "layout(location = 0) in vec2 position;\n"
+        "layout(location = 1) in vec2 texCoord;\n"
+        "\n"
+        "layout(location = 0) out vec2 vTexCoord;\n"
+        "\n"
+        "uniform mat4 modelViewProjectionMatrix;\n"
+        "\n"
+        "void main() {\n"
+        "    vTexCoord = texCoord;\n"
+        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
+        "}\n");
+}
+
+QString SurfaceShaderRegistry::compositorBufferVertexSource()
+{
+    return QStringLiteral(
+        "#version 450\n"
+        "layout(location = 0) in vec2 position;\n"
+        "layout(location = 1) in vec2 texCoord;\n"
+        "layout(location = 0) out vec2 vTexCoord;\n"
+        "void main() {\n"
+        "    vTexCoord = texCoord;\n"
+        "    gl_Position = vec4(position, 0.0, 1.0);\n"
+        "}\n");
+}
+
+QString SurfaceShaderRegistry::compositorPresentVertexSource()
+{
+    return QStringLiteral(
+        "#version 450\n"
+        "\n"
+        "layout(location = 0) in vec2 position;\n"
+        "layout(location = 1) in vec2 texCoord;\n"
+        "\n"
+        "layout(location = 0) out vec2 vTexCoord;\n"
+        "\n"
+        "uniform mat4 modelViewProjectionMatrix;\n"
+        "\n"
+        "void main() {\n"
+        "#ifdef PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN\n"
+        "    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);\n"
+        "#else\n"
+        "    vTexCoord = texCoord;\n"
+        "#endif\n"
+        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
+        "}\n");
+}
+
 } // namespace PhosphorSurfaceShaders

@@ -96,7 +96,7 @@ PackPresets parsePackPresets(const QDir& packDir, const QSet<QString>& imagePara
         // Nothing forces a screen here either: `applyPackBucket` takes the key as
         // the preset's id and name with `sourcePath` empty, and a pack preset never
         // becomes a filename — duplicating one into a user preset mints a fresh
-        // UUID. So the enforcement lives in `reportPresetProblems`, which states
+        // UUID. So the enforcement lives in the validator's `presetLints`, which states
         // the rules without claiming this function refuses them.
         if (!it.value().isObject()) {
             qCWarning(log).noquote() << "Shader pack" << packDir.dirName() << "preset" << it.key()

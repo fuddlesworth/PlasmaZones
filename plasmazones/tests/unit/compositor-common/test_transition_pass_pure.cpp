@@ -56,16 +56,6 @@ private Q_SLOTS:
         QFETCH(GLenum, target);
         QCOMPARE(alphaCaptureFormatForInternalFormat(target), GLenum(GL_RGBA8));
     }
-
-    void quadVertexSourceDeclaresTheContract()
-    {
-        // The strip and desktop packs' generated main reads vTexCoord at
-        // location 0 and the passes upload the projection under this name.
-        const QString src = QString::fromLatin1(PlasmaZones::TransitionPass::kOutputQuadVertexSource);
-        QVERIFY(src.startsWith(QStringLiteral("#version 450")));
-        QVERIFY(src.contains(QStringLiteral("uniform mat4 modelViewProjectionMatrix;")));
-        QVERIFY(src.contains(QStringLiteral("layout(location = 0) out vec2 vTexCoord;")));
-    }
 };
 
 QTEST_APPLESS_MAIN(TestTransitionPassPure)

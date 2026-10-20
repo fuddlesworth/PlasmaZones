@@ -41,20 +41,6 @@ inline GLenum alphaCaptureFormatForInternalFormat(GLenum targetFormat)
     }
 }
 
-/// The GLSL vertex stage shared by the screen-level passes (see
-/// transitionpasshelpers.h, outputQuadVertexSource, for the projection and
-/// texcoord reasoning). Callers splice their KWin define in themselves.
-inline constexpr const char* kOutputQuadVertexSource =
-    "#version 450\n"
-    "uniform mat4 modelViewProjectionMatrix;\n"
-    "layout(location = 0) in vec2 position;\n"
-    "layout(location = 1) in vec2 texCoord;\n"
-    "layout(location = 0) out vec2 vTexCoord;\n"
-    "void main() {\n"
-    "    vTexCoord = texCoord;\n"
-    "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-    "}\n";
-
 } // namespace TransitionPass
 
 } // namespace PlasmaZones
