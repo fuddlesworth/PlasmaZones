@@ -769,6 +769,81 @@ private Q_SLOTS:
         QVERIFY2(!shadow.report.contains(QStringLiteral("reads the varying vOne")), qPrintable(shadow.report));
     }
 
+    /// Use, type and dialect follow GLSL rather than the text: a member of the
+    /// same name is not the input, a `return` or `else` operand is a use, an
+    /// array size on the type equals one on the name, and a varying declared
+    /// on a desktop context alone is checked there.
+    void theVaryingCheckFollowsGlslRatherThanText()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+        const QByteArray member =
+            "layout(location = 1) in vec2 vGhost;\n"
+            "struct Holder { vec2 vGhost; };\n"
+            "vec4 pTransition(vec2 uv, float t) { Holder h; h.vGhost = uv; return vec4(h.vGhost, t, 1.0); }\n";
+        const PackResult m = validateWithVertex(tmp, QStringLiteral("member"), member, animationVertex(""));
+        QVERIFY2(m.report.contains(linkLine(QStringLiteral("effect.frag"), QStringLiteral("OK"))),
+                 qPrintable(m.report));
+
+        const QByteArray keywords =
+            "layout(location = 1) in vec2 vReturned;\n"
+            "layout(location = 2) in vec2 vElse;\n"
+            "vec2 pick() { return vReturned; }\n"
+            "vec4 pTransition(vec2 uv, float t) {\n"
+            "    float f = 0.0;\n"
+            "    if (t > 1.0) f = 1.0; else vElse.x > 0.0 ? (f = 2.0) : (f = 3.0);\n"
+            "    return vec4(pick(), t, f);\n"
+            "}\n";
+        const PackResult k = validateWithVertex(tmp, QStringLiteral("keywords"), keywords, animationVertex(""));
+        QVERIFY2(k.report.contains(QStringLiteral("reads the varying vReturned")), qPrintable(k.report));
+        QVERIFY2(k.report.contains(QStringLiteral("reads the varying vElse")), qPrintable(k.report));
+
+        const QByteArray arrayVert = animationVertex(
+            "#ifdef PLASMAZONES_KWIN\nout vec2 vArr[2];\n#else\nlayout(location = 1) out vec2 vArr[2];\n#endif\n",
+            "    vArr[0] = position;\n    vArr[1] = texCoord;\n");
+        const QByteArray arrayFrag =
+            "#ifdef PLASMAZONES_KWIN\nin vec2[2] vArr;\n#else\nlayout(location = 1) in vec2 vArr[2];\n#endif\n"
+            "vec4 pTransition(vec2 uv, float t) { return vec4(vArr[0] + vArr[1], t, 1.0); }\n";
+        const PackResult arr = validateWithVertex(tmp, QStringLiteral("array-type"), arrayFrag, arrayVert);
+        QVERIFY2(arr.report.contains(linkLine(QStringLiteral("effect.frag"), QStringLiteral("OK"))),
+                 qPrintable(arr.report));
+        QCOMPARE(arr.errors, 0);
+
+        const QByteArray desktopOnly =
+            "#if defined(PLASMAZONES_KWIN) && !defined(GL_ES)\n"
+            "in vec2 vDesktopOnly;\n#define PZ_PROBE_UV vDesktopOnly\n"
+            "#else\n#define PZ_PROBE_UV uv\n#endif\n"
+            "vec4 pTransition(vec2 uv, float t) { return vec4(PZ_PROBE_UV, t, 1.0); }\n";
+        const PackResult d = validateWithVertex(tmp, QStringLiteral("desktop-only"), desktopOnly, animationVertex(""));
+        QVERIFY2(d.report.contains(linkLine(QStringLiteral("effect.frag"), QStringLiteral("ERROR"))),
+                 qPrintable(d.report));
+        QVERIFY2(d.report.contains(QStringLiteral("reads the varying vDesktopOnly")), qPrintable(d.report));
+    }
+
+    /// A per-window fragment with its own main() still gets the compositor's
+    /// colour block above its first line, so an `#extension` there cannot be
+    /// moved high enough, and the advice says so.
+    void aLateExtensionUnderTheColourBlockCannotBeMoved()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+        QJsonObject obj = basePack(QStringLiteral("colour-first"));
+        obj.insert(QStringLiteral("appliesTo"), toArray({QStringLiteral("appearance")}));
+        QVERIFY(writePackFile(tmp.filePath(QStringLiteral("colour-first")), QStringLiteral("effect.frag"),
+                              "#version 450\n"
+                              "#if defined(PLASMAZONES_KWIN) && !defined(GL_ES)\n"
+                              "#extension GL_ARB_shading_language_420pack : enable\n"
+                              "#endif\n"
+                              "#include <animation_uniforms.glsl>\n"
+                              "layout(location = 0) in vec2 vTexCoord;\n"
+                              "layout(location = 0) out vec4 fragColor;\n"
+                              "void main() { fragColor = PZ_FINALIZE_COLOR(vec4(vTexCoord, 0.0, 1.0)); }\n"));
+        const PackResult r = validate(tmp, QStringLiteral("colour-first"), obj, /*writeFragment=*/false);
+        QVERIFY2(r.report.contains(linkLine(QStringLiteral("effect.frag"), QStringLiteral("ERROR"))),
+                 qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("cannot enable an extension on Mesa at all")), qPrintable(r.report));
+    }
+
     /// A screen-level pass always runs with the compositor's screen vertex
     /// stage, and `vertexShader` is ignored there, so the advice for a varying
     /// it does not write must not be to declare one.

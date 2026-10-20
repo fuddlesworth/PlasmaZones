@@ -368,7 +368,7 @@ CompositorStage builtinCompositorStage(const QString& label, PhosphorShaders::Sh
 /// Returns 1 when any arm rejects the stage and 0 when all compile: a stage
 /// counts once in the pack's error total however many arms reject it, so the
 /// total is the number of broken stages. When an arm rejects it with the same
-/// diagnostics as the last arm that printed them, its line says so rather than
+/// diagnostics as the arm immediately above, its line says so rather than
 /// repeating them. The arms run concurrently. A glslang that cannot run at all
 /// (staging failure, start failure, timeout, crash) fails them alike and is
 /// reported once.

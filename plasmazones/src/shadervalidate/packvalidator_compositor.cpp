@@ -305,8 +305,10 @@ bool isUseOf(const QString& text, qsizetype at)
         --start;
     }
     // Two identifiers in a row is a type and its declarator everywhere in
-    // GLSL except after `return`.
-    return QStringView(text).mid(start, i - start + 1) == QLatin1String("return");
+    // GLSL except after a keyword that an expression can follow.
+    const QStringView before = QStringView(text).mid(start, i - start + 1);
+    return before == QLatin1String("return") || before == QLatin1String("else") || before == QLatin1String("do")
+        || before == QLatin1String("case");
 }
 
 /// One stage to preprocess for its interface.
@@ -367,18 +369,29 @@ StageInterface parseStageInterface(const GlslangRun& run, const QString& label)
         QRegularExpression::MultilineOption);
     static const QRegularExpression arraySuffix(QStringLiteral(R"(\s*\[[^\]]*\]\s*$)"));
     QList<std::pair<qsizetype, qsizetype>> declarationSpans;
+    // The array size off a type or a declarator, spaces dropped, so that
+    // `vec2[2] v` and `vec2 v[2]`, which GLSL treats as one type, compare equal.
+    const auto splitArray = [](QString text) {
+        const QRegularExpressionMatch m = arraySuffix.match(text);
+        QString size = m.hasMatch() ? m.captured(0) : QString();
+        text.remove(arraySuffix);
+        size.remove(QLatin1Char(' '));
+        return std::pair<QString, QString>{text.trimmed(), size.trimmed()};
+    };
     for (auto it = declaration.globalMatch(run.stdoutText); it.hasNext();) {
         const QRegularExpressionMatch m = it.next();
         declarationSpans.append({m.capturedStart(0), m.capturedEnd(0)});
-        for (QString name : m.captured(3).split(QLatin1Char(','))) {
-            name = name.remove(arraySuffix).trimmed();
+        const auto [baseType, typeArray] = splitArray(m.captured(2));
+        for (const QString& declarator : m.captured(3).split(QLatin1Char(','))) {
+            const auto [name, nameArray] = splitArray(declarator);
             if (name.isEmpty() || name.startsWith(QLatin1String("gl_"))) {
                 continue;
             }
+            const QString type = baseType + typeArray + nameArray;
             if (m.captured(1) == QLatin1String("out")) {
-                result.outputs.insert(name, m.captured(2));
+                result.outputs.insert(name, type);
             } else {
-                result.inputs.append({name, m.captured(2)});
+                result.inputs.append({name, type});
             }
         }
     }
@@ -405,11 +418,13 @@ StageInterface parseStageInterface(const GlslangRun& run, const QString& label)
         }
     }
     // Mesa's rule: an `#extension` after anything that is not a preprocessor
-    // directive is "not allowed in the middle of a shader", and a `#pragma`
-    // counts as such a statement there. glslang accepts it anywhere, which is
-    // why this is read off by hand.
+    // directive is "not allowed in the middle of a shader". The pragmas Mesa
+    // acts on count as such a statement there, and any other one is dropped
+    // unread. glslang accepts an `#extension` anywhere, which is why this is
+    // read off by hand.
     static const QRegularExpression extension(QStringLiteral(R"(^\s*#\s*extension\s+(\S+))"));
-    static const QRegularExpression pragma(QStringLiteral(R"(^\s*#\s*pragma\b)"));
+    static const QRegularExpression pragma(
+        QStringLiteral(R"(^\s*#\s*pragma\s+(?:debug|optimize|warning|STDGL\s+invariant)\b)"));
     bool pastDeclaration = false;
     for (const QString& line : run.stdoutText.split(QLatin1Char('\n'))) {
         const QString trimmed = line.trimmed();
@@ -530,8 +545,10 @@ int reportCompositorCompile(QTextStream& out, const CompositorStage& stage)
     const QList<GlslangRun> runs = runGlslang(tool, jobs);
     const GlslangRun& desktop = runs.constFirst();
     const QStringList desktopLines = diagnosticLines(desktop, stage.label, stage.sourcePaths);
-    if (desktop.status == GlslangRun::Status::ToolFailure) {
-        // The GLES arms failed the same way, so it is said once.
+    if (std::all_of(runs.cbegin(), runs.cend(), [](const GlslangRun& run) {
+            return run.status == GlslangRun::Status::ToolFailure;
+        })) {
+        // A glslang that cannot run fails every arm alike, so it is said once.
         out << "  " << padLabel(stage.label) << "ERROR (compositor, both dialects)\n    " << desktop.output << "\n";
         return 1;
     }
@@ -539,8 +556,12 @@ int reportCompositorCompile(QTextStream& out, const CompositorStage& stage)
         out << "  " << padLabel(stage.label) << "OK (compositor)\n";
     } else {
         out << "  " << padLabel(stage.label) << "ERROR (compositor)\n";
-        for (const QString& line : desktopLines) {
-            out << "    " << line << "\n";
+        if (desktop.status == GlslangRun::Status::ToolFailure) {
+            out << "    " << desktop.output << "\n";
+        } else {
+            for (const QString& line : desktopLines) {
+                out << "    " << line << "\n";
+            }
         }
     }
 
@@ -560,7 +581,8 @@ int reportCompositorCompile(QTextStream& out, const CompositorStage& stage)
         out << "  " << padLabel(stage.label) << "ERROR (" << arm.tag << ")\n";
         if (gles.status == GlslangRun::Status::ToolFailure) {
             out << "    " << gles.output << "\n";
-            break;
+            previousLines.clear();
+            continue;
         }
         if (!previousLines.isEmpty() && glesLines == previousLines) {
             // The usual case for an ordinary error: every dialect rejects the
@@ -619,7 +641,11 @@ int reportCompositorLink(QTextStream& out, const CompositorStage& vertex, const 
     for (qsizetype k = 0; k < missing.size(); ++k) {
         const InterfaceRequest& request = requests.at(missing.at(k));
         interfaces[missing.at(k)] = parseStageInterface(runs.at(k), request.label);
-        interfaceCache().insert(request.key(), interfaces.at(missing.at(k)));
+        // A tool failure may be passing (a timeout under load), so the next
+        // pack that needs this stage tries again rather than inherit it.
+        if (runs.at(k).status != GlslangRun::Status::ToolFailure) {
+            interfaceCache().insert(request.key(), interfaces.at(missing.at(k)));
+        }
     }
     const GlslangRun& link = runs.constLast();
     const DialectPair gles{interfaces.at(0), interfaces.at(1)};
@@ -643,27 +669,41 @@ int reportCompositorLink(QTextStream& out, const CompositorStage& vertex, const 
         for (const CompositorStage* owner : {&vertex, &fragment}) {
             const StageInterface& onGles = owner == &vertex ? gles.vertex : gles.fragment;
             const StageInterface& onDesktop = owner == &vertex ? desktop.vertex : desktop.fragment;
+            // On GLES every pack line follows KWin's precision declarations, so
+            // the only fix there is a guard against GLES. On desktop the fix is
+            // to move it up, unless the compositor's own declarations come
+            // first, and then the stage cannot have it on Mesa at all.
+            static const QString kMidShader =
+                QStringLiteral("(\"#extension directive is not allowed in the middle of a shader\")");
+            const QString impossible = QStringLiteral(
+                "The compositor places declarations of its own above this stage's code, so the stage cannot "
+                "enable an extension on Mesa at all");
             for (const QString& ext : onDesktop.lateExtensions) {
-                addProblem(QStringLiteral("%1 enables %2 after a declaration, which Mesa rejects on KWin 6.7's "
-                                          "desktop context (\"#extension directive is not allowed in the middle of "
-                                          "a shader\"). %3")
-                               .arg(owner->label, ext,
-                                    owner->compositorDeclarationsFirst
-                                        ? QStringLiteral("The compositor places declarations of its own above this "
-                                                         "stage's code, so the stage cannot enable an extension on "
-                                                         "Mesa at all")
-                                        : QStringLiteral("Move it directly under #version, above every declaration "
-                                                         "and every #include that brings declarations in")));
+                const bool lateOnGles = onGles.lateExtensions.contains(ext);
+                addProblem(
+                    QStringLiteral("%1 enables %2 after a declaration, which Mesa rejects on KWin 6.7's desktop "
+                                   "context %3. %4")
+                        .arg(owner->label, ext, kMidShader,
+                             owner->compositorDeclarationsFirst ? impossible
+                                 : lateOnGles
+                                 ? QStringLiteral("Move it directly under #version, above every declaration and "
+                                                  "every #include that brings declarations in, and guard it with "
+                                                  "#ifndef GL_ES, since nothing can come before KWin's precision "
+                                                  "declarations on a GLES context")
+                                 : QStringLiteral("Move it directly under #version, above every declaration and "
+                                                  "every #include that brings declarations in")));
             }
             for (const QString& ext : onGles.lateExtensions) {
                 if (onDesktop.lateExtensions.contains(ext)) {
                     continue; // the desktop line above already names it
                 }
                 addProblem(QStringLiteral("%1 enables %2 after KWin's precision declarations, which Mesa and NVIDIA "
-                                          "reject (\"#extension directive is not allowed in the middle of a "
-                                          "shader\"). Nothing can come before those on a GLES context, so guard it "
-                                          "with #ifndef GL_ES")
-                               .arg(owner->label, ext));
+                                          "reject %3. %4")
+                               .arg(owner->label, ext, kMidShader,
+                                    owner->compositorDeclarationsFirst
+                                        ? impossible
+                                        : QStringLiteral("Nothing can come before those on a GLES context, so guard "
+                                                         "it with #ifndef GL_ES")));
             }
         }
         // GLSL links varyings by NAME once the locations are stripped, and
