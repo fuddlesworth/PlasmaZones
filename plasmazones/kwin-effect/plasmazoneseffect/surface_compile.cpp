@@ -6,7 +6,7 @@
 // buffer passes), and the per-window pack lookup. The RENDERING of compiled
 // packs (buffer-pass draws, chain compositing, uniform pushes) lives in
 // surfacelayers.cpp; the animation shader compile path this mirrors lives in
-// shader_transitions.cpp.
+// shader_textures.cpp (compileOrLoadAnimationShader).
 
 #include "plasmazoneseffect.h"
 #include "shader_internal.h"
@@ -52,41 +52,23 @@ using ShaderInternal::kCustomParamsElementNames;
 using ShaderInternal::kITextureResolutionKeys;
 using ShaderInternal::loadUserTextureImage;
 
-namespace {
-
 // ── Fullscreen-quad primitive for the multipass SURFACE buffer passes ────────
 //
 // A buffer pass is an FBO→FBO blit: it samples the captured window surface
 // (uTexture0) plus any prior buffer outputs (iChannelN) and writes its own FBO.
 // There is no window quad to redirect here — the pass covers the whole target
-// FBO — so we draw a unit triangle-strip quad in NDC directly, with NO
-// modelViewProjectionMatrix (the position is already clip-space). The buffer's
-// fragment uses surface_uniforms.glsl; injectKwinDefineAfterVersion on this
-// vertex source isn't needed for the vertex stage (it declares no uniforms from
-// the header), but the define IS injected so both stages compile against the
-// same #version handling and the contract's KWin branch is selected in the frag.
-//
-// Attribute slots match KWin::VA_Position (0) / VA_TexCoord (1) per
-// <opengl/glvertexbuffer.h>'s GLVertex2DLayout: explicit layout(location=N)
-// decorations bind to those indices so vbo->setVertices(GLVertex2D{...}) feeds
-// position@0 and texcoord@1 directly.
+// FBO — so its vertex stage, SurfaceShaderRegistry::compositorBufferVertexSource(),
+// draws a unit triangle-strip quad in NDC directly, with NO
+// modelViewProjectionMatrix (the position is already clip-space). Its attribute
+// slots match KWin::VA_Position (0) / VA_TexCoord (1) per
+// <opengl/glvertexbuffer.h>'s GLVertex2DLayout, so vbo->setVertices(GLVertex2D{...})
+// feeds position@0 and texcoord@1 directly.
 //
 // NOTE: the fullscreen-quad DRAW helper (drawFullscreenQuad) lives in
 // surfacelayers.cpp, the only TU that issues buffer-pass draws. It is not
 // duplicated here (this TU only compiles the buffer-pass shaders) — under the
 // kwin-effect's Unity build two anonymous-namespace definitions of the same
 // helper would collide.
-constexpr const char* kFullscreenQuadVertexSource =
-    "#version 450\n"
-    "layout(location = 0) in vec2 position;\n"
-    "layout(location = 1) in vec2 texCoord;\n"
-    "layout(location = 0) out vec2 vTexCoord;\n"
-    "void main() {\n"
-    "    vTexCoord = texCoord;\n"
-    "    gl_Position = vec4(position, 0.0, 1.0);\n"
-    "}\n";
-
-} // namespace
 
 SurfaceParamValues ShaderInternal::resolveSurfaceParamValues(const PhosphorSurfaceShaders::SurfaceShaderEffect& eff,
                                                              const QVariantMap& friendlyOverrides)
@@ -290,38 +272,37 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // Select the PLASMAZONES_KWIN branch of surface_uniforms.glsl (classic-GL
     // default-block uniforms; KWin::GLShader has no UBO bind path), exactly as
     // the animation compile path does.
-    const QByteArray fragWithKwinDefine = injectKwinDefineAfterVersion(expanded);
+    const QByteArray fragWithKwinDefine =
+        injectKwinDefineAfterVersion(expanded, PhosphorShaders::ShaderStage::Fragment);
 
-    // Default surface vertex stage for frag-only packs (the border ships none).
-    // Passthrough texcoord, NO Y-flip: the fragment reconstructs the top-down
-    // device pixel itself for the rounded-rect SDF, so the geometry lines up
-    // with the top-down frame uniforms. Shares the attribute-slot layout
-    // (position@0, texCoord@1, modelViewProjectionMatrix) with the animation
-    // default vertex, minus its Y-flip.
-    static const QByteArray kSurfaceDefaultVertexSource = QByteArrayLiteral(
-        "#version 450\n\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n\n"
-        "layout(location = 0) out vec2 vTexCoord;\n\n"
-        "uniform mat4 modelViewProjectionMatrix;\n\n"
-        "void main() {\n"
-        "    vTexCoord = texCoord;\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n");
-    // Wrap the default vertex source through injectKwinDefineAfterVersion just
-    // like the custom-vertex branch below (and the animation default vertex):
-    // KWin rewrites our #version 450 down to the GL context core version (140),
-    // where the `layout(location = N)` qualifiers are illegal without the ARB
-    // extensions the inject helper enables. Passing the raw source here made
-    // frag-only packs (the border ships no vertex stage) fail to compile on
-    // NVIDIA (error C7548), latching the pack failed every frame.
-    QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(QString::fromUtf8(kSurfaceDefaultVertexSource));
+    // Default surface vertex stage for frag-only packs (the border ships none),
+    // SurfaceShaderRegistry::compositorVertexSource(). Passthrough texcoord, NO
+    // Y-flip: the fragment reconstructs the top-down device pixel itself for the
+    // rounded-rect SDF, so the geometry lines up with the top-down frame
+    // uniforms. Shares the attribute-slot layout (position@0, texCoord@1,
+    // modelViewProjectionMatrix) with the animation default vertex, which flips
+    // only on KWin 6.7.
+    //
+    // Wrapped through injectKwinDefineAfterVersion just like the custom-vertex
+    // branch below (and the animation default vertex). On a 6.7 desktop context
+    // KWin compiles our #version 450 as desktop GLSL 140, where the input
+    // location needs the ARB extension the helper enables. On a GLES context
+    // (every context on 6.8) it compiles GLSL ES 300, where the input location
+    // is legal but the varying's is not, so the helper strips it. Passing the
+    // raw source here made frag-only packs (the border ships no vertex stage)
+    // fail to compile on NVIDIA under 6.7 (error C7548) and latch the pack off.
+    QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(
+        PhosphorSurfaceShaders::SurfaceShaderRegistry::compositorVertexSource(), PhosphorShaders::ShaderStage::Vertex);
     if (!eff.vertexShaderPath.isEmpty()) {
         // Every failure below (unreadable / empty file, include expansion
         // error) warns and KEEPS the already-assigned default vertex stage,
         // matching the animation path's graceful degradation — feeding the
         // raw unexpanded source to the compiler would fail the whole pack
-        // ("decoration disabled this session") for a vertex-only defect.
+        // ("decoration disabled this session") for a vertex-only defect. The
+        // fallback only degrades gracefully for a fragment that reads no
+        // varying beyond vTexCoord: one that reads a varying only its own
+        // vertex stage writes cannot link against the default, so that pack
+        // still caches as a failed compile.
         QFile vertFile(eff.vertexShaderPath);
         if (!vertFile.open(QIODevice::ReadOnly)) {
             qCWarning(lcEffect) << "Failed to open surface vertex shader" << eff.vertexShaderPath << "for pack"
@@ -339,7 +320,8 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
                     qCWarning(lcEffect) << "Failed to expand surface vertex-shader includes for" << packId << ":"
                                         << vertIncErr << "— falling back to the default surface vertex stage";
                 } else {
-                    vertWithKwinDefine = injectKwinDefineAfterVersion(expandedVert);
+                    vertWithKwinDefine =
+                        injectKwinDefineAfterVersion(expandedVert, PhosphorShaders::ShaderStage::Vertex);
                 }
             }
         }
@@ -518,10 +500,11 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // else, so a pack that sets the flag renders without feedback rather than
     // failing; the flag is not read on this path.
     if (eff.isMultipass && !eff.bufferShaderPaths.isEmpty()) {
-        // The fullscreen-quad vertex stage is shared by every buffer pass; the
-        // PLASMAZONES_KWIN define is injected so it travels the same #version
-        // handling as the frag (the vertex declares no contract uniforms, but
-        // keeping both stages on the same define path avoids surprises).
+        // The fullscreen-quad vertex stage is shared by every buffer pass, and
+        // the inject helper is load-bearing for it: it enables the ARB
+        // extension its input locations need on a 6.7 desktop context, and
+        // strips the location on its `vTexCoord` output, which a GLSL ES 300
+        // compile rejects on Mesa.
         //
         // NOTE, and this diverges from the daemon: a pack's DECLARED vertex
         // stage (eff.vertexShaderPath, applied to the main pass above) is NOT
@@ -533,7 +516,9 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         // The declared-stage contract is documented on
         // SurfaceShaderEffect::vertexShaderPath: a buffer frag must read no
         // varying beyond vTexCoord. No bundled pack declares a vertex stage.
-        const QByteArray bufVert = injectKwinDefineAfterVersion(QString::fromUtf8(kFullscreenQuadVertexSource));
+        const QByteArray bufVert =
+            injectKwinDefineAfterVersion(PhosphorSurfaceShaders::SurfaceShaderRegistry::compositorBufferVertexSource(),
+                                         PhosphorShaders::ShaderStage::Vertex);
 
         std::vector<CompiledSurfaceBufferPass> passes;
         passes.reserve(static_cast<size_t>(eff.bufferShaderPaths.size()));
@@ -569,7 +554,8 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
             // keeping all three buffer-pass compile paths identical. The raw
             // customParams/customColors locations are still cached below because
             // buffer passes read those uniforms directly.
-            const QByteArray bufFrag = injectKwinDefineAfterVersion(bufExpanded);
+            const QByteArray bufFrag =
+                injectKwinDefineAfterVersion(bufExpanded, PhosphorShaders::ShaderStage::Fragment);
             auto bufShader =
                 KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, bufVert, bufFrag);
             if (!bufShader) {

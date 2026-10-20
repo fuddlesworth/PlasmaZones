@@ -10,6 +10,7 @@
 // contract the runtimes depend on.
 
 #include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QTest>
 
@@ -118,6 +119,31 @@ private Q_SLOTS:
         // missing-main() error (not a silent rewrite) surfaces.
         const QString src = QStringLiteral("float helper(float x) { return x * 2.0; }\n");
         QCOMPARE(PhosphorShaders::composeEntryPoint(src, zoneCandidates()), src);
+    }
+
+    // ── assembleEntryPoint ────────────────────────────────────────────────
+
+    // A prologue that carries the `#version` is followed by a re-anchor to the
+    // author's line 1, so a diagnostic names the line in the pack's own file.
+    void testAssembleReanchorsAfterAVersionedPrologue()
+    {
+        const QString prologue = QStringLiteral("#version 450\n#include <h.glsl>\nin vec2 vTexCoord;");
+        const QString raw = QStringLiteral("vec4 pZone() { return vec4(1.0); }\n");
+        QCOMPARE(PhosphorShaders::assembleEntryPoint(raw, prologue, zoneCandidates()),
+                 prologue + QLatin1Char('\n') + PhosphorShaders::lineDirective(1, 0) + raw
+                     + QStringLiteral("void main() { /* ZONE WRAP */ }\n"));
+    }
+
+    // A prologue without one leaves the `#version` to the raw source, and a
+    // `#line` ahead of the version directive is rejected by every compiler,
+    // so none is emitted.
+    void testAssembleLeavesAVersionlessPrologueUnanchored()
+    {
+        const QString prologue = QStringLiteral("// shared declarations\n");
+        const QString raw = QStringLiteral("#version 450\nvec4 pZone() { return vec4(1.0); }\n");
+        const QString out = PhosphorShaders::assembleEntryPoint(raw, prologue, zoneCandidates());
+        QVERIFY2(!out.contains(QStringLiteral("#line")), qPrintable(out));
+        QVERIFY2(out.startsWith(prologue + raw), qPrintable(out));
     }
 
     // ── stripGlslComments ─────────────────────────────────────────────────

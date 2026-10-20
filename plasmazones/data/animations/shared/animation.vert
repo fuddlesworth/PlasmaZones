@@ -6,7 +6,7 @@
 // not ship its own `effect.vert` (see surfaceanimator.cpp::runLeg).
 // Surface-extent effects (bounce, fly-in, broken-glass, morph) supply
 // their own pass-through `effect.vert` and never use this file; the
-// kwin-effect path supplies `kKwinDefaultVertexSource` and likewise
+// kwin-effect path supplies `AnimationShaderRegistry::compositorVertexSource()` and likewise
 // never uses this file — so this stage is daemon anchor-extent only.
 //
 // Card-space remap. The rasterised quad covers the captured FBO, which

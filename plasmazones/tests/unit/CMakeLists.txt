@@ -1215,9 +1215,14 @@ target_link_libraries(test_zone_entry_scaffold PRIVATE Qt6::Test Qt6::Core Qt6::
 target_compile_definitions(test_zone_entry_scaffold PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
 add_test(NAME test_zone_entry_scaffold COMMAND test_zone_entry_scaffold)
 
-# Pins buildParamPreamble's generated `#define p_<id> <accessor>` block:
-# declaration-order auto-slotting (must match the lane the runtime uploads to),
-# independent scalar/color/image pools, and skip-don't-break on bad input.
+# Pins the source transforms in PhosphorShaders/ShaderParamPreamble.h:
+# buildParamPreamble's generated `#define p_<id> <accessor>` block
+# (declaration-order auto-slotting that must match the lane the runtime uploads
+# to, independent scalar/color/image pools, skip-don't-break on bad input), the
+# #version finder and splice with their dialect-proof #line re-anchor, the
+# compositor's define block, varying-location strip and kwinCompositorSource,
+# KWin's own rewrites for the offline gates, and the zone parser's pack-path
+# containment.
 add_executable(test_shader_param_preamble ui/shaders/test_shader_param_preamble.cpp)
 target_link_libraries(test_shader_param_preamble PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
 add_test(NAME test_shader_param_preamble COMMAND test_shader_param_preamble)
@@ -1238,7 +1243,10 @@ add_test(NAME test_animation_shader_preamble_bake COMMAND test_animation_shader_
 # through a real offscreen OpenGL context — the branch qsb/SPIR-V rejects and the
 # daemon preamble bake therefore never compiles. Catches GLSL errors in the KWin
 # branch (getFromColor/getToColor, surfaceColor's kwin flip, customColors/iFrame
-# usage). Skips when no desktop-GL >= 4.5 context is available (headless CI).
+# usage) at the packs' own #version 450. KWin's own dialects (GLSL 140, GLSL ES
+# 300) and the vertex-to-fragment link are the shader_validate_animations gate's,
+# which runs headless. Skips when no desktop-GL >= 4.5 context is available
+# (headless CI).
 add_executable(test_animation_shader_kwin_bake ui/shaders/test_animation_shader_kwin_bake.cpp)
 target_link_libraries(test_animation_shader_kwin_bake PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation PhosphorShaders::PhosphorShaders)
 target_compile_definitions(test_animation_shader_kwin_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
@@ -2824,7 +2832,7 @@ add_test(NAME test_desktop_move_stash COMMAND test_desktop_move_stash)
 
 # The pure half of the screen-level passes' helpers (transitionpasspure.h):
 # the on-screen format to alpha-capable capture format table the strip pass
-# allocates with, and the shared quad vertex stage. Header-only GL enums,
+# allocates with. Header-only GL enums,
 # same include-from-the-effect-tree shape as the sampler above. The header
 # pulls <epoxy/gl.h> for its GL enums, so the epoxy include path is taken
 # from pkg-config rather than assumed to be a system default (the effect's
@@ -2899,7 +2907,8 @@ set(_pack_validator_arms
     ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_surface_lints.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_surface_buffer_lints.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_pointer.cpp
-    ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidatorcommon.cpp)
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidatorcommon.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_compositor.cpp)
 foreach(_pv_test IN ITEMS test_pack_validators test_pack_validator_presets test_pointer_pack_validator
                           test_surface_pack_validator test_surface_pack_lints test_surface_blur_chain_lints
                           test_animation_pack_bakes test_pack_model_detection)

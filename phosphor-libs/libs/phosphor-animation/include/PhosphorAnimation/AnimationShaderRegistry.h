@@ -208,6 +208,33 @@ public:
     /// `PhosphorShaders::assembleEntryPoint` (kwin) so both runtimes agree.
     static QList<PhosphorShaders::EntryCandidate> animationEntryCandidates();
 
+    /// The vertex stage the COMPOSITOR compiles for every per-window animation
+    /// pack that declares none of its own. KWin's classic-GL OffscreenEffect
+    /// hands it positions in screen-pixel space and projects them with the
+    /// `modelViewProjectionMatrix` default-block uniform, the opposite of the
+    /// daemon's clip-space `shared/animation.vert`, which is why this is not
+    /// that file. It writes `vTexCoord` top-down: KWin 6.8 already supplies
+    /// top-down texcoords (`PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN`), earlier
+    /// versions bottom-up, which it flips.
+    ///
+    /// Lives here rather than in the effect so the offline validator links
+    /// every frag-only pack against the exact stage the compositor uses, which
+    /// is how a varying it reads but this stage never writes gets caught.
+    [[nodiscard]] static QString compositorVertexSource();
+
+    /// The vertex stage of the SCREEN-level passes (desktop switch and
+    /// strip), which draw one full-output quad. Positions arrive in the
+    /// RenderViewport's device coordinate space and are projected by KWin's
+    /// own matrix, which encodes RenderTarget::transform() (the output
+    /// rotation/flip combined with the buffer's FlipY) and the render offset.
+    /// Emitting clip-space directly is only equivalent when the transform is
+    /// exactly FlipY and the offset is zero, the default unrotated
+    /// configuration: on a rotated output the target framebuffer is
+    /// panel-oriented while the captures are logical-oriented, so a pass that
+    /// skipped the projection painted unrotated and stretched. Here for the
+    /// same reason as compositorVertexSource().
+    [[nodiscard]] static QString compositorScreenVertexSource();
+
     /// The `shared` subdirectory of every search path that has one, in PRIORITY
     /// order: the user directory first, then the system prefixes highest-first.
     /// Deduplicated.

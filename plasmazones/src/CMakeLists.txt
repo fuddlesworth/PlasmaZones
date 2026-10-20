@@ -969,6 +969,7 @@ add_executable(plasmazones-shader-validate
     shadervalidate/packvalidator_surface_buffer_lints.cpp
     shadervalidate/packvalidator_pointer.cpp
     shadervalidate/packvalidatorcommon.cpp
+    shadervalidate/packvalidator_compositor.cpp
 )
 target_link_libraries(plasmazones-shader-validate
     PRIVATE
@@ -1000,10 +1001,12 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 # every pointer pack's stages, are compiled for the compositor's classic-GL
 # branch (default-block uniforms, which QShaderBaker's SPIR-V target rejects by
 # design), so they go out of process through glslang's default GLSL-semantics
-# mode. Those three invocations FAIL rather than skip when the binary is
-# absent: the compositor branch is compiled nowhere else in a headless run (the
-# GPU bake test QSKIPs without a desktop GL 4.5 context), so a silent skip would
-# put the gate back to lints-only. The overlay invocation bakes through
+# mode. Each is compiled in both dialects KWin compiles it in, desktop GLSL 140
+# and GLSL ES 300, and each fragment is linked against the vertex stage the
+# compositor pairs it with. Those three invocations FAIL rather than skip when
+# the binary is absent: the compositor branch is compiled nowhere else in a
+# headless run (the GPU bake test QSKIPs without a desktop GL 4.5 context), so a
+# silent skip would put the gate back to lints-only. The overlay invocation bakes through
 # QShaderBaker alone and needs no such tool.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled

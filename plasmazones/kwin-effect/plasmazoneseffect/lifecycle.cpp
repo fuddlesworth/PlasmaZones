@@ -444,24 +444,6 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     m_enableAudioVisualizer = false;
     m_audioSpectrumSize = 0;
 
-    // Drain the texture loader pool before any other teardown. A
-    // worker that's mid-rasterise would otherwise post a queued
-    // upload via QMetaObject::invokeMethod against `this` AFTER our
-    // members start tearing down — UAF on the texture cache.
-    // QThreadPool::waitForDone is called here BEFORE we let the
-    // member's destructor run (which itself blocks on waitForDone)
-    // so the pending invokeMethod posts are flushed against a still-
-    // intact `this`.
-    //
-    // Distinct from the hot-reload path in the `effectsChanged`
-    // lambda above: hot-reload bumps `m_shaderManager.m_textureCacheGeneration` (no
-    // wait) so workers in flight can discard their queued upload
-    // without blocking the compositor. Shutdown REQUIRES the wait —
-    // the queued uploads need to be flushed against a live `this`,
-    // not raced against member destruction.
-    m_shaderManager.m_textureLoaderPool.waitForDone();
-    m_shaderManager.m_textureLoadsInFlight.clear();
-
     // Clear daemon-side drag/overlay state while the effect is still alive,
     // but only after the destructor's local UAF-prevention guards have run.
     clearDaemonCompositorState();

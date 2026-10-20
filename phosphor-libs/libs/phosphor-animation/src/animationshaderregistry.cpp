@@ -924,4 +924,43 @@ QList<PhosphorShaders::EntryCandidate> AnimationShaderRegistry::animationEntryCa
     return {transition, inOut};
 }
 
+QString AnimationShaderRegistry::compositorVertexSource()
+{
+    // Attribute slots match KWin::VA_Position (0) / VA_TexCoord (1). The
+    // explicit locations bypass KWin's name-only bindAttributeLocation, whose
+    // `texcoord` would not match `texCoord`.
+    return QStringLiteral(
+        "#version 450\n"
+        "\n"
+        "layout(location = 0) in vec2 position;\n"
+        "layout(location = 1) in vec2 texCoord;\n"
+        "\n"
+        "layout(location = 0) out vec2 vTexCoord;\n"
+        "\n"
+        "uniform mat4 modelViewProjectionMatrix;\n"
+        "\n"
+        "void main() {\n"
+        "#ifdef PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN\n"
+        "    vTexCoord = texCoord;\n"
+        "#else\n"
+        "    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);\n"
+        "#endif\n"
+        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
+        "}\n");
+}
+
+QString AnimationShaderRegistry::compositorScreenVertexSource()
+{
+    return QStringLiteral(
+        "#version 450\n"
+        "uniform mat4 modelViewProjectionMatrix;\n"
+        "layout(location = 0) in vec2 position;\n"
+        "layout(location = 1) in vec2 texCoord;\n"
+        "layout(location = 0) out vec2 vTexCoord;\n"
+        "void main() {\n"
+        "    vTexCoord = texCoord;\n"
+        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
+        "}\n");
+}
+
 } // namespace PhosphorAnimationShaders

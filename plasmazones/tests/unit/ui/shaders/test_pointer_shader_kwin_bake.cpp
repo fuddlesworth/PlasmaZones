@@ -12,21 +12,36 @@
 // compositor branch. The two dialects declare different identifiers (the
 // preview UBO carries qt_Matrix, qt_Opacity and the rest of BaseUniforms), so
 // a pack could bake clean for the preview and fail on the path that ships.
-// The validator now also bakes the compositor dialect through glslang; this
-// test compiles that same branch through the driver, closing the gap the
-// animation family's twin closes for its packs.
+// The validator also bakes the compositor dialect through glslang; this test
+// compiles that same branch through a real driver, as the animation family's
+// twin does for its packs.
 //
-// It assembles the variant the way the runtime does: entry scaffold → include
-// expansion → param preamble → the KWin `#extension`/`#define` block. That
-// final block comes from PhosphorShaders::kwinDefineBlock(), the same function
-// the compositor's injector and the offline validator splice, so this gate
-// cannot drift into accepting a dialect the compositor rejects.
+// It assembles the variant the way the runtime does, through
+// PhosphorShaders::kwinCompositorSource, the one function the compositor's
+// injector, the offline validator and this test all build the compositor
+// branch through. The runtime's main pass also splices KWin's
+// colour-management block, which includes a KWin resource this test cannot
+// resolve, so that block is the one step left out here.
 //
-// Three stages per pack: the main fragment (scaffolded, with the preamble),
-// every buffer pass (no scaffold and NO preamble, the asymmetry the
-// compositor applies at pointerdecorationshader.cpp: buffer sources address
-// parameters by raw slot), and the compositor's own vertex stage from
-// PointerShaderRegistry::compositorVertexSource(). The shared
+// SCOPE, as the animation twin records: the bake compiles at the pack's own
+// `#version 450` through a desktop driver. It proves the KWin branch is valid
+// GLSL 450 on a real compiler, not that it survives the dialects KWin compiles
+// in (desktop GLSL 140 on a 6.7 desktop context, GLSL ES 300 on a GLES one).
+// The shader_validate_pointer gate compiles and links every pack after KWin's
+// own rewrites.
+//
+// The stages per pack:
+//   • the main fragment: entry scaffold → include expansion → param preamble →
+//     kwinCompositorSource;
+//   • every buffer pass: include expansion → kwinCompositorSource, with no
+//     scaffold and NO preamble, the asymmetry the compositor applies at
+//     pointerdecorationshader.cpp (buffer sources address parameters by raw
+//     slot);
+//   • a pack's DECLARED vertex stage: include expansion → kwinCompositorSource.
+//     No bundled pack declares one today, so this arm runs for none of them.
+// The compositor's own default vertex stage,
+// PointerShaderRegistry::compositorVertexSource(), is baked once in its own
+// slot, since it does not vary by pack. The shared
 // data/pointer/shared/pointer.vert is deliberately NOT baked: it is the
 // preview's stage, reads qt_Matrix, and never compiles on the compositor.
 //
@@ -73,14 +88,16 @@ class TestPointerShaderKwinBake : public QObject
         return PointerShaderEffect::fromJson(obj, dir);
     }
 
-    // The block ShaderInternal::injectKwinDefineAfterVersion splices in after
-    // #version on the KWin path. Taken from PhosphorShaders rather than spelled
-    // out here: the compositor's injector and the offline validator's
-    // compositor bake splice the SAME function, so this test cannot drift into
-    // accepting a dialect the compositor rejects.
-    static QString kwinDefineBlock()
+    // The source tree's own include roots, in the order the runtime walks them
+    // for a pack laid out like these ({packRoot/shared, packRoot}), and NOTHING
+    // else. PointerShaderRegistry::includePathsFor would also append every
+    // installed `plasmazones/pointer/shared`, so a header deleted from the tree
+    // but still installed would keep this bake green on a developer machine
+    // while CI failed it.
+    static QStringList includePaths()
     {
-        return PhosphorShaders::kwinDefineBlock();
+        return {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/pointer/shared"),
+                QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/pointer")};
     }
 
     QOffscreenSurface* m_surface = nullptr;
@@ -110,9 +127,8 @@ private Q_SLOTS:
         }
 
         // The bundled packs declare `#version 450`, so the obtained context must
-        // be desktop GL >= 4.5. A GLES or lower-core context can't compile them
-        // (and KWin wouldn't be running on it either) — skip rather than emit a
-        // misleading failure.
+        // be desktop GL >= 4.5 to compile them as written. The dialects KWin
+        // itself compiles in are the validator's to cover (see the header).
         const QPair<int, int> v = m_ctx->format().version();
         if (m_ctx->isOpenGLES() || v.first < 4 || (v.first == 4 && v.second < 5)) {
             m_ctx->doneCurrent();
@@ -135,14 +151,27 @@ private Q_SLOTS:
         m_surface = nullptr;
     }
 
+    // The compositor's default vertex stage, the one every pack without a
+    // declared stage links against for its main pass and its buffer passes.
+    void testCompositorVertexStageBakesOnKwinPath()
+    {
+        if (!m_glReady) {
+            QSKIP("no desktop OpenGL >= 4.5 offscreen context available — cannot compile the KWin variant");
+        }
+        QVERIFY(m_ctx->makeCurrent(m_surface));
+        const QString vsrc = PhosphorShaders::kwinCompositorSource(PointerShaderRegistry::compositorVertexSource(),
+                                                                   PhosphorShaders::ShaderStage::Vertex);
+        QString vlog;
+        QVERIFY2(compileStage(GL_VERTEX_SHADER, vsrc, &vlog),
+                 qPrintable(QStringLiteral("KWin-path default vert bake failed\n") + vlog));
+    }
+
     void testEveryPointerShaderBakesOnKwinPath_data()
     {
         QTest::addColumn<QString>("dir");
         const QString pointerDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/pointer");
         QDir dir(pointerDir);
-        if (!dir.exists()) {
-            QSKIP("data/pointer not found — running outside source tree");
-        }
+        QVERIFY2(dir.exists(), "data/pointer not found");
         bool any = false;
         for (const QString& sub : dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
             if (sub == QLatin1String("shared")) {
@@ -165,18 +194,15 @@ private Q_SLOTS:
         if (!m_glReady) {
             QSKIP("no desktop OpenGL >= 4.5 offscreen context available — cannot compile the KWin variant");
         }
+        QVERIFY(m_ctx->makeCurrent(m_surface));
         QFETCH(QString, dir);
         const PointerShaderEffect eff = loadEffect(dir);
         QVERIFY2(eff.isValid(), qPrintable(QStringLiteral("failed to load effect: ") + dir));
-
-        // The runtime's include roots for this pack, not a hardcoded shared/
-        // dir: the registry's list is what both hosts resolve against.
-        const QStringList includePaths = PointerShaderRegistry::includePathsFor(dir);
+        const QStringList roots = includePaths();
 
         // Main fragment: entry scaffold → include expansion → param preamble →
-        // KWin define block after #version (each spliceAfterVersion lands
-        // right below #version, so the define block ends up first, matching
-        // the runtime's preamble-then-injectKwinDefine order).
+        // kwinCompositorSource. The preamble lands right below #version and the
+        // define block above it, the runtime's own order.
         QFile frag(eff.fragmentShaderPath);
         QVERIFY2(frag.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(eff.fragmentShaderPath));
         const QString raw = QString::fromUtf8(frag.readAll());
@@ -185,18 +211,18 @@ private Q_SLOTS:
 
         QString err;
         QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
-            assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
+            assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), roots, &err);
         QVERIFY2(!src.isEmpty(),
                  qPrintable(QStringLiteral("include expand failed: ") + dir + QStringLiteral(" — ") + err));
 
         src = PhosphorShaders::spliceAfterVersion(src, PointerShaderRegistry::paramPreamble(eff));
-        src = PhosphorShaders::spliceAfterVersion(src, kwinDefineBlock());
+        src = PhosphorShaders::kwinCompositorSource(src, PhosphorShaders::ShaderStage::Fragment);
 
         QString log;
         const bool ok = compileStage(GL_FRAGMENT_SHADER, src, &log);
         QVERIFY2(ok, qPrintable(QStringLiteral("KWin-path frag bake failed: ") + dir + QStringLiteral("\n") + log));
 
-        // Buffer passes: include expansion and the define block only. The
+        // Buffer passes: include expansion → kwinCompositorSource. The
         // compositor splices NO param preamble into a buffer pass, so neither
         // does this; splicing one would pass a buffer that fails live.
         for (const QString& bufPath : eff.bufferShaderPaths) {
@@ -205,11 +231,11 @@ private Q_SLOTS:
             const QString rawBuf = QString::fromUtf8(buf.readAll());
             QString bufErr;
             QString bsrc = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
-                rawBuf, QFileInfo(bufPath).absolutePath(), includePaths, &bufErr);
+                rawBuf, QFileInfo(bufPath).absolutePath(), roots, &bufErr);
             QVERIFY2(!bsrc.isEmpty(),
                      qPrintable(QStringLiteral("buffer include expand failed: ") + bufPath + QStringLiteral(" — ")
                                 + bufErr));
-            bsrc = PhosphorShaders::spliceAfterVersion(bsrc, kwinDefineBlock());
+            bsrc = PhosphorShaders::kwinCompositorSource(bsrc, PhosphorShaders::ShaderStage::Fragment);
             QString blog;
             const bool bok = compileStage(GL_FRAGMENT_SHADER, bsrc, &blog);
             QVERIFY2(
@@ -217,26 +243,17 @@ private Q_SLOTS:
                 qPrintable(QStringLiteral("KWin-path buffer bake failed: ") + bufPath + QStringLiteral("\n") + blog));
         }
 
-        // The compositor's vertex stage. TU-local to the effect until it was
-        // hoisted onto the registry; baked here per pack so a pack that ships
-        // its own vertexShader and one that takes the default both cover the
-        // stage the compositor links against.
-        {
-            QString vsrc;
-            if (!eff.vertexShaderPath.isEmpty()) {
-                QFile vert(eff.vertexShaderPath);
-                QVERIFY2(vert.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(eff.vertexShaderPath));
-                QString vertErr;
-                vsrc = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
-                    QString::fromUtf8(vert.readAll()), QFileInfo(eff.vertexShaderPath).absolutePath(), includePaths,
-                    &vertErr);
-                QVERIFY2(!vsrc.isEmpty(),
-                         qPrintable(QStringLiteral("vertex include expand failed: ") + dir + QStringLiteral(" — ")
-                                    + vertErr));
-            } else {
-                vsrc = PointerShaderRegistry::compositorVertexSource();
-            }
-            vsrc = PhosphorShaders::spliceAfterVersion(vsrc, kwinDefineBlock());
+        // A declared vertex stage: include expansion → kwinCompositorSource.
+        if (!eff.vertexShaderPath.isEmpty()) {
+            QFile vert(eff.vertexShaderPath);
+            QVERIFY2(vert.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(eff.vertexShaderPath));
+            QString vertErr;
+            QString vsrc = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
+                QString::fromUtf8(vert.readAll()), QFileInfo(eff.vertexShaderPath).absolutePath(), roots, &vertErr);
+            QVERIFY2(
+                !vsrc.isEmpty(),
+                qPrintable(QStringLiteral("vertex include expand failed: ") + dir + QStringLiteral(" — ") + vertErr));
+            vsrc = PhosphorShaders::kwinCompositorSource(vsrc, PhosphorShaders::ShaderStage::Vertex);
             QString vlog;
             const bool vok = compileStage(GL_VERTEX_SHADER, vsrc, &vlog);
             QVERIFY2(vok,
