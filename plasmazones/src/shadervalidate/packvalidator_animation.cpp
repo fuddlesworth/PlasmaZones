@@ -791,7 +791,7 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
 
     // ── links ──
     // Each compiled fragment variant against the vertex stage the compositor
-    // pairs it with, on the GLES arm.
+    // pairs it with.
     if (perWindowFrag) {
         const std::optional<CompositorStage> vertex = linkedVertex(
             declaredVert,
@@ -806,7 +806,8 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         errors += reportCompositorLink(out,
                                        builtinCompositorStage(QStringLiteral("the built-in screen vertex stage"),
                                                               PhosphorShaders::ShaderStage::Vertex,
-                                                              AnimationShaderRegistry::compositorScreenVertexSource()),
+                                                              AnimationShaderRegistry::compositorScreenVertexSource(),
+                                                              {}, CompositorStage::Origin::FixedBuiltin),
                                        *screenFrag);
     }
 

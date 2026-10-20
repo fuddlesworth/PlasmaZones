@@ -58,7 +58,7 @@ private Q_SLOTS:
         const PackResult r =
             validateSurface(tmp, QStringLiteral("sf-clean"), obj, surfaceBodyReading({QStringLiteral("width")}));
         QVERIFY2(r.report.contains(QStringLiteral("metadata       OK")), qPrintable(r.report));
-        QVERIFY2(reportLineHas(r.report, QStringLiteral("effect.frag"), QStringLiteral("OK (compositor GLES link)")),
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("effect.frag"), QStringLiteral("OK (compositor link)")),
                  qPrintable(r.report));
         QCOMPARE(r.errors, 0);
     }
@@ -888,7 +888,7 @@ private Q_SLOTS:
         QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK (compositor GLES)")),
                  qPrintable(r.report));
         // And the program the compositor builds: the fragment linked against it.
-        QVERIFY2(reportLineHas(r.report, QStringLiteral("effect.frag"), QStringLiteral("OK (compositor GLES link)")),
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("effect.frag"), QStringLiteral("OK (compositor link)")),
                  qPrintable(r.report));
         QCOMPARE(r.errors, 0);
     }
@@ -1016,7 +1016,7 @@ private Q_SLOTS:
             QVERIFY2(reportLineHas(r.report, stage, QStringLiteral("OK (compositor GLES)")),
                      qPrintable(stage + QStringLiteral(" has no compositor GLES OK line\n") + r.report));
             // Linked against the built-in quad every compositor buffer pass uses.
-            QVERIFY2(reportLineHas(r.report, stage, QStringLiteral("OK (compositor GLES link)")),
+            QVERIFY2(reportLineHas(r.report, stage, QStringLiteral("OK (compositor link)")),
                      qPrintable(stage + QStringLiteral(" has no link line\n") + r.report));
         }
         QCOMPARE(r.errors, 0);

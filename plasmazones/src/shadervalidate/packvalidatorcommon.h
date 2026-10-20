@@ -248,16 +248,18 @@ int reportPresetLints(QTextStream& out, const QStringList& lints);
 // direct libglslang dependency for one code path is a heavier build cost than
 // a tool the GLSL toolchain already ships.
 //
-// Every compositor stage is compiled in two arms, one per dialect KWin compiles
-// in: `(compositor)` is desktop GLSL 140, what KWin 6.7 hands a desktop GL
-// context (PhosphorShaders::kwinDesktopDialect), and `(compositor GLES)` is GLSL
-// ES 300, what KWin hands a GLES context, which is every context on 6.8
-// (PhosphorShaders::kwinGlesDialect). glslang holds ES 300 to the spec where a
+// Every compositor stage is compiled once per dialect KWin compiles it in:
+// `(compositor)` is desktop GLSL 140, what KWin 6.7 hands a desktop GL context
+// (PhosphorShaders::kwinDesktopDialect), and `(compositor GLES)` is GLSL ES 300,
+// what KWin hands a GLES context, which is every context on 6.8
+// (PhosphorShaders::kwinGlesDialect). A stage 6.8 adds a define to is also
+// compiled as `(compositor GLES 6.7)`, the same dialect without it, which is
+// what 6.7 builds on a GLES context. glslang holds ES 300 to the spec where a
 // lenient driver would not, which is how varying locations reached a release
 // compiling on NVIDIA and failing on Mesa. Each pack's fragment stages are then
-// LINKED against the vertex stage the compositor pairs them with, on the GLES
-// arm, which is where a varying read by name and written under another, a
-// precision mismatch, or a mid-shader `#extension` shows.
+// LINKED against the vertex stage the compositor pairs them with, which is
+// where a varying read by name and written under another, a precision
+// mismatch, or an `#extension` after a declaration shows.
 //
 // Out of reach either way: glslang is not the driver, so a driver-specific
 // limit or bug still passes here, and KWin's own colour-management include
@@ -307,9 +309,23 @@ struct CompositorStage
     /// some is also compiled as GLSL ES without them, which is what KWin 6.7
     /// builds on a GLES context.
     QString glesExtraDefines;
-    /// A compositor-supplied stage rather than one the pack ships, so a link
-    /// diagnostic does not tell the author to edit it.
-    bool builtin = false;
+    /// Who supplies the stage, so a link diagnostic offers only a fix the
+    /// author can make.
+    enum class Origin {
+        /// The pack ships it.
+        Pack,
+        /// The compositor's own, used because the pack declares no stage of
+        /// its own, which it may.
+        Builtin,
+        /// The compositor's own, and the pass always runs with it (a screen
+        /// pass, a surface buffer pass).
+        FixedBuiltin,
+    };
+    Origin origin = Origin::Pack;
+    /// The compositor places declarations of its own above the pack's first
+    /// line (the entry scaffold, the colour-management block), so nothing in
+    /// the pack can precede every declaration.
+    bool compositorDeclarationsFirst = false;
 };
 
 /// How a family assembles one of its stages before the KWin define block.
@@ -340,20 +356,22 @@ std::optional<CompositorStage> assembleCompositorStage(QTextStream& out, const Q
 
 /// A built-in compositor stage, which has no includes to expand.
 CompositorStage builtinCompositorStage(const QString& label, PhosphorShaders::ShaderStage stage, const QString& source,
-                                       const QString& glesExtraDefines = {});
+                                       const QString& glesExtraDefines = {},
+                                       CompositorStage::Origin origin = CompositorStage::Origin::Builtin);
 
 /// Finish @p stage the way the compositor does (PhosphorShaders::
 /// kwinCompositorSource, which is exactly what the compositor's
-/// injectKwinDefineAfterVersion runs), compile it through glslang in both of
-/// KWin's dialects, and print one OK/ERROR line per dialect under its label.
+/// injectKwinDefineAfterVersion runs), compile it through glslang in each
+/// source KWin builds it from (desktop, GLES, and GLES as 6.7 builds it when
+/// 6.8 adds a define), and print one OK/ERROR line per arm under its label.
 ///
-/// Returns 1 when either dialect rejects the stage and 0 when both compile: a
-/// stage counts once in the pack's error total however many dialects reject
-/// it, so the total is the number of broken stages. When both dialects reject
-/// it with identical diagnostics the GLES line says so rather than repeating
-/// them. A glslang that cannot run at all (staging failure, start failure,
-/// timeout, crash) is reported once for both dialects and the GLES arm is not
-/// attempted, since it would fail the same way and double the wait.
+/// Returns 1 when any arm rejects the stage and 0 when all compile: a stage
+/// counts once in the pack's error total however many arms reject it, so the
+/// total is the number of broken stages. When an arm rejects it with the same
+/// diagnostics as the last arm that printed them, its line says so rather than
+/// repeating them. The arms run concurrently. A glslang that cannot run at all
+/// (staging failure, start failure, timeout, crash) fails them alike and is
+/// reported once.
 int reportCompositorCompile(QTextStream& out, const CompositorStage& stage);
 
 /// assembleCompositorStage then reportCompositorCompile, the pair every arm
@@ -386,14 +404,14 @@ DeclaredVertex bakeDeclaredVertex(QTextStream& out, int& errors, const QString& 
 /// declared one failed to compile.
 std::optional<CompositorStage> linkedVertex(const DeclaredVertex& declared, const CompositorStage& builtin);
 
-/// Link @p fragment against @p vertex on the GLES arm, the program the
-/// compositor actually builds, and print one OK/ERROR line tagged
-/// `(compositor GLES link)` under the fragment's label. Checks what compiling
-/// each stage alone cannot: every varying the fragment uses must be written by
-/// the vertex stage under the same name and type (the compositor strips the
-/// locations, so names are all that match them), uniforms both declare must
-/// agree on precision, and neither stage may enable an `#extension` after a
-/// declaration in either dialect. Call it only for pack stages that compiled,
+/// Link @p fragment against @p vertex, the program the compositor actually
+/// builds, and print one OK/ERROR line tagged `(compositor link)` under the
+/// fragment's label. Checks what compiling each stage alone cannot, in both
+/// dialects: every varying the fragment uses must be written by the vertex
+/// stage under the same name and type (the compositor strips the locations,
+/// so names are all that match them), and neither stage may enable an
+/// `#extension` after a declaration. glslang's own link, run on the GLES
+/// pair, adds that uniforms both declare must agree on precision. Call it only for pack stages that compiled,
 /// so a compile error is not reported twice. A built-in stage is compiled by
 /// the tests. Returns 1 on failure, 0 otherwise.
 int reportCompositorLink(QTextStream& out, const CompositorStage& vertex, const CompositorStage& fragment);

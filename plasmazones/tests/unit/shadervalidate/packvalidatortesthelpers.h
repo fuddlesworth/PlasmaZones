@@ -350,7 +350,7 @@ inline bool reportLineHas(const QString& report, const QString& stage, const QSt
 }
 
 /// The text every compositor arm's report line contains: "(compositor)",
-/// "(compositor GLES)", "(compositor GLES 6.7)", "(compositor GLES link)" and
+/// "(compositor GLES)", "(compositor GLES 6.7)", "(compositor link)" and
 /// "(compositor, both dialects)". Excluding "(compositor)" with its closing paren would let the
 /// GLES lines through.
 inline const QString kCompositorMarker = QStringLiteral("(compositor");
@@ -358,7 +358,7 @@ inline const QString kCompositorMarker = QStringLiteral("(compositor");
 /// As `reportLineHas`, but the line must ALSO not contain @p excluded.
 ///
 /// Needed because the host markers NEST: every compositor line reads "OK
-/// (compositor)", "OK (compositor GLES)" or "OK (compositor GLES link)", each of
+/// (compositor)", "OK (compositor GLES)" or "OK (compositor link)", each of
 /// which contains "OK", so asserting `reportLineHas(stage, "OK")` is SUBSUMED by
 /// the compositor assertions beside it and the Qt-RHI half goes untested.
 /// Deleting the whole daemon buffer-pass loop left both of those assertions

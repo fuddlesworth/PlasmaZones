@@ -818,12 +818,6 @@ private Q_SLOTS:
         }
     }
 
-    /// The preset lint runs on THIS arm too.
-    ///
-    /// `reportPresetLints` is wired into all four validator arms, and every test
-    /// that exercised it drove the animation or overlay one, so deleting the call from
-    /// the pointer arm left the whole suite green. Every executable here compiles all
-    /// four arms, so that deletion also failed no link.
     /// The pointer compositor reuses the main pass's vertex stage for every
     /// buffer pass, so each of them is compiled in KWin's GLES dialect and
     /// linked against it. A fragment reading a varying the built-in stage
@@ -854,7 +848,7 @@ private Q_SLOTS:
         for (const QString& stage : {QStringLiteral("effect.frag"), QStringLiteral("buffer.frag")}) {
             QVERIFY2(reportLineHas(good.report, stage, QStringLiteral("OK (compositor GLES)")),
                      qPrintable(good.report));
-            QVERIFY2(reportLineHas(good.report, stage, QStringLiteral("OK (compositor GLES link)")),
+            QVERIFY2(reportLineHas(good.report, stage, QStringLiteral("OK (compositor link)")),
                      qPrintable(good.report));
         }
 
@@ -866,16 +860,59 @@ private Q_SLOTS:
                                            "vec4 pPointer(vec2 uv) {\n"
                                            "    return texture(iChannel0, vNotWritten) * p_activationSpeed;\n"
                                            "}\n"));
-        QVERIFY2(
-            reportLineHas(bad.report, QStringLiteral("effect.frag"), QStringLiteral("ERROR (compositor GLES link)")),
-            qPrintable(bad.report));
+        QVERIFY2(reportLineHas(bad.report, QStringLiteral("effect.frag"), QStringLiteral("ERROR (compositor link)")),
+                 qPrintable(bad.report));
         QVERIFY2(bad.report.contains(QStringLiteral("reads the varying vNotWritten")), qPrintable(bad.report));
         QVERIFY2(bad.report.contains(QStringLiteral("declare a vertexShader that writes vNotWritten")),
                  qPrintable(bad.report));
-        QVERIFY2(reportLineHas(bad.report, QStringLiteral("buffer.frag"), QStringLiteral("OK (compositor GLES link)")),
+        QVERIFY2(reportLineHas(bad.report, QStringLiteral("buffer.frag"), QStringLiteral("OK (compositor link)")),
                  qPrintable(bad.report));
     }
 
+    /// A pointer pack with its own vertex stage includes the family header in
+    /// both stages, so both declare its int uniforms. Without the header's
+    /// GLES `precision highp int` the two stages default to different int
+    /// precisions and fail to link on a GLES context.
+    void aPointerVertexStageSharingTheHeaderLinks()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_POINTER_FIXTURE(tmp);
+        QJsonObject obj = pointerPackWithGate(QStringLiteral("pt-shared-int"), 0.0);
+        obj.insert(QStringLiteral("vertexShader"), QStringLiteral("probe.vert"));
+        // Clip space on the preview, so the stage reads no qt_Matrix, which a
+        // lint of this arm refuses in a declared stage.
+        QVERIFY(writePointerBuffer(
+            tmp, QStringLiteral("pt-shared-int"), QStringLiteral("probe.vert"),
+            QStringLiteral("#version 450\n"
+                           "#include <pointer_uniforms.glsl>\n"
+                           "layout(location = 0) in vec2 position;\n"
+                           "layout(location = 1) in vec2 texCoord;\n"
+                           "layout(location = 0) out vec2 vTexCoord;\n"
+                           "#ifdef PLASMAZONES_KWIN\n"
+                           "uniform mat4 modelViewProjectionMatrix;\n"
+                           "#else\n"
+                           "#define modelViewProjectionMatrix mat4(1.0)\n"
+                           "#endif\n"
+                           "void main() {\n"
+                           "    vTexCoord = texCoord * float(iAudioSpectrumSize + 1);\n"
+                           "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
+                           "}\n")));
+        const PackResult r =
+            validatePointer(tmp, QStringLiteral("pt-shared-int"), obj,
+                            QStringLiteral("vec4 pPointer(vec2 uv) { return vec4(uv, float(iAudioSpectrumSize), 1.0) * "
+                                           "p_activationSpeed; }\n"));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK (compositor GLES)")),
+                 qPrintable(r.report));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("effect.frag"), QStringLiteral("OK (compositor link)")),
+                 qPrintable(r.report));
+    }
+
+    /// The preset lint runs on THIS arm too.
+    ///
+    /// `reportPresetLints` is wired into all four validator arms, and every test
+    /// that exercised it drove the animation or overlay one, so deleting the call from
+    /// the pointer arm left the whole suite green. Every executable here compiles all
+    /// four arms, so that deletion also failed no link.
     void thePointerArmLintsPresetsToo()
     {
         QTemporaryDir tmp;

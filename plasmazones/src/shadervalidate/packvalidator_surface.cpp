@@ -459,7 +459,8 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         errors += reportCompositorLink(out,
                                        builtinCompositorStage(QStringLiteral("the built-in buffer vertex stage"),
                                                               PhosphorShaders::ShaderStage::Vertex,
-                                                              SurfaceShaderRegistry::compositorBufferVertexSource()),
+                                                              SurfaceShaderRegistry::compositorBufferVertexSource(), {},
+                                                              CompositorStage::Origin::FixedBuiltin),
                                        buffer);
     }
 

@@ -246,7 +246,7 @@ private Q_SLOTS:
     // The block selects the compositor branch. Every #extension sits inside
     // the desktop-only guard, because one after KWin's ES precision lines is
     // rejected by Mesa and NVIDIA while glslang accepts it. This pins the
-    // block's exact text. The validators' GLES link arm is the behavioural
+    // block's exact text. The validators' link step is the behavioural
     // check, and it would fail every bundled pack without the guard.
     void testKwinDefineBlockShape()
     {

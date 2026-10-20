@@ -57,7 +57,7 @@ QRegularExpression glesLine(const QString& stage, const QString& outcome)
 QRegularExpression linkLine(const QString& stage, const QString& outcome)
 {
     return QRegularExpression(QRegularExpression::escape(stage) + QStringLiteral("\\s+") + outcome
-                              + QStringLiteral(" \\(compositor GLES link\\)"));
+                              + QStringLiteral(" \\(compositor link\\)"));
 }
 
 /// An animation vertex stage valid on both hosts that writes vTexCoord, which
@@ -270,7 +270,7 @@ private Q_SLOTS:
 
         // Writes vTexCoord, which the scaffolded fragment reads: the compositor
         // links the two by name, and a stage that left it out would fail to
-        // link where it ships (the GLES link arm reports exactly that).
+        // link where it ships (the link check reports exactly that).
         QVERIFY(writePackFile(tmp.filePath(QStringLiteral("kwin-vert")), QStringLiteral("effect.vert"),
                               "#version 450\n"
                               "#include <animation_uniforms.glsl>\n"
@@ -340,7 +340,7 @@ private Q_SLOTS:
             QByteArray source;
             if (vertex) {
                 // vTexCoord is the varying the scaffolded fragment reads,
-                // which the GLES link checks the stage writes.
+                // which the link checks the stage writes.
                 source +=
                     "#version 450\n#include <animation_uniforms.glsl>\n"
                     "layout(location = 0) out vec2 vTexCoord;\n";
@@ -470,9 +470,10 @@ private Q_SLOTS:
     }
 
     // ── the compositor's GLES arm and link ──────────────────────────────────
-    // Each slot below fails ONE of the checks the GLES arm adds and passes
-    // every other, so deleting that check (or turning the arm back into a
-    // single desktop compile) leaves its slot red.
+    // The slots below cover the checks the GLES arms and the link add. Each
+    // negative one fails one such check and passes every other, so deleting
+    // that check (or turning the arm back into a single desktop compile)
+    // leaves its slot red.
 
     /// A varying location the strip does not recognise is legal on a 6.7
     /// desktop context (GL_ARB_separate_shader_objects is enabled there) and
@@ -567,7 +568,8 @@ private Q_SLOTS:
     /// The compositor's own built-in vertex stages, which every frag-only pack
     /// links against and no pack declares, compile in both of KWin's dialects,
     /// with and without the top-down define the stages that key off it get on
-    /// 6.8. The decoration present stage is the one #1142 broke.
+    /// 6.8 (the arm without it is the one 6.7 builds on a GLES context). The decoration present stage is the one #1142
+    /// broke.
     void theBuiltinCompositorVertexStagesCompileInBothDialects()
     {
         if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {
@@ -580,8 +582,6 @@ private Q_SLOTS:
             builtinCompositorStage(QStringLiteral("animation"), vertex,
                                    PhosphorAnimationShaders::AnimationShaderRegistry::compositorVertexSource(),
                                    topDown),
-            builtinCompositorStage(QStringLiteral("animation-6.7"), vertex,
-                                   PhosphorAnimationShaders::AnimationShaderRegistry::compositorVertexSource()),
             builtinCompositorStage(QStringLiteral("screen"), vertex,
                                    PhosphorAnimationShaders::AnimationShaderRegistry::compositorScreenVertexSource()),
             builtinCompositorStage(QStringLiteral("surface"), vertex,
@@ -591,8 +591,6 @@ private Q_SLOTS:
             builtinCompositorStage(QStringLiteral("present"), vertex,
                                    PhosphorSurfaceShaders::SurfaceShaderRegistry::compositorPresentVertexSource(),
                                    topDown),
-            builtinCompositorStage(QStringLiteral("present-6.7"), vertex,
-                                   PhosphorSurfaceShaders::SurfaceShaderRegistry::compositorPresentVertexSource()),
             builtinCompositorStage(QStringLiteral("pointer"), vertex,
                                    PhosphorPointerShaders::PointerShaderRegistry::compositorVertexSource()),
         };
@@ -604,6 +602,12 @@ private Q_SLOTS:
             QVERIFY2(errors == 0, qPrintable(report));
             QVERIFY2(report.contains(compositorLine(stage.label, QStringLiteral("OK"))), qPrintable(report));
             QVERIFY2(report.contains(glesLine(stage.label, QStringLiteral("OK"))), qPrintable(report));
+            // A stage with a 6.8-only define is also compiled without it, as
+            // KWin 6.7 builds it on a GLES context.
+            if (!stage.glesExtraDefines.isEmpty()) {
+                QVERIFY2(reportLineHas(report, stage.label, QStringLiteral("OK (compositor GLES 6.7)")),
+                         qPrintable(report));
+            }
         }
     }
 
@@ -679,7 +683,33 @@ private Q_SLOTS:
         QVERIFY2(r.report.contains(QStringLiteral("enables GL_ARB_shading_language_420pack after a declaration, "
                                                   "which Mesa rejects")),
                  qPrintable(r.report));
+        // The scaffold and the colour block come first here, so the advice is
+        // that the stage cannot have the extension, not where to move it.
+        QVERIFY2(r.report.contains(QStringLiteral("cannot enable an extension on Mesa at all")), qPrintable(r.report));
         QCOMPARE(r.errors, 1);
+
+        // A declared vertex stage gets nothing above its own code, so there
+        // the extension can move. A `#pragma` counts as a statement on Mesa.
+        const QByteArray vert =
+            "#version 450\n"
+            "#if defined(PLASMAZONES_KWIN) && !defined(GL_ES)\n"
+            "#pragma optimize(on)\n"
+            "#extension GL_ARB_shading_language_420pack : enable\n"
+            "#endif\n"
+            "#include <animation_uniforms.glsl>\n"
+            "layout(location = 0) in vec2 position;\n"
+            "layout(location = 1) in vec2 texCoord;\n"
+            "layout(location = 0) out vec2 vTexCoord;\n"
+            "void main() { vTexCoord = texCoord; gl_Position = vec4(position, 0.0, 1.0); }\n";
+        const PackResult movable =
+            validateWithVertex(tmp, QStringLiteral("mid-ext-vert"),
+                               "vec4 pTransition(vec2 uv, float t) { return vec4(uv, t, 1.0); }\n", vert);
+        QVERIFY2(movable.report.contains(QStringLiteral("effect.vert enables GL_ARB_shading_language_420pack after a "
+                                                        "declaration")),
+                 qPrintable(movable.report));
+        QVERIFY2(movable.report.contains(QStringLiteral("Move it directly under #version")),
+                 qPrintable(movable.report));
+        QCOMPARE(movable.errors, 1);
     }
 
     /// GLSL fails a link only on an unmatched input the fragment USES, and
@@ -722,6 +752,40 @@ private Q_SLOTS:
                  qPrintable(missed.report));
         QVERIFY2(missed.report.contains(QStringLiteral("reads the varying vOther")), qPrintable(missed.report));
         QCOMPARE(missed.errors, 1);
+
+        // A parameter of the same name is a declarator, not a use of the
+        // input, and two declarations on one line are both read.
+        const QByteArray shadowFrag =
+            "layout(location = 1) in vec2 vShadowed;\n"
+            "#ifdef PLASMAZONES_KWIN\nin vec2 vOne; in vec2 vTwo;\n#else\n"
+            "layout(location = 2) in vec2 vOne;\nlayout(location = 3) in vec2 vTwo;\n#endif\n"
+            "float unusedHelper(vec2 vShadowed) { return 1.0; }\n"
+            "vec4 pTransition(vec2 uv, float t) { return vec4(vTwo, t, 1.0); }\n";
+        const PackResult shadow = validateWithVertex(tmp, QStringLiteral("shadow"), shadowFrag, animationVertex(""));
+        QVERIFY2(shadow.report.contains(linkLine(QStringLiteral("effect.frag"), QStringLiteral("ERROR"))),
+                 qPrintable(shadow.report));
+        QVERIFY2(shadow.report.contains(QStringLiteral("reads the varying vTwo")), qPrintable(shadow.report));
+        QVERIFY2(!shadow.report.contains(QStringLiteral("reads the varying vShadowed")), qPrintable(shadow.report));
+        QVERIFY2(!shadow.report.contains(QStringLiteral("reads the varying vOne")), qPrintable(shadow.report));
+    }
+
+    /// A screen-level pass always runs with the compositor's screen vertex
+    /// stage, and `vertexShader` is ignored there, so the advice for a varying
+    /// it does not write must not be to declare one.
+    void aFixedBuiltinVertexStageGetsAdviceThatFits()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+        QJsonObject obj = basePack(QStringLiteral("screen-varying"));
+        obj.insert(QStringLiteral("appliesTo"), toArray({QStringLiteral("desktop")}));
+        QVERIFY(writePackFile(tmp.filePath(QStringLiteral("screen-varying")), QStringLiteral("effect.frag"),
+                              "layout(location = 1) in vec2 vScreenExtra;\n"
+                              "vec4 pTransition(vec2 uv, float t) { return vec4(vScreenExtra, t, 1.0); }\n"));
+        const PackResult r = validate(tmp, QStringLiteral("screen-varying"), obj, /*writeFragment=*/false);
+        QVERIFY2(r.report.contains(linkLine(QStringLiteral("effect.frag"), QStringLiteral("ERROR"))),
+                 qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("This pass always runs with that stage")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("declare a vertexShader")), qPrintable(r.report));
     }
 
     /// KWin 6.7 on a GLES context compiles a per-window stage as GLSL ES 300
