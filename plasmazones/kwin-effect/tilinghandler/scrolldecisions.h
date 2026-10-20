@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QPoint>
 #include <QRect>
 #include <QRectF>
 #include <QSet>
@@ -225,12 +226,13 @@ inline bool claimedPressOwesLeg(bool answeringClaimedPress, const QRectF& origin
     return answeringClaimedPress && origin.isValid() && !origin.isEmpty() && origin.toRect() != target;
 }
 
-/// The counter-assert burst budget for scroll-managed X11 windows an
-/// EXTERNAL mover relocated: RATE-LIMITED to @p maxPerWindow counters per
-/// rolling window of @p windowMs, re-armed by every fresh batch command
-/// (the caller resets the pair on batch insert). Mutates the per-window
-/// bookkeeping in place and answers whether THIS frame change should be
-/// countered. @p frameDiffers is the caller's `actual != commanded` test.
+/// The counter-assert burst budget for scroll-managed windows an EXTERNAL
+/// mover relocated: RATE-LIMITED to @p maxPerWindow counters per rolling
+/// window of @p windowMs, re-armed by every fresh batch command (the caller
+/// resets the pair on batch insert). Mutates the per-window bookkeeping in
+/// place and answers whether THIS frame change should be countered.
+/// @p frameDiffers is whether the counter would move the window at all, and a
+/// change that would not consumes nothing.
 inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 nowMs, bool frameDiffers,
                                 qint64 windowMs = 1000, int maxPerWindow = 3)
 {
@@ -246,6 +248,49 @@ inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 no
         return true;
     }
     return false;
+}
+
+/// Whether the counter-assert treats a scroll-managed window as one an
+/// EXTERNAL mover can relocate. An X11 client moves itself through
+/// ConfigureRequests; a Wayland client cannot, so a Wayland window qualifies
+/// only where KWin is the mover: its maximize-area re-assert over a column
+/// maximized to the edges (@p maximizedMember), and on KWin 6.8 the
+/// keep-visible clamp it applies to a commit that acks a configure or changes
+/// the window geometry, which pulls a column the strip committed outside its
+/// output (@p outOfViewEntry: a park, or a straddler cropped at the edge) back
+/// in. Never mid maximize
+/// transition: that frame change is a maximize or restore, not a mover.
+inline constexpr bool counterAssertMovable(bool inMaximizeTransition, bool waylandClient, bool maximizedMember,
+                                           bool outOfViewEntry)
+{
+    return !inMaximizeTransition && (!waylandClient || maximizedMember || outOfViewEntry);
+}
+
+/// Whether the counter-assert puts a window back by POSITION alone, a move()
+/// that sends no configure of its own (handing the window to another output
+/// still can, see the counter-assert) and leaves a running leg alone, instead of
+/// re-applying the commanded rect (which drops the leg). Only for a window the
+/// strip committed outside its output. A plain Wayland column always: the
+/// clamp moved it and nothing resized it, and a client that holds its own size
+/// would only refuse a re-offered column again. Anything else only when the
+/// size still matches the command, so a mover that also RESIZED it (a client
+/// re-asserting a saved size, KWin's maximize re-assert) still gets the
+/// commanded size back.
+inline constexpr bool counterAssertsByPosition(bool outOfViewEntry, bool waylandClient, bool maximizedMember,
+                                               bool sizeMatches)
+{
+    return outOfViewEntry && ((waylandClient && !maximizedMember) || sizeMatches);
+}
+
+/// Where a position-only counter seats a frame of size @p live in @p column:
+/// centred, with the shift clamped at zero so a frame larger than its column
+/// stays at the column's origin. The same centring the offered-column pass in
+/// the frame hook and the paint resolver (scrollVisualTranslationFor) apply,
+/// so the three agree on where the window sits.
+inline QPoint reseatOrigin(const QRect& column, const QSize& live)
+{
+    return QPoint(column.x() + qMax(0, column.width() - live.width()) / 2,
+                  column.y() + qMax(0, column.height() - live.height()) / 2);
 }
 
 /// Whether the scroll size-continuity cache may carry a client's committed

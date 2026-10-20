@@ -163,6 +163,7 @@ one whose daemon died or was replaced.
 | f1138-float-toggle-screen-hint | 2 | Snap.toggleFloatForWindow naming a monitor the window is not on is refused |
 | f1139-readopt-keeps-claim | 2 | an evacuee's Monocle claim survives the park drop inside a Readopt and is taken back at the re-seat |
 | f1140-stale-zone-notice-clear / -write | 1 | a stale id's zone notices neither clear nor overwrite the live window's own zone |
+| f1141-parked-tab-offscreen | 1, S | on KWin 6.8 a hidden tab stays parked wholly below the output across tab switches, though each switch's acked configure clamps it back on screen |
 | f1147-arrival-minimize-float | 2 | a minimized tile whose monitor leaves and returns gets its minimize-float back and tiles |
 | f1149-overlapping-settle-reports | 4 | with two settle reports in flight, the second one's park drop waits for its own verdict |
 | f1151-touch-forgets-claim | 2 | a touch after a Readopt that left a granted place forgets the Monocle claim, and the next batch does not take it back |

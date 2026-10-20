@@ -140,14 +140,16 @@ struct WindowLayerSnapshot
     bool keepBelow = false;
 };
 
-/// The rect a scrolling batch last commanded for an X11 window, plus the
-/// counter-assert burst budget. See PlasmaZonesEffect::m_scrollCommandedRects.
+/// The rect a scrolling batch last commanded for a window the counter-assert
+/// guards, plus its burst budget. See PlasmaZonesEffect::m_scrollCommandedRects.
 struct ScrollCommandedRect
 {
     QRect rect;
     qint64 burstStartMs = 0;
     int burstCount = 0;
     quint64 commandStamp = 0; ///< the stamp of the strip apply that recorded this rect (WindowCommandStamps)
+    bool outOfView = false; ///< @c rect leaves the strip's output (a park or a cropped straddler)
+    bool parked = false; ///< @c rect lies off every output (TilingHandler::rectAtScrollPark)
 };
 
 /// Minimize-shader stamp: the time and generation of the transition a minimize

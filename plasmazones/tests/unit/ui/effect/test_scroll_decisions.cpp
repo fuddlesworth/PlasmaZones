@@ -5,7 +5,8 @@
 // (tilinghandler/scrolldecisions.h) — the windowed-fullscreen 5-way batch
 // decision (with its clear-in-flight marker arm/consume contract), the
 // column-maximize 3-way batch decision (with its toggle-in-flight marker and
-// the two threaded stale-batch walks), the counter-assert burst budget, the
+// the two threaded stale-batch walks), the counter-assert burst budget, who it
+// guards, how it puts a window back and where it re-seats one, the
 // compositor-claim release table (which claim answers to which exit scope,
 // the teardown ordering rule, and the retain-on-fullscreen-skip policy), the
 // size-continuity carry-forward table, the engine-flip screen set, the
@@ -376,6 +377,86 @@ private Q_SLOTS:
         QVERIFY(shouldCounterAssert(start, count, 10450, true));
         QCOMPARE(start, qint64(10400));
         QCOMPARE(count, 1);
+    }
+
+    // Who the counter-assert guards. Every row asserted, so the Wayland
+    // exclusion has to be argued for per population rather than assumed.
+    void counterAssertMovableTable_data()
+    {
+        QTest::addColumn<bool>("inTransition");
+        QTest::addColumn<bool>("wayland");
+        QTest::addColumn<bool>("member");
+        QTest::addColumn<bool>("outOfView");
+        QTest::addColumn<bool>("movable");
+        QTest::newRow("x11 on screen") << false << false << false << false << true;
+        QTest::newRow("x11 parked") << false << false << false << true << true;
+        QTest::newRow("wayland on screen (cannot move itself)") << false << true << false << false << false;
+        QTest::newRow("wayland parked (6.8 clamp)") << false << true << false << true << true;
+        QTest::newRow("wayland maximized member") << false << true << true << false << true;
+        QTest::newRow("x11 mid maximize transition") << true << false << false << false << false;
+        QTest::newRow("wayland parked mid maximize transition") << true << true << false << true << false;
+        QTest::newRow("wayland member mid maximize transition") << true << true << true << false << false;
+    }
+
+    void counterAssertMovableTable()
+    {
+        QFETCH(bool, inTransition);
+        QFETCH(bool, wayland);
+        QFETCH(bool, member);
+        QFETCH(bool, outOfView);
+        QFETCH(bool, movable);
+        QCOMPARE(counterAssertMovable(inTransition, wayland, member, outOfView), movable);
+    }
+
+    // How the counter puts a window back: by position (a move that keeps the
+    // leaving leg) only out of view, and outside a plain Wayland column only
+    // while the size still matches, so a mover that resized gets the size back.
+    void counterAssertsByPositionTable_data()
+    {
+        QTest::addColumn<bool>("outOfView");
+        QTest::addColumn<bool>("wayland");
+        QTest::addColumn<bool>("member");
+        QTest::addColumn<bool>("sizeMatches");
+        QTest::addColumn<bool>("byPosition");
+        QTest::newRow("on screen, same size") << false << false << false << true << false;
+        QTest::newRow("wayland on screen") << false << true << false << false << false;
+        QTest::newRow("wayland park, client holds another size") << true << true << false << false << true;
+        QTest::newRow("wayland park, same size") << true << true << false << true << true;
+        QTest::newRow("member park, same size") << true << true << true << true << true;
+        QTest::newRow("member park, KWin resized it") << true << true << true << false << false;
+        QTest::newRow("x11 park, same size") << true << false << false << true << true;
+        QTest::newRow("x11 park, client resized itself") << true << false << false << false << false;
+    }
+
+    void counterAssertsByPositionTable()
+    {
+        QFETCH(bool, outOfView);
+        QFETCH(bool, wayland);
+        QFETCH(bool, member);
+        QFETCH(bool, sizeMatches);
+        QFETCH(bool, byPosition);
+        QCOMPARE(counterAssertsByPosition(outOfView, wayland, member, sizeMatches), byPosition);
+    }
+
+    // The re-seat point: centred in the column, the shift clamped at zero.
+    void reseatOrigin_centresASmallerFrame()
+    {
+        QCOMPARE(reseatOrigin(QRect(100, 816, 600, 784), QSize(400, 600)), QPoint(200, 908));
+    }
+
+    void reseatOrigin_fullSizeIsTheColumnOrigin()
+    {
+        QCOMPARE(reseatOrigin(QRect(100, 816, 600, 784), QSize(600, 784)), QPoint(100, 816));
+    }
+
+    void reseatOrigin_largerFrameStaysAtTheOrigin()
+    {
+        QCOMPARE(reseatOrigin(QRect(100, 816, 600, 784), QSize(700, 900)), QPoint(100, 816));
+    }
+
+    void reseatOrigin_oddGapRoundsDown()
+    {
+        QCOMPARE(reseatOrigin(QRect(0, 0, 601, 784), QSize(600, 781)), QPoint(0, 1));
     }
 
     // ── Compositor-state claims ────────────────────────────────────────────

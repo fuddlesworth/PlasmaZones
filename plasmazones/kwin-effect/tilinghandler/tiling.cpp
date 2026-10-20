@@ -1472,11 +1472,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // commanded rect at the tail of this lambda so the counter-assert
             // compares the client's commit against what was really asked for.
             //
-            // Only the MAXIMIZED-TO-EDGES arm reaches the record: the
-            // size-continuity pass excludes that state (it holds a declared
-            // rect), and the consumer requires it, so the two are mutually
-            // exclusive and the re-centred column never lands here. Null when
-            // this entry took no committing path.
+            // Set for every Wayland strip entry after the size-continuity pass,
+            // so a carried size is recorded centred, as it was sent. The record
+            // keeps it only for a column maximized to the edges or placed
+            // outside its output, the two the counter-assert guards on Wayland.
+            // Null when this entry took no committing path.
             QRect scrollDeliveredRect;
             {
                 // Stored as the column's strip POSITION and SIZE, not as a
@@ -2028,19 +2028,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (isScrollingScreen(snap.screenId) && (snap.isMaximizedToEdges || snap.isWindowedFullscreen)) {
                     m_effect->m_scrollOfferedColumn.remove(snap.windowId);
                 }
-                // A maximized-to-edges column takes the exemption above, so it
-                // never reaches that assignment — but it is the ONE Wayland
-                // population the counter-assert exists for (KWin's own
-                // maximize-area re-assert is its external mover), and the arm
-                // at the bottom of this lambda refuses to record a commanded
-                // rect while this is null. Without this the counter would be
-                // permanently disarmed for exactly the windows it protects.
+                // The rect this entry delivers, for the commanded-rect arm at the
+                // bottom of this lambda, which refuses to record while this is
+                // null and keeps it for the two Wayland populations the
+                // counter-assert guards: a column maximized to the edges (KWin's
+                // own maximize-area re-assert is its external mover) and one
+                // placed outside its output (KWin 6.8's keep-visible clamp is).
+                // Without this the counter would be disarmed for exactly those.
                 //
-                // The rect is `geo` unchanged, the column rect: the size-continuity
-                // pass excludes maximized columns, so the rect delivered is the one
-                // asked for, which the commanded-rect arm at the bottom then records.
-                if (isScrollingScreen(snap.screenId) && snap.isMaximizedToEdges && !snap.isWindowedFullscreen
-                    && snap.window->isWaylandClient()) {
+                // The rect is `geo` after the size-continuity pass: the column
+                // rect for a maximized column, which the pass excludes, and the
+                // carried size centred in its column where the pass carried one.
+                if (isScrollingScreen(snap.screenId) && !snap.isWindowedFullscreen && snap.window->isWaylandClient()) {
                     scrollDeliveredRect = geo;
                 }
 
@@ -2715,32 +2714,27 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // apply emits returns at the centring pass's inGeometryApply
                 // gate, so nothing reads the map mid-apply either.
                 if (isScrollingScreen(snap.screenId)) {
-                    // A COLUMN-MAXIMIZED Wayland window arms the counter-assert,
-                    // which is otherwise X11-only. The exclusion below is about
-                    // the X11 SELF-mover — a client repositioning itself through
-                    // ConfigureRequests, which no Wayland client can do — but
-                    // the maximize mirror introduces a second external mover
-                    // that exists on both platforms: KWin re-runs its
-                    // maximize-area placement for a MaximizeFull window and
-                    // overwrites the column rect with the ungapped work area.
-                    // Observed live on a cross-output move: the window sat at
-                    // the full output while its column stayed gapped, until the
-                    // next batch happened to move a rect.
+                    // Two Wayland populations arm the counter-assert, which is
+                    // otherwise X11-only. The exclusion is about the X11
+                    // SELF-mover, a client repositioning itself through
+                    // ConfigureRequests, which no Wayland client can do; for
+                    // these two KWin itself is the mover. It re-runs its
+                    // maximize-area placement over a MaximizeFull column and
+                    // overwrites the column rect with the ungapped work area
+                    // (seen live on a cross-output move: the window sat at the
+                    // full output while its column stayed gapped). And on 6.8 it
+                    // pulls a column the strip placed outside its output (a
+                    // park, or a straddler cropped at the edge) back in until
+                    // its title bar shows, on a commit that acks or reshapes.
                     //
                     // The COMMANDED rect is recorded here rather than the
                     // committed frame the X11 leg uses, because a Wayland
                     // commit lands a round trip later and recording the frame
                     // now would capture the pre-commit rect. That substitution
-                    // is safe because the rect recorded is the one this
-                    // entry actually DELIVERED, captured after the
-                    // size-continuity pass. For a maximized column that is the
-                    // column rect unchanged: the pass EXCLUDES the three
-                    // declared-rect states, so no centred commit can reach
-                    // this record and the commanded rect is what the client
-                    // was offered. The exclusion is what makes the two agree.
-                    // Without it the pass would hand a client's own smaller
-                    // answer forward, and the counter-assert would compare the
-                    // centred commit against a rect that was never offered.
+                    // is safe because the rect recorded is the one this entry
+                    // actually DELIVERED, captured after the size-continuity
+                    // pass: the column rect for a maximized column, which the
+                    // pass excludes, and a carried size centred as it was sent.
                     // Not armed mid-gesture, matching the X11 leg's deferred-commit predicate: countering a live
                     // drag or resize would fight the user's hand. fullscreenBailSkippedCommit is the third term
                     // for the reason the X11 leg and the sibling offered-column write carry it: the non-member
@@ -2748,12 +2742,16 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // offered, and the counter-assert would yank a self-fullscreened client back into its column
                     // (3 per rolling second between batches, and every fresh batch command re-arms the pair).
                     // The rect carries this apply's command stamp: the counter-assert acts only while it is
-                    // current (F71).
-                    if (snap.isMaximizedToEdges && !snap.window->isUserMove() && !snap.window->isUserResize()
-                        && !fullscreenBailSkippedCommit && !scrollDeliveredRect.isNull()) {
+                    // current (F71). Out of view is measured in the strip rect this batch recorded (F815).
+                    const QRect stripRect = m_stripScreenRectAtBatch.value(snap.screenId);
+                    const bool outOfView = stripRect.isValid() && !stripRect.contains(scrollDeliveredRect);
+                    if ((snap.isMaximizedToEdges || outOfView) && !snap.window->isUserMove()
+                        && !snap.window->isUserResize() && !fullscreenBailSkippedCommit
+                        && !scrollDeliveredRect.isNull()) {
                         m_effect->m_scrollCommandedRects.insert(
                             snap.windowId,
-                            {scrollDeliveredRect, 0, 0, m_effect->m_daemonGate.commandStamps.current(snap.window)});
+                            {scrollDeliveredRect, 0, 0, m_effect->m_daemonGate.commandStamps.current(snap.window),
+                             outOfView, rectAtScrollPark(scrollDeliveredRect)});
                     } else {
                         // DISARM, the way the X11 and monocle arms both do.
                         // This was the only one of the three that armed
@@ -2831,10 +2829,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // removing an absent key costs nothing.
                     m_effect->m_scrollOfferedColumn.remove(snap.windowId);
                 } else {
+                    const QRect committed = snap.window->frameGeometry().toRect();
+                    const QRect stripRect = m_stripScreenRectAtBatch.value(snap.screenId);
                     m_effect->m_scrollCommandedRects.insert(
                         snap.windowId,
-                        {snap.window->frameGeometry().toRect(), 0, 0,
-                         m_effect->m_daemonGate.commandStamps.current(snap.window)});
+                        {committed, 0, 0, m_effect->m_daemonGate.commandStamps.current(snap.window),
+                         stripRect.isValid() && !stripRect.contains(committed), rectAtScrollPark(committed)});
                 }
             } else if (snap.isMonocle) {
                 // A monocle window is never counter-asserted — neither arm

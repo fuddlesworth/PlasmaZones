@@ -25,6 +25,7 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
+#include <workspace.h>
 
 #include <QDBusPendingCallWatcher>
 #include <QLoggingCategory>
@@ -85,9 +86,10 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // tiled member with no recorded screen — the helper resolves that
     // (fail-closed either way; the helper just fails closed for the right
     // set).
-    // Wayland is excluded for the SELF-mover reason above, with one exception:
-    // a column-maximize member has an external mover that exists on both
-    // platforms — KWin's own maximize-area re-assert. That population arms a
+    // Wayland is excluded for the SELF-mover reason above, except where KWin
+    // itself is the mover: a column-maximize member has KWin's own
+    // maximize-area re-assert, and a column committed outside its output has
+    // the KWin 6.8 keep-visible clamp described below. Those populations arm a
     // commanded rect at the apply site for exactly this, and nothing else
     // reaches it, so the general exclusion and its reasoning stand.
     // A maximized-to-edges member whose maximize bit is mid-transition is exempt
@@ -123,32 +125,89 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // moves it to the work area before the interception hands the request to
     // the engine, and countering that frame bounced it back to its column
     // (F973).
+    //
+    // A column the strip committed OUTSIDE its output (a park, or a straddler
+    // cropped at the edge) has a third mover on KWin 6.8, on either platform:
+    // XdgToplevelWindow::handleRoleCommit runs confineInteractiveMove on every
+    // commit that acks a configure (a deactivation, a suspend, a scale change)
+    // or changes the window geometry on its own, pulling the frame back until
+    // its title bar shows. That population arms a commanded rect too
+    // (outOfView), and is put back by POSITION alone (see
+    // ScrollDecisions::counterAssertsByPosition): a move() sends no configure
+    // of its own and leaves the leaving leg that is still drawing the column
+    // alone, where the re-apply below would drop it. A Wayland re-seat takes
+    // the budget only when it hands the window to another output (the one
+    // Workspace::outputAt picks for the seat, against the moveResizeOutput KWin
+    // holds for it): KWin then re-sends the output's scale, transform and
+    // colour description, the configure that carries them is acked, and that
+    // commit is clamped again, so the pair would loop. A re-seat that stays on
+    // the same output schedules nothing and answers a commit the client made
+    // anyway, so it is never refused. X11 re-seats take the budget always.
     KWin::Window* kwCounter = w->window();
     // The mode each one rests in: a member maximized, anything else restored.
     const KWin::MaximizeMode modeAtRest =
         m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
     const bool inMaximizeTransition = kwCounter && kwCounter->requestedMaximizeMode() != modeAtRest;
-    const bool externallyMovable = !inMaximizeTransition
-        && (!w->isWaylandClient()
-            || (kwCounter && m_maximizedToEdgesWindows.contains(windowId)
-                && kwCounter->requestedMaximizeMode() == KWin::MaximizeFull));
+    const bool maximizedMember = kwCounter && m_maximizedToEdgesWindows.contains(windowId)
+        && kwCounter->requestedMaximizeMode() == KWin::MaximizeFull;
+    const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
+    const bool armed = cit != m_effect->m_scrollCommandedRects.end();
+    const bool externallyMovable = armed
+        && ScrollDecisions::counterAssertMovable(inMaximizeTransition, w->isWaylandClient(), maximizedMember,
+                                                 cit->outOfView);
     // Only while the strip apply that armed the rect is still the window's
     // latest command: a snap or float command issued since (a cross-mode move
     // before the strip's release lands) owns the window now (F71). Nor while
     // the outputs are changing or the strip's output has moved since its
     // batch: the rect is in the old coordinates, and the next batch re-arms
-    // it in the new ones (F815). Nor for a frame KWin moved onto another output
-    // whole (its Move to Screen): a real move, which the output arm hands over (F738).
+    // it in the new ones (F815). A PARK is the exception, re-checked against
+    // the outputs as they are now instead: a configure reaches every window
+    // when the outputs change, each ack is clamped, and a rect still off every
+    // output keeps the column out of sight whatever coordinates it was built
+    // in. Nor for a frame KWin moved onto another output whole (its Move to
+    // Screen): a real move, which the output arm hands over (F738). Nor for a
+    // window going fullscreen: KWin commits the fullscreen frame before the
+    // state, and the apply this replaces bailed on it (fullscreenBailsApply).
     if (externallyMovable && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()
-        && !isKWinMoveOfStripTile(w, windowId)) {
-        const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
-        if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(scrollTrackedScreenFor(windowId))
-            && m_effect->m_daemonGate.commandStamps.isCurrent(w, cit->commandStamp)
-            && !m_effect->m_screenChangeHandler->isScreenChangeInProgress()
-            && !stripOutputMovedSinceBatch(scrollTrackedScreenFor(windowId))
+        && !m_effect->fullscreenBailsApply(w) && !isKWinMoveOfStripTile(w, windowId)) {
+        const bool coordinatesHold = cit->parked ? rectAtScrollPark(cit->rect)
+                                                 : !m_effect->m_screenChangeHandler->isScreenChangeInProgress()
+                && !stripOutputMovedSinceBatch(scrollTrackedScreenFor(windowId));
+        if (isScrollingScreen(scrollTrackedScreenFor(windowId))
+            && m_effect->m_daemonGate.commandStamps.isCurrent(w, cit->commandStamp) && coordinatesHold
             && !(m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())) {
             const QRect actual = w->frameGeometry().toRect();
-            {
+            if (ScrollDecisions::counterAssertsByPosition(cit->outOfView, w->isWaylandClient(), maximizedMember,
+                                                          actual.size() == cit->rect.size())) {
+                // Seated in the column the strip OFFERED where there is one, as
+                // the offered-column centring and the paint resolver seat it,
+                // so the three agree. A maximized column and an X11 window have
+                // no offer; their commanded rect is the column.
+                const auto offer = m_effect->m_scrollOfferedColumn.constFind(windowId);
+                const QPoint seat = ScrollDecisions::reseatOrigin(
+                    offer != m_effect->m_scrollOfferedColumn.constEnd() ? *offer : cit->rect, actual.size());
+                // KWin's own test, mirrored: Window::move resolves the output at
+                // the float centre of the moved rect at its COMMANDED size and
+                // switches only when that differs from the one it holds.
+                const bool switchesOutput = kwCounter
+                    && KWin::Workspace::self()->outputAt(
+                           QRectF(QPointF(seat), QRectF(kwCounter->moveResizeGeometry()).size()).center())
+                        != kwCounter->moveResizeOutput();
+                const bool budgeted = !w->isWaylandClient() || switchesOutput;
+                const bool reseat = kwCounter && actual.topLeft() != seat
+                    && (!budgeted
+                        || ScrollDecisions::shouldCounterAssert(cit->burstStartMs, cit->burstCount,
+                                                                ShaderInternal::shaderClockNowMs(), true));
+                if (reseat) {
+                    // Debug, not info: on KWin 6.8 every acked configure of
+                    // every parked column lands here.
+                    qCDebug(lcEffect) << "Re-seating scroll-managed window" << windowId << "from" << actual << "at"
+                                      << seat;
+                    const auto counterGuard = m_effect->geometryApplyScope();
+                    kwCounter->move(QPointF(seat));
+                    return;
+                }
+            } else {
                 // Budget arithmetic is pure and unit-tested
                 // (scrolldecisions.h, test_scroll_decisions).
                 const qint64 nowMs = ShaderInternal::shaderClockNowMs();
