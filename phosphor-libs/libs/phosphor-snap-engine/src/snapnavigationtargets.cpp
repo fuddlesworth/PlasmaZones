@@ -82,12 +82,14 @@ bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& sto
     if (storedScreen.isEmpty()) {
         return false;
     }
+    // The manager is the authority every other screen gate in the daemon reads,
+    // so a screen it tracks is valid whether or not Qt has a QScreen for it.
+    // The QScreen list answers only when no manager is wired.
     if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
-        QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-        if (!PhosphorScreens::ScreenIdentity::findByIdOrName(physId)) {
-            return false;
-        }
         return mgr && mgr->effectiveScreenIds().contains(storedScreen);
+    }
+    if (mgr) {
+        return mgr->physicalScreenFor(storedScreen).isValid();
     }
     return PhosphorScreens::ScreenIdentity::findByIdOrName(storedScreen) != nullptr;
 }
@@ -123,10 +125,21 @@ void SnapNavigationTargetResolver::setNeighbourTilingProvider(NeighbourTilingFn 
     m_neighbourIsTiling = std::move(fn);
 }
 
-PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& currentZoneId,
+void SnapNavigationTargetResolver::setLandingRefusalProvider(LandingRefusalFn fn)
+{
+    m_landingRefusal = std::move(fn);
+}
+
+void SnapNavigationTargetResolver::setZoneOccupantsProvider(ZoneOccupantsFn fn)
+{
+    m_zoneOccupants = std::move(fn);
+}
+
+PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& windowId,
+                                                                                        const QString& currentZoneId,
                                                                                         const QString& direction,
                                                                                         const QString& sourceScreenId,
-                                                                                        bool requireSnapNeighbour) const
+                                                                                        bool landsWindow) const
 {
     const QString fail = QString();
     // hasDependencies() is the release pair for the ctor asserts on m_service
@@ -139,12 +152,25 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntr
     if (neighborScreen.isEmpty()) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
     }
-    // A MOVE/SWAP must not snap the window onto a tiling neighbour (autotile or
-    // scrolling): that screen has no snap zones to own the window even though its
-    // assigned layout still enumerates zones. Report no crossing so the engine's
-    // cross-mode handoff takes over. FOCUS (requireSnapNeighbour=false) is not gated.
-    if (requireSnapNeighbour && m_neighbourIsTiling && m_neighbourIsTiling(neighborScreen)) {
+    // A tiling neighbour (autotile or scrolling) is never entered here: it has
+    // no snap zones, though its assigned layout still enumerates some. The
+    // engine hands focus, move and swap to that engine (F422).
+    if (m_neighbourIsTiling && m_neighbourIsTiling(neighborScreen)) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
+    }
+    // A move asks where the window lands (F159, F208). A disabled neighbour
+    // takes it unsnapped, which the engine does on this silent reason; an
+    // exclusion there refuses the move.
+    if (landsWindow && m_landingRefusal) {
+        const QString refusal = m_landingRefusal(windowId, neighborScreen);
+        if (refusal == QLatin1String("disabled")) {
+            return moveResult(false, QStringLiteral("landing_disabled"), QString(), QRect(), currentZoneId,
+                              neighborScreen);
+        }
+        if (refusal == QLatin1String("excluded")) {
+            emitFeedback(false, QStringLiteral("move"), refusal, currentZoneId, QString(), neighborScreen);
+            return moveResult(false, refusal, QString(), QRect(), currentZoneId, neighborScreen);
+        }
     }
     // Enter the neighbour output from the edge facing back toward the source.
     const QString entryZone =
@@ -186,6 +212,16 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
     if (m_neighbourIsTiling && m_neighbourIsTiling(neighborScreen)) {
         return fail(QString());
     }
+    // A disabled neighbour has no zone set to exchange, so the swap reports
+    // the layout edge; an exclusion there refuses it (F159, F208).
+    const QString refusal = m_landingRefusal ? m_landingRefusal(windowId, neighborScreen) : QString();
+    if (refusal == QLatin1String("disabled")) {
+        return fail(QString());
+    }
+    if (refusal == QLatin1String("excluded")) {
+        emitFeedback(false, QStringLiteral("swap"), refusal, currentZoneId, QString(), neighborScreen);
+        return fail(refusal);
+    }
     // Enter the neighbour output from the edge facing back toward the source.
     const QString entryZone =
         m_zoneAdjacency->getFirstZoneInDirection(oppositeCrossingDirection(direction), neighborScreen);
@@ -204,7 +240,7 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
     // neighbour screen mirrors the in-surface swap: the zone UUID is shared by
     // every output the layout drives, so an unfiltered windowsInZone could
     // surface a window on the wrong monitor.
-    const QStringList occupants = windowsInZoneOnScreen(entryZone, neighborScreen);
+    const QStringList occupants = zoneOccupants(entryZone, neighborScreen, windowId);
     if (occupants.isEmpty()) {
         // Empty entry zone → move-to-empty across the boundary: window1 crosses,
         // there is no counterpart to send back. screenName2 stays empty.
@@ -213,6 +249,12 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
                           neighborScreen, currentZoneId, entryZone);
     }
     const QString partner = occupants.first();
+    // The partner lands on the source output.
+    if (m_landingRefusal && m_landingRefusal(partner, sourceScreenId) == QLatin1String("excluded")) {
+        emitFeedback(false, QStringLiteral("swap"), QStringLiteral("excluded"), currentZoneId, entryZone,
+                     sourceScreenId);
+        return fail(QStringLiteral("excluded"));
+    }
     PhosphorProtocol::SwapTargetResult r =
         swapResult(true, QString(), windowId, entryGeom.x(), entryGeom.y(), entryGeom.width(), entryGeom.height(),
                    entryZone, partner, sourceGeom.x(), sourceGeom.y(), sourceGeom.width(), sourceGeom.height(),
@@ -220,6 +262,26 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
     // window2 returns to the source output; screenName carries window1's target.
     r.screenName2 = sourceScreenId;
     return r;
+}
+
+QString SnapNavigationTargetResolver::adjacentZoneFor(const QString& windowId, const QString& currentZoneId,
+                                                      const QString& direction, const QString& screenId) const
+{
+    // A span is measured from its whole union, and a fallback never lands on
+    // one of its own members (F242).
+    const QStringList zones = m_service->zonesForWindow(windowId);
+    QString target = zones.size() > 1 ? m_zoneAdjacency->getAdjacentZoneOutside(zones, direction, screenId)
+                                      : m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, screenId);
+    if (zones.contains(target)) {
+        target.clear();
+    }
+    return target;
+}
+
+QString SnapNavigationTargetResolver::storedScreenOr(const QString& windowId, const QString& screenId) const
+{
+    const QString stored = m_service->screenForWindow(windowId);
+    return isStoredScreenValid(m_service->screenManager(), stored) ? stored : screenId;
 }
 
 QStringList SnapNavigationTargetResolver::windowsInZoneOnScreen(const QString& zoneId, const QString& screenName) const
@@ -239,10 +301,24 @@ QStringList SnapNavigationTargetResolver::windowsInZoneOnScreen(const QString& z
     return result;
 }
 
-QString SnapNavigationTargetResolver::firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName) const
+QString SnapNavigationTargetResolver::firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName,
+                                                                const QString& excludeWindowId) const
 {
-    const QStringList onScreen = windowsInZoneOnScreen(zoneId, screenName);
-    return onScreen.isEmpty() ? QString() : onScreen.first();
+    return zoneOccupants(zoneId, screenName, excludeWindowId).value(0);
+}
+
+QStringList SnapNavigationTargetResolver::zoneOccupants(const QString& zoneId, const QString& screenName,
+                                                        const QString& excludeWindowId) const
+{
+    // The provider answers for the context in view only (F182).
+    if (m_zoneOccupants) {
+        return m_zoneOccupants(zoneId, screenName, excludeWindowId);
+    }
+    QStringList occupants = windowsInZoneOnScreen(zoneId, screenName);
+    if (!excludeWindowId.isEmpty()) {
+        occupants.removeAll(excludeWindowId);
+    }
+    return occupants;
 }
 
 // Feedback callback emission goes through SnapNavigationTargetResolver::emitFeedback
@@ -285,26 +361,10 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
 
     QString currentZoneId = m_service->zoneForWindow(windowId);
 
-    // When the window is snapped, trust the daemon's stored screen assignment
-    // over the effect-reported screenId.  KWin's EffectWindow::screen() can
-    // return the wrong output for same-model multi-monitor setups (e.g. dual
-    // Samsung Odyssey G93SC with different serials).  The daemon's assignment
-    // is authoritative because it was set at snap time.
-    //
-    // When the window is NOT snapped (e.g. moved between monitors via KDE's
-    // Move-to-Screen shortcut — outputChanged fires and unsnaps it), we use
-    // the effect-provided screen since there's no stored assignment.
-    //
-    // Only use the stored screen if it's still connected — when a monitor
-    // enters standby, KWin rehomes windows but the stored assignment points
-    // at the dead output.
-    QString effectiveScreenId = screenId;
-    if (!currentZoneId.isEmpty()) {
-        QString storedScreen = m_service->screenForWindow(windowId);
-        if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
-            effectiveScreenId = storedScreen;
-        }
-    }
+    // A snapped window's stored screen beats the effect's report, which
+    // same-model monitors (dual Samsung Odyssey G93SC) can get wrong; see
+    // storedScreenOr. A window in no zone has no stored screen to trust.
+    const QString effectiveScreenId = currentZoneId.isEmpty() ? screenId : storedScreenOr(windowId, screenId);
 
     QString targetZoneId;
     if (currentZoneId.isEmpty()) {
@@ -315,16 +375,19 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
             return moveResult(false, QStringLiteral("no_zones"), QString(), QRect(), QString(), effectiveScreenId);
         }
     } else {
-        targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
+        targetZoneId = adjacentZoneFor(windowId, currentZoneId, direction, effectiveScreenId);
         if (targetZoneId.isEmpty()) {
-            // No adjacent zone on this output — cross into the adjacent output's
-            // entry zone before giving up. requireSnapNeighbour: a tiling-mode
-            // neighbour is handed off cross-mode by the engine, not snapped here.
+            // No adjacent zone on this output: cross into the adjacent output's
+            // entry zone before giving up.
             const PhosphorProtocol::MoveTargetResult cross =
-                crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/true);
+                crossOutputEntryTarget(windowId, currentZoneId, direction, effectiveScreenId, /*landsWindow=*/true);
             if (cross.success) {
                 emitFeedback(true, QStringLiteral("move"), QStringLiteral("screen:") + direction, currentZoneId,
                              cross.zoneId, cross.screenName);
+                return cross;
+            }
+            // The landing context's verdict goes to the engine as it is.
+            if (cross.reason == QLatin1String("landing_disabled") || cross.reason == QLatin1String("excluded")) {
                 return cross;
             }
             // Defer the boundary decision AND its feedback to the caller:
@@ -410,13 +473,7 @@ SpanTargetResult SnapNavigationTargetResolver::getSpanTargetForWindow(const QStr
     QStringList currentZones = m_service->zonesForWindow(windowId);
 
     // Trust stored screen for snapped windows — see getMoveTargetForWindow comment.
-    QString effectiveScreenId = screenId;
-    if (!currentZones.isEmpty()) {
-        const QString storedScreen = m_service->screenForWindow(windowId);
-        if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
-            effectiveScreenId = storedScreen;
-        }
-    }
+    const QString effectiveScreenId = currentZones.isEmpty() ? screenId : storedScreenOr(windowId, screenId);
     result.screenName = effectiveScreenId;
 
     // Member rects. A stale member whose zone no longer resolves (layout
@@ -738,58 +795,39 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
     }
 
     // Trust stored screen for snapped windows — see getMoveTargetForWindow comment
-    QString effectiveScreenId = screenId;
-    {
-        QString storedScreen = m_service->screenForWindow(windowId);
-        if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
-            effectiveScreenId = storedScreen;
-        }
-    }
+    const QString effectiveScreenId = storedScreenOr(windowId, screenId);
 
-    QString targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
+    QString targetZoneId = adjacentZoneFor(windowId, currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
-        // No adjacent zone on this output — try focusing into the adjacent
-        // output's entry zone. The neighbour's mode is not gated
-        // (requireSnapNeighbour=false), but the landing below still needs a
-        // snap-tracked occupant, so a tiling-mode neighbour dead-ends to
-        // no_adjacent_zone anyway.
+        // No adjacent zone on this output: focus the snapping neighbour's
+        // entry-zone occupant. A tiling neighbour is the engine's to hand on.
         const PhosphorProtocol::MoveTargetResult cross =
-            crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/false);
+            crossOutputEntryTarget(windowId, currentZoneId, direction, effectiveScreenId, /*landsWindow=*/false);
         if (cross.success) {
             // Pin the entry window to the neighbour output: windowsInZone is
             // screen-agnostic and the entry zone's UUID can also exist on the
             // source output when one layout drives both monitors.
-            const QString entryWindow = firstWindowInZoneOnScreen(cross.zoneId, cross.screenName);
+            const QString entryWindow = firstWindowInZoneOnScreen(cross.zoneId, cross.screenName, windowId);
             if (!entryWindow.isEmpty()) {
                 emitFeedback(true, QStringLiteral("focus"), QStringLiteral("screen:") + direction, currentZoneId,
                              cross.zoneId, cross.screenName);
                 return focusResult(true, QString(), entryWindow, currentZoneId, cross.zoneId, cross.screenName);
             }
         }
-        // Reaching here means either no cross-output entry zone was found OR one
-        // was found but is unoccupied on the neighbour (firstWindowInZoneOnScreen
-        // empty — you cannot focus an empty zone). Both collapse to the same
-        // "no_adjacent_zone" reason: from the caller's perspective there is no
-        // window to land on that way, so it should try the desktop axis next. The
-        // reason intentionally does not distinguish the empty-zone case.
-        // Defer the boundary decision AND its feedback to the caller —
-        // SnapEngine tries the cross-desktop axis and emits the boundary
-        // feedback itself when it fails, in every configuration (see the
-        // matching note in getMoveTargetForWindow).
+        // No entry zone, or an empty one (an empty zone cannot be focused): no
+        // window to land on that way. The caller tries the desktop axis and
+        // emits the boundary feedback itself (see getMoveTargetForWindow).
         return focusResult(false, QStringLiteral("no_adjacent_zone"), QString(), currentZoneId, QString(),
                            effectiveScreenId);
     }
 
     // Prefer the occupant actually on this output so a shared zone UUID on a
-    // sibling monitor can't hijack same-surface focus. Unlike the cross-output
-    // path, this is best-effort: the target zone already belongs to
-    // effectiveScreenId, so if the screen filter finds nothing — e.g. the stored
-    // assignment was recorded under a different screen-id form (virtual vs bare
-    // physical) than effectiveScreenId resolved to — fall back to the unfiltered
-    // occupant rather than spuriously reporting an empty zone. The strict filter
-    // only has to be authoritative across the cross-OUTPUT boundary.
-    QString targetWindow = firstWindowInZoneOnScreen(targetZoneId, effectiveScreenId);
-    if (targetWindow.isEmpty()) {
+    // sibling monitor can't hijack same-surface focus. Unwired, a screen-id form
+    // skew (virtual vs bare physical) falls back to the unfiltered occupant; the
+    // provider's store key already absorbs it, and the unfiltered list spans
+    // other desktops, so it is not consulted then.
+    QString targetWindow = firstWindowInZoneOnScreen(targetZoneId, effectiveScreenId, windowId);
+    if (targetWindow.isEmpty() && !m_zoneOccupants) {
         const QStringList windowsInZone = m_service->windowsInZone(targetZoneId);
         if (!windowsInZone.isEmpty()) {
             targetWindow = windowsInZone.first();
@@ -862,15 +900,9 @@ SnapNavigationTargetResolver::getCycleTargetForWindow(const QString& windowId, b
     // window's effective screen the same way the move/focus paths do (the stored
     // assignment is authoritative over the effect-reported screen for same-model
     // multi-monitor setups), then pin the ring to it.
-    QString effectiveScreenId = screenId;
-    {
-        const QString storedScreen = m_service->screenForWindow(windowId);
-        if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
-            effectiveScreenId = storedScreen;
-        }
-    }
-    QStringList windowsInZone = windowsInZoneOnScreen(currentZoneId, effectiveScreenId);
-    if (windowsInZone.isEmpty()) {
+    const QString effectiveScreenId = storedScreenOr(windowId, screenId);
+    QStringList windowsInZone = zoneOccupants(currentZoneId, effectiveScreenId, QString());
+    if (windowsInZone.isEmpty() && !m_zoneOccupants) {
         // Best-effort skew rescue (mirrors focus/swap, which fall back only on an
         // EMPTY filtered result): an empty filtered ring means even the calling
         // window's own stored screen-id form didn't match effectiveScreenId
@@ -951,15 +983,9 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
     }
 
     // Trust stored screen for snapped windows — see getMoveTargetForWindow comment
-    QString effectiveScreenId = screenId;
-    {
-        QString storedScreen = m_service->screenForWindow(windowId);
-        if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
-            effectiveScreenId = storedScreen;
-        }
-    }
+    const QString effectiveScreenId = storedScreenOr(windowId, screenId);
 
-    QString targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
+    QString targetZoneId = adjacentZoneFor(windowId, currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
         // No adjacent zone on this output — treat monitors as one constructed
         // surface and cross into the neighbour output's entry zone, swapping with
@@ -970,6 +996,9 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
             emitFeedback(true, QStringLiteral("swap"), QStringLiteral("screen:") + direction, currentZoneId,
                          cross.targetZoneId, cross.screenName);
             return cross;
+        }
+        if (cross.reason == QLatin1String("excluded")) {
+            return cross; // reported by the landing refusal
         }
         // Defer the boundary decision AND its feedback to the caller —
         // SnapEngine tries the cross-mode axis and emits the boundary
@@ -996,7 +1025,7 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
     // the same-output occupant. Unlike the focus path, swap does NOT fall back to
     // the unfiltered ring on a miss: mis-swapping a window across outputs is far
     // more disruptive than focus, so the safe degradation is move-to-empty.
-    const QStringList windowsInTargetZone = windowsInZoneOnScreen(targetZoneId, effectiveScreenId);
+    const QStringList windowsInTargetZone = zoneOccupants(targetZoneId, effectiveScreenId, windowId);
     if (windowsInTargetZone.isEmpty()) {
         emitFeedback(true, QStringLiteral("swap"), direction, currentZoneId, targetZoneId, effectiveScreenId);
         return swapResult(true, QStringLiteral("moved_to_empty"), windowId, targetGeom.x(), targetGeom.y(),
@@ -1005,6 +1034,14 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
     }
 
     const QString targetWindowId = windowsInTargetZone.first();
+    // The partner lands in the focused window's zone: a rule excluding it there
+    // refuses the swap (F159).
+    if (m_landingRefusal && m_landingRefusal(targetWindowId, effectiveScreenId) == QLatin1String("excluded")) {
+        emitFeedback(false, QStringLiteral("swap"), QStringLiteral("excluded"), currentZoneId, targetZoneId,
+                     effectiveScreenId);
+        return swapResult(false, QStringLiteral("excluded"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0, 0,
+                          QString(), effectiveScreenId, currentZoneId, targetZoneId);
+    }
     emitFeedback(true, QStringLiteral("swap"), direction, currentZoneId, targetZoneId, effectiveScreenId);
     return swapResult(true, QString(), windowId, targetGeom.x(), targetGeom.y(), targetGeom.width(),
                       targetGeom.height(), targetZoneId, targetWindowId, currentGeom.x(), currentGeom.y(),

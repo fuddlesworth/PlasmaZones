@@ -45,7 +45,7 @@ permissions:
   contents: read
 
 # One in-flight run per ref, matching kwin-rebuild-watch.yml and release.yml.
-# Without this every push to a PR ran the whole matrix — now seven container jobs,
+# Without this every push to a PR ran the whole matrix — now six container jobs,
 # each doing a full pacman -Syu, build and ctest — to completion, including the
 # runs whose results nobody will ever read. Cancellation is limited to pull
 # requests: a superseded PR push is genuinely dead work, whereas a push to a
@@ -79,6 +79,35 @@ jobs:
           set -euo pipefail
           # Full -Syu prevents partial-upgrade state that can break linked
           # libs against stale base packages — Arch's standard guidance.
+          #
+          # Arch stable ships KWin 6.8, so this job (its KDE_FRAMEWORKS=ON leg)
+          # and the other Arch jobs that build the KWin effect compile the 6.8
+          # half of plasmazones/kwin-effect/kwincompat.h. The 6.7 half is
+          # compiled by the `nix` jobs, whose nixpkgs still carries KWin 6.7.
+          #
+          # There are SIX hand-maintained pacman lists in this file: four
+          # build-dependency lists in three groups, plus two small tool lists
+          # (`lint` and `luau-analyze`) that install neither Qt nor KF6.
+          # Do not assume an edit here reaches the rest:
+          #   * shell-OFF: `build` (this one).
+          #   * shell-ON: `build-shell`, and `presets` which is the same set
+          #     minus ccache, xorg-server-xvfb and mesa because it neither
+          #     caches nor runs the suite. Both add libpipewire, polkit-qt6,
+          #     pam and ddcutil for the three shell libraries with hard
+          #     configure-time requirements.
+          #   * `build-arch-draft`, deliberately not a copy of either: it
+          #     bootstraps a makepkg host (base-devel, sudo, namcap) and lets
+          #     `makepkg -s` resolve the real dependencies from the PKGBUILD.
+          #     A new build dependency belongs in `packaging/` for that job,
+          #     not in its pacman line.
+          #
+          # NOT hoisted into a composite action under .github/actions, which is
+          # the obvious fix: a LOCAL action is only readable once
+          # actions/checkout has run, and these container jobs install their
+          # dependencies BEFORE checkout because the archlinux image ships
+          # without git. Reordering that bootstrap across every container job
+          # cannot be validated without running CI, which is not a trade worth
+          # making to de-duplicate a package list.
           pacman -Syu --noconfirm
           pacman -S --noconfirm --needed \
             git base-devel ccache \
@@ -252,145 +281,6 @@ jobs:
             ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)" -E "$EXCLUDE"
           fi
 
-  # ─── Build against the NEXT Plasma: the `build` job above uses Arch's
-  # stable Plasma, so nothing there exercises the KWin effect against the
-  # upcoming release. kde-unstable carries the beta (Plasma 6.8 = KWin
-  # 6.7.90), where the paint hooks return bool, RenderDevice exists, and
-  # Scene::renderer() takes a device. plasmazones/kwin-effect/kwincompat.h adapts to
-  # either, and this job is what keeps that true.
-  #
-  # ADVISORY (continue-on-error): kde-unstable is a moving target that is
-  # legitimately mid-rebuild at times, and a beta repo's health must not block
-  # merging unrelated work. Be clear about what that costs: this job reports a
-  # GREEN check whatever happens, so the verify step below and a genuine 6.8
-  # compile break are both visible only by opening the job log. Flip this to
-  # required once the beta repo's noise turns out to be lower than that risk.
-  #
-  # This job's whole life is the gap between a Plasma beta and that Plasma
-  # reaching Arch stable. Once the `build` job's own KWin is 6.8 or newer, this
-  # is redundant and goes away with the 6.7 half of kwincompat.h.
-  build-plasma-next:
-    name: Build (arch kde-unstable, next Plasma)
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    container:
-      image: archlinux:latest
-
-    steps:
-      - name: Setup (Arch + kde-unstable)
-        run: |
-          set -euo pipefail
-          # kde-unstable must precede core/extra so its newer Plasma and KF6 win
-          # dependency resolution; appending it would leave pacman on stable.
-          printf '[kde-unstable]\nInclude = /etc/pacman.d/mirrorlist\n\n' > /tmp/kde-unstable.conf
-          cat /tmp/kde-unstable.conf /etc/pacman.conf > /tmp/pacman.conf.new
-          mv /tmp/pacman.conf.new /etc/pacman.conf
-          # Byte-identical to the `build` job's "Setup (Arch)". Those two are
-          # the shell-OFF set; a dependency added to one and not the other
-          # makes this job quietly build a different configuration from the one
-          # it exists to mirror — the same class of false equivalence the
-          # verify step below guards against for the paint API. Change one,
-          # change the other.
-          #
-          # There are SEVEN hand-maintained pacman lists in this file: five
-          # build-dependency lists in three groups, plus two small tool lists
-          # (`lint` and `luau-analyze`) that install neither Qt nor KF6.
-          # Do not assume an edit here reaches the rest:
-          #   * shell-OFF, identical: `build`, `build-plasma-next` (this one).
-          #   * shell-ON: `build-shell`, and `presets` which is the same set
-          #     minus ccache, xorg-server-xvfb and mesa because it neither
-          #     caches nor runs the suite. Both add libpipewire, polkit-qt6,
-          #     pam and ddcutil for the three shell libraries with hard
-          #     configure-time requirements.
-          #   * `build-arch-draft`, deliberately not a copy of either: it
-          #     bootstraps a makepkg host (base-devel, sudo, namcap) and lets
-          #     `makepkg -s` resolve the real dependencies from the PKGBUILD.
-          #     A new build dependency belongs in `packaging/` for that job,
-          #     not in its pacman line.
-          #
-          # NOT hoisted into a composite action under .github/actions, which is
-          # the obvious fix: a LOCAL action is only readable once
-          # actions/checkout has run, and these container jobs install their
-          # dependencies BEFORE checkout because the archlinux image ships
-          # without git. Reordering that bootstrap across every container job
-          # cannot be validated without running CI, which is not a trade worth
-          # making to de-duplicate a package list.
-          # Note what kde-unstable actually moves, though: it carries beta Qt, KF6
-          # and Kirigami as well as Plasma, and the Test step below runs the FULL
-          # suite against them. A failure here is not necessarily about the paint
-          # API — the Verify step above is the part that speaks only to that.
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed \
-            git base-devel ccache \
-            cmake ninja extra-cmake-modules \
-            qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
-            qt6-wayland wayland plasma-wayland-protocols wayland-protocols \
-            kwin \
-            kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme kirigami \
-            plasma-activities \
-            vulkan-headers vulkan-icd-loader glslang \
-            xorg-server-xvfb mesa cava ffmpeg
-
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d
-        with:
-          key: arch-plasma-next
-          max-size: 500M
-
-      - name: Configure
-        env:
-          CC: ccache gcc
-          CXX: ccache g++
-        run: |
-          set -euo pipefail
-          # Output kept so the next step can read which paint API was selected.
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/usr \
-            -DUSE_KDE_FRAMEWORKS=ON \
-            -DBUILD_TESTING=ON \
-            -DBUILD_TOOLS=ON 2>&1 | tee configure.log
-
-      # Without this the job can go GREEN while testing nothing new: whenever
-      # kde-unstable holds no Plasma newer than stable (it is emptied and
-      # resynced between releases), the effect silently compiles its 6.7 arm and
-      # this job becomes a duplicate of `build`. Assert the NEW arm was actually
-      # selected, so "no newer Plasma to test" is a visible state rather than a
-      # false pass. plasmazones/kwin-effect/CMakeLists.txt emits the line.
-      #
-      # Matched on the API-SELECTION phrase rather than a marketing version
-      # number: a grep for "Plasma 6.8" keeps passing once kde-unstable moves on
-      # to 6.9, while no longer distinguishing anything.
-      - name: Verify the next-Plasma paint API was selected
-        run: |
-          set -euo pipefail
-          grep -F 'building against KWin' configure.log || true
-          if ! grep -qF 'bool paint API selected' configure.log; then
-            echo "::error::kde-unstable did not provide KWin 6.7.90 or newer, so this job compiled the 6.7 arm and duplicated the 'build' job. If 6.8 has reached Arch stable, retire this job and the 6.7 half of kwin-effect/kwincompat.h."
-            exit 1
-          fi
-
-      - name: Build
-        run: cmake --build build --parallel $(nproc)
-
-      - name: Test
-        env:
-          QT_QPA_PLATFORM: offscreen
-          LIBGL_ALWAYS_SOFTWARE: "1"
-        run: |
-          # XDG_RUNTIME_DIR for the same reason as the `build` job: an unset one
-          # makes Qt emit a warning that warning-asserting tests then fail on.
-          export XDG_RUNTIME_DIR="$(mktemp -d)"
-          if command -v xvfb-run >/dev/null 2>&1; then
-            xvfb-run -a ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)"
-          else
-            ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)"
-          fi
-
   # ─── Lint: clang-format + qmlformat mirror the lefthook hooks so a
   # contributor who skipped them can't merge unformatted code. Only
   # lints files changed in the PR (or HEAD~1..HEAD for direct pushes)
@@ -503,8 +393,16 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           # Pick the right diff range for the trigger.
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-              BASE="origin/${{ github.base_ref }}"
-              git fetch origin "${{ github.base_ref }}" --depth=1 || true
+              # The base commit the event's merge ref was built on, not the
+              # base branch's current tip. The tip moves when anything lands
+              # on the base branch between the event and this job (merging
+              # the PR itself does it), and the old `fetch --depth=1` of that
+              # tip made the full clone shallow there, cutting off its
+              # parents, so "BASE...HEAD" had no merge base and git exited
+              # 128. fetch-depth: 0 above already holds this commit; the
+              # fetch only covers a checkout that somehow lacks it.
+              BASE="${{ github.event.pull_request.base.sha }}"
+              git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch origin "$BASE"
               RANGE="$BASE...HEAD"
           else
               # Direct push — diff against the previous commit on this ref.
@@ -711,6 +609,11 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # Nix Flake CI (x86_64 + aarch64)
   # ═══════════════════════════════════════════════════════════════════════════
+  # Also the only jobs that compile the 6.7 half of
+  # plasmazones/kwin-effect/kwincompat.h, for as long as the locked nixpkgs
+  # carries KWin 6.7. The Arch jobs compile the 6.8 half. Once
+  # flake.lock moves to a nixpkgs with KWin 6.8, nothing in CI builds the 6.7
+  # half any more.
   nix:
     name: Nix (${{ matrix.system }})
     # Same trigger gate as `build` / `lint`.

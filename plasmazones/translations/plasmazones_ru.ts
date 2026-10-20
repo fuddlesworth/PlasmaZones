@@ -687,7 +687,7 @@
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="137"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="611"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="598"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="127"/>
@@ -1222,37 +1222,37 @@
         <translation>На передний план</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="703"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="710"/>
         <source>Cancel Zone Overlay</source>
         <translation>Отменить наложение зон</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="762"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="769"/>
         <source>Layout Picker: Move Left</source>
         <translation>Выбор раскладки: влево</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="766"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="773"/>
         <source>Layout Picker: Move Right</source>
         <translation>Выбор раскладки: вправо</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="770"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="777"/>
         <source>Layout Picker: Move Up</source>
         <translation>Выбор раскладки: вверх</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="774"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="781"/>
         <source>Layout Picker: Move Down</source>
         <translation>Выбор раскладки: вниз</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="778"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="785"/>
         <source>Layout Picker: Confirm</source>
         <translation>Выбор раскладки: подтвердить</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="779"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="786"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
         <translation>Выбор раскладки: подтвердить (Enter на цифровой клавиатуре)</translation>
     </message>
@@ -1448,44 +1448,44 @@
         <translation>Не удалось определить размеры этого экрана</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="355"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="342"/>
         <source>Layout Locked</source>
         <translation>Раскладка заблокирована</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="369"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="356"/>
         <source>Layout Unlocked</source>
         <translation>Раскладка разблокирована</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="445"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="432"/>
         <source>Disabled on this monitor</source>
         <translation>Отключено на этом экране</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="456"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="443"/>
         <source>Desktop %1</source>
         <translation>Рабочий стол %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="458"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="469"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="445"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="456"/>
         <source>Disabled on %1</source>
         <translation>Отключено на %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="467"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="454"/>
         <source>Disabled on this activity</source>
         <translation>Отключено в этой комнате</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="497"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="484"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="580"/>
         <source>No layout assigned</source>
         <translation>Раскладка не назначена</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="664"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="651"/>
         <location filename=".qml-stubs/plasmazones/src/ui/LayoutOsdContent.qml.cpp" line="355"/>
         <source>Column template — %1</source>
         <comment>OSD caption, %1 is the template name</comment>
@@ -1507,7 +1507,7 @@
         <translation>Служба раскладок не инициализирована</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="328"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="315"/>
         <source>Layout: %1</source>
         <translation>Раскладка: %1</translation>
     </message>
@@ -1636,7 +1636,7 @@
         <translation>Имя целевого экрана</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="730"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="717"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="294"/>
         <source>Tiling: %1</source>
         <translation>Мозаичное размещение: %1</translation>
@@ -1718,22 +1718,22 @@
         <translation>Номер зоны должен быть не менее 1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="292"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="81"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation>Модуль эффекта PlasmaZones для KWin не установлен в месте, где KWin может его найти. Переустановите PlasmaZones.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="331"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="120"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin.</source>
         <translation>Эффект PlasmaZones для KWin был собран для KWin %1, но запущен KWin %2, поэтому KWin не загрузит его. Пересоберите и переустановите PlasmaZones для запущенного KWin.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="358"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="147"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation>Эффект PlasmaZones для KWin не зарегистрировался в службе, поэтому перетаскивание окон и комбинации клавиш не будут работать. Убедитесь, что он включён в разделе «Параметры системы &gt; Эффекты рабочего стола», затем перезапустите сеанс Plasma.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="377"/>
+        <location filename="../src/daemon/daemon/bridge_watchdog.cpp" line="166"/>
         <source>Window manager integration is inactive</source>
         <translation>Интеграция с диспетчером окон неактивна</translation>
     </message>
@@ -14672,7 +14672,7 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="276"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="188"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="183"/>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="328"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="339"/>
         <source>(missing: %1)</source>
         <comment>@info item missing</comment>
         <translation>(отсутствует: %1)</translation>
@@ -14725,7 +14725,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="319"/>
         <source>Following the inherited pack, with a preset and settings of its own</source>
-        <translation type="unfinished"></translation>
+        <translation>Следует унаследованному набору, со своей предустановкой и своими параметрами</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="321"/>
@@ -14735,7 +14735,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="325"/>
         <source>Following the inherited pack, with a preset of its own</source>
-        <translation type="unfinished"></translation>
+        <translation>Следует унаследованному набору, со своей предустановкой</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="327"/>
@@ -19839,8 +19839,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
-        <source>When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
-        <translation>Когда вы возвращаете из плавающего режима окно, которое никогда не было прилеплено, прилеплять его к резервной зоне (последней использованной, затем первой пустой, затем первой зоне) вместо того, чтобы оставлять его плавающим.</translation>
+        <source>When you unfloat a window with no zone to return to on its monitor and desktop, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</source>
+        <oldsource>When you unfloat a window with no zone to return to on its monitor, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.</oldsource>
+        <translation>Когда вы снимаете с окна плавание, а на его экране и рабочем столе нет зоны, в которую оно могло бы вернуться, прилеплять его к резервной зоне (последней использованной, затем первой пустой, затем первой по порядку), а не оставлять плавающим.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="153"/>
@@ -20607,19 +20608,19 @@
         <translation>Вручную</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="98"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="109"/>
         <source>None</source>
         <comment>@item:inlistbox</comment>
         <translation>Нет</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="99"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="110"/>
         <source>Select…</source>
         <comment>@action:button</comment>
         <translation>Выбрать…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="103"/>
+        <location filename=".qml-stubs/plasmazones/src/shared/CategoryMenuButton.qml.cpp" line="114"/>
         <source>Choose from the categorized list</source>
         <comment>@info:tooltip</comment>
         <translation>Выбрать из списка по категориям</translation>
@@ -20709,7 +20710,7 @@
         <location filename=".qml-stubs/plasmazones/src/shared/ParameterEditor.qml.cpp" line="702"/>
         <source>Changed here, on top of the selected preset.</source>
         <comment>@info:whatsthis</comment>
-        <translation type="unfinished"></translation>
+        <translation>Изменено здесь поверх выбранной предустановки.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/shared/ParameterRow.qml.cpp" line="364"/>
@@ -20855,11 +20856,11 @@
         <location filename=".qml-stubs/plasmazones/src/shared/ShaderErrorBanner.qml.cpp" line="59"/>
         <source>Shader failed to load</source>
         <comment>@info:status shader preview</comment>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось загрузить шейдер</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/shared/ShaderErrorBanner.qml.cpp" line="92"/>
-        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="312"/>
+        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="310"/>
         <source>Shader error details</source>
         <comment>@info:whatsthis</comment>
         <translation>Сведения об ошибке шейдера</translation>
@@ -20964,8 +20965,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="100"/>
-        <source>This window is excluded from tiling</source>
-        <translation>Это окно исключено из размещения</translation>
+        <source>This window is excluded from snapping</source>
+        <oldsource>This window is excluded from tiling</oldsource>
+        <translation>Это окно исключено из прилипания</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="116"/>
@@ -21460,12 +21462,12 @@
         <translation>Краткий отклик на действия с окнами и раскладками с клавиатуры</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="170"/>
+        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="168"/>
         <source>Zone overlay</source>
         <translation>Наложение зон</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="314"/>
+        <location filename=".qml-stubs/plasmazones/src/ui/RenderNodeOverlayContent.qml.cpp" line="312"/>
         <source>Shader error</source>
         <translation>Ошибка шейдера</translation>
     </message>
@@ -21810,7 +21812,7 @@
         <translation>Вкладка окна, которое требует внимания.</translation>
     </message>
     <message>
-        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="717"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="711"/>
         <source>Untitled window</source>
         <translation>Окно без заголовка</translation>
     </message>
@@ -22543,17 +22545,17 @@
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="328"/>
         <source>%n layer with a preset</source>
         <comment>@info:status number of decoration layers with a preset</comment>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n слой с предустановкой</numerusform>
+            <numerusform>%n слоя с предустановкой</numerusform>
+            <numerusform>%n слоёв с предустановкой</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="349"/>
         <source>Missing preset</source>
         <comment>@info:status preset that no longer exists</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановка отсутствует</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="369"/>
@@ -22951,7 +22953,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="21"/>
         <source>Decoration for surfaces the Plasma shell owns: the panels and the applet popups. The global default decoration never applies to them, so they stay undecorated until a decoration is enabled here.</source>
-        <translation type="unfinished"></translation>
+        <translation>Оформление поверхностей, принадлежащих оболочке Plasma: панелей и всплывающих окон апплетов. Общее оформление по умолчанию к ним никогда не применяется, поэтому они остаются без оформления, пока оно не включено здесь.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="49"/>
@@ -23842,7 +23844,7 @@
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="192"/>
         <source>That preset has an unusable name on disk.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>У этой предустановки недопустимое имя на диске.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="205"/>
@@ -23851,13 +23853,13 @@
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="430"/>
         <source>That preset no longer exists.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Эта предустановка больше не существует.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="213"/>
         <source>Could not create the preset folder.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось создать папку предустановок.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="255"/>
@@ -23865,175 +23867,175 @@
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="272"/>
         <source>Could not write the preset to disk.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось записать предустановку на диск.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="292"/>
         <source>No shader pack selected.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Пакет шейдеров не выбран.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="301"/>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="351"/>
         <source>Enter a name for the preset.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Введите имя предустановки.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="302"/>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="352"/>
         <source>That name cannot be used. Try a shorter one, without special characters.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Это имя использовать нельзя. Попробуйте более короткое имя без специальных символов.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="336"/>
         <source>This preset comes with its pack and cannot be changed.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Эта предустановка поставляется вместе с пакетом, и её нельзя изменить.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="363"/>
         <source>This preset comes with its pack and cannot be renamed.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Эта предустановка поставляется вместе с пакетом, и её нельзя переименовать.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="386"/>
         <source>This preset comes with its pack and cannot be deleted.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Эта предустановка поставляется вместе с пакетом, и её нельзя удалить.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="410"/>
         <location filename="../src/settings/stores/shaderpresetbridge.cpp" line="417"/>
         <source>Could not delete the preset.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось удалить предустановку.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionPresetEditor.qml.cpp" line="78"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="246"/>
         <source>None</source>
         <comment>@item:inlistbox no shader preset</comment>
-        <translation type="unfinished">Нет</translation>
+        <translation>Нет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionPresetEditor.qml.cpp" line="92"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="258"/>
         <source>Missing preset</source>
         <comment>@item:inlistbox preset that no longer exists</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановка отсутствует</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionPresetEditor.qml.cpp" line="117"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="232"/>
         <source>Shader preset</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановка шейдера</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="210"/>
         <source>Preset</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished">Предустановка</translation>
+        <translation>Предустановка</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="232"/>
         <source>Shader preset for %1</source>
         <comment>@label:listbox preset picker for one pack</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановка шейдера для %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="237"/>
         <source>Named parameter preset for this shader pack. This assignment has edits on top of it.</source>
         <comment>@info:whatsthis</comment>
-        <translation type="unfinished"></translation>
+        <translation>Именованная предустановка параметров для этого пакета шейдеров. В этом назначении поверх неё внесены правки.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="237"/>
         <source>Named parameter preset for this shader pack.</source>
         <comment>@info:whatsthis</comment>
-        <translation type="unfinished"></translation>
+        <translation>Именованная предустановка параметров для этого пакета шейдеров.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="295"/>
         <source>Modified</source>
         <comment>@info shader preset has local edits</comment>
-        <translation type="unfinished">Изменён</translation>
+        <translation>Изменено</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="305"/>
         <source>Revert to preset</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Вернуть к предустановке</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="321"/>
         <source>Duplicate into an editable preset</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Дублировать как редактируемую предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="330"/>
         <source>%1 copy</source>
         <comment>@info default name for a duplicated preset, %1 is the original</comment>
-        <translation type="unfinished"></translation>
+        <translation>Копия %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="340"/>
         <source>Update preset</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Обновить предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="343"/>
         <source>Save these values into the preset, for everything using it</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Сохранить эти значения в предустановку для всего, что её использует</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="354"/>
         <source>Save as new preset</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Сохранить как новую предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="365"/>
         <source>Rename preset</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Переименовать предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="379"/>
         <source>Delete preset</source>
         <comment>@action:button</comment>
-        <translation type="unfinished">Удалить предустановку</translation>
+        <translation>Удалить предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="411"/>
         <source>Rename Preset</source>
         <comment>@title:window</comment>
-        <translation type="unfinished"></translation>
+        <translation>Переименовать предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="413"/>
         <source>Duplicate Preset</source>
         <comment>@title:window</comment>
-        <translation type="unfinished"></translation>
+        <translation>Дублировать предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="414"/>
         <source>Save Preset</source>
         <comment>@title:window</comment>
-        <translation type="unfinished"></translation>
+        <translation>Сохранить предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/shaders/PresetRow.qml.cpp" line="468"/>
         <source>Preset name</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished">Имя предустановки</translation>
+        <translation>Имя предустановки</translation>
     </message>
 </context>
 </TS>

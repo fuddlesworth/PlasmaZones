@@ -229,6 +229,16 @@ void LayoutAdaptor::connectVirtualDesktopSignals()
     if (m_virtualDesktopManager) {
         connect(m_virtualDesktopManager, &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this,
                 &LayoutAdaptor::virtualDesktopCountChanged);
+        // A growing count goes out before the list that names the new desktop
+        // (F1022), so a reader of the count alone keeps the old names (F1101).
+        m_relayedDesktopNames = m_virtualDesktopManager->desktopNames();
+        connect(m_virtualDesktopManager, &PhosphorWorkspaces::VirtualDesktopManager::desktopsChanged, this, [this]() {
+            const QStringList names = m_virtualDesktopManager->desktopNames();
+            if (names != m_relayedDesktopNames) {
+                m_relayedDesktopNames = names;
+                Q_EMIT virtualDesktopNamesChanged(names);
+            }
+        });
     }
 }
 

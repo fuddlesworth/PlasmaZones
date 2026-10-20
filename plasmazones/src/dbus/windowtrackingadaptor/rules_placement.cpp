@@ -18,11 +18,13 @@
 
 #include "core/interfaces/isettings.h"
 #include "core/platform/logging.h"
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorSnapEngine/PlacementDirective.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorRules/Rule.h>
@@ -271,7 +273,26 @@ bool WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
         m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query)), windowId);
 }
 
-bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, const QString& screenId)
+void WindowTrackingAdaptor::evictRuleVerdicts(const QString& windowId)
+{
+    if (m_ruleEvaluator) {
+        m_ruleEvaluator->evictCached(windowId);
+    }
+}
+
+void WindowTrackingAdaptor::setRoutedOpenDispatcher(
+    std::function<void(const PhosphorProtocol::WindowOpenedEntry&)> dispatcher)
+{
+    m_routedOpenDispatcher = std::move(dispatcher);
+}
+
+void WindowTrackingAdaptor::setWindowLeftScreenHook(std::function<void(const QString&, const QString&)> hook)
+{
+    m_windowLeftScreenHook = std::move(hook);
+}
+
+bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, const QString& screenId,
+                                                   PhosphorEngine::RestoreReason reason)
 {
     if (!m_ruleStore) {
         return false;
@@ -390,34 +411,66 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
         return true;
     }
 
-    // Map the window's position relative to its current screen's available area onto
-    // the target screen's, then clamp so the whole frame fits. Preserves "the same
-    // spot on the other monitor" across differing resolutions; an unknown /
-    // degenerate source area falls back to the target's top-left. The SIZE is
-    // carried over unchanged unless the target work area is smaller in that axis,
-    // in which case it shrinks to fit rather than overflowing the monitor.
-    const QRect srcAvail = screens->screenAvailableGeometry(screenId);
-    const int w = qMin(cur.width(), dstAvail.width());
-    const int h = qMin(cur.height(), dstAvail.height());
-    int x = dstAvail.x();
-    int y = dstAvail.y();
-    if (srcAvail.isValid() && srcAvail.width() > 0 && srcAvail.height() > 0) {
-        const double relX = static_cast<double>(cur.x() - srcAvail.x()) / srcAvail.width();
-        const double relY = static_cast<double>(cur.y() - srcAvail.y()) / srcAvail.height();
-        x = dstAvail.x() + qRound(relX * dstAvail.width());
-        y = dstAvail.y() + qRound(relY * dstAvail.height());
-    }
-    // Clamp the frame fully inside the target available area.
-    x = qBound(dstAvail.left(), x, dstAvail.right() - w + 1);
-    y = qBound(dstAvail.top(), y, dstAvail.bottom() - h + 1);
+    // "The same spot on the other monitor" across differing resolutions: the
+    // position kept relative to the available area, the size shrunk only where
+    // the target is smaller, the whole frame clamped inside.
+    const QRect routed =
+        PhosphorEngine::GeometryUtils::carryRectOntoArea(cur, screens->screenAvailableGeometry(screenId), dstAvail);
+    const int x = routed.x();
+    const int y = routed.y();
+    const int w = routed.width();
+    const int h = routed.height();
 
     qCInfo(lcDbusWindow) << "applyOpenScreenRouting: routing" << windowId << "to monitor" << target << "at"
                          << QRect(x, y, w, h);
-    // Emit the marker first so the effect treats the resulting outputChanged as an
-    // expected daemon-driven move (bookkeeping + decoration only, no reopen), then
-    // the free placement (empty zone id ⇒ no snap chrome).
-    Q_EMIT windowOutputMoveExpected(windowId, target, screenId);
-    Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), target, false);
+    // The screen the frame lands on, at the virtual-screen level, and the
+    // engine that runs it.
+    QString landed = Utils::effectiveScreenIdAt(screens, QRect(x, y, w, h).center());
+    if (landed.isEmpty() || !PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(landed, target)) {
+        landed = target;
+    }
+    PhosphorSnapEngine::SnapEngine* snap = snapEngine();
+    PhosphorEngine::PlacementEngineBase* tiling = nullptr;
+    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(landed)) {
+        tiling = m_autotileEngine.data();
+    } else if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(landed)) {
+        tiling = m_scrollEngine.data();
+    }
+    if (tiling) {
+        // The open float terminal's snap float on the spawn screen goes (F448),
+        // then the window lands free on the target and its engine gets it as
+        // an open: nothing else would tile it when the move's echo arrives
+        // inside the apply (F472). A genuine open only for an Open (F510).
+        announceOutputMove(windowId, landed, screenId, tiling);
+        Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), landed, false,
+                                      static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+        int routedDesktop = 0;
+        if (const auto desktopRoute = resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop))) {
+            routedDesktop = desktopRoute->params.value(QString(PhosphorRules::ActionParam::TargetDesktop)).toInt(0);
+        }
+        // Sent to a desktop not in view there: its arrival places it.
+        const bool offView = routedDesktop >= 1 && routedDesktop != currentDesktopForScreen(landed);
+        if (!offView && m_routedOpenDispatcher) {
+            PhosphorProtocol::WindowOpenedEntry entry;
+            entry.windowId = windowId;
+            entry.screenId = landed;
+            entry.focusEligible = reason == PhosphorEngine::RestoreReason::Open;
+            m_routedOpenDispatcher(entry);
+        }
+        return true;
+    }
+    // A snapping target: the open float goes with the window, so Meta+F and
+    // the next snap key act on the monitor it is on (F411, F245).
+    const bool snapTarget = snap && snap->isActiveOnScreen(landed);
+    if (snapTarget && snap->isWindowTracked(windowId) && snap->zoneForWindow(windowId).isEmpty()) {
+        snap->migrateWindowToScreen(windowId, landed);
+    }
+    announceOutputMove(windowId, landed, screenId, snapTarget ? snap : nullptr);
+    Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), landed, false,
+                                  static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+    if (snapTarget) {
+        captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
+    }
     return true;
 }
 
@@ -426,7 +479,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
 {
     // Owned by this function, not the caller: a set-only out-param leaves a
     // caller's pre-set value standing on every no-match path, which reads as
-    // "a rule matched" and silently vetoes the reclaim.
+    // "a rule matched" and silently vetoes the reopen claim.
     if (directiveMatched) {
         *directiveMatched = false;
     }
@@ -445,7 +498,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     // RouteToDesktop is engine-neutral — emit it for autotile windows too.
     // Deliberately NOT folded into `directiveMatched`: a desktop route says
     // nothing about which monitor the window belongs on, so it must not veto
-    // the cross-screen reclaim the way a RouteToScreen match does.
+    // the reopen claim the way a RouteToScreen match does.
     emitRouteToDesktopIfMatched(resolved, windowId);
 
     const auto markMatched = [&] {
@@ -456,7 +509,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
 
     // A valid SnapToZone placement directive owns the window's placement even
     // on this channel (the snap facade acts on it) — signal the match so the
-    // caller's reclaim veto sees it, mirroring the snap twin's target check.
+    // caller's reopen-claim veto sees it, mirroring the snap twin's target check.
     // The routed-screen RETURN stays empty: placement is not a tiling
     // redirect.
     if (hasValidPlacementTarget(resolved)) {
@@ -478,7 +531,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     // already-on-target and target-not-connected. The snap twin
     // (applyOpenScreenRouting) folds both into one bool; overloading THIS
     // function's empty return the same way is what let the two channels
-    // apply opposite reclaim precedence.
+    // apply opposite reopen-claim precedence.
     const std::optional<PhosphorRules::RuleAction> route =
         resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
     if (!route) {
@@ -530,7 +583,9 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
         return QString();
     }
     qCInfo(lcDbusWindow) << "applyOpenRoutingForTiling: routing" << windowId << "to engine-managed screen" << target;
-    Q_EMIT windowOutputMoveExpected(windowId, target, screenId);
+    announceOutputMove(windowId, target, screenId,
+                       targetMode == PhosphorZones::AssignmentEntry::Mode::Autotile ? m_autotileEngine.data()
+                                                                                    : m_scrollEngine.data());
     return target;
 }
 

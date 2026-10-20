@@ -10,8 +10,9 @@
 // geometry the shader emits, so this stage MUST multiply by qt_Matrix: it is
 // identity on Y-down backends (Vulkan) and a Y-flip on Y-up-in-NDC backends
 // (OpenGL), keeping the quad upright on both. (qt_Matrix lives in the preview
-// UBO branch of pointer_uniforms.glsl.) The compositor supplies its own
-// vertex stage through GLShader traits and never compiles this file.
+// UBO branch of pointer_uniforms.glsl.) The compositor compiles
+// PointerShaderRegistry::compositorVertexSource() instead and never
+// compiles this file.
 //
 // vTexCoord is the screen UV the fragment contract expects; pointerPixel(uv)
 // turns it into top-down canvas px on either runtime.

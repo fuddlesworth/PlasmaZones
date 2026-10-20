@@ -159,17 +159,16 @@ private Q_SLOTS:
 
     void testPreTileGeometryEntryRoundtrip()
     {
-        // Registered and marshalled like its neighbours but, until this case,
-        // with no signature pinned anywhere — so a field reorder in the struct
-        // would have shipped silently. It shares its shape with
-        // WindowGeometryEntry, which makes a transposition between the two
-        // especially easy to introduce and impossible to see by eye.
+        // Registered and marshalled like its neighbours, its signature pinned so a field reorder cannot ship
+        // silently. It differs from WindowGeometryEntry's (siiiis) only by the trailing windowId, so a
+        // transposition between the two is easy to introduce and hard to see.
         PhosphorProtocol::registerWireTypes();
+        const QString windowId = QStringLiteral("org.kde.konsole|k1");
         PhosphorProtocol::PreTileGeometryEntry entry{
-            QStringLiteral("org.kde.konsole"), 10, 20, 640, 480, QStringLiteral("DP-2")};
+            QStringLiteral("org.kde.konsole"), 10, 20, 640, 480, QStringLiteral("DP-2"), windowId};
 
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiis)"));
+        QCOMPARE(sig, QStringLiteral("(siiiiss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::PreTileGeometryEntry>();
         QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
@@ -180,8 +179,8 @@ private Q_SLOTS:
         QCOMPARE(entry.width, 640);
         QCOMPARE(entry.height, 480);
         QCOMPARE(entry.screenId, QStringLiteral("DP-2"));
-        // The accessor the consumers actually use, so a field swap that kept
-        // the signature valid still fails here.
+        QCOMPARE(entry.windowId, windowId);
+        // The accessor consumers use, so a field swap that keeps the signature still fails here.
         QCOMPARE(entry.toRect(), QRect(10, 20, 640, 480));
 
         PhosphorProtocol::PreTileGeometryEntry defaultEntry;
@@ -191,6 +190,7 @@ private Q_SLOTS:
         QCOMPARE(defaultEntry.width, 0);
         QCOMPARE(defaultEntry.height, 0);
         QVERIFY(defaultEntry.screenId.isEmpty());
+        QVERIFY(defaultEntry.windowId.isEmpty());
     }
 
     // =================================================================

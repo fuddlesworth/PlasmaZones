@@ -27,7 +27,16 @@ of it is wrapped here.
 A compositor plugin links `PhosphorCompositor`, implements
 `ICompositorBridge` (the interface mapping native window handles to the
 daemon's vocabulary), wires handler interfaces for callbacks, and lets
-`DaemonClient` manage all D-Bus communication. The plugin never touches
+`DaemonClient` carry the calls it wraps: bridge registration, the window
+opened, closed and activated notices and the focused window changing
+screen, the drag round trips, the cursor and primary screen notices, the
+floating, snapped, pending-restore and virtual-screen queries, the stale
+window prune, and the geometry, raise, activate, float and snap-assist
+signals it dispatches to the handlers. It is not a complete client: the
+daemon's other calls (window metadata, frame geometry, the `Snap`,
+`Scrolling` and `Control` interfaces among them) are the plugin's own
+D-Bus code. The KWin effect in this repository makes all of its D-Bus
+calls itself and does not use `DaemonClient`. The plugin never touches
 placement logic directly. The daemon decides *where*, and the plugin
 applies *how*.
 

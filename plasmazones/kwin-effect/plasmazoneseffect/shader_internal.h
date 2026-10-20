@@ -24,6 +24,10 @@
 
 class QImage;
 
+namespace PhosphorShaders {
+enum class ShaderStage;
+}
+
 namespace PlasmaZones::ShaderInternal {
 
 /// Save/restore the global GL state the offscreen decoration folds perturb —
@@ -92,17 +96,19 @@ private:
     GLint m_scissorBox[4] = {0, 0, 0, 0};
 };
 
-/// Splice `#define PLASMAZONES_KWIN` (plus the ARB explicit-location
-/// extension enables) after the shader's `#version` directive, selecting the
-/// classic-GL default-block branch of the shared uniform headers that
-/// KWin::GLShader requires. Called from every family's compile path (animation
-/// through pointer; no file count, it drifts) and defined in
-/// shader_transitions.cpp; it has external linkage here rather than an
-/// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
-/// (jumbo) target, where duplicate anonymous-namespace definitions collide.
-/// Full behavioural notes (BOM strip, comment-aware #version scan, missing
-/// #version synthesis) live at the definition.
-QByteArray injectKwinDefineAfterVersion(const QString& source);
+/// The compositor branch of @p source for @p stage: PhosphorShaders::
+/// kwinCompositorSource (the `#define PLASMAZONES_KWIN` block and its
+/// desktop-only extension guard spliced after `#version`, @p extraDefines
+/// beside it, and the stage's varying locations stripped, which a GLSL ES 300
+/// compile rejects on Mesa), plus a journal warning when a missing `#version`
+/// had to be synthesized. Selects the classic-GL default-block branch of the
+/// shared uniform headers that KWin::GLShader requires. Called from every
+/// family's compile path and defined in shader_transitions.cpp; it has external
+/// linkage here rather than an anonymous-namespace copy per TU because the
+/// kwin-effect builds as a Unity (jumbo) target, where duplicate
+/// anonymous-namespace definitions collide.
+QByteArray injectKwinDefineAfterVersion(const QString& source, PhosphorShaders::ShaderStage stage,
+                                        const QString& extraDefines = {});
 
 /// The `pzFinalizeColor` splice that converts a shader's sRGB output into the
 /// render target's colour description on the compositor: KWin's
@@ -126,10 +132,11 @@ const QString& kwinFinalizeColorBlock();
 /// PIXELS for an SVG: every caller here takes the default 1024, while the daemon
 /// reads the pack's own uTexture<N>_svgSize clamped to [64, 2048], so a pack
 /// declaring 2048 rasterises twice as large there. A raster image does resolve
-/// identically. Returns a null QImage on any failure. Three callers: the async pre-warm in
-/// shader_textures.cpp, the animation compile path's synchronous cold-install fallback in shader_transitions.cpp, and
-/// the surface pack compile in surface_compile.cpp. External linkage rather than an anonymous-namespace copy per TU
-/// because the kwin-effect builds as a Unity (jumbo) target. Defined in shader_textures.cpp.
+/// identically. Returns a null QImage on any failure. Every pack texture the compositor loads
+/// goes through it: the animation transition's first-use load in shader_transitions.cpp, and
+/// the surface and pointer pack compiles. External linkage rather than an anonymous-namespace
+/// copy per TU because the kwin-effect builds as a Unity (jumbo) target. Defined in
+/// shader_textures.cpp.
 QImage loadUserTextureImage(const QString& path, int svgMaxDim = 1024);
 
 } // namespace PlasmaZones::ShaderInternal

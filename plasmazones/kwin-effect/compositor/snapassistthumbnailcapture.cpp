@@ -857,9 +857,10 @@ void SnapAssistThumbnailCapture::postThumbnail(const Pending& p, const QImage& i
     // Mark-recently-posted is gated on the daemon's
     // explicit `accepted` reply, NOT just on transport success. The
     // daemon's slot is `bool`-returning and replies @c false on every
-    // silent rejection path (auth failure, oversize-payload cap,
-    // dimension/byte-count mismatch, post-shutdown engine teardown) —
-    // treating those as success would mark the handle in the dedup
+    // silent rejection path (oversize-payload cap, dimension/byte-count
+    // mismatch, post-shutdown engine teardown), and an auth refusal comes
+    // back as an AccessDenied error, which leaves the reply invalid —
+    // treating any of those as success would mark the handle in the dedup
     // window, skip the next capture, and strand snap-assist on icons
     // until the LRU window rolls past.
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,

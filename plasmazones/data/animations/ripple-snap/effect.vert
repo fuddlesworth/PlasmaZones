@@ -52,9 +52,9 @@ void main() {
     float amp = p_amplitude;                  // transverse amplitude (card uv)
     float shadeGain = p_shade;                // crest/trough shade gain
 
-    // Card uv with KWin's window-quad texcoord flip re-applied (see flow).
+    // Card uv normalised to top-down on either KWin offscreen quad.
 #ifdef PLASMAZONES_KWIN
-    vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
+    vec2 cuv = animationScreenUv(texCoord);
 #else
     // The Qt-RHI quad's texCoord is Y-down already — no re-flip.
     // ...and spans the captured canvas: fold the anchor sub-rect so cuv is

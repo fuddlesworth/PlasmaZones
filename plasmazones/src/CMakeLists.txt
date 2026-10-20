@@ -173,6 +173,12 @@ set(plasmazones_core_SRCS
     # snapnavigationtargets moved to phosphor-libs/libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/lifecycle.cpp
+    dbus/windowtrackingadaptor/activation.cpp
+    dbus/windowtrackingadaptor/prune.cpp
+    dbus/windowtrackingadaptor/evacuees.cpp
+    dbus/windowtrackingadaptor/screenleave.cpp
+    dbus/windowtrackingadaptor/evacueeledger.h
+    dbus/windowtrackingadaptor/lifecyclerelay.h
     dbus/windowtrackingadaptor/queries.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
     dbus/windowtrackingadaptor/rules.cpp
@@ -213,6 +219,7 @@ set(plasmazones_core_SRCS
     dbus/tilingadaptor/desktopreconcile.cpp
     dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
+    dbus/snapadaptor/busgate.cpp
     dbus/snapadaptor/commit.cpp
     dbus/snapadaptor/snaprestore.cpp
     dbus/snapadaptor/navigation.cpp
@@ -541,6 +548,8 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/shortcutmanager_catalog.cpp
     daemon/controllers/shortcutmanager_ids.h
     daemon/daemon/start.cpp
+    daemon/daemon/desktop_renumber.cpp
+    daemon/daemon/evacuees.cpp
     daemon/daemon/shortcuts_wiring.cpp
     daemon/daemon/autotile_init.cpp
     daemon/daemon/scrolling_init.cpp
@@ -554,12 +563,16 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/init_assignment_apply.cpp
     daemon/daemon/init_dbus_service.cpp
     daemon/daemon/lifecycle.cpp
+    daemon/daemon/bridge_watchdog.cpp
+    daemon/daemon/plasma_workspace.cpp
     daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
     daemon/daemon/engine_release.cpp
     daemon/daemon/seedorderfilter.cpp
     daemon/daemon/seedorderfilter.h
+    daemon/daemon/enginerouting.cpp
+    daemon/daemon/enginerouting.h
     daemon/daemon/osd.cpp
     daemon/daemon/cheatsheet.cpp
     daemon/daemon/stripzones.h
@@ -956,6 +969,7 @@ add_executable(plasmazones-shader-validate
     shadervalidate/packvalidator_surface_buffer_lints.cpp
     shadervalidate/packvalidator_pointer.cpp
     shadervalidate/packvalidatorcommon.cpp
+    shadervalidate/packvalidator_compositor.cpp
 )
 target_link_libraries(plasmazones-shader-validate
     PRIVATE
@@ -987,10 +1001,12 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 # every pointer pack's stages, are compiled for the compositor's classic-GL
 # branch (default-block uniforms, which QShaderBaker's SPIR-V target rejects by
 # design), so they go out of process through glslang's default GLSL-semantics
-# mode. Those three invocations FAIL rather than skip when the binary is
-# absent: the compositor branch is compiled nowhere else in a headless run (the
-# GPU bake test QSKIPs without a desktop GL 4.5 context), so a silent skip would
-# put the gate back to lints-only. The overlay invocation bakes through
+# mode. Each is compiled in both dialects KWin compiles it in, desktop GLSL 140
+# and GLSL ES 300, and each fragment is linked against the vertex stage the
+# compositor pairs it with. Those three invocations FAIL rather than skip when
+# the binary is absent: the compositor branch is compiled nowhere else in a
+# headless run (the GPU bake test QSKIPs without a desktop GL 4.5 context), so a
+# silent skip would put the gate back to lints-only. The overlay invocation bakes through
 # QShaderBaker alone and needs no such tool.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled

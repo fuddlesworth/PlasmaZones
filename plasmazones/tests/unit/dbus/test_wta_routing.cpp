@@ -339,83 +339,67 @@ private Q_SLOTS:
         QCOMPARE(drive(RestoreReason::DesktopArrival), 0);
     }
 
-    // A tiling claim that DECLINES leaves the window to the snap engine's
-    // float default, and two things have to survive that round trip: the
-    // record's reclaim credit (so a later desktop arrival can still claim
-    // it) and the lineage snapshot the free-size restore gates on.
-    //
-    // The snapshot is the subtle one. A claim that got as far as takeForReopen
-    // re-binds the consumed record under the OPENING window's uuid with the
-    // claiming engine's slot, and a claim that then declines on its membership
-    // check leaves that record standing. Recomputing the snapshot inside the
-    // float default would read "already placed" for a window no engine ever
-    // placed, and silently skip the resize (#1106). The hook below reproduces
-    // exactly that store mutation.
-    void testDeclinedTilingReclaim_keepsCreditAndStillRestoresTheFreeSize()
+    // The reopen contract on the snap channel: a record that tiles the app on
+    // ANOTHER output is not a reason to move the opening window, nor to hand
+    // it to that output's tiling engine. The window opens on its own snap
+    // screen, falls to the snap float default there, and still inherits the
+    // free size of a closed sibling recorded on that screen (#1106). Every
+    // record in the bucket is left as it was.
+    void testRecordTiledOnAnotherOutput_doesNotMoveTheOpeningWindow()
     {
         using PhosphorEngine::WindowPlacement;
-        const QString appId = QStringLiteral("reclaimapp");
-        const QString opener = QStringLiteral("reclaimapp|second");
+        const QString appId = QStringLiteral("reopenapp");
+        const QString opener = QStringLiteral("reopenapp|second");
 
         auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
         m_wta->setWindowRegistry(registry);
         m_wta->setWindowMetadata(QStringLiteral("second"), appId, QString(), QString(), QString(), 0, 0, QString(), 0,
                                  QVariantMap());
+        int routedOpens = 0;
+        m_wta->setRoutedOpenDispatcher([&routedOpens](const PhosphorProtocol::WindowOpenedEntry&) {
+            ++routedOpens;
+        });
         const auto teardown = qScopeGuard([this] {
+            m_wta->setRoutedOpenDispatcher({});
             m_wta->setWindowRegistry(nullptr);
-            m_snapAdaptor->setCrossScreenTileReclaim({});
         });
 
-        // DP-2 runs autotile, so a record tiled there is a cross-screen
-        // tiling record and the snap engine defers rather than placing.
         PhosphorZones::AssignmentEntry autotile;
         autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
         autotile.tilingAlgorithm = QStringLiteral("dwindle");
         m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
 
         PhosphorEngine::WindowPlacementStore& store = m_wta->service()->placementStore();
-        // The record that earns the defer: tiled on the autotile screen.
         WindowPlacement tiledElsewhere;
-        tiledElsewhere.windowId = QStringLiteral("reclaimapp|old");
+        tiledElsewhere.windowId = QStringLiteral("reopenapp|old");
         tiledElsewhere.appId = appId;
         tiledElsewhere.screenId = QStringLiteral("DP-2");
         PhosphorEngine::EngineSlot tiledSlot;
         tiledSlot.state = QString(WindowPlacement::stateTiled());
         tiledElsewhere.engines.insert(QString(WindowPlacement::autotileEngineId()), tiledSlot);
         QVERIFY(store.record(tiledElsewhere));
-        // A closed sibling carrying the free size the opener should inherit.
         const QRect siblingFree(80, 60, 910, 620);
         WindowPlacement closedSibling;
-        closedSibling.windowId = QStringLiteral("reclaimapp|closed");
+        closedSibling.windowId = QStringLiteral("reopenapp|closed");
         closedSibling.appId = appId;
         closedSibling.screenId = m_screenId;
         closedSibling.freeGeometryByScreen.insert(m_screenId, siblingFree);
         QVERIFY(store.record(closedSibling));
-
-        // The claim: consumes and re-binds under the opener's uuid, exactly
-        // as takeForReopen does, then declines.
-        bool hookRan = false;
-        bool reBindLanded = false;
-        m_snapAdaptor->setCrossScreenTileReclaim([&](const QString& windowId, const QString&, int, int) {
-            hookRan = true;
-            WindowPlacement reBound;
-            reBound.windowId = windowId;
-            reBound.appId = appId;
-            reBound.screenId = m_screenId;
-            PhosphorEngine::EngineSlot slot;
-            slot.state = QString(WindowPlacement::stateTiled());
-            reBound.engines.insert(QString(WindowPlacement::autotileEngineId()), slot);
-            reBound.freeGeometryByScreen.clear();
-            // Captured, not swallowed by a `&& false`: if record() ever
-            // refused this shape the opener would have no slot-bearing
-            // record, placedBefore would read false either way, and the test
-            // would pass while covering nothing.
-            reBindLanded = store.record(reBound);
-            return false;
-        });
+        WindowPlacement snappedElsewhere;
+        snappedElsewhere.windowId = QStringLiteral("reopenapp|snapped");
+        snappedElsewhere.appId = appId;
+        snappedElsewhere.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot snapSlot;
+        snapSlot.state = QString(WindowPlacement::stateSnapped());
+        snapSlot.zoneIds = {m_zoneIds[0]};
+        snappedElsewhere.engines.insert(QString(WindowPlacement::snapEngineId()), snapSlot);
+        QVERIFY(store.record(snappedElsewhere));
+        const WindowPlacement tiledBefore = *store.peekExact(tiledElsewhere.windowId);
+        const WindowPlacement snappedBefore = *store.peekExact(snappedElsewhere.windowId);
 
         QSignalSpy sizeSpy(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
-        QSignalSpy floatSpy(m_snapEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        QSignalSpy geomSpy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        QSignalSpy outputMoveSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
         int x = 0;
         int y = 0;
         int w = 0;
@@ -425,29 +409,25 @@ private Q_SLOTS:
             opener, m_screenId, false, static_cast<int>(PhosphorEngine::WindowKind::Unknown),
             static_cast<int>(PhosphorEngine::RestoreReason::Open), 0, 0, x, y, w, h, shouldSnap);
 
-        QVERIFY2(hookRan, "the cross-screen tiling reclaim must be offered for a deferred open");
-        QVERIFY2(reBindLanded, "the claim's re-bind must land, or this test covers nothing about the snapshot");
         QVERIFY(!shouldSnap);
-        QVERIFY2(m_snapEngine->isFloating(opener), "a declined claim falls back to the snap float default");
-        QCOMPARE(floatSpy.count(), 1);
+        QVERIFY2(m_snapEngine->isFloating(opener), "the opening screen's snap float default places the window");
         QCOMPARE(sizeSpy.count(), 1);
         const QList<QVariant> args = sizeSpy.takeFirst();
         QCOMPARE(args.at(0).toString(), opener);
         QCOMPARE(args.at(1).toSize(), siblingFree.size());
-
-        // And no record in the bucket lost its credit, so the desktop-arrival
-        // continuation can still reclaim. BOTH are asserted: burnReclaimCredit
-        // retires the HIGHEST-sequence eligible record, which is the sibling
-        // recorded second, so checking only the deferred one would pass even
-        // with the credit guard deleted.
-        const auto keptDeferred = store.peekExact(QStringLiteral("reclaimapp|old"));
-        QVERIFY(keptDeferred);
-        QVERIFY2(keptDeferred->reclaimEligible, "a declined claim must not spend the open's reclaim credit");
-        const auto keptSibling = store.peekExact(QStringLiteral("reclaimapp|closed"));
-        QVERIFY(keptSibling);
-        QVERIFY2(keptSibling->reclaimEligible, "nor the credit of the newest record in the same bucket");
+        for (const QList<QVariant>& call : std::as_const(geomSpy)) {
+            QVERIFY2(call.at(6).toString() != QStringLiteral("DP-2"),
+                     "the window must not be sent to the other output");
+        }
+        QCOMPARE(outputMoveSpy.count(), 0);
+        QCOMPARE(routedOpens, 0);
+        const auto tiledAfter = store.peekExact(tiledElsewhere.windowId);
+        const auto snappedAfter = store.peekExact(snappedElsewhere.windowId);
+        QVERIFY(tiledAfter.has_value());
+        QVERIFY(snappedAfter.has_value());
+        QVERIFY2(tiledAfter->sameContentAs(tiledBefore), "the tiled record is left as it was");
+        QVERIFY2(snappedAfter->sameContentAs(snappedBefore), "the snapped record is left as it was");
     }
-
     void testEmitRouteToDesktop_matchedButUnusableTargetStillReportsAMatch()
     {
         // A matched RouteToDesktop owns this window's desktop whether or not its
@@ -501,8 +481,8 @@ private Q_SLOTS:
     }
 
     // The wire clamp, asserted directly. Its consumers are the reason gates in
-    // SnapAdaptor::resolveWindowRestore (the cross-screen reclaim and the
-    // per-open credit burn), so a garbled value reading as anything but Open
+    // SnapAdaptor::resolveWindowRestore (sibling borrowing and placement
+    // rules), so a garbled value reading as anything but Open
     // would silently skip a genuine restore. Every named reason must survive the
     // round trip, and everything else must land on Open rather than on whichever
     // enumerator happens to sit at that ordinal.
@@ -519,6 +499,7 @@ private Q_SLOTS:
                  RestoreReason::DesktopArrival);
         QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(static_cast<int>(RestoreReason::DaemonRestartSweep)),
                  RestoreReason::DaemonRestartSweep);
+        QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(5), RestoreReason::DesktopReapply);
 
         QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(9999), RestoreReason::Open);
         QCOMPARE(PhosphorEngine::clampRestoreReasonFromWire(-1), RestoreReason::Open);
@@ -680,7 +661,8 @@ private Q_SLOTS:
     // signal, and it must reach the two open-path pending maps as well: their
     // normal clears are the next frame report and windowClosed, neither of
     // which arrives for such a window. Driven through the observable the maps
-    // feed, the open route's size translation.
+    // feed, the open route's size translation. The last leg pins the first of
+    // those normal clears: a frame report supersedes a pending rect (F853).
     void testPruneStaleWindows_dropsThePendingOpenMaps()
     {
         PhosphorScreens::FakePhysicalScreenSource fake;
@@ -751,6 +733,15 @@ private Q_SLOTS:
         QVERIFY(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")));
         QVERIFY(after.count() >= 1);
         QCOMPARE(QSize(after.last().at(3).toInt(), after.last().at(4).toInt()), QSize(960, 1040));
+
+        // The open path asks for a float position, then the effect reports
+        // where the window is: the route translates the reported frame.
+        Q_EMIT snap->geometryRestoreRequested(w, QRect(100, 100, 880, 640), QStringLiteral("DP-1"));
+        wta->setFrameGeometry(w, 200, 150, 700, 500);
+        QSignalSpy reported(wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        QVERIFY(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")));
+        QVERIFY(reported.count() >= 1);
+        QCOMPARE(QSize(reported.last().at(3).toInt(), reported.last().at(4).toInt()), QSize(700, 500));
     }
 
     // A rule carrying BOTH SnapToZone and RouteToScreen is still moved by
@@ -825,11 +816,12 @@ private Q_SLOTS:
     }
 
     // The bool verdict of applyOpenScreenRouting and the directiveMatched
-    // out-param of applyOpenRoutingForTiling gate the cross-screen reclaim
-    // on their respective channels. Both must report "a directive matched"
-    // for the cases where a rule OWNS the window's monitor but no move is
-    // needed or possible — reading those as "no rule" is what let the two
-    // channels apply opposite precedence to the same rule.
+    // out-param of applyOpenRoutingForTiling both report "a directive
+    // matched" for the cases where a rule OWNS the window's monitor but no
+    // move is needed or possible. The tiling channel's answer vetoes its
+    // reopen claim (dispatchOpenToClaimingEngine); the snap channel's bool
+    // gates no claim and is pinned so the two channels keep one reading of
+    // the same rule.
     void testRoutingVerdicts_matchedButNoMove_reportMatchedOnBothChannels()
     {
         PhosphorScreens::FakePhysicalScreenSource fake;
@@ -877,9 +869,9 @@ private Q_SLOTS:
         bool matched = false;
         const QString routed = wta->applyOpenRoutingForTiling(w, QStringLiteral("DP-1"), &matched);
         QVERIFY2(routed.isEmpty(), "already on target: no redirect");
-        QVERIFY2(matched, "…but the directive matched, so the reclaim must be vetoed on this channel too");
+        QVERIFY2(matched, "…but the directive matched, so the tiling channel's claim is vetoed");
 
-        // NO RULE AT ALL: both channels report unmatched, so the reclaim runs.
+        // NO RULE AT ALL: both channels report unmatched, so the tiling claim runs.
         wta->setWindowMetadata(QStringLiteral("inst4"), QStringLiteral("otherapp"), QString(), QString(), QString(), 0,
                                0, QString(), 0, QVariantMap());
         const QString other = QStringLiteral("otherapp|inst4");
@@ -1047,6 +1039,9 @@ private Q_SLOTS:
         QVERIFY2(m_snapEngine->isWindowTracked(w), "a refused crossing must re-home the window into the source");
         QCOMPARE(m_snapEngine->screenForTrackedWindow(w), m_screenId);
         QVERIFY2(markerSpy.isEmpty(), "no output-move marker may be armed for a refused crossing");
+        // Nothing left the source monitor, so the screen-leave release never
+        // ran: the re-homed window keeps its zone there.
+        QCOMPARE(m_snapEngine->zoneForWindow(w), m_zoneIds[0]);
 
         m_wta->setEngines(m_snapEngine, nullptr, nullptr);
     }

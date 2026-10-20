@@ -276,8 +276,9 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     }
     // If the target desktop on this screen is a DIFFERENT mode (snapping or
     // scrolling), autotile has no state there — defer to the daemon cross-mode
-    // handoff, which snaps the window into the equivalent zone on a snap desktop
-    // or inserts it into the strip on a scrolling one. The daemon slot is a
+    // handoff, which places it in the entry zone of a snap desktop's layout, or
+    // moves it to a scrolling desktop whose engine places it once that desktop
+    // is shown. The daemon slot is a
     // direct (synchronous) connection.
     //
     // The question is "is the target NOT autotile", not "is it snapping": a

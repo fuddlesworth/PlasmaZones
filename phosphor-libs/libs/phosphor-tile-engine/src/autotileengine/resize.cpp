@@ -322,13 +322,13 @@ void AutotileEngine::onScreenGeometryChanged(const QString& screenId)
         << "onScreenGeometryChanged:" << screenId << "geometry=" << screenGeometry(screenId);
 
     // Min-sizes are NOT cleared here. Stored min-sizes represent the window's
-    // actual compositor-declared minimum (from windowOpened or the centering
-    // code's reportDiscoveredMinSize), not stale zone widths. Clearing them
+    // actual compositor-declared minimum (from windowOpened or the effect's
+    // reportMinSizeIfChanged), not stale zone widths. Clearing them
     // forces a retile with zero constraints, which produces zones that oversized
     // windows can't fill — the centering code then pushes them off-screen.
     // The old feedback loop (zone width → stored min → expanded zone) was
-    // eliminated by removing the targetZone.width() fallback in
-    // reportDiscoveredMinSize (commit c1d0ea16). Without that feedback loop,
+    // eliminated by removing the targetZone.width() fallback from the
+    // centring pass's report (commit c1d0ea16). Without that feedback loop,
     // indiscriminate clearing does more harm than good.
 
     retileAfterOperation(screenId, true);

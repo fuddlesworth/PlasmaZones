@@ -39,11 +39,11 @@ uniform mat4 modelViewProjectionMatrix;
 
 void main() {
     // texCoord -> Y-down screen UV. The daemon's Qt-RHI quad delivers
-    // it Y-down already; KWin's offscreen FBO is Y-up, so flip on that
-    // path. Mirrors `kKwinDefaultVertexSource` and the canonical
+    // it Y-down already; KWin's offscreen quad orientation depends on its
+    // version. Mirrors `AnimationShaderRegistry::compositorVertexSource()` and the
     // header's vertex-stage contract.
 #ifdef PLASMAZONES_KWIN
-    vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
+    vTexCoord = animationScreenUv(texCoord);
     gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);
 #else
     vTexCoord = texCoord;

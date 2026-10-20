@@ -64,7 +64,8 @@ vec4 oldColor(vec2 uv) {
     }
     vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
 #ifdef PLASMAZONES_KWIN
-    // KWin's snapshot FBO is bottom-origin (Y-up) — flip, like surfaceColor.
+    // This compositor-created snapshot FBO is bottom-origin (Y-up) on both
+    // KWin versions, unlike the 6.8 redirected live texture.
     return texture(uOldWindow, vec2(t.x, 1.0 - t.y)) * iOldWindowOpacity;
 #else
     // A Qt-RHI uploaded snapshot is top-origin (Y-down) — no flip.

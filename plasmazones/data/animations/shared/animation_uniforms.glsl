@@ -30,28 +30,25 @@
 // the TOP of the surface — on BOTH runtimes, so effect-space math may
 // use it directly. The vertex stage is what guarantees that: the
 // daemon's Qt-RHI quad emits texCoord Y-down already and passes it
-// through (`vTexCoord = texCoord`); the kwin path receives texCoord
-// from KWin's Y-up offscreen FBO and flips it
-// (`vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y)`). `gl_Position`
+// through (`vTexCoord = texCoord`); KWin 6.7 supplies bottom-up texcoords
+// and KWin 6.8 supplies top-down texcoords. `animationScreenUv()` normalises
+// either input. `gl_Position`
 // also differs only in WHICH matrix: the kwin path multiplies `position` by
 // `modelViewProjectionMatrix`, the daemon by `qt_Matrix`. Neither emits
 // clip-space directly.
-// See `kKwinDefaultVertexSource` in
-// `kwin-effect/plasmazoneseffect/shader_textures.cpp` and
+// See `AnimationShaderRegistry::compositorVertexSource()` and
 // `kDefaultVertexShaderSource` in
-// `libs/phosphor-rendering/src/shadereffect.cpp`. The desktop-switch pass
-// is a THIRD source of the same invariant: `TransitionPass::kOutputQuadVertexSource`
-// (`kwin-effect/transitions/transitionpasspure.h`) passes texCoord
+// `libs/phosphor-rendering/src/shadereffect.cpp`. The screen-level passes
+// hold the same invariant another way:
+// `AnimationShaderRegistry::compositorScreenVertexSource()` passes texCoord
 // through unflipped and gets Y-down from the blend quad's own vertex
 // texcoords instead.
 //
-// Surface texture: the redirected surface is stored in a Y-up texture
-// on the kwin path (KWin's bottom-origin FBO) and a Y-down texture on
-// the daemon, so — unlike `vTexCoord` — it does NOT share one
-// convention. Never sample `uTexture0` directly; call
-// `surfaceColor(uv)` (defined at the end of this header). It flips on
-// the kwin path so one shader source reads the surface upright on
-// both runtimes.
+// Surface texture: KWin 6.8's offscreen texture uses top-down sample
+// coordinates, while 6.7's uses bottom-up coordinates. The daemon's
+// Qt-RHI texture is top-down. Never sample `uTexture0` directly; call
+// `surfaceColor(uv)` (defined at the end of this header) to map a
+// top-down effect-space UV to the redirected surface on each runtime.
 //
 // Layout-drift guard: the offsets in the UBO branch MUST stay aligned
 // with `PhosphorShaders::BaseUniforms`. The C++ side enforces that via
@@ -68,6 +65,22 @@
 
 #ifndef PLASMAZONES_ANIMATION_UNIFORMS_GLSL
 #define PLASMAZONES_ANIMATION_UNIFORMS_GLSL
+
+#ifdef GL_ES
+// KWin can compile the vertex and fragment stages with different default int
+// precision. Shared uniforms must have the same precision to link on GLES.
+precision highp int;
+#endif
+
+// KWin 6.8 supplies top-down offscreen-quad texcoords. Earlier KWin versions
+// supply bottom-up texcoords. Keep effect-space coordinates top-down on both.
+vec2 animationScreenUv(vec2 uv) {
+#if defined(PLASMAZONES_KWIN) && !defined(PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN)
+    return vec2(uv.x, 1.0 - uv.y);
+#else
+    return uv;
+#endif
+}
 
 #ifdef PLASMAZONES_KWIN
 
@@ -260,8 +273,9 @@ uniform sampler2D uTexture3;
 // composited, so an animation runs OVER the layered surface and the border
 // does not disappear when the animation shader takes the draw slot. The
 // kwin-effect renders it (PlasmaZonesEffect::renderSurfaceChain) and binds it
-// to a dedicated unit; it shares uTexture0's bottom-origin layout, so the same
-// Y-flip applies when sampling. Default unit / `iHasSurfaceLayer == 0` leaves
+// to a dedicated unit. Unlike KWin 6.8's redirected texture, this compositor-
+// created FBO is bottom-origin and still needs a Y-flip when sampled.
+// Default unit / `iHasSurfaceLayer == 0` leaves
 // the unlayered path untouched.
 uniform sampler2D uSurfaceLayer;
 uniform int iHasSurfaceLayer;
@@ -504,13 +518,12 @@ layout(binding = 14) uniform sampler2D uTexture3;
 // directly. `uv` is a Y-down screen UV — pass `vTexCoord` (or any
 // coordinate derived from it) straight in.
 //
-// The surface texture's storage orientation is the one thing the two
-// runtimes genuinely disagree on: KWin's offscreen FBO is bottom-origin
-// (Y-up), the daemon's Qt-RHI texture is top-origin (Y-down). This
-// helper flips the sample coordinate on the kwin path so the returned
-// texel is upright on both runtimes — keeping effect-space math, which
-// uses the Y-down `vTexCoord` directly, decoupled from the surface
-// texture's physical layout.
+// The surface texture's sampler orientation depends on the runtime:
+// KWin 6.7 samples its offscreen FBO bottom-up, while KWin 6.8 and the
+// daemon sample it top-down. This
+// helper maps the sample coordinate so the returned texel is upright
+// on both runtimes — keeping effect-space math, which uses the Y-down
+// `vTexCoord` directly, decoupled from the surface texture's layout.
 //
 // Both runtimes capture more than the bare card into `uTexture0`: KWin
 // redirects the EXPANDED window geometry (frame + decoration + shadow);
@@ -524,9 +537,8 @@ layout(binding = 14) uniform sampler2D uTexture3;
 vec4 surfaceColor(vec2 uv) {
     vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
 #ifdef PLASMAZONES_KWIN
-    // KWin's FBO is bottom-origin (Y-up) — flip last. Then scale by the
-    // window's resolved opacity: uTexture0 is premultiplied, so multiplying the
-    // whole sample by the [0, 1] `iWindowOpacity` is the correct
+    // Scale by the window's resolved opacity: uTexture0 is premultiplied,
+    // so multiplying the whole sample by the [0, 1] `iWindowOpacity` is the correct
     // premultiplied-alpha dim. This is what makes a dim hold throughout a
     // transition (with no `Modulate` trait the shader can't see
     // `data.opacity()`). Every window-content shader reads the
@@ -537,12 +549,19 @@ vec4 surfaceColor(vec2 uv) {
     // The uniform is 1.0 in every case but one, so the multiply is a no-op
     // almost always — see its declaration for which case, and for why a window
     // that HAS a live SetOpacity rule is usually one of the 1.0 ones.
+    // KWin 6.8's offscreen texture matrix already maps the top-down quad
+    // into its sampler coordinates. Flipping again turns dialog content upside
+    // down during its open/close animation. KWin 6.7 still needs the flip.
+#ifdef PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN
+    vec2 fc = t;
+#else
     vec2 fc = vec2(t.x, 1.0 - t.y);
+#endif
     // Surface-layer redirect: when the window has an active surface-layer stack
     // (border / rounded corners, ...), sample the pre-composited layered surface
-    // so the animation runs over it. `uSurfaceLayer` shares uTexture0's
-    // bottom-origin layout and premultiplied alpha, so the flip + opacity dim
-    // are identical. Falls back to the live redirected surface when the window
+    // so the animation runs over it. `uSurfaceLayer` is our own bottom-origin
+    // FBO on both KWin versions, so it still needs the flip. Its premultiplied
+    // alpha gets the same opacity dim. Falls back to the live surface when the window
     // has no layers (`iHasSurfaceLayer == 0`).
     if (iHasSurfaceLayer != 0) {
         // The layer canvas may be PADDED past uTexture0's extent (the

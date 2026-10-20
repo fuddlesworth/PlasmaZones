@@ -127,7 +127,7 @@ public:
     ///   • PACK SWAP (different @p effectId): the sampler resets too — pack
     ///     B must not begin at pack A's accumulated clock and frame count.
     ///   • AXIS FLIP (@p axis differs from the animator's current axis for
-    ///     this output): same arm as a pack swap. The spring may well be live
+    ///     @p strip): same arm as a pack swap. The spring may well be live
     ///     at call time, but applyBatchDelta is about to CANCEL it rather than
     ///     retarget it (an in-flight motion along the old axis has no velocity
     ///     worth keeping), so treating this as a retarget would compensate the
@@ -137,10 +137,12 @@ public:
     ///     above: running BEFORE applyBatchDelta is what leaves
     ///     StripViewAnimator::axisFor() still reporting the PRE-batch axis.
     ///
-    /// @p axis is the batch's strip axis for this output, the same value the
-    /// caller passes to applyBatchDelta.
-    void notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params, int viewDelta,
-                   PhosphorProtocol::ScrollAxis axis);
+    /// @p axis is the batch's axis for @p strip, the same value the
+    /// caller passes to applyBatchDelta. @p strip is the strip key the leg
+    /// belongs to: the pass decorates the whole output, so only a strip that
+    /// is the whole output arms one, and a leg for another strip is fresh.
+    void notifyLeg(KWin::LogicalOutput* output, const QString& strip, const QString& effectId,
+                   const QVariantMap& params, int viewDelta, PhosphorProtocol::ScrollAxis axis);
 
     /// True while any armed output's view spring is live OR its settle fade
     /// is open. Feeds PlasmaZonesEffect::isActive() and
@@ -235,6 +237,9 @@ public:
     /// screenRemoved handler beside StripViewAnimator::forgetOutput — a
     /// disconnected LogicalOutput* left in m_active would dangle.
     void outputRemoved(KWin::LogicalOutput* screen);
+    /// Drop the pass armed for @p strip (if any): its strip changed or left
+    /// scrolling.
+    void stripRemoved(const QString& strip);
 
     /// Drop all state and release GL resources (effect teardown / compositor
     /// reset).
@@ -244,6 +249,8 @@ private:
     struct OutputStripPass
     {
         QString effectId;
+        // The strip key the pass was armed for, whose spring it reads.
+        QString strip;
         // Resolved p_<name> values packed into the customParams[] /
         // customColors[] slot pools (metadata defaults merged with the
         // profile's overrides) — same translation as the desktop pass.

@@ -219,6 +219,33 @@ public:
     static bool isBuiltinBufferShader(const QString& token);
     static QString resolveBuiltinBufferShader(const QString& token, const QString& effectDir);
 
+    /// The vertex stage the COMPOSITOR compiles for every surface pack that
+    /// declares none of its own (the bundled border ships none). Positions in
+    /// screen-pixel space projected by KWin's `modelViewProjectionMatrix`, and
+    /// a passthrough texcoord with NO Y-flip, because the fragment reconstructs
+    /// the top-down device pixel itself for its rounded-rect SDF. Attribute
+    /// slots match KWin::VA_Position (0) / VA_TexCoord (1).
+    ///
+    /// The compositor's vertex stages live here rather than in the effect so the offline
+    /// validator links every pack against the exact stage the compositor
+    /// uses, which is how a varying a fragment reads but no stage writes gets
+    /// caught.
+    [[nodiscard]] static QString compositorVertexSource();
+
+    /// The vertex stage of every surface BUFFER pass on the compositor: a unit
+    /// quad already in clip space (no matrix), since a buffer pass is an
+    /// FBO-to-FBO blit with no window quad to project. A pack's declared
+    /// vertex stage is deliberately not used for buffer passes there, so a
+    /// buffer fragment may read no varying beyond `vTexCoord`.
+    [[nodiscard]] static QString compositorBufferVertexSource();
+
+    /// The vertex stage of the decoration PRESENT shader, the passthrough that
+    /// samples a decorated window's pre-composited final FBO. That FBO has
+    /// GL's bottom-left origin, so where KWin supplies top-down texcoords
+    /// (`PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN`, KWin 6.8) the stage flips them
+    /// back, and passes them through on earlier versions.
+    [[nodiscard]] static QString compositorPresentVertexSource();
+
 Q_SIGNALS:
     void effectsChanged();
 

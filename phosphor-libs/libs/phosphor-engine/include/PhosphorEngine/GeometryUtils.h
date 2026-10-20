@@ -7,6 +7,7 @@
 #include <PhosphorGeometry/GeometryUtils.h>
 #include <phosphorengine_export.h>
 
+#include <QRect>
 #include <QString>
 #include <QVector>
 
@@ -25,7 +26,9 @@ PHOSPHORENGINE_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignm
 /// Parse the wire format serializeZoneAssignments produces back into entries —
 /// the two functions are the single serializer/deserializer pair for the batch
 /// resnap payload, sharing the same JsonKeys constants so the sides cannot
-/// drift. Entries missing a windowId or targetZoneId are dropped; a missing
+/// drift. Entries missing a windowId or targetZoneId are dropped, and so is one
+/// whose TargetZoneIds span holds an empty member or does not start with its
+/// targetZoneId; a missing
 /// VirtualDesktop key (or a negative wire value) yields 0, the current-desktop
 /// default. On malformed JSON returns an empty vector and, when @p errorString
 /// is non-null, stores a human-readable parse diagnostic there (empty on
@@ -33,6 +36,11 @@ PHOSPHORENGINE_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignm
 /// batch).
 PHOSPHORENGINE_EXPORT QVector<ZoneAssignmentEntry> deserializeZoneAssignments(const QString& json,
                                                                               QString* errorString = nullptr);
+
+/// @p rect carried from @p fromArea onto @p toArea: its position kept relative
+/// to the area, its size shrunk only where @p toArea is smaller, then clamped
+/// so the whole rect fits. An invalid @p fromArea starts at @p toArea's top-left.
+PHOSPHORENGINE_EXPORT QRect carryRectOntoArea(const QRect& rect, const QRect& fromArea, const QRect& toArea);
 
 } // namespace GeometryUtils
 } // namespace PhosphorEngine

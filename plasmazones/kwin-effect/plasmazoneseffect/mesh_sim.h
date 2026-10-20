@@ -73,6 +73,12 @@ namespace ShaderInternal {
 /// constrain the node nearest @p cursor as the grip. Call once at grab.
 void initMeshSim(MeshSim& sim, const QRectF& frame, const QPointF& cursor, const MeshSimParams& params);
 
+/// Re-grab a lattice that is still ringing out: keep every node's position,
+/// velocity and acceleration, and move only the grip to the node nearest
+/// @p cursor (KWin's wobbly re-grab keeps the deformation the same way).
+/// Seeding it flat instead jumped the deformed sheet to a flat rect.
+void regripMeshSim(MeshSim& sim, const QRectF& frame, const QPointF& cursor, const MeshSimParams& params);
+
 /// Advance the simulation by @p deltaMs of wall time (stepped internally in
 /// <=10 ms increments), with the node origins re-derived from @p frame each
 /// step so the constrained/pinned nodes chase the live window. Updates

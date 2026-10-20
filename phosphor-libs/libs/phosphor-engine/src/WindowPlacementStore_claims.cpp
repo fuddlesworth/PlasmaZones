@@ -53,6 +53,12 @@ void WindowPlacementStore::dropClaimsNaming(const QString& recordWindowId)
     m_claimedBy.remove(recordWindowId);
 }
 
+void WindowPlacementStore::forgetRemovedRecord(const QString& recordWindowId)
+{
+    dropClaimsNaming(recordWindowId);
+    m_touchedThisSession.remove(recordWindowId);
+}
+
 bool WindowPlacementStore::boundToLiveOther(const QString& askingWindowId, const WindowPlacement& p) const
 {
     return m_liveInstanceProbe && m_liveInstanceProbe(p.windowId) && !sameWindowInstance(p.windowId, askingWindowId);
@@ -72,7 +78,37 @@ void WindowPlacementStore::releaseOpenClaim(const QString& windowId)
     m_openPairing.remove(instance);
 }
 
+int WindowPlacementStore::releaseOpenClaimsExcept(const QSet<QString>& aliveInstanceIds)
+{
+    int released = 0;
+    for (auto it = m_openPairing.begin(); it != m_openPairing.end();) {
+        if (aliveInstanceIds.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        m_claimedBy.remove(it.value());
+        it = m_openPairing.erase(it);
+        ++released;
+    }
+    return released;
+}
+
 std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString& windowId, const QString& appId)
+{
+    return claimForOpenImpl(windowId, appId, /*ownRecordFinal=*/false, QString(), {});
+}
+
+std::optional<WindowPlacement>
+WindowPlacementStore::claimForOpen(const QString& windowId, const QString& appId, const QString& openingScreenId,
+                                   const std::function<bool(const WindowPlacement&)>& restorableHere)
+{
+    return claimForOpenImpl(windowId, appId, /*ownRecordFinal=*/true, openingScreenId, restorableHere);
+}
+
+std::optional<WindowPlacement>
+WindowPlacementStore::claimForOpenImpl(const QString& windowId, const QString& appId, bool ownRecordFinal,
+                                       const QString& openingScreenId,
+                                       const std::function<bool(const WindowPlacement&)>& restorableHere)
 {
     if (windowId.isEmpty()) {
         return std::nullopt;
@@ -103,9 +139,15 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
     //    every sibling record through pairingAllows, so a reopen on a
     //    tiling screen, where the stub always precedes the announce,
     //    restored nothing from a closed sibling.
+    //    Under the reopen contract (ownRecordFinal) a captured own record is
+    //    the answer even when it holds nothing restorable: its slots are the
+    //    window's own verdict, and a sibling's record must not stand in.
     for (auto b = m_byApp.constBegin(); b != m_byApp.constEnd(); ++b) {
         for (const WindowPlacement& p : b.value()) {
-            if (sameWindowInstance(p.windowId, windowId) && !p.engines.isEmpty() && p.hasRestorableContent()) {
+            if (!sameWindowInstance(p.windowId, windowId) || p.engines.isEmpty()) {
+                continue;
+            }
+            if (p.hasRestorableContent()) {
                 // Keep the two maps in lockstep: a claim another instance
                 // holds on this record dies here, or its pairing would go on
                 // naming a record m_claimedBy now attributes to this one.
@@ -113,6 +155,9 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
                 m_openPairing.insert(instance, p.windowId);
                 m_claimedBy.insert(p.windowId, instance);
                 return p;
+            }
+            if (ownRecordFinal) {
+                return std::nullopt;
             }
         }
     }
@@ -141,6 +186,16 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
         const auto owner = m_claimedBy.constFind(p.windowId);
         if (owner != m_claimedBy.constEnd() && *owner != instance) {
             continue; // already claimed by a sibling
+        }
+        // The reopen contract: only a record on the opening output (or with no
+        // screen) that the opening engine can restore there. A record on
+        // another output stays untouched for an instance that opens there.
+        if (!openingScreenId.isEmpty() && !p.screenId.isEmpty()
+            && !PhosphorIdentity::VirtualScreenId::samePhysical(p.screenId, openingScreenId)) {
+            continue;
+        }
+        if (restorableHere && !restorableHere(p)) {
+            continue;
         }
         if (!best || p.sequence > best->sequence) {
             best = &p;

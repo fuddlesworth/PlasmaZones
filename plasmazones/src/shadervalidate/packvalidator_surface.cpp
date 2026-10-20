@@ -4,8 +4,12 @@
 // The surface/decoration arm of plasmazones-shader-validate — see
 // packvalidators.h. Reproduces the surface runtime's GLSL assembly
 // (SurfaceShaderEffect + generated p_<id> preamble + include expansion) and
-// bakes the fragment stage, the buffer passes and the shared vertex stage
-// through headless glslang.
+// bakes the fragment stage, the buffer passes and the vertex stage on the
+// preview (Qt-RHI) dialect through headless QShaderBaker. The fragment, the
+// buffer passes and a DECLARED vertex stage are also compiled in both of
+// KWin's compositor dialects through glslang, and each fragment is linked
+// against the vertex stage the compositor runs it with. The shared
+// surface.vert is the preview's stage alone.
 //
 // The one arm whose buffer entries are not all filenames: a `builtin:` token
 // resolves through SurfaceShaderRegistry to a shared pass, so the path lints
@@ -19,7 +23,6 @@
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
-#include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
@@ -30,7 +33,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
 #include <QString>
@@ -38,6 +40,8 @@
 #include <QTextStream>
 
 #include <algorithm>
+#include <optional>
+#include <vector>
 
 #include <rhi/qshader.h>
 
@@ -54,73 +58,26 @@ namespace {
 /// p_<id> the stage could not have referenced.
 const QStringList kNoDeclaredParams;
 
-// Bake one stage on the COMPOSITOR dialect (`#define PLASMAZONES_KWIN`,
-// default-block uniforms), which QShaderBaker cannot compile — it wants
-// Vulkan-dialect GLSL — so this shells out to glslang the way the animation and
-// pointer arms do.
+// How the compositor assembles the MAIN fragment of a surface pack for the
+// compositor arms (`#define PLASMAZONES_KWIN`, default-block uniforms), which
+// QShaderBaker cannot compile, since it wants Vulkan-dialect GLSL. Buffer
+// passes and vertex stages take a default CompositorAssembly instead: they
+// compile WITHOUT the scaffold and the generated preamble and read their
+// parameters by raw contract slot, so splicing one there would let them
+// reference a p_<id> that fails where it ships.
 //
-// Modelled on the POINTER arm rather than the animation one: the animation helper
-// carries a finalizeColor argument because its per-window path splices KWin's
-// colour-management block, and the surface compositor path splices no such block
-// (surface_compile.cpp assembles the entry, expands includes, splices the param
-// preamble and injects the KWin define, and nothing else).
-//
-// Expansion goes through ShaderIncludeResolver, NOT ShaderCompiler::expandSource,
-// because that is what the compositor uses and the two differ: expandSource also
-// searches the shader's own directory for an angle include, so a pack-local angle
-// include resolves on the daemon and fails where it ships.
-int bakeCompositorStage(QTextStream& out, const SurfaceShaderEffect& eff, const QString& path, const QString& label,
-                        const QString& stage, const QStringList& includePaths, bool scaffold)
+// Modelled on the POINTER arm rather than the animation one: the surface
+// compositor path splices no colour-management block and no orientation
+// define. surface_compile.cpp assembles the entry, expands includes, splices
+// the param preamble and hands the result to injectKwinDefineAfterVersion
+// (the define block and the varying strip), and nothing else.
+CompositorAssembly surfaceMainAssembly(const SurfaceShaderEffect& eff)
 {
-    if (!QFile::exists(path)) {
-        return 0; // an absent stage is already linted by the caller
-    }
-    const QString tool = glslangValidatorPath();
-    if (tool.isEmpty()) {
-        // Hard failure rather than a skip, for the reason the two sibling arms
-        // give: a pack cannot reach a release with the branch it ships on
-        // uncompiled, and a quiet degrade is how that happened before. Explained
-        // once per run; every stage still counts the error.
-        static bool explained = false;
-        out << "  " << padLabel(label) << "ERROR (compositor)\n";
-        if (!explained) {
-            explained = true;
-            out << "    neither glslangValidator nor glslang found on PATH. One of them is required to "
-                   "compile the compositor dialect every surface pack ships on (install the glslang package)\n";
-        }
-        return 1;
-    }
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        out << "  " << padLabel(label) << "ERROR\n    cannot read " << path << "\n";
-        return 1;
-    }
-    const QString raw = QString::fromUtf8(f.readAll());
-    const QString assembled = scaffold
-        ? PhosphorShaders::assembleEntryPoint(raw, SurfaceShaderRegistry::surfaceEntryPrologue(),
-                                              SurfaceShaderRegistry::surfaceEntryCandidates())
-        : raw;
-    QString err;
-    QStringList sourcePaths;
-    QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
-                                                                         includePaths, &err, nullptr, &sourcePaths);
-    if (src.isEmpty()) {
-        out << "  " << padLabel(label) << "ERROR (compositor)\n    include expansion failed the way the compositor "
-            << "expands it: " << err
-            << "\n    (if the file sits beside this one, note that the compositor resolves an angle include only "
-            << "against the registry roots; the quoted form is the pack-local one)\n";
-        return 1;
-    }
-    if (scaffold) {
-        // Buffer passes compile WITHOUT the generated preamble and read their
-        // parameters by raw contract slot, so splicing one here would let a buffer
-        // reference a p_<id> that fails on both paths that ship.
-        src = PhosphorShaders::spliceAfterVersion(src, SurfaceShaderRegistry::paramPreamble(eff));
-    }
-    // LAST, so the define block lands above the preamble, which is what
-    // injectKwinDefineAfterVersion produces at runtime.
-    src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
-    return reportCompositorCompile(out, label, stage, src, tool, sourcePaths);
+    CompositorAssembly assembly;
+    assembly.entryPrologue = SurfaceShaderRegistry::surfaceEntryPrologue();
+    assembly.entryCandidates = SurfaceShaderRegistry::surfaceEntryCandidates();
+    assembly.preamble = SurfaceShaderRegistry::paramPreamble(eff);
+    return assembly;
 }
 
 } // namespace
@@ -139,29 +96,22 @@ int bakeCompositorStage(QTextStream& out, const SurfaceShaderEffect& eff, const 
 // ship and surface as a black decoration, since the compositor swallows a compile
 // failure.
 //
-// COVERAGE BOUNDARY, as on the animation arm. The compositor recompiles `#version
-// 450` down to its context core version at load, so a construct this gate accepts
-// at 450 can still fail there. And glslang is not the compositor's own driver
-// compiler, so a driver-specific rejection is out of reach either way.
+// COVERAGE BOUNDARY, as on the animation arm. The two compositor arms compile
+// the pack after KWin's own rewrites, desktop GLSL 140 for a 6.7 desktop
+// context and GLSL ES 300 for a GLES one, and link each fragment against the
+// vertex stage the compositor pairs it with. glslang is not the compositor's
+// own driver compiler, though, so a driver-specific rejection is out of reach.
 int validateSurfacePack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
 
-    QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-    if (!metaFile.open(QIODevice::ReadOnly)) {
-        out << name << "\n  " << padLabel(QStringLiteral("metadata"))
-            << "ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
+    const std::optional<QJsonObject> metadata = readPackMetadata(out, packDir);
+    if (!metadata) {
         return 1;
     }
-    QJsonParseError perr{};
-    const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &perr);
-    if (doc.isNull() || !doc.isObject()) {
-        out << name << "\n  " << padLabel(QStringLiteral("metadata"))
-            << "ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
-        return 1;
-    }
+    const QJsonObject& root = *metadata;
 
-    SurfaceShaderEffect eff = SurfaceShaderEffect::fromJson(doc.object());
+    SurfaceShaderEffect eff = SurfaceShaderEffect::fromJson(root);
     eff.sourceDir = QDir(packDir).absolutePath();
     // The `fragmentShader` / `bufferShaders` / `vertexShader` paths come from the
     // user-editable metadata.json, so confine each to the pack dir (via
@@ -177,8 +127,8 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                "rejected)\n  → 1 error\n\n";
         return 1;
     }
-    // Every offender named, not just the first. The fragment and vertex exits
-    // above each cover ONE key, so naming it adds nothing; bufferShaders is a
+    // Every offender named, not just the first. The fragment exit above and the
+    // vertex exit below each cover ONE key, so naming it adds nothing; bufferShaders is a
     // list, and bailing on the first escape printed neither the path nor the
     // index while suppressing the whole rest of the report. An author with two
     // bad entries then fixed one and got the same anonymous line again. The lint
@@ -212,9 +162,8 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     }
     if (!confineToPack(eff.vertexShaderPath)) {
         out << name << "\n  " << padLabel(QStringLiteral("metadata"))
-            << "ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n "
-               " "
-               "→ 1 error\n\n";
+            << "ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n";
+        out << "  → 1 error\n\n";
         return 1;
     }
     if (!eff.isValid()) {
@@ -230,8 +179,8 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // array. The header owes the author the number in their own file, or it reads
     // "3 textures" three lines above "too many textures: 5 declared". A non-array
     // value counts 0, which is honest, and the separate type lint reports the shape.
-    const qsizetype rawParamCount = doc.object().value(QLatin1String("parameters")).toArray().size();
-    const qsizetype rawTextureCount = doc.object().value(QLatin1String("textures")).toArray().size();
+    const qsizetype rawParamCount = root.value(QLatin1String("parameters")).toArray().size();
+    const qsizetype rawTextureCount = root.value(QLatin1String("textures")).toArray().size();
     out << name << "  (" << rawParamCount << " param" << (rawParamCount == 1 ? "" : "s") << ", " << rawTextureCount
         << " texture" << (rawTextureCount == 1 ? "" : "s") << ", " << (eff.isMultipass ? "multipass" : "single-pass")
         << ")\n";
@@ -242,7 +191,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // Collected in packvalidator_surface_lints.cpp, which is the whole of what is
     // decidable from metadata.json alone. Flushed just below, so a lint added there
     // needs no change here.
-    const QStringList lints = surfaceMetadataLints(doc.object(), eff, packDir);
+    const QStringList lints = surfaceMetadataLints(root, eff, packDir);
 
     if (lints.isEmpty()) {
         out << "  " << padLabel(QStringLiteral("metadata")) << "OK\n";
@@ -269,13 +218,15 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         && std::all_of(eff.bufferShaderPaths.cbegin(), eff.bufferShaderPaths.cend(), [](const QString& p) {
                                     return !p.isEmpty() && QFileInfo(p).isFile();
                                 });
-    if (depthChainRuns && doc.object().value(QLatin1String("depthBuffer")).toBool()) {
+    if (depthChainRuns && root.value(QLatin1String("depthBuffer")).toBool()) {
         out << "  " << padLabel(QStringLiteral("note"))
             << "\"depthBuffer\" is honoured on the daemon only (settings preview, OSD and popup decorations); "
                "the compositor implements no depth buffer for surface packs\n";
         out << "  " << padLabel(QString())
             << "and the surface family ships no depth module, so declare "
-               "`layout(binding = 16) uniform sampler2D uDepthBuffer;` yourself\n";
+               "`layout(binding = 16) uniform sampler2D uDepthBuffer;` yourself, inside `#ifndef "
+               "PLASMAZONES_KWIN` (the compositor branch compiles as GLSL ES 300 on a GLES context, which has no "
+               "binding qualifier)\n";
     }
     // Also a NOTE, beside the one above because a note printed before the lint flush
     // lands above its own `metadata ERROR` header. cornerRadius is not reserved, so a
@@ -297,9 +248,8 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // `presets ERROR` above `metadata OK`, which is the self-contradicting shape the
     // collected-then-printed design was introduced to avoid.
     // Same gap as the animation arm, same reason: presets parse before sourceDir.
-    errors += reportPresetLints(out,
-                                rawPresetLints(doc.object()) + imageParamPresetLints(doc.object())
-                                    + presetLints(packDir, eff.presets, eff.parameters));
+    errors += reportPresetLints(
+        out, rawPresetLints(root) + imageParamPresetLints(root) + presetLints(packDir, eff.presets, eff.parameters));
 
     // ── stage compile (reproduce the daemon runtime fragment assembly) ──
     //
@@ -319,13 +269,12 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     const QString surfacePacksRoot = QFileInfo(packDir).absolutePath();
     const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
     bool fragReadsBackdrop = false;
-    if (QFile::exists(eff.fragmentShaderPath)) {
-        QFile frag(eff.fragmentShaderPath);
-        if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  " << padLabel(fragLabel) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
+    // The compositor stages that compiled, for the links at the end.
+    std::optional<CompositorStage> mainFrag;
+    if (QString raw; QFile::exists(eff.fragmentShaderPath)) {
+        if (!readStageSource(out, fragLabel, eff.fragmentShaderPath, raw)) {
             ++errors;
         } else {
-            const QString raw = QString::fromUtf8(frag.readAll());
             QString err;
             // Assemble an entry-only pack (a `vec4 pSurface(vec2 uv)` body, no
             // main()) into a full TU before expansion, identical to the daemon /
@@ -350,14 +299,12 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 fragReadsBackdrop =
                     raw.contains(QLatin1String("backdropTexel")) || raw.contains(QLatin1String("uBackdrop"));
             }
+            // The COMPOSITOR branch of the same stage, from the same read and
+            // the ONE include-root list built above, per the note on it.
+            mainFrag = bakeCompositorStage(out, errors, fragLabel, PhosphorShaders::ShaderStage::Fragment, raw,
+                                           eff.fragmentShaderPath, includePaths, surfaceMainAssembly(eff));
         }
     }
-    // The COMPOSITOR branch of the same stage. Outside the exists() guard above:
-    // the helper does its own check, and an absent stage is already linted. Uses the
-    // ONE include-root list built above, per the note on it — this site rebuilt it
-    // byte-identically, which was the drift hazard that note describes.
-    errors += bakeCompositorStage(out, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"), includePaths,
-                                  /*scaffold=*/true);
 
     // A NOTE, not a lint, and deliberately so: shared/surface_backdrop.glsl tells authors to gate
     // styling on uHasBackdrop for an explicit fallback, so reading the backdrop without the flag is
@@ -368,7 +315,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // ONLY source; here it can only be a note. KNOWN BOUNDARY: a pack that calls backdropTexel from
     // a pack-local included helper rather than from its own fragment is missed, which is the price
     // of scanning the pack's own source instead of the expanded TU.
-    if (fragReadsBackdrop && !doc.object().value(QLatin1String("needsBackdrop")).toBool()) {
+    if (fragReadsBackdrop && !root.value(QLatin1String("needsBackdrop")).toBool()) {
         out << "  " << padLabel(QStringLiteral("note"))
             << "reads the backdrop (backdropTexel/uBackdrop) but \"needsBackdrop\" is not true, so "
                "nothing is captured and uHasBackdrop stays false\n";
@@ -378,6 +325,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // Buffer passes carry their own main() (no entry scaffold, no param preamble)
     // and bake on the daemon Qt-RHI path, same as overlay packs. The compositor
     // runtime executes them via the GL-FBO chain; both share this source.
+    std::vector<CompositorStage> bufferStages;
     if (eff.isMultipass) {
         for (const QString& buf : eff.bufferShaderPaths) {
             if (!QFile::exists(buf)) {
@@ -391,13 +339,11 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             // an entry already in the list, which the resolver tolerates.
             const QStringList bufferIncludePaths = QStringList(includePaths) << QFileInfo(buf).absolutePath();
             const QString label = QFileInfo(buf).fileName();
-            QFile bufFile(buf);
-            if (!bufFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << padLabel(label) << "ERROR\n    cannot read " << buf << "\n";
+            QString rawBuf;
+            if (!readStageSource(out, label, buf, rawBuf)) {
                 ++errors;
                 continue;
             }
-            const QString rawBuf = QString::fromUtf8(bufFile.readAll());
             QString err;
             const QString expanded =
                 ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), bufferIncludePaths, &err);
@@ -417,10 +363,17 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             // The COMPOSITOR branch of the same buffer pass. scaffold=false: a
             // buffer ships its own main() and reads its parameters by raw contract
             // slot, so it takes neither the entry scaffold nor the preamble.
-            errors += bakeCompositorStage(out, eff, buf, label, QStringLiteral("frag"), bufferIncludePaths,
-                                          /*scaffold=*/false);
+            if (std::optional<CompositorStage> stage =
+                    bakeCompositorStage(out, errors, label, PhosphorShaders::ShaderStage::Fragment, rawBuf, buf,
+                                        bufferIncludePaths, CompositorAssembly{})) {
+                bufferStages.push_back(std::move(*stage));
+            }
         }
     }
+
+    // A declared vertex stage that compiled for the compositor, and whether one
+    // was declared and failed to, for the main fragment's link below.
+    DeclaredVertex declaredVert;
 
     // ── vertex stage ──
     // Mirror the daemon runtime (SurfaceShaderItem::updatePaintNode): an explicit
@@ -451,14 +404,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 }
             }
         }
-        if (!vertPath.isEmpty() && QFile::exists(vertPath)) {
+        if (QString rawVert; !vertPath.isEmpty() && QFile::exists(vertPath)) {
             const QString label = QFileInfo(vertPath).fileName();
-            QFile vertFile(vertPath);
-            if (!vertFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                out << "  " << padLabel(label) << "ERROR\n    cannot read " << vertPath << "\n";
+            if (!readStageSource(out, label, vertPath, rawVert)) {
                 ++errors;
+                // An unreadable declared stage: the compositor falls back to its
+                // built-in one, which the link below then uses.
             } else {
-                const QString rawVert = QString::fromUtf8(vertFile.readAll());
                 QString err;
                 const QString expanded =
                     ShaderCompiler::expandSource(rawVert, QFileInfo(vertPath).absolutePath(), includePaths, &err);
@@ -472,18 +424,44 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                     // vertex stage takes no generated preamble either.
                     errors += reportCompile(out, label, result, kNoDeclaredParams);
                 }
+                // The COMPOSITOR branch, for a DECLARED vertex stage ONLY. The
+                // shared surface.vert fallback resolved above is deliberately not
+                // baked here: the compositor never resolves that file (it supplies
+                // its own built-in stage), and the shared one reads qt_Matrix,
+                // which is a daemon UBO member and undeclared under
+                // PLASMAZONES_KWIN. Baking it would fail every bundled pack on a
+                // stage that never runs there.
+                if (vertPath == eff.vertexShaderPath) {
+                    declaredVert =
+                        bakeDeclaredVertex(out, errors, label, rawVert, vertPath, includePaths, CompositorAssembly{});
+                }
             }
         }
-        // The COMPOSITOR branch, for a DECLARED vertex stage ONLY. The shared
-        // surface.vert fallback resolved above is deliberately not baked here: the
-        // compositor never resolves that file (it supplies its own built-in
-        // fullscreen-quad stage), and the shared one reads qt_Matrix, which is a
-        // daemon UBO member and undeclared under PLASMAZONES_KWIN. Baking it would
-        // fail every bundled pack on a stage that never runs there.
-        if (!eff.vertexShaderPath.isEmpty()) {
-            errors += bakeCompositorStage(out, eff, eff.vertexShaderPath, QFileInfo(eff.vertexShaderPath).fileName(),
-                                          QStringLiteral("vert"), includePaths, /*scaffold=*/false);
+    }
+
+    // ── links ──
+    // The main fragment against the vertex stage the compositor pairs it with:
+    // the declared one when it compiled, the built-in one when the compositor
+    // would have fallen back to it (no declared stage, or one it could not read
+    // or expand), and none when the declared stage failed to compile, since the
+    // program then fails live. The buffer passes always link against the
+    // built-in fullscreen quad, whatever the pack declares.
+    if (mainFrag) {
+        const std::optional<CompositorStage> vertex = linkedVertex(
+            declaredVert,
+            builtinCompositorStage(QStringLiteral("the built-in vertex stage"), PhosphorShaders::ShaderStage::Vertex,
+                                   SurfaceShaderRegistry::compositorVertexSource()));
+        if (vertex) {
+            errors += reportCompositorLink(out, *vertex, *mainFrag);
         }
+    }
+    for (const CompositorStage& buffer : bufferStages) {
+        errors += reportCompositorLink(out,
+                                       builtinCompositorStage(QStringLiteral("the built-in buffer vertex stage"),
+                                                              PhosphorShaders::ShaderStage::Vertex,
+                                                              SurfaceShaderRegistry::compositorBufferVertexSource(), {},
+                                                              CompositorStage::Origin::FixedBuiltin),
+                                       buffer);
     }
 
     if (errors == 0) {

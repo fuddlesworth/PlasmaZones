@@ -11,6 +11,9 @@
  * SettingsAdaptor::getSettings regresses — drops known keys, propagates
  * unknown keys, returns the wrong type — the editor silently falls back
  * to hardcoded defaults and user config is ignored until the next change.
+ *
+ * Also pins the InvalidArgs error replies getSetting and the per-screen
+ * writes send over the bus, called by a peer on the private test bus.
  */
 
 #include <QTest>
@@ -32,10 +35,14 @@
 #include <PhosphorAnimation/ProfileTree.h>
 
 #include "dbus/settingsadaptor/settingsadaptor.h"
+#include "helpers/BusPeer.h"
 #include "helpers/StubSettings.h"
 #include "helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::BusHost;
+using PlasmaZones::TestHelpers::BusPeer;
+using PlasmaZones::TestHelpers::isBusError;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
@@ -88,7 +95,9 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_settings = new CountingStubSettings(nullptr);
-        m_parent = new QObject(nullptr);
+        // Exported through a host carrying the call context, as Daemon does,
+        // so the rows that call over the bus see their error replies.
+        m_parent = new BusHost;
         m_adaptor = new SettingsAdaptor(m_settings, /*profileRegistry=*/nullptr, m_parent);
     }
 
@@ -425,6 +434,53 @@ private Q_SLOTS:
         values[QStringLiteral("masterCount")] = 2;
         const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("autotile"), values);
         QVERIFY(ok);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Error replies over the bus. getSetting answers an unknown or empty key
+    // with InvalidArgs, and the void per-screen writes answer each rejection
+    // the same way, so a caller can tell a refused call from an applied one.
+    // A peer on the private test bus calls the adaptor through its host.
+    // ─────────────────────────────────────────────────────────────────────
+    void testGetSetting_overTheBus_unknownAndEmptyKeysAnswerInvalidArgs()
+    {
+        BusPeer peer(m_parent, QStringLiteral("GetSetting"));
+        QVERIFY(peer.ready());
+        const QString settings = QStringLiteral("org.plasmazones.Settings");
+
+        const QDBusMessage unknown =
+            peer.call(settings, QStringLiteral("getSetting"), {QStringLiteral("noSuchSetting")}, 2000);
+        QVERIFY2(isBusError(unknown, QDBusError::InvalidArgs), qPrintable(unknown.errorMessage()));
+
+        const QDBusMessage empty = peer.call(settings, QStringLiteral("getSetting"), {QString()}, 2000);
+        QVERIFY2(isBusError(empty, QDBusError::InvalidArgs), qPrintable(empty.errorMessage()));
+
+        const QDBusMessage known =
+            peer.call(settings, QStringLiteral("getSetting"), {QStringLiteral("adjacentThreshold")}, 2000);
+        QCOMPARE(known.type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(known.arguments().value(0).value<QDBusVariant>().variant().toInt(), m_settings->adjacentThreshold());
+    }
+
+    void testPerScreenWrites_overTheBus_rejectionsAnswerInvalidArgs()
+    {
+        BusPeer peer(m_parent, QStringLiteral("PerScreen"));
+        QVERIFY(peer.ready());
+        const QString settings = QStringLiteral("org.plasmazones.Settings");
+        const QVariant value = QVariant::fromValue(QDBusVariant(2));
+
+        const QDBusMessage bogus =
+            peer.call(settings, QStringLiteral("setPerScreenSetting"),
+                      {QStringLiteral("DP-1"), QStringLiteral("bogus"), QStringLiteral("masterCount"), value}, 2000);
+        QVERIFY2(isBusError(bogus, QDBusError::InvalidArgs), qPrintable(bogus.errorMessage()));
+
+        const QDBusMessage readOnly = peer.call(settings, QStringLiteral("clearPerScreenSettings"),
+                                                {QStringLiteral("DP-1"), QStringLiteral("snapping")}, 2000);
+        QVERIFY2(isBusError(readOnly, QDBusError::InvalidArgs), qPrintable(readOnly.errorMessage()));
+
+        const QDBusMessage applied =
+            peer.call(settings, QStringLiteral("setPerScreenSetting"),
+                      {QStringLiteral("DP-1"), QStringLiteral("autotile"), QStringLiteral("masterCount"), value}, 2000);
+        QCOMPARE(applied.type(), QDBusMessage::ReplyMessage);
     }
 
     // ─────────────────────────────────────────────────────────────────────

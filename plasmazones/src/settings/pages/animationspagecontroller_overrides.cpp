@@ -218,6 +218,29 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     return true;
 }
 
+bool AnimationsPageController::engageOverridesUnder(const QStringList& eventPaths)
+{
+    if (m_settings == nullptr)
+        return false;
+    QVariantMap tree = motionTree();
+    QStringList engaged;
+    bool hasValidPath = false;
+    for (const QString& path : eventPaths) {
+        if (!isRemovableEventPath(path))
+            continue;
+        hasValidPath = true;
+        if (treeHasOverrideForPath(tree, path))
+            continue;
+        tree = treeWithEngagedOverrideForPath(tree, path);
+        engaged.append(path);
+    }
+    if (!engaged.isEmpty())
+        writeMotionTree(tree);
+    for (const QString& path : engaged)
+        Q_EMIT overrideChanged(path);
+    return hasValidPath;
+}
+
 AnimationsPageController::OverrideWrite AnimationsPageController::writeOverrideOnly(const QString& path,
                                                                                     const QVariantMap& profileJson)
 {
@@ -360,6 +383,8 @@ bool AnimationsPageController::hasScopedPendingOverrides(const QStringList& even
     for (const QString& path : eventPaths) {
         if (!isRemovableEventPath(path))
             continue;
+        if (treeHasOverrideForPath(live, path) != treeHasOverrideForPath(committed, path))
+            return true;
         if (treeProfileForPath(live, path) != treeProfileForPath(committed, path))
             return true;
     }

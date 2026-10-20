@@ -13,6 +13,8 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
@@ -99,6 +101,13 @@ std::optional<PackModel> detectPackModel(const QString& packDir);
 /// this function is good for.
 QStringList packSharedRoots(const QString& packDir);
 
+/// Read and parse @p packDir's metadata.json for a validator arm. On failure it
+/// prints the pack's whole report, the one `metadata ERROR` naming why (an
+/// unreadable file, invalid JSON, or a root that parses but is not an object)
+/// and the `→ 1 error` footer, and returns nullopt. Shared so no arm can drift
+/// back to reporting "invalid JSON: no error occurred" for a `[]` root.
+std::optional<QJsonObject> readPackMetadata(QTextStream& out, const QString& packDir);
+
 // Confine a metadata-supplied shader path to its pack dir. Returns the confined
 // path, or nullopt when the path is empty or escapes the pack dir. The
 // definition explains the canonical-vs-lexical comparison.
@@ -130,7 +139,7 @@ QString poolName(const QString& type);
 // at the wrong binding. Returns 1 on failure, 0 on success. Shared by all the
 // validators.
 //
-// Takes NO source-string legend, unlike reportCompositorCompile. QShaderBaker
+// Takes NO source-string legend, unlike the compositor bake. QShaderBaker
 // drops the `#line` source string and reports every error against the top-level
 // source, so there is no id here to resolve. Measured rather than assumed; the
 // definition says how, and what it costs.
@@ -224,13 +233,13 @@ QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>
 /// is empty, which is what keeps a clean pack's report free of an empty section.
 int reportPresetLints(QTextStream& out, const QStringList& lints);
 
-// ── compositor (KWin classic-GL) bake ──────────────────────────────────────
+// ── compositor (KWin) bake, in both of KWin's dialects ─────────────────────
 // Packs whose appliesTo makes them compositor-only are never loaded by the
 // daemon, and their source is classic-GL (default-block uniforms, unbound
-// samplers) that QShaderBaker's strict SPIR-V target rejects by design. That
-// left 35 of the 94 bundled animation packs with metadata lints and NO stage
-// compile anywhere in a headless run — the GPU bake test that does cover them
-// QSKIPs without a desktop GL 4.5 context, which is exactly the CI case.
+// samplers) that QShaderBaker's strict SPIR-V target rejects by design. Those
+// packs once had metadata lints and NO stage compile anywhere in a headless
+// run, because the GPU bake test that does cover them QSKIPs without a
+// desktop GL 4.5 context, which is exactly the CI case.
 //
 // glslang's DEFAULT mode (no -V / -G, so no SPIR-V target) validates plain
 // OpenGL-dialect GLSL and accepts that source, so the coverage is reachable
@@ -238,22 +247,174 @@ int reportPresetLints(QTextStream& out, const QStringList& lints);
 // linked: Qt vendors glslang inside ShaderTools without exposing it, and a
 // direct libglslang dependency for one code path is a heavier build cost than
 // a tool the GLSL toolchain already ships.
+//
+// Every compositor stage is compiled once per dialect KWin compiles it in:
+// `(compositor)` is desktop GLSL 140, what KWin 6.7 hands a desktop GL context
+// (PhosphorShaders::kwinDesktopDialect), and `(compositor GLES)` is GLSL ES 300,
+// what KWin hands a GLES context, which is every context on 6.8
+// (PhosphorShaders::kwinGlesDialect). A stage 6.8 adds a define to is also
+// compiled as `(compositor GLES 6.7)`, the same dialect without it, which is
+// what 6.7 builds on a GLES context. glslang holds ES 300 to the spec where a
+// lenient driver would not, which is how varying locations reached a release
+// compiling on NVIDIA and failing on Mesa. Each pack's fragment stages are then
+// LINKED against the vertex stage the compositor pairs them with, which is
+// where a varying read by name and written under another, a precision
+// mismatch, or an `#extension` after a declaration shows.
+//
+// Out of reach either way: glslang is not the driver, so a driver-specific
+// limit or bug still passes here, and KWin's own colour-management include
+// cannot be resolved offline (finalizeColorStub stands in for it).
 
 /// Absolute path to a usable glslang binary (`glslangValidator`, else the
 /// `glslang` the project renamed it to), or an empty string when neither is on
 /// PATH. Resolved once per run.
 QString glslangValidatorPath();
 
-/// Compile @p source as @p stage through `glslangValidator` at @p toolPath and
-/// print OK/ERROR under @p label. @p stage is the glslang `-S` token ("frag" /
-/// "vert"). Returns 1 on failure, 0 on success.
+/// Replace the source-string id a glslang diagnostic @p line leads with by the
+/// name of the file it stands for: @p label for source string 0, the file
+/// name of @p sourcePaths[i] (the include resolver's legend) for an include.
+/// Shared by both reporters, the Qt-RHI one (reportCompile) and the compositor
+/// bake. Leaves the line untouched when the legend does not cover the id.
+QString nameDiagnosticSource(const QString& line, const QString& label, const QStringList& sourcePaths);
+
+/// Read the stage at @p path once for every arm that bakes it. Prints under
+/// @p label and returns false when it cannot be read or is empty, so the
+/// preview and compositor arms do not each report the same file.
+bool readStageSource(QTextStream& out, const QString& label, const QString& path, QString& raw);
+
+/// The compositor's HDR colour-management block declares `pzFinalizeColor`
+/// and routes the generated main()'s fragColor write through it. The real
+/// block includes KWin's `colormanagement.glsl` from a resource path glslang
+/// cannot see, so the bake splices an identity stand-in that declares the SAME
+/// symbol and macro: a pack that defines its own `pzFinalizeColor`, or
+/// redefines `PZ_FINALIZE_COLOR`, collides here the way it collides live. The
+/// compositor splices the real block into every pass that authors new sRGB
+/// content: an animation's per-window fragment and a pointer pack's main pass.
+QString finalizeColorStub();
+
+/// One compositor stage, assembled as the effect assembles it but not yet
+/// finished: no KWin define block, varyings still located.
+struct CompositorStage
+{
+    /// The report label, usually the file name.
+    QString label;
+    PhosphorShaders::ShaderStage stage = PhosphorShaders::ShaderStage::Fragment;
+    QString source;
+    /// The include resolver's source-string legend, so a diagnostic inside a
+    /// shared header reads `surface_lib.glsl:112` instead of a bare `1`.
+    QStringList sourcePaths;
+    /// What the runtime splices beside the define block on KWin 6.8 only (the
+    /// top-down texcoord define of the per-window animation path and the
+    /// present shader), so it reaches the GLES arm alone. A stage that has
+    /// some is also compiled as GLSL ES without them, which is what KWin 6.7
+    /// builds on a GLES context.
+    QString glesExtraDefines;
+    /// Who supplies the stage, so a link diagnostic offers only a fix the
+    /// author can make.
+    enum class Origin {
+        /// The pack ships it.
+        Pack,
+        /// The compositor's own, used because the pack declares no stage of
+        /// its own, which it may.
+        Builtin,
+        /// The compositor's own, and the pass always runs with it (a screen
+        /// pass, a surface buffer pass).
+        FixedBuiltin,
+    };
+    Origin origin = Origin::Pack;
+    /// The compositor places declarations of its own above the pack's first
+    /// line (the entry scaffold, the colour-management block), so nothing in
+    /// the pack can precede every declaration.
+    bool compositorDeclarationsFirst = false;
+};
+
+/// How a family assembles one of its stages before the KWin define block.
+struct CompositorAssembly
+{
+    /// The entry scaffold; an empty prologue means none (buffer passes and
+    /// vertex stages ship their own main()).
+    QString entryPrologue;
+    QList<PhosphorShaders::EntryCandidate> entryCandidates;
+    /// The p_<id> preamble, spliced after include expansion. Empty for a stage
+    /// the runtime splices none into.
+    QString preamble;
+    /// Splice finalizeColorStub, as the runtime splices the real block.
+    bool finalizeColor = false;
+    QString glesExtraDefines;
+};
+
+/// Assemble @p raw (read from @p path) the way the compositor does: the entry
+/// scaffold, include expansion through the resolver the compositor uses (NOT
+/// ShaderCompiler::expandSource, whose angle includes also search the
+/// shader's own directory), the preamble and the colour stand-in. An include
+/// failure is printed under @p label, tagged for both dialects since it
+/// blocks both, and returns nullopt.
+std::optional<CompositorStage> assembleCompositorStage(QTextStream& out, const QString& label,
+                                                       PhosphorShaders::ShaderStage stage, const QString& raw,
+                                                       const QString& path, const QStringList& includePaths,
+                                                       const CompositorAssembly& assembly);
+
+/// A built-in compositor stage, which has no includes to expand.
+CompositorStage builtinCompositorStage(const QString& label, PhosphorShaders::ShaderStage stage, const QString& source,
+                                       const QString& glesExtraDefines = {},
+                                       CompositorStage::Origin origin = CompositorStage::Origin::Builtin);
+
+/// Finish @p stage the way the compositor does (PhosphorShaders::
+/// kwinCompositorSource, which is exactly what the compositor's
+/// injectKwinDefineAfterVersion runs), compile it through glslang in each
+/// source KWin builds it from (desktop, GLES, and GLES as 6.7 builds it when
+/// 6.8 adds a define), and print one OK/ERROR line per arm under its label.
 ///
-/// @p sourcePaths is the include resolver's source-string legend. This is the
-/// arm where it matters: glslang run directly preserves the `#line` source id,
-/// so an error inside a shared header reads `surface_lib.glsl:112` instead of a
-/// bare `1`. Pass the list the same expansion filled.
-int reportCompositorCompile(QTextStream& out, const QString& label, const QString& stage, const QString& source,
-                            const QString& toolPath, const QStringList& sourcePaths = {});
+/// Returns 1 when any arm rejects the stage and 0 when all compile: a stage
+/// counts once in the pack's error total however many arms reject it, so the
+/// total is the number of broken stages. When an arm rejects it with the same
+/// diagnostics as the arm immediately above, its line says so rather than
+/// repeating them. The arms run concurrently. A glslang that cannot run at all
+/// (staging failure, start failure, timeout, crash) fails them alike and is
+/// reported once.
+int reportCompositorCompile(QTextStream& out, const CompositorStage& stage);
+
+/// assembleCompositorStage then reportCompositorCompile, the pair every arm
+/// runs per stage. Returns the stage when it compiled, for its link, and adds
+/// one to @p errors when it did not.
+std::optional<CompositorStage> bakeCompositorStage(QTextStream& out, int& errors, const QString& label,
+                                                   PhosphorShaders::ShaderStage stage, const QString& raw,
+                                                   const QString& path, const QStringList& includePaths,
+                                                   const CompositorAssembly& assembly);
+
+/// A pack's DECLARED vertex stage after its compositor bake. @c stage is set
+/// when it compiled. It is empty with @c broken false when the runtime falls
+/// back to its built-in stage (an include failure), and empty with @c broken
+/// true when it failed to compile, in which case the program fails live and
+/// there is nothing to link.
+struct DeclaredVertex
+{
+    std::optional<CompositorStage> stage;
+    bool broken = false;
+};
+
+/// bakeCompositorStage for a declared vertex stage, sorting the two ways it
+/// can fail as the runtime does.
+DeclaredVertex bakeDeclaredVertex(QTextStream& out, int& errors, const QString& label, const QString& raw,
+                                  const QString& path, const QStringList& includePaths,
+                                  const CompositorAssembly& assembly);
+
+/// The vertex stage the compositor runs a fragment with: the declared one when
+/// it compiled, @p builtin when it would have fallen back, and none when the
+/// declared one failed to compile.
+std::optional<CompositorStage> linkedVertex(const DeclaredVertex& declared, const CompositorStage& builtin);
+
+/// Link @p fragment against @p vertex, the program the compositor actually
+/// builds, and print one OK/ERROR line tagged `(compositor link)` under the
+/// fragment's label. Checks what compiling each stage alone cannot, in both
+/// dialects: every varying the fragment uses must be written by the vertex
+/// stage under the same name and type (the compositor strips the locations,
+/// so names are all that match them), and neither stage may enable an
+/// `#extension` after a declaration. glslang's own link, run on the GLES
+/// pair, adds that uniforms both declare must agree on precision. Call it only for pack stages that compiled,
+/// so a compile error is not reported twice. A built-in stage is compiled by
+/// the tests. Returns 1 on failure, 0 otherwise.
+int reportCompositorLink(QTextStream& out, const CompositorStage& vertex, const CompositorStage& fragment);
 
 // Compile one ZONE stage through the exact runtime assembly and print OK/ERROR.
 // Returns 1 on failure, 0 on success.

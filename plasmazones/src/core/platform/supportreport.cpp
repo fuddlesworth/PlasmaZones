@@ -488,6 +488,9 @@ QString SupportReport::sectionSession()
     QVector<QJsonObject> entries;
     QStringList classCounts;
     for (auto it = placements.constBegin(); it != placements.constEnd(); ++it) {
+        // A class's records are an array; the store's format stamp (_version) is not a class.
+        if (!it.value().isArray())
+            continue;
         const QJsonArray list = it.value().toArray();
         total += list.size();
         classCounts.append(QStringLiteral("%1 (%2)").arg(it.key()).arg(list.size()));
@@ -496,7 +499,7 @@ QString SupportReport::sectionSession()
     }
     out += QStringLiteral("**Tracked placements:** %1 entries across %2 window classes\n")
                .arg(total)
-               .arg(placements.size());
+               .arg(classCounts.size());
     if (!classCounts.isEmpty())
         out += QStringLiteral("**Per class:** %1\n").arg(classCounts.join(QStringLiteral(", ")));
 

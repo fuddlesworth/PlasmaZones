@@ -133,13 +133,11 @@ private Q_SLOTS:
     void contextSwitchFlagRidesChangedScreenSets();
 
 private:
-    // NOTE: windowOpened's cross-screen snap-restore defer gate
-    // (setSnappingModeResolver + placementStore().peek) is deliberately
-    // untested here: makeEngine passes a null IWindowTrackingService, and
-    // faking the full tracking service just for the peek would drag half
-    // of phosphor-placement into this smoke suite. The gate's daemon-side
-    // wiring mirrors AutotileEngine's, whose twin is covered at the
-    // integration layer.
+    // NOTE: the reopen claim (claimCrossScreenReopen, which reads the
+    // placement store) is deliberately untested here: makeEngine passes a
+    // null IWindowTrackingService, and faking the full tracking service just
+    // for the store would drag half of phosphor-placement into this smoke
+    // suite. It is covered at the integration layer.
     static ScrollEngine* makeEngine(QObject* parent)
     {
         auto* engine = new ScrollEngine(nullptr, nullptr, parent);
@@ -270,7 +268,7 @@ void TestScrollEngineSmoke::floatPullsOutAndRestoresSlot()
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
 
-    QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+    QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
     engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
     QVERIFY(engine->isWindowFloatingInScroll(QStringLiteral("app|b")));
     QVERIFY(engine->isModeSpecificFloated(QStringLiteral("app|b")));
@@ -571,12 +569,11 @@ void TestScrollEngineSmoke::pruneRemovedScreenAndActivitiesSweep()
     // sub-screens ("S1/vs:0", the PhosphorIdentity separator) are swept,
     // but an id that merely shares the prefix ("S10") is not. Activities:
     // only states whose key names an activity absent from the valid list
-    // go; activity-less states stay.
+    // go; activity-less states stay, and an empty list prunes nothing (F423).
     QObject owner;
     ScrollEngine* engine = makeEngine(&owner);
-    // The default fixture only activates S1/S2; the sub-screen and the
-    // prefix-sharing sibling must be MANAGED or the sweep asserts below
-    // pass vacuously.
+    // The fixture activates only S1/S2; the sub-screen and the prefix-sharing
+    // sibling must be MANAGED or the sweep asserts below pass vacuously.
     engine->setActiveScreens(
         {QStringLiteral("S1"), QStringLiteral("S1/vs:0"), QStringLiteral("S10"), QStringLiteral("S2")});
     engine->windowOpened(QStringLiteral("app|p"), QStringLiteral("S1"), 0, 0);
@@ -586,10 +583,9 @@ void TestScrollEngineSmoke::pruneRemovedScreenAndActivitiesSweep()
     QVERIFY(engine->isWindowTracked(QStringLiteral("app|v")));
     QVERIFY(engine->isWindowTracked(QStringLiteral("app|s10")));
 
-    // The prune hands the windows back the same way the screens-set sweep
-    // does — they are alive, only their output is gone — so the daemon's
-    // restore consumers hear one windowsReleased naming both the physical
-    // screen and the swept sub-screen.
+    // The prune hands the windows back as the screens-set sweep does (alive,
+    // only their output gone), so the daemon's restore consumers hear one
+    // windowsReleased naming the physical screen and the swept sub-screen.
     QSignalSpy releasedSpy(engine, &ScrollEngine::windowsReleased);
     engine->pruneStatesForRemovedScreen(QStringLiteral("S1"));
     QCOMPARE(releasedSpy.count(), 1);
@@ -607,6 +603,8 @@ void TestScrollEngineSmoke::pruneRemovedScreenAndActivitiesSweep()
     engine->setCurrentActivity(QStringLiteral("actB"));
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S2"), 0, 0);
     engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S2"));
+    engine->pruneStatesForActivities({});
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|b")));
     engine->pruneStatesForActivities({QStringLiteral("actA")});
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|b")));
     QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|b")));
@@ -2366,7 +2364,7 @@ void TestScrollEngineSmoke::migrateOutAnnouncesDroppedFloat()
     // The announcement rides windowFloatingStateSynced. A migration is the
     // engine's own bookkeeping, not a user float action, so the daemon must
     // mirror the state without restoring geometry or raising an OSD; only the
-    // explicit setWindowFloat below is an active transition.
+    // user toggle below is an active transition.
     QObject owner;
     ScrollEngine* engine = makeEngine(&owner);
     QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
@@ -2374,7 +2372,7 @@ void TestScrollEngineSmoke::migrateOutAnnouncesDroppedFloat()
 
     // windowOpened's context migration.
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
-    engine->setWindowFloat(QStringLiteral("app|a"), true, QStringLiteral("S1"));
+    engine->toggleWindowFloat(QStringLiteral("app|a"), QStringLiteral("S1"));
     QCOMPARE(activeFloatSpy.count(), 1); // the user float is the ACTIVE arm
     QCOMPARE(floatSpy.count(), 0);
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S2"), 0, 0);

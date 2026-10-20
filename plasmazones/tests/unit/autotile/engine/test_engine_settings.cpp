@@ -415,6 +415,70 @@ private Q_SLOTS:
         QCOMPARE(engine.config()->masterCount, 1);
     }
 
+    // A removed desktop's tuned flag goes with it even when no state held it,
+    // so the desktop that takes its number next follows the settings ratio
+    // instead of inheriting the skip (F1033).
+    void testRemovedDesktop_statelessTunedFlagIsNotInherited()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        Settings settings;
+        engine.setEngineSettings(&settings);
+        settings.setAutotileSplitRatio(0.5);
+        engine.refreshConfigFromSettings();
+
+        engine.setCurrentDesktopForScreen(screen, 2);
+        engine.noteSplitRatioUserTuned(screen);
+        engine.pruneStatesForDesktop(2);
+
+        // A new desktop 2, with a state holding a ratio nobody tuned.
+        engine.setCurrentDesktopForScreen(screen, 2);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(QStringLiteral("win1"), screen, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        QVERIFY(!qFuzzyCompare(engine.config()->splitRatio, 0.7));
+        state->setSplitRatio(0.7);
+
+        engine.refreshConfigFromSettings();
+        QVERIFY2(qFuzzyCompare(state->splitRatio(), engine.config()->splitRatio),
+                 "the removed desktop's tuned flag shielded the desktop that took its number");
+    }
+
+    // The daemon's prune of a shrunk desktop count reaches only the desktops
+    // desktopsWithActiveState lists, so a tuned flag no state holds lists its
+    // own (F1126).
+    void testRemovedDesktop_statelessTunedFlagReachesTheCountPrune_data()
+    {
+        QTest::addColumn<bool>("masterCount");
+        QTest::newRow("split ratio") << false;
+        QTest::newRow("master count") << true;
+    }
+
+    void testRemovedDesktop_statelessTunedFlagReachesTheCountPrune()
+    {
+        QFETCH(bool, masterCount);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setCurrentDesktopForScreen(screen, 3);
+        if (masterCount) {
+            engine.noteMasterCountUserTuned(screen);
+        } else {
+            engine.noteSplitRatioUserTuned(screen);
+        }
+
+        const QSet<int> desktops = engine.desktopsWithActiveState();
+        QVERIFY2(desktops.contains(3), "a stateless tuned flag left its desktop out of the count prune");
+        for (const int desktop : desktops) {
+            if (desktop > 2) {
+                engine.pruneStatesForDesktop(desktop);
+            }
+        }
+        QVERIFY(!engine.desktopsWithActiveState().contains(3));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Overflow behavior (Float <-> Unlimited)
     // ═══════════════════════════════════════════════════════════════════════════

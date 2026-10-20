@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "navigationhandler.h"
+#include "handlers/snaphandler.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 
@@ -117,6 +120,20 @@ void NavigationHandler::syncZonesFromDaemon()
         for (const PhosphorProtocol::WindowStateEntry& state : states) {
             if (!state.zoneId.isEmpty()) {
                 m_zoneCache.setZone(state.windowId, state.zoneId);
+                // The parks died with the previous effect or daemon: a snapped
+                // window on a hidden desktop is parked again to re-apply its
+                // zone there. Found by instance, since the daemon's id can
+                // carry an older class spelling, and parked under the live id
+                // the arrival drain resolves by (F1079).
+                KWin::EffectWindow* window = m_effect->findWindowByInstanceId(state.windowId);
+                // Filed under the window's own id, as a live notice would be (F1140).
+                if (window) {
+                    m_zoneOwnNotices.insert(::PhosphorIdentity::WindowId::extractInstanceId(state.windowId));
+                }
+                if (window && (!isOnOwnOutputCurrentDesktop(window) || !window->isOnCurrentActivity())) {
+                    m_effect->snapHandler()->armDesktopArrivalRestore(m_effect->getWindowId(window),
+                                                                      DesktopArrivalParks::Cause::ReapplyOnly);
+                }
             }
         }
         qCDebug(lcEffect) << "Synced" << zoneEntryCount() << "snapped-window zones from daemon";
@@ -153,6 +170,9 @@ void NavigationHandler::setWindowFloating(const QString& windowId, bool floating
 
 void NavigationHandler::setWindowZone(const QString& windowId, const QString& zoneId)
 {
+    if (zoneId.isEmpty()) {
+        forgetZoneNoticesOn(windowId);
+    }
     if (m_zoneCache.setZone(windowId, zoneId)) {
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }
@@ -160,9 +180,48 @@ void NavigationHandler::setWindowZone(const QString& windowId, const QString& zo
 
 void NavigationHandler::clearWindowZone(const QString& windowId)
 {
+    forgetZoneNoticesOn(windowId);
     if (m_zoneCache.remove(windowId)) {
         m_effect->invalidateRuleCacheForStateChange(windowId);
     }
+}
+
+bool NavigationHandler::noteZoneNoticeTarget(const QString& daemonId, const QString& liveId)
+{
+    if (liveId.isEmpty()) {
+        m_zoneNoticeTargets.remove(daemonId);
+        return true;
+    }
+    if (!::PhosphorIdentity::WindowId::sameWindowInstance(liveId, daemonId)) {
+        // The window's own id filed its zone already, and that id speaks for
+        // it: neither this id's zone nor its clear may land on it. The daemon
+        // emits the two ids' notices in no fixed order (a batch walks a hash, a
+        // commit follows the user), and either order ends with the window's
+        // own zone and no target (F1140, F1152).
+        if (m_zoneOwnNotices.contains(::PhosphorIdentity::WindowId::extractInstanceId(liveId))) {
+            m_zoneNoticeTargets.remove(daemonId);
+            return false;
+        }
+        m_zoneNoticeTargets.insert(daemonId, liveId);
+        return true;
+    }
+    m_zoneNoticeTargets.remove(daemonId);
+    forgetZoneNoticesOn(liveId);
+    m_zoneOwnNotices.insert(::PhosphorIdentity::WindowId::extractInstanceId(liveId));
+    return true;
+}
+
+void NavigationHandler::forgetZoneNoticesOn(const QString& liveId)
+{
+    m_zoneOwnNotices.remove(::PhosphorIdentity::WindowId::extractInstanceId(liveId));
+    m_zoneNoticeTargets.removeIf([&liveId](const QHash<QString, QString>::iterator it) {
+        return ::PhosphorIdentity::WindowId::sameWindowInstance(it.value(), liveId);
+    });
+}
+
+QString NavigationHandler::takeZoneNoticeTarget(const QString& daemonId)
+{
+    return m_zoneNoticeTargets.take(daemonId);
 }
 
 } // namespace PlasmaZones

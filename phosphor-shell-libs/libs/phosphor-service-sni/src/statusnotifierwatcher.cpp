@@ -217,8 +217,10 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
         }
     }
     // Adaptors don't pass the sender through automatically, but
-    // QDBusContext does. The adaptor base class inherits QDBusContext
-    // and forwards message().service() as the unique sender name;
+    // QDBusContext does. This watcher, the adaptor's parent, inherits
+    // QDBusContext (Qt sets the context on the object an adaptor is
+    // attached to, never on the adaptor) and message().service() is the
+    // unique sender name;
     // QDBus annotates it on the QDBusMessage backing this call. When
     // this method is reached outside a real D-Bus dispatch (e.g. a
     // direct in-process call from a test fixture), message().service()

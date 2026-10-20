@@ -10,7 +10,8 @@
  * "[]" retraction that drops a screen from that cache, the per-screen PAINT
  * override map and its predicate-driven clear, the all-windows
  * scrollTabColorsChanged broadcast, the targeted per-window re-drive, and the
- * scrollTabColors pass-through to the WindowTrackingAdaptor's rule resolution.
+ * scrollTabColors pass-through to the WindowTrackingAdaptor's rule resolution,
+ * whose memo follows every change of the window's registry record.
  *
  * NOTE: the adaptor is parented to a plain QObject rather than a
  * D-Bus-registered object, same as the panel-gate and active-layouts tests —
@@ -375,6 +376,74 @@ private Q_SLOTS:
         // dereference a dangling borrow.
         adaptor.setWindowTrackingAdaptor(nullptr);
         QVERIFY(adaptor.scrollTabColors(windowId).isEmpty());
+    }
+
+    // The tab-colour memo is keyed on the window's whole registry record, so a
+    // rule on a state field the effect pushes (maximized, kept above) follows
+    // each edge (F699). Keyed on the title, desktop and activity alone, the
+    // memo answered every later query with the first verdict.
+    void testTabColoursFollowEveryRecordChange()
+    {
+        IsolatedConfigGuard guard;
+        // Declared before `parent`, as in testColorsPassThroughToRuleResolution.
+        auto* layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
+        const auto dropRegistry = qScopeGuard([layoutManager] {
+            delete layoutManager;
+        });
+        QObject parent;
+        StubSettings settings(nullptr);
+        StubZoneDetector zoneDetector(nullptr);
+        auto* wta =
+            new WindowTrackingAdaptor(layoutManager, &zoneDetector, nullptr, &settings, nullptr, nullptr, &parent);
+        auto* registry = new PhosphorEngine::WindowRegistry(&parent);
+        wta->setWindowRegistry(registry);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("tabapp");
+        meta.isMaximized = false;
+        meta.keepAbove = false;
+        registry->upsert(QStringLiteral("inst1"), meta);
+
+        using namespace PhosphorRules;
+        const auto colourRule = [](Field field, QLatin1StringView type, const QString& colour) {
+            Rule rule;
+            rule.id = QUuid::createUuid();
+            rule.enabled = true;
+            rule.match = MatchExpression::makeLeaf(field, Operator::Equals, true);
+            RuleAction action;
+            action.type = QString(type);
+            action.params.insert(QString(ActionParam::Value), colour);
+            rule.actions = {action};
+            return rule;
+        };
+        RuleStore store(ConfigDefaults::rulesFilePath(), &parent);
+        QVERIFY(store.addRule(colourRule(Field::IsMaximized, ActionType::TabColorActive, QStringLiteral("#ff0000"))));
+        QVERIFY(store.addRule(colourRule(Field::KeepAbove, ActionType::TabColorInactive, QStringLiteral("#00ff00"))));
+        wta->setRuleStore(&store);
+        const auto teardown = qScopeGuard([wta] {
+            wta->setRuleStore(nullptr);
+            wta->setWindowRegistry(nullptr);
+        });
+
+        namespace STK = PhosphorProtocol::Service::ScrollTabKey;
+        const QString windowId = QStringLiteral("tabapp|inst1");
+        QVERIFY(wta->tabColorRuleParams(windowId).isEmpty());
+
+        meta.isMaximized = true;
+        registry->upsert(QStringLiteral("inst1"), meta);
+        QVariantMap colors = wta->tabColorRuleParams(windowId);
+        QCOMPARE(colors.value(QString(STK::ActiveColor)).toString(), QStringLiteral("#ff0000"));
+        QVERIFY(!colors.contains(QString(STK::InactiveColor)));
+
+        meta.keepAbove = true;
+        registry->upsert(QStringLiteral("inst1"), meta);
+        colors = wta->tabColorRuleParams(windowId);
+        QCOMPARE(colors.value(QString(STK::InactiveColor)).toString(), QStringLiteral("#00ff00"));
+
+        meta.isMaximized = false;
+        registry->upsert(QStringLiteral("inst1"), meta);
+        colors = wta->tabColorRuleParams(windowId);
+        QVERIFY(!colors.contains(QString(STK::ActiveColor)));
+        QCOMPARE(colors.value(QString(STK::InactiveColor)).toString(), QStringLiteral("#00ff00"));
     }
 };
 

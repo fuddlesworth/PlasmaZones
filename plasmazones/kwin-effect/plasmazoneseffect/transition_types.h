@@ -225,6 +225,12 @@ struct ShaderTransition
     /// "fully revealed", which is exactly the semantic users expect for
     /// the corresponding `disappear` event.
     bool reverse = false;
+    /// True for a leg beginMaximizeShaderMorph installed for a KWin maximize
+    /// edge. A second edge inside it (a rapid toggle) supersedes it from the
+    /// rect it is drawing instead of riding it: the same-effect short-circuit
+    /// would keep the progress running while the endpoints swap, so the drawn
+    /// rect jumped from mix(from, to, p) to mix(to, from, p).
+    bool maximizeLeg = false;
     /// True when the active animation declares `fboExtent: "surface"` in
     /// its metadata. Surface-extent shaders (bounce, fly-in, broken-glass,
     /// morph) paint past the window bounds, so `apply()` expands the
@@ -578,7 +584,7 @@ struct ScrollVisualPlacement
     /// The resolver has to draw the window where it was actually committed, so
     /// this records what the commit did rather than what the column is. Two
     /// commit-side centrings exist and they cover different populations. An
-    /// X11 tile is pre-centred by constrainTileGeometry (drag_snap.cpp) on
+    /// X11 tile is pre-centred by constrainTileGeometry (window_geometry_apply.cpp) on
     /// every apply, with no declared-rect exemption, so it stays true there. A
     /// Wayland tile is centred only by the size-continuity pass and the
     /// reactive pass in window_connections.cpp, and both are keyed on
@@ -619,8 +625,9 @@ struct ScrollVisualPlacement
 struct RestoreSuppression
 {
     /// frameGeometry at `windowAdded`. The window is released once its
-    /// live geometry leaves this point — i.e. the repositioning configure
-    /// has landed.
+    /// live position leaves this point, or once it reaches the target's
+    /// size — i.e. the repositioning configure has landed
+    /// (InstantRestoreDecisions::suppressionSettled).
     QRectF spawnGeometry;
     /// The resolved snap / tile rect, stamped by `applyWindowGeometry` once
     /// the window is actually being repositioned. Invalid until then:

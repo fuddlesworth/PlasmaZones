@@ -210,6 +210,10 @@ public:
     /// @p path that is not a supported surface path.
     Q_INVOKABLE bool hasOverride(const QString& path) const;
 
+    /// Engage an empty direct override so the card's switch is saved while
+    /// inherited chain and parameters continue to follow their source.
+    Q_INVOKABLE bool engageOverride(const QString& path);
+
     // ── Chain mutators ────────────────────────────────────────────────────
 
     /// The effective (resolved) chain for @p path — the ordered pack-id

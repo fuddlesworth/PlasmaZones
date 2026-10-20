@@ -21,6 +21,7 @@
 #include <QObject>
 #include <QTest>
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -41,6 +42,8 @@ const QString kScreen2 = QStringLiteral("HDMI-1");
 const QString kInstance = QStringLiteral("11111111-2222-3333-4444-555555555555");
 const QString kWindow = QStringLiteral("app|11111111-2222-3333-4444-555555555555");
 const QString kStays = QStringLiteral("app|66666666-7777-8888-9999-000000000000");
+/// What a missing held key reads as: desktop 0, which no membership has.
+const PhosphorEngine::PlacementStateKey kNoKey{QString(), 0, QString()};
 
 PhosphorEngine::WindowMetadata onDesktop(int desktop, const QList<int>& span = {}, const QString& activity = QString())
 {
@@ -167,7 +170,7 @@ private Q_SLOTS:
         QVERIFY(!d1->containsWindow(kWindow));
         QVERIFY(f.engine.isWindowTracked(kWindow));
         QVERIFY(f.engine.tilingStateForScreen(kScreen)->containsWindow(kWindow));
-        QCOMPARE(f.engine.heldKeyForWindow(kWindow)->desktop, 2);
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow).value_or(kNoKey).desktop, 2);
     }
 
     // A desktop set that merely GREW to include the holding desktop keeps the
@@ -221,7 +224,7 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         QVERIFY2(!d1->containsWindow(kWindow), "sticky off onto desktop 2: desktop 1's tile goes");
         QVERIFY(d2->containsWindow(kWindow));
-        QCOMPARE(f.engine.heldKeyForWindow(kWindow)->desktop, 2);
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow).value_or(kNoKey).desktop, 2);
     }
 
     // A title tick that leaves the desktop fields alone must not reconcile at
@@ -669,6 +672,57 @@ private Q_SLOTS:
         f.engine.cancelDragInsertPreview();
         QCoreApplication::processEvents();
         QVERIFY(f.engine.heldKeyForWindow(kWindow).has_value());
+    }
+
+    // F800: KWin moves a removed desktop's windows to its successor, while the
+    // engines still key them under the removed number when the daemon's
+    // renumber runs, so the prune releases them with the context. The two
+    // halves around the renumber hand a window in view back to the engine, in
+    // the context its screen shows under the new numbering. Mutation: drop
+    // readoptRenumberEvictees' announce and the window stays untracked.
+    void autotile_removedDesktopsWindowInView_isReadopted()
+    {
+        AutotileFixture f;
+        f.openOn(2, {kWindow});
+        QVERIFY(f.engine.isWindowTracked(kWindow));
+
+        // Desktop 2 of 3 goes, as the daemon's renumber handler applies it:
+        // the map through the engine, then the re-seed of the desktop the
+        // screen shows (the successor, which took number 2).
+        f.adaptor.noteRenumberEvictees({kWindow}, {2});
+        f.engine.remapDesktops(PhosphorEngine::DesktopRemap::removal(2, 3));
+        f.engine.setCurrentDesktopForScreen(kScreen, 2);
+        QCoreApplication::processEvents();
+        QVERIFY2(!f.engine.isWindowTracked(kWindow), "the prune releases it with the context");
+
+        // The registry holds the window's push in the new numbering.
+        f.adaptor.readoptRenumberEvictees([](const QString& screenId, const PhosphorEngine::DesktopSpan& span) {
+            return screenId == kScreen && span.coversDesktop(2);
+        });
+        QCoreApplication::processEvents();
+
+        QVERIFY2(f.engine.isWindowTracked(kWindow), "handed back to the engine");
+        QCOMPARE(f.engine.heldKeyForWindow(kWindow).value_or(kNoKey).desktop, 2);
+    }
+
+    // The second half's gate: a window whose successor is out of view is left
+    // for the desktop switch to re-announce. Mutation: drop the inView test and
+    // the window is tiled into the desktop the screen shows instead.
+    void autotile_removedDesktopsWindowOutOfView_waitsForTheSwitch()
+    {
+        AutotileFixture f;
+        f.openOn(2, {kWindow});
+        f.engine.setCurrentDesktopForScreen(kScreen, 1);
+
+        f.adaptor.noteRenumberEvictees({kWindow}, {2});
+        f.engine.remapDesktops(PhosphorEngine::DesktopRemap::removal(2, 3));
+        QCoreApplication::processEvents();
+        f.adaptor.readoptRenumberEvictees([](const QString&, const PhosphorEngine::DesktopSpan& span) {
+            return span.coversDesktop(1);
+        });
+        QCoreApplication::processEvents();
+
+        QVERIFY2(!f.engine.isWindowTracked(kWindow), "out of view: the switch to its desktop re-announces it");
     }
 };
 

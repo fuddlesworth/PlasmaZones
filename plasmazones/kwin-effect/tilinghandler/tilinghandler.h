@@ -2,27 +2,32 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // FILE-SIZE EXCEPTION (sanctioned): TilingHandler is one class declaration,
-// and the implementation is already partitioned across the fourteen TUs in
-// this directory (tiling.cpp, tilinghandler.cpp, state.cpp, wiring.cpp,
-// signals.cpp, windowedfullscreen.cpp, pretilegeometry.cpp, floatcleanup.cpp,
-// minimizefloat.cpp, outputchange.cpp, screenschanged.cpp, scrolltabs.cpp,
-// wheelchord.cpp, fullscreenhold.cpp) —
-// every one of those TUs calls back
-// through this single declaration, which C++ requires to be whole. Most of the
-// length is the per-member invariant prose the split files depend on: the
-// per-session daemon state (managed/scrolling/axis sets and their teardown
-// pairings), the generation guards, and the inline predicates those TUs share.
+// and the implementation is already partitioned across the fifteen TUs in
+// this directory (tiling.cpp, framecentering.cpp, tilinghandler.cpp, state.cpp,
+// wiring.cpp, signals.cpp, windowedfullscreen.cpp, pretilegeometry.cpp,
+// floatcleanup.cpp, minimizefloat.cpp, outputchange.cpp, screenschanged.cpp,
+// scrolltabs.cpp, wheelchord.cpp, fullscreenhold.cpp) — every one of those TUs
+// calls back through this single declaration, which C++ requires to be whole.
+// Most of the length is the per-member invariant prose the split files depend
+// on: the per-session daemon state (managed/scrolling/axis sets and their
+// teardown pairings), the generation guards, and the inline predicates those
+// TUs share.
 // Splitting the class itself would mean a second handler type with the same
-// state, which is the coupling this file exists to avoid.
+// state, which is the coupling this file exists to avoid. Grew with the
+// cross-output bounce fix (#1124): dropCenteringTarget, which
+// applyWindowGeometry calls to retire a stale centring target.
 
 #pragma once
 
 #include "compositor/deferredwindowcommits.h"
 #include "compositor/scrolltabindicatorpainter.h"
+#include "desktopmovestash.h"
 #include "minimizefloatmarks.h"
 // ClaimScope is part of releaseAllClaims' signature; the header is pure and
 // header-only, so this costs nothing beyond the enum.
 #include "scrolldecisions.h"
+#include "untiledecisions.h"
+#include "plasmazoneseffect/placementstatement.h"
 
 #include <PhosphorCompositor/TilingState.h>
 #include <PhosphorCompositor/TriggerParser.h>
@@ -49,9 +54,6 @@
 
 #include <cstdint>
 
-class QAction;
-class QTimer;
-
 namespace KWin {
 class LogicalOutput;
 class EffectWindow;
@@ -70,11 +72,11 @@ class PlasmaZonesEffect;
 /**
  * @brief Handles tiling-family engine integration (autotile + scrolling) for PlasmaZones
  *
- * Manages the autotile D-Bus interface, screen tracking, window tiling,
- * monocle mode, tiled-tracking for border rendering, and pre-autotile
- * geometry preservation. Title-bar (borderless) state is owned by the
- * effect's DecorationManager and driven by rules — this handler does
- * not touch decorations.
+ * Manages the tiling D-Bus interface, screen tracking, window tiling, monocle mode, tiled membership and
+ * pre-autotile geometry preservation. Tiled membership selects a window's decoration (the window.tiled surface
+ * path and the Tiled appearance scope) and feeds the IsTiled rule field. Title-bar state belongs to the effect's
+ * DecorationManager and is driven by rules, so this handler owns none of it, but it re-drives decorations
+ * whenever it moves a window between those paths.
  *
  * Delegates window lookups, geometry application, and animation back to the effect.
  */
@@ -89,106 +91,100 @@ public:
     // Integration points (called by PlasmaZonesEffect)
     // ═══════════════════════════════════════════════════════════════════
 
-    /// Returns true when the window was on an autotile screen and a
-    /// `windowOpened` D-Bus call was issued (i.e. the daemon is expected
-    /// to tile it, producing a moveResize). Returns false when the call
-    /// was filtered out locally (ineligible window, non-autotile screen,
-    /// already-notified) — callers that depend on a follow-up tile must
-    /// not wait for one in that case (used by the first-frame open
-    /// suppression path to release suppression immediately on a no-op).
-    ///
-    /// @p knownFreeFloating governs the pre-autotile geometry capture: the
-    /// genuine window-opened/spawn path passes `true` (the frame is KWin's
-    /// spawn geometry and the FloatingCache is not yet populated, so the
-    /// isWindowFloating() guard must be bypassed). RE-ADD callers (a window
-    /// already known to the engine being re-announced — cross-screen
-    /// transfer, desktop-return catch-scan) and the fullscreen-exit announce of
-    /// a never-tracked window pass `false`: the frame may be a tiled zone rect
-    /// or still the output rect, so the floating guard MUST run and reject it,
-    /// otherwise the tiled rect would be persisted as the window's
-    /// free-floating geometry and clobber the daemon's real float-back.
-    bool notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating);
+    /// Returns true when the window was on a tiling screen and the
+    /// announce was sent (the daemon is expected to tile it). Returns false
+    /// when it was filtered out locally (ineligible window, non-tiling
+    /// screen, already notified): callers that depend on a follow-up tile
+    /// must not wait for one (the first-frame open suppression path releases
+    /// suppression immediately on a no-op). @p knownFreeFloating governs the
+    /// pre-tile geometry capture: the genuine open passes `true` (the frame
+    /// is KWin's spawn geometry and the FloatingCache is not yet populated, so
+    /// the isWindowFloating() guard must be bypassed). RE-ADD callers (a window
+    /// already known to the engine being re-announced — cross-screen transfer,
+    /// desktop-return catch-scan) and the fullscreen-exit announce of a
+    /// never-tracked window pass `false`: the frame may be a tiled zone rect or
+    /// still the output rect, so the floating guard MUST run and reject it, or
+    /// the tiled rect would clobber the daemon's real float-back. An untracked window a KWin move brings onto a
+    /// tiling screen (handleWindowOutputChanged) passes `true` unless it is already tile-marked: its frame is the
+    /// free frame it carried, while one handoffReceive tiled sits in a zone rect.
+    /// @p focusEligible: true only for a genuine open or an arrival on the
+    /// desktop in view (Tiling.windowOpened, may take focus); a re-placement
+    /// passes false (Tiling.windowReannounced, never focuses).
+    bool notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating, bool focusEligible);
 
     /**
      * @brief Batch-notify windows added to engine-managed screens
      *
      * Filters windows the same way as notifyWindowAdded, then sends one
-     * windowsOpenedBatch D-Bus call instead of per-window windowOpened calls.
-     * Used on daemon startup/restart and autotile toggle-on.
+     * windowsOpenedBatch D-Bus call instead of per-window windowOpened calls. Callers: the bring-up
+     * managed-screens reply (loadSettings), a screen entering a tiling engine from snapping (slotScreensChanged),
+     * and an in-union engine flip (setScrollingScreens).
      *
      * @param windows List of candidate windows to process
      * @param screenFilter If non-empty, only process windows on these screens
      * @param resetNotified If true, remove windowId from m_notifiedWindows before processing
      *        (for re-announce on daemon restart / screen change)
-     * @param enteringAutotile True when the screen has just changed from snap
-     *        mode. Already-minimized windows then need an immediate first
-     *        autotile placement when they become visible.
-     * @param screenOverrides Per-window screen ids resolved by the caller,
-     *        used in place of getWindowScreenId for the windows it names. The
-     *        engine-flip caller (setScrollingScreens) MUST supply these: the
-     *        engine-authoritative screen override is gated on the scrolling
-     *        set, so once the flip has been written a parked strip column
-     *        resolves positionally onto the neighbouring output and the
-     *        screenFilter drops it. The value chosen here is the one used for
-     *        the filter, the m_notifiedWindowScreens stamp, the pre-tile
-     *        capture and the wire entry alike, so an override cannot desync
-     *        them.
+     * @param enteringAutotile True for a mode-entry batch: the screens in @p screenFilter have just come under
+     *        a tiling engine, from snapping or by an in-union engine flip. Already-minimized windows are then
+     *        marked untiled (and a snap-owned minimize-float is adopted) so their unminimize lands in the new
+     *        tile at once, and every window not yet tile-marked is captured as a known free frame, bypassing
+     *        the capture's isWindowFloating guard.
+     * @param screenOverrides Per-window screen ids resolved by the caller, used in place of getWindowScreenId
+     *        for the windows it names. The engine-flip caller (setScrollingScreens) MUST supply these: the
+     *        engine-authoritative screen override is gated on the scrolling set, so once the flip has been
+     *        written a parked strip column resolves positionally to whichever output is nearest its
+     *        below-every-output park, which need not be its own, and the screenFilter drops it. The value
+     *        chosen here is the one used for the filter, the m_notifiedWindowScreens stamp, the pre-tile
+     *        capture and the wire entry alike, so an override cannot desync them.
      */
     void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, const QSet<QString>& screenFilter = {},
                                  bool resetNotified = false, bool enteringAutotile = false,
                                  const QHash<KWin::EffectWindow*, QString>& screenOverrides = {});
 
     /// Remove a window from this handler's autotile tracking and notify the daemon.
-    /// INTENT NOTE: an earlier m_pendingCloses guard (deduping a close racing
-    /// its own re-announce) was deliberately deleted — window ids are
-    /// uuid-based, so a closed id can never be re-announced, and the
-    /// regression the guard defended against is unreachable. Do not
-    /// reintroduce it as "missing hardening".
+    /// INTENT NOTE: an earlier m_pendingCloses guard (deduping a close racing its own re-announce) was deliberately
+    /// deleted — window ids are uuid-based, so a closed id can never be re-announced, and the regression the guard
+    /// defended against is unreachable. Do not reintroduce it as "missing hardening".
     void onWindowClosed(const QString& windowId, const QString& screenId);
 
-    /// Drop a LIVE window from engine tracking without a close (the
-    /// drag-bypass revert, and the desktop arms). The same
-    /// cleanupAutotileTracking teardown as onWindowClosed, minus that one's
-    /// unconditional maximize-ledger scrub, and the daemon relay is
-    /// Tiling.releaseWindowTracking, which runs NO
-    /// placement capture — the window is mid-drag and its frame must never
-    /// be recorded as a float-back.
+    /// Drop a LIVE window from engine tracking without a close. The same cleanupAutotileTracking teardown as
+    /// onWindowClosed, minus its maximize-ledger scrub, and the daemon relay is Tiling.releaseWindowTracking,
+    /// which runs NO placement capture: a close relay would persist the slot being left as the window's final
+    /// state. Callers: the desktop handler (a genuine departure, an arrival onto a desktop in view that does not
+    /// tile, an arrival a rule excludes), the flags-settle eviction (reevaluateWindowEligibility), the cross-output
+    /// transfer in handleWindowOutputChanged, and an overflow float landing on another screen (floatOntoScreen).
     ///
-    /// The daemon relay fires only when @p screenId is managed in the CURRENT
-    /// context. That gate is deliberately NOT lifted for a window arriving
-    /// from another desktop: which desktop's state still lists a window is
-    /// the daemon's question, answered by TilingAdaptor's desktop-membership
-    /// reconcile off the window's registry desktop set (#1076), never by this
-    /// screen's managed set, which says nothing about the desktop it left.
-    void releaseWindowTracking(const QString& windowId, const QString& screenId);
-    /// Tear down all effect-side autotile tracking for @p windowId (shared +
-    /// KWin-specific state, incl. the pending cross-screen-restore connection)
-    /// WITHOUT notifying the daemon. Shared by onWindowClosed (which adds the
-    /// daemon windowClosed call) and the cross-mode-move marker path (where the
-    /// daemon already relinquished the window via handoffRelease).
-    /// No screenId parameter: every container this touches is either keyed by
-    /// windowId or swept across all screens. The saved stacking orders used to
-    /// be pruned only for a caller-supplied screen, which left the id behind on
-    /// every other screen's order — including the DESTINATION's on a
-    /// cross-output transfer, where the caller passes the source.
-    void cleanupAutotileTracking(const QString& windowId);
-    /// Drop @p windowId from the minimize-float set and cancel EITHER
-    /// deferred edge — the minimize debounce and the unminimize commit —
-    /// mirroring SnapHandler::removeMinimizeFloated, plus the qualifier-marks
-    /// drop (snap has no MinimizeFloatMarks counterpart). Returns true if
-    /// the window was tracked. Callers: close cleanup, the effect's
-    /// authoritative visible unfloat (slotWindowFloatingChanged, including
-    /// its dual-hold repair), and the cross-mode adoption hops (snap's
-    /// adoption paths and countermand hand-offs).
-    bool removeMinimizeFloated(const QString& windowId)
-    {
-        cancelPendingMinimizeFloat(windowId);
-        cancelPendingUnminimizeUnfloat(windowId);
-        m_minimizeFloatMarks.remove(windowId);
-        m_unfloatRetryAttempts.remove(windowId);
-        const bool owned = m_minimizeFloatedWindows.remove(windowId);
-        return m_unfloatInFlight.remove(windowId) > 0 || owned;
-    }
+    /// The relay fires only when @p screenId is managed in the CURRENT context. Which desktop's state still lists a
+    /// window is the daemon's question, answered by TilingAdaptor's desktop-membership reconcile off the registry
+    /// desktop set (#1076), so the desktop handler relays only a genuine move, after the metadata push. A departure
+    /// passes ClaimScope::LiveDeparture (F675).
+    void releaseWindowTracking(const QString& windowId, const QString& screenId,
+                               ScrollDecisions::ClaimScope scope = ScrollDecisions::ClaimScope::UntrackFunnel);
+    /// Tear down all effect-side autotile tracking for @p windowId (shared + KWin-specific state, incl. the pending
+    /// cross-screen-restore connection) WITHOUT notifying the daemon. Its callers include onWindowClosed and
+    /// releaseWindowTracking (which add their own daemon call) and the cross-mode-move marker path (the daemon
+    /// already ran handoffRelease). No screenId parameter: every container this touches is keyed by windowId or
+    /// swept across all screens (a per-screen prune once left the id on the cross-output DESTINATION's stacking
+    /// order). Claims release by @p scope; an evacuee passes ClaimScope::Evacuation and is scrubbed, not released.
+    void cleanupAutotileTracking(const QString& windowId,
+                                 ScrollDecisions::ClaimScope scope = ScrollDecisions::ClaimScope::UntrackFunnel);
+    /// The settle's evacuee and returned-window verdicts (evacuees.cpp): what the effect held for @p w goes without
+    /// handing KWin's state back, and it is tracked on @p screenId when managed, unannounced. @p departed: the
+    /// output it left, as the settle saw it; @p parkedOutputs: the outputs whose park the daemon still holds.
+    void adoptEvacuee(KWin::EffectWindow* w, const QString& screenId, const QString& departed,
+                      const QSet<QString>& parkedOutputs);
+    void readoptEvacuee(KWin::EffectWindow* w, const QString& screenId);
+    void forgetEvacueeParks(const QString& windowId); ///< the daemon holds none for it any more (F1120, evacuees.cpp)
+    void forgetEvacueeParksOn(const QString& windowId, const QString& physicalId); ///< that output's park only (F1128)
+    /// The windows tiled in @p screenId's strip, wherever their frames sit.
+    QStringList stripMembersOn(const QString& screenId) const;
+    /// Drop @p windowId from the minimize-float set and cancel EITHER deferred edge — the minimize debounce and
+    /// the unminimize commit — mirroring SnapHandler::removeMinimizeFloated, plus the qualifier-marks drop (snap
+    /// has no MinimizeFloatMarks counterpart). Returns true if the window was tracked. Callers: the effect's
+    /// authoritative visible unfloat (slotWindowFloatingChanged, including its dual-hold repair) and snap's
+    /// cross-mode adoption of an autotile minimize-float. Close and untrack do not call it:
+    /// cleanupAutotileTracking makes the same drops itself.
+    bool removeMinimizeFloated(const QString& windowId);
 
     /// Whether this handler currently owns @p windowId's minimize-float
     /// marker (mirrors SnapHandler::isMinimizeFloated). Includes the
@@ -201,62 +197,26 @@ public:
         return m_minimizeFloatedWindows.contains(windowId) || m_unfloatInFlight.contains(windowId);
     }
 
-    /// Take ownership of a minimize-float relinquished by the snap handler
-    /// (cross-mode countermand / hand-off on a screen autotile now owns).
-    /// @p untiled marks the window's rect as belonging to the prior mode so
-    /// its unminimize commits immediately instead of through the animation
-    /// grace.
-    void adoptMinimizeFloated(const QString& windowId, bool untiled)
-    {
-        m_minimizeFloatedWindows.insert(windowId);
-        if (untiled) {
-            m_minimizeFloatMarks.markUntiled(windowId);
-        }
-    }
+    /// Take ownership of a minimize-float relinquished by the snap handler (cross-mode countermand / hand-off on a
+    /// screen autotile now owns). @p untiled marks the window's rect as belonging to the prior mode so its
+    /// unminimize commits immediately instead of through the animation grace.
+    void adoptMinimizeFloated(const QString& windowId, bool untiled);
 
-    /// Retry-budget hand-off for cross-mode adoptions: the budget is a
-    /// per-WINDOW cap on daemon unfloat attempts, and it must survive the
-    /// ownership hop or a persistently-refused unfloat ping-ponging between
-    /// handlers resets to a fresh budget on every bounce.
-    int unfloatRetryBudgetUsed(const QString& windowId) const
-    {
-        return m_unfloatRetryAttempts.value(windowId);
-    }
-    void seedUnfloatRetryBudget(const QString& windowId, int attemptsUsed)
-    {
-        if (attemptsUsed > m_unfloatRetryAttempts.value(windowId)) {
-            m_unfloatRetryAttempts.insert(windowId, attemptsUsed);
-        }
-    }
-    bool hasPendingUnminimizeUnfloat(const QString& windowId) const
-    {
-        return m_pendingUnminimizeUnfloat.contains(windowId);
-    }
-    bool hasUnfloatInFlight(const QString& windowId) const
-    {
-        return m_unfloatInFlight.contains(windowId);
-    }
-    /// Drop a destroyed window's desktop-move geometry stash. Separate from
-    /// onWindowClosed because the desktop-MOVE path calls onWindowClosed
-    /// right after creating the stash (the window must look "closed" to this
-    /// desktop's tiling) — only genuine destruction may clear it.
-    void clearDesktopMoveStash(const QString& windowId)
-    {
-        m_savedPreTileForDesktopMove.remove(windowId);
-    }
+    /// Retry-budget hand-off for cross-mode adoptions: the budget is a per-WINDOW cap on daemon unfloat attempts,
+    /// and it must survive the ownership hop or a persistently-refused unfloat ping-ponging between handlers resets
+    /// to a fresh budget on every bounce.
+    int unfloatRetryBudgetUsed(const QString& windowId) const;
+    void seedUnfloatRetryBudget(const QString& windowId, int attemptsUsed);
+    bool hasPendingUnminimizeUnfloat(const QString& windowId) const;
+    bool hasUnfloatInFlight(const QString& windowId) const;
+    void clearDesktopMoveStash(const QString& windowId); ///< a destroyed window's stash (only destruction may)
     void deferWindowRouting(KWin::EffectWindow* window);
-    /// An announce is in flight (see SnapHandler::hasOpenResolveInFlight).
-    bool announceInFlight(const QString& id) const
-    {
-        return m_announceGen.contains(id);
-    }
-    /// Flags-settle eviction backstop: re-run the structural placement
-    /// filters for an already-announced window whose keep-above /
-    /// skip-switcher flag just changed, and release it from its engine
-    /// (restoring the captured spawn frame) when it is no longer tileable.
-    /// Wired to KWin::Window's flag-change signals in
-    /// setupWindowConnections; free for windows this handler never
-    /// announced.
+    bool announceInFlight(const QString& id) const; ///< see SnapHandler::hasOpenResolveInFlight
+    quint64 announceGeneration(const QString& id) const; ///< the stamp of the announce in flight, 0 when none
+    /// Flags-settle backstop, wired in wireOutputChangeHandlers: a window's keep-above, skip-switcher, transient or
+    /// modal state changed (WindowFlagEdges::actionsFor). An announced window no longer tileable is released from its
+    /// engine at its captured spawn frame; an unannounced one now tileable on a managed screen in view is tiled at
+    /// once, with no focus (late_tileable_adopt, F991).
     void reevaluateWindowEligibility(KWin::EffectWindow* window);
     void onDaemonReady();
 
@@ -280,26 +240,21 @@ public:
     /// the successor cannot have pushed yet, so nothing it sends is ever thrown
     /// away.
     ///
-    /// The serviceUnregistered teardown cannot be the sole drain site, and not
-    /// because it might be skipped: the daemon registers its name with the
-    /// default flags (no replacement, no queueing), so an owner change always
-    /// goes through the name being free and the teardown always fires on a
-    /// restart. The teardown drains a deliberately SMALLER set — the maps this
-    /// function clears have to keep answering for the whole daemon-down
-    /// interval (see clearPerSessionDaemonState). Everything the two have in
-    /// common is cleared idempotently here, so bring-up is authoritative on its
-    /// own rather than depending on what the teardown left behind.
+    /// The serviceUnregistered teardown always fires on a restart (the name is
+    /// registered with no replacement or queueing), but it drains a
+    /// deliberately SMALLER set: the maps this function clears keep answering
+    /// for the daemon-down interval (see clearPerSessionDaemonState). What the
+    /// two share is cleared idempotently here, so bring-up is authoritative on
+    /// its own.
     void drainDeadSessionState();
 
     /// Drop every map whose contents belong to ONE daemon session.
     ///
     /// Called by drainDeadSessionState, which owns the timing argument above.
-    /// The teardown in lifecycle_wiring_daemon.cpp cannot be the sole drain
-    /// site. That teardown drains a DIFFERENT, deliberately smaller
-    /// set (the rule-visible inputs plus the compositor restores), because the
-    /// maps here must keep answering for the daemon-down interval — a window's
-    /// notified screen, its minimize-float ownership and its deferred routes all
-    /// still describe live windows while the daemon is merely absent.
+    /// The teardown in lifecycle_wiring_daemon.cpp drains a deliberately
+    /// smaller set (the rule-visible inputs plus the compositor restores),
+    /// because these maps describe live windows while the daemon is merely
+    /// absent: a window's notified screen, minimize-float ownership, routes.
     ///
     /// Paired invariant, and the reason this is one function rather than an
     /// inline list: anything added to a per-session map must be dropped here.
@@ -311,22 +266,22 @@ public:
     /// surviving membership to a Release. Adding to the teardown list is a separate decision — see the
     /// serviceUnregistered handler for what belongs there and why.
     ///
-    /// Two further deliberate exceptions, both self-healing rather than drained: m_maximizeToggleInFlight entries
+    /// Two further maps are not cleared here: m_maximizeToggleInFlight entries
     /// expire on read via MaximizeToggleFlightMs — except one carrying a recorded press, whose ENTRY is kept
     /// (stamped armedAtMs = 0) so the press itself survives: only the in-flight suppression lapses, and the
     /// reply still takes the entry and honours the click rather than throwing it away on a slow round trip.
-    /// That take, or cleanupAutotileTracking, is what collects it. And m_windowedFsClearInFlight is
-    /// reply-gated — a toggle or clear
-    /// dispatched to the dead daemon gets a D-Bus error for the vanished peer and its error arm drops the marker,
-    /// so a drain here would only race the same cleanup.
+    /// That take, or cleanupAutotileTracking, is what collects it. And m_windowedFsClearInFlight is drained by
+    /// restoreAllWindowedFullscreen, which drainDeadSessionState and the serviceUnregistered teardown both run; a
+    /// clear dispatched to the dead daemon also drops its own marker in the reply's error arm.
     void clearPerSessionDaemonState();
 
     /**
-     * @brief Handle autotile drag-to-float: restore border and pre-autotile size
+     * @brief Handle autotile drag-to-float: clear tile state and restore the pre-autotile size
      *
-     * Called synchronously at drag-stop time. Restores the KWin border (title bar),
-     * clears tiling state, and defers a size-only restore to the next event loop
-     * tick (after KWin finishes the interactive move).
+     * Called at drag start (the bypass fast path and a mid-drag policy flip, both @p immediate) and at the
+     * drop's ApplyFloat outcome. Runs applyFloatCleanup, re-drives decorations, and restores the pre-autotile
+     * size at the current position (deferred to the next event loop tick at the drop, after KWin finishes the
+     * interactive move).
      *
      * When @p immediate is true (drag-start path), the size restore is applied
      * synchronously with allowDuringDrag=true so the user sees the window return
@@ -335,23 +290,39 @@ public:
      * via QTimer::singleShot so it runs after KWin has finished the interactive
      * move and the window's frame geometry reflects the actual drop position.
      *
-     * @param w The window being floated (may be null for cross-screen drops)
+     * @param w The window being floated (callers pass a live one; the body still null-checks)
      * @param windowId Stable window identifier
      * @param immediate Apply size restore synchronously during the interactive move
      */
     void handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate = false);
+    /// A tile dragged onto the snap path mid-drag: suspend its tile state (the
+    /// daemon still holds it, and the drop decides), then settle it after the
+    /// drop, untracking it unless it came back to a tiling screen.
+    void suspendTileForSnapDrag(const QString& windowId);
+    void settleSuspendedTileAfterDrop(KWin::EffectWindow* w, const QString& windowId);
     void savePreTileForDesktopMove(const QString& windowId);
     /// Consume the desktop-move stash for @p windowId, folding the preserved
     /// pre-autotile rect back into @p screenId's bucket so a float-restore
     /// after the move returns to the original free position rather than the
-    /// source desktop's tiled frame. MUST run after the re-add path's
-    /// releaseWindowTracking (which wipes the bucket) and before
-    /// notifyWindowAdded. Declines a rect stashed under a different screen —
-    /// saved rects are absolute in the SOURCE monitor's coordinate space and
-    /// would land off-target after a combined cross-desktop + cross-screen
-    /// move. Consumes the entry either way; a window with no stash is a no-op.
+    /// source desktop's tiled frame. MUST run after the teardown that wipes the
+    /// bucket and before notifyWindowAdded. Declines another monitor's rect.
     void restorePreTileForDesktopMove(const QString& windowId, const QString& screenId);
-    void handleWindowOutputChanged(KWin::EffectWindow* w);
+    /// The free placement a window that left a tiling desktop is owed where it
+    /// is now in view (DesktopMoveStash); the second pays every one a switch shows.
+    void payOwedFreePlacement(KWin::EffectWindow* w, const QString& windowId, const QString& screenId);
+    void payOwedFreePlacementsInView(const QList<KWin::EffectWindow*>& windows);
+    /// A hand gesture ended: the stash follows a move or resize, the float bucket a resize.
+    void noteFreeGeometryAfterGesture(KWin::EffectWindow* w, bool resized);
+    /// The tiling side of a crossing. True when it is the window's own (not a daemon
+    /// move's echo nor a strip column's hop), for ScreenChangeHandler::reportCrossing.
+    /// TrackOnly re-adds on the new screen without an announce: a drop the daemon placed (F713, F731).
+    enum class ReAdd {
+        Announce,
+        TrackOnly
+    };
+    bool handleWindowOutputChanged(KWin::EffectWindow* w, ReAdd readd = ReAdd::Announce);
+    /// KWin moved a strip tile to another output itself (ScrollDecisions::isKWinMoveOffStrip, F738).
+    bool isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& windowId) const;
 
     // D-Bus signal connections and settings
     void connectSignals();
@@ -415,8 +386,8 @@ public:
     /// claimed; an unclaimed one is left entirely alone.
     ///
     /// Writes NOTHING to KWin's maximize bit. The user's own flip stands for
-    /// the length of the round trip and the engine's batch imposes the answer,
-    /// which is what keeps the button's motion to a single animated leg. Only
+    /// the length of the round trip and the engine's batch imposes the answer
+    /// in one leg, anchored at the frame the press left (F989). Only
     /// a REFUSED request writes the bit back, from the dispatch's reply
     /// handler.
     ///
@@ -436,9 +407,9 @@ public:
     /// flip, with no dispatch to the engine.
     ///
     /// interceptMaximizeRequest sits behind the caller's fully-maximized edge
-    /// filter, so a quick tile (one axis) never reaches it, and nothing else
-    /// clears the bit: the batch arm that would needs a batch, and the engine
-    /// emits on change, so a quick tile that moves no column schedules none.
+    /// filter, so an axis-only maximize (Maximize Vertically / Horizontally)
+    /// never reaches it, and nothing else clears the bit: the batch arm that
+    /// would needs a batch, and the engine emits on change, so none comes.
     /// Cancel only — the engine has no half-maximize to express, and routing
     /// this through the interception would toggle the column instead.
     void cancelAxisOnlyMaximize(KWin::EffectWindow* w);
@@ -484,6 +455,11 @@ public:
     /// closes it: the gesture end replays geometry only, and the engine emits
     /// on change, so a drag that moves no column schedules no batch.
     void reconcileMaximizeAfterGesture(KWin::EffectWindow* w);
+    /// A monocle member KWin un-maximized during a gesture, settled at its end: kept when KWin re-maximized it,
+    /// else unclaimed, and floated unless @p outcomePlacedIt (F775).
+    void settleMonocleUnmaximizeAfterGesture(KWin::EffectWindow* w, bool outcomePlacedIt);
+    /// A cancelled drag revoked the drag-start float: the Monocle restore it owed goes too (F1014).
+    void revokeDragStartMonocleRestore(KWin::EffectWindow* w);
 
     /// What a releaseAllClaims call actually handed back. Callers gate
     /// follow-up work on it — the passive float shed re-resolves decorations
@@ -517,9 +493,6 @@ public:
     /// RETAINED while the window holds (or has requested) fullscreen, so a
     /// later batch's Release arm can do the real restore — see the body.
     ///
-    /// Public because the strip-exit funnels in the sibling TUs call it; the
-    /// bracketed write and the dispatch it uses are private mechanics.
-    ///
     /// @return true only when this call actually WROTE KWin's maximize bit.
     /// False for every arm that returns early, which includes both retain
     /// arms (fullscreen, mid-gesture) and the already-restored case. The
@@ -543,47 +516,30 @@ public:
         return m_suppressMaximizeChanged > 0;
     }
 
-    /// Drop KWin's maximize state before a SNAP-mode zone placement lands.
-    ///
-    /// A zone placement is authoritative over the window's geometry, but a
-    /// KWin-maximized window carries two pieces of state a bare moveResize
-    /// never touches: the maximize bit itself (which KWin re-enforces against
-    /// the zone rect, and which the client keeps re-asserting through its
-    /// configure acks) and geometryRestore (which can sit on ANOTHER monitor
-    /// entirely — the screen the window was last maximized on). Left standing,
-    /// the next maximize press toggles OFF and KWin restores the window
-    /// cross-screen; the daemon then reads the teleport as the user moving the
-    /// window off its zone and unsnaps it (the #1028-family report's Brave
-    /// trace: commitSnap on one screen, windowScreenChanged-unsnap two seconds
-    /// later).
-    ///
-    /// Seeds geometryRestore with @p zoneRect FIRST, so the restore moveResize
-    /// inside maximize() goes straight to the zone — one configure, on the
-    /// target screen, with no interim hop through a stale rect whose async
-    /// Wayland ack could land on the wrong output and re-trigger the very
-    /// unsnap this exists to prevent.
-    ///
-    /// Lives on this handler rather than the effect because the maximize
-    /// OWNERSHIP LEDGERS live here: a window whose maximize the engine holds
-    /// (monocle, maximize-to-edges) is skipped — those bits are handed back by
-    /// their own release arms, and writing over them would strand the ledger.
-    /// No-op for a window that is not KWin-maximized, so call sites need no
-    /// pre-check. Callers apply the zone rect immediately after, under their
-    /// own inGeometryApply bracket or not — this method brackets its own write.
-    void demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const QRect& zoneRect);
+    /// The placement statement before a placement on a SNAPPING screen applies @p rect (placementhandback.cpp,
+    /// PlacementStatement::decide). A maximized or fullscreen window's restore rect can sit on another monitor, so a
+    /// bare moveResize leaves the next maximize press restoring it cross-screen (the #1028-family Brave trace). A
+    /// tiling engine's claim is shed for any @p purpose; a user verb or a move to another output ends the window's own
+    /// fullscreen, then its maximize, anchored at @p rect; a re-statement on the same output keeps both, seats @p rect
+    /// as their restore rect and says apply false. A window the tiling handler still tracks is untracked here. Nothing
+    /// is written under a live gesture (the replay calls again). Here because the OWNERSHIP LEDGERS are.
+    PlacementStatement::Verdict preparePlacement(KWin::EffectWindow* w, const QRect& rect,
+                                                 PlacementStatement::Purpose purpose);
+    /// A self-fullscreened tile arriving on @p screenId by a keyboard crossing leaves its fullscreen at @p tile.
+    void endFullscreenOfArrivingTile(const QString& windowId, KWin::EffectWindow* w, const QString& screenId,
+                                     const QRect& tile);
 
-    /// Arm the clear-in-flight marker and dispatch Scrolling.
-    /// clearWindowedFullscreen reply-gated: the error arm drops the marker
-    /// so a lost clear (whose flag-off echo will never arrive) cannot latch
-    /// the adopt guard for the session.
+    /// Arm the clear-in-flight marker and dispatch Scrolling.clearWindowedFullscreen reply-gated: the error arm
+    /// drops the marker so the next batch re-adopts toward the daemon's surviving flag instead of spending its
+    /// single refusal.
     void dispatchWindowedFullscreenClear(const QString& windowId);
     /// Shed half of applyFloatCleanup for the WindowTracking float channel
-    /// (PlasmaZonesEffect::slotWindowFloatingChanged), whose floats never
-    /// reach this handler's slot and so never run applyFloatCleanup. Drops
-    /// the windowed-fullscreen hold AND the column-maximize mirror (both
-    /// through releaseAllClaims, on the PassiveFloat scope), the
-    /// clear-in-flight marker, the counter-assert rect, the centering targets
-    /// and the parked paint hint (with damage), and re-drives decorations.
+    /// (PlasmaZonesEffect::slotWindowFloatingChanged), whose floats never reach this handler's slot and so never
+    /// run applyFloatCleanup. Drops the windowed-fullscreen hold AND the column-maximize mirror (both through
+    /// releaseAllClaims, on the PassiveFloat scope), the clear-in-flight marker, the counter-assert rect and the
+    /// offered column, the tiled membership on every screen (the IsTiled flip, which re-resolves the window's
+    /// rules), the centering targets and the parked paint hint (with damage), and re-drives decorations when the
+    /// windowed-fullscreen hold was released.
     ///
     /// Monocle is the one claim this path does NOT release, and that blank is
     /// the PassiveFloat row's recorded DECISION rather than an omission:
@@ -592,16 +548,17 @@ public:
     /// definition carries the full argument.
     void applyPassiveFloatShed(const QString& windowId);
 
-    /// Cleanup: drop all autotile tiled-tracking bookkeeping. Physical
-    /// title-bar restores are the DecorationManager's job — teardown callers
-    /// pair this with DecorationManager::restoreAll().
+    /// Teardown only (daemon loss, effect destruction): drops tiled membership AND the managed-screen set, and
+    /// bumps the tile stagger epoch so a pending cascade completion does nothing. The set clear takes the named
+    /// exemption in scrollingScreenIntersection's contract, so a live caller must not use this. Physical
+    /// title-bar restores are the DecorationManager's job, and teardown callers pair this with
+    /// DecorationManager::restoreAll().
     void clearTiledTracking();
 
     // Focus follows mouse: focus the managed window under the cursor.
-    // Autotile and scrolling screens carry independent flags (per-mode
-    // settings); handleCursorMoved routes per screen.
+    // handleCursorMoved routes per screen: the autotile setting governs an
+    // autotile screen, the daemon's resolved membership a scrolling one.
     void setFocusFollowsMouse(bool enabled);
-    void setScrollingFocusFollowsMouse(bool enabled);
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
     // Wheel configuration for BOTH wheel chords (column focus and view pan).
@@ -618,15 +575,10 @@ public:
     void setWheelFocusTriggers(const QVector<PhosphorCompositor::ParsedTrigger>& triggers);
     void setWheelViewTriggers(const QVector<PhosphorCompositor::ParsedTrigger>& triggers);
 
-    /// Route one axis event to a wheel chord. Returns true when a chord
-    /// matched and the event was acted on, and the caller must then CONSUME
-    /// it: forwarding a matched chord would scroll the app underneath as
-    /// well as the strip.
-    ///
-    /// Returns true when the chord CLAIMED the event, which is not the same
-    /// as having acted on it: a sub-notch delta is claimed and banked without
-    /// firing a verb, so the app underneath does not scroll its own content
-    /// while the user is mid-step on the strip.
+    /// Route one axis event to a wheel chord. Returns true when a chord CLAIMED the event, and the caller must
+    /// then CONSUME it: forwarding a matched chord would scroll the app underneath as well as the strip. Claimed
+    /// is not the same as acted on: a sub-notch delta is claimed and banked without firing a verb, so the app
+    /// underneath does not scroll its own content while the user is mid-step on the strip.
     ///
     /// @p delta and @p deltaV120 are the event's own two scroll fields, and
     /// both are needed because neither alone counts notches on every source:
@@ -650,14 +602,12 @@ public:
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
     bool isManagedScreen(const QString& screenId) const;
 
-    /// The engine-authoritative screen for a window the scrolling engine is
-    /// ACTIVELY TILING, or empty. Parked scroll frames sit inside a
-    /// neighbouring output's geometry by design, so position-derived screen
-    /// resolution must yield to this for strip-placed windows. Gated on
-    /// tiled membership: a FLOATED window on a scrolling screen is never
-    /// parked — its frame is its real position — and answering for it would
-    /// pin every consumer (drag drop, rule Mode stamp, minimize routing) to
-    /// the screen it floated away from.
+    /// The engine-authoritative screen for a window the scrolling engine is ACTIVELY TILING, or empty. Parked
+    /// scroll frames sit below every output by design, inside none, and KWin gives them to the nearest output (a
+    /// neighbour whenever one reaches lower than the strip's own), so position-derived screen resolution must
+    /// yield to this for strip-placed windows. Gated on tiled membership: a FLOATED window on a scrolling screen
+    /// is never parked — its frame is its real position — and answering for it would pin every consumer (drag
+    /// drop, rule Mode stamp, minimize routing) to the screen it floated away from.
     /// Second half of the invariant, folded in (not left to call sites):
     /// the answer only holds while the tracked screen's physical output is
     /// still CONNECTED — on unplug/DPMS-off KWin reassigns the window and
@@ -699,7 +649,7 @@ public:
     // ── Compositor-drawn tab indicators (model half; the painter is the effect's) ──
     //
     // The public surface is what the effect's other collaborators call: the
-    // paint-settings loaders (rebuildAll), the window hooks (noteScrollTab*),
+    // paint-settings loaders (rebuildAllScrollTabIndicators), the window hooks (noteScrollTab*),
     // the input filter and the pointer hooks (hover / press / activate), the
     // screen and daemon lifecycle (output removed / clear). The per-screen
     // rebuild, the hit test and the interception latch are implementation
@@ -720,7 +670,8 @@ public:
     /// the title — a chatty terminal title must not re-raster a bar that
     /// cannot change.
     void noteScrollTabTitleChanged(const QString& windowId);
-    /// The window is gone: forget its cached tab-colour verdict.
+    /// Forget @p windowId's cached tab-colour verdict and its in-flight query: on close or untrack, and when it
+    /// stops being a tab anywhere, so a re-tab asks again.
     void dropScrollTabColorsForWindow(const QString& windowId);
     /// Pointer moved to @p pos (absolute logical): update hover on the
     /// screen's pills and hold or release the pointing-hand interception.
@@ -746,20 +697,19 @@ public:
     void noteScrollTabRelease(const QPointF& pos);
     /// Whether the pill interception is currently held — the effect's
     /// pointer hooks consult this to know the events are theirs to route.
-    bool scrollTabInterceptionHeld() const
-    {
-        return m_scrollTabCursorOverridden;
-    }
+    bool scrollTabInterceptionHeld() const;
+    /// Whether @p screenId's strip moved or resized since its last batch, its rects then being stale (F815).
+    bool stripOutputMovedSinceBatch(const QString& screenId) const;
     /// Void the bring-up strips/overrides fetches still in flight, for the
     /// daemon-loss edge only (a late reply from the dead session must not
     /// re-seed the model after clearScrollTabState). Bring-up needs no call:
     /// every fetch bumps its own generation at dispatch.
     void voidInFlightScrollTabFetches();
-    /// Drop every screen's tab model, hover, press latch and cursor
-    /// override, and the painter's per-output state — for daemon loss (the
-    /// strips no longer exist), daemon bring-up (drainDeadSessionState's
-    /// per-session drain) and effect teardown. GL-free: the painter retires
-    /// its textures and frees them at the next GL-current point.
+    /// Drop every screen's tab model, hover, press latch and cursor override, and the painter's per-output state
+    /// — for daemon loss (the strips no longer exist), daemon bring-up (drainDeadSessionState's per-session
+    /// drain) and effect teardown. The painter retires its textures without GL, then
+    /// drainRetiredScrollTabTextures deletes them under a made-current context before this returns. Only during
+    /// compositor teardown, when no context can be made current, are they left to releaseGl.
     void clearScrollTabState();
 
     /// Application-level event filter, installed on qGuiApp at construction:
@@ -768,12 +718,13 @@ public:
     /// units and font. Without it the pills kept the old scheme until the
     /// next unrelated rebuild. Gated on the application object as receiver.
     bool eventFilter(QObject* watched, QEvent* event) override;
-    /// @p output is going away: drop its painter state, its payload and
-    /// overrides, and, if its pills held the hover, the hover and the
-    /// override cursor. @p removedScreenId is the id the caller resolved
-    /// BEFORE clearing the screen-id cache (re-resolving here would
-    /// re-populate the entry the caller just purged).
+    /// @p output is going away: drop its painter state, its payload and overrides, and, if its pills held the
+    /// hover, the hover and the override cursor. @p removedScreenId is the spelling the output was published
+    /// under, read by the caller before it cleared the screen-id cache. Do not resolve a fresh one, here or at
+    /// the caller: a resolve at unplug time can collapse a suffixed id when identical monitors go away together,
+    /// and here it would also re-populate the cache entry the caller just purged.
     void noteScrollTabOutputRemoved(KWin::LogicalOutput* output, const QString& removedScreenId);
+    void noteContextSwitched(const QString& physicalScreenId); ///< a reported desktop switch; empty: all (activity)
     /// Delete the painter's retired textures under a made-current context;
     /// called after every clearOutput() so a strip that went away does not
     /// hold its texture until the next paint pass (which may never come once
@@ -832,37 +783,16 @@ public:
     /// the Mode discriminator, and skipping the invalidate would leave rule
     /// verdicts memoised against the dead session's stamp. A second caller
     /// must carry the same pairing or use setScrollingScreens.
-    void clearScrollingScreensForTeardown()
-    {
-        ++m_scrollingScreensGeneration;
-        m_scrollingScreens.clear();
-        // The behaviour sets belong to the same dead session, and all of
-        // them outlive it if they are not cleared here: a stale crop entry
-        // keeps forcing composition session-wide, a stale
-        // focus-follows-mouse entry answers for a screen the new daemon may
-        // not run the scrolling engine on at all, a stale vertical-axis
-        // entry answers Vertical for a screen the new daemon may lay out
-        // horizontally, and the scroll-cap block list — which arrives on
-        // its own property and is keyed by window rather than by screen —
-        // would keep refusing focus for windows whose strip is gone.
-        clearScrollEffectBehaviourForTeardown();
-        // The wheel chords need no teardown of their own. They are matched
-        // per event against the (now empty) scrolling-screen set rather than
-        // registered with the compositor, so a dead session simply stops
-        // matching and every axis event passes straight through.
-    }
+    void clearScrollingScreensForTeardown();
 
-    /// Drop the dead session's resolved scroll-behaviour map (the three
-    /// per-screen sets, the per-window scroll-cap block list, and the
-    /// seeded flag), and bump the write generation so a reply still in
-    /// flight from that session cannot repopulate any of them. Shared by the serviceUnregistered teardown
-    /// (via clearScrollingScreensForTeardown) and by drainDeadSessionState,
-    /// which repeats it at bring-up so the new session starts from a map it
-    /// published rather than one the teardown happened to leave.
-    /// Takes the crop set's repaint bookend itself — that set is
-    /// painted state, so dropping it changes what the clip cuts. The axis set
-    /// needs no bookend of its own: the paint path reads StripViewAnimator's
-    /// per-output copy, which its own reset() drops on the same teardown.
+    /// Drop the dead session's resolved scroll-behaviour map (the three per-screen sets, the per-window
+    /// scroll-cap block list, and the seeded flag), and bump both write generations (the behaviour map's and the
+    /// blocked list's) so a reply still in flight from that session cannot repopulate any of them. Shared by the
+    /// serviceUnregistered teardown (via clearScrollingScreensForTeardown) and by drainDeadSessionState, which
+    /// repeats it at bring-up so the new session starts from a map it published rather than one the teardown
+    /// happened to leave. Takes the crop set's repaint bookend itself, because blocksDirectScanout reads that set
+    /// and KWin re-evaluates it only on a composited frame. The axis set needs no bookend of its own: the paint
+    /// path reads StripViewAnimator's per-output copy, which its own reset() drops on the same teardown.
     void clearScrollEffectBehaviourForTeardown();
 
     /// True when @p screenId runs the SCROLLING engine. A subset of the
@@ -884,12 +814,12 @@ public:
         return m_scrollingScreens.contains(screenId) && m_managedScreens.contains(screenId);
     }
 
-    /// The RULES-VISIBLE active layout id the daemon pushed for @p screenId
-    /// (snapping UUID / "autotile:<algo>" / "scrolling:<templateUuid>" /
-    /// bare sentinel), stamped onto Field::ActiveLayout in ruleQuery.
-    /// Empty for a screen the daemon did not name. Callers must gate on
-    /// activeLayoutsSeeded(): before the first map lands, EVERY screen reads
-    /// empty here, and an empty answer is not inert (see the seeded flag).
+    /// The RULES-VISIBLE active layout id the daemon pushed for @p screenId (snapping UUID / "autotile:<algo>" /
+    /// "scrolling:<templateUuid>" / bare sentinel), stamped onto Field::ActiveLayout in ruleQuery. Empty for a
+    /// screen the daemon did not name. Before the first map lands EVERY screen reads empty here, and an empty
+    /// answer is not inert. The ruleQuery stamp reads it ungated on purpose: rule admission withholds
+    /// ActiveLayout-referencing rules until activeLayoutsSeeded() (see the seeded flag), which is what makes the
+    /// bring-up window safe.
     QString activeLayoutForScreen(const QString& screenId) const
     {
         return m_activeLayouts.value(screenId);
@@ -918,8 +848,9 @@ public:
     ///
     /// The marker is NOT cleared by either unseeding path — those paths SET
     /// it instead, from the re-slice clearActiveLayoutsForTeardown performs.
-    /// Every getAllRules reply that PARSES recomputes it outright; the
-    /// malformed-payload and over-cap arms RE-ARM it to true instead, because
+    /// Every getAllRules reply that PARSES recomputes it outright; the arms
+    /// that admit nothing (retry exhaustion, the payload caps, a malformed
+    /// payload) RE-ARM it to true instead, because
     /// this edge consumed it before dispatching and those arms admit nothing —
     /// leaving it false there would disarm the next unseed→seed cycle while
     /// the rules are still withheld. Clearing it on teardown or bring-up would
@@ -960,24 +891,18 @@ public:
     /// PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap: every rule
     /// whose match references Field::ActiveLayout comes back OUT of the five
     /// effect-bound sets (the three exclusion slices, the shader manager's
-    /// effect-rule set and its effect-verdict set). Leaving them in was the
-    /// defect — the rule sets
-    /// survive daemon loss on purpose, but they were filled while the map was
-    /// seeded, and an unstamped ActiveLayout reads as an ENGAGED empty string,
-    /// so a negated leaf over-matches EVERY window for the whole daemon-down
-    /// interval. Re-slicing restores the both-polarities-inert shape a cold
-    /// start has.
+    /// effect-rule and effect-verdict sets). The sets survive daemon loss on
+    /// purpose, but an unstamped ActiveLayout reads as an ENGAGED empty string,
+    /// so a negated leaf over-matched EVERY window while the daemon was down.
+    /// Re-slicing restores the both-polarities-inert shape of a cold start.
     ///
     /// Neither caller clears the effect's m_activeLayoutRulesWithheld marker
     /// that gates the seed edge, and neither should. The re-slice SETS it
-    /// whenever it removed a rule, so on this path the marker's correctness is
-    /// by construction: the same call that withholds the rules records that it
-    /// did, and the next seeding edge re-drives loadRuleAnimationsFromDbus to
-    /// restore them from the live store. A marker left true from an earlier
-    /// admission pass is still true and must not be cleared here — that would
-    /// strand the withheld rules disarmed for the session whenever the
-    /// following getAllRules errors or times out. A stale-TRUE marker costs
-    /// one redundant re-drive, the safe direction.
+    /// whenever it removed a rule, so the call that withholds the rules records
+    /// that it did, and the next seeding edge re-drives loadRuleAnimationsFromDbus
+    /// to restore them. Clearing a marker left true by an earlier pass would
+    /// strand the withheld rules for the session whenever the following
+    /// getAllRules fails. A stale-TRUE marker costs one redundant re-drive.
     ///
     /// Out-of-line (state.cpp) because the re-slice reaches into effect
     /// internals that are incomplete at this point in the header.
@@ -985,25 +910,30 @@ public:
 
     /// Drop every autotile centring target, for daemon teardown.
     ///
-    /// Their consumer is the reactive centring pass in
-    /// slotWindowFrameGeometryChanged, which KWin drives off the window's own
-    /// geometry changes and which carries no daemon gate. So unlike the rest of
-    /// the per-session state, these stay LIVE with the daemon gone: a user
-    /// resize still finds its entry and moveResizes the window into a zone rect
-    /// nothing owns any more, clamping it onto that zone's output. The bring-up
-    /// drain already clears both maps; this is the matching teardown half, so
-    /// the behaviour does not depend on a daemon coming back.
+    /// Their consumer is the reactive centring pass in slotWindowFrameGeometryChanged, which KWin drives off the
+    /// window's own geometry changes and which carries no daemon gate. So unlike the rest of the per-session
+    /// state, these stay LIVE with the daemon gone: a user resize still finds its entry and moveResizes the
+    /// window into a zone rect nothing owns any more, clamping it onto that zone's output. The centred stamps
+    /// (m_centeredWaylandZones and its frames) are read only by the tile batch's redundant-apply skip, so their
+    /// hazard is carrying into the next session instead. The bring-up drain clears all three as well; this is
+    /// the matching teardown half.
     void clearCenteringTargetsForTeardown();
 
-    /// The set this discriminator actually answers over.
-    ///
-    /// Because the answer is an INTERSECTION, it can change when EITHER input
-    /// moves. setScrollingScreens invalidates the rule caches on its own
-    /// writes, but m_managedScreens is assigned raw by slotScreensChanged and
-    /// by loadSettings' reply, and those two arrive independently of the
-    /// scrolling-screens signal. Every writer of m_managedScreens must
-    /// therefore snapshot this before and compare after — otherwise a screen
-    /// that enters the union AFTER being marked scrolling leaves every
+    /// Drop @p windowId's centring target and centred stamp. Called by applyWindowGeometry for every apply that
+    /// gets past its invalid-rect and fullscreen bails: whatever it puts the window at supersedes the tile the
+    /// centring pass was waiting to centre it in. Raw compositor writes such as the windowed-fullscreen column
+    /// and fullscreen-area asserts, the Adopt arm's in-stack move, the centring pass itself and the stale-ack
+    /// answer do not come through here. The tile batch records its own target after its apply when an ack is
+    /// coming; a tile deferred to a gesture's end records none.
+    void dropCenteringTarget(const QString& windowId);
+    /// Drop @p windowId's three per-window scroll companions; true when a park relocation went (state.cpp).
+    bool dropScrollCompanions(const QString& windowId, bool damage = true);
+
+    /// The set this discriminator actually answers over. Because the answer is an INTERSECTION, it can change when
+    /// EITHER input moves. setScrollingScreens invalidates the rule caches on its own writes, but m_managedScreens
+    /// is assigned raw by slotScreensChanged and by loadSettings' reply, and those two arrive independently of the
+    /// scrolling-screens signal. Every writer of m_managedScreens must therefore snapshot this before and compare
+    /// after — otherwise a screen that enters the union AFTER being marked scrolling leaves every
     /// `Mode == "scrolling"` verdict memoised as non-matching for the session.
     ///
     /// ONE exemption, by name: clearTiledTracking. It is a teardown-only writer
@@ -1016,32 +946,27 @@ public:
         return m_scrollingScreens & m_managedScreens;
     }
 
-    /// Check if a window is tracked by the autotile handler (in m_notifiedWindows).
+    /// Check if a window is tracked by the tiling handler (in m_notifiedWindows).
     bool isTrackedWindow(const QString& windowId) const
     {
         return m_notifiedWindows.contains(windowId);
     }
+    /// A window demoted by a desktop switch: still held in its desktop's state.
+    bool isParkedForDesktopReturn(const QString& windowId) const;
+    /// A strip tile held out of its strip for its own fullscreen (setWindowFullscreenFloat), reply pending or not.
+    bool holdsFullscreenFloat(const QString& windowId) const;
 
-    /**
-     * @brief Update the notified screen ID for a tracked window.
-     *
-     * Called after virtual screen config changes re-resolve window screen IDs,
-     * so that slotWindowFrameGeometryChanged does not compare against stale
-     * screen IDs and trigger spurious cross-VS transfers.
-     *
-     * No-op if the window is not in m_notifiedWindowScreens.
-     */
-    void updateNotifiedScreen(const QString& windowId, const QString& newScreenId)
-    {
-        auto it = m_notifiedWindowScreens.find(windowId);
-        if (it != m_notifiedWindowScreens.end()) {
-            it.value() = newScreenId;
-        }
-    }
+    /// The screen a tracked window was last notified on (empty when untracked).
+    QString notifiedScreenFor(const QString& windowId) const;
+    /// Update a tracked window's notified screen when something other than an announce moves it: a placement the
+    /// effect applies (snap batches and single applies, snap-assist picks, drops, size restores, the
+    /// screen-change re-apply and settle) and a virtual-screen re-resolve. Without it the per-frame VS detector
+    /// and handleWindowOutputChanged compare against a screen the window has left. No-op when untracked.
+    void updateNotifiedScreen(const QString& windowId, const QString& newScreenId);
 
-    // Tiled-membership accessor — delegates to shared TilingStateHelpers. The
-    // membership set feeds the IsTiled rule field; per-window border appearance
-    // and title-bar hiding are resolved from rules, not from this state.
+    // Tiled-membership accessor — delegates to shared TilingStateHelpers. The membership set feeds the IsTiled
+    // rule field and selects the window.tiled decoration path and the Tiled appearance scope; title-bar hiding is
+    // rule-driven through DecorationManager.
     bool isTiledWindow(const QString& windowId) const
     {
         return TilingStateHelpers::isTiledWindow(m_border, windowId);
@@ -1054,23 +979,25 @@ public:
     // title-bar / opacity rule. markWindowTiled only invalidates on a genuine
     // not-tiled→tiled transition (its own single-owner sweep runs after the
     // wasTiled read, so a cross-screen transfer of an already-tiled window
-    // does NOT invalidate here — IsTiled never flipped, and the per-batch
-    // invalidation in slotWindowsTileRequested covers the ScreenId field
-    // change); a same-screen re-assert is likewise a no-op.
+    // does NOT invalidate here — IsTiled never flipped, and the tile apply
+    // re-resolves a cross-screen placement once its frame lands there through
+    // m_ruleScreenOwed); a same-screen re-assert is likewise a no-op.
     void markWindowTiled(const QString& screenId, const QString& windowId);
     void clearWindowTiledAllScreens(const QString& windowId);
     void clearWindowTiledOnScreen(const QString& screenId, const QString& windowId);
+    /// A completed batch's untile diff for @p screenId (untilediff.cpp, UntileDecisions).
+    void untileWindowsLeftOnScreen(const QString& screenId, const QSet<QString>& newSet);
 
     // Set a window to re-activate after the next autotile raise loop completes.
     // Used by slotDaemonReady() to preserve focus of non-tiled windows (e.g. KCM).
-    void setPendingReactivateWindow(KWin::EffectWindow* w)
-    {
-        m_pendingReactivateWindow = w;
-    }
+    void setPendingReactivateWindow(KWin::EffectWindow* w);
 
     /// Record a daemon-initiated cross-output move so the next outputChanged
     /// for @p windowId to @p targetScreenId updates bookkeeping only. See
-    /// m_expectedOutputMove.
+    /// m_expectedOutputMove. An untracked window the daemon has already landed
+    /// on a managed @p targetScreenId is tracked at once instead
+    /// (adoptsDaemonArrival); one still waiting for its tile apply is tracked
+    /// by that apply (F718, F736).
     ///
     /// @p sourceScreenId is the screen the daemon moved the window off, and is
     /// authoritative whenever it is non-empty: a daemon arm
@@ -1078,15 +1005,15 @@ public:
     /// tiles, so by now m_notifiedWindowScreens names the DESTINATION.
     ///
     /// An empty source falls back to the notified screen. That is correct for
-    /// the arm sites that fire ahead of any placement work, and it is what an
-    /// older daemon that does not put the source on the wire produces — in
-    /// which case the fallback is blind for a post-handoff arm exactly as
-    /// described above, and stillTiledOnSource degrades to always-false.
-    void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId, const QString& sourceScreenId)
-    {
-        const QString source = sourceScreenId.isEmpty() ? m_notifiedWindowScreens.value(windowId) : sourceScreenId;
-        m_expectedOutputMove.insert(windowId, ExpectedOutputMove{targetScreenId, source});
-    }
+    /// the arm sites that fire ahead of any placement work, which are the only
+    /// senders of an empty source (the engines' relayed markers).
+    void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId, const QString& sourceScreenId);
+    /// The strip key for a scrolling screen id (StripKeys::stripKey over the output it resolves to).
+    QString stripKeyFor(const QString& screenId) const;
+    /// The rect a strip's edges are measured against (StripKeys::screenRect), invalid with no output.
+    QRect stripScreenRect(const QString& screenId) const;
+    /// Each strip's live view offset, the one its tab band is blitted at.
+    ScrollTabIndicatorPainter::ViewOffsetFor scrollTabViewOffsets() const;
 
 public Q_SLOTS:
     // Autotile D-Bus signal handlers
@@ -1098,7 +1025,8 @@ public Q_SLOTS:
     ///        this effect last reported has been overtaken by a newer switch and
     ///        is dropped — see announceMatchesReportedDesktops.
     void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch, const QVariantMap& screenDesktops);
-    void slotScrollingScreensChanged(const QStringList& screenIds);
+    void slotScrollingScreensChanged(const QStringList& screenIds, bool isContextSwitch,
+                                     const QStringList& leavingToAutotile);
     /// The strip @p screenId is showing has been replaced (desktop or activity
     /// switch, sticky-pin change). Retires the strip-scoped paint state this
     /// process holds for that screen, which is not keyed by desktop and would
@@ -1131,8 +1059,8 @@ public Q_SLOTS:
     /// and carries the resolved map itself.
     void slotScrollTabColorsChanged(const QString& windowId, const QVariantMap& colors);
     /// Per-screen tab-indicator PAINT overrides from context rules (style,
-    /// gaps, corner radius, three colours), layered over the global settings
-    /// for that screen alone. An empty map clears the screen.
+    /// gaps, corner radius, three colours and the label font), layered over
+    /// the global settings for that screen alone. An empty map clears the screen.
     void slotScrollTabPaintOverridesChanged(const QString& screenId, const QVariantMap& overrides);
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
 
@@ -1140,8 +1068,8 @@ public Q_SLOTS:
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
     /// Cross-mode transfer entry point over slotWindowMinimizedChanged.
     /// Returns false when the ENTRY GATES would refuse the window
-    /// (unhandleable / not on an autotile screen) WITHOUT forwarding the
-    /// edge; true after forwarding. SnapHandler's became-autotile hand-offs
+    /// (unhandleable / not on a tiling screen) WITHOUT forwarding the
+    /// edge; true after forwarding. SnapHandler's became-tiling hand-offs
     /// must use this instead of the raw slot: a silently refused transfer
     /// left ownership with the sender while the edge was already spent, so
     /// the suspension stranded until the next minimize cycle.
@@ -1155,10 +1083,9 @@ private:
     // Utility methods
     // ═══════════════════════════════════════════════════════════════════
 
-    /// NOT a slot, despite the signal that drives it: its only caller is a
-    /// plain call from slotStripContextChanged, and nothing connects to it.
-    /// It sits here with the other state.cpp helpers so the slots block does
-    /// not advertise as connectable something that is not.
+    /// Cancel @p screenId's strip spring and armed pass, damaging its output; false with no output.
+    bool dropStripMotion(const QString& screenId);
+    /// Not a slot: slotStripContextChanged calls it.
     /// Drop the state this process holds that belonged to the strip @p screenId
     /// was showing until now. Called when its strip epoch changes.
     ///
@@ -1172,21 +1099,18 @@ private:
     /// |---|---|---|---|
     /// | `m_scrollVisualDelta` | where the window sits ON the strip | no | retire |
     /// | `StripViewAnimator` motion | how far THIS strip's view travelled | no | retire |
-    /// | `m_scrollCommandedRects` | we commanded R and the client is arguing | yes | keep |
-    /// | `m_scrollOfferedColumn` | the client was offered size S and answered | yes | keep |
+    /// | `m_scrollCommandedRects` | we commanded R and an external mover is arguing | yes | keep |
+    /// | `m_scrollOfferedColumn` | the column rect its strip offered it | no (strip coordinate) | keep, see below |
     /// | `m_scrollTabPayloadByScreen` | the pills for THIS strip's columns | no | keep anyway, see below |
     /// | `m_scrollTabScreensByWindow` | reverse index of the above | no | keep anyway, see below |
     ///
-    /// The tab-indicator pair is the one place the rule's answer is overridden
-    /// on purpose, so it is in the table rather than absent from it. Both fail
-    /// the test — they describe the outgoing strip's columns — but retiring
-    /// them would be a REGRESSION, not a fix. The daemon's tab emit is
+    /// The tab-indicator pair overrides the rule on purpose. Both fail the
+    /// test, but retiring them would be a REGRESSION: the daemon's tab emit is
     /// change-gated per screen id with no context term, so a switch onto a
-    /// strip whose pills happen to serialise identically re-pushes nothing,
-    /// and a consumer that had cleared them would show an empty band instead
-    /// of a stale one. Retiring them only becomes correct once the engine's
+    /// strip whose pills serialise identically re-pushes nothing and a cleared
+    /// consumer would show an empty band. Retire them only once the engine's
     /// payload gate is keyed by context, or drops the screen's entry when the
-    /// epoch changes; do that first, then move these two rows.
+    /// epoch changes.
     ///
     /// The rule is DIRECTIONAL and both directions fail, which is why it is
     /// stated rather than left implicit in the loop body:
@@ -1205,31 +1129,32 @@ private:
     /// than a naming convention: a map can be about a client and still be
     /// strip-scoped. Something recording "the column rect we offered, on strip
     /// X" would carry the strip in its meaning and would need retiring.
-    /// `m_scrollOfferedColumn` escapes only because what it stores is the
-    /// client's settled answer, not a strip coordinate.
+    /// `m_scrollOfferedColumn` is that map, and it is kept anyway: every epoch
+    /// announce is paired with a forced emit, so the incoming strip's first
+    /// batch re-offers each window it seats, and a window it does not seat
+    /// keeps the offer of the strip it still belongs to. Retiring it would
+    /// re-offer the full column on return and restart the size renegotiation
+    /// it exists to end.
     ///
-    /// NOT covered by a test: the effect has no unit-test harness in this tree,
-    /// so nothing turns red if this set is later "tidied" into sweeping all
-    /// four. That is precisely why the rule is written here rather than
-    /// inferred from which maps the loop below happens to skip.
+    /// retireStripScopedState has no unit test because it mutates effect maps,
+    /// so the rule is written here rather than left to the maps the loop
+    /// happens to skip.
     void retireStripScopedState(const QString& screenId);
 
     /// Bracketed maximize-mode write, the maximize twin of
     /// applyFullScreenSuppressed: a counter rather than a bool because the
     /// batch consumer and the interception arm both nest their own brackets.
-    /// Both helpers serve in-handler and out-of-handler callers alike. TWO
-    /// brackets are deliberately not routed through this one, and both are
-    /// monocle: the batch apply's, which spans the geometry apply as well as
-    /// the maximize, and restoreAllMonocleMaximized's, which holds one bracket
-    /// across a whole loop of writes instead of paying it per window.
+    /// Every authored maximize write in the handler goes through it;
+    /// restoreAllMonocleMaximized also holds one counter bracket across its
+    /// whole loop, which this helper's own bracket nests inside.
     void applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode mode);
 
-    /// Whether @p windowId is still a live tile on a SCROLLING screen, the
-    /// single predicate every maximize-to-edges write gates on. The screen is
-    /// the strip's notified one, falling back to the window's current output,
-    /// so a window mid-way through a cross-screen move answers for the strip
-    /// that placed it. @p w may be null, in which case only the notified
-    /// record can answer.
+    /// Whether @p windowId is still a live tile on a SCROLLING screen: the gate reconcileMaximizeAfterGesture,
+    /// cancelAxisOnlyMaximize and the toggle reply's refusal write-back use. The batch arm gates on the entry's
+    /// own screen instead, and the interception and the toggle's press re-dispatch spell the same three steps
+    /// out because they need the screen. The screen is the strip's notified one, falling back to the window's
+    /// current output, so a window mid-way through a cross-screen move answers for the strip that placed it.
+    /// @p w may be null, in which case only the notified record can answer.
     bool isScrollTiledWindow(const QString& windowId, KWin::EffectWindow* w) const;
 
     /// Scrolling.toggleMaximizeToEdges for @p windowId's column on @p screenId.
@@ -1268,21 +1193,23 @@ private:
     /// Hands KWin's maximize bit back for a window PlasmaZones itself
     /// maximized for monocle. Returns true only when THIS call wrote the
     /// restore, so windowMaximizedStateAboutToChange has just refreshed the
-    /// captured departure rect; false on every skip (not a member, window
-    /// gone, still fullscreen) and on a member that KWin already reports as
-    /// restored, where maximize() emits nothing and the capture is stale.
-    /// The tile batch reads it to anchor the placement leg's origin at the
-    /// pre-maximize rect; most other callers discard it, which is why there
-    /// is no [[nodiscard]]. Mirrors releaseMaximizedToEdges.
+    /// captured departure rect; false on every skip and on a member that KWin
+    /// already reports as restored, where maximize() emits nothing and the
+    /// capture is stale. The skips: not a member; window gone (membership
+    /// dropped); still requested-fullscreen (membership kept); mid-gesture
+    /// (membership kept and m_monocleRestoreOwed recorded, so
+    /// reconcileMaximizeAfterGesture pays the restore when the gesture ends).
+    /// The tile batch anchors the placement leg's origin on it; most callers
+    /// discard it (no [[nodiscard]]). Mirrors releaseMaximizedToEdges.
     bool unmaximizeMonocleWindow(const QString& windowId);
 
     /**
      * @brief Shared float-state cleanup for a window being floated
      *
-     * Updates the float cache, clears tiled tracking, removes the border
-     * overlay, and unmaximizes monocle (title-bar restores flow through the
-     * rule path). Used by the per-window D-Bus signal, batch float, and
-     * drag-to-float paths.
+     * Updates the float cache, clears tiled tracking, reconciles the window's
+     * decoration for the placement flip (decorations are rule-driven), and
+     * unmaximizes monocle. Used by the per-window D-Bus signal, batch float,
+     * drag-to-float and both minimize-float paths (claimAlreadyMinimizedAsFloated).
      *
      * ALL THREE COMPOSITOR CLAIMS are released here, not just monocle: the
      * windowed-fullscreen hold goes first (before the geometry work, which is
@@ -1311,6 +1238,11 @@ private:
     /// fullscreen. The enter branch's float-out is primary; the batch's read is the residual guard.
     bool isInOwnFullscreen(KWin::EffectWindow* w, const QString& windowId, bool flaggedWindowed) const;
 
+    /// The windows a tile entry naming no live window could stand for: the
+    /// same-app windows on @p targetScreenId's output, on the desktop and
+    /// activity that output shows, and not in their own fullscreen hold.
+    QVector<KWin::EffectWindow*> fuzzyTileCandidates(const QString& windowId, const QString& targetScreenId) const;
+
     /**
      * @brief Claim a window that was already minimized at batch-announce time
      *        as minimize-floated.
@@ -1322,9 +1254,12 @@ private:
      * re-announcements retain the normal animation grace for windows already
      * parked at an autotile rect.
      *
-     * Skips windows the daemon already tracks as floating (a user float or
-     * another mode's minimize-float record) — mirroring the runtime minimize
-     * path, we never claim ownership of a float we did not create.
+     * A window this handler already minimize-floats is re-asserted to the
+     * daemon on every pass (and marked untiled on a mode entry). On a
+     * mode-entry batch a snap-owned minimize-float is adopted, since its owner
+     * must follow the screen's mode. Any other float (a user float, or another
+     * mode's float) is skipped: claiming it would make the unminimize path
+     * tile a window whose float this handler did not create.
      *
      * @p resolvedScreenId, when non-empty, replaces the positional resolve.
      * The batch caller passes the id it already resolved for the window so
@@ -1350,9 +1285,11 @@ private:
     /**
      * @brief Cancel a pending deferred unminimize→unfloat commit.
      *
-     * No-op if no timer is pending for the window. Called from the minimize
-     * path (a re-minimize during the grace must leave the window
-     * minimize-floated), from cleanupAutotileTracking (window closed), and
+     * No-op if no timer is pending for the window. Called from both edges of
+     * slotWindowMinimizedChanged (a re-minimize during the grace must leave
+     * the window minimize-floated; an unminimize supersedes any surviving
+     * entry, retry timers included, so the grace re-arms from the fresh edge),
+     * from cleanupAutotileTracking (close or untrack), and
      * from removeMinimizeFloated (authoritative external unfloat via the
      * daemon's windowFloatingChanged echo); bulk teardown goes through the
      * helper's cancelAll in clearAllPendingMinimizeFloats instead.
@@ -1393,11 +1330,24 @@ private:
      * @param knownFreeFloating Bypass the isWindowFloating guard when the
      *        caller knows the frame is authoritatively a free-float rect.
      *        True for a genuine window-open (not in the FloatingCache yet, so
-     *        the guard would reject the initial capture) and a mode-entry
-     *        batch; false at the fullscreen-exit announce (frame still full).
+     *        the guard would reject the initial capture), a mode-entry batch
+     *        and an untracked cross-output arrival that is not tile-marked;
+     *        false at the fullscreen-exit announce (frame still full).
      */
     void saveAndRecordPreTileGeometry(const QString& windowId, const QString& screenId, KWin::EffectWindow* w,
                                       const QRectF& frameIn, bool knownFreeFloating = false);
+    /// The effect-side half of an announce: track @p w on @p screenId and
+    /// file its pre-tile geometry. Returns whether a spawn marker was consumed.
+    bool trackWithoutAnnounce(KWin::EffectWindow* w, const QString& screenId, bool knownFreeFloating);
+    /// A batch float whose free rect @p freeRect lies on @p toScreenId floats and is counted there (F310).
+    void floatOntoScreen(KWin::EffectWindow* w, const QString& windowId, const QRectF& freeRect,
+                         const QString& fromScreenId, const QString& toScreenId);
+    /// Track a window the daemon placed on @p screenId without announcing it, when it sits there already and passes
+    /// the untracked arrival branch's eligibility test (outputchange.cpp). Returns whether it did.
+    bool adoptsDaemonArrival(KWin::EffectWindow* w, const QString& screenId);
+    /// An evacuee's claims, dropped from the ledgers with KWin's state left as
+    /// it is (ClaimScope::Evacuation releases none of them).
+    void scrubClaimsForEvacuation(const QString& windowId, KWin::EffectWindow* w);
 
     /**
      * @brief All-bucket pre-autotile geometry lookup.
@@ -1406,9 +1356,11 @@ private:
      * screen's bucket in m_preTileGeometries, or an invalid QRectF if
      * none holds one. Readers must scan all buckets (not just the window's
      * current screen): a VS config change can re-resolve the window's
-     * screen without moving its geometry bucket. Shared by the batch-float,
-     * drag-to-float, cross-monitor-snapshot, desktop-move-stash, and
-     * desktop-switch restore paths.
+     * screen without moving its geometry bucket. Direct callers: the capture's
+     * stale-bucket scan, preTileRestoreRectFor (which serves the batch float,
+     * the desktop-switch restore and the flags-settle eviction), the
+     * desktop-move stash, drag-to-float, the cross-monitor snapshot and the
+     * daemon pre-tile fetch.
      *
      * @param bucketScreenId Optional out — receives the screen key of the
      *        bucket the rect was found under (unchanged when not found).
@@ -1437,16 +1389,17 @@ private:
      * round-trip (re-notified, autotile screen, snap commit, float, user
      * move/resize, desktop switched again). Callers must only invoke this
      * for windows that were verifiably autotile-managed (tracked in
-     * m_notifiedWindows at demotion time) — the daemon store is mode-shared,
-     * appId-fuzzy and session-persisted, so an ungated call can teleport a
-     * never-autotiled window.
+     * m_notifiedWindows at demotion time): the daemon record is mode-shared and
+     * session-persisted, so an ungated call would move a never-autotiled
+     * window to its own float-back from another mode or an earlier session.
+     * `capturedScreenId` is the caller's screen taken while the engine's
+     * override was still live; by reply time a positional re-resolve of a
+     * parked (off-canvas) frame can name a neighbouring output.
      */
-    /// `capturedScreenId` is the caller's screen resolution taken while the
-    /// engine-authoritative override was still live; the reply guard tests it
-    /// instead of re-resolving, because by reply time the window's tracking
-    /// has been demoted and a positional re-resolve of a parked (off-canvas)
-    /// frame can name a neighbouring output.
     void requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId, const QString& capturedScreenId);
+    /// Apply @p rect as @p w's free geometry on a desktop switch: crossing
+    /// detectors muted, KWin's maximize cleared through the ledger, screen re-seeded.
+    void applyFreeGeometryRestore(KWin::EffectWindow* w, const QString& windowId, const QRectF& rect);
 
     /**
      * @brief Declared compositor min-size for @p w, rounded up to ints.
@@ -1455,17 +1408,8 @@ private:
      * overlays) are skipped entirely — KWin's InternalWindow::minSize()
      * segfaults when the backing QWindow is null (discussion #511).
      */
-    // Public because the SNAP handler needs the same value: a cross-screen
-    // reclaim driven off resolveWindowRestore adopts the window into a
-    // tiling engine, which evaluates its oversized/float verdict once from
-    // the declared minimum — so both channels must report the same number
-    // from the same reader. Stateless static; no TilingHandler instance is
-    // needed or implied.
-public:
     static QSize declaredMinSize(KWin::EffectWindow* w);
-
-private:
-    void reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight);
+    void reportMinSizeIfChanged(const QString& windowId, const QSize& declared, bool force = false);
 
     // ═══════════════════════════════════════════════════════════════════
     // Member variables
@@ -1474,9 +1418,9 @@ private:
     PlasmaZonesEffect* m_effect;
 
     QSet<QString> m_managedScreens;
-    /// Screens running the scrolling engine — a pure mode discriminator
-    /// (see isScrollingScreen); all lifecycle gating keys on
-    /// m_managedScreens, which carries the union.
+    /// Screens running the scrolling engine — the Mode stamp input (see
+    /// isScrollingScreen) and the trigger of the in-union engine flip
+    /// (setScrollingScreens); the union's lifecycle keys on m_managedScreens.
     QSet<QString> m_scrollingScreens;
     /// Windows already reported as having lost their scroll clip via the
     /// connected-output gate. Every exit from scrollTrackedScreenFor fails
@@ -1489,23 +1433,27 @@ private:
     /// comes back so a later failure reports again, and entries die with the
     /// window in cleanupAutotileTracking and on daemon bring-up.
     mutable QSet<QString> m_scrollClipLossReported;
-    /// Authoritative write for the scrolling discriminator. A screen that
-    /// flips engine WITHIN the managed union transits no managedScreensChanged,
-    /// so this re-announces the flipped screens' windows to hand them to the
-    /// new engine. Pass @p announceFlipped false only for BRING-UP clears
-    /// (drainDeadSessionState), where the tracking maps are about to be reset and
-    /// loadSettings owns the re-announce — announcing there desyncs the
-    /// daemon's view from the effect's until that batch lands.
-    void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true);
-    /// The bring-up property Gets loadSettings dispatches (scrolling screens,
-    /// active layouts, scroll effect behaviour, and the scroll cap's
-    /// blocked-window list), factored out
-    /// so their bounded failure retries can re-dispatch exactly one fetch.
+    /// Authoritative write for the scrolling set. A screen that flips engine
+    /// WITHIN the managed union transits no managedScreensChanged, so this
+    /// re-announces its windows to the new engine (ScrollDecisions::engineFlipScreens).
+    /// @p announceFlipped false for the two bring-up writers only: the
+    /// dead-session clear (drainDeadSessionState) and loadSettings'
+    /// scrolling-screens reply. In both, the managed-screens reply owns the
+    /// re-announce: an announce from the drain is undone by the clears that
+    /// follow it, and one from the reply bumps the flipped screens' stagger
+    /// epoch and voids the batch the new daemon is delivering.
+    void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true, bool isContextSwitch = false,
+                             const QSet<QString>& leavingToAutotile = {});
+    /// The bring-up fetches loadSettings dispatches (four property Gets:
+    /// scrolling screens, active layouts, scroll effect behaviour and the
+    /// scroll cap's blocked-window list; two Tiling method calls: the tab
+    /// paint overrides and the tab strips), factored out so their bounded
+    /// failure retries can re-dispatch exactly one fetch.
     /// Every dispatch bumps the matching per-query generation, so a stale
     /// retry reply loses to any newer query or live-signal write.
     ///
     /// PRIVATE deliberately: the retry budgets are granted by loadSettings
-    /// alone, so an outside caller invoking either of these directly would
+    /// alone, so an outside caller invoking any of these directly would
     /// re-drive a fetch under whatever budget the last loadSettings left.
     /// loadSettings is the budget-granting entry point, the same shape
     /// loadRuleAnimationsFromDbus has over fetchAllRulesOnce.
@@ -1538,24 +1486,19 @@ private:
     /// Evict the cached colour verdict of every window in @p indexedBefore
     /// that the reverse index no longer names (it stopped being a tab), so a
     /// later re-tab re-queries instead of painting a verdict the daemon's
-    /// strip-gated title relay could not have refreshed meanwhile.
+    /// strip-gated record relay could not have refreshed meanwhile.
     void dropScrollTabColorsForUnindexed(const QList<QString>& indexedBefore);
-    /// Damage @p bounds on @p out WHERE THE BAND IS ACTUALLY DRAWN, i.e.
-    /// shifted by the strip view spring's live offset for that output.
-    ///
-    /// The painter stores the band offset-free (the model does not move during
-    /// a scroll; the blit adds the offset), so damaging the raw bounds is only
-    /// correct at rest. Mid-leg it damages where the band WAS, and the pills
-    /// are drawn somewhere else — visible as a hover highlight that does not
-    /// appear until the leg ends, on any frame the spring's own full-output
-    /// repaint does not happen to cover. A no-op at rest, where offsetFor
-    /// returns a null point.
-    ///
-    /// Silently does nothing for an invalid @p bounds, so callers can hand it
-    /// a boundsFor() result straight from an output with no pills.
-    void damageScrollTabBand(KWin::LogicalOutput* out, const QRect& bounds) const;
+    /// Damage @p bounds of @p strip's band WHERE IT IS DRAWN, shifted by that
+    /// strip's live view offset. The painter stores the band offset-free (the
+    /// blit adds the offset), so the raw bounds are right only at rest: mid-leg
+    /// they miss the pills, and a hover highlight would not appear until the leg
+    /// ends on any frame the spring's own repaint does not cover. Does nothing
+    /// for an invalid @p bounds, so a boundsFor() of a strip with no pills is fine.
+    void damageScrollTabBand(const QString& strip, const QRect& bounds) const;
+    /// damageScrollTabBand for every band on @p out (a hover change can touch any of them).
+    void damageScrollTabOutput(KWin::LogicalOutput* out) const;
     /// The engine retracted @p screenId's strips ("[]"): drop the payload,
-    /// the index entries and the painter output, releasing a hover it held.
+    /// the index entries and the painter's band, re-evaluating the hover.
     void dropScrollTabScreen(const QString& screenId);
     /// Ask the daemon for @p windowId's tab-colour verdict (once per window
     /// in flight; dropped if a broadcast supersedes it).
@@ -1574,12 +1517,12 @@ private:
     /// cost one call into KWin. Held through a pill press regardless of
     /// @p overPill (see noteScrollTabPress).
     void setScrollTabHoverCursor(bool overPill);
-    /// Shared apply for the fetch reply and the live signal: replaces all
-    /// three sets from the wire map. Repaints when the CROP set moved (it is
-    /// painted state the compositor will not otherwise revisit) and,
-    /// defensively, when the AXIS set moved, which signals a re-resolved
-    /// layout rather than stale pixels of its own. Focus-follows-mouse is
-    /// consulted per pointer move and needs nothing.
+    /// Shared apply for the fetch reply and the live signal: replaces the
+    /// three sets from the wire map (a malformed axis keeps its membership;
+    /// see the parse contract in scrollbehaviourparse.h). Repaints when the
+    /// CROP set moved (it gates direct scanout, which is re-evaluated only on
+    /// a composited frame) and, defensively, when the AXIS set moved.
+    /// Focus-follows-mouse is consulted per pointer move and needs nothing.
     void applyScrollEffectBehaviour(const QVariantMap& behaviour);
     /// Shared apply for the blocked-window fetch reply and its live signal.
     /// Deliberately does NOT repaint and does not touch the FFM suppression
@@ -1625,11 +1568,13 @@ private:
     void suppressFfmUntilCursorMoves();
     QPointF m_ffmSuppressAnchor;
     bool m_ffmSuppressPending = false;
-    /// Bumped on every managedScreensChanged signal. loadSettings' async
-    /// Properties.Get reply captures the value at dispatch and discards
-    /// itself if a signal landed in between — the signal carried a newer
-    /// set AND ran the full per-screen transition handling the raw reply
-    /// assignment lacks.
+    /// Bumped on every managedScreensChanged signal (including one the
+    /// staleness gate then drops) and by drainDeadSessionState, which voids
+    /// the dead session's in-flight reply. Two replies capture it at dispatch:
+    /// loadSettings' managed-screens Get discards itself when it moved (the
+    /// signal carried a newer set and ran the per-screen transition handling
+    /// the raw assignment lacks), and fetchDaemonPreTileGeometries
+    /// re-dispatches for the screens it was fetching.
     quint64 m_screensSignalGeneration = 0;
     quint64 m_screenQueryGeneration = 0;
     bool m_initialScreenQueryPending = false;
@@ -1652,8 +1597,8 @@ private:
     /// share the tick.
     bool m_deferredRouteDispatchScheduled = false;
     /// Per-screen rules-visible active layout ids, pushed by the daemon
-    /// (see activeLayoutForScreen). A pure ruleQuery input like
-    /// m_scrollingScreens — no lifecycle transitions key on it.
+    /// (see activeLayoutForScreen). A pure ruleQuery input: no lifecycle
+    /// transition keys on it.
     QHash<QString, QString> m_activeLayouts;
     /// Authoritative write for m_activeLayouts: generation bump (voids
     /// in-flight property replies), change gate, then rule-cache invalidate
@@ -1661,7 +1606,7 @@ private:
     void setActiveLayouts(const QHash<QString, QString>& activeLayouts);
     /// Set by setActiveLayouts BEFORE its change gate (an identical map is
     /// still a real map, and the gate would otherwise leave the effect
-    /// permanently unseeded whenever the daemon's first push is empty),
+    /// unseeded whenever the first map it sees is empty),
     /// cleared by clearActiveLayoutsForTeardown. See activeLayoutsSeeded()
     /// for what reads it and why an unstamped field is not inert.
     bool m_activeLayoutsSeeded = false;
@@ -1692,7 +1637,7 @@ private:
     quint64 m_scrollFocusScrollBlockedQueryGeneration = 0;
     /// The two tab-indicator bring-up fetches carry the same bounded retry
     /// and per-dispatch generation guard as their four siblings. The guard
-    /// matters across a daemon restart: two loadSettings runs put two Gets in
+    /// matters across a daemon restart: two loadSettings runs put two calls in
     /// flight, and a late reply from the DEAD session would otherwise
     /// re-install a payload for a screen the new daemon never names and
     /// never clears (its "[]" is latched on its own membership set).
@@ -1718,9 +1663,11 @@ private:
     quint64 m_scrollFocusScrollBlockedGeneration = 0;
     /// Screens whose RESOLVED scrolling focus-follows-mouse is on, and whose
     /// RESOLVED straddler crop is on (`rule ?? config`, decided daemon-side).
-    /// Membership is the whole answer — the effect holds no config fallback
-    /// for either, so an empty set reads as "off everywhere", which is what
-    /// bring-up before the daemon's first reply looks like.
+    /// The per-screen readers take membership as the whole answer, so an
+    /// empty set reads as off everywhere, which is what bring-up before the
+    /// daemon's first reply looks like. The one exception is the
+    /// direct-scanout gate, which falls back to the global crop setting until
+    /// the map is seeded (scrollEffectBehaviourSeeded).
     QSet<QString> m_scrollFocusFollowsMouseScreens;
     QSet<QString> m_scrollCropStraddlerScreens;
     /// WINDOW ids the focus-follows-mouse scroll cap refuses on a scrolling
@@ -1744,7 +1691,7 @@ private:
     /// because the axis outlives any one batch.
     ///
     /// NOT the copy the paint path reads. StripViewAnimator stamps the axis
-    /// per output when a batch lands, and offsetFor / axisFor answer from that
+    /// per strip when a batch lands, and offsetFor / axisFor answer from that
     /// stamp — which is why the teardown clear here needs no repaint bookend.
     /// This set is consulted only when a batch is in hand.
     QSet<QString> m_scrollVerticalAxisScreens;
@@ -1757,6 +1704,7 @@ private:
     /// re-deriving identity from KWin's current desktop is wrong on any
     /// sticky-pinned screen.
     QHash<QString, QString> m_stripEpochByScreen;
+    QHash<QString, QRect> m_stripScreenRectAtBatch; ///< each strip screen's rect at its last batch (F815)
     /// Set by applyScrollEffectBehaviour on every apply (before its change
     /// gate, the m_activeLayoutsSeeded shape: an identical map is still a real
     /// map, and the daemon's first publish is legitimately all-empty on a
@@ -1781,8 +1729,10 @@ private:
     /// frame instantly when the window leaves autotile mode (untile, mode
     /// switch, screen change) without waiting on a D-Bus round-trip.
     ///
-    /// Layout: per-screen bucket mirrors `BorderState` so swap/rotate can
-    /// drop a screen's records wholesale. Readers that need a window's rect
+    /// Layout: a bucket keys the screen whose coordinate space its rects were
+    /// captured in, which can differ from the window's current screen (a
+    /// transfer keeps the rect under the old screen's bucket), so the
+    /// removed-screen prune works per entry, never per bucket. Readers that need a window's rect
     /// regardless of which screen it was captured under (a VS config change
     /// can re-resolve the notified screen without moving the bucket) scan
     /// ALL buckets — see the desktop-switch Pass-2 scan in screenschanged.cpp and
@@ -1790,15 +1740,19 @@ private:
     QHash<QString, QHash<QString, QRectF>> m_preTileGeometries;
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile
     QSet<QString> m_notifiedWindows;
-    QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen ID at time of notification
+    /// windowId → the screen the window was last announced on or re-homed to (by updateNotifiedScreen and by
+    /// direct writes such as the tile apply's pre-seed and handleWindowOutputChanged's arms).
+    QHash<QString, QString> m_notifiedWindowScreens;
     /// Daemon-initiated cross-output moves: windowId → expected destination
     /// screen. Set when the daemon emits windowOutputMoveExpected (it has
     /// already migrated its tiling state and reflowed both outputs). Consumed
     /// one-shot by handleWindowOutputChanged on the matching outputChanged so
     /// that transfer only updates bookkeeping + decoration, never re-issues
     /// windowClosed/windowOpened. A stale entry (no outputChanged ever arrives,
-    /// or a different destination) is cleared on the next outputChanged for the
-    /// window and on close.
+    /// or a different destination) is cleared by the next outputChanged that
+    /// settles the window off a strip, by the removed-screen prune, by the
+    /// bring-up drain and on close or untrack. A window still in a strip and a
+    /// snap↔snap echo keep it on purpose (see handleWindowOutputChanged).
     struct ExpectedOutputMove
     {
         QString targetScreenId;
@@ -1811,25 +1765,13 @@ private:
     };
     QHash<QString, ExpectedOutputMove> m_expectedOutputMove;
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
-    /// Pre-autotile geometry preserved when a window is moved to another
-    /// desktop. Keyed by windowId; value holds (sourceScreenId, frameRect)
-    /// so a cross-desktop + cross-screen move can detect the screen change
-    /// at restore time and skip the saved geometry (the rect is in the
-    /// source screen's coordinate space and would land off-target on a
-    /// different monitor).
-    QHash<QString, QPair<QString, QRectF>> m_savedPreTileForDesktopMove;
-    /// Re-entrancy guard for handleWindowOutputChanged, PER WINDOW.
-    ///
-    /// A single global bool refused every nested call, including one for a
-    /// DIFFERENT window, and that refusal was permanent: window_connections.cpp
-    /// pre-writes m_trackedScreenPerWindow before calling in, so the detector
-    /// will not re-fire for the same physical hop, and the only other re-entry
-    /// path triggers solely on a virtual-screen crossing. A dropped physical hop
-    /// therefore had no re-detect path anywhere and the window kept the old
-    /// screen's tracking for the session. Keyed by windowId, re-entry is refused
-    /// only for the window already being handled, which is the case the guard was
-    /// written for (the transfer's own releaseWindowTracking / notifyWindowAdded
-    /// can move the window across screens again).
+    DesktopMoveStash m_desktopMoveStash; ///< free geometry of windows that left a desktop (desktopmovestash.h)
+    /// Re-entrancy guard for handleWindowOutputChanged, PER WINDOW: a global one
+    /// refused a nested call for a DIFFERENT window for good, since
+    /// window_output_connections.cpp pre-writes m_trackedScreenPerWindow before
+    /// calling in and nothing re-detects that hop. Refused only for the window
+    /// being handled, whose transfer (releaseWindowTracking / notifyWindowAdded)
+    /// can move it across screens again.
     QSet<QString> m_outputChangeInFlight;
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
@@ -1864,9 +1806,8 @@ private:
     /// Windows whose clearWindowedFullscreen is dispatched and unechoed —
     /// the m_unfloatInFlight idiom for the fullscreen-exit reconcile. A batch
     /// emitted before the daemon processed the clear can still carry
-    /// flag=true; the adopt arm skips members so it cannot re-fullscreen the
-    /// window against the user's exit, and the first flag-off batch entry
-    /// consumes the marker (a lost clear therefore cannot latch it).
+    /// flag=true: the batch refuses one stale flag=true adopt for a marker holder (consuming the marker), a
+    /// flag-off entry consumes it too, and the reply's error arm drops it early (dispatchWindowedFullscreenClear).
     QSet<QString> m_windowedFsClearInFlight;
     /// A dispatched toggleMaximizeToEdges whose reply has not arrived.
     ///
@@ -1902,27 +1843,28 @@ private:
     {
         qint64 armedAtMs = 0;
         bool pendingPress = false;
-        /// Committed echoes of the REFUSAL write-back still expected to arrive at
-        /// the already-agrees arm while this entry is live. That write puts
-        /// KWin's bit back to membership, so its echo reaches the arm looking
-        /// exactly like a user press that agrees — and the reply handler's
-        /// pending-press guard re-arms a fresh entry AFTER the write, so the
-        /// echo lands on a live entry. Counted rather than flagged so a reply
-        /// that beats its own echo can carry the debt forward to the entry it
-        /// re-arms. Each echo the arm consumes decrements instead of recording a
-        /// press; a genuine press queued behind the echo is recorded normally,
-        /// because the compositor delivers committed edges in request order.
-        /// On X11 the write-back commits synchronously under the suppression
-        /// counter and never reaches the arm, so the reply handler does not
+        /// Committed echoes of the REFUSAL write-back still expected to arrive at the already-agrees arm while
+        /// this entry is live. That write puts KWin's bit back to membership, so its echo reaches the arm looking
+        /// exactly like a user press that agrees — and the reply handler's pending-press guard re-arms a fresh
+        /// entry AFTER the write, so the echo lands on a live entry. Counted rather than flagged so a reply that
+        /// beats its own echo can carry the debt forward to the entry it re-arms. Each echo the arm consumes
+        /// decrements instead of recording a press; a genuine press queued behind the echo is recorded normally,
+        /// because the compositor delivers committed edges in request order. On X11 the write-back commits
+        /// synchronously under the suppression counter and never reaches the arm, so the reply handler does not
         /// count it there.
-        /// Debts are consumed by COUNT, not identity: any agreeing edge that
-        /// lands while one is outstanding pays it, so a press that happens to
-        /// agree (a double toggle inside the round trip) consumes the debt and
-        /// the real write-back echo is then recorded as a press. Bounded to
-        /// one extra toggle; inherent to counting rather than tagging echoes.
+        /// Debts are consumed by COUNT, not identity: any agreeing edge that lands while one is outstanding pays
+        /// it, so a press that happens to agree (a double toggle inside the round trip) consumes the debt and the
+        /// real write-back echo is then recorded as a press. Bounded to one extra toggle; inherent to counting
+        /// rather than tagging echoes.
         int writeBackEchoesPending = 0;
     };
     QHash<QString, MaximizeToggleFlight> m_maximizeToggleInFlight;
+    /// A column maximize or restore the interception claimed (F989): the frame the press left and when. Taken by
+    /// the batch arm that answers it (ScrollDecisions::answersClaimedPress), which can run after the reply took the
+    /// flight entry; dropped by a refusal, with the tracking, and past MaximizeToggleFlightMs.
+    QHash<QString, QPair<QRectF, qint64>> m_claimedMaximizePresses;
+    bool takeClaimedPress(const QString& windowId, ScrollDecisions::MaximizeAction action, bool kwinMaximized,
+                          QRectF& departure);
     /// Upper bound on how long a dispatched toggle is treated as in flight.
     /// Generous against a slow daemon (the round trip is ~40ms) while still
     /// guaranteeing the suppressed repair leg comes back without a timer.
@@ -1937,8 +1879,8 @@ private:
     /// immediately instead of through the deferred animation grace.
     MinimizeFloatMarks m_minimizeFloatMarks;
     // NOTE: title-bar (borderless) state is owned by the effect's
-    // DecorationManager; this handler only tracks tiled membership for
-    // border RENDERING via m_border.tiledWindowsByScreen.
+    // DecorationManager; this handler only tracks tiled membership (the
+    // IsTiled field and the tiled decoration path) in m_border.
     /// Pending debounced minimize→float commits, keyed by windowId. An entry
     /// is created when slotWindowMinimizedChanged sees minimized=true; if the
     /// matching unminimize arrives before the timer fires, the timer is
@@ -1956,15 +1898,15 @@ private:
     /// grace) and revalidated at fire time; a re-minimize during the grace
     /// cancels it, leaving the window minimize-floated as before.
     DeferredWindowCommits m_pendingUnminimizeUnfloat{this};
-    /// Global stagger epoch, bumped ONLY on a desktop switch (slotScreensChanged)
-    /// to cancel EVERY in-flight staggered apply — geometry computed for the old
-    /// desktop must never land in the new one. Plain managed-set changes must
-    /// not bump it: a mode toggle's own managedScreensChanged lands in the same
-    /// burst as its tile batch, and a blanket bump voided that batch after its
-    /// first synchronous entry (screen sat half-tiled until a manual
-    /// float/unfloat). Non-desktop invalidation is per-screen: removed screens
-    /// in slotScreensChanged, flipped screens in setScrollingScreens.
+    /// Global stagger epoch, bumped on daemon loss (clearTiledTracking), at the successor's bring-up, and on a
+    /// switch announce with no effect-side switch owed, to cancel EVERY in-flight staggered apply. A switch the
+    /// effect saw bumps only the switched outputs' screens (m_tileStaggerGenByScreen, noteContextSwitched).
+    /// Plain managed-set changes must not bump it: a mode toggle's own managedScreensChanged lands in the same
+    /// burst as its tile batch, and a blanket bump voided that batch after its first synchronous entry (screen
+    /// sat half-tiled until a manual float/unfloat). Non-desktop invalidation is per-screen: removed screens in
+    /// slotScreensChanged, flipped screens in setScrollingScreens.
     uint64_t m_tileStaggerGeneration = 0;
+    UntileDecisions::SwitchAnnounceLedger m_switchAnnounce; ///< outputs whose context switch is not announced yet
     /// Per-screen stagger generation. A retile bumps only its own screen(s), so a
     /// newer batch for the SAME screen supersedes an earlier one while a batch for
     /// a DIFFERENT screen leaves it untouched. Without this, the destination batch
@@ -1972,8 +1914,9 @@ private:
     /// cancelled the source's still-staggered windows via the single global
     /// generation — they never moved, leaving a hole on the source monitor.
     QHash<QString, uint64_t> m_tileStaggerGenByScreen;
-    QHash<QString, QRect> m_tileTargetZones;
+    QHash<QString, QRect> m_tileTargetZones; ///< zone each tile waits to be centred in by the centring pass
     QHash<QString, QRect> m_centeredWaylandZones; ///< zones where Wayland windows were last centered
+    QHash<QString, QRectF> m_centeredWaylandFrames; ///< the frame each stamp centred (read only with a stamp)
     QString m_pendingAutotileFocusWindowId;
     QPointer<KWin::EffectWindow> m_pendingReactivateWindow; ///< re-activate after raise loop (daemon restart)
     QSet<QString> m_monocleMaximizedWindows;
@@ -1989,26 +1932,30 @@ private:
     /// in slotWindowFullScreenChanged then call unmaximizeMonocleWindow with the gesture flags clear and pay
     /// the debt instead.
     QSet<QString> m_monocleRestoreOwed;
-    /// Windows whose KWin maximize bit this handler holds because the
-    /// scrolling engine says their column is maximized. An OWNERSHIP LEDGER
-    /// on the same terms as m_monocleMaximizedWindows: membership is shed
-    /// only by an arm that actually hands the bit back, never merely because
-    /// the window's situation changed. releaseMaximizedToEdges therefore
-    /// RETAINS membership when it skips a still-fullscreen window, so a later
+    QSet<QString> m_monocleUnmaximizedInGesture; ///< restore-on-drag un-maximizes awaiting the gesture's end (F775)
+    /// Monocle claims an evacuee held, per physical output it left, taken back by the first monocle batch on that
+    /// output (F685, F1120). Dropped by a close or real move (cleanupAutotileTracking), at bring-up, by Reassert or
+    /// UserMove (forgetEvacueeParks), and per output by the next evacuation off it (adoptEvacuee) and by the daemon's
+    /// park drop unless a Readopt answers it (ScreenChangeHandler::forgetParkEntries, F1128, F1139).
+    QHash<QString, QSet<QString>> m_evacueeMonocleClaims;
+    bool takeEvacueeMonocleClaim(const QString& windowId, const QString& screenId); ///< evacuees.cpp; consumes it
+    /// Minimize-floats an evacuee held, per physical output it left (the value is its untiled mark), given back by
+    /// readoptEvacuee on that output's return (F1046, F1113); dropped like m_evacueeMonocleClaims.
+    QHash<QString, QHash<QString, bool>> m_evacueeMinimizeFloats;
+    /// Windows whose KWin maximize bit this handler holds because the scrolling engine says their column is
+    /// maximized. An OWNERSHIP LEDGER on the same terms as m_monocleMaximizedWindows: membership is shed only by
+    /// an arm that actually hands the bit back, never merely because the window's situation changed.
+    /// releaseMaximizedToEdges therefore RETAINS membership when it skips a still-fullscreen window, so a later
     /// batch can do the real restore.
     ///
-    /// Every path that ends the strip's claim on a window must release it, and
-    /// the batch is not one of them for a window that LEAVES the strip: no
-    /// entry arrives to carry a cleared flag. The float funnels (both
-    /// channels), the untile diff, the demote and removed-screen sweeps, the
-    /// no-strip-left output-change arm, the leaving-scrolling loop, the
-    /// fullscreen-exit-while-floating repair and the untrack funnel
-    /// (cleanupAutotileTracking, via releaseAllClaims) all call it for that reason. The
-    /// untrack funnel matters most for the cross-output transfer half: the
-    /// window survives on a screen these engines do not manage, and nothing
-    /// else would ever hand the bit back. The scroll-to-scroll handoff
-    /// deliberately does NOT: the destination strip owns the bit and answers
-    /// on its own first batch.
+    /// Every path that ends the strip's claim on a window must release it, and the batch is not one of them for a
+    /// window that LEAVES the strip: no entry arrives to carry a cleared flag. The float funnels (both channels),
+    /// the untile diff, the demote and removed-screen sweeps, the no-strip-left output-change arm, the
+    /// leaving-scrolling loop, the fullscreen-exit-while-floating repair and the untrack funnel
+    /// (cleanupAutotileTracking, via releaseAllClaims) all call it for that reason. The untrack funnel matters
+    /// most for the cross-output transfer half: the window survives on a screen these engines do not manage, and
+    /// nothing else would ever hand the bit back. The scroll-to-scroll handoff deliberately does NOT: the
+    /// destination strip owns the bit and answers on its own first batch.
     ///
     /// Per window rather than per column because the wire is flat and the
     /// effect has no column identity — every tile of a maximized column is a
@@ -2038,8 +1985,9 @@ private:
     /// `scrollTabColors`. An ENTRY WITH AN EMPTY MAP means "asked, no rule"
     /// — distinct from absent (never asked, or the last ask failed), so the
     /// common no-rule case is one probe rather than a D-Bus round trip per
-    /// rebuild. Evicted per window on close; re-queried in place on the
-    /// broadcast.
+    /// rebuild. Evicted per window on close or untrack, when the window stops
+    /// being a tab anywhere, and when a query fails; cleared whole with the tab
+    /// state; re-queried in place on the broadcast.
     QHash<QString, QVariantMap> m_scrollTabColorCache;
     /// Windows with a `scrollTabColors` query in flight, keyed to the serial
     /// of the dispatch that owns the slot: a second rebuild during the round
@@ -2078,39 +2026,33 @@ private:
     bool m_scrollTabPressHeld = false;
 
     // ── Focus follows mouse ──
-    // Per-mode pair of GLOBAL SETTING mirrors: m_focusFollowsMouse is the
-    // autotile flag (autotileFocusFollowsMouse), m_scrollingFocusFollowsMouse
-    // the scrolling one (scrollingFocusFollowsMouse).
-    //
-    // Only the autotile half is still the per-screen AUTHORITY. On a scrolling
-    // screen the authority is m_scrollFocusFollowsMouseScreens, the daemon's
-    // already-resolved `rule ?? config` membership — a SetScrollFocusFollowsMouse
-    // context rule can turn the behaviour on for one monitor while the global
-    // setting is off, so m_scrollingFocusFollowsMouse alone would answer "off"
-    // for a screen the rule turned on. handleCursorMoved therefore routes per
+    // m_focusFollowsMouse mirrors the autotile setting
+    // (autotileFocusFollowsMouse) and is the authority on an autotile screen.
+    // Scrolling has no mirror: its authority is m_scrollFocusFollowsMouseScreens,
+    // the daemon's already-resolved `rule ?? config` membership, since a
+    // SetScrollFocusFollowsMouse context rule can turn the behaviour on for one
+    // monitor while the global setting is off. handleCursorMoved routes per
     // screen (isScrollingScreen → membership, else the autotile flag), and
-    // every "is FFM off everywhere" gate goes through ffmOffEverywhere() so
-    // the scrolling half's real authority is a term in all of them.
+    // every "is FFM off everywhere" gate goes through ffmOffEverywhere().
     bool m_focusFollowsMouse = false;
-    bool m_scrollingFocusFollowsMouse = false;
-    /// True when NO screen can focus-follow-mouse: both global settings off
+    /// True when NO screen can focus-follow-mouse: the autotile setting off
     /// AND the daemon's resolved scrolling set empty.
     ///
-    /// The ONE spelling of that condition. It has five consumers — the
-    /// handleCursorMoved bail, the two setting-writer latch clears, the
-    /// applyScrollEffectBehaviour tail and the teardown clear — and while
-    /// they were spelled
-    /// separately the bail read only the two globals, so a rule that turned
-    /// FFM on for a screen was defeated before the per-screen read ever ran
-    /// (the rule could turn the behaviour OFF but never ON).
+    /// The ONE spelling of that condition. Its consumers are the
+    /// handleCursorMoved bail, the setFocusFollowsMouse latch clear, the
+    /// applyScrollEffectBehaviour tail and the teardown clear. While they were
+    /// spelled separately the bail read only the global settings, so a rule
+    /// that turned FFM on for a screen was defeated before the per-screen read
+    /// ever ran (the rule could turn the behaviour OFF but never ON).
     ///
-    /// The two globals stay as terms rather than being replaced by the set:
-    /// the autotile half has no per-screen set at all, and the scrolling
-    /// global still governs the pre-seed window before the daemon's first
-    /// scrollEffectBehaviour reply lands.
+    /// The autotile global stays as a term because that half has no
+    /// per-screen set. The scrolling global is not a term: the scrolling arm
+    /// of handleCursorMoved reads only the resolved set, so before the first
+    /// scrollEffectBehaviour reply no scrolling screen can focus-follow,
+    /// whatever the global says.
     bool ffmOffEverywhere() const
     {
-        return !m_focusFollowsMouse && !m_scrollingFocusFollowsMouse && m_scrollFocusFollowsMouseScreens.isEmpty();
+        return !m_focusFollowsMouse && m_scrollFocusFollowsMouseScreens.isEmpty();
     }
     // ── Wheel chords (column focus, view pan) ──
     bool m_wheelFocusEnabled = true;
@@ -2166,7 +2108,7 @@ private:
     // the real question instead: did WE ask for the tab the model is now
     // showing?
     QSet<QString> m_tabWheelWalked;
-    // ── Border state — uses shared BorderState from compositor-common ──
+    // ── Border state: PhosphorCompositor::BorderState (TilingState.h) ──
     BorderState m_border;
 };
 

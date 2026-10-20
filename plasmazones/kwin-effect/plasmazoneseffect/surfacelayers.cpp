@@ -38,7 +38,7 @@ namespace {
 /// already-bound shader as a triangle strip. texcoord [0,1] maps to the bound
 /// FBO directly (bottom-origin), so a passthrough buffer reproduces uTexture0's
 /// layout. This is the SOLE buffer-pass draw site; the matching vertex SOURCE
-/// (kFullscreenQuadVertexSource) lives in surface_compile.cpp, which only
+/// (SurfaceShaderRegistry::compositorBufferVertexSource) is compiled in surface_compile.cpp, which only
 /// compiles the buffer-pass shaders. Kept file-local — under the Unity build a
 /// duplicate anonymous-namespace definition elsewhere would collide.
 /// The caller owns the ShaderBinder.
@@ -146,10 +146,10 @@ QRectF PlasmaZonesEffect::surfaceWindowRect(KWin::EffectWindow* w) const
 }
 
 // Shadow-margin cache refresh for surfaceWindowRect() above. Seeded at
-// connect time (setupWindowConnections — nothing is resizing then, so the
-// pair agrees) and re-run on every windowExpandedGeometryChanged, which is
-// the one moment KWin has just recomputed the expanded rect against the live
-// frame.
+// connect time (setupWindowConnections; a window the load sweep wires
+// mid-resize can seed a lagged pair, which the next signal corrects) and re-run
+// on every windowExpandedGeometryChanged, which is the one moment KWin has just
+// recomputed the expanded rect against the live frame.
 //
 // A resize is exactly the interval where those two disagree (see
 // surfaceWindowRect's declaration for the measured X11 case), so the cache

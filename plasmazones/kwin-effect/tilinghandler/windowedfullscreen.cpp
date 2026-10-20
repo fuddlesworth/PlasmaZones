@@ -16,6 +16,7 @@
 
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/shader_internal.h"
 #include "compositor/effectlogging.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -26,7 +27,6 @@
 
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDateTime>
 #include <QList>
 #include <QLoggingCategory>
 #include <QScopeGuard>
@@ -57,10 +57,10 @@ bool TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
         m_monocleRestoreOwed.remove(windowId);
         return false;
     }
-    // KWin's maximize() has NO fullscreen conditional: called on a
-    // still-fullscreen window it takes both "no longer maximized" branches
-    // and moveResizes to geometryRestore, shrinking a fullscreen game or
-    // video out of its presentation. Skip on the REQUESTED bit alone, not on
+    // KWin's X11 maximize(Restore) has no fullscreen conditional: called on a
+    // still-fullscreen window it moveResizes to geometryRestore, shrinking a
+    // fullscreen game or video out of its presentation. Wayland ignores
+    // maximize() while fullscreen is requested. Skip on the REQUESTED bit alone, not on
     // the union with the committed one.
     //
     // The union looked safer and was not. This project is Wayland-only, where
@@ -123,11 +123,7 @@ bool TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     // notifyWindowAdded) and tears down whatever float/tile transition the
     // caller is mid-way through. Save/restore rather than set/clear so the
     // guard nests inside already-guarded callers.
-    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-    m_effect->m_daemonGate.inGeometryApply = true;
-    const auto geomGuard = qScopeGuard([this, prevInApply] {
-        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-    });
+    const auto geomGuard = m_effect->geometryApplyScope();
     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
     // The gate suppressed the VS-crossing detectors, whose early return sits
     // BEFORE their m_trackedScreenPerWindow write — and unlike a daemon
@@ -196,77 +192,6 @@ void TilingHandler::applyMaximizeSuppressed(KWin::Window* kw, KWin::MaximizeMode
     kw->maximize(mode);
 }
 
-void TilingHandler::demoteMaximizeForSnapPlacement(KWin::EffectWindow* w, const QRect& zoneRect)
-{
-    if (!w || w->isDeleted() || !zoneRect.isValid()) {
-        return;
-    }
-    KWin::Window* kw = w->window();
-    if (!kw) {
-        return;
-    }
-    // REQUESTED mode, matching every sibling maximize write in this file: on
-    // Wayland the committed bit trails a client round-trip, and the window the
-    // demote exists for (snapped straight out of a maximized state) is exactly
-    // the one mid-transition.
-    if (kw->requestedMaximizeMode() == KWin::MaximizeRestore) {
-        return;
-    }
-    // Engine-owned maximize claims are handed back by their own release arms
-    // (the ledger contract at the top of this file). A snap placement for such
-    // a window arrives only after untrack has already routed the claim through
-    // its release; a demote racing ahead of that would clear a bit the ledger
-    // still records as held.
-    const QString windowId = m_effect->getWindowId(w);
-    if (!windowId.isEmpty()
-        && (m_monocleMaximizedWindows.contains(windowId) || m_maximizedToEdgesWindows.contains(windowId))) {
-        return;
-    }
-    // Fullscreen and gesture guards, the pair every sibling maximize write
-    // carries: maximize() has no fullscreen conditional and would moveResize a
-    // presenting surface down to its restore rect, and mid-gesture it snaps
-    // the window out from under the user's pointer. The ApplySnap caller
-    // cancels its interactive move before calling here, so a still-set flag
-    // means a gesture this placement does not own.
-    if (kw->isRequestedFullScreen() || w->isUserMove() || w->isUserResize()) {
-        return;
-    }
-    qCInfo(lcEffect) << "Demoting KWin maximize for snap placement of" << windowId << "into" << zoneRect;
-    // On Wayland the committed echo of this restore arrives with the
-    // suppression counter back at 0 (the platform split window_connections.cpp
-    // documents for the monocle writes) and would read as a genuine
-    // unmaximize edge: the maximize lambda would replay a placeOut morph
-    // anchored at the full-monitor pre-frame over the batch's placeIn leg.
-    // Pre-write the edge tracker so the echo takes the no-edge branch — its
-    // only side effect, cancelAxisOnlyMaximize, no-ops for a window that is
-    // not scroll-tiled. That branch skips two writes the edge branch owed
-    // this transition, so pay them here: drop any pending morph a just-prior
-    // genuine maximize edge armed (the zone-rect commit would otherwise
-    // complete it through the geometry hook and replay the same wrong
-    // morph), and refresh the IsMaximized rule verdict.
-    m_effect->m_shaderManager.noteMaximizeDemotedForSnap(w);
-    m_effect->invalidateRuleCacheForStateChange(windowId);
-    // Zone rect FIRST, so the restore moveResize inside maximize() lands
-    // directly on the placement's target — never on a stale restore rect
-    // whose screen the window is not being placed on (the cross-screen
-    // teleport this method exists to prevent; see the declaration).
-    kw->setGeometryRestore(KWin::RectF(zoneRect));
-    // maximize() emits windowFrameGeometryChanged SYNCHRONOUSLY — the same
-    // edge unmaximizeMonocleWindow guards. The rect it moves to is the zone
-    // rect on the placement's own screen, so no tracker re-seed is owed
-    // here: the zone apply that follows immediately re-stamps the tracked
-    // screen through its own frame-change processing (for an X11 client the
-    // committed rect can differ by constrainTileGeometry's centring shift, a
-    // one-apply transient that same processing heals). Save/restore so the
-    // bracket nests inside ApplySnap's.
-    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-    m_effect->m_daemonGate.inGeometryApply = true;
-    const auto geomGuard = qScopeGuard([this, prevInApply] {
-        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-    });
-    applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
-}
-
 void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
 {
     // Pay the claims the batch arms took but could not apply mid-gesture.
@@ -325,29 +250,29 @@ void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
     // it. Pay the release the mid-drag skip owed instead: the gesture flags are
     // clear by now, so it performs the real restore and sheds the entry.
     //
-    // Monocle carries its direction explicitly instead. A monocle member
-    // reaching here holds a live claim in one of two states: still owed its
-    // maximize (the Apply arm skipped mid-drag), or owed a RESTORE
-    // (unmaximizeMonocleWindow skipped mid-drag and recorded that in
-    // m_monocleRestoreOwed). The set is what distinguishes them, and it is
-    // read before the re-apply below because the re-apply is the wrong answer
-    // for the second state — it would re-maximize the window the batch was
-    // demoting, or the one the drag just floated. The release is routed
-    // through unmaximizeMonocleWindow rather than written here so it takes
-    // that function's fullscreen guard and departure bookkeeping; the gesture
-    // flags are clear by now, so it performs the real restore and sheds.
+    // Monocle carries its direction explicitly instead: a member reaching here
+    // is still owed its maximize (the Apply arm skipped mid-drag), or owed a
+    // RESTORE (unmaximizeMonocleWindow skipped mid-drag, m_monocleRestoreOwed),
+    // or KWin un-maximized it on drag and the drop's outcome settles it
+    // (m_monocleUnmaximizedInGesture, F775). The sets are read before the
+    // re-apply below, which would re-maximize the window the batch was
+    // demoting or the drag just floated. The release goes through
+    // unmaximizeMonocleWindow for its fullscreen guard and departure
+    // bookkeeping; the gesture flags are clear, so it restores and sheds.
     if (owesMaximizedToEdges && !isScrollTiledWindow(windowId, w)) {
         releaseMaximizedToEdges(windowId, w);
         if (!owesMonocle) {
             return;
         }
     }
+    if (owesMonocle && m_monocleUnmaximizedInGesture.contains(windowId)) {
+        return;
+    }
     // The return leaves no maximized-to-edges claim behind it. A window in
     // BOTH ledgers is unreachable: the column arm inserts only on a scrolling
     // screen and the monocle arm only under a tiling algorithm, the modes are
-    // exclusive per screen, and a screen change routes through the release of
-    // whichever claim the window held before it can acquire the other. So
-    // when this arm fires, owesMaximizedToEdges was false or already paid.
+    // exclusive per screen, and a tile batch on a non-scrolling screen releases (autotile) or hands over
+    // (monocle) a column claim before either arm runs, so owesMaximizedToEdges is false or paid by here.
     if (owesMonocle && m_monocleRestoreOwed.contains(windowId)) {
         unmaximizeMonocleWindow(windowId);
         return;
@@ -355,11 +280,7 @@ void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
     if (kw->requestedMaximizeMode() == KWin::MaximizeFull) {
         return;
     }
-    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-    m_effect->m_daemonGate.inGeometryApply = true;
-    const auto geomGuard = qScopeGuard([this, prevInApply] {
-        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-    });
+    const auto geomGuard = m_effect->geometryApplyScope();
     applyMaximizeSuppressed(kw, KWin::MaximizeFull);
     m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
 }
@@ -370,15 +291,15 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
     // interception does only on a REFUSED request — but unconditionally, and
     // with no dispatch.
     //
-    // An axis-only maximize (KWin's quick tile) never reaches the interception,
-    // because the caller's edge filter only passes a change in the FULLY
-    // maximized state. On a scroll-managed tile nothing else takes the bit back
-    // either: the batch arm that clears a stray partial maximize needs a batch,
-    // and the engine emits on change, so a quick tile that moves no column
-    // schedules none. Put the bit back to whatever the engine last said and
-    // stop there — the engine has no half-maximize to express, so there is
-    // nothing to dispatch and asking it would turn a quick tile into a column
-    // maximize.
+    // An axis-only maximize (Maximize Vertically / Horizontally) never reaches
+    // the interception, because the caller's edge filter only passes a change
+    // in the FULLY maximized state. On a scroll-managed tile nothing else takes
+    // the bit back either: the batch arm that clears a stray partial maximize
+    // needs a batch, and the engine emits on change, so a flip that moves no
+    // column schedules none. Put the bit back to whatever the engine last said
+    // and stop there — the engine has no half-maximize to express, so there is
+    // nothing to dispatch and asking it would turn an axis maximize into a
+    // column maximize.
     if (!w || w->isDeleted()) {
         return;
     }
@@ -405,11 +326,7 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
     if (kw->maximizeMode() == restored) {
         return;
     }
-    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-    m_effect->m_daemonGate.inGeometryApply = true;
-    const auto geomGuard = qScopeGuard([this, prevInApply] {
-        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-    });
+    const auto geomGuard = m_effect->geometryApplyScope();
     applyMaximizeSuppressed(kw, restored);
 }
 
@@ -434,7 +351,7 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // Declining does not strand the ledger, and that is what makes it safe
     // without knowing how the drag's own float cleanup orders against this
     // edge. KWin clears the bit while membership stands, and every gesture ends
-    // in reconcileMaximizeAfterGesture (window_connections.cpp's
+    // in reconcileMaximizeAfterGesture (window_moveresize_connections.cpp's
     // windowFinishUserMovedResized, the one point that always runs): a window
     // still tiled on its strip has the claim re-driven there, and one the drag
     // took off the strip is routed to releaseMaximizedToEdges instead, which
@@ -545,30 +462,22 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // arbitrary backlog against a state each press was aimed at from a
     // different starting point.
     //
-    // THE REFUSAL WRITE-BACK'S ECHO IS NOT A PRESS, and this arm is where it
-    // arrives. A refused toggle puts KWin's bit back to membership from the
-    // reply handler, and that handler's pending-press guard re-arms a fresh
-    // flight entry AFTER the write, so on Wayland the write-back's committed
-    // echo lands a round trip later on a live entry, reading exactly like a
-    // press that agrees. Recorded as one, it re-dispatched on the next
-    // refusal, and a strip that kept refusing kept the cycle going — one
-    // unrequested toggle and one visible bit write per round trip.
+    // THE REFUSAL WRITE-BACK'S ECHO IS NOT A PRESS, and this arm is where it arrives. A refused toggle puts KWin's
+    // bit back to membership from the reply handler, and that handler's pending-press guard re-arms a fresh flight
+    // entry AFTER the write, so on Wayland the write-back's committed echo lands a round trip later on a live entry,
+    // reading exactly like a press that agrees. Recorded as one, it re-dispatched on the next refusal, and a strip
+    // that kept refusing kept the cycle going — one unrequested toggle and one visible bit write per round trip.
     //
-    // The entry carries how many such echoes it still owes, and this arm
-    // consumes one per arrival instead of recording a press. A genuine press
-    // queued behind the echo is recorded normally: committed edges arrive in
-    // request order, so the write-back's echo is always the first to land.
-    // No write from a USER-DRIVEN toggle reaches here with an entry live: the
-    // engine ADOPTS KWin's bit rather than re-writing it
-    // (applyMaximizeSuppressed's requested-mode early return), so the batch
-    // produces no echo at all. An ENGINE-driven write can (Meta+Alt+M, or a
-    // neighbour's toggle re-resolving this column): its Wayland echo agrees
-    // with membership, and if it lands inside a button press's round trip with
-    // no debt outstanding it is recorded as a press and the reply re-dispatches
-    // one unrequested toggle. Bounded to that one, since the re-armed entry
-    // starts with pendingPress clear. Accepted residual; the counting is by
-    // arrival, not identity, so a press that happens to agree consumes a debt
-    // just the same (see writeBackEchoesPending).
+    // The entry carries how many such echoes it still owes, and this arm consumes one per arrival instead of
+    // recording a press. A genuine press queued behind the echo is recorded normally: committed edges arrive in
+    // request order, so the write-back's echo is always the first to land. No write from a USER-DRIVEN toggle
+    // reaches here with an entry live: the engine ADOPTS KWin's bit rather than re-writing it
+    // (applyMaximizeSuppressed's requested-mode early return), so the batch produces no echo at all. An
+    // ENGINE-driven write can (Meta+Alt+M, or a neighbour's toggle re-resolving this column): its Wayland echo
+    // agrees with membership, and if it lands inside a button press's round trip with no debt outstanding it is
+    // recorded as a press and the reply re-dispatches one unrequested toggle. Bounded to that one, since the
+    // re-armed entry starts with pendingPress clear. Accepted residual; the counting is by arrival, not identity, so
+    // a press that happens to agree consumes a debt just the same (see writeBackEchoesPending).
     const KWin::MaximizeMode engineState =
         m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
     if (kw->maximizeMode() == engineState) {
@@ -598,6 +507,10 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     }
     qCInfo(lcEffect) << "Maximize interception: claiming" << windowId << "on" << screenId << "— dispatching toggle ("
                      << (engineState == KWin::MaximizeFull ? "un-maximize" : "maximize") << ")";
+    // The answer finds KWin already holding the asked-for mode and writes no bit, so it departs from the frame
+    // this press left (F989).
+    const QRectF departure = m_effect->m_shaderManager.preMaximizeFrame(w);
+    m_claimedMaximizePresses.insert(windowId, {departure, ShaderInternal::shaderClockNowMs()});
     dispatchMaximizeToEdgesToggle(screenId, windowId);
     return true;
 }
@@ -612,7 +525,7 @@ bool TilingHandler::maximizeToggleInFlight(const QString& windowId)
     // can be lost or outlive the window, and the only reader that matters is
     // the batch arm, which runs often enough that an expired entry is
     // collected promptly.
-    if (QDateTime::currentMSecsSinceEpoch() - it->armedAtMs > MaximizeToggleFlightMs) {
+    if (ShaderInternal::shaderClockNowMs() - it->armedAtMs > MaximizeToggleFlightMs) {
         // A recorded press SURVIVES expiry. The suppression this entry
         // provides is time-bounded because a latched one would disable the
         // repair arm for the session, but the user's second click is not
@@ -628,59 +541,68 @@ bool TilingHandler::maximizeToggleInFlight(const QString& windowId)
     return true;
 }
 
+bool TilingHandler::takeClaimedPress(const QString& windowId, ScrollDecisions::MaximizeAction action,
+                                     bool kwinMaximized, QRectF& departure)
+{
+    const auto claimed = m_claimedMaximizePresses.constFind(windowId);
+    if (claimed == m_claimedMaximizePresses.cend()) {
+        return false;
+    }
+    // Expired on read, like the flight entry: a press whose answer never came anchors no later batch.
+    const bool live = ShaderInternal::shaderClockNowMs() - claimed->second <= MaximizeToggleFlightMs;
+    const bool answers = ScrollDecisions::answersClaimedPress(action, kwinMaximized, live);
+    if (answers) {
+        departure = claimed->first;
+    }
+    if (answers || !live) {
+        m_claimedMaximizePresses.erase(claimed);
+    }
+    return answers;
+}
+
 void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const QString& windowId,
                                                   int writeBackEchoesPending)
 {
-    // The reply IS consumed, unlike every other dispatch in this file, and
-    // since the interception stopped writing KWin's bit this is the ONLY thing
-    // standing between a refused request and a window left in a state the
-    // engine never agreed to.
+    // The reply IS consumed, unlike every other dispatch in this file, and since the interception stopped writing
+    // KWin's bit this is the ONLY thing standing between a refused request and a window left in a state the engine
+    // never agreed to.
     //
-    // False means the strip did not change, from either kind of refusal (the
-    // wire note on ApiVersion 7 spells out both and why they are not
-    // distinguished). No batch follows, so nothing else will ever correct the
-    // state the user's click imposed.
+    // False means the strip did not change, from either kind of refusal (the wire note on ApiVersion 7 spells out both
+    // and why they are not distinguished). No batch follows, so nothing else will ever correct the state the user's
+    // click imposed.
     //
-    // A LOST OR ERRORED CALL IS TREATED AS A REFUSAL, which is the opposite of
-    // the sibling dispatches' fail-open and deliberate here. Those can fail
-    // open because a call they lose was still probably acted on, and the batch
-    // that follows is then the authority. This verb has no such backstop on
-    // the outcome that matters: the refusal is exactly the case that changes
-    // nothing, and a call that changes nothing emits NO tile batch, so on an
-    // error there is no following batch to correct anything. Failing open
-    // there leaves the window KWin-maximized against the strip's rects with
-    // nothing armed to pull it back, until some unrelated change happens to
-    // re-drive applyLayout for that screen.
+    // A LOST OR ERRORED CALL IS TREATED AS A REFUSAL, which is the opposite of the sibling dispatches' fail-open and
+    // deliberate here. Those can fail open because a call they lose was still probably acted on, and the batch that
+    // follows is then the authority. This verb has no such backstop on the outcome that matters: the refusal is exactly
+    // the case that changes nothing, and a call that changes nothing emits NO tile batch, so on an error there is no
+    // following batch to correct anything. Failing open there leaves the window KWin-maximized against the strip's
+    // rects with nothing armed to pull it back, until some unrelated change happens to re-drive applyLayout for that
+    // screen.
     //
-    // The write is safe on the other branch of the error. If the call WAS
-    // acted on and only the reply was lost, this writes the pre-toggle state
-    // and the batch that is already on its way immediately supersedes it, so
-    // the cost is one transient bit write rather than a stranded window. The
-    // write is also idempotent: it early-returns when KWin already agrees with
-    // membership.
+    // The write is safe on the other branch of the error. If the call WAS acted on and only the reply was lost, this
+    // writes the pre-toggle state and the batch that is already on its way immediately supersedes it, so the cost is
+    // one transient bit write rather than a stranded window. The write is also idempotent: it early-returns when KWin
+    // already agrees with membership.
     if (!m_effect->m_daemonGate.serviceRegistered) {
-        // Logged for the same reason the two re-check arms in the reply's
-        // pending-press guard are: that guard re-enters HERE, so a coalesced
-        // second click can be dropped on this line after its flight entry has
-        // already been taken, and without this nothing anywhere records it.
+        // Logged for the same reason the two re-check arms in the reply's pending-press guard are: that guard re-enters
+        // HERE, so a coalesced second click can be dropped on this line after its flight entry has already been taken,
+        // and without this nothing anywhere records it.
         qCDebug(lcEffect) << "Maximize toggle: dropping request for" << windowId << "on" << screenId
                           << "— no daemon registered to answer it";
         return;
     }
-    // ARM BEFORE THE CALL. A batch can arrive before the reply, and the arm
-    // that reads this is the one that must not act on it.
+    // ARM BEFORE THE CALL. A batch can arrive before the reply, and the arm that reads this is the one that must not
+    // act on it.
     //
-    // RE-ARMING PRESERVES pendingPress. A second press that DISAGREES with
-    // membership takes the dispatch path rather than the coalesce path, so
-    // this is reachable with an entry already present, and value-overwriting
-    // would silently drop a press the interception had recorded.
+    // RE-ARMING PRESERVES pendingPress. A second press that DISAGREES with membership takes the dispatch path rather
+    // than the coalesce path, so this is reachable with an entry already present, and value-overwriting would silently
+    // drop a press the interception had recorded.
     MaximizeToggleFlight& flightEntry = m_maximizeToggleInFlight[windowId];
-    flightEntry.armedAtMs = QDateTime::currentMSecsSinceEpoch();
-    // The echo debt is SEEDED, not accumulated: the reply handler computes the
-    // full count it owes (whatever the entry it took still had, plus one if
-    // its own write-back has not committed yet) and passes it here, so a
-    // re-dispatch after a refusal starts with exactly the echoes that are
-    // actually in flight. A fresh user press passes the default of none.
+    flightEntry.armedAtMs = ShaderInternal::shaderClockNowMs();
+    // The echo debt is SEEDED, not accumulated: the reply handler computes the full count it owes (whatever the entry
+    // it took still had, plus one if its own write-back has not committed yet) and passes it here, so a re-dispatch
+    // after a refusal starts with exactly the echoes that are actually in flight. A fresh user press passes the default
+    // of none.
     flightEntry.writeBackEchoesPending = writeBackEchoesPending;
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scrolling,
@@ -689,40 +611,30 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* pw) {
         pw->deleteLater();
         const QDBusPendingReply<bool> reply = *pw;
-        // DISARM FIRST, before any write below and on every exit, so the entry
-        // cannot outlive the round trip it describes. That is the whole reason;
-        // it is NOT what keeps the refusal write-back from looping, since the
-        // pending-press guard below re-arms a fresh entry at scope exit, before
-        // that write's echo can land. The echo debt carried on the entry is
-        // what closes the loop — see writeBackEchoesPending.
+        // DISARM FIRST, before any write below and on every exit, so the entry cannot outlive the round trip it
+        // describes. That is the whole reason; it is NOT what keeps the refusal write-back from looping, since the
+        // pending-press guard below re-arms a fresh entry at scope exit, before that write's echo can land. The echo
+        // debt carried on the entry is what closes the loop — see writeBackEchoesPending.
         const MaximizeToggleFlight flight = m_maximizeToggleInFlight.take(windowId);
-        // Echoes the entry we just took still owed, carried forward to the one
-        // the guard may re-arm. A reply can beat its own write-back's echo (a
-        // daemon round trip against a client one), in which case the debt
-        // would otherwise be lost with the taken entry and the echo would land
-        // on the re-armed one as a phantom press. Incremented below if this
-        // reply issues a write-back of its own; read by reference in the guard,
-        // which runs after that write.
+        // Echoes the entry we just took still owed, carried forward to the one the guard may re-arm. A reply can beat
+        // its own write-back's echo (a daemon round trip against a client one), in which case the debt would otherwise
+        // be lost with the taken entry and the echo would land on the re-armed one as a phantom press. Incremented
+        // below if this reply issues a write-back of its own; read by reference in the guard, which runs after that
+        // write.
         int writeBackEchoesPending = flight.writeBackEchoesPending;
-        // A press that arrived mid-flight is honoured once the first answer
-        // has settled, so a fast double-click toggles twice instead of once.
+        // A press that arrived mid-flight is honoured once the first answer has settled, so a fast double-click toggles
+        // twice instead of once.
         //
-        // Re-dispatching cannot loop, and the reason is the echo debt, not the
-        // order of operations. This guard runs at scope EXIT, after the
-        // refusal's write-back below, so the entry it arms is live when that
-        // write-back's own Wayland echo arrives — and that echo reaches the
-        // already-agrees arm looking exactly like a press, because the
-        // write-back just made KWin's bit equal membership. Recorded as a
-        // press, it re-dispatched on the next refusal, and a strip that kept
-        // refusing kept the cycle running. The entry re-armed here carries the
-        // count of such echoes still in flight, and the arm consumes them
-        // instead of recording them.
+        // Re-dispatching cannot loop, and the reason is the echo debt, not the order of operations. This guard runs at
+        // scope EXIT, after the refusal's write-back below, so the entry it arms is live when that write-back's own
+        // Wayland echo arrives — and that echo reaches the already-agrees arm looking exactly like a press, because the
+        // write-back just made KWin's bit equal membership. Recorded as a press, it re-dispatched on the next refusal,
+        // and a strip that kept refusing kept the cycle running. The entry re-armed here carries the count of such
+        // echoes still in flight, and the arm consumes them instead of recording them.
         //
-        // RE-RESOLVES the screen rather than reusing the one captured at
-        // dispatch, and re-runs both gates. This is the only thing in the
-        // lambda that sends a new verb, so it needs the round-trip re-checks
-        // at least as much as the write below does: a window that changed
-        // output mid-flight would otherwise have a toggle addressed to the
+        // RE-RESOLVES the screen rather than reusing the one captured at dispatch, and re-runs both gates. This is the
+        // only thing in the lambda that sends a new verb, so it needs the round-trip re-checks at least as much as the
+        // write below does: a window that changed output mid-flight would otherwise have a toggle addressed to the
         // strip it left.
         const auto honourPendingPress = qScopeGuard([this, windowId, flight, &writeBackEchoesPending] {
             if (!flight.pendingPress) {
@@ -754,8 +666,9 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         if (!reply.isError() && reply.value()) {
             return;
         }
-        // The one outcome that leaves the user's click visibly unhonoured, and
-        // until now the only record of it was the window snapping back.
+        m_claimedMaximizePresses.remove(windowId); // no answer is coming
+        // The one outcome that leaves the user's click visibly unhonoured, and until now the only record of it was
+        // the window snapping back.
         if (reply.isError()) {
             qCWarning(lcEffect) << "Maximize toggle refused for" << windowId
                                 << "— D-Bus error:" << reply.error().message()
@@ -784,20 +697,13 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         if (!w || w->isDeleted() || !kw) {
             return;
         }
-        // RE-RUN the two gates the interception took before dispatching. A
-        // full round trip separates them, and the window can have floated out
-        // of the strip, been untracked, or moved to a non-scrolling screen in
-        // between. Without these the bit gets written from column membership
-        // for a window that is no longer a column member, so a user who floats
-        // a window and maximizes it mid-flight has it silently un-maximized.
-        if (!isTiledWindow(windowId)) {
-            return;
-        }
-        QString replyScreenId = m_notifiedWindowScreens.value(windowId);
-        if (replyScreenId.isEmpty()) {
-            replyScreenId = m_effect->getWindowScreenId(w);
-        }
-        if (!isScrollingScreen(replyScreenId)) {
+        // RE-RUN the interception's gate before writing. A full round trip
+        // separates them, and the window can have floated out of the strip,
+        // been untracked, or moved to a non-scrolling screen in between.
+        // Without it the bit gets written from column membership for a window
+        // that is no longer a column member, so a user who floats a window and
+        // maximizes it mid-flight has it silently un-maximized.
+        if (!isScrollTiledWindow(windowId, w)) {
             return;
         }
         const KWin::MaximizeMode engineState =
@@ -806,9 +712,9 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
             return;
         }
         // Fullscreen and gesture guards, the pair every sibling maximize write
-        // in this file carries: maximize() has no fullscreen conditional and
-        // would moveResize a presenting surface down to its restore rect, and
-        // mid-gesture it snaps the window under the user's pointer.
+        // in this file carries: the restore direction would moveResize an X11
+        // fullscreen window to its restore rect, and mid-gesture either
+        // direction snaps the window under the user's pointer.
         if (kw->isRequestedFullScreen() || w->isUserMove() || w->isUserResize()) {
             return;
         }
@@ -816,11 +722,7 @@ void TilingHandler::dispatchMaximizeToEdgesToggle(const QString& screenId, const
         // moveResizes to the restore rect, which can sit in a different
         // virtual-screen region — the same edge unmaximizeMonocleWindow guards.
         // Save/restore so the guard nests inside an already-guarded caller.
-        const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-        m_effect->m_daemonGate.inGeometryApply = true;
-        const auto geomGuard = qScopeGuard([this, prevInApply] {
-            m_effect->m_daemonGate.inGeometryApply = prevInApply;
-        });
+        const auto geomGuard = m_effect->geometryApplyScope();
         // Whether THIS call writes: applyMaximizeSuppressed early-returns when
         // the requested mode already matches, and an echo it did not author
         // must not be counted as a debt (on Wayland requested can already
@@ -858,9 +760,9 @@ bool TilingHandler::releaseMaximizedToEdges(const QString& windowId, KWin::Effec
         return false;
     }
     // Fullscreen guard, for the reason unmaximizeMonocleWindow spells out:
-    // maximize() has no fullscreen conditional, so on a still-fullscreen
-    // window it moveResizes down to geometryRestore and shrinks a presenting
-    // surface. Reachable here because windowed fullscreen and column
+    // on X11 a MaximizeRestore on a fullscreen window still moveResizes it to
+    // geometryRestore and shrinks a presenting surface (Wayland ignores it
+    // while fullscreen is requested). Reachable here because windowed fullscreen and column
     // maximize are deliberately NOT exclusive.
     //
     // MEMBERSHIP IS RETAINED ON THIS ARM, the monocle ledger's choice rather
@@ -909,11 +811,7 @@ bool TilingHandler::releaseMaximizedToEdges(const QString& windowId, KWin::Effec
     // cross-output transfer path holding no guard of its own, which is
     // precisely the case the VS-crossing detector reacts to. Save/restore so
     // the guard nests inside an already-guarded caller such as the batch.
-    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-    m_effect->m_daemonGate.inGeometryApply = true;
-    const auto geomGuard = qScopeGuard([this, prevInApply] {
-        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-    });
+    const auto geomGuard = m_effect->geometryApplyScope();
     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
     // The gate suppressed the VS-crossing detectors, whose early return sits
     // BEFORE their m_trackedScreenPerWindow write, and this move is not
@@ -1005,11 +903,7 @@ void TilingHandler::restoreAllMaximizedToEdges()
     // cleanupClosedWindowState through the output-changed path.
     const QStringList ids = m_maximizedToEdgesWindows.values();
     m_maximizedToEdgesWindows.clear();
-    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-    m_effect->m_daemonGate.inGeometryApply = true;
-    const auto geomGuard = qScopeGuard([this, prevInApply] {
-        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-    });
+    const auto geomGuard = m_effect->geometryApplyScope();
     for (const QString& wid : ids) {
         // EXACT resolve — the fuzzy appId fallback would un-maximize an
         // unrelated same-app sibling under suppression, invisibly.
@@ -1103,11 +997,7 @@ void TilingHandler::restoreAllMonocleMaximized()
     // retains (fullscreen) re-inserts membership without a direction, so the
     // next real release pays it through the ordinary path.
     m_monocleRestoreOwed.clear();
-    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-    m_effect->m_daemonGate.inGeometryApply = true;
-    const auto geomGuard = qScopeGuard([this, prevInApply] {
-        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-    });
+    const auto geomGuard = m_effect->geometryApplyScope();
     ++m_suppressMaximizeChanged;
     const auto suppressGuard = qScopeGuard([this] {
         --m_suppressMaximizeChanged;
@@ -1137,8 +1027,8 @@ void TilingHandler::restoreAllMonocleMaximized()
             continue;
         }
         // Fullscreen members are skipped for the reason spelled out in
-        // unmaximizeMonocleWindow: maximize() has no fullscreen conditional
-        // and would moveResize a presenting surface down to its restore rect.
+        // unmaximizeMonocleWindow: an X11 MaximizeRestore would moveResize a
+        // presenting surface down to its restore rect.
         if (kw->isRequestedFullScreen()) {
             m_monocleMaximizedWindows.insert(wid);
             continue;
@@ -1246,7 +1136,7 @@ void TilingHandler::releaseWindowedFullscreenState(const QString& windowId)
     restoreWindowedFullscreenLayerDemotion(windowId, kw);
     // Requested-state term: during our OWN enter round-trip the committed
     // state lags behind while requested is already true (the same lag
-    // drag_snap's apply bail and the self-heal arm handle explicitly). A
+    // applyWindowGeometry's bail and the self-heal arm handle explicitly). A
     // release landing inside that gap must still un-set, or the client
     // commits fullscreen with membership already gone — the apply bail then
     // rejects every geometry and the ack arm can't fire, stranding the
@@ -1259,11 +1149,7 @@ void TilingHandler::releaseWindowedFullscreenState(const QString& windowId)
     // holds the guard — without it the VS-crossing detector re-enters the
     // very teardown loop that is running. Save/restore, not set/clear: the
     // demote and funnel callers can nest inside an outer apply.
-    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-    m_effect->m_daemonGate.inGeometryApply = true;
-    const auto geomGuard = qScopeGuard([this, prevInApply] {
-        m_effect->m_daemonGate.inGeometryApply = prevInApply;
-    });
+    const auto geomGuard = m_effect->geometryApplyScope();
     // Through the helper, not a hand-rolled ++/--: its own note spells out why
     // the bracket has to be RAII, and this was one of the last two copies that
     // was not. An early return added between the pair leaks the increment, and
@@ -1279,15 +1165,14 @@ void TilingHandler::dispatchWindowedFullscreenClear(const QString& windowId)
     // Arm the in-flight marker: a batch the daemon emitted BEFORE
     // processing this clear can still carry flag=true (cross-direction
     // D-Bus has no ordering guarantee), and its adopt arm would
-    // re-fullscreen the window the user just exited. The batch arm's
-    // flag-off echo consumes the marker on success.
+    // re-fullscreen the window the user just exited. The batch consumes the
+    // marker on the flag-off echo or on the one stale adopt it refuses.
     //
     // Reply-gated, NOT fireAndForget: on a LOST clear the daemon keeps its
-    // flag true, so every subsequent batch entry carries flag=true and the
-    // flag-off echo never arrives — the marker would latch and refuse
-    // re-adoption for the rest of the session. The error arm drops it so
-    // the next batch can adopt again (the daemon's flag surviving an error
-    // is exactly the state re-adoption reconciles).
+    // flag true, and the error arm drops the marker so the next batch
+    // re-adopts toward that flag rather than spending the marker's one
+    // refusal on it (the daemon's flag surviving an error is exactly the
+    // state re-adoption reconciles).
     m_windowedFsClearInFlight.insert(windowId);
     QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(
         PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("clearWindowedFullscreen"), {windowId});

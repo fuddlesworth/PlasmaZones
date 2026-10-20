@@ -3,7 +3,7 @@
 
 // Durable strip-structure snapshots. serializeStripState captures every live
 // strip plus the un-consumed mode-round-trip stash as one JSON blob the
-// daemon persists through the WTA KConfig layer; restoreStripState loads a
+// daemon persists through the WTA's session store; restoreStripState loads a
 // blob back INTO THE STASH so the existing arrival-restore path
 // (restoreFromStripStash) rebuilds each strip as its windows are announced —
 // there is deliberately no second restore mechanism.
@@ -446,6 +446,11 @@ QJsonObject ScrollEngine::serializeStripState() const
     // stash columns are folded into the live entry instead.
     QHash<PhosphorEngine::PlacementStateKey, StashedStrip> prunedStashes;
     for (const PhosphorEngine::PlacementStateKey& key : std::as_const(stashKeys)) {
+        // A strip parked for an output's return is session memory: a restart
+        // loses the park, so the save must not carry its structure either.
+        if (isEvacueeParkedKey(key)) {
+            continue;
+        }
         StashedStrip pruned = m_stripStash.value(key);
         for (auto colIt = pruned.columns.begin(); colIt != pruned.columns.end();) {
             colIt->tiles.removeIf([&liveWindowIds, &writtenWindowIds](const StashedTile& tile) {

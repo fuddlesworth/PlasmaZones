@@ -236,7 +236,8 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
         m_pendingFocusEmitContexts.insert(key);
     }
     // Focus and view anchor are persisted (serializeStripState), and
-    // placementChanged is the only thing that marks DirtyScrollStrips.
+    // placementChanged is this engine's only way to mark DirtyScrollStrips
+    // (the tracking service's scheduleSaveState, DirtyAll, also sets that bit).
     // Emitted for a background context too: the strip that changed is
     // serialized whether or not it is the one on screen right now.
     Q_EMIT placementChanged(key.screenId);

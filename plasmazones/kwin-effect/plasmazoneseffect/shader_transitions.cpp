@@ -52,10 +52,8 @@
 #include <QLoggingCategory>
 #include <QPainter>
 #include <QPointer>
-#include <QRunnable>
 #include <QStringList>
 #include <QSvgRenderer>
-#include <QThreadPool>
 #include <QTimer>
 #include <QVariantMap>
 #include <QVector4D>
@@ -72,28 +70,6 @@ using ShaderInternal::kUserTextureWrapKeys;
 using ShaderInternal::loadUserTextureImage;
 using ShaderInternal::shaderClockNowMs;
 
-/// Splice `#define PLASMAZONES_KWIN` between the shader's `#version`
-/// directive and the rest of the source. The macro selects the
-/// default-block branch in `data/animations/shared/animation_uniforms.glsl`,
-/// which is what KWin's classic-GL `KWin::GLShader` API requires (no UBO
-/// bind path). The GLSL spec disallows non-comment, non-whitespace tokens
-/// before `#version`, so the define cannot just be prepended verbatim —
-/// it is injected after the directive's own line, which
-/// PhosphorShaders::versionDirectiveEnd locates. That is the same finder
-/// spliceAfterVersion uses, so all three compile paths (pointer, surface,
-/// animation) and the validator agree on where `#version` is: the preamble
-/// splice that runs before this step and this define land on the same side
-/// of it whatever comments or BOM the pack carries.
-///
-/// Defensive fallback: if no `#version` is present (a hand-rolled
-/// shader that ships without one), synthesize `#version 450` and warn.
-/// KWin on Wayland with modern Mesa runs core profile, where the
-/// directive is mandatory — a bare `#define` would fail compile with
-/// a confusing line-1 error. The bake test on the daemon side already
-/// catches any built-in shader that ships without `#version`; the
-/// fallback exists to surface third-party packs that violate the
-/// contract with a useful journal entry rather than a cryptic GLSL
-/// error.
 const QString& ShaderInternal::kwinFinalizeColorBlock()
 {
     // Mirrors KWin's base.frag step for step: encoding → nits, colorimetry
@@ -114,98 +90,57 @@ const QString& ShaderInternal::kwinFinalizeColorBlock()
     return block;
 }
 
-QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
+/// The compositor branch of a stage: PhosphorShaders::kwinCompositorSource,
+/// which splices `#define PLASMAZONES_KWIN` (and the desktop-only extension
+/// guard) after the shader's `#version` and strips the stage's varying
+/// locations, plus the journal warning that function leaves to its caller. The
+/// macro selects the default-block branch of the shared uniform headers, which
+/// is what KWin's classic-GL `KWin::GLShader` API requires (no UBO bind path).
+/// The transform itself lives in PhosphorShaders so the offline validator and
+/// the GPU bake tests build the identical source; only the warning is the
+/// effect's own.
+///
+/// Every caller hands in source with its phosphor includes expanded, so the
+/// strip reaches the varyings a shared header declares as well as the pack's
+/// own. KWin's own `#include`s (colormanagement.glsl, spliced by
+/// kwinFinalizeColorBlock) stay unexpanded until KWin's preprocess and declare
+/// no varyings.
+///
+/// A source with no `#version` gets `#version 450` synthesized. A core or ES
+/// context requires the directive, so a bare `#define` as the first token
+/// would fail with a confusing line-1 error, and the warning names the
+/// contract violation instead. On KWin 6.8 the synthesized line is then
+/// blanked by KWin's own rewrite like any other `#version`, so it matters on
+/// a 6.7 desktop context and costs nothing elsewhere.
+///
+/// What a failure costs here: a failed COMPILE is cached as a null-shader
+/// sentinel by every family's compile path, so it costs the assemble once.
+QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source, PhosphorShaders::ShaderStage stage,
+                                                        const QString& extraDefines)
 {
-    // Strip a leading UTF-8 BOM (U+FEFF) before anything else. The BOM
-    // is not a Unicode whitespace category, so QString::trimmed() does
-    // NOT remove it — without this strip a BOM-prefixed shader's first
-    // line is "﻿#version 450", trimmed("...") still leads with the
-    // BOM, the `startsWith("#version")` check fails, and we fall into
-    // the "no #version" prepend path. That writes
-    // `#define PLASMAZONES_KWIN\n﻿#version 450...`, which the
-    // GLSL compiler rejects because `#version` must be the first
-    // non-comment token of the source.
-    QString working = source;
-    if (working.startsWith(QChar(0xFEFF))) {
-        working.remove(0, 1);
-    }
-    if (working.isEmpty()) {
-        // BOM-only source (or genuinely empty input) — emit a debug
-        // breadcrumb so a hot-reload that lands here surfaces the real
-        // cause faster than "GLSL compile failed: line 1 unexpected".
-        // Debug-level rather than warn because empty input from the
-        // bake test or unit fixtures is also legal.
-        qCDebug(lcEffect) << "injectKwinDefineAfterVersion: empty source after BOM strip — returning bare define";
-    }
-
-    // Detect line ending so the injected define matches the source's
-    // convention. GLSL compilers accept mixed CRLF/LF, but mixing
-    // produces visually inconsistent diffs and trips lints. If any
-    // CRLF appears in the source, emit "\r\n"; otherwise plain "\n".
-    const bool useCrlf = working.contains(QStringLiteral("\r\n"));
-    const QString eol = useCrlf ? QStringLiteral("\r\n") : QStringLiteral("\n");
-    // The ARB `#extension` pair and the `#define PLASMAZONES_KWIN` ABI switch
-    // come from PhosphorShaders so the offline validator and the GPU bake test
-    // splice the identical block; `kwinDefineBlock`'s declaration carries why
-    // each directive is needed (KWin 6.7 recompiles at #version 140). Only the
-    // #version-finding walk below is this function's own.
-    //
-    // Cost of getting it wrong, since that is compositor-specific: a failed
-    // COMPILE is cached as a null-shader sentinel, so it costs the assemble
-    // once and later transitions skip it. The failures that are NOT cached are
-    // the ones returning before the cache is touched at all — a missing or
-    // empty shader file, or an include-expansion error — which re-run the full
-    // read and assemble on the compositor thread every transition.
-    const QString defineLine = PhosphorShaders::kwinDefineBlock(eol);
-
-    // The comment-aware, BOM-tolerant finder shared with spliceAfterVersion.
-    // A naive `indexOf("#version")` would match inside a `//` or `/* */`
-    // comment and splice the define into the comment body, so the macro
-    // silently disappears and the shader compiles against the wrong UBO ABI.
-    // Three answers: -1 for no directive, working.size() for a directive
-    // that ends the file with no trailing newline, otherwise the index of
-    // the newline after it.
-    const int versionEnd = PhosphorShaders::versionDirectiveEnd(working);
-
-    if (versionEnd < 0) {
-        // No #version directive (or it was shadowed by an early break
-        // mid block-comment). KWin on Wayland with modern Mesa runs
-        // core profile, where `#version` is mandatory and a bare
-        // `#define` as the first token would fail compile with a
-        // confusing line-1 error. Synthesize a `#version 450` directive
-        // matching the rest of the animation suite, prepend the define,
-        // and warn so the author sees the contract violation in the
-        // journal.
+    bool synthesizedVersion = false;
+    const QString finished = PhosphorShaders::kwinCompositorSource(source, stage, extraDefines, &synthesizedVersion);
+    if (synthesizedVersion) {
         qCWarning(lcEffect) << "Shader source has no #version directive — synthesizing `#version 450`. "
-                               "Animation and surface packs MUST declare `#version 450` (the canonical contract); "
+                               "Packs MUST declare `#version 450` (the canonical contract); "
                                "the shader-validate CI gate enforces this for the bundled packs.";
-        const QString header = QStringLiteral("#version 450") + eol + defineLine;
-        return (header + working).toUtf8();
     }
-    if (versionEnd >= working.size()) {
-        // `#version` line ends at EOF with no trailing newline (rare but
-        // legal: an editor save that strips the final LF). The GLSL spec
-        // requires `#version` to be the FIRST directive, so the define
-        // cannot be prepended; append it behind a separator newline so the
-        // compiler still sees `#version` first.
-        return (working + eol + defineLine).toUtf8();
-    }
-    working.insert(versionEnd + 1, defineLine);
-    return working.toUtf8();
+    return finished.toUtf8();
 }
 
 namespace {
 
 /// Translate a metadata / params wrap-mode string to the GL enum the
-/// kwin-effect applies at bind time. Empty / unrecognised values fall
-/// through to `GL_CLAMP_TO_EDGE` (the GL default and the daemon's
-/// default per `ShaderNodeRhi::setUserTextureWrap`'s normalisation).
+/// kwin-effect applies at bind time. Exact, case-sensitive matches on the
+/// schema's vocabulary, the same comparison the surface and pointer compile
+/// paths make and the daemon's ShaderNodeRhi normalisation applies, so a
+/// runtime override the preview clamps cannot repeat here. Empty and
+/// unrecognised values fall through to `GL_CLAMP_TO_EDGE`.
 inline GLenum wrapStringToEnum(const QString& wrap)
 {
-    const QString lower = wrap.toLower();
-    if (lower == QLatin1String("repeat"))
+    if (wrap == QLatin1String("repeat"))
         return GL_REPEAT;
-    if (lower == QLatin1String("mirror") || lower == QLatin1String("mirrored"))
+    if (wrap == QLatin1String("mirror"))
         return GL_MIRRORED_REPEAT;
     return GL_CLAMP_TO_EDGE;
 }
@@ -336,7 +271,16 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // Placed here, BELOW the early-outs, not at the top of the function. Making a context
     // current is not free, and the busiest caller by far is a superseded drag geometry
     // update that turns around at one of the guards above without touching GL at all.
-    ensureGlContextCurrent();
+    //
+    // The result is honoured, as the surface, pointer and present compile paths honour
+    // theirs: compiling with no current context would cache a failed-compile sentinel
+    // and leave the pack dead until the next hot-reload, where refusing here costs this
+    // one event's animation and the next trigger retries.
+    if (!ensureGlContextCurrent()) {
+        qCWarning(lcEffect) << "Animation shader" << effectId
+                            << "not started: no current GL context; the next trigger retries";
+        return false;
+    }
 
     // Compile (or fetch the cached) shader program + uniform locations for this
     // effect. Split out to shader_textures.cpp; the GL context made current just
@@ -548,27 +492,10 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // pointer in the transition. Wrap mode is stored per-transition so
     // two legs sharing a path can run with different wrap modes
     // without invalidating each other's cache entry.
-    //
-    // Pre-warm: kick an async load for every declared texture path
-    // BEFORE the synchronous fallback loop below. On the very first
-    // transition for a given path the cache is cold and the
-    // synchronous loader still runs (so the first frame is correct);
-    // every subsequent transition for that path either hits the warm
-    // cache (worker completed) or hits the in-flight dedupe (worker
-    // still running, synchronous loader picks up the slack one more
-    // time). The warmup itself is cheap — early-out on cache hit and
-    // on in-flight membership — so a second pass over the same path
-    // costs only a hash lookup.
-    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
-        // Path key shares the GLSL sampler name (`uTexture<N>`) — see
-        // the metadata enrichment in `translateAnimationParams`.
-        const QString path = translated.value(QLatin1String(kUserTextureSamplerNames[slot])).toString();
-        if (!path.isEmpty()) {
-            warmUserTextureAsync(path);
-        }
-    }
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
         const int glslSlot = slot + 1; // uTexture0 is the surface; only used for the freshly-loaded log
+        // Path key shares the GLSL sampler name (`uTexture<N>`) — see
+        // the metadata enrichment in `translateAnimationParams`.
         const QString path = translated.value(QLatin1String(kUserTextureSamplerNames[slot])).toString();
         const QString wrap = translated.value(QLatin1String(kUserTextureWrapKeys[slot])).toString();
         transition.userTextureWrap[slot] = wrapStringToEnum(wrap);
@@ -586,10 +513,9 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             texIt->second.lastAccessTick = ++m_shaderManager.m_textureCacheAccessTick;
         }
         if (texIt == m_shaderManager.m_textureCache.end()) {
-            // Synchronous fallback — the warm path didn't promote in
-            // time (or this is the very first transition for this
-            // path). Subsequent transitions for the same path will
-            // hit the cache and pay zero load cost.
+            // First transition for this path since the cache last held
+            // it. Subsequent transitions for the same path hit the cache
+            // and pay zero load cost.
             //
             // This load runs on the compositor thread (PNG decode +
             // GLTexture::upload, or QSvgRenderer rasterise + upload).

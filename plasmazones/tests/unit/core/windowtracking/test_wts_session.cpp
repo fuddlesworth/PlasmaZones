@@ -3,16 +3,13 @@
 
 /**
  * @file test_wts_session.cpp
- * @brief Unit tests for WindowTrackingService session restore, clear-stale, and resnap
+ * @brief Unit tests for WindowTrackingService resnap, rotation and auto-snap marking
  *
  * Tests cover:
- * 1. Clear stale pending assignments
- * 2. Resnap buffer population (desktop filter, per-screen VDM desktops,
+ * 1. Resnap buffer population (desktop filter, per-screen VDM desktops,
  *    durable-record fallback) and resnap calculations from the previous layout
- * 3. Rotation calculations
- * 4. Pending-restore queue persistence round-trips
- * 5. Auto-snap marking
- * 6. Consume pending assignment
+ * 2. Rotation calculations
+ * 3. Auto-snap marking
  *
  * Session zone-restore-from-session (the old calculateRestoreFromSession /
  * PendingRestoreQueues path) is now covered by the unified WindowPlacementStore
@@ -29,8 +26,8 @@
 #include <QHash>
 #include <QRect>
 #include <QSet>
-#include <QUuid>
 #include <QRectF>
+#include <QUuid>
 #include <memory>
 
 #include <PhosphorEngine/GeometryUtils.h>
@@ -154,43 +151,19 @@ private Q_SLOTS:
     // that mechanism.
 
     // =====================================================================
-    // P1: Clear Stale Pending
-    // =====================================================================
-
-    void testClearStalePendingAssignment()
-    {
-        QString windowId = QStringLiteral("app|12345");
-        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.screenId = QStringLiteral("DP-1");
-        entry.virtualDesktop = 1;
-        entry.layoutId = QUuid::createUuid().toString();
-        entry.zoneNumbers = {1};
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        bool popped = m_service->consumePendingAssignment(windowId);
-        QVERIFY(popped);
-        QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
-    }
-
-    // =====================================================================
     // P1: Resnap
     // =====================================================================
 
     void testResnapFromPreviousLayout_zonePositionMapping()
     {
+        const QString screen = QStringLiteral("DP-1");
         QString window1 = QStringLiteral("app1|111");
         QString window2 = QStringLiteral("app2|222");
         QString window3 = QStringLiteral("app3|333");
 
-        m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 0);
-        m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
-        m_service->assignWindowToZone(window3, m_zoneIds[2], QString(), 0);
+        m_service->assignWindowToZone(window1, m_zoneIds[0], screen, 0);
+        m_service->assignWindowToZone(window2, m_zoneIds[1], screen, 0);
+        m_service->assignWindowToZone(window3, m_zoneIds[2], screen, 0);
 
         PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
@@ -203,7 +176,7 @@ private Q_SLOTS:
         m_layoutManager->setDefaultLayoutIdProvider([newLayoutId]() {
             return newLayoutId;
         });
-        m_service->onLayoutChanged();
+        m_service->populateResnapBufferForAllScreens({}, {screen});
 
         // Old zone positions map 1:1 into the new layout by zone number
         // (1 -> 1, 2 -> 2). window3's old position 3 exceeds the new 2-zone
@@ -228,6 +201,87 @@ private Q_SLOTS:
         QVERIFY(secondCall.isEmpty()); // Buffer consumed on first call
     }
 
+    // F963(b), l18_minimized_layout_switch: a window minimized (a suspension
+    // float) while its monitor switches layouts keeps pre-float zones that
+    // name the old layout. The switch's populate re-slots them into the
+    // same-numbered zone of the new one, so the unminimize lands there. Without
+    // the re-slot they keep the old layout's id.
+    void populate_minimizedWindowTakesTheSameNumberedZone()
+    {
+        const QString window = QStringLiteral("app1|minimized");
+        const QString userFloat = QStringLiteral("app2|floated");
+        floatOutOfZone(window, m_zoneIds[1], /*suspension=*/true);
+        floatOutOfZone(userFloat, m_zoneIds[1], /*suspension=*/false);
+        PhosphorZones::Layout* next = switchToNewLayout(3);
+
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+
+        PhosphorZones::Zone* oldZone = m_testLayout->zoneById(QUuid(m_zoneIds[1]));
+        QVERIFY(oldZone);
+        QString sameNumbered;
+        for (PhosphorZones::Zone* z : next->zones()) {
+            if (z->zoneNumber() == oldZone->zoneNumber()) {
+                sameNumbered = z->id().toString();
+            }
+        }
+        QCOMPARE(m_service->preFloatZones(window), QStringList{sameNumbered});
+        // A float the user made is not a minimize: its memory is left alone.
+        QCOMPARE(m_service->preFloatZones(userFloat), QStringList{m_zoneIds[1]});
+    }
+
+    // A new layout without that zone leaves the zones alone, and the unfloat's
+    // layout guard (F963(a)) keeps the window at its float spot.
+    void populate_minimizedWindowKeepsItsZonesWhenTheLayoutIsShort()
+    {
+        const QString window = QStringLiteral("app1|minimized");
+        floatOutOfZone(window, m_zoneIds[2], /*suspension=*/true);
+        switchToNewLayout(1);
+
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+
+        QCOMPARE(m_service->preFloatZones(window), QStringList{m_zoneIds[2]});
+    }
+
+    // F1035: the same re-slot when the layout is DELETED. The removal buffers
+    // with the layout still alive (wired here as the adaptor wires it), the
+    // registry picks the replacement after, and the prune that closes the
+    // removal re-slots the minimized window into it. A user float is left alone.
+    void layoutDelete_minimizedWindowTakesTheSameNumberedZone()
+    {
+        const QString window = QStringLiteral("app1|minimized");
+        const QString userFloat = QStringLiteral("app2|floated");
+        floatOutOfZone(window, m_zoneIds[1], /*suspension=*/true);
+        floatOutOfZone(userFloat, m_zoneIds[1], /*suspension=*/false);
+        PhosphorZones::Zone* oldZone = m_testLayout->zoneById(QUuid(m_zoneIds[1]));
+        QVERIFY(oldZone);
+        const int oldNumber = oldZone->zoneNumber();
+        PhosphorZones::Layout* next = createTestLayout(3, m_layoutManager);
+        m_layoutManager->addLayout(next);
+        const QString nextId = next->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([nextId]() {
+            return nextId;
+        });
+        const QMetaObject::Connection buffer = connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutRemoved,
+                                                       this, [this](PhosphorZones::Layout* layout) {
+                                                           m_service->bufferWindowsOfRemovedLayout(layout);
+                                                       });
+        QVERIFY(m_layoutManager->removeLayout(m_testLayout));
+        disconnect(buffer);
+        m_testLayout = nullptr;
+        QCOMPARE(m_layoutManager->activeLayout(), next);
+
+        m_service->pruneStaleZoneAssignments();
+
+        QString sameNumbered;
+        for (PhosphorZones::Zone* z : next->zones()) {
+            if (z->zoneNumber() == oldNumber) {
+                sameNumbered = z->id().toString();
+            }
+        }
+        QCOMPARE(m_service->preFloatZones(window), QStringList{sameNumbered});
+        QCOMPARE(m_service->preFloatZones(userFloat), QStringList{m_zoneIds[1]});
+    }
+
     // Regression: daemon off->on while in autotile, then swap to snapping. The
     // window's snap zones live ONLY in the durable WindowPlacement record after a
     // restart — the live m_snapState map is cold. populateResnapBufferForAllScreens
@@ -248,7 +302,7 @@ private Q_SLOTS:
         snapSlot.state = PhosphorEngine::WindowPlacement::stateSnapped();
         snapSlot.zoneIds = QStringList{m_zoneIds[0]};
         rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snapSlot);
-        m_service->placementStore().record(rec);
+        QVERIFY(m_service->placementStore().record(rec));
 
         QVERIFY(m_service->zonesForWindow(windowId).isEmpty()); // live map is cold
 
@@ -264,6 +318,236 @@ private Q_SLOTS:
             }
         }
         QVERIFY2(found, "durable-recorded snap window must enter the resnap buffer when the live map is cold");
+    }
+
+    // The durable arm reads where a live window IS, not the record: a window
+    // KWin moved to another desktop or activity since its snapped record was
+    // written is not on the screen's shown context and is not resnapped
+    // there (F516). Rows: a single-desktop record, a multi-desktop record,
+    // an activity, and the window on the shown desktop as the control.
+    void testResnapBuffer_durableArmReadsTheWindowsLiveDesktops()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        PhosphorWorkspaces::VirtualDesktopManager vdm;
+        vdm.updateScreenDesktop(screen, 1);
+        SnapState state(QString(), nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, &vdm);
+        service.setSnapState(&state);
+        service.setWindowRegistry(&registry);
+        m_layoutManager->setCurrentActivity(QStringLiteral("act-a"));
+
+        const auto addWindow = [&](const QString& instance, int recordDesktop, QHash<int, QStringList> byDesktop,
+                                   int liveDesktop, QList<int> liveDesktops, const QString& liveActivity) {
+            PhosphorEngine::WindowMetadata meta;
+            meta.appId = QStringLiteral("app");
+            meta.virtualDesktop = liveDesktop;
+            meta.virtualDesktops = liveDesktops;
+            meta.activity = liveActivity;
+            registry.upsert(instance, meta);
+            PhosphorEngine::WindowPlacement rec;
+            rec.windowId = QStringLiteral("app|") + instance;
+            rec.appId = QStringLiteral("app");
+            rec.screenId = screen;
+            rec.virtualDesktop = recordDesktop;
+            PhosphorEngine::EngineSlot slot;
+            slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+            slot.zoneIds = QStringList{m_zoneIds[0]};
+            slot.zonesByDesktop = byDesktop;
+            rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+            // An empty id when the store refused the record; checked below.
+            return service.placementStore().record(rec) ? rec.windowId : QString();
+        };
+        const QString movedOff = addWindow(QStringLiteral("moved-off"), 1, {}, 2, {}, QString());
+        const QString spanMoved =
+            addWindow(QStringLiteral("span-moved"), 1, {{1, {m_zoneIds[0]}}, {3, {m_zoneIds[1]}}}, 2, {}, QString());
+        const QString otherActivity =
+            addWindow(QStringLiteral("other-activity"), 1, {}, 1, {}, QStringLiteral("act-b"));
+        const QString inView = addWindow(QStringLiteral("in-view"), 1, {}, 1, {}, QStringLiteral("act-a"));
+        QVERIFY(!movedOff.isEmpty() && !spanMoved.isEmpty() && !otherActivity.isEmpty() && !inView.isEmpty());
+
+        service.populateResnapBufferForAllScreens({}, {screen}, 1);
+
+        QSet<QString> ids;
+        for (const PhosphorEngine::ResnapEntry& e : service.takeResnapBuffer()) {
+            ids.insert(e.windowId);
+        }
+        QVERIFY2(!ids.contains(movedOff), "a window now on desktop 2 must not be resnapped on desktop 1");
+        QVERIFY2(!ids.contains(spanMoved), "a window that left desktops 1 and 3 for 2 must not be resnapped on 1");
+        QVERIFY2(!ids.contains(otherActivity), "a window on another activity must not be resnapped here");
+        QVERIFY(ids.contains(inView));
+
+        m_layoutManager->setCurrentActivity(QString());
+        service.setSnapState(nullptr);
+    }
+
+    // A window on several activities is in view on any of them, not only its
+    // first (F1034, the F426 reading busgate's activity gate shares).
+    void testResnapBuffer_durableArmReadsEveryActivityOfTheWindow()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        SnapState state(QString(), nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, nullptr);
+        service.setSnapState(&state);
+        service.setWindowRegistry(&registry);
+        m_layoutManager->setCurrentActivity(QStringLiteral("act-b"));
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.activity = QStringLiteral("act-a");
+        meta.activities = {QStringLiteral("act-a"), QStringLiteral("act-b")};
+        registry.upsert(QStringLiteral("both"), meta);
+        meta.activities = {QStringLiteral("act-a"), QStringLiteral("act-c")};
+        registry.upsert(QStringLiteral("elsewhere"), meta);
+        QVERIFY(service.placementStore().record(snappedRecord(QStringLiteral("app|both"), screen, {m_zoneIds[0]})));
+        QVERIFY(
+            service.placementStore().record(snappedRecord(QStringLiteral("app|elsewhere"), screen, {m_zoneIds[1]})));
+
+        service.populateResnapBufferForAllScreens({}, {screen});
+
+        const QStringList ids = bufferIds(service);
+        m_layoutManager->setCurrentActivity(QString());
+        service.setSnapState(nullptr);
+        QVERIFY2(ids.contains(QStringLiteral("app|both")), "a window also on the activity in view is resnapped");
+        QVERIFY(!ids.contains(QStringLiteral("app|elsewhere")));
+    }
+
+    // ── populate's guards (F828): each row pins one, so deleting it fails the row ──
+
+    /// One snapped record of the window @p windowId on @p screen, zones @p zones.
+    static PhosphorEngine::WindowPlacement snappedRecord(const QString& windowId, const QString& screen,
+                                                         const QStringList& zones)
+    {
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = windowId;
+        rec.appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        rec.screenId = screen;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = zones;
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        return rec;
+    }
+
+    static QStringList bufferIds(PhosphorPlacement::WindowTrackingService& service)
+    {
+        QStringList ids;
+        for (const PhosphorEngine::ResnapEntry& e : service.takeResnapBuffer()) {
+            ids.append(e.windowId);
+        }
+        return ids;
+    }
+
+    // A record of a window that is gone gives no row: a dead id in the batch is
+    // resolved by the compositor onto a live window of the same app.
+    void populate_deadRecordIsSkipped()
+    {
+        SnapState state(QString(), nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, nullptr);
+        service.setSnapState(&state);
+        service.setWindowRegistry(&registry);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        registry.upsert(QStringLiteral("live"), meta);
+        QVERIFY(service.placementStore().record(
+            snappedRecord(QStringLiteral("app|dead"), QStringLiteral("DP-1"), {m_zoneIds[0]})));
+        QVERIFY(service.placementStore().record(
+            snappedRecord(QStringLiteral("app|live"), QStringLiteral("DP-1"), {m_zoneIds[1]})));
+
+        service.populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+        QCOMPARE(bufferIds(service), QStringList{QStringLiteral("app|live")});
+        service.setSnapState(nullptr);
+    }
+
+    // A window whose class changed is one row: the live store holds it under its
+    // first-seen canonical key and its record under the current composite.
+    void populate_canonicalSkewContributesOneRow()
+    {
+        SnapState state(QString(), nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, nullptr);
+        service.setSnapState(&state);
+        service.setWindowRegistry(&registry);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("new");
+        registry.upsert(QStringLiteral("u"), meta);
+        QCOMPARE(registry.canonicalizeWindowId(QStringLiteral("old|u")), QStringLiteral("old|u"));
+        state.assignWindowToZone(QStringLiteral("old|u"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        QVERIFY(service.placementStore().record(
+            snappedRecord(QStringLiteral("new|u"), QStringLiteral("DP-1"), {m_zoneIds[0]})));
+
+        service.populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+        QCOMPARE(bufferIds(service).size(), 1);
+        service.setSnapState(nullptr);
+    }
+
+    // A record whose snap slot floats gives no row, even with zones left in it.
+    void populate_floatingDurableSlotIsSkipped()
+    {
+        PhosphorEngine::WindowPlacement rec =
+            snappedRecord(QStringLiteral("app|f"), QStringLiteral("DP-1"), {m_zoneIds[0]});
+        rec.engines[PhosphorEngine::WindowPlacement::snapEngineId()].state =
+            PhosphorEngine::WindowPlacement::stateFloating();
+        QVERIFY(m_service->placementStore().record(rec));
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+        QVERIFY(bufferIds(*m_service).isEmpty());
+    }
+
+    // A window on desktops 1 and 2 is resnapped from the zone it holds on the
+    // desktop its screen shows, stamped with that desktop.
+    void populate_multiDesktopRecordTakesTheShownDesktop()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        PhosphorWorkspaces::VirtualDesktopManager vdm;
+        vdm.updateScreenDesktop(screen, 2);
+        SnapState state(QString(), nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, &vdm);
+        service.setSnapState(&state);
+        service.setWindowRegistry(&registry);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("app");
+        meta.virtualDesktops = {1, 2};
+        registry.upsert(QStringLiteral("multi"), meta);
+        PhosphorEngine::WindowPlacement rec = snappedRecord(QStringLiteral("app|multi"), screen, {m_zoneIds[0]});
+        rec.virtualDesktop = 1;
+        rec.engines[PhosphorEngine::WindowPlacement::snapEngineId()].zonesByDesktop = {{1, {m_zoneIds[0]}},
+                                                                                       {2, {m_zoneIds[1]}}};
+        QVERIFY(service.placementStore().record(rec));
+
+        service.populateResnapBufferForAllScreens({}, {screen});
+        const QVector<PhosphorEngine::ResnapEntry> buffer = service.takeResnapBuffer();
+        QCOMPARE(buffer.size(), 1);
+        QCOMPARE(buffer.first().zonePosition, 2);
+        QCOMPARE(buffer.first().virtualDesktop, 2);
+        service.setSnapState(nullptr);
+    }
+
+    // A window on a screen a tiling engine runs is left out.
+    void populate_excludedScreenIsSkipped()
+    {
+        m_service->assignWindowToZone(QStringLiteral("app|left"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        m_service->assignWindowToZone(QStringLiteral("app|right"), m_zoneIds[0], QStringLiteral("DP-2"), 0);
+        m_service->populateResnapBufferForAllScreens({QStringLiteral("DP-2")});
+        QCOMPARE(bufferIds(*m_service), QStringList{QStringLiteral("app|left")});
+    }
+
+    // The snap store's own float bit decides, not the routed float resolver
+    // (which answers for whatever engine runs the window's screen now).
+    void populate_readsSnapsOwnFloatBit()
+    {
+        SnapState* state = m_engine->snapState();
+        state->assignWindowToZone(QStringLiteral("app|snapfloat"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        state->setFloating(QStringLiteral("app|snapfloat"), true);
+        state->assignWindowToZone(QStringLiteral("app|routedfloat"), m_zoneIds[1], QStringLiteral("DP-1"), 0);
+        QVERIFY(!state->zonesForWindow(QStringLiteral("app|snapfloat")).isEmpty());
+        m_service->setEngineFloatResolver([](const QString& windowId) {
+            return windowId == QStringLiteral("app|routedfloat");
+        });
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+        QCOMPARE(bufferIds(*m_service), QStringList{QStringLiteral("app|routedfloat")});
+        m_service->setEngineFloatResolver({});
     }
 
     // Regression (#layout-leak): a per-desktop layout change must resnap only
@@ -370,12 +654,12 @@ private Q_SLOTS:
     void testCalculateResnap_preservesRecordedDesktop()
     {
         const QString win = QStringLiteral("app1|111");
-        m_service->assignWindowToZone(win, m_zoneIds[0], QString(), 2);
+        m_service->assignWindowToZone(win, m_zoneIds[0], QStringLiteral("DP-1"), 2);
 
         PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->setActiveLayout(newLayout);
-        m_service->onLayoutChanged();
+        m_service->populateResnapBufferForAllScreens();
 
         const QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
         QVERIFY(!resnap.isEmpty());
@@ -404,13 +688,37 @@ private Q_SLOTS:
         m_layoutManager->setDefaultLayoutIdProvider([newLayoutId]() {
             return newLayoutId;
         });
-        m_service->onLayoutChanged();
+        m_service->populateResnapBufferForAllScreens({}, {screen});
 
         const QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
         QVERIFY(!resnap.isEmpty());
         for (const ZoneAssignmentEntry& e : resnap) {
             QCOMPARE(e.targetScreenId, screen);
         }
+    }
+
+    // A layout change captures nothing for a resnap: the switch callers
+    // populate their own buffer before it lands, and a row captured here
+    // was replayed by a later resnap or Reapply that had nothing to do with
+    // this change (D1, F34).
+    void onLayoutChangedBuffersNothing()
+    {
+        m_service->assignWindowToZone(QStringLiteral("app1|111"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(newLayout);
+        m_layoutManager->setActiveLayout(newLayout);
+        m_service->onLayoutChanged();
+        QVERIFY(m_service->takeResnapBuffer().isEmpty());
+    }
+
+    // A populate that finds nothing replaces the buffer. Keeping the earlier
+    // rows moved those windows again on the next resnap (F34).
+    void populateReplacesTheBufferWhenItFindsNothing()
+    {
+        m_service->assignWindowToZone(QStringLiteral("app1|111"), m_zoneIds[0], QStringLiteral("DP-1"), 0);
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-2")});
+        QVERIFY(m_service->takeResnapBuffer().isEmpty());
     }
 
     // Same stamp assertion for the current-assignments producer (gap reflow,
@@ -594,49 +902,6 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Daemon Restart / Pending Restore
-    // =====================================================================
-
-    // Pins the pending-restore queue setter/readback round-trip — pure state
-    // persistence, no restart simulation and no signal emission involved.
-    void testPendingRestoreQueue_roundTrip()
-    {
-        QString appId = QStringLiteral("firefox");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.layoutId = m_testLayout->id().toString();
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().zoneIds.first(), m_zoneIds[0]);
-    }
-
-    // =====================================================================
-    // P0: PendingRestore round-trip preserves screenId
-    // (wrong-display restore *resolution* is covered by test_window_placement_store
-    //  / test_wta_convenience; this only pins the persistence round-trip)
-    // =====================================================================
-
-    void testPendingRestore_preservesScreenId()
-    {
-        QString appId = QStringLiteral("app");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.screenId = QStringLiteral("HDMI-2");
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().screenId, QStringLiteral("HDMI-2"));
-    }
-
-    // =====================================================================
     // P1: Auto-snap / Mark as auto-snapped
     // =====================================================================
 
@@ -651,51 +916,33 @@ private Q_SLOTS:
         QVERIFY(!m_service->isAutoSnapped(windowId));
     }
 
-    // =====================================================================
-    // P1: Consume pending assignment
-    // =====================================================================
-
-    void testConsumePendingAssignment()
-    {
-        QString windowId = QStringLiteral("app|12345");
-        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.zoneNumbers = {1};
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        m_service->consumePendingAssignment(windowId);
-
-        QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
-    }
-
-    // =====================================================================
-    // P0: PendingRestore round-trip preserves zoneNumbers
-    // (UUID-collision regeneration on import is covered elsewhere; this only
-    //  pins that zoneNumbers survive the persistence round-trip)
-    // =====================================================================
-
-    void testPendingRestore_preservesZoneNumbers()
-    {
-        QString appId = QStringLiteral("app");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.zoneNumbers = {1};
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().zoneNumbers.first(), 1);
-    }
-
 private:
+    /// Snap @p windowId into @p zoneId on DP-1, then float it out of the zone,
+    /// as a minimize does when @p suspension.
+    void floatOutOfZone(const QString& windowId, const QString& zoneId, bool suspension)
+    {
+        m_service->assignWindowToZone(windowId, zoneId, QStringLiteral("DP-1"), 0);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        if (suspension) {
+            m_service->markSuspensionFloat(windowId);
+        }
+        QCOMPARE(m_service->preFloatZones(windowId), QStringList{zoneId});
+    }
+
+    /// Make a new @p zoneCount-zone layout the one DP-1 runs.
+    PhosphorZones::Layout* switchToNewLayout(int zoneCount)
+    {
+        PhosphorZones::Layout* next = createTestLayout(zoneCount, m_layoutManager);
+        m_layoutManager->addLayout(next);
+        m_layoutManager->setActiveLayout(next);
+        const QString nextId = next->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([nextId]() {
+            return nextId;
+        });
+        return next;
+    }
+
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsSession* m_settings = nullptr;

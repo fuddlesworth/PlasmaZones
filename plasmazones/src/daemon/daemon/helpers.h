@@ -5,9 +5,9 @@
 
 // Inline helpers shared across the daemon TU files in this directory
 // (start.cpp, signals.cpp, navigation.cpp, osd.cpp, cheatsheet.cpp,
-// lifecycle.cpp, the init_*.cpp files, autotile_init.cpp and
-// scrolling_init.cpp). Defined inline to avoid ODR issues in both unity and
-// normal builds.
+// lifecycle.cpp, bridge_watchdog.cpp, plasma_workspace.cpp, the init_*.cpp
+// files, autotile_init.cpp and scrolling_init.cpp). Defined inline to avoid ODR
+// issues in both unity and normal builds.
 
 #include <QScreen>
 #include "core/platform/logging.h"
@@ -27,6 +27,13 @@
 #include <optional>
 
 namespace PlasmaZones {
+
+// Grace period (ms) for the KWin effect to register as a compositor bridge
+// after daemon startup. Comfortably longer than a healthy effect takes to
+// register (sub-second once KWin and the daemon's D-Bus name are both up),
+// even when the daemon starts before KWin during login — so a timeout means
+// a genuine failure, not a race.
+inline constexpr int BRIDGE_WATCHDOG_TIMEOUT_MS = 20000;
 
 /// Run one phase of the sticky-screen pin pass on the tiling-family engines.
 ///

@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "dragtracker.h"
+#include "plasmazoneseffect/gestureenddecisions.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <window.h>
 #include <QLoggingCategory>
 
 namespace PlasmaZones {
@@ -43,6 +46,16 @@ void DragTracker::handleWindowStartMoveResize(KWin::EffectWindow* w)
     m_draggedWindow = w;
     m_draggedWindowId = m_effect->getWindowId(w);
     m_lastCursorPos = KWin::effects->cursorPos();
+    m_dragStartFrame = w->frameGeometry();
+    // KWin's grab point: the pointer, the touch point, or where a
+    // client-initiated move began.
+    const KWin::Window* kw = w->window();
+    m_dragStartAnchor = kw ? kw->interactiveMoveResizeAnchor() : m_lastCursorPos;
+    // Before any restore on drag, which KWin makes once the move gets going.
+    m_dragStartMaximizeMode = kw ? int(kw->requestedMaximizeMode()) : 0;
+    m_dragStartOutputId = kw && kw->moveResizeOutput() ? kw->moveResizeOutput()->uuid() : QString();
+    m_pointerMoved = false;
+    m_pointerDrag = m_effect->m_currentMouseButtons != Qt::NoButton;
     m_dragMovedThrottle.start();
 
     qCInfo(lcEffect) << "Window move started -" << w->windowClass();
@@ -82,10 +95,35 @@ void DragTracker::handleWindowFinishMoveResize(KWin::EffectWindow* w)
         return;
     }
 
-    // forceEnd() handles normal drag end (LMB release). If we get here, the move was
-    // cancelled externally (Escape key, compositor ended it, fullscreen transition).
-    qCInfo(lcEffect) << "Window move cancelled (finished without button release)";
-    finishDrag(/*cancelled=*/true);
+    // forceEnd() handles a pointer drag's end (LMB release). A move that
+    // finishes here ended some other way, and only one KWin reverted is
+    // cancelled: Escape puts the window back at its start rect. Return or
+    // Space accepting a keyboard move, a lifted finger or a tablet tip, and a
+    // compositor-ended move keep where the window went (F752). The COMMANDED
+    // rect, not the frame: an Escape that undoes a restore-from-maximize
+    // commits its size at the ack, while the commanded rect is the start at
+    // once. With the requested maximize mode too, since that Escape re-applies
+    // the starting maximize, which commands the maximize area (F1014), on the
+    // output the move started on, where the cancel puts it back (F1072).
+    const KWin::Window* kw = w->window();
+    const QRectF commanded = kw ? QRectF(kw->moveResizeGeometry()) : QRectF(w->frameGeometry());
+    const bool endsOnStartOutput =
+        kw && kw->moveResizeOutput() && kw->moveResizeOutput()->uuid() == m_dragStartOutputId;
+    const bool reverted =
+        GestureEndDecisions::moveReverted(m_dragStartFrame, commanded, m_dragStartMaximizeMode,
+                                          kw ? int(kw->requestedMaximizeMode()) : 0, endsOnStartOutput);
+    m_lastCursorPos = dragPoint();
+    qCInfo(lcEffect) << "Window move finished without button release, reverted=" << reverted;
+    finishDrag(reverted);
+}
+
+QPointF DragTracker::dragPoint() const
+{
+    if (m_pointerMoved || !m_draggedWindow) {
+        return m_lastCursorPos;
+    }
+    return GestureEndDecisions::grabPointAt(m_dragStartAnchor, m_dragStartFrame.topLeft(),
+                                            m_draggedWindow->frameGeometry().topLeft());
 }
 
 void DragTracker::forceEnd(const QPointF& cursorPos)
@@ -105,7 +143,10 @@ void DragTracker::updateCursorPosition(const QPointF& cursorPos)
     if (!m_draggedWindow) {
         return;
     }
-    // Always track latest position for forceEnd()/callDragStopped() to use
+    // Always track latest position for forceEnd()/callEndDrag() to use
+    if (cursorPos != m_lastCursorPos) {
+        m_pointerMoved = true;
+    }
     m_lastCursorPos = cursorPos;
     // Throttle dragMoved signals to ~30Hz. slotMouseChanged fires at input
     // device rate (often 1000Hz on gaming mice); sending a D-Bus call for
@@ -141,7 +182,7 @@ void DragTracker::handleWindowClosed(KWin::EffectWindow* window)
     if (m_draggedWindow == window) {
         qCInfo(lcEffect) << "Drag: window closed, cancelled";
         // Don't call finishDrag() — it would pass the mid-destruction window pointer
-        // through dragStopped, causing use-after-free in callDragStopped's geometry queries.
+        // through dragStopped, causing use-after-free in callEndDrag's geometry queries.
         // Instead, clear state and emit with nullptr so the receiver skips the snap.
         QString windowIdToCancel = m_draggedWindowId;
         m_draggedWindow = nullptr;
@@ -168,6 +209,10 @@ void DragTracker::reset()
     m_draggedWindow = nullptr;
     m_draggedWindowId.clear();
     m_lastCursorPos = QPointF();
+    m_pointerMoved = false;
+    m_pointerDrag = false;
+    m_dragStartMaximizeMode = 0;
+    m_dragStartOutputId.clear();
     m_dragMovedThrottle.invalidate();
 }
 

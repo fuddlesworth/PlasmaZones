@@ -21,6 +21,7 @@ inline constexpr QLatin1String TargetZoneId{"targetZoneId"};
 inline constexpr QLatin1String TargetZoneIds{"targetZoneIds"};
 inline constexpr QLatin1String TargetScreenId{"targetScreenId"};
 inline constexpr QLatin1String VirtualDesktop{"virtualDesktop"};
+inline constexpr QLatin1String Restatement{"restatement"};
 
 } // namespace JsonKeys
 } // namespace PhosphorEngine

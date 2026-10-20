@@ -82,7 +82,7 @@ P_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, fi
 // retired in v4 — the migration in src/config/configmigration.cpp drains
 // the legacy lists into Application-subject Rules, and runtime
 // evaluators in SnapEngine, the KWin effect, and the WTA
-// pending-restore prune route through `PhosphorRules::ExclusionRules`
+// placement prune route through `PhosphorRules::ExclusionRules`
 // over the unified store.
 //
 // The on-disk group name `"Exclusions"` is INTENTIONALLY kept after the

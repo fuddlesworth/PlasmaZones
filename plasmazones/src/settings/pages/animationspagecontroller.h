@@ -278,6 +278,10 @@ public:
     /// @return true when the entry was written.
     Q_INVOKABLE bool setOverride(const QString& path, const QVariantMap& profileJson);
 
+    /// Engage the card override at each valid path without copying inherited
+    /// timing values. The empty profile preserves the user's toggle state.
+    Q_INVOKABLE bool engageOverridesUnder(const QStringList& eventPaths);
+
     /// Remove the stored override at @p path. Same path validation as
     /// `setOverride`. Emits `overrideChanged(path)` once the path has passed
     /// validation and was known to carry an override, whether this call did

@@ -8,7 +8,6 @@
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QDBusAbstractAdaptor>
-#include <QDBusContext>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QObject>
@@ -66,13 +65,14 @@ class WindowTrackingAdaptor;
  * - Overlay visibility based on modifiers
  * - Window snapping via KWin D-Bus
  *
- * Inherits @c QDBusContext so registerDropProxy can identify the peer that
- * registered a proxy and drop the registration when that peer dies. A proxy
- * outlives every individual drag by design, so without owner tracking a shell
- * that crashes rather than unregistering would keep hijacking snap drops over
- * its old rect for the daemon's whole lifetime.
+ * registerDropProxy identifies the peer that registered a proxy through the
+ * context of the object this adaptor is exported through
+ * (DbusHelpers::busCaller), and drops the registration when that peer dies.
+ * A proxy outlives every individual drag by design, so without owner
+ * tracking a shell that crashes rather than unregistering would keep
+ * hijacking snap drops over its old rect for the daemon's whole lifetime.
  */
-class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor, public QDBusContext
+class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowDrag")
@@ -306,9 +306,8 @@ public Q_SLOTS:
 public:
     /**
      * Called when a window is closed during or after a drag operation.
-     * Connected to WindowTrackingAdaptor::windowClosedNotification — the
-     * canonical close path also tears down drag state when the closing
-     * window was in flight.
+     * Connected to WindowLifecycleRelay::windowClosed, so the canonical close
+     * path also tears down drag state when the closing window was in flight.
      *
      * Declared as a public plain member function (NOT under Q_SLOTS):
      * QDBusAbstractAdaptor's runtime introspection exposes every PUBLIC
@@ -690,6 +689,9 @@ private:
     // structural compare, so new fields are picked up automatically.
     PhosphorProtocol::DragPolicy m_currentDragPolicy;
     QRect m_originalGeometry;
+    /// Whether the window filled its output (maximized or fullscreen) when the
+    /// drag began: its original frame is then the output, never a float-back.
+    bool m_originalFrameFillsOutput = false;
 
     // Pending snap-path drag awaiting first activation. Populated by
     // beginDrag on the snap path instead of immediately running the full
@@ -703,6 +705,8 @@ private:
     // laziness now lives on the daemon side.
     QString m_pendingSnapDragWindowId;
     QRect m_pendingSnapDragGeometry;
+    /// m_originalFrameFillsOutput read with the geometry, not at promotion (F1051).
+    bool m_pendingSnapDragFillsOutput = false;
     bool m_pendingSnapDragWasSnapped = false;
     /// Set for the duration of one endDrag whose `cancelled` flag was true —
     /// KWin ended the interactive move itself (Escape, a fullscreen
@@ -1030,7 +1034,13 @@ private:
     // captured pre-snap geometry to prevent race conditions in
     // dragStopped() — the in-flight value may have already been
     // overwritten by the snap commit by the time this runs.
-    void tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry);
+    void tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry, bool fillsOutput);
+    /// The registry's fills-output verdict for @p windowId, false when unknown.
+    bool windowFillsOutput(const QString& windowId) const;
+    /// The pre-snap size a drag-out restores on @p screenId: the float-back
+    /// there, else the size of the window's float-back on another monitor,
+    /// bounded to this one. The position stays screen-local; only the size travels.
+    std::optional<QSize> preSnapSizeFor(const QString& windowId, const QString& screenId) const;
 
 private Q_SLOTS:
     /**

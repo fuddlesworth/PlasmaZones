@@ -84,12 +84,17 @@ add_library(PhosphorSnapEngine SHARED
     src/SnapState.cpp
     src/calculate.cpp
     src/commit.cpp
+    src/desktopremap.cpp
     src/float.cpp
+    src/evacueepark.cpp
+    src/evacueepark_p.h
     src/free_size.cpp
+    src/leave.cpp
     src/lifecycle.cpp
     src/navigation.cpp
     src/navigation_actions.cpp
     src/navigation_crosssurface.cpp
+    src/pendingcarries_p.h
     src/resnap_calc.cpp
     src/snapnavigationtargets.cpp
     src/snapenginelogging.h

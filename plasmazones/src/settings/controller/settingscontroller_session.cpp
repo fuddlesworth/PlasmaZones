@@ -500,22 +500,18 @@ void SettingsController::onActivitiesChanged()
                 validIds.insert(id);
             }
         }
-        // Gate on the ids the prune actually consumes, not on m_activities: a
-        // non-empty payload whose entries carry no usable id passes an
-        // m_activities check with an empty validIds, and pruning against an
-        // empty set wipes every disabled-activity entry the user has.
+        // A payload with no usable id leaves validIds empty, and the prune
+        // removes nothing then (F423).
         //
         // Iterate every mode the (Mode, Family) table knows about so a
         // future mode (e.g. Scrolling) is automatically pruned when the
         // user removes a KDE activity it referenced. Symmetric with the
         // desktop-prune loop in onVirtualDesktopsChanged above.
-        if (!validIds.isEmpty()) {
-            for (const auto mode : PhosphorZones::allModes()) {
-                QStringList disabledActs = m_settings.disabledActivities(mode);
-                if (pruneDisabledActivityEntries(disabledActs, validIds)) {
-                    m_settings.setDisabledActivities(mode, disabledActs);
-                    prunedAny = true;
-                }
+        for (const auto mode : PhosphorZones::allModes()) {
+            QStringList disabledActs = m_settings.disabledActivities(mode);
+            if (pruneDisabledActivityEntries(disabledActs, validIds)) {
+                m_settings.setDisabledActivities(mode, disabledActs);
+                prunedAny = true;
             }
         }
         if (prunedAny) {

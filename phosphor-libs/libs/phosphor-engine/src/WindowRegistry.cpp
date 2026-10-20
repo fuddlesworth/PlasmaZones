@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorIdentity/WindowId.h>
 
 #include <QLoggingCategory>
@@ -26,6 +27,9 @@ void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& met
         qCWarning(lcWindowRegistry, "WindowRegistry::upsert: rejecting empty instance id");
         return;
     }
+    // A push after the renumber began carries the new numbering already, even
+    // one equal to the record (F763).
+    m_desktopRenumberPending.remove(instanceId);
 
     if (m_disappearingInstances.contains(instanceId)) {
         m_pendingUpserts.insert(instanceId, metadata);
@@ -55,6 +59,7 @@ void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& met
 
 void WindowRegistry::remove(const QString& instanceId)
 {
+    m_desktopRenumberPending.remove(instanceId);
     if (m_disappearingInstances.contains(instanceId)) {
         m_pendingUpserts.remove(instanceId);
         return;
@@ -82,10 +87,10 @@ void WindowRegistry::remove(const QString& instanceId)
     m_disappearingInstances.remove(instanceId);
     const bool hasPendingUpsert = m_pendingUpserts.contains(instanceId);
     const WindowMetadata pendingMetadata = m_pendingUpserts.take(instanceId);
-    // Retire the mapping only if it still is the pre-emit one: a synchronous
-    // subscriber may have re-seeded a FRESH canonical for this instance during
-    // the emit (a re-announce racing the close), and clobbering that with a
-    // blind remove would strip the next lifecycle's identity translation.
+    // Retire the mapping only if it still is the pre-emit one. An instance that had a canonical keeps it through the
+    // emit (canonicalizeWindowId never re-seeds one), and a re-announce racing the close is the pending-upsert replay
+    // below. The test matters only for an instance that gained its FIRST canonical from a subscriber during the emit,
+    // and that mapping is kept: a blind remove would strip the next lifecycle's identity translation.
     const QString postEmit = m_canonicalByInstance.value(instanceId);
     if (postEmit == canonical) {
         m_canonicalByInstance.remove(instanceId);
@@ -121,7 +126,8 @@ std::optional<WindowRegistry::WindowContext> WindowRegistry::windowContext(const
     if (it == m_records.constEnd()) {
         return std::nullopt;
     }
-    return WindowContext{it.value().virtualDesktop, it.value().virtualDesktops, it.value().activity};
+    return WindowContext{it.value().virtualDesktop, it.value().virtualDesktops, it.value().activity,
+                         it.value().activities};
 }
 
 QString WindowRegistry::appIdFor(const QString& instanceId) const
@@ -145,6 +151,27 @@ std::optional<bool> WindowRegistry::minimizedState(const QString& windowId) cons
     return it->isMinimized;
 }
 
+std::optional<bool> WindowRegistry::fillsOutputState(const QString& windowId) const
+{
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const auto it = m_records.constFind(instanceId);
+    if (it == m_records.constEnd()) {
+        return std::nullopt;
+    }
+    // A one-axis maximize stretches the frame to the output on that axis, so
+    // it is not a free position either (F65).
+    if (it->isMaximized.value_or(false) || it->isAxisMaximized.value_or(false) || it->isFullscreen.value_or(false)) {
+        return true;
+    }
+    // Off only when BOTH are known off: an unknown maximize next to a known
+    // fullscreen=false may well be on (F141). The axis field is left out of
+    // this: an effect that never sends it keeps the answer it had.
+    if (it->isMaximized.has_value() && it->isFullscreen.has_value()) {
+        return false;
+    }
+    return std::nullopt;
+}
+
 std::optional<WindowDesktopContext> WindowRegistry::desktopContext(const QString& windowId) const
 {
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
@@ -152,7 +179,7 @@ std::optional<WindowDesktopContext> WindowRegistry::desktopContext(const QString
     if (it == m_records.constEnd()) {
         return std::nullopt;
     }
-    return WindowDesktopContext{it->virtualDesktop, it->virtualDesktops, it->isSticky, it->activity};
+    return WindowDesktopContext{it->virtualDesktop, it->virtualDesktops, it->isSticky, it->activity, it->activities};
 }
 
 QStringList WindowRegistry::instancesWithAppId(const QString& appId) const
@@ -203,6 +230,11 @@ QString WindowRegistry::canonicalizeWindowId(const QString& rawWindowId)
         return rawWindowId;
     }
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
+    // An id with no instance part ("appId|") names no window: freezing it under
+    // the empty key would map every later "x|" to this one (F207).
+    if (instanceId.isEmpty()) {
+        return rawWindowId;
+    }
     auto it = m_canonicalByInstance.constFind(instanceId);
     if (it != m_canonicalByInstance.constEnd()) {
         return it.value();
@@ -233,6 +265,9 @@ QString WindowRegistry::canonicalizeForLookup(const QString& rawWindowId) const
         return rawWindowId;
     }
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
+    if (instanceId.isEmpty()) {
+        return rawWindowId; // never filed (canonicalizeWindowId)
+    }
     auto it = m_canonicalByInstance.constFind(instanceId);
     return (it != m_canonicalByInstance.constEnd()) ? it.value() : rawWindowId;
 }
@@ -284,6 +319,71 @@ int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
         }
     }
     return removed;
+}
+
+void WindowRegistry::beginDesktopRenumber()
+{
+    m_desktopRenumberPending = QSet<QString>(m_records.keyBegin(), m_records.keyEnd());
+}
+
+int WindowRegistry::remapDesktops(const DesktopRemap& remap)
+{
+    // Only the records the compositor has not re-pushed since the renumber
+    // began: a push carries the NEW numbering, and remapping it again would
+    // shift it twice (the desktop manager's map reaches the daemon after
+    // KWin's own signal, and the effect's pushes can land in between).
+    if (remap.isIdentity()) {
+        m_desktopRenumberPending.clear();
+        return 0;
+    }
+    // Walked off a copy and checked against the live set each time: a
+    // metadataChanged subscriber can push another pending record, which then
+    // carries the new numbering too.
+    const QList<QString> pending(m_desktopRenumberPending.cbegin(), m_desktopRenumberPending.cend());
+    QPointer<WindowRegistry> guard(this);
+    int changed = 0;
+    for (const QString& instanceId : pending) {
+        if (!m_desktopRenumberPending.remove(instanceId)) {
+            continue;
+        }
+        const auto it = m_records.constFind(instanceId);
+        if (it == m_records.constEnd()) {
+            continue;
+        }
+        const WindowMetadata oldMeta = it.value();
+        WindowMetadata newMeta = oldMeta;
+        // A window on a removed desktop goes where KWin sends it, the desktop
+        // that takes its number (DesktopRemap::successor); 0 stays "all".
+        newMeta.virtualDesktop = remap.successor(oldMeta.virtualDesktop);
+        newMeta.virtualDesktops.clear();
+        for (const int desktop : oldMeta.virtualDesktops) {
+            const int moved = remap.successor(desktop);
+            if (moved > 0 && !newMeta.virtualDesktops.contains(moved)) {
+                newMeta.virtualDesktops.append(moved);
+            }
+        }
+        // The field's invariant: a list only for several desktops, its first
+        // entry the single desktop field.
+        if (newMeta.virtualDesktops.size() == 1) {
+            newMeta.virtualDesktops.clear();
+        } else if (!newMeta.virtualDesktops.isEmpty()) {
+            newMeta.virtualDesktop = newMeta.virtualDesktops.first();
+        }
+        if (newMeta == oldMeta) {
+            continue;
+        }
+        m_records[instanceId] = newMeta;
+        ++changed;
+        Q_EMIT metadataChanged(instanceId, oldMeta, newMeta);
+        if (!guard) {
+            return changed;
+        }
+    }
+    m_desktopRenumberPending.clear();
+    if (changed > 0) {
+        qCInfo(lcWindowRegistry) << "remapDesktops: renumbered the desktops of" << changed << "window(s)";
+    }
+    return changed;
 }
 
 void WindowRegistry::indexInsert(const QString& instanceId, const QString& appId)

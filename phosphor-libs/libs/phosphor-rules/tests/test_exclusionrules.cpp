@@ -477,7 +477,7 @@ private Q_SLOTS:
     void testApplicationExcludePatternsFrom_harvestsExcludePlacementRules()
     {
         // ExcludePlacement makes a window unmanaged by placement exactly
-        // like the blanket Exclude, and the pending-restore prune this
+        // like the blanket Exclude, and the placement prune this
         // helper feeds is a placement concern — so its AppId patterns
         // harvest too.
         RuleSet source;
@@ -505,7 +505,7 @@ private Q_SLOTS:
     {
         RuleSet source;
         // An AppId AppIdMatches leaf with a Float action — not an Exclude.
-        // The pending-restore prune callers ONLY care about Exclude
+        // The placement prune callers ONLY care about Exclude
         // patterns; a Float-action rule must not surface here.
         QVERIFY(source.addRule(
             makeRule(QStringLiteral("not-exclude"), 0,
@@ -517,7 +517,7 @@ private Q_SLOTS:
     void testApplicationExcludePatternsFrom_dropsDisabledRules()
     {
         // Symmetric with the slice-side disabled-skip — the daemon's
-        // pending-restore prune consumes the returned patterns, and
+        // placement prune consumes the returned patterns, and
         // pruning restores for a DISABLED rule's app would silently kill
         // state the user explicitly opted to keep.
         RuleSet source;
@@ -533,7 +533,7 @@ private Q_SLOTS:
         // A WindowClass-leaf Exclude rule (user-authored via the Rule
         // editor's broader UI) is a valid Exclude — it fires through the
         // snap engine — but it doesn't have a single canonical AppId
-        // pattern to harvest for the pending-restore prune. The helper's
+        // pattern to harvest for the placement prune. The helper's
         // documented contract is that composite / non-AppId rules are
         // SILENTLY skipped; pinning that here means a future widening
         // would have to update this test deliberately.

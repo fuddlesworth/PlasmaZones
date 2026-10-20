@@ -89,6 +89,15 @@ inline bool isVirtualScreenCrossing(const QString& oldScreenId, const QString& n
     return samePhysical(oldScreenId, newScreenId);
 }
 
+/// @p screenId carried onto the physical output @p physicalScreenId: a virtual
+/// screen keeps its index, a bare id becomes the bare output. Whether that
+/// virtual screen exists on the output is the caller's to check.
+inline QString onOutput(const QString& screenId, const QString& physicalScreenId)
+{
+    const int index = extractIndex(screenId);
+    return index >= 0 ? make(physicalScreenId, index) : physicalScreenId;
+}
+
 } // namespace VirtualScreenId
 
 } // namespace PhosphorIdentity

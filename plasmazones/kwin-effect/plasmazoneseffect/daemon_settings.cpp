@@ -40,6 +40,8 @@ void PlasmaZonesEffect::slotSettingsChanged()
 {
     qCInfo(lcEffect) << "settingsChanged: reloading settings";
     loadCachedSettings();
+    // Switching snapping or the zone restore off empties the daemon's answer (F703).
+    refreshRestoreCache();
     // Note: m_tilingHandler->loadSettings() is intentionally NOT called here.
     // Autotile screen changes are tracked via the dedicated managedScreensChanged
     // D-Bus signal (→ slotScreensChanged), which is authoritative.
@@ -991,13 +993,6 @@ void PlasmaZonesEffect::loadCachedSettings()
                 KWin::effects->addRepaintFull();
             }
         }
-    });
-
-    loadSettingAsync(QStringLiteral("scrollingFocusFollowsMouse"), [this](const QVariant& v) {
-        if (v.typeId() != QMetaType::Bool) {
-            return;
-        }
-        m_tilingHandler->setScrollingFocusFollowsMouse(v.toBool());
     });
 
     // Type-guard matters doubly here: scrollingWheelFocusEnabled defaults to

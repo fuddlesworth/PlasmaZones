@@ -9,6 +9,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <algorithm>
+
 namespace PhosphorEngine {
 namespace GeometryUtils {
 
@@ -42,6 +44,9 @@ QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
         }
         if (entry.virtualDesktop > 0) {
             obj[JsonKeys::VirtualDesktop] = entry.virtualDesktop;
+        }
+        if (entry.restatement) {
+            obj[JsonKeys::Restatement] = true;
         }
         array.append(obj);
     }
@@ -85,11 +90,37 @@ QVector<ZoneAssignmentEntry> deserializeZoneAssignments(const QString& json, QSt
         // clamp a nonsensical negative wire value to the same default so no
         // negative desktop ever reaches the commit path.
         entry.virtualDesktop = qMax(0, obj.value(JsonKeys::VirtualDesktop).toInt());
-        if (!entry.windowId.isEmpty() && !entry.targetZoneId.isEmpty()) {
+        entry.restatement = obj.value(JsonKeys::Restatement).toBool();
+        // A span is the primary followed by the rest, as the serializer writes
+        // it. An empty member, or a span another zone leads, would commit a
+        // zone the entry does not name (F459).
+        const bool spanValid = entry.targetZoneIds.isEmpty()
+            || (entry.targetZoneIds.first() == entry.targetZoneId
+                && std::none_of(entry.targetZoneIds.cbegin(), entry.targetZoneIds.cend(), [](const QString& id) {
+                       return id.isEmpty();
+                   }));
+        if (!entry.windowId.isEmpty() && !entry.targetZoneId.isEmpty() && spanValid) {
             entries.append(entry);
         }
     }
     return entries;
+}
+
+QRect carryRectOntoArea(const QRect& rect, const QRect& fromArea, const QRect& toArea)
+{
+    const int w = qMin(rect.width(), toArea.width());
+    const int h = qMin(rect.height(), toArea.height());
+    int x = toArea.x();
+    int y = toArea.y();
+    if (fromArea.isValid() && fromArea.width() > 0 && fromArea.height() > 0) {
+        const double relX = static_cast<double>(rect.x() - fromArea.x()) / fromArea.width();
+        const double relY = static_cast<double>(rect.y() - fromArea.y()) / fromArea.height();
+        x = toArea.x() + qRound(relX * toArea.width());
+        y = toArea.y() + qRound(relY * toArea.height());
+    }
+    x = qBound(toArea.left(), x, toArea.right() - w + 1);
+    y = qBound(toArea.top(), y, toArea.bottom() - h + 1);
+    return QRect(x, y, w, h);
 }
 
 } // namespace GeometryUtils

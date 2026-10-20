@@ -20,7 +20,7 @@
  *         - `excludeRulesFrom` — the blanket-Exclude-only slice, retained
  *           for consumers that need exactly that shape.
  *        The flat-string variant (`applicationExcludePatternsFrom`)
- *        extracts the bare AppId patterns the WTA pending-restore prune
+ *        extracts the bare AppId patterns the WTA placement prune
  *        walks, over the same placement-exclusion membership.
  *
  * After v4 (configmigration.cpp), exclusion rules live exclusively in
@@ -102,9 +102,9 @@ PHOSPHORRULES_EXPORT RuleSet excludeAnimationsRulesFrom(const RuleSet& source);
 /// Return the AppId pattern of every `AppId AppIdMatches <pattern>` leaf
 /// that lives on an enabled `Exclude`- or `ExcludePlacement`-action rule
 /// in @p source (both shapes make the window unmanaged by placement, and
-/// the pending-restore prune this feeds is a placement concern). Mirrors
+/// the placement prune this feeds is a placement concern). Mirrors
 /// the deleted runtime bridge's flat-string output so a consumer that
-/// needs a flat list of patterns (the WTA pending-restore prune) can
+/// needs a flat list of patterns (the WTA placement prune) can
 /// derive one from the unified store.
 ///
 /// **Only the simple shape "single AppId AppIdMatches leaf" is
@@ -114,14 +114,13 @@ PHOSPHORRULES_EXPORT RuleSet excludeAnimationsRulesFrom(const RuleSet& source);
 /// a single canonical AppId pattern and is silently skipped. The
 /// snap-engine and drag gate still fire on the rule (they bind the
 /// full Exclude slice to a RuleEvaluator, not the harvested string
-/// list), but the pending-restore prune cannot see it. Practical
+/// list), but the placement prune cannot see it. Practical
 /// consequence: a user authoring a `WindowClass Contains "steam"`
 /// Exclude rule keeps Steam windows out of layouts (good), but stale
-/// queued pending-restores for Steam on disk are NOT pruned (the
-/// queue keeps growing slowly across daemon restarts until a real
-/// snap-engine matching cycle re-checks them and discards them as
+/// placement records for Steam on disk are NOT pruned (they stay until a
+/// real snap-engine matching cycle re-checks them and discards them as
 /// excluded). A future widening of this harvest, or a switch to
-/// evaluating the RuleSet directly against each queued
+/// evaluating the RuleSet directly against each stored
 /// WindowQuery, would close that gap.
 ///
 /// Empty / whitespace-only / disabled rules are dropped, and duplicate

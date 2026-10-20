@@ -713,7 +713,7 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
         return target;
     }
     // The PREVIEW's screen id, not the caller's, whenever a preview owns this
-    // screen. screensMatch above accepts a virtual/physical spelling
+    // screen. screensMatch above accepts a connector-name / EDID-id spelling
     // difference between the two, and layoutParamsForScreen resolves gaps and
     // the work area per SCREEN ID — so passing the caller's spelling could
     // hit-test against a work area the commit path never uses. Its sibling

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowdragadaptor.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <QDBusConnection>
-#include <QDBusMessage>
 #include <QDBusServiceWatcher>
 #include <QScreen>
 #include <QUuid>
@@ -265,7 +265,7 @@ void WindowDragAdaptor::registerDropProxy(const QString& screenId, const QString
     // A proxy outlives every individual drag, so it is tied to the life of the
     // peer that asked for it. Direct (non-D-Bus) calls — the unit tests invoke
     // this slot through QMetaObject — have no peer, and register unowned.
-    const QString sender = calledFromDBus() ? message().service() : QString();
+    const QString sender = DbusHelpers::busCaller(this);
     if (!m_dropProxies.registerProxy(screenId, proxyJson, sender)) {
         return;
     }

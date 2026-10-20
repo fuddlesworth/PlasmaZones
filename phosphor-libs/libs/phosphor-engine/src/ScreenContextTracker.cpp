@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorEngine/ScreenContextTracker.h>
+#include <PhosphorEngine/DesktopRemap.h>
+
+#include <algorithm>
 
 namespace PhosphorEngine {
 
@@ -133,21 +136,23 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
     // it does not know which desktop identity was removed. Values are dropped
     // here rather than shifted, because this call only knows a count.
     //
-    // The SHIFT is renumberDesktopsAfterRemoval's job, and the daemon runs it
-    // straight after this one on the path that does know which desktop went
-    // away. The two must stay paired: these maps hold positional numbers into
-    // the same numbering the engine state keys use, so renumbering the stores
-    // without renumbering these would leave a pin naming a position whose
-    // content moved.
+    // The SHIFT is remapDesktops' job, run by each engine's remapDesktops on
+    // the daemon's desktopsRenumbered, which goes out BEFORE the count: by the
+    // time this runs the numbers are already moved and nothing names a desktop
+    // past the count. The engines move these maps together with their stores:
+    // they hold positional numbers into the same numbering the engine state
+    // keys use, so renumbering one without the other would leave a pin naming
+    // a position whose content moved.
     //
     // Dropping a per-output entry here is safe, and NOT in tension with
     // releaseScreenOwnership's argument that the same entry must survive a mode
-    // leave. The difference is what re-establishes it. On this path the daemon
-    // clamps every screen's desktop and pushes the new values BEFORE the count
-    // change propagates, so a dropped entry is rewritten immediately. On a mode
-    // leave nothing pushes at all, and the global desktop the lookup would fall
-    // back to is written once at startup — so there the drop is permanent and
-    // merges every output onto one desktop.
+    // leave. The difference is what re-establishes it. The daemon re-seeds each
+    // screen's desktop afterwards (Daemon::reseedScreenDesktopsAfterRenumber):
+    // KWin hands a screen that showed the removed desktop its successor, which
+    // takes the removed number, so nothing reports a change there (F799). On a
+    // mode leave nothing pushes at all, and the global desktop the lookup would
+    // fall back to is written once at startup — so there the drop is permanent
+    // and merges every output onto one desktop.
     for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end();) {
         if (it.value() == removedDesktop) {
             it = m_screenDesktopOverride.erase(it);
@@ -180,6 +185,53 @@ void ScreenContextTracker::renumberDesktopsAfterRemoval(int removedDesktop)
     };
     shift(m_screenDesktopOverride);
     shift(m_screenCurrentDesktop);
+    // The global desktop is the startup seed every unpinned screen falls back
+    // to, so it follows the desktop it named rather than the number (F799).
+    if (m_currentDesktop > removedDesktop) {
+        --m_currentDesktop;
+    }
+}
+
+void ScreenContextTracker::remapDesktops(const DesktopRemap& remap)
+{
+    if (remap.isIdentity()) {
+        return;
+    }
+    // In place: each map holds one desktop per screen, so no write can land
+    // on an entry not yet visited.
+    for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end();) {
+        const int pinned = remap.map(it.value());
+        if (pinned < 1) {
+            it = m_screenDesktopOverride.erase(it);
+        } else {
+            it.value() = pinned;
+            ++it;
+        }
+    }
+    for (auto it = m_screenCurrentDesktop.begin(); it != m_screenCurrentDesktop.end();) {
+        const int shown = remap.successor(it.value());
+        if (shown < 1) {
+            it = m_screenCurrentDesktop.erase(it);
+        } else {
+            it.value() = shown;
+            ++it;
+        }
+    }
+    if (const int global = remap.successor(m_currentDesktop); global >= 1) {
+        m_currentDesktop = global;
+    }
+}
+
+int ScreenContextTracker::highestDesktop() const
+{
+    int highest = m_currentDesktop;
+    for (const int desktop : m_screenDesktopOverride) {
+        highest = std::max(highest, desktop);
+    }
+    for (const int desktop : m_screenCurrentDesktop) {
+        highest = std::max(highest, desktop);
+    }
+    return highest;
 }
 
 } // namespace PhosphorEngine

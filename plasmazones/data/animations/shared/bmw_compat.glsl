@@ -89,8 +89,8 @@
 // ── I/O bridges (premul ↔ straight-alpha) ───────────────────────────
 // Reads the surface through `surfaceColor()` (from animation_uniforms.glsl,
 // which the caller contract above requires be included first) so the
-// kwin-path Y-flip is applied — a raw `texture(uTexture0, ...)` here
-// would render the surface upside-down on the compositor path.
+// runtime-specific sample mapping is applied. A raw `texture(uTexture0, ...)`
+// would bypass the KWin 6.7 coordinate flip and the surface-layer stack.
 vec4 getInputColor(vec2 coords) {
     vec4 color = surfaceColor(coords);
     if (color.a > 0.0) {

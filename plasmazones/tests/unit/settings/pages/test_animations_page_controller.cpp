@@ -304,6 +304,28 @@ private Q_SLOTS:
         QVERIFY(c.hasOverride(QStringLiteral("editor.snapIn")));
     }
 
+    void engageOverrides_stagesToggleWithoutPinningInheritedTiming()
+    {
+        TestHelpers::TimingControllerFixture fx;
+        auto& c = fx.c;
+        const QString path = QStringLiteral("editor.snapIn");
+        const QVariantMap inherited = c.resolvedProfile(path);
+        QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
+
+        QVERIFY(c.engageOverridesUnder({path}));
+        QVERIFY(c.hasOverride(path));
+        QVERIFY(c.rawProfile(path).isEmpty());
+        QCOMPARE(c.resolvedProfile(path), inherited);
+        QVERIFY(c.hasPendingChanges() && c.hasScopedPendingOverrides({path}));
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(c.engageOverridesUnder({path}));
+        QCOMPARE(spy.count(), 1);
+
+        QVERIFY(c.revertPendingUnder({path}));
+        QVERIFY(!c.hasOverride(path));
+        QVERIFY(!c.hasPendingChanges() && !c.hasScopedPendingOverrides({path}));
+    }
+
     void rawProfile_roundTripsProfileFieldsStripsName()
     {
         QTemporaryDir tmp;
@@ -975,7 +997,7 @@ private Q_SLOTS:
     /// `resolveShaderWithDefault`, driving both DesktopTransitionManager from
     /// `kwin-effect/plasmazoneseffect/lifecycle.cpp` (the screen-level desktop
     /// switch and peek legs) and the snap geometry legs through
-    /// `applyWindowGeometry` in `kwin-effect/plasmazoneseffect/drag_snap.cpp`.
+    /// `applyWindowGeometry` in `kwin-effect/plasmazoneseffect/window_geometry_apply.cpp`.
     void supportsShaderLeg_matchesConsumedLegCallSites()
     {
         TestHelpers::TimingControllerFixture fx;
@@ -1020,7 +1042,7 @@ private Q_SLOTS:
         // windowClosed, windowStartUserMovedResized for the held move,
         // windowMaximizedStateChanged and windowActivated; daemon_apply for
         // minimizedChanged), while the snap geometry legs resolve through
-        // applyWindowGeometry in drag_snap.cpp. Both run the resolved shader
+        // applyWindowGeometry in window_geometry_apply.cpp. Both run the resolved shader
         // on the OffscreenEffect's redirected texture quad.
         expect(QStringLiteral("window.appearance.open"), true);
         expect(QStringLiteral("window.appearance.close"), true);

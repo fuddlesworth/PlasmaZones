@@ -17,6 +17,7 @@
 #include "shader_internal.h" // easeProgress, clampProgressForCurve
 #include "transition_types.h" // ShaderTransition
 
+#include <QRectF>
 #include <QtGlobal>
 
 namespace KWin {
@@ -150,6 +151,36 @@ inline qreal timeDrivenProgress(ShaderTransition& st, qint64 nowMs, bool stepCur
         }
     }
     return progress;
+}
+
+/// The rect a time-driven geometry-morph leg is drawing at @p nowMs, or an
+/// invalid rect when the leg owns no geometry, lacks endpoints, is
+/// animator-driven, or paints nothing at @p nowMs. Mirrors window-morph's own
+/// split: POSITION takes the raw progress (the overshoot is the bounce),
+/// SIZE the clamped one (an extrapolated extent is nonsense at a large
+/// ratio). Packs that shape the rect their own way (fold, ripple-snap, the
+/// per-vertex staggers) are approximated. stepCurve=false: paintWindow owns
+/// the stateful curve's single per-frame step.
+inline QRectF predictedMorphRect(ShaderTransition& st, qint64 nowMs)
+{
+    if (!st.cached || st.cached->iFromRectLoc < 0 || !st.fromGeometry.isValid() || !st.toGeometry.isValid()
+        || st.durationMs <= 0) {
+        return {};
+    }
+    bool active = false;
+    qreal t = timeDrivenProgress(st, nowMs, /*stepCurve=*/false, active);
+    if (!active) {
+        return {};
+    }
+    if (st.reverse) {
+        t = 1.0 - t;
+    }
+    const qreal tc = qBound(0.0, t, 1.0);
+    const QRectF& f = st.fromGeometry;
+    const QRectF& g = st.toGeometry;
+    return QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
+                  qMax(1.0, f.width() + (g.width() - f.width()) * tc),
+                  qMax(1.0, f.height() + (g.height() - f.height()) * tc));
 }
 
 } // namespace PlasmaZones

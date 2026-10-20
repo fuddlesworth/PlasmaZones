@@ -82,12 +82,16 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/engine_overrides.cpp
     src/scrollengine/engine_grouping.cpp
     src/scrollengine/engine_context.cpp
+    src/scrollengine/engine_desktopremap.cpp
     src/scrollengine/engine_membership.cpp
+    src/scrollengine/engine_stashleave.cpp
     src/scrollengine/engine_stickypin.cpp
     src/scrollengine/enginelimits.h
     src/scrollengine/engine_apply.cpp
     src/scrollengine/engine_query.cpp
     src/scrollengine/scrollpark_p.h
+    src/scrollengine/engine_evacueepark.cpp
+    src/scrollengine/evacueepark_p.h
     src/scrollengine/engine_park.cpp
     src/scrollengine/engine_snapshot.cpp
     src/scrollengine/drag_autoscroll.cpp

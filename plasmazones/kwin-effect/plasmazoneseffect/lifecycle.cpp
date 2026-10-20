@@ -8,6 +8,7 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -129,6 +130,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // render correctly before the fetch, so no placeholder tree is needed.
     seedDecorationTreeBaseline();
 
+    // A virtual-screen strip's tab pills are cut at that virtual screen's edge,
+    // as its columns are (scrollStripPaintRegion). A virtual screen's strip key
+    // is its own screen id (StripKeys::stripKey); a physical strip needs none.
+    m_scrollTabPainter->setStripClip([this](const QString& strip) {
+        return PhosphorIdentity::VirtualScreenId::isVirtual(strip) ? m_tilingHandler->stripScreenRect(strip) : QRect();
+    });
+
     // Constructor wiring decomposed into concern-scoped init methods (definitions
     // in lifecycle_wiring.cpp). Call order is load-bearing and matches the
     // original inline sequence — in particular initRenderingAndRegistries()
@@ -165,10 +173,11 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     m_pointerPass.reset();
     // And the tab indicators: the override cursor must be handed back before
     // the effect goes (KWin would keep a pointing hand nothing owns). The
-    // handler's clear is GL-free — it RETIRES the per-output textures rather
-    // than deleting them — and releaseGl() right after is the GL-current
-    // point that actually frees them (plus anything retired earlier), so
-    // nothing leaks past the effect and nothing is deleted off-context.
+    // handler's clear retires the per-output textures and deletes them under
+    // a made-current context when one can be made current (F997); releaseGl()
+    // right after frees whatever is left (a clear that found no context, and
+    // anything retired earlier), so nothing leaks past the effect and nothing
+    // is deleted off-context.
     // Made current HERE rather than inherited from the transition resets
     // above, so reordering those cannot turn this into an off-context free.
     m_tilingHandler->clearScrollTabState();
@@ -434,24 +443,6 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // requests no spurious full repaint during shutdown.
     m_enableAudioVisualizer = false;
     m_audioSpectrumSize = 0;
-
-    // Drain the texture loader pool before any other teardown. A
-    // worker that's mid-rasterise would otherwise post a queued
-    // upload via QMetaObject::invokeMethod against `this` AFTER our
-    // members start tearing down — UAF on the texture cache.
-    // QThreadPool::waitForDone is called here BEFORE we let the
-    // member's destructor run (which itself blocks on waitForDone)
-    // so the pending invokeMethod posts are flushed against a still-
-    // intact `this`.
-    //
-    // Distinct from the hot-reload path in the `effectsChanged`
-    // lambda above: hot-reload bumps `m_shaderManager.m_textureCacheGeneration` (no
-    // wait) so workers in flight can discard their queued upload
-    // without blocking the compositor. Shutdown REQUIRES the wait —
-    // the queued uploads need to be flushed against a live `this`,
-    // not raced against member destruction.
-    m_shaderManager.m_textureLoaderPool.waitForDone();
-    m_shaderManager.m_textureLoadsInFlight.clear();
 
     // Clear daemon-side drag/overlay state while the effect is still alive,
     // but only after the destructor's local UAF-prevention guards have run.

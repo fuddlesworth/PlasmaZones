@@ -7,7 +7,6 @@
 #include <PhosphorProtocol/BridgeMarshalling.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
-#include <QDBusContext>
 #include <QString>
 #include <QStringList>
 
@@ -21,10 +20,11 @@ namespace PlasmaZones {
  * Compositor-agnostic bridge protocol: the registration handshake and
  * modifier-state reporting. Window manipulation commands do NOT flow over
  * this interface — they ride org.plasmazones.WindowTracking
- * (applyGeometryRequested, applyGeometriesBatch, raiseWindowsRequested, ...),
+ * (applyGeometryRequested, applyGeometriesBatch, ...),
  * which bridges subscribe to after a successful registration.
  *
- * Inherits @c QDBusContext so reportGesture can identify its caller. The
+ * reportGesture identifies its caller through DbusHelpers::busCaller (Qt sets
+ * a call's QDBusContext on the exported object, not on its adaptor). The
  * registered capability list is daemon-wide state, not a property of whoever
  * is calling, so checking it alone would let any peer on the session bus drive
  * the shell's gesture surfaces; the caller's bus name has to be matched
@@ -32,7 +32,7 @@ namespace PlasmaZones {
  *
  * @note This is an EXPERIMENTAL interface — may change before v2.
  */
-class PLASMAZONES_EXPORT CompositorBridgeAdaptor : public QDBusAbstractAdaptor, public QDBusContext
+class PLASMAZONES_EXPORT CompositorBridgeAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.CompositorBridge")
@@ -60,6 +60,12 @@ public:
     bool isBridgeRegistered() const
     {
         return !m_bridgeName.isEmpty();
+    }
+    /// Whether @p busName is the unique bus name the registered bridge called
+    /// from. Never true for a registration that did not arrive over D-Bus.
+    bool isBridgeService(const QString& busName) const
+    {
+        return !m_bridgeService.isEmpty() && busName == m_bridgeService;
     }
     bool hasCapability(const QString& cap) const
     {
@@ -128,9 +134,9 @@ Q_SIGNALS:
     // Bridge lifecycle
     //
     // NOTE: this interface deliberately carries NO window-manipulation
-    // command signals. Geometry/focus/stacking commands flow over
+    // command signals. Geometry and focus commands flow over
     // org.plasmazones.WindowTracking (applyGeometryRequested,
-    // applyGeometriesBatch, raiseWindowsRequested, ...) — a set of dead,
+    // applyGeometriesBatch, ...) — a set of dead,
     // never-emitted command signals used to live here and misled bridge
     // implementers into subscribing to a channel that never fired.
     // ═══════════════════════════════════════════════════════════════════════════
@@ -147,7 +153,7 @@ private:
     // registration did not arrive over D-Bus. A D-Bus caller is then never
     // equal to it, so remote gestures stay refused until a bridge registers
     // over the bus. The tests call the slots directly and bypass the
-    // comparison entirely, because it is gated on calledFromDBus().
+    // comparison entirely, because a direct call has no bus caller.
     QString m_bridgeService;
 };
 

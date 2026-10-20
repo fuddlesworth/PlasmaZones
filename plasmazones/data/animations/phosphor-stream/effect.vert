@@ -48,10 +48,9 @@ float laneHash(float n) {
 }
 
 void main() {
-    // Card uv with y = 0 at the window top (KWin Y-flips window-quad
-    // texcoords on upload; re-apply the flip, same as flow).
+    // Card uv with y = 0 at the window top on both KWin versions.
 #ifdef PLASMAZONES_KWIN
-    vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
+    vec2 cuv = animationScreenUv(texCoord);
 #else
     // The Qt-RHI quad's texCoord is Y-down already — no re-flip.
     // ...and spans the captured canvas: fold the anchor sub-rect so cuv is

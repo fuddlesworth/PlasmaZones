@@ -24,7 +24,6 @@
 #include <QSet>
 #include <QSize>
 #include <QString>
-#include <QThreadPool>
 #include <QVector4D>
 
 #include <cstdint>
@@ -63,7 +62,8 @@ public:
     explicit ShaderTransitionManager(PlasmaZonesEffect* effect);
     ~ShaderTransitionManager();
 
-    // Non-copyable, non-movable (contains QThreadPool, pointers into effect)
+    // Non-copyable, non-movable: holds pointers into the effect, and its
+    // transitions hold raw pointers into its own texture cache.
     ShaderTransitionManager(const ShaderTransitionManager&) = delete;
     ShaderTransitionManager& operator=(const ShaderTransitionManager&) = delete;
 
@@ -107,7 +107,7 @@ public:
     }
 
     /// Pre-write the maximize edge tracking for a maximize demote the
-    /// effect itself authored (TilingHandler::demoteMaximizeForSnapPlacement):
+    /// effect itself authored (TilingHandler::preparePlacement):
     /// stamps the window not-fully-maximized so the demote's committed
     /// Wayland echo reads as no-edge in the maximize lambda instead of
     /// replaying a placeOut morph over the batch's placeIn leg, and drops any
@@ -123,6 +123,21 @@ public:
         }
         m_lastFullyMaximized.insert(w, false);
         m_pendingMaximizeMorph.remove(w);
+    }
+
+    /// The tile batch wrote (@p maximized true) or released (false) @p w's
+    /// monocle maximize bit; see m_monocleEchoOwed. Null-guarded like
+    /// noteMaximizeDemotedForSnap.
+    void armMonocleEcho(KWin::EffectWindow* w, bool maximized)
+    {
+        if (w) {
+            m_monocleEchoOwed.insert(w, maximized);
+        }
+    }
+    /// Drop @p w's owed echo (the window left tiling, so no echo is owed).
+    void dropMonocleEcho(KWin::EffectWindow* w)
+    {
+        m_monocleEchoOwed.remove(w);
     }
 
     /// Rebuild the effect-rule `RuleSet` from `m_ruleAnimationRules`
@@ -251,7 +266,7 @@ public:
 
     // NOTE: Shader transition methods (beginShaderTransition, endShaderTransition,
     // tryBeginShaderForEvent, loadShaderRegistryFromDbus, loadShaderProfileFromDbus,
-    // warmUserTextureAsync, evictLruTextureIfOverBound) are declared on
+    // evictLruTextureIfOverBound) are declared on
     // PlasmaZonesEffect and operate on m_shaderManager state via friend access.
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -485,9 +500,6 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
     std::map<QString, CachedTexture> m_textureCache;
 
-    QThreadPool m_textureLoaderPool;
-    QSet<QString> m_textureLoadsInFlight;
-    quint64 m_textureCacheGeneration = 0;
     quint64 m_textureCacheAccessTick = 0;
     static constexpr std::size_t kTextureCacheSoftBound = 32;
 
@@ -545,6 +557,14 @@ private:
         qint64 armedAtMs = 0;
     };
     QHash<KWin::EffectWindow*, PendingMaximizeMorph> m_pendingMaximizeMorph;
+    // The tile batch wrote (true) or released (false) a Wayland monocle
+    // window's maximize bit itself. KWin's committed maximizedChanged echo
+    // arrives a round trip later with the suppression counter back at 0, and
+    // is absorbed (no morph) instead of replaying a full maximize morph over
+    // the batch's own placement leg; the edge tracking and the rule-cache
+    // invalidation still run for it. One-shot: consumed by the matching edge,
+    // dropped by a non-matching one, on the untrack funnel and on windowDeleted.
+    QHash<KWin::EffectWindow*, bool> m_monocleEchoOwed;
     QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
 };
 

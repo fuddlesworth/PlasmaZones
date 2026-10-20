@@ -60,10 +60,9 @@ vec2 sampleMesh(float s, float t) {
 
 void main() {
 #ifdef PLASMAZONES_KWIN
-    // Card uv with y = 0 at the window top (KWin Y-flips window-quad
-    // texcoords on upload; re-apply the flip, same as the flow pack). The
+    // Card uv with y = 0 at the window top on both KWin versions. The
     // lattice rows run top (row 0) to bottom, so cuv indexes it directly.
-    vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
+    vec2 cuv = animationScreenUv(texCoord);
 #else
     // The Qt-RHI quad's texCoord is Y-down already (no re-flip) but spans
     // the captured padded canvas — fold the anchor sub-rect so cuv is CARD

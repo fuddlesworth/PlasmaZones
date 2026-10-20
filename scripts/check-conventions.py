@@ -411,12 +411,24 @@ def rule_size(files: list[str]) -> list[Violation]:
     return out
 
 
+# The marker a file over the ceiling carries to say why it may stay whole. --update-baseline
+# refuses to RAISE an entry, or to add one, for a file without it. Lowering an entry, or
+# re-recording it unchanged, needs nothing: shrinking is the direction the ratchet exists for.
+SIZE_EXCEPTION_MARKER = "FILE-SIZE EXCEPTION"
+
+
 def update_baseline() -> int:
     files = tracked_files()
     # Read once. It was being re-read and re-parsed inside the loop, twice per unreadable
     # file, for a value that cannot change while the sweep runs.
     prior = load_baseline()
     rec = {}
+    # A raise or an addition used to be absorbed silently, so a change could grow a
+    # grandfathered file, re-run this, and pass the size rule with no record of why. The
+    # refusal is scoped to entries THIS run would raise or add relative to the committed
+    # baseline: most grandfathered files predate the marker, and refusing every entry that
+    # lacks one would fail the tree as it stands.
+    refused = []
     for f in files:
         if Path(f).suffix not in CODE_SUFFIXES:
             continue
@@ -431,9 +443,26 @@ def update_baseline() -> int:
             if f in prior:
                 rec[f] = prior[f]
             continue
-        n = len(read(f).splitlines())
+        text = read(f)
+        n = len(text.splitlines())
         if n > SIZE_CEILING:
+            raised = f not in prior or n > prior[f]
+            if raised and SIZE_EXCEPTION_MARKER not in text:
+                was = f"from {prior[f]} " if f in prior else ""
+                refused.append(f"{f}: {was}to {n} lines")
             rec[f] = n
+    if refused:
+        # Nothing is written: a partial baseline would hide the refusal behind a file that
+        # still changed, and the operator would commit it.
+        for line in refused:
+            print(f"error: {line}, with no {SIZE_EXCEPTION_MARKER} comment", file=sys.stderr)
+        print(
+            f"refused to raise or add {len(refused)} baseline entr{'y' if len(refused) == 1 else 'ies'}; "
+            f"split the file by concern, or give it a {SIZE_EXCEPTION_MARKER} comment saying what it "
+            "gained and why, then re-run",
+            file=sys.stderr,
+        )
+        return 1
     BASELINE.write_text(
         json.dumps(
             {
@@ -442,10 +471,10 @@ def update_baseline() -> int:
                     f"{SIZE_CEILING} lines, recorded at their current length. "
                     "scripts/check-conventions.py fails if one of these grows or "
                     "if a new file appears over the ceiling. Shrinking a file "
-                    "here is always welcome; re-run with --update-baseline to "
-                    "ratchet the recorded length down. A file whose entry was "
-                    "RAISED carries its own FILE-SIZE EXCEPTION comment saying "
-                    "what it gained and why."
+                    "here is always welcome, and re-running with --update-baseline "
+                    "ratchets its recorded length down. --update-baseline raises an "
+                    f"entry, or adds one, only for a file that carries a {SIZE_EXCEPTION_MARKER} "
+                    "comment, which says what the file gained and why."
                 ),
                 "ceiling": SIZE_CEILING,
                 "files": dict(sorted(rec.items())),

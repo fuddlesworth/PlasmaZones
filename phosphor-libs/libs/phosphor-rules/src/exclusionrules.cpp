@@ -77,10 +77,10 @@ RuleSet rulesWithEitherAction(const RuleSet& source, QLatin1StringView actionTyp
 
 // The ONE placement-exclusion membership predicate, shared by
 // `excludePlacementRulesFrom` and `applicationExcludePatternsFrom` so the
-// slice the engines bind and the AppId harvest the pending-restore prune
+// slice the engines bind and the AppId harvest the placement prune
 // walks can never diverge — a third placement-exclusion action added to
 // one and not the other would let the engines refuse windows whose stale
-// queued restores are never pruned.
+// placement records are never pruned.
 bool isPlacementExclusion(const Rule& rule)
 {
     return ruleHasAction(rule, ActionType::Exclude) || ruleHasAction(rule, ActionType::ExcludePlacement);
@@ -123,8 +123,8 @@ QStringList applicationExcludePatternsFrom(const RuleSet& source)
 {
     QStringList patterns;
     for (const Rule& rule : source.rules()) {
-        // Skip disabled rules — the daemon's pending-restore prune
-        // consumes the returned patterns to discard queued restores for
+        // Skip disabled rules — the daemon's placement prune
+        // consumes the returned patterns to discard the placement records of
         // matching apps, so harvesting from a disabled rule would prune
         // restores the user explicitly opted into keeping. Mirrors the
         // disabled-rule skip in the slicers above. Every in-tree caller
@@ -140,11 +140,11 @@ QStringList applicationExcludePatternsFrom(const RuleSet& source)
         // KNOWN LIMITATION (EXCL-3): only a single `AppId AppIdMatches` leaf
         // is harvested into the pattern list. WindowClass / Equals /
         // composite Exclude or ExcludePlacement rules contribute no pattern,
-        // so their stale queued pending-restores aren't pruned through THIS
-        // path. Not a leak — the snap engine re-checks each queued placement
+        // so their stale placement records aren't pruned through THIS
+        // path. Not a leak — the snap engine re-checks each stored placement
         // against the live RuleSet at restore time and discards excluded
         // ones, so growth self-heals (just delayed). A full fix evaluates
-        // the placement-exclusion RuleSet against each queued WindowQuery
+        // the placement-exclusion RuleSet against each stored WindowQuery
         // instead of harvesting strings — deferred.
         if (match.kind() != MatchExpression::Kind::Leaf) {
             continue;

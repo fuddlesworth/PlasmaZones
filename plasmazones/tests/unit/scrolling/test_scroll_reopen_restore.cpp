@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QCoreApplication>
-#include <QLoggingCategory>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -12,7 +11,6 @@
 #include <PhosphorScrollEngine/ScrollState.h>
 
 #include "helpers/AutotileFakes.h"
-#include "helpers/LogCapture.h"
 #include "helpers/WindowPlacementBuilders.h"
 
 using namespace PhosphorScrollEngine;
@@ -37,7 +35,10 @@ class TestScrollReopenRestore : public QObject
     Q_OBJECT
 
 private:
-    static constexpr auto Screen = "S1";
+    static constexpr auto Screen = "S1/vs:0";
+    /// Another virtual screen of Screen's output: the only place the reopen
+    /// claim may restore a window that opened on Screen, and vice versa.
+    static constexpr auto Sibling = "S1/vs:1";
 
     /// A headless tracker-wired engine on the geometry-provider seam,
     /// active on Screen. The activation echo mirrors the lib suite's
@@ -54,23 +55,15 @@ private:
                          [engine](const QString& windowId) {
                              engine->windowFocused(windowId, engine->screenForTrackedWindow(windowId));
                          });
-        engine->setActiveScreens({QLatin1String(Screen)});
+        engine->setActiveScreens({QLatin1String(Screen), QLatin1String(Sibling)});
         engine->setCurrentDesktopForScreen(QLatin1String(Screen), 1);
+        engine->setCurrentDesktopForScreen(QLatin1String(Sibling), 1);
         return engine;
     }
 
     static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
     {
         return static_cast<ScrollState*>(engine->stateForScreen(screenId));
-    }
-
-    /// Scroll-engine log capture (shared helper), so a test can assert WHICH
-    /// branch produced an outcome rather than only that it happened.
-    template<typename Fn>
-    static QStringList captureScrollLogs(Fn&& fn)
-    {
-        return PlasmaZones::TestHelpers::captureCategoryLogs(QLatin1String("org.phosphor.scroll-engine"),
-                                                             std::forward<Fn>(fn));
     }
 
     /// The daemon's close capture, condensed: snapshot the engine's slot,
@@ -274,10 +267,10 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Cross-screen session reclaim (claimCrossScreenReopen): KWin's session
-    // restore opens windows on a nondeterministic output, so a window recorded
-    // TILED on this engine's screen can arrive announced on some other screen.
-    // The engine pulls it back into its recorded strip; a floating record, a
+    // The reopen claim (claimCrossScreenReopen): a window recorded TILED on
+    // one virtual screen of an output, reopened as a fresh instance on another
+    // virtual screen of the SAME output, is restored into its recorded strip.
+    // A record on another output never is, and a floating record, a
     // same-screen record, an already-tracked window, and a home no longer in
     // scrolling mode all refuse the claim.
     // =========================================================================
@@ -297,13 +290,17 @@ private Q_SLOTS:
         QVERIFY(captureClose(engine, &tracker, QStringLiteral("term|t1")));
         QVERIFY(tracker.placementStore().peekExact(QStringLiteral("term|t1")).has_value());
 
-        // This session: KWin drops the fresh-uuid window on another output.
-        QVERIFY2(engine->claimCrossScreenReopen(QStringLiteral("term|t2"), QStringLiteral("OTHER"), 0, 0),
-                 "a tiled record homed on a scrolling-mode screen must be reclaimed cross-screen");
+        // A fresh instance that opens on ANOTHER output is never pulled here.
+        QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("term|t2"), QStringLiteral("OTHER"), 0, 0),
+                 "a record on another output must not pull the window across monitors");
+
+        // One that opens on the other virtual screen of the same output is.
+        QVERIFY2(engine->claimCrossScreenReopen(QStringLiteral("term|t2"), QLatin1String(Sibling), 0, 0),
+                 "a tiled record on another virtual screen of the opening output must be claimed");
         ScrollState* state = stateFor(engine, screen);
         QVERIFY(state);
         QVERIFY2(state->strip().containsWindow(QStringLiteral("term|t2")),
-                 "the reclaimed window must re-enter the RECORDED screen's strip");
+                 "the claimed window must re-enter the RECORDED screen's strip");
     }
 
     void claimCrossScreenReopenIgnoresLiveSiblingsRecord()
@@ -329,8 +326,8 @@ private Q_SLOTS:
         QVERIFY(tracker.placementStore().record(*live));
         tracker.liveInstances.insert(QStringLiteral("t1")); // instance half of term|t1
 
-        // Instance 2 opens on another output.
-        QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("term|t2"), QStringLiteral("OTHER"), 0, 0),
+        // Instance 2 opens on the other virtual screen of the same output.
+        QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("term|t2"), QLatin1String(Sibling), 0, 0),
                  "a LIVE sibling's record must never justify pulling a fresh instance cross-screen");
     }
 
@@ -348,7 +345,7 @@ private Q_SLOTS:
         engine->windowOpened(QStringLiteral("edit|e1"), screen, 0, 0);
         engine->setWindowFloat(QStringLiteral("edit|e1"), true, screen);
         QVERIFY(captureClose(engine, &tracker, QStringLiteral("edit|e1"), QRect(30, 30, 400, 300)));
-        QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("edit|e2"), QStringLiteral("OTHER"), 0, 0),
+        QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("edit|e2"), QLatin1String(Sibling), 0, 0),
                  "a scroll-floating record must not claim cross-screen");
 
         // Same-screen arrival: the ordinary open path owns it, never the claim.
@@ -359,7 +356,7 @@ private Q_SLOTS:
 
         // Already-tracked window: an in-session move, never a session restore.
         engine->windowOpened(QStringLiteral("term|t2"), screen, 0, 0);
-        QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("term|t2"), QStringLiteral("OTHER"), 0, 0),
+        QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("term|t2"), QLatin1String(Sibling), 0, 0),
                  "a window this engine already tracks must never be re-claimed");
 
         // Home context no longer in scrolling mode: the resolver's verdict wins.
@@ -368,27 +365,24 @@ private Q_SLOTS:
         engine->setScrollingModeResolver([](const QString&, int, const QString&) {
             return false;
         });
-        QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("web|w2"), QStringLiteral("OTHER"), 0, 0),
+        QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("web|w2"), QLatin1String(Sibling), 0, 0),
                  "a home screen no longer in scrolling mode must refuse the claim");
 
         // No resolver wired at all (headless path): never claims.
         engine->setScrollingModeResolver({});
-        QVERIFY(!engine->claimCrossScreenReopen(QStringLiteral("web|w2"), QStringLiteral("OTHER"), 0, 0));
+        QVERIFY(!engine->claimCrossScreenReopen(QStringLiteral("web|w2"), QLatin1String(Sibling), 0, 0));
     }
 
-    void windowOpenedDefersToAutotileCrossScreenRestore()
+    void windowOpenedAdoptsDespiteAnotherOutputsTiledRecord()
     {
-        // The scroll-side reciprocal of autotile's claim: a window recorded
-        // TILED on an autotile-mode screen that KWin drops on this scrolling
-        // screen must NOT be spliced into the strip — autotile's
-        // claimCrossScreenReopen pulls it home instead.
+        // The reopen contract on the scroll side: a window whose app is
+        // recorded TILED by autotile on another output, and which KWin opens
+        // on this scrolling screen, is this screen's. It is spliced into the
+        // strip here, and the other output's record is left alone.
         QObject owner;
         FakeStickyWindowTracking tracker;
         ScrollEngine* engine = makeEngine(&owner, &tracker);
         const QString screen = QLatin1String(Screen);
-        engine->setAutotileModeResolver([](const QString& rec, int, const QString&) {
-            return rec == QStringLiteral("AUTOTILE-1");
-        });
 
         WindowPlacement rec;
         rec.windowId = QStringLiteral("ide|old");
@@ -400,25 +394,11 @@ private Q_SLOTS:
         rec.engines.insert(WindowPlacement::autotileEngineId(), slot);
         QVERIFY(tracker.placementStore().record(rec));
 
-        const QStringList deferLines = captureScrollLogs([&] {
-            engine->windowOpened(QStringLiteral("ide|new"), screen, 0, 0);
-        });
-        QVERIFY2(!deferLines.isEmpty(),
-                 "scroll-engine log capture produced nothing — the branch assertion below "
-                 "would pass vacuously");
-        // ScrollEngine::stateForScreen does NOT create on demand (it passes
-        // create=false), so a deferred arrival that never reached the insert
-        // path legitimately leaves NO state for the screen — a null state is
-        // the strongest evidence of non-adoption, not a skipped assertion.
-        // (Autotile's tilingStateForScreen differs and does create.)
+        engine->windowOpened(QStringLiteral("ide|new"), screen, 0, 0);
         ScrollState* state = stateFor(engine, screen);
-        QVERIFY2(!state || !state->containsWindow(QStringLiteral("ide|new")),
-                 "a cross-screen autotile restore must not be adopted into the strip");
-        // ...and specifically via the DEFER branch, not some unrelated bail.
-        QVERIFY2(deferLines.join(QLatin1Char('\n'))
-                     .contains(QStringLiteral("defers — carries a cross-screen restore for another engine")),
-                 "the cross-screen defer gate must be the branch that refused adoption");
-        // The record survives untouched for autotile's claim.
+        QVERIFY(state);
+        QVERIFY2(state->strip().containsWindow(QStringLiteral("ide|new")),
+                 "another output's tiled record must not keep the window out of this strip");
         QVERIFY(tracker.placementStore().peekExact(QStringLiteral("ide|old")).has_value());
     }
 };

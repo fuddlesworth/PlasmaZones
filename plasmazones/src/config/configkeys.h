@@ -230,22 +230,22 @@ public:
 
     P_CONFIG_KEY(activeLayoutIdKey, "ActiveLayoutId")
 
-    // Snap mode — last used zone info. Only the zone id is persisted (see
-    // windowtrackingadaptor/saveload.cpp); the companion screen / class /
-    // desktop keys had no reader and no writer left and are gone.
+    // Snap mode — last used zone info. Only the zone id is persisted (windowtrackingadaptor/
+    // saveload.cpp); the companion screen / class / desktop keys had no reader or writer left.
     P_CONFIG_KEY(lastUsedZoneIdKey, "LastUsedZoneId")
 
     // User-snapped classes
     P_CONFIG_KEY(userSnappedClassesKey, "UserSnappedClasses")
 
-    // Unified, engine-agnostic per-window placement record (WindowPlacementStore) —
-    // the SOLE persisted per-window restore key for both snap and autotile.
+    // Unified per-window placement record (WindowPlacementStore), the sole persisted restore key.
     P_CONFIG_KEY(windowPlacementsKey, "WindowPlacements")
 
-    // Scrolling strip-structure snapshots (per-context column groupings,
-    // tabbed flags, sizes, focus, view anchor) — ScrollEngine::serializeStripState
-    // blob, restored into the engine's arrival-restore stash on load.
+    // Scrolling strip snapshots (column groupings, tabs, sizes, focus, view anchor): the
+    // ScrollEngine::serializeStripState blob, restored into the arrival-restore stash on load.
     P_CONFIG_KEY(scrollStripsKey, "ScrollStrips")
+
+    // The virtual desktop ids the session last saw, in order; the next start diffs them against KWin's.
+    P_CONFIG_KEY(knownDesktopIdsKey, "KnownDesktopIds")
 
     // Legacy per-window restore keys — superseded by WindowPlacements. Retained
     // ONLY so saveState() can deleteKey() them, scrubbing them from any session.json

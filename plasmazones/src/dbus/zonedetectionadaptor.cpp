@@ -282,6 +282,51 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
     return zones.at(bestIndex)->id().toString();
 }
 
+QString ZoneDetectionAdaptor::getAdjacentZoneOutside(const QStringList& zoneIds, const QString& direction,
+                                                     const QString& screenId) const
+{
+    if (zoneIds.size() < 2) {
+        return zoneIds.isEmpty() ? QString() : getAdjacentZone(zoneIds.first(), direction, screenId);
+    }
+    if (!DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get adjacent zone"))) {
+        return QString();
+    }
+    // Every member in one layout, or the single-zone answer (F242).
+    PhosphorZones::Layout* layout = nullptr;
+    QList<PhosphorZones::Zone*> members;
+    for (const QString& zoneId : zoneIds) {
+        PhosphorZones::Zone* zone =
+            DbusHelpers::findZoneInAnyLayout(m_layoutManager, zoneId, QStringLiteral("get adjacent zone"));
+        auto* parent = zone ? qobject_cast<PhosphorZones::Layout*>(zone->parent()) : nullptr;
+        if (!parent || (layout && parent != layout)) {
+            return getAdjacentZone(zoneIds.first(), direction, screenId);
+        }
+        layout = parent;
+        members.append(zone);
+    }
+    const QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
+    const QRectF refGeom = DbusHelpers::resolveScreenGeometry(m_screenManager, layout, resolvedId);
+    if (!refGeom.isValid()) {
+        return QString();
+    }
+    // Measure from the span's union, against the layout's other zones.
+    QRectF spanGeom;
+    for (const PhosphorZones::Zone* member : std::as_const(members)) {
+        spanGeom = spanGeom.isNull() ? member->normalizedGeometry(refGeom)
+                                     : spanGeom.united(member->normalizedGeometry(refGeom));
+    }
+    QList<PhosphorZones::Zone*> candidates;
+    QList<QRectF> candidateGeoms;
+    for (auto* zone : layout->zones()) {
+        if (!members.contains(zone)) {
+            candidates.append(zone);
+            candidateGeoms.append(zone->normalizedGeometry(refGeom));
+        }
+    }
+    const int bestIndex = SpatialAdjacency::findAdjacentRect(spanGeom, candidateGeoms, direction);
+    return bestIndex < 0 ? QString() : candidates.at(bestIndex)->id().toString();
+}
+
 QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, const QString& screenId) const
 {
     if (!DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get first zone"))) {
@@ -289,8 +334,31 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
     }
 
     // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
-    QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
-    PhosphorZones::Layout* layout = resolveActiveLayoutForScreen(resolvedId);
+    const QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
+    return firstZoneOfLayout(resolveActiveLayoutForScreen(resolvedId), direction, resolvedId);
+}
+
+QString ZoneDetectionAdaptor::getFirstZoneInDirectionOnDesktop(const QString& direction, const QString& screenId,
+                                                               int desktop) const
+{
+    if (desktop <= 0) {
+        return getFirstZoneInDirection(direction, screenId);
+    }
+    if (!ensureDeps("getFirstZoneInDirectionOnDesktop")
+        || !DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get first zone"))) {
+        return QString();
+    }
+    const QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
+    const QString activity = m_layoutManager->currentActivity();
+    if (m_layoutManager->isContextActiveLayoutSuppressed(resolvedId, desktop, activity)) {
+        return QString();
+    }
+    return firstZoneOfLayout(m_layoutManager->layoutForScreen(resolvedId, desktop, activity), direction, resolvedId);
+}
+
+QString ZoneDetectionAdaptor::firstZoneOfLayout(PhosphorZones::Layout* layout, const QString& direction,
+                                                const QString& resolvedId) const
+{
     if (!layout || layout->zones().isEmpty()) {
         return QString();
     }

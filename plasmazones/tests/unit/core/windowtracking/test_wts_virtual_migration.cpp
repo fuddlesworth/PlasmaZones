@@ -160,6 +160,96 @@ private Q_SLOTS:
         QCOMPARE(m_service->zonesForWindow(rightWin).first(), m_zoneIds[2]);
     }
 
+    // A window whose zone is not in its virtual screen's layout loses the
+    // zone and its pre-float home, but it is a live window: its float-back
+    // rects (one per monitor) and its sticky flag stay (F441).
+    void testMigrateToVirtual_prunedWindowKeepsItsFreeGeometryAndStickyFlag()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
+        const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
+        PhosphorZones::Layout* vsLayout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(vsLayout);
+        for (const QString& vs : virtualIds) {
+            m_layoutManager->assignLayout(vs, m_layoutManager->currentVirtualDesktop(), QString(), vsLayout);
+        }
+
+        const QString w = QStringLiteral("konsole|pruned");
+        const QRect elsewhere(10, 10, 400, 300);
+        m_service->assignWindowToZone(w, m_zoneIds[0], physId, 1);
+        m_service->setWindowSticky(w, true);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = w;
+        rec.appId = QStringLiteral("konsole");
+        rec.screenId = physId;
+        rec.freeGeometryByScreen.insert(QStringLiteral("HDMI-1"), elsewhere);
+        QVERIFY(m_service->placementStore().record(rec));
+
+        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, &mgr);
+
+        QVERIFY2(m_service->zonesForWindow(w).isEmpty(), "the zone is not in the virtual screen's layout");
+        const auto after = m_service->placementStore().peekExact(w);
+        QVERIFY(after.has_value());
+        QCOMPARE(after->freeGeometryByScreen.value(QStringLiteral("HDMI-1")), elsewhere);
+        QVERIFY(m_service->isWindowSticky(w));
+    }
+
+    // A last-used zone recorded on desktop 2 is judged against desktop 2's
+    // layout, not the one the desktop in view runs, so a reconfigure keeps it
+    // (F162).
+    void testMigrateToVirtual_backgroundDesktopKeepsItsLastUsedZone()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
+        const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
+        const QString vs0 = virtualIds.first();
+        PhosphorZones::Layout* other = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(other);
+        m_layoutManager->assignLayout(vs0, 2, QString(), other);
+        const QString zone = other->zones().first()->id().toString();
+        m_snapState->restoreLastUsedZone(zone, vs0, QStringLiteral("konsole"), 2);
+
+        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, &mgr);
+
+        QCOMPARE(m_snapState->lastUsedZoneId(), zone);
+    }
+
+    // A desktop running autotile keeps its snap memory frozen: its last-used
+    // zone is not judged against the default layout the cascade answers there
+    // (F162).
+    void testMigrateToVirtual_tilingDesktopKeepsItsFrozenLastUsedZone()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
+        const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
+        const QString vs0 = virtualIds.first();
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        entry.tilingAlgorithm = QStringLiteral("bsp");
+        m_layoutManager->setAssignmentEntryDirect(vs0, 2, QString(), entry);
+        const QString frozen = QUuid::createUuid().toString();
+        m_snapState->restoreLastUsedZone(frozen, vs0, QStringLiteral("konsole"), 2);
+
+        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, &mgr);
+
+        QCOMPARE(m_snapState->lastUsedZoneId(), frozen);
+    }
+
     // Guard clause: a null manager refuses the migration. The virtual list is
     // deliberately NON-EMPTY so the null-manager conjunct is the only reason
     // the call can return early — with both falsy the test would pass under a
@@ -514,7 +604,197 @@ private Q_SLOTS:
         QVERIFY(orphans.isEmpty());
     }
 
+    // =====================================================================
+    // The last-used zone on a reconfigure (F803)
+    // =====================================================================
+
+    // A last-used zone already on a valid virtual screen is validated against
+    // that screen's layout. A stale one is cleared and marked dirty by the
+    // validation itself: nothing else in this reconfigure schedules a save.
+    void validateLastUsed_staleZoneClearedAndMarked()
+    {
+        SplitFixture split;
+        m_snapState->restoreLastUsedZone(QUuid::createUuid().toString(), split.vs0, QStringLiteral("konsole"), 1);
+        m_service->clearDirty();
+
+        m_service->migrateScreenAssignmentsToVirtual(split.physId, split.virtualIds, &split.mgr);
+
+        QVERIFY(m_snapState->lastUsedZoneId().isEmpty());
+        QCOMPARE(m_service->peekDirty(),
+                 PhosphorPlacement::WindowTrackingService::DirtyMask(
+                     PhosphorPlacement::WindowTrackingService::DirtyLastUsedZone));
+    }
+
+    // A context with no layout cannot prove the zone stale, so it keeps it (F264).
+    void validateLastUsed_noneContextKeepsIt()
+    {
+        SplitFixture split;
+        PhosphorZones::AssignmentEntry none;
+        none.mode = PhosphorZones::AssignmentEntry::Snapping;
+        none.snappingLayout = QString(PhosphorZones::NoSnappingLayout);
+        m_layoutManager->setAssignmentEntryDirect(split.vs0, 1, QString(), none);
+        // A zone in no layout, so only the None context can keep it.
+        const QString unproven = QUuid::createUuid().toString();
+        m_snapState->restoreLastUsedZone(unproven, split.vs0, QStringLiteral("konsole"), 1);
+
+        m_service->migrateScreenAssignmentsToVirtual(split.physId, split.virtualIds, &split.mgr);
+
+        QCOMPARE(m_snapState->lastUsedZoneId(), unproven);
+    }
+
+    // Another monitor's last-used zone is not this migration's to judge.
+    void validateLastUsed_otherScreenUntouched()
+    {
+        SplitFixture split;
+        const QString other = QStringLiteral("LG:27GP850:ABC123");
+        const QString stale = QUuid::createUuid().toString();
+        m_snapState->restoreLastUsedZone(stale, other, QStringLiteral("konsole"), 1);
+
+        m_service->migrateScreenAssignmentsToVirtual(split.physId, split.virtualIds, &split.mgr);
+
+        QCOMPARE(m_snapState->lastUsedZoneId(), stale);
+        QCOMPARE(m_snapState->lastUsedScreenId(), other);
+    }
+
+    // Removing the split folds the last-used screen back to the monitor and
+    // keeps a zone the monitor's layout still has.
+    void migrateFromVirtual_keepsAValidLastUsedZone()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        m_snapState->restoreLastUsedZone(m_zoneIds[1], vs0, QStringLiteral("konsole"), 1);
+
+        m_service->migrateScreenAssignmentsFromVirtual(physId);
+
+        QCOMPARE(m_snapState->lastUsedZoneId(), m_zoneIds[1]);
+        QCOMPARE(m_snapState->lastUsedScreenId(), physId);
+    }
+
+    // =====================================================================
+    // resolveEffectiveScreenId (F584, F834)
+    // =====================================================================
+
+    void resolveEffective_liveVsIsItself()
+    {
+        SplitFixture split;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, &split.mgr, nullptr);
+        QCOMPARE(service.resolveEffectiveScreenId(split.vs0), split.vs0);
+    }
+
+    void resolveEffective_deadVsGoesToNearestSibling()
+    {
+        SplitFixture split;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, &split.mgr, nullptr);
+        QCOMPARE(service.resolveEffectiveScreenId(PhosphorIdentity::VirtualScreenId::make(split.physId, 3)), split.vs1);
+    }
+
+    void resolveEffective_physicalIsItself()
+    {
+        SplitFixture split;
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, &split.mgr, nullptr);
+        QCOMPARE(service.resolveEffectiveScreenId(split.physId), split.physId);
+    }
+
+    void resolveEffective_splitRemovedGoesToPhysical()
+    {
+        SplitFixture split;
+        QVERIFY(split.mgr.setVirtualScreenConfig(split.physId, PhosphorScreens::VirtualScreenConfig{}));
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, &split.mgr, nullptr);
+        QCOMPARE(service.resolveEffectiveScreenId(split.vs1), split.physId);
+    }
+
+    // An unplugged output keeps its split configured, so its virtual screens
+    // are still listed for it but none is live: the answer is the monitor, not
+    // a dead sibling.
+    void resolveEffective_unpluggedOutputGoesToPhysical()
+    {
+        SplitFixture split;
+        split.fake.removeScreen(QStringLiteral("DP-1"));
+        QVERIFY(split.mgr.virtualScreenIdsFor(split.physId).contains(split.vs0));
+        QVERIFY(!split.mgr.effectiveScreenIds().contains(split.vs0));
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, &split.mgr, nullptr);
+        QCOMPARE(service.resolveEffectiveScreenId(PhosphorIdentity::VirtualScreenId::make(split.physId, 3)),
+                 split.physId);
+    }
+
+    // =====================================================================
+    // A closed window's record follows its monitor's split (F381)
+    // =====================================================================
+
+    // A record with no live window is placed by its snapped slot's zone: zone 3
+    // sits in the right third, so the record moves to the right half.
+    void migrateToVirtual_closedWindowRecordFollowsItsZone()
+    {
+        SplitFixture split;
+        const QRect spot(3000, 200, 400, 300);
+        QVERIFY(m_service->placementStore().record(closedSnappedRecord(split.physId, m_zoneIds[2], spot)));
+
+        m_service->migrateScreenAssignmentsToVirtual(split.physId, split.virtualIds, &split.mgr);
+
+        const auto after = m_service->placementStore().peekExact(QStringLiteral("kate|closed"));
+        QVERIFY(after.has_value());
+        QCOMPARE(after->screenId, split.vs1);
+        QCOMPARE(after->freeGeometryByScreen.value(split.vs1), spot);
+        QVERIFY(!after->freeGeometryByScreen.contains(split.physId));
+    }
+
+    // A record on a virtual screen the new configuration does not have is
+    // re-homed by index, the same as a live window's.
+    void migrateToVirtual_deadVsRecordReHomed()
+    {
+        SplitFixture split;
+        const QString dead = PhosphorIdentity::VirtualScreenId::make(split.physId, 2);
+        QVERIFY(m_service->placementStore().record(closedSnappedRecord(dead, m_zoneIds[0], QRect())));
+
+        m_service->migrateScreenAssignmentsToVirtual(split.physId, split.virtualIds, &split.mgr);
+
+        const auto after = m_service->placementStore().peekExact(QStringLiteral("kate|closed"));
+        QVERIFY(after.has_value());
+        QCOMPARE(after->screenId, split.vs1);
+    }
+
 private:
+    /// A 3840x2160 output split 50/50 side by side, staged headlessly.
+    struct SplitFixture
+    {
+        SplitFixture()
+        {
+            fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+            mgr.start();
+            if (!mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId))) {
+                qFatal("could not split the output");
+            }
+            virtualIds = mgr.virtualScreenIdsFor(physId);
+        }
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1);
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        PhosphorScreens::ScreenManager mgr{
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false}};
+        QStringList virtualIds;
+    };
+
+    /// The record of a closed window snapped in @p zoneId on @p screenId,
+    /// with a float-back rect there when @p spot is valid.
+    static PhosphorEngine::WindowPlacement closedSnappedRecord(const QString& screenId, const QString& zoneId,
+                                                               const QRect& spot)
+    {
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("kate|closed");
+        rec.appId = QStringLiteral("kate");
+        rec.screenId = screenId;
+        rec.virtualDesktop = 1;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{zoneId};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        if (spot.isValid()) {
+            rec.freeGeometryByScreen.insert(screenId, spot);
+        }
+        return rec;
+    }
+
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;

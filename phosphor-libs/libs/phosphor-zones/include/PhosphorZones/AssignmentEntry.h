@@ -174,7 +174,8 @@ inline constexpr QLatin1String NoSnappingLayout{"none"};
 
 /// Reserved value of @ref AssignmentEntry::tilingAlgorithm meaning "this
 /// context explicitly uses NO tiling algorithm": the context stays in
-/// Autotile mode but nothing tiles there — windows float. An empty field
+/// Autotile mode but nothing tiles there, and no engine holds a window
+/// floating there either (windows keep their frames). An empty field
 /// still means "not chosen here", which inherits the configured default
 /// algorithm. The wire id for the state is @c "autotile:none"
 /// (makeAutotileId over this word), so it rides every existing string path.

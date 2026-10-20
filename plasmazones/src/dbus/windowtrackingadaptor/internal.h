@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QRect>
+#include <QSet>
 #include <QHash>
 #include <QString>
 #include <QPointer>
@@ -23,9 +24,22 @@
 #include <PhosphorRules/WindowQuery.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "core/platform/logging.h"
+#include "plasmazones_export.h"
+
+namespace PhosphorSnapEngine {
+class SnapEngine;
+}
 
 namespace PlasmaZones {
+class WindowTrackingAdaptor;
 namespace WindowTrackingInternal {
+
+/// The screen of a store that holds @p windowId as a member with a zone, on a
+/// screen other than @p excludeScreen; empty when there is none (screenleave.cpp).
+QString snapZoneScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& excludeScreen);
+/// Whether snap holds @p windowId in any store on another screen than
+/// @p keepScreenId (another virtual screen of the same monitor counts).
+bool snapHoldsOffScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& keepScreenId);
 
 /// Release @p windowId from @p source (when given and distinct from the
 /// destination) and receive it into @p dest, VERIFYING adoption.
@@ -45,12 +59,12 @@ namespace WindowTrackingInternal {
 ///
 /// PRECONDITION for that pre-tracked test: an engine must record an accepted
 /// arrival under a screen id that screensMatch() equates with the ctx.toScreenId
-/// it was handed. screensMatch absorbs connector-name / EDID-id spelling and the
-/// "/vs:" virtual-screen suffix, but an engine that re-resolved the arrival onto
-/// a genuinely DIFFERENT screen id (say, redirecting to a fallback output) would
-/// read here as a refusal — this helper would then re-home a window the
-/// destination actually adopted. No engine does that today; one that starts to
-/// must report the id it stored, not silently redirect.
+/// it was handed. screensMatch absorbs connector-name / EDID-id spelling, and a
+/// virtual-screen id matches only itself, so an engine must store the id it was
+/// handed. One that re-resolved the arrival onto a genuinely DIFFERENT screen id
+/// (say, a fallback output) would read here as a refusal, and this helper would
+/// re-home a window the destination adopted. No engine does that today; one that
+/// starts to must report the id it stored, not silently redirect.
 inline bool guardedHandoff(::PhosphorEngine::IPlacementEngine* source, ::PhosphorEngine::IPlacementEngine* dest,
                            ::PhosphorEngine::IPlacementEngine::HandoffContext ctx, const QString& recoverScreenId,
                            int recoverDesktop = 0)
@@ -119,6 +133,86 @@ inline QJsonObject rectToJsonObject(const QRect& rect)
     obj[::PhosphorZones::ZoneJsonKeys::Height] = rect.height();
     return obj;
 }
+
+/// Whether a window's own @p context is on another activity than
+/// @p currentActivity (empty: unknown). One on several activities is on the
+/// current one when it is any of them, not only its first (F1040), as
+/// WindowContext::effectiveActivity reads it.
+inline bool onAnotherActivity(const std::optional<::PhosphorEngine::WindowDesktopContext>& context,
+                              const QString& currentActivity)
+{
+    return context && !context->activity.isEmpty() && !currentActivity.isEmpty()
+        && (context->activities.size() > 1 ? !context->activities.contains(currentActivity)
+                                           : context->activity != currentActivity);
+}
+
+/// Where a window on @p desktops (nullopt: every one, or unknown) meets a
+/// screen showing @p shownDesktop (0: unknown): 0 when it is on that desktop,
+/// its one desktop when it is on a single other one, and nullopt when it is on
+/// several others.
+inline std::optional<int> desktopShowing(const std::optional<QSet<int>>& desktops, int shownDesktop)
+{
+    if (!desktops || shownDesktop < 1 || desktops->contains(shownDesktop)) {
+        return 0;
+    }
+    if (desktops->size() == 1) {
+        return *desktops->cbegin();
+    }
+    return std::nullopt;
+}
+
+/// The desktop @p screenId shows: the per-output value, else the global current
+/// one the layout registry holds; 0 ("unknown") with neither (queries.cpp).
+int shownDesktop(const WindowTrackingAdaptor& adaptor, const QString& screenId);
+
+/// Where a window's own context meets a screen showing @p shownDesktop (0:
+/// unknown) in @p currentActivity (empty: unknown): desktopShowing, and
+/// nullopt on another activity. An unknown @p context reads as in view.
+inline std::optional<int> ownDesktopOn(const std::optional<::PhosphorEngine::WindowDesktopContext>& context,
+                                       int shownDesktop, const QString& currentActivity)
+{
+    if (!context) {
+        return 0;
+    }
+    if (onAnotherActivity(context, currentActivity)) {
+        return std::nullopt;
+    }
+    return desktopShowing(context->desktopSet(), shownDesktop);
+}
+
+/// Whether @p desktop (0: the one @p screenId shows) on @p screenId in @p activity is the tiling opt-out
+/// ("autotile:none"): Autotile mode with no algorithm, so nothing tiles there and no engine owns a float (user
+/// decision autotile_none_float_owner). Read from the same cascade entry as ScreenModeRouter::modeFor's opt-out arm
+/// and Daemon::runningModeForContext's routerOptOut (float.cpp).
+PLASMAZONES_EXPORT bool isOptOutContext(const WindowTrackingAdaptor& adaptor, const QString& screenId, int desktop,
+                                        const QString& activity);
+
+/// Whether @p windowId's own context on @p screenId (empty: its live screen) is the tiling opt-out. False for one
+/// whose context there cannot be told: on several hidden desktops, or on another activity.
+PLASMAZONES_EXPORT bool onOptOutContext(const WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                        const QString& screenId);
+
+/// No float for @p windowId where it is on an opt-out context: snap's float bit and pre-float home go from every
+/// store whose context is the opt-out (the screenless bit with them when its own store is one or it has none), so
+/// does a floating snap slot its record keeps for one, and subscribers hear on @p screenId that it is not floating.
+PLASMAZONES_EXPORT void dropOptOutFloat(WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                        const QString& screenId);
+
+/// dropOptOutFloat for every window snap floats in a store whose context is the opt-out: a desktop given
+/// "autotile:none" while snap floated windows on it. The daemon runs it at the end of every engine-set recompute.
+PLASMAZONES_EXPORT void dropOptOutFloats(WindowTrackingAdaptor* adaptor);
+
+/// Of @p screens, the ones whose context in view just became the tiling opt-out release the windows snap holds in
+/// zones there, in place: subscribers hear each "unsnapped" and nothing moves. Snap keeps the zones as frozen memory,
+/// as it does for a context that went to a tiling engine, and the resnap of the flip back to snapping re-applies them.
+/// The daemon passes every screen whose active assignment changed (Daemon::diffActiveAssignments).
+PLASMAZONES_EXPORT void releaseOptOutZones(WindowTrackingAdaptor* adaptor, const QSet<QString>& screens);
+
+/// A window a scrolling strip let go of on the tiling opt-out, where nothing places it: back at @p freeGeometry,
+/// its pre-scroll free spot, when that lies on @p screenId, else moved on screen at its size when its frame is off
+/// the screen's available area. Stated as a re-statement, with no zone and no float. Nothing for a screen that is gone.
+PLASMAZONES_EXPORT void placeReleasedOnOptOut(WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                              const QString& screenId, const QRect& freeGeometry);
 
 } // namespace WindowTrackingInternal
 

@@ -235,13 +235,12 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
         query.isMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
         // KWin::Window-only accessory / capability flags (not exposed on
         // EffectWindow). Always engaged when the underlying window exists.
-        // NO INVALIDATION EDGE, deliberately: these flags rarely change
-        // after map (X11 clients and KWin window rules can flip them), and
-        // no change-signal is connected for them — a verdict scoped on one
-        // refreshes at the next natural invalidation (focus, placement,
-        // class swap, rule edit) rather than on its own edge. Accepted
-        // staleness; wiring five rarely-firing signals was judged not worth
-        // the connection overhead per window.
+        // skip-taskbar, skip-pager and maximizable have change edges
+        // (window_output_connections.cpp, windowflagedges.h) that refresh the
+        // daemon's copy and drop the cached verdicts. KWin has no change
+        // signal for isResizable / isMovable, so a verdict scoped on those two
+        // refreshes at the next natural invalidation (focus, placement, class
+        // swap, rule edit).
         query.skipTaskbar = kw->skipTaskbar();
         query.skipPager = kw->skipPager();
         query.isResizable = kw->isResizable();
@@ -282,8 +281,8 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     // snapshot by the caller's applyOwnLayerFlags pass when a SetWindowLayer
     // rule or the keep-floating-above default owns the window — see
     // window_filtering.cpp — so a `WHEN KeepAbove` predicate never reads its
-    // own rule's effect. A MANUAL keep-above toggle
-    // (window menu) has no cache-invalidation edge, deliberately: routing it
+    // own rule's effect. A MANUAL keep-above or keep-below toggle refreshes
+    // the daemon's copy but drops no cached verdict, deliberately: routing it
     // through invalidateRuleCacheForStateChange would re-run the layer
     // reconcile and instantly re-assert the rule over the user's toggle,
     // which the reconcile's own docs rule out. A verdict scoped on these
@@ -300,7 +299,8 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     // KWin-version behaviour this code cannot verify statically. Do not
     // scope a SetHideTitleBar rule on HasDecoration; a substitution needs a
     // pre-rule snapshot sourced from the DecorationManager's restore state
-    // if this ever bites in practice.
+    // if this ever bites in practice. Its change edge refreshes only the
+    // daemon's copy for the same reason.
     query.hasDecoration = w->hasDecoration();
     query.skipSwitcher = w->isSkipSwitcher();
     const QRectF frame = w->frameGeometry();

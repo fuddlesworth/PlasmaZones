@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <phosphorengine_export.h>
@@ -66,8 +67,9 @@ public:
     /// back to the DURABLE placement-record snap slot when the live cache is cold.
     /// The live per-store zone maps are runtime-only — a daemon restart (and
     /// `handoffRelease` on autotile entry) clears them — so consumers that must
-    /// survive a restart (the autotile→snap resnap) read this instead. Returns an
-    /// empty list for a window that was never snapped in either source.
+    /// survive a restart (the autotile→snap resnap) read this instead. Only the
+    /// window's OWN record counts, never a sibling instance's: a window that was
+    /// never snapped in either source answers an empty list.
     virtual QStringList recordedSnapZones(const QString& windowId) const = 0;
 
     virtual QString zoneForWindow(const QString& windowId) const = 0;
@@ -138,12 +140,10 @@ public:
     virtual void clearPreFloatZone(const QString& windowId) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Auto-snap / pending restore
+    // Auto-snap
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual bool clearAutoSnapped(const QString& windowId) = 0;
-    virtual bool consumePendingAssignment(const QString& windowId) = 0;
-    virtual const QHash<QString, QList<PendingRestore>>& pendingRestoreQueues() const = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Last-used zone tracking
@@ -212,12 +212,12 @@ public:
     /// resolved, so an embedder with no screen manager keeps its behaviour.
     virtual bool geometryBelongsToScreen(const QRect& geometry, const QString& screenId) const = 0;
 
-    /// Record a window's SHARED free/float geometry (the single float-back store —
-    /// the placement record's freeGeometryByScreen). This is the ONE writer all
-    /// float-back captures route through (effect pre-tile/pre-snap capture, drag
-    /// store, float-toggle capture), so snap and autotile read the same value and
-    /// never drift. @p overwrite=false leaves an existing entry for @p screenId
-    /// untouched (first-capture-wins). No-op on an invalid geometry.
+    /// Record a window's SHARED free/float geometry (the placement record's
+    /// freeGeometryByScreen), so snap and autotile read the same value. Refuses a
+    /// rect off @p screenId, a managed frame and the frame of a window in a zone
+    /// or tile in view; a caller that SAMPLES a frame refuses a minimized or
+    /// output-filling window's itself. @p overwrite=false leaves an existing entry
+    /// for @p screenId untouched (first-capture-wins). No-op on an invalid geometry.
     virtual void recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,
                                     bool overwrite) = 0;
 
@@ -228,9 +228,9 @@ public:
 
     /// Downgrade @p engineId's slot on @p windowId's record to
     /// WindowPlacement::stateReleased() and mark the placements dirty. Called
-    /// by an engine that KNOWINGLY gives a window up (cross-mode handoff), so
-    /// its slot stops advertising a home the cross-screen reclaim would pull
-    /// the window back to. Default no-op: an embedder without persistence has
+    /// by an engine that KNOWINGLY gives a window up (cross-mode handoff), and
+    /// for a window that left its screen, because a stale managed slot would
+    /// read as a restorable home. Default no-op: an embedder without persistence has
     /// nothing to downgrade. NOT for ordinary close — a window that closed
     /// tiled keeps its slot, which is what login restore reads.
     virtual void releaseEngineSlot(const QString& windowId, const QString& engineId)
@@ -291,6 +291,23 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual QVector<ResnapEntry> takeResnapBuffer() = 0;
+
+    /// An engine cleared a last-used zone in one of its stores: persist it.
+    virtual void markLastUsedZoneDirty()
+    {
+    }
+
+    /// renumberDesktopZones for any change of KWin's desktop list (F763): move
+    /// every persisted per-desktop zone map and record-level desktop through
+    /// @p remap and mark the placements dirty. The default handles a single
+    /// removal through renumberDesktopZones and nothing else. Appended last
+    /// for ABI.
+    virtual void remapDesktopZones(const DesktopRemap& remap)
+    {
+        if (const int removed = remap.singleRemoval(); removed > 0) {
+            renumberDesktopZones(removed);
+        }
+    }
 };
 
 } // namespace PhosphorEngine

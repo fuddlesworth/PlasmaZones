@@ -16,6 +16,8 @@
 
 namespace PhosphorEngine {
 
+class DesktopRemap;
+
 struct WindowMetadata
 {
     QString appId;
@@ -23,7 +25,9 @@ struct WindowMetadata
     QString title;
     QString windowRole{}; ///< X11 WM_WINDOW_ROLE; empty for Wayland-native windows
     int pid = 0; ///< process id; 0 = unknown
-    int virtualDesktop = 0; ///< 1-based x11 desktop number; 0 = all desktops / unknown
+    /// 1-based x11 desktop number; 0 = all desktops / unknown. KWin renumbers on a mid-list change, and the
+    /// registry follows (WindowRegistry::remapDesktops) for every record the effect has not re-pushed.
+    int virtualDesktop = 0;
     /// Full desktop list when the window spans SEVERAL (but not all) desktops;
     /// empty for the common single-desktop / sticky / unknown cases. When
     /// non-empty, virtualDesktop equals the first entry.
@@ -75,6 +79,13 @@ struct WindowMetadata
     std::optional<int> positionX{}; ///< frame left edge X in px
     std::optional<int> positionY{}; ///< frame top edge Y in px
     std::optional<QString> captionNormal{}; ///< title without the WM-added app-name suffix
+    /// Full activity list when the window is on SEVERAL (but not all)
+    /// activities; empty otherwise. When non-empty, activity equals the first
+    /// entry. Appended last (installed struct).
+    QStringList activities{};
+    /// Maximized on ONE axis (vertical or horizontal). Separate from isMaximized,
+    /// which rules match on and which stays full-maximize only (F65). Appended last.
+    std::optional<bool> isAxisMaximized{};
 
     bool operator==(const WindowMetadata& other) const
     {
@@ -89,7 +100,8 @@ struct WindowMetadata
             && isModal == other.isModal && hasDecoration == other.hasDecoration && isResizable == other.isResizable
             && isMovable == other.isMovable && isMaximizable == other.isMaximizable && width == other.width
             && height == other.height && positionX == other.positionX && positionY == other.positionY
-            && captionNormal == other.captionNormal;
+            && captionNormal == other.captionNormal && activities == other.activities
+            && isAxisMaximized == other.isAxisMaximized;
     }
     bool operator!=(const WindowMetadata& other) const
     {
@@ -108,6 +120,8 @@ public:
     void upsert(const QString& instanceId, const WindowMetadata& metadata);
     /// Remove metadata and canonical state, emitting windowDisappeared exactly
     /// once while the canonical mapping remains available to subscribers.
+    /// An upsert a subscriber makes during the emit is replayed after it and
+    /// keeps the instance's canonical mapping; inside clear() that replay is dropped.
     void remove(const QString& instanceId);
 
     std::optional<WindowMetadata> metadata(const QString& instanceId) const;
@@ -121,6 +135,7 @@ public:
         int virtualDesktop = 0;
         QList<int> virtualDesktops;
         QString activity;
+        QStringList activities; ///< full list when on several activities (appended last)
 
         /// Effective desktop for per-window mode resolution: the window's own
         /// desktop when known (virtualDesktop > 0), never the screen's current
@@ -139,13 +154,15 @@ public:
             return virtualDesktop > 0 ? virtualDesktop : screenCurrentDesktop;
         }
 
-        /// Effective activity: the window's own when known, else
-        /// @p currentActivity. No span analogue to effectiveDesktop's
-        /// current-context preference exists here — the metadata carries only
-        /// the window's first activity, not a list, so there is nothing to
-        /// prefer against.
+        /// Effective activity, the activity axis of effectiveDesktop: a window
+        /// on several activities resolves to @p currentActivity when that is
+        /// one of them, else its own (first) activity when known, else
+        /// @p currentActivity (F426).
         QString effectiveActivity(const QString& currentActivity) const
         {
+            if (activities.size() > 1 && activities.contains(currentActivity)) {
+                return currentActivity;
+            }
             return activity.isEmpty() ? currentActivity : activity;
         }
     };
@@ -161,11 +178,14 @@ public:
     /// window is unknown or the field was never delivered. Accepts either a
     /// bare instance id or a composite appId|instanceId window id.
     std::optional<bool> minimizedState(const QString& windowId) const override;
+    /// IWindowRegistry::fillsOutputState over the reported maximize (either
+    /// axis) and fullscreen fields. Accepts a bare instance id or a composite id.
+    std::optional<bool> fillsOutputState(const QString& windowId) const override;
     std::optional<WindowDesktopContext> desktopContext(const QString& windowId) const override;
-    /// Every instance currently recorded under @p appId, in UNSPECIFIED order
-    /// (QMultiHash bucket order, not insertion or arrival order). Callers that
-    /// need a deterministic sequence — anything FIFO-shaped — must sort or
-    /// otherwise order the result themselves.
+    /// Every instance currently recorded under @p appId, most recently indexed
+    /// first (QMultiHash::values(key)). An appId change re-indexes the instance
+    /// at the head, so this is not arrival order: callers that need a FIFO
+    /// sequence must order the result themselves.
     QStringList instancesWithAppId(const QString& appId) const;
     bool contains(const QString& instanceId) const;
     int size() const;
@@ -186,8 +206,23 @@ public:
     /// the count removed. @p aliveInstanceIds are the uuid components
     /// (WindowId::extractInstanceId), matching this registry's keying. The
     /// normal per-window path is remove() on windowClosed; this is the batch
-    /// backstop the WTA alive-ids report drives.
+    /// backstop the WTA alive-ids report drives. An EMPTY @p aliveInstanceIds
+    /// is refused (returns 0 with a warning) while any record or mapping
+    /// exists: the effect's first alive report can come before restored apps map.
     int pruneStaleInstances(const QSet<QString>& aliveInstanceIds);
+
+    /// Snapshot the recorded instances as the ones a coming desktop renumber
+    /// applies to. Called when KWin's desktop list starts changing (the
+    /// desktop manager's desktopListChanging): any upsert or remove after this
+    /// drops its instance from the snapshot, since its push already carries
+    /// the new numbering.
+    void beginDesktopRenumber();
+    /// Move the desktop fields of every instance still in the snapshot through
+    /// @p remap (a removed desktop goes to its successor, where KWin sends its
+    /// windows), emit metadataChanged for each record that changed, and end the
+    /// snapshot. Without a beginDesktopRenumber first it changes nothing.
+    /// Returns the count changed (F763).
+    int remapDesktops(const DesktopRemap& remap);
 
 Q_SIGNALS:
     void windowAppeared(const QString& instanceId);
@@ -199,10 +234,9 @@ private:
     QHash<QString, WindowMetadata> m_records;
     QMultiHash<QString, QString> m_appIdIndex;
     QHash<QString, QString> m_canonicalByInstance;
-    /// Instances currently inside remove()'s windowDisappeared emit. A
-    /// re-entrant remove() of the same instance is a no-op (exactly-once
-    /// signal), and a re-entrant upsert() is deferred into m_pendingUpserts
-    /// and replayed after the removal completes.
+    /// Instances currently inside remove()'s windowDisappeared emit. A re-entrant remove() of the same instance emits
+    /// nothing further and cancels any upsert queued for it during this emit. A re-entrant upsert() is deferred into
+    /// m_pendingUpserts and replayed after the removal completes.
     QSet<QString> m_disappearingInstances;
     QHash<QString, WindowMetadata> m_pendingUpserts;
     /// Depth counter, non-zero while clear() drives a removal loop: remove()
@@ -214,6 +248,8 @@ private:
     /// seam.) A counter, not a bool — a NESTED clear() from a subscriber must
     /// not un-flag the outer one on its way out.
     int m_clearing = 0;
+    /// beginDesktopRenumber's snapshot (appended last: installed class).
+    QSet<QString> m_desktopRenumberPending;
 
     void indexInsert(const QString& instanceId, const QString& appId);
     void indexRemove(const QString& instanceId, const QString& appId);

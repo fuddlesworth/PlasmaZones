@@ -3,7 +3,13 @@
 
 #pragma once
 
+#include <QPoint>
+#include <QRect>
+#include <QRectF>
+#include <QSet>
 #include <QSize>
+#include <QString>
+#include <QStringList>
 #include <QtGlobal>
 
 /// Pure decision logic for the scroll-managed window mechanisms in
@@ -171,12 +177,62 @@ inline MaximizeAction resolveMaximizeToEdgesAction(bool flagOnWire, bool inSet, 
     return (!inSet || !kwinMaximized) ? MaximizeAction::Apply : MaximizeAction::None;
 }
 
-/// The counter-assert burst budget for scroll-managed X11 windows an
-/// EXTERNAL mover relocated: RATE-LIMITED to @p maxPerWindow counters per
-/// rolling window of @p windowMs, re-armed by every fresh batch command
-/// (the caller resets the pair on batch insert). Mutates the per-window
-/// bookkeeping in place and answers whether THIS frame change should be
-/// countered. @p frameDiffers is the caller's `actual != commanded` test.
+/// Whether a maximize Apply arm that is about to call maximize() takes the
+/// claim (F680). Only for a window KWin will maximize, or one already at
+/// MaximizeFull (the adopt case): KWin refuses a window that cannot be
+/// maximized, and a claim over a bit it never holds kept the counter-assert
+/// exempt for good while the decision resolved Apply on every batch anyway.
+/// An arm that skips the call (fullscreen, a gesture) takes the claim as it
+/// always did, so a later batch or the gesture end can pay it.
+inline constexpr bool takesMaximizeMembership(bool maximizable, bool alreadyFull)
+{
+    return maximizable || alreadyFull;
+}
+
+/// Whether a column-maximize arm is the answer to a press the maximize
+/// interception claimed (F989), given a live marker for it. The interception
+/// dispatches without writing KWin's bit, so KWin already holds the mode the
+/// press asked for when the answer lands, and the arm writes nothing: an Apply
+/// that finds KWin maximized, or a Release that finds it restored. That answer
+/// anchors its leg at the press's departure rect, and a Release rides placeOut.
+/// The effect-restart adopt (Apply over a held bit) carries no marker.
+inline constexpr bool answersClaimedPress(MaximizeAction action, bool kwinMaximized, bool markerLive)
+{
+    return markerLive
+        && ((action == MaximizeAction::Apply && kwinMaximized)
+            || (action == MaximizeAction::Release && !kwinMaximized));
+}
+
+/// Where a leg of a window the strip's view carries starts: @p from, rounded,
+/// backed out by @p viewDelta along the strip's axis. The paint position is the
+/// animated rect plus the view offset, which starts at viewDelta, so the first
+/// frame lands on @p from. Rounded because AnimatedValue judges a degenerate
+/// leg with no pixel epsilon, and fractional residue would start a spring on
+/// every scroll tick. @p from is the live frame, or the frame a claimed
+/// maximize press left (F989).
+inline QRect viewCarriedOrigin(const QRectF& from, int viewDelta, bool vertical)
+{
+    return QRect(qRound(from.x()) - (vertical ? 0 : viewDelta), qRound(from.y()) - (vertical ? viewDelta : 0),
+                 qRound(from.width()), qRound(from.height()));
+}
+
+/// Whether an apply that finds the window already commanded to its target
+/// still owes a leg (F989). Only the answer to a claimed press does: KWin's own
+/// flip already commanded the batch's rect, so the leg from the press's
+/// departure is the only motion the press gets. It needs an origin that is not
+/// the target itself. Every other apply at its target stays a no-op.
+inline bool claimedPressOwesLeg(bool answeringClaimedPress, const QRectF& origin, const QRect& target)
+{
+    return answeringClaimedPress && origin.isValid() && !origin.isEmpty() && origin.toRect() != target;
+}
+
+/// The counter-assert burst budget for scroll-managed windows an EXTERNAL
+/// mover relocated: RATE-LIMITED to @p maxPerWindow counters per rolling
+/// window of @p windowMs, re-armed by every fresh batch command (the caller
+/// resets the pair on batch insert). Mutates the per-window bookkeeping in
+/// place and answers whether THIS frame change should be countered.
+/// @p frameDiffers is whether the counter would move the window at all, and a
+/// change that would not consumes nothing.
 inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 nowMs, bool frameDiffers,
                                 qint64 windowMs = 1000, int maxPerWindow = 3)
 {
@@ -192,6 +248,49 @@ inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 no
         return true;
     }
     return false;
+}
+
+/// Whether the counter-assert treats a scroll-managed window as one an
+/// EXTERNAL mover can relocate. An X11 client moves itself through
+/// ConfigureRequests; a Wayland client cannot, so a Wayland window qualifies
+/// only where KWin is the mover: its maximize-area re-assert over a column
+/// maximized to the edges (@p maximizedMember), and on KWin 6.8 the
+/// keep-visible clamp it applies to a commit that acks a configure or changes
+/// the window geometry, which pulls a column the strip committed outside its
+/// output (@p outOfViewEntry: a park, or a straddler cropped at the edge) back
+/// in. Never mid maximize
+/// transition: that frame change is a maximize or restore, not a mover.
+inline constexpr bool counterAssertMovable(bool inMaximizeTransition, bool waylandClient, bool maximizedMember,
+                                           bool outOfViewEntry)
+{
+    return !inMaximizeTransition && (!waylandClient || maximizedMember || outOfViewEntry);
+}
+
+/// Whether the counter-assert puts a window back by POSITION alone, a move()
+/// that sends no configure of its own (handing the window to another output
+/// still can, see the counter-assert) and leaves a running leg alone, instead of
+/// re-applying the commanded rect (which drops the leg). Only for a window the
+/// strip committed outside its output. A plain Wayland column always: the
+/// clamp moved it and nothing resized it, and a client that holds its own size
+/// would only refuse a re-offered column again. Anything else only when the
+/// size still matches the command, so a mover that also RESIZED it (a client
+/// re-asserting a saved size, KWin's maximize re-assert) still gets the
+/// commanded size back.
+inline constexpr bool counterAssertsByPosition(bool outOfViewEntry, bool waylandClient, bool maximizedMember,
+                                               bool sizeMatches)
+{
+    return outOfViewEntry && ((waylandClient && !maximizedMember) || sizeMatches);
+}
+
+/// Where a position-only counter seats a frame of size @p live in @p column:
+/// centred, with the shift clamped at zero so a frame larger than its column
+/// stays at the column's origin. The same centring the offered-column pass in
+/// the frame hook and the paint resolver (scrollVisualTranslationFor) apply,
+/// so the three agree on where the window sits.
+inline QPoint reseatOrigin(const QRect& column, const QSize& live)
+{
+    return QPoint(column.x() + qMax(0, column.width() - live.width()) / 2,
+                  column.y() + qMax(0, column.height() - live.height()) / 2);
 }
 
 /// Whether the scroll size-continuity cache may carry a client's committed
@@ -292,10 +391,11 @@ enum class Claim {
 /// deliberate blank is a cell a reader can see rather than a call nobody
 /// wrote.
 ///
-/// THREE OF THESE SIX HAVE NO PRODUCTION CALLER, and that is a decision, not
-/// a gap. StripExit, UntrackFunnel and PassiveFloat route their releases
-/// through releaseAllClaims. ModeFlip, FullscreenExitWhileFloating and
-/// Teardown do not, because the funnel's shape is wrong for them:
+/// MODEFLIP, FULLSCREENEXITWHILEFLOATING AND TEARDOWN HAVE NO PRODUCTION
+/// CALLER, and that is a decision, not a gap. Every other scope routes its
+/// releases through releaseAllClaims, directly or through
+/// cleanupAutotileTracking. These do not, because the funnel's shape is wrong
+/// for them:
 ///
 ///  - ModeFlip's release is deliberately SPLIT IN TWO. The demote pass sheds
 ///    before the engines re-place, and the pre-tile restores run after; one
@@ -313,7 +413,7 @@ enum class Claim {
 ///    its own commit with its own live check (the same standing as the
 ///    UntrackFunnel monocle blank below).
 ///
-/// All three stay in the enum because the table is what the tests drive, and
+/// They stay in the enum because the table is what the tests drive, and
 /// because the answer to "does monocle release on a mode flip" has to be
 /// written down somewhere a reader can find it. Do not "finish the wiring"
 /// by pointing the first two at releaseAllClaims without re-deriving their
@@ -323,8 +423,9 @@ enum class ClaimScope {
     /// it: the untile diff, the active float channel, the leaving-scrolling
     /// loop.
     StripExit,
-    /// The untrack funnel — a close, or a cross-output transfer to a screen
-    /// this handler's engines do not manage.
+    /// The untrack funnel: a close, a cross-output transfer to a screen this
+    /// handler's engines do not manage, and the effect-only releases that pass
+    /// no scope.
     ///
     /// Identical to StripExit except that monocle does NOT release here, and
     /// that blank is RECORDED rather than filled because it is unresolved, not
@@ -352,6 +453,21 @@ enum class ClaimScope {
     /// Engine disable, daemon loss, daemon bring-up, effect unload. Every
     /// claim answers, and the ORDER matters (see claimReleaseOrder).
     Teardown,
+    /// KWin moved the window off an output that disconnected. Its claims are
+    /// scrubbed from the ledgers without touching KWin's state: a maximized or
+    /// fullscreen evacuee stays that way, so KWin can still return it as it
+    /// was when the output comes back.
+    Evacuation,
+    /// A placement on a snapping screen took the window: preparePlacement has
+    /// already handed every claim back, anchored at the placement rect, so the
+    /// untrack it runs releases none.
+    SnapPlacement,
+    /// A live window left the context in view (a desktop or activity edit) and
+    /// survives off-screen: every claim releases, the monocle maximize included,
+    /// against KWin's geometryRestore, so it does not arrive elsewhere holding a
+    /// maximize nothing hands back (F675, l18_monocle_move). The funnel releases
+    /// the monocle claim before its scrub drops the membership the release reads.
+    LiveDeparture,
 };
 
 /// Whether @p claim releases on @p scope.
@@ -372,7 +488,8 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
         // Monocle is EXCLUDED, and documented at its site: re-driving a
         // maximize restore from a passive float signal has not been shown
         // safe against the monocle batch that owns that membership. The
-        // other two have no such owner on this channel.
+        // other two have no such owner on this channel. passiveFloatScope
+        // sends a float on a scrolling screen to StripExit instead.
         return claim != Claim::MonocleMaximize;
     case ClaimScope::ModeFlip:
         return true;
@@ -383,8 +500,64 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
         return claim != Claim::WindowedFullscreen;
     case ClaimScope::Teardown:
         return true;
+    case ClaimScope::Evacuation:
+        // No claim releases: a release restores KWin's state, and an evacuee
+        // keeps it. The caller scrubs the ledgers bare instead.
+        return false;
+    case ClaimScope::SnapPlacement:
+        // Released already, by the placement, at the placement's rect.
+        return false;
+    case ClaimScope::LiveDeparture:
+        // All three: the context the window lands in re-claims what it runs.
+        return true;
     }
     return false;
+}
+
+/// Whether a monocle member's committed un-maximize is the user's (F1013). A
+/// commit with either axis still maximized is not an un-maximize at all, and a
+/// Restore commit while KWin still holds a MaximizeFull request is the late ack
+/// of a configure a monocle batch has since superseded: on Wayland a
+/// non-monocle batch and a monocle batch can land inside one client round trip,
+/// and the client acks the Restore after the Full was requested.
+inline constexpr bool isUserMonocleUnmaximize(bool committedHorizontal, bool committedVertical, bool requestedFull)
+{
+    return !committedHorizontal && !committedVertical && !requestedFull;
+}
+
+/// Whether KWin's restore rect for a monocle member leads back onto the output
+/// its stack is on (F1011). A column maximized to edges and handed to a monocle
+/// stack on another monitor keeps the strip frame KWin recorded there, so
+/// un-maximizing it would send it back to that monitor. An invalid rect reads
+/// as off the output.
+inline bool restoreRectOnOutput(const QRectF& restore, const QRectF& outputGeometry)
+{
+    return restore.isValid() && outputGeometry.contains(restore.center());
+}
+
+/// Whether an output change of a strip tile is a move KWin made itself (its
+/// Move to Screen, a window rule), not a column the engine parked or handed
+/// over (F738). The engine's own moves arm a marker, a parked column sits off
+/// every output by design, and a drag is the drop's. Anything else whose frame
+/// has left the output of the rect the strip last gave it has gone to another
+/// output: a column straddling its output's edge still intersects it.
+/// @p commandedOutput the output under that rect (commanded, or the offered column)
+inline bool isKWinMoveOffStrip(const QRectF& frame, const QRectF& commandedOutput, bool markerArmed, bool parked,
+                               bool userMove)
+{
+    return !markerArmed && !parked && !userMove && commandedOutput.isValid() && frame.isValid()
+        && !frame.intersects(commandedOutput);
+}
+
+/// The scope the passive float channel releases under (F723). On a scrolling
+/// screen a float ends every claim (StripExit): a strip runs no monocle batch
+/// that could own the membership, so a monocle member left over from an
+/// autotile Monocle context has nothing else to hand its bit back. Anywhere
+/// else the monocle membership stays with the autotile monocle batch
+/// (PassiveFloat).
+inline constexpr ClaimScope passiveFloatScope(bool onScrollingScreen)
+{
+    return onScrollingScreen ? ClaimScope::StripExit : ClaimScope::PassiveFloat;
 }
 
 /// Teardown release order, lowest first.
@@ -419,6 +592,38 @@ inline constexpr int claimReleaseOrder(Claim claim)
 inline constexpr bool claimRetainsOnFullscreenSkip(Claim claim)
 {
     return claim != Claim::WindowedFullscreen;
+}
+
+/// The screens a scrolling-set change flips between engines inside the tiling
+/// union, whose windows the effect re-announces: a screen entering the strip
+/// from autotile (still in the managed set), or leaving it for autotile (the
+/// daemon names those, because the managed set that says so lands after this
+/// change). A desktop or activity switch flips nothing: the engines already
+/// hold the context entered, and the switch's own announce places its windows
+/// (F231, F286, F1004).
+inline QSet<QString> engineFlipScreens(const QSet<QString>& oldSet, const QSet<QString>& newSet,
+                                       const QSet<QString>& managed, bool isContextSwitch,
+                                       const QSet<QString>& leavingToAutotile)
+{
+    if (isContextSwitch) {
+        return {};
+    }
+    return ((newSet - oldSet) & managed) + ((oldSet - newSet) & leavingToAutotile);
+}
+
+/// The non-empty ids of a wire screen list, as a set. An empty id names no
+/// screen, and in the scrolling set it would also match every window whose
+/// screen lookup falls back to an empty QString (F359).
+inline QSet<QString> nonEmptyIdSet(const QStringList& ids)
+{
+    QSet<QString> out;
+    out.reserve(ids.size());
+    for (const QString& id : ids) {
+        if (!id.isEmpty()) {
+            out.insert(id);
+        }
+    }
+    return out;
 }
 
 } // namespace PlasmaZones::ScrollDecisions

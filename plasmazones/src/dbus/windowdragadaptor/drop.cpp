@@ -85,6 +85,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const QVector<QUuid> capturedAdjacentZoneIds = m_currentAdjacentZoneIds;
     const bool capturedWasSnapped = m_wasSnapped;
     const QRect capturedOriginalGeometry = m_originalGeometry;
+    const bool capturedOriginalFillsOutput = m_originalFrameFillsOutput;
     const bool capturedSnapCancelled = m_snapCancelled;
     const bool capturedExternallyCancelled = m_dragExternallyCancelled;
     const bool capturedZoneSelectorShown = m_zoneSelectorShown;
@@ -154,9 +155,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Cross-screen drag: when the window's owning engine differs from the
     // engine that owns the release screen, run the IPlacementEngine handoff
     // contract NOW — before any destination-side snap/tile logic runs.
-    // During drag, outputChanged's windowScreenChanged is skipped (drag owns
-    // state), so this is the single point where cross-screen ownership
-    // transfer happens.
+    // During a drag the effect holds every crossing back, so this is where an
+    // activated drag's cross-screen transfer happens (a pending or dead drag
+    // goes through WindowTrackingAdaptor::dragEndedOnScreen from endDrag).
     //
     // The release uses the contract so both source modes (snap zone, autotile
     // tile) drop tracking via the same call; the receive only fires when the
@@ -166,7 +167,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     //
     // Pre-tile / pre-float geometry captures are preserved by handoffRelease
     // for the receiving side to consult on a future return handoff.
-    if (releaseScreen && m_windowTracking) {
+    //
+    // Not on an externally cancelled drag: KWin is putting the window back
+    // where it started, so it never left its monitor (F1041), as the pending
+    // arm in endDrag skips dragEndedOnScreen on a cancel.
+    if (releaseScreen && m_windowTracking && !capturedExternallyCancelled) {
         auto* snapEngine = m_windowTracking->snapEngine();
         const QString snapScreen = snapEngine ? snapEngine->screenForTrackedWindow(windowId) : QString();
         const QString autotileScreen =
@@ -175,9 +180,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         PhosphorEngine::IPlacementEngine* sourceEngine = nullptr;
         QString sourceScreen;
         // screensMatch, not raw !=: an engine may hold the connector-name form
-        // (or a "/vs:" virtual-screen variant) of the very screen the drop
-        // landed on, and a raw compare would read that as a cross-screen move
-        // and release the window's tracking on its own screen.
+        // of the very screen the drop landed on, and a raw compare would read
+        // that as a cross-screen move and release the window's tracking on its
+        // own screen.
         const auto isCrossScreen = [&releaseScreenId](const QString& engineScreen) {
             return !engineScreen.isEmpty()
                 && !PhosphorScreens::ScreenIdentity::screensMatch(engineScreen, releaseScreenId);
@@ -236,9 +241,31 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // helper's release clears live tracking first).
                     ctx.sourceZoneIds = QStringList{capturedZoneId};
                 }
-                WindowTrackingInternal::guardedHandoff(sourceEngine, destEngine, ctx, sourceScreen);
+                // What every other engine still holds of the window on the
+                // monitor it left goes once the destination took it.
+                if (WindowTrackingInternal::guardedHandoff(sourceEngine, destEngine, ctx, sourceScreen)) {
+                    m_windowTracking->releaseLeftScreens(windowId, releaseScreenId, destEngine);
+                }
+            } else if (sourceEngine == snapEngine) {
+                // Snapping to snapping: the same move as a KWin one. A snapped
+                // window loses its zone on the monitor left (the commit below
+                // places it here); a floating one keeps floating here, with no
+                // home there (F177). A release dropped it untracked instead.
+                m_windowTracking->windowScreenChanged(windowId, releaseScreenId);
             } else {
                 sourceEngine->handoffRelease(windowId);
+                m_windowTracking->releaseLeftScreens(windowId, releaseScreenId, sourceEngine);
+            }
+        }
+        // The handoff above runs for ONE source, snap first. A tiling engine
+        // that also holds the window on another screen (a background-desktop
+        // tile or column of a multi-desktop window) keeps stale memory that
+        // would pull the window back on that desktop's return, so every other
+        // tiling engine releases what it holds off the release screen. Silent
+        // toward snap, whose memory the commit below restates.
+        for (PhosphorEngine::IPlacementEngine* engine : {m_autotileEngine, m_scrollEngine}) {
+            if (engine && engine != sourceEngine) {
+                engine->releaseWindowOffScreen(windowId, releaseScreenId);
             }
         }
     }
@@ -310,7 +337,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 shouldApplyGeometry = true;
                 usedZoneSelector = true;
 
-                tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);
+                tryStorePreSnapGeometry(windowId, capturedOriginalGeometry, capturedOriginalFillsOutput);
 
                 int selectedZoneIndex = m_overlayService->selectedZoneIndex();
                 if (m_windowTracking && m_layoutManager) {
@@ -411,6 +438,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                             // split-snapshot race the resolver was added to remove.
                             m_layoutManager->assignLayout(selectorScreenId, selectorCtx.virtualDesktop,
                                                           selectorCtx.activity, selectedLayout);
+                            // The other windows on the screen move like a
+                            // quick-layout switch: each to the same-numbered
+                            // zone of the new layout, or its float spot past
+                            // its zone count. Before the active-layout write,
+                            // whose prune would drop their old zones first.
+                            m_windowTracking->resnapScreensToTheirLayouts({}, {selectorScreenId},
+                                                                          selectorCtx.virtualDesktop);
                             m_layoutManager->setActiveLayout(selectedLayout);
                         }
                     }
@@ -455,7 +489,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             // branch above. capturedZoneId is the primary zone of the
             // multi-zone snap as resolved by dragMoved.
             resolvedZoneIdOut = capturedZoneId;
-            tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);
+            tryStorePreSnapGeometry(windowId, capturedOriginalGeometry, capturedOriginalFillsOutput);
             if (m_windowTracking) {
                 auto* snapMulti = m_windowTracking->snapEngine();
                 if (snapMulti)
@@ -476,7 +510,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             snapHeight = frame.height();
             shouldApplyGeometry = true;
             resolvedZoneIdOut = capturedZoneId;
-            tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);
+            tryStorePreSnapGeometry(windowId, capturedOriginalGeometry, capturedOriginalFillsOutput);
             if (m_windowTracking) {
                 auto* snapSingle = m_windowTracking->snapEngine();
                 if (snapSingle)
@@ -490,7 +524,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Handle unsnap - window was snapped but dropped outside any zone
     // Use same state as float shortcut: save zone for restore and mark floating, so unfloat/snap-back works.
     // Call unconditionally when capturedWasSnapped: unsnapForFloat handles the
-    // no-zone case internally, and setWindowFloating ensures windowClosed won't persist
+    // no-zone case internally, and syncWindowFloating ensures windowClosed won't persist
     // the zone (floating windows are excluded from persistence).
     // capturedExternallyCancelled is the load-bearing half of this gate. With
     // the commit branches above skipped, shouldApplyGeometry is false and a
@@ -501,45 +535,43 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     if (!shouldApplyGeometry && capturedWasSnapped && !capturedExternallyCancelled) {
         qCInfo(lcDbusWindow) << "Drag-out unsnap for" << windowId << "releaseScreen:" << releaseScreenId;
         // Latch the pre-snap float-back BEFORE the float write (twin of
-        // WindowTrackingAdaptor::notifyDragOutUnsnap): setWindowFloating's
+        // WindowTrackingAdaptor::notifyDragOutUnsnap): syncWindowFloating's
         // capture refresh records the live dragged frame into the same
         // per-screen map this read consumes.
-        std::optional<QRect> preSnapGeo;
+        std::optional<QSize> preSnapSize;
         // Evaluated once (it routes through the rule evaluator) and reused by
         // the restore gate below.
         const bool restoreSizeOnUnsnap = m_windowTracking && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId);
         if (restoreSizeOnUnsnap) {
-            preSnapGeo = m_windowTracking->service()->validatedUnmanagedGeometry(windowId, releaseScreenId);
+            preSnapSize = preSnapSizeFor(windowId, releaseScreenId);
         }
         if (m_windowTracking) {
             // unsnapForFloat on WTS: saves zone for restore, clears assignment.
             // No-op if the window wasn't snapped.
             m_windowTracking->service()->unsnapForFloat(windowId);
-            m_windowTracking->setWindowFloating(windowId, true);
+            m_windowTracking->syncWindowFloating(windowId, true);
         }
 
         // On drag-to-unsnap: restore pre-snap width/height; window keeps drop position.
         // Float-toggle shortcut uses calculateUnfloatRestore and restores full x/y/w/h.
-        // Pass the release screen for proper cross-screen geometry validation (the float
-        // toggle path passes screenId to validatedUnmanagedGeometry; without it,
-        // coordinates captured on another screen may fail the service's on-screen
-        // visibility check and not restore).
+        // Read for the release screen: the float-back there, else the size of
+        // the one the window has on another monitor (preSnapSizeFor).
         if (restoreSizeOnUnsnap) {
             auto* wts = m_windowTracking->service();
-            const auto& geo = preSnapGeo;
+            const auto& size = preSnapSize;
             // Require strictly-positive dimensions: a degenerate stored
             // rect would produce a RestoreSize outcome that validates to
             // "requires non-zero size" and gets dropped effect-side, so
             // the window would never actually restore.
-            if (geo && geo->width() > 0 && geo->height() > 0) {
-                snapWidth = geo->width();
-                snapHeight = geo->height();
+            if (size && size->width() > 0 && size->height() > 0) {
+                snapWidth = size->width();
+                snapHeight = size->height();
                 shouldApplyGeometry = true;
                 restoreSizeOnlyOut = true;
                 // Consume-once, per screen — other monitors' remembered
                 // positions stay intact.
                 wts->clearFreeGeometry(windowId, releaseScreenId);
-                qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
+                qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << size->width() << "x" << size->height();
             } else {
                 qCInfo(lcDbusWindow) << "Drag-out unsnap: no valid pre-tile geometry for" << windowId;
             }

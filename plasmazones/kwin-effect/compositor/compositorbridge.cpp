@@ -4,6 +4,7 @@
 #include "compositorbridge.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 
 #include <QLoggingCategory>
 
@@ -120,7 +121,7 @@ bool KWinCompositorBridge::isMinimized(WindowHandle w) const
 bool KWinCompositorBridge::isOnCurrentDesktop(WindowHandle w) const
 {
     auto* ew = toEffectWindow(w);
-    return ew && ew->isOnCurrentDesktop();
+    return ew && isOnOwnOutputCurrentDesktop(ew);
 }
 
 bool KWinCompositorBridge::isOnCurrentActivity(WindowHandle w) const
@@ -179,7 +180,7 @@ WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
     info.frameGeometry = ew->frameGeometry();
     info.isMinimized = ew->isMinimized();
     info.isFullScreen = ew->isFullScreen();
-    info.isOnCurrentDesktop = ew->isOnCurrentDesktop();
+    info.isOnCurrentDesktop = isOnOwnOutputCurrentDesktop(ew);
     info.isOnCurrentActivity = ew->isOnCurrentActivity();
     info.isNormalWindow = ew->isNormalWindow();
     // The window's OWN keep-above — pre-write snapshot while either flag

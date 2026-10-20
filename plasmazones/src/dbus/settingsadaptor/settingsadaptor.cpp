@@ -6,6 +6,7 @@
 // lives in settingsadaptor_batch.cpp (same class, no API change).
 
 #include "settingsadaptor.h"
+#include "dbus/dbushelpers.h"
 #include "core/interfaces/interfaces.h"
 #include "core/utils/dbusvariantutils.h"
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -196,9 +197,7 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
     // failing silently and the other loudly, which is how the silent one survives.
     if (key.isEmpty()) {
         qCDebug(lcDbusSettings) << "getSetting: empty key";
-        if (calledFromDBus()) {
-            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Empty setting key"));
-        }
+        DbusHelpers::sendBusError(this, QDBusError::InvalidArgs, QStringLiteral("Empty setting key"));
         return QDBusVariant(QVariant());
     }
 
@@ -233,11 +232,9 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
     // is the real signal; logging it at warning level let any process on the session bus
     // fill the daemon's log with content of its own choosing, one key at a time.
     qCDebug(lcDbusSettings) << "getSetting: unknown key" << key;
-    if (calledFromDBus()) {
-        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Unknown setting key: %1").arg(key));
-    }
-    // The return value is discarded once sendErrorReply has run; it matters only for
-    // a direct (non-D-Bus) call, where an invalid variant is the honest answer.
+    DbusHelpers::sendBusError(this, QDBusError::InvalidArgs, QStringLiteral("Unknown setting key: %1").arg(key));
+    // The return value is discarded once the error reply has gone out; it matters only
+    // for a direct (non-D-Bus) call, where an invalid variant is the honest answer.
     return QDBusVariant(QVariant());
 }
 
@@ -485,13 +482,11 @@ void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString
     // rejection has no return value to carry. Raise a D-Bus error on every
     // rejection path instead: without one the caller cannot tell a dropped
     // write from an applied one, and the batch twin (setPerScreenSettings)
-    // already reports failure through its bool. calledFromDBus() guards the
-    // reply because these are also reachable as plain C++ calls in tests.
+    // already reports failure through its bool. A plain C++ call, as the
+    // tests make, gets no reply (DbusHelpers::sendBusError).
     const auto reject = [this](const QString& reason) {
         qCDebug(lcDbusSettings) << "setPerScreenSetting:" << reason;
-        if (calledFromDBus()) {
-            sendErrorReply(QDBusError::InvalidArgs, reason);
-        }
+        DbusHelpers::sendBusError(this, QDBusError::InvalidArgs, reason);
     };
     if (!m_settings) {
         reject(QStringLiteral("no settings backend is attached"));
@@ -530,9 +525,7 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QStr
     // Void slot, same reject-loudly contract as setPerScreenSetting above.
     const auto reject = [this](const QString& reason) {
         qCDebug(lcDbusSettings) << "clearPerScreenSettings:" << reason;
-        if (calledFromDBus()) {
-            sendErrorReply(QDBusError::InvalidArgs, reason);
-        }
+        DbusHelpers::sendBusError(this, QDBusError::InvalidArgs, reason);
     };
     if (!m_settings) {
         reject(QStringLiteral("no settings backend is attached"));

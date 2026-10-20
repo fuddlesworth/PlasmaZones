@@ -38,6 +38,13 @@ Phosphor overlay (hosts `ShaderEffect` items in QML).
 | `PhosphorShaders::createWallpaperProvider`| Factory that auto-detects KDE / Hyprland / Sway / GNOME |
 | `PhosphorShaders::buildParamPreamble`     | Generates the per-effect `#define` preamble that maps declared parameter ids onto UBO lanes |
 | `PhosphorShaders::spliceAfterVersion`     | Inserts generated GLSL directly after a source's `#version` line |
+| `PhosphorShaders::versionDirectiveEnd`    | Comment- and BOM-aware locator for a source's `#version` directive, shared by every splice |
+| `PhosphorShaders::lineDirective`          | A `#line` re-anchor that numbers correctly under pre-330 and 330+ GLSL alike |
+| `PhosphorShaders::kwinCompositorSource`   | A pack stage as the KWin effect compiles it: the compositor define block spliced in and varying locations stripped |
+| `PhosphorShaders::kwinDefineBlock`        | The `PLASMAZONES_KWIN` define block, with its desktop-only extension guard |
+| `PhosphorShaders::kwinTopDownTexcoordsDefine` | The define KWin 6.8's per-window path adds for its top-down offscreen texcoords |
+| `PhosphorShaders::ShaderStage` / `stripVaryingLocations` | Drops `layout(location)` from a stage's varyings, which KWin's GLSL ES 300 compile rejects on Mesa |
+| `PhosphorShaders::kwinGlesDialect` / `kwinDesktopDialect` | KWin's own top-level rewrite on a GLES and a desktop context, for offline gates |
 | `PhosphorShaders::BaseUniformProfile`     | Describes which base-UBO regions a consumer actually uploads |
 | `PhosphorShaders::IUboProfile`            | Contract for a bounded set of UBO upload regions (`kCapacity` of them) |
 | `PhosphorShaders::ShaderEntryPoint`       | Which entry point a pack's stage declares, so the loader can wrap it correctly |

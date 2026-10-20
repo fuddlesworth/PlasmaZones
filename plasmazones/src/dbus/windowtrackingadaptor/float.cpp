@@ -6,8 +6,9 @@
 //
 // This file retains cross-mode float methods that stay on WTA:
 //   notifyDragOutUnsnap, getPreFloatZone, clearPreFloatZone,
-//   isWindowFloating, queryWindowFloating, setWindowFloating (WTS delegate),
-//   getFloatingWindows, applyGeometryForFloat, setWindowFloatingForScreen.
+//   isWindowFloating, queryWindowFloating, setWindowFloating (the bus verb),
+//   syncWindowFloating (the in-process engine sync), getFloatingWindows,
+//   applyGeometryForFloat, setWindowFloatingForScreen.
 
 #include "windowtrackingadaptor.h"
 #include "internal.h"
@@ -15,10 +16,222 @@
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include <array>
+#include <PhosphorContext/IContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include "dbus/dbushelpers.h"
 namespace PlasmaZones {
+
+bool WindowTrackingInternal::isOptOutContext(const WindowTrackingAdaptor& adaptor, const QString& screenId, int desktop,
+                                             const QString& activity)
+{
+    PhosphorZones::LayoutRegistry* const layouts = adaptor.layoutRegistry();
+    if (!layouts || screenId.isEmpty()) {
+        return false;
+    }
+    const PhosphorZones::AssignmentEntry entry =
+        layouts->assignmentEntryForScreen(screenId, desktop >= 1 ? desktop : shownDesktop(adaptor, screenId), activity);
+    return entry.mode == PhosphorZones::AssignmentEntry::Autotile
+        && entry.tilingAlgorithm == PhosphorZones::NoTilingAlgorithm;
+}
+
+bool WindowTrackingInternal::onOptOutContext(const WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                             const QString& screenId)
+{
+    const QString screen = screenId.isEmpty() ? adaptor.liveScreenForWindow(windowId) : screenId;
+    if (screen.isEmpty()) {
+        return false;
+    }
+    PhosphorZones::LayoutRegistry* const layouts = adaptor.layoutRegistry();
+    const QString activity = layouts ? layouts->currentActivity() : QString();
+    const std::optional<int> desktop =
+        ownDesktopOn(adaptor.windowDesktopContext(windowId), shownDesktop(adaptor, screen), activity);
+    return desktop && isOptOutContext(adaptor, screen, *desktop, activity);
+}
+
+void WindowTrackingInternal::dropOptOutFloat(WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                             const QString& screenId)
+{
+    PhosphorPlacement::WindowTrackingService* const service = adaptor.service();
+    if (!service || windowId.isEmpty()) {
+        return;
+    }
+    using PhosphorEngine::WindowPlacement;
+    const auto optOutKey = [&adaptor](const std::optional<PhosphorEngine::PlacementStateKey>& key) {
+        return key && isOptOutContext(adaptor, key->screenId, key->desktop, key->activity);
+    };
+    bool dropped = false;
+    if (PhosphorSnapEngine::SnapEngine* const snap = adaptor.snapEngine()) {
+        for (PhosphorSnapEngine::SnapState* state : snap->allSnapStates()) {
+            if (!snap->holdsWindowInState(windowId, state) || !optOutKey(snap->keyForState(state))) {
+                continue;
+            }
+            // The home goes with the float: a drag-out unsnap left one with no
+            // float bit, and an unfloat after a return to snapping would snap
+            // the window back into it.
+            dropped |= state->isFloating(windowId);
+            state->setFloating(windowId, false);
+            dropped |= state->clearPreFloatZone(windowId);
+        }
+        // The global holder's bit answers every snap float query for a window
+        // no store holds, wherever it is, and one beside an opt-out store too.
+        const auto own = snap->heldKeyForWindow(windowId);
+        if (snap->isFloating(windowId) && (!own || optOutKey(own))) {
+            snap->setFloating(windowId, false);
+            dropped = true;
+        }
+    }
+    // A floating snap slot the record keeps for an opt-out context would float
+    // the window again at its next open there.
+    if (const auto rec = service->placementStore().peekExact(service->canonicalizeForLookup(windowId)); rec
+        && rec->slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateFloating()
+        && isOptOutContext(adaptor, rec->screenId, rec->virtualDesktop, rec->activity)) {
+        service->releaseEngineSlot(windowId, WindowPlacement::snapEngineId());
+        dropped = true;
+    }
+    if (dropped) {
+        qCInfo(lcDbusWindow) << "dropOptOutFloat:" << windowId << "holds no float on the tiling opt-out" << screenId;
+    }
+    if (!service->isWindowFloating(windowId)) {
+        adaptor.relayWindowFloatingChanged(windowId, false, screenId);
+    }
+}
+
+void WindowTrackingInternal::dropOptOutFloats(WindowTrackingAdaptor* adaptor)
+{
+    PhosphorSnapEngine::SnapEngine* const snap = adaptor ? adaptor->snapEngine() : nullptr;
+    if (!snap) {
+        return;
+    }
+    // Collected first: the drop rewrites the stores walked here.
+    QHash<QString, QString> floats;
+    for (PhosphorSnapEngine::SnapState* state : snap->allSnapStates()) {
+        const QStringList floating = state->floatingWindows();
+        if (floating.isEmpty()) {
+            continue;
+        }
+        const auto key = snap->keyForState(state);
+        if (!key || !isOptOutContext(*adaptor, key->screenId, key->desktop, key->activity)) {
+            continue;
+        }
+        for (const QString& windowId : floating) {
+            if (snap->holdsWindowInState(windowId, state)) {
+                floats.insert(windowId, key->screenId);
+            }
+        }
+    }
+    for (auto it = floats.cbegin(); it != floats.cend(); ++it) {
+        dropOptOutFloat(*adaptor, it.key(), it.value());
+    }
+}
+
+void WindowTrackingInternal::releaseOptOutZones(WindowTrackingAdaptor* adaptor, const QSet<QString>& screens)
+{
+    const PhosphorSnapEngine::SnapEngine* const snap = adaptor ? adaptor->snapEngine() : nullptr;
+    PhosphorZones::LayoutRegistry* const layouts = adaptor ? adaptor->layoutRegistry() : nullptr;
+    if (!snap || !layouts) {
+        return;
+    }
+    const QString activity = layouts->currentActivity();
+    for (const QString& screenId : screens) {
+        if (!isOptOutContext(*adaptor, screenId, 0, activity)) {
+            continue;
+        }
+        // The store in view, not created here: a context snap never held
+        // anything in has nothing to release.
+        const auto* const state = static_cast<const PhosphorSnapEngine::SnapState*>(snap->stateForScreen(screenId));
+        if (!state) {
+            continue;
+        }
+        int released = 0;
+        for (const QString& windowId : state->snappedWindows()) {
+            if (!snap->holdsWindowInState(windowId, state)) {
+                continue;
+            }
+            Q_EMIT adaptor->windowStateChanged(windowId,
+                                               PhosphorProtocol::WindowStateEntry{windowId, QString(), screenId, false,
+                                                                                  QStringLiteral("unsnapped"),
+                                                                                  QStringList{}, false});
+            ++released;
+        }
+        if (released > 0) {
+            qCInfo(lcDbusWindow) << "releaseOptOutZones:" << released << "window(s) released in place on the tiling"
+                                 << "opt-out" << screenId << "- their zones kept for a return to snapping";
+        }
+    }
+}
+
+void WindowTrackingInternal::placeReleasedOnOptOut(WindowTrackingAdaptor& adaptor, const QString& windowId,
+                                                   const QString& screenId, const QRect& freeGeometry)
+{
+    PhosphorPlacement::WindowTrackingService* const service = adaptor.service();
+    if (!service || windowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    // A screen with no geometry is gone (a prune-origin release): KWin has
+    // already put the window somewhere visible.
+    const QRect area = service->screenAvailableGeometry(screenId);
+    if (!area.isValid()) {
+        return;
+    }
+    QRect target;
+    if (freeGeometry.isValid() && service->geometryBelongsToScreen(freeGeometry, screenId)) {
+        target = freeGeometry;
+    } else {
+        // A strip rect can sit past the viewport: the window comes into the
+        // screen's available area at its own size, bounded by that area.
+        const QRect frame = adaptor.frameGeometry(windowId);
+        if (frame.isValid() && !area.contains(frame)) {
+            target = QRect(frame.topLeft(), frame.size().boundedTo(area.size()));
+            target.moveLeft(qBound(area.left(), target.left(), area.right() + 1 - target.width()));
+            target.moveTop(qBound(area.top(), target.top(), area.bottom() + 1 - target.height()));
+        }
+    }
+    if (!target.isValid()) {
+        return;
+    }
+    qCInfo(lcDbusWindow) << "placeReleasedOnOptOut:" << windowId << "on the tiling opt-out" << screenId << "at"
+                         << target
+                         << (target == freeGeometry ? "(its pre-scroll free geometry)" : "(brought on screen)");
+    Q_EMIT adaptor.applyGeometryRequested(windowId, target.x(), target.y(), target.width(), target.height(), QString(),
+                                          screenId, false,
+                                          static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
+}
+
+namespace {
+
+/// Why a bus float of @p windowId may not act on @p screen, or null. The
+/// engine running the screen floats in the desktop and activity in view, so a
+/// window on a hidden desktop or another activity would be adopted into a
+/// context it is not in (float is per mode), and a disabled context places
+/// nothing (F1048, as l13_bus_snap_hidden_multidesktop refuses the bus snap).
+const char* busFloatRefusal(const WindowTrackingAdaptor& adaptor, const PhosphorContext::IContextResolver* resolver,
+                            const QString& windowId, const QString& screen)
+{
+    PhosphorZones::LayoutRegistry* const layouts = adaptor.layoutRegistry();
+    if (WindowTrackingInternal::ownDesktopOn(adaptor.windowDesktopContext(windowId),
+                                             WindowTrackingInternal::shownDesktop(adaptor, screen),
+                                             layouts ? layouts->currentActivity() : QString())
+        != 0) {
+        return "is not on the desktop and activity its screen shows";
+    }
+    if (resolver && resolver->isDisabled(resolver->handleFor(screen))) {
+        return "is in a disabled context";
+    }
+    return nullptr;
+}
+
+} // namespace
+
+void WindowTrackingAdaptor::setBridgeCallerCheck(std::function<bool(const QString&)> check)
+{
+    m_isBridgeCaller = std::move(check);
+}
 
 void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
 {
@@ -35,7 +248,7 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     QString screenId = m_service->screenForWindow(windowId, m_lastActiveScreenId);
     qCInfo(lcDbusWindow) << "Drag-out unsnap (no activation trigger) for" << windowId << "screen:" << screenId;
 
-    // Latch the pre-snap float-back BEFORE the float write: setWindowFloating
+    // Latch the pre-snap float-back BEFORE the float write: syncWindowFloating
     // synchronously runs a placement capture that records the LIVE dragged
     // frame (zone dimensions) into the same per-screen free-geometry map this
     // read consumes — reading afterwards would "restore" the zone size and
@@ -49,7 +262,7 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     // method windowUnsnappedForFloat does the same thing, but this path
     // doesn't need the SnapAdaptor detour for a WTS-level operation).
     m_service->unsnapForFloat(windowId);
-    setWindowFloating(windowId, true);
+    syncWindowFloating(windowId, true);
 
     // Restore pre-snap size (not position — window stays where the user dropped it).
     // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped. A
@@ -59,7 +272,7 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     // size" and is dropped effect-side — don't claim success for it.
     if (preSnapGeo && preSnapGeo->width() > 0 && preSnapGeo->height() > 0) {
         Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapGeo->width(), preSnapGeo->height(), QString(), screenId,
-                                      true);
+                                      true, static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
         // Consume-once, per screen: only this screen's float-back was used;
         // other monitors' remembered positions stay intact.
         m_service->clearFreeGeometry(windowId, screenId);
@@ -121,7 +334,39 @@ bool WindowTrackingAdaptor::queryWindowFloating(const QString& windowId)
 
 void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floating)
 {
+    // The bus verb (F678), floated or unfloated by the engine that runs the
+    // screen the window is on: the path the effect's minimize and drag floats
+    // take. syncWindowFloating below is NOT this: it only records a flip an
+    // engine already made, so on a tile it told subscribers a window floated
+    // while it stayed in the layout.
     if (!validateWindowId(windowId, QStringLiteral("set float state"))) {
+        return;
+    }
+    // A refused verb is silent toward the caller, with a log line.
+    const QString screen = isRegistryTracked(windowId) ? liveScreenForWindow(windowId) : QString();
+    if (screen.isEmpty()) {
+        qCInfo(lcDbusWindow) << "setWindowFloating: no live window or screen for" << windowId << "- refused";
+        return;
+    }
+    // Only in the context the screen shows (busFloatRefusal).
+    if (const char* refusal = busFloatRefusal(*this, m_contextResolver, windowId, screen)) {
+        qCInfo(lcDbusWindow) << "setWindowFloating:" << windowId << refusal << "on" << screen << "- refused";
+        return;
+    }
+    setWindowFloatingForScreen(windowId, screen, floating);
+}
+
+void WindowTrackingAdaptor::syncWindowFloating(const QString& windowId, bool floating)
+{
+    if (!validateWindowId(windowId, QStringLiteral("sync float state"))) {
+        return;
+    }
+    // A float recorded for a window on the tiling opt-out is dropped instead
+    // (user decision autotile_none_float_owner). The drag-out unsnap of a zone
+    // snap kept there from before snapping left the context sends one.
+    if (floating && WindowTrackingInternal::onOptOutContext(*this, windowId, QString())) {
+        qCInfo(lcDbusWindow) << "syncWindowFloating:" << windowId << "is on the tiling opt-out - not floating";
+        WindowTrackingInternal::dropOptOutFloat(*this, windowId, liveScreenForWindow(windowId));
         return;
     }
     // Suspension classification — see WindowTrackingService::isSuspensionFloat.
@@ -159,11 +404,15 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     }
     qCInfo(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
 
-    // Emit unified state change
+    // The snap zone only where snapping runs: a tiling engine's float has none,
+    // and a frozen snap zone sent here is written back into the effect's zone
+    // cache, making a tile read as snapped (F488).
+    PhosphorSnapEngine::SnapEngine* snap = snapEngine();
+    const QString zone = (snap && snap->isActiveOnScreen(screen)) ? m_service->zoneForWindow(windowId) : QString();
     Q_EMIT windowStateChanged(windowId,
                               PhosphorProtocol::WindowStateEntry{
                                   windowId,
-                                  m_service->zoneForWindow(windowId),
+                                  zone,
                                   screen,
                                   floating,
                                   floating ? QStringLiteral("floated") : QStringLiteral("unfloated"),
@@ -202,15 +451,15 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
 {
     // CALLER CONTRACT: callers must guarantee a non-minimized window. Unlike
     // the snap engine's applyFloatGeometryUnlessMinimized twin, this method
-    // has no minimize guard — it is not exposed on D-Bus, and its sole caller
-    // (Daemon::syncAutotileFloatState) is the user-toggle path whose passive
-    // sync twin deliberately skips it for exactly this reason.
+    // has no minimize guard — it is not exposed on D-Bus, and its callers
+    // (Daemon::syncAutotileFloatState and the scroll engine's active float arm
+    // in init_engines.cpp) are user float paths whose passive twins skip it.
     auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (geo) {
         qCInfo(lcDbusWindow) << "applyGeometryForFloat: windowId=" << windowId << "geo=" << *geo
                              << "screen=" << screenId;
         Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
-                                      false);
+                                      false, static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
         return true;
     }
 
@@ -229,7 +478,7 @@ bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, 
     // The single owner of the last-broadcast dedup contract — see the header
     // doc: every emission channel must keep m_broadcastFloating equal to what
     // subscribers last heard, or the gate turns from a dedup into a
-    // suppressor of genuine changes. setWindowFloating delegates here too.
+    // suppressor of genuine changes. syncWindowFloating delegates here too.
     // DELIBERATE divergence: the dedup keys on the CANONICAL (shadow) id so a
     // class-mutated window dedups as one window, while the signal carries the
     // CALLER'S raw id — subscribers resolve raw ids through their own
@@ -240,7 +489,7 @@ bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, 
     // relay, so after a daemon restart it is empty while WTS has restored
     // floating windows and subscribers still believe "floating" — treating
     // absent as false would swallow the first genuine unfloat entirely (no
-    // signal, and via setWindowFloating's early return no state-change
+    // signal, and via syncWindowFloating's early return no state-change
     // emission or capture refresh either). The cost is one redundant
     // broadcast per window on its first relay, which subscribers absorb
     // idempotently.
@@ -268,6 +517,41 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     }
     if (effectiveScreenId.isEmpty()) {
         qCWarning(lcDbusWindow) << "setWindowFloatingForScreen: no screen for" << windowId << "— refusing";
+        return;
+    }
+    // A bus caller other than the compositor bridge, such as the shell's
+    // placement map, which draws desktops not in view, is held to the
+    // screenless verb's gate (F1108), and to the screen the window is on: the
+    // engine of another one would adopt it there (F1123). A split monitor's
+    // physical id names the half the window is on. The bridge floats a window
+    // where it is (minimize, drag, overflow), and a call the daemon makes
+    // outside a bus call is not gated.
+    if (const QString caller = DbusHelpers::busCaller(this);
+        !caller.isEmpty() && !(m_isBridgeCaller && m_isBridgeCaller(caller))) {
+        const QString named = resolveBusScreen(effectiveScreenId, windowId);
+        const QString live = isRegistryTracked(windowId) ? liveScreenForWindow(windowId) : QString();
+        if (named.isEmpty() || named != live) {
+            qCInfo(lcDbusWindow) << "setWindowFloatingForScreen:" << windowId << "is on" << live << "not"
+                                 << effectiveScreenId << "- refused for" << caller;
+            return;
+        }
+        effectiveScreenId = named;
+        if (const char* refusal = busFloatRefusal(*this, m_contextResolver, windowId, effectiveScreenId)) {
+            qCInfo(lcDbusWindow) << "setWindowFloatingForScreen:" << windowId << refusal << "on" << effectiveScreenId
+                                 << "- refused for" << caller;
+            return;
+        }
+    }
+    // Nothing floats or unfloats on the tiling opt-out, since no engine owns a
+    // float there (user decision autotile_none_float_owner): neither the
+    // effect's minimize float of a zone snap kept there from before nor a bus
+    // verb. A float the window still carries goes, and the caller, whose float
+    // cache is pre-latched, hears that it is not floating.
+    if (WindowTrackingInternal::onOptOutContext(*this, windowId, effectiveScreenId)) {
+        qCInfo(lcDbusWindow) << "setWindowFloatingForScreen:" << windowId << "is on the tiling opt-out"
+                             << effectiveScreenId << "- nothing floats there";
+        m_service->clearSuspensionFloat(windowId);
+        WindowTrackingInternal::dropOptOutFloat(*this, windowId, effectiveScreenId);
         return;
     }
 

@@ -3,19 +3,55 @@
 
 #include "seedorderfilter.h"
 
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
+QString seedWindowScreen(const QString& windowId, const QList<const PhosphorEngine::IPlacementEngine*>& tilingEngines,
+                         const PhosphorEngine::IPlacementEngine* snap, const QRect& frame,
+                         const PhosphorScreens::ScreenManager* screens)
+{
+    for (const PhosphorEngine::IPlacementEngine* engine : tilingEngines) {
+        if (const QString held = engine ? engine->heldScreenForWindow(windowId) : QString(); !held.isEmpty()) {
+            return held;
+        }
+    }
+    if (const QString tracked = snap ? snap->screenForTrackedWindow(windowId) : QString(); !tracked.isEmpty()) {
+        return tracked;
+    }
+    return frame.isValid() && screens ? screens->effectiveScreenAt(frame.center()) : QString();
+}
+
 void filterEngineSeedOrder(QStringList& order, PhosphorPlacement::WindowTrackingService* wts,
-                           const PhosphorEngine::WindowRegistry* registry, const QString& targetEngineId)
+                           const PhosphorEngine::WindowRegistry* registry, const QString& targetEngineId,
+                           const SeedScope& scope)
 {
     if (order.isEmpty() || !wts) {
         return;
     }
-    order.removeIf([wts, registry, &targetEngineId](const QString& windowId) {
+    order.removeIf([wts, registry, &targetEngineId, &scope](const QString& windowId) {
+        // A window that has left the seeded context since the order was
+        // saved is not seeded back into it (F695). A virtual screen of the
+        // same monitor is another screen: screensMatch only equates
+        // spellings of one screen.
+        if (!scope.screenId.isEmpty() && scope.screenOf) {
+            const QString now = scope.screenOf(windowId);
+            if (!now.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(now, scope.screenId)) {
+                return true;
+            }
+        }
+        if (scope.desktop >= 1 && registry) {
+            if (const auto context = registry->desktopContext(windowId)) {
+                if (const auto desktops = context->desktopSet(); desktops && !desktops->contains(scope.desktop)) {
+                    return true;
+                }
+            }
+        }
         // minimizedState().value_or(false), not isMinimized(): keeps this
         // filter's unknown-handling in lockstep with the resnap-order and
         // restore-entry filters (autotile.cpp / autotile_init.cpp), which the

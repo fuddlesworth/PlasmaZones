@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include <QObject>
+#include <QPointer>
 #include <QDBusAbstractAdaptor>
 #include <QDBusVariant>
 #include <QJsonObject>
@@ -444,6 +445,9 @@ Q_SIGNALS:
     void activeLayoutForScreenChanged(const QString& screenId, const QString& layoutId);
 
     void virtualDesktopCountChanged(int count);
+    /// The desktop names changed: a rename, or a desktop added, removed or
+    /// moved. A growing count can go out before the names it brings (F1101).
+    void virtualDesktopNamesChanged(const QStringList& names);
 
     /**
      * @brief Emitted when the internal active layout changes
@@ -545,6 +549,11 @@ public:
     /// outside one the write is applied at once through applyAssignmentChangesFor,
     /// so a lone bus call resnaps and announces like a batch close does.
     void stageOrApply(const QString& resolvedId);
+
+    /// Make @p layout the global active layout, at the batch close when a save
+    /// batch is open. flushPendingActiveLayout applies the held one.
+    void setActiveLayoutAtApply(PhosphorZones::Layout* layout);
+    void flushPendingActiveLayout();
 
     /**
      * @brief Publish the daemon's freshly recomputed active-assignment snapshot.
@@ -704,6 +713,7 @@ private:
 
     PhosphorZones::LayoutRegistry* m_layoutManager; // Concrete type for signal connections
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager = nullptr;
+    QStringList m_relayedDesktopNames; ///< the last virtualDesktopNamesChanged payload
     PhosphorWorkspaces::ActivityManager* m_activityManager = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     ISettings* m_settings = nullptr;
@@ -725,6 +735,10 @@ private:
     // setters/clears, the batch setters, setScrollingTemplateLayout, ...),
     // consumed by applyAssignmentChanges.
     QSet<QString> m_changedScreenIds;
+
+    // The global active layout a staged write set, applied by
+    // applyAssignmentChanges after the apply (F724).
+    QPointer<PhosphorZones::Layout> m_pendingActiveLayout;
 
     // Resolved active layout id per effective screen, pushed by the daemon via
     // publishActiveAssignments. Mirrors Daemon::m_activeAssignmentByScreen — the

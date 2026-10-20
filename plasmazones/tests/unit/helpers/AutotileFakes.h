@@ -161,11 +161,7 @@ public:
  * isWindowSticky(), which is otherwise unreachable in a headless test (the
  * engine is normally built with a null tracker). Everything else returns the
  * "nothing known about this window" default, which is what the engine's own
- * null-tracker path already assumes.
- *
- * It is a QObject carrying windowZoneChanged because AutotileEngine::
- * connectSignals() connects that signal on any non-null tracker and Q_ASSERTs
- * the connection — asQObject() returning nullptr aborts a debug build.
+ * null-tracker path already assumes. asQObject() answers this QObject.
  */
 class FakeStickyWindowTracking : public QObject, public PhosphorEngine::IWindowTrackingService
 {
@@ -181,11 +177,8 @@ public:
         // three of the four consuming suites never called wireLiveInstanceProbe
         // and every `m_liveInstanceProbe && ...` guard in WindowPlacementStore
         // short-circuited false — i.e. NO window counted as live, which is the
-        // maximally permissive branch of the steal / takeForReopen /
-        // reclaim-eligible logic, and the opposite of what production does.
-        // The save path derives from the same probe (WindowPlacementStore.cpp
-        // around the reclaim-credit write), so an unwired fake silently
-        // changed what got PERSISTED too, not just what got read back.
+        // maximally permissive branch of the steal / takeForReopen logic, and
+        // the opposite of what production does.
         // An empty liveInstances set is the same "nothing is live" answer those
         // suites had before, so opting in now only ADDS live windows.
         wireLiveInstanceProbe();
@@ -201,17 +194,10 @@ public:
     {
         return m_store;
     }
-    const QHash<QString, QList<PhosphorEngine::PendingRestore>>& pendingRestoreQueues() const override
-    {
-        return m_pending;
-    }
     QObject* asQObject() override
     {
         return this;
     }
-
-Q_SIGNALS:
-    void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
 public:
     // ── Unused by these tests — "nothing known" stubs ──
@@ -297,10 +283,6 @@ public:
     {
     }
     bool clearAutoSnapped(const QString&) override
-    {
-        return false;
-    }
-    bool consumePendingAssignment(const QString&) override
     {
         return false;
     }
@@ -397,7 +379,6 @@ public:
     }
 
 private:
-    QHash<QString, QList<PhosphorEngine::PendingRestore>> m_pending;
     PhosphorEngine::WindowPlacementStore m_store;
 };
 

@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QRectF>
 #include <QString>
+#include <QtGlobal>
 
 /// Pure decision logic for the pre-autotile geometry restore that
 /// TilingHandler::demoteWindowsForDesktopSwitch runs, extracted so the branch
@@ -69,6 +70,8 @@ inline bool announceMatchesReportedDesktops(const QHash<QString, int>& announced
 ///                 Compare PHYSICAL ids: virtual screens subdivide one output
 ///                 and share its coordinate space, so a VS re-key is `true`.
 /// @p currentFrame the window's live frame, used when the origin must be dropped
+/// @p outputGeometry the window's output as it is NOW (physical, not a virtual
+///                 screen's part of it); invalid when the caller has none
 ///
 /// Bucket rects are ABSOLUTE compositor coordinates. One measured on another
 /// output therefore does not restore a size when applied whole — it MOVES the
@@ -77,19 +80,30 @@ inline bool announceMatchesReportedDesktops(const QHash<QString, int>& announced
 /// and the origin is not, so the cross-output answer keeps the size and takes
 /// the position from the live frame. Degrading rather than refusing matters:
 /// every caller's purpose is to UN-TILE the window, and refusing leaves it
-/// sitting at its tile rect still looking tiled.
-inline QRectF applicablePreTileRect(const QRectF& saved, bool sameOutput, const QRectF& currentFrame)
+/// sitting at its tile rect still looking tiled. Same output is the same
+/// coordinate space only while the output has not moved: a rect whose centre is
+/// no longer on the output's current geometry is from where the output used to
+/// be, and keeps its size only (F807). A size kept that way is moved back
+/// inside the output when it would hang over its edge, so a bigger saved size
+/// cannot carry the window's centre onto the next monitor (F1076).
+inline QRectF applicablePreTileRect(const QRectF& saved, bool sameOutput, const QRectF& currentFrame,
+                                    const QRectF& outputGeometry = {})
 {
     if (!saved.isValid()) {
         return {};
     }
-    if (sameOutput) {
+    if (sameOutput && (!outputGeometry.isValid() || outputGeometry.contains(saved.center()))) {
         return saved;
     }
     if (!currentFrame.isValid()) {
         return {};
     }
-    return QRectF(currentFrame.topLeft(), saved.size());
+    QRectF sized(currentFrame.topLeft(), saved.size());
+    if (outputGeometry.isValid()) {
+        sized.moveLeft(qMax(outputGeometry.left(), qMin(sized.left(), outputGeometry.right() - sized.width())));
+        sized.moveTop(qMax(outputGeometry.top(), qMin(sized.top(), outputGeometry.bottom() - sized.height())));
+    }
+    return sized;
 }
 
 /// What the desktop-switch demote pass does with a window's pre-autotile rect.

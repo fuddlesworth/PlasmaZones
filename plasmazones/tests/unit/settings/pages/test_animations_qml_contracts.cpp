@@ -177,19 +177,13 @@ private Q_SLOTS:
                                 .arg(unreachable.join(QStringLiteral(", ")))));
     }
 
-    // ─── Override toggle no-write latch ───────────────────────────────────
+    // ─── Override toggle persistence ───────────────────────────────────────
 
-    /// The Override toggle's ON branch is a no-write latch: it opens the timing
-    /// editor and writes nothing until a control is actually edited. The old
-    /// behaviour committed a snapshot of the inherited values so the derived
-    /// toggle state would stick, which silently pinned a copy of the Global
-    /// curve and duration the moment the toggle was flipped.
+    /// The ON branch stages an empty timing override, keeping inherited
+    /// duration and curve live while making the switch saveable.
     ///
-    /// Scraped rather than exercised, because the branch lives entirely in QML
-    /// and calls nothing on the controller — a C++ slot driving the controller
-    /// directly would stay green no matter what the branch did. What CAN be
-    /// pinned is the property this test actually cares about: that the branch
-    /// body reaches no controller method at all.
+    /// Scraped because a C++ slot driving the controller directly would not
+    /// prove that the switch calls it.
     void overrideToggleArmsMatchTheirQmlOnlyContracts()
     {
         const QString qmlPath =
@@ -213,7 +207,7 @@ private Q_SLOTS:
 
         // Brace-count to the arm's closing `}`, then to the `else {` that
         // follows it, then to the OFF arm's closing `}`. Both arms are scanned:
-        // the ON arm is the no-write latch, and the OFF arm carries the
+        // the ON arm stages the empty override, and the OFF arm carries the
         // refusal-gated `_editingTiming` reset, which is pure QML that no
         // controller call can distinguish — reverting it to an unconditional
         // reset is invisible to every other test in the suite.
@@ -235,9 +229,7 @@ private Q_SLOTS:
         const QString arm = scanBlock(head.capturedEnd(), &onArmEnd);
         QVERIFY2(!arm.isEmpty(), "unbalanced braces while scanning the onToggleClicked ON arm");
 
-        // Strip comments: the arm's own comment explains the behaviour by naming
-        // the calls it does NOT make, and matching those would fail the test for
-        // describing itself.
+        // Strip comments before comparing the handler's code.
         //
         // Trailing comments are stripped too, not just whole lines — a
         // `// latch only` after the statement is a comment, and reddening the
@@ -258,15 +250,13 @@ private Q_SLOTS:
                      && !code.contains(QLatin1Char('`')),
                  "the ON arm now contains a string literal — the comment stripper above is only sound without one");
 
-        // Assert what the arm IS, not which receivers it avoids. An
-        // exclusion list has to enumerate every route to the controller, and
-        // this card reaches it through its own helpers (`root._setOverrideMerged`,
-        // `_clearFieldOnAll`, …) as well as directly — the old form missed
-        // exactly those, which is the shape of the regression being pinned.
+        // Pin the controller write and the editor latch together.
         static const QRegularExpression wsRe(QStringLiteral("\\s+"));
         code = code.replace(wsRe, QStringLiteral(" ")).trimmed();
 
-        QCOMPARE(code, QStringLiteral("root._editingTiming = true;"));
+        QCOMPARE(code,
+                 QStringLiteral("if (settingsController.animationsPage.engageOverridesUnder(root._writePaths)) "
+                                "root._editingTiming = true;"));
 
         // ── OFF arm ────────────────────────────────────────────────────────
         // Not an equality check: this arm legitimately carries several

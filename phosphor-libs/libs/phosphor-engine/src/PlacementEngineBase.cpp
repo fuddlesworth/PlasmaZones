@@ -3,6 +3,7 @@
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/LayerFocusSwitch.h>
 #include <PhosphorEngine/PerScreenStates.h>
@@ -32,6 +33,54 @@ PlacementEngineBase::PlacementEngineBase(QObject* parent)
 }
 
 PlacementEngineBase::~PlacementEngineBase() = default;
+
+void PlacementEngineBase::releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    // Compared at the virtual-screen level: a window that moved to the other
+    // half of a split monitor left the half it was held on, too.
+    const QString heldScreen = screenForTrackedWindow(windowId);
+    if (heldScreen.isEmpty() || heldScreen == keepScreenId) {
+        return;
+    }
+    qCInfo(lcPlacementEngineBase) << "releaseWindowOffScreen:" << engineId() << "releases" << windowId << "held on"
+                                  << heldScreen << "— it was placed on" << keepScreenId;
+    handoffRelease(windowId);
+}
+
+void IPlacementEngine::remapDesktops(const DesktopRemap& remap)
+{
+    if (remap.isIdentity()) {
+        return;
+    }
+    // The shape the per-removal pair can apply: desktops removed, the rest in
+    // their order (desktops appended after them move no number). Applied one
+    // removal at a time in DESCENDING position order, which keeps each later
+    // position valid. An engine that keys state by desktop number and has not
+    // overridden this keeps its old numbers for an insert or a reorder, which
+    // is worth a line in the journal.
+    QList<int> removedPositions;
+    int nextSurvivor = 1;
+    for (int oldPosition = 1; oldPosition <= remap.oldCount(); ++oldPosition) {
+        const int newPosition = remap.map(oldPosition);
+        if (newPosition == 0) {
+            removedPositions.prepend(oldPosition);
+        } else if (newPosition == nextSurvivor) {
+            ++nextSurvivor;
+        } else {
+            qCWarning(lcPlacementEngineBase) << "remapDesktops:" << engineId()
+                                             << "has no remap for desktops inserted or moved; its per-desktop state"
+                                             << "keeps the old numbers";
+            return;
+        }
+    }
+    for (const int removed : std::as_const(removedPositions)) {
+        pruneStatesForDesktop(removed);
+        renumberDesktopsAfterRemoval(removed);
+    }
+}
 
 bool PlacementEngineBase::isManagedSize(const QList<QSize>& managedSizes, const QSize& size)
 {
@@ -67,60 +116,89 @@ void PlacementEngineBase::restoreFreeSizeWhereItStands(IWindowTrackingService* t
                                        << "already placed by a previous daemon lineage, size left alone";
         return;
     }
-    const auto usableOn = [&](const QRect& rect) {
-        return rect.isValid() && tracker->geometryBelongsToScreen(rect, screenId)
-            && !isManagedSize(managedSizes, rect.size());
-    };
     const WindowPlacementStore& store = tracker->placementStore();
+    const auto own = store.peekExact(windowId);
+    const QString appId = tracker->currentAppIdFor(windowId);
+    const bool stableAppId = hasStableAppIdFor(appId, windowId);
     QRect freeGeo;
     QString sourceWindowId;
-    // 1. The window's own record, only when an engine has ever captured it:
-    //    the slot-less record under the live id is this open's pre-tile
-    //    capture and its rect is the spawn frame this exists to undo.
-    const auto own = store.peekExact(windowId);
-    const QRect ownRect = own && !own->engines.isEmpty() ? own->freeGeometryFor(screenId) : QRect();
-    if (usableOn(ownRect)) {
-        freeGeo = ownRect;
-        sourceWindowId = own->windowId;
-    } else if (const QString appId = tracker->currentAppIdFor(windowId); hasStableAppIdFor(appId, windowId)) {
-        // 2. The earliest live sibling with a usable rect.
-        const auto sibling = store.peekLiveSibling(windowId, appId, [&](const WindowPlacement& p) {
-            return usableOn(p.freeGeometryFor(screenId));
-        });
-        if (sibling) {
-            freeGeo = sibling->freeGeometryFor(screenId);
-            sourceWindowId = sibling->windowId;
-        } else {
-            // 3. A closed same-app record, read but never consumed, so a
-            //    tiled record stays as the exact-final evidence the tiling
-            //    engines' reopen accept relies on. The asker's own records
-            //    are excluded explicitly: without a probe the store cannot
-            //    call them live.
-            const auto closed = store.peek(windowId, appId, [&](const WindowPlacement& p) {
-                return !PhosphorIdentity::WindowId::sameWindowInstance(p.windowId, windowId)
-                    && !store.isLiveInstance(p.windowId) && usableOn(p.freeGeometryFor(screenId));
-            });
-            if (closed) {
-                freeGeo = closed->freeGeometryFor(screenId);
-                sourceWindowId = closed->windowId;
+    // The source order, run with one rect picker per pass. Returns whether a
+    // record supplied a rect.
+    const auto search = [&](const auto& rectOf) {
+        // 1. The window's own record, only when an engine has ever captured
+        //    it: the slot-less record under the live id is this open's
+        //    pre-tile capture and its rect is the spawn frame this exists to
+        //    undo.
+        if (own && !own->engines.isEmpty()) {
+            if (const QRect rect = rectOf(*own); rect.isValid()) {
+                freeGeo = rect;
+                sourceWindowId = own->windowId;
+                return true;
             }
         }
-    }
-    if (!freeGeo.isValid()) {
+        if (!stableAppId) {
+            return false;
+        }
+        // 2. The earliest live sibling with a usable rect.
+        const auto sibling = store.peekLiveSibling(windowId, appId, [&](const WindowPlacement& p) {
+            return rectOf(p).isValid();
+        });
+        // 3. A closed same-app record, read but never consumed, so a tiled
+        //    record stays as the exact-final evidence the tiling engines'
+        //    reopen accept relies on. The asker's own records are excluded
+        //    explicitly: without a probe the store cannot call them live.
+        const auto source = sibling ? sibling : store.peek(windowId, appId, [&](const WindowPlacement& p) {
+            return !PhosphorIdentity::WindowId::sameWindowInstance(p.windowId, windowId)
+                && !store.isLiveInstance(p.windowId) && rectOf(p).isValid();
+        });
+        if (!source) {
+            return false;
+        }
+        freeGeo = rectOf(*source);
+        sourceWindowId = source->windowId;
+        return true;
+    };
+    // The size sent is clamped to the output's available area when the tracker
+    // can resolve one. An unresolvable screen answers an invalid rect, whose
+    // 0x0 size QSize::isValid would accept as a bound, hence the emptiness
+    // test. The managed-size refusal tests the clamped size, which is the one
+    // the window gets: a larger free size can clamp to a managed one (F1094).
+    const QRect available = tracker->screenAvailableGeometry(screenId);
+    const auto fitted = [&available](const QRect& rect) {
+        return available.isValid() && !available.isEmpty() ? rect.size().boundedTo(available.size()) : rect.size();
+    };
+    // First pass: a rect on this screen.
+    const auto onThisScreen = [&](const WindowPlacement& p) {
+        const QRect rect = p.freeGeometryFor(screenId);
+        return rect.isValid() && tracker->geometryBelongsToScreen(rect, screenId)
+                && !isManagedSize(managedSizes, fitted(rect))
+            ? rect
+            : QRect();
+    };
+    // Second pass, when no record holds one: a rect a record keeps for another
+    // screen, of which only the size is used. Still refused when it is a size
+    // managed on THIS screen, so each screen's rect is tried in key order, the
+    // order anyFreeGeometry picks by, until one is not (F1038).
+    const auto onAnyScreen = [&](const WindowPlacement& p) {
+        QStringList keys = p.freeGeometryByScreen.keys();
+        std::sort(keys.begin(), keys.end());
+        for (const QString& key : std::as_const(keys)) {
+            const QRect rect = p.freeGeometryByScreen.value(key);
+            if (rect.isValid() && !isManagedSize(managedSizes, fitted(rect))) {
+                return rect;
+            }
+        }
+        return QRect();
+    };
+    const bool local = search(onThisScreen);
+    if (!local && !search(onAnyScreen)) {
         qCDebug(lcPlacementEngineBase) << "restoreFreeSizeWhereItStands:" << windowId << "no free size on record for"
                                        << screenId;
         return;
     }
-    QSize size = freeGeo.size();
-    // Clamped to the output's available area when the tracker can resolve
-    // one. An unresolvable screen answers an invalid rect, whose 0x0 size
-    // QSize::isValid would accept as a bound, hence the emptiness test.
-    const QRect available = tracker->screenAvailableGeometry(screenId);
-    if (available.isValid() && !available.isEmpty()) {
-        size = size.boundedTo(available.size());
-    }
+    const QSize size = fitted(freeGeo);
     qCInfo(lcPlacementEngineBase) << "restoreFreeSizeWhereItStands:" << windowId << "->" << size << "from"
-                                  << sourceWindowId;
+                                  << sourceWindowId << (local ? "" : "(from another screen)");
     Q_EMIT sizeRestoreRequested(windowId, size, screenId);
 }
 

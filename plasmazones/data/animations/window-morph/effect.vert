@@ -32,10 +32,14 @@ uniform mat4 modelViewProjectionMatrix;
 
 void main() {
 #ifdef PLASMAZONES_KWIN
-    // KWin's offscreen FBO is Y-up; flip so vTexCoord is the Y-down screen
+    // Normalise KWin's version-dependent texcoords to the Y-down screen
     // UV the contract specifies, and place the output-spanning quad via the
     // MVP matrix.
+#ifdef PZ_KWIN_OFFSCREEN_TEXCOORDS_TOP_DOWN
+    vTexCoord = texCoord;
+#else
     vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y);
+#endif
     gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);
 #else
     // The Qt-RHI quad's texCoord is Y-down already — no re-flip; the quad

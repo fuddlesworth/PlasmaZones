@@ -11,6 +11,7 @@
 
 #include "daemon/daemon.h"
 
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -54,6 +55,15 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
     if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
         PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
         for (const QString& windowId : windowIds) {
+            // A window parked off an output that went away is not handed back
+            // to snapping: it floats where KWin put it, and its parked context
+            // answers the output's return. Restoring the record's snap float
+            // bit, zone or free rect would revive the dead output's state on
+            // the monitor it was moved to (F618).
+            if (releasingEngine->hasParked(windowId, QString())) {
+                releasingEngine->clearModeSpecificFloatMarker(windowId);
+                continue;
+            }
             // Only process windows whose current WTS screen is one of the
             // screens being released. A window that moved to a different
             // screen (e.g., dragged from autotile VS to snap VS and resnapped)
@@ -103,7 +113,7 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
             // Clear autotile-originated floats (they don't persist into snap mode)
             bool wasAutotileFloated = releasingEngine->isModeSpecificFloated(windowId);
             if (wasAutotileFloated) {
-                m_windowTrackingAdaptor->setWindowFloating(windowId, false);
+                m_windowTrackingAdaptor->syncWindowFloating(windowId, false);
             }
             releasingEngine->clearModeSpecificFloatMarker(windowId);
             // Restore the snap-mode float from the SINGLE source of truth — the
@@ -116,7 +126,27 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
             const auto rec = wts->placementStore().peekExact(windowId);
             const PhosphorEngine::EngineSlot snapSlot =
                 rec ? rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()) : PhosphorEngine::EngineSlot{};
-            const bool snapFloat = snapSlot.state == PhosphorEngine::WindowPlacement::stateFloating();
+            // A screen released into the tiling opt-out ("autotile:none") runs
+            // no engine, and no float is owned there (user decision
+            // autotile_none_float_owner): the snap float the record and snap's
+            // stores kept from before the screen tiled goes, not restored.
+            const QString releasedOn = windowScreen.isEmpty() && rec ? rec->screenId : windowScreen;
+            const bool optOut =
+                WindowTrackingInternal::isOptOutContext(*m_windowTrackingAdaptor, releasedOn, 0, currentActivity());
+            if (optOut) {
+                WindowTrackingInternal::dropOptOutFloat(*m_windowTrackingAdaptor, windowId, releasedOn);
+            }
+            // A strip window lands on screen there: nothing adopts it, and the
+            // drain below holds every restore an opt-out screen would get. It
+            // goes back to the pre-scroll free spot a free or floating window
+            // had, as on a return to snapping, else onto the screen at its size.
+            if (optOut && releasedFromScroll) {
+                const bool hadFreeSpot = rec && snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped();
+                WindowTrackingInternal::placeReleasedOnOptOut(*m_windowTrackingAdaptor, windowId, releasedOn,
+                                                              hadFreeSpot ? rec->freeGeometryFor(releasedOn) : QRect());
+                continue;
+            }
+            const bool snapFloat = !optOut && snapSlot.state == PhosphorEngine::WindowPlacement::stateFloating();
             // A window SNAPPED in snapping mode, then floated in autotile, keeps its
             // snap-engine state — float is PER ENGINE. Such a window is excluded from
             // the captured autotile tile order (floated windows aren't ordered), so the
@@ -137,18 +167,19 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
                 && snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped() && !snapSlot.zoneIds.isEmpty();
             if (snapFloat) {
                 qCInfo(lcDaemon) << "windowsReleased: restoring snap-float for" << windowId;
-                m_windowTrackingAdaptor->setWindowFloating(windowId, true);
+                m_windowTrackingAdaptor->syncWindowFloating(windowId, true);
                 const QString screen = wts->screenForWindow(windowId);
                 // Per-screen rect only. anyFreeGeometry() would return a rect
                 // remembered for a DIFFERENT monitor and teleport the window
                 // there on multi-monitor; with no rect for this screen the
                 // window simply stays where it is.
                 QRect g = rec->freeGeometryFor(screen.isEmpty() ? rec->screenId : screen);
-                // A prune-origin release (monitor unplug) resolves the free
-                // geometry against the screen that just went away, so the rect
-                // can sit entirely on a dead output. Restoring it would push the
-                // window off every live screen; the compositor has already
-                // relocated it somewhere visible, so let that stand.
+                // A prune-origin release (monitor unplug) of a window the park
+                // above did not catch resolves the free geometry against the
+                // screen that just went away, so the rect can sit entirely on
+                // a dead output. Restoring it would push the window off every
+                // live screen; the compositor has already relocated it
+                // somewhere visible, so let that stand.
                 if (g.isValid() && !intersectsAnyLiveScreen(g)) {
                     qCInfo(lcDaemon) << "windowsReleased: dropping snap-float restore for" << windowId << "geo=" << g
                                      << "— target intersects no live screen";

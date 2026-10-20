@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorEngine/DesktopRemap.h>
 #include <PhosphorIdentity/WindowId.h>
 
-#include <QDateTime>
 #include <QJsonArray>
 #include <QLatin1Char>
 #include <QLoggingCategory>
@@ -118,6 +118,9 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
             if (!appIdChanged && merged.sameContentAs(bucket.at(i))) {
                 // Content-identical re-capture (sequence aside): leave the existing
                 // record untouched and report "no change" so the save loop settles.
+                // It is unstamped, so the mark is what says a live window saw it in
+                // the live numbering (remapRestoredDesktopZones, F1103).
+                m_touchedThisSession.insert(stored.windowId);
                 return false;
             }
             merged.appId = incoming.appId;
@@ -215,7 +218,7 @@ void WindowPlacementStore::evictForCapacity(QList<WindowPlacement>& bucket)
         }
         // Drop any open claim naming the record about to go, or the instance
         // that claimed it becomes unpairable and restores nothing.
-        dropClaimsNaming(bucket.at(idx).windowId);
+        forgetRemovedRecord(bucket.at(idx).windowId);
         bucket.removeAt(idx);
     }
 }
@@ -310,32 +313,6 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
                 // collapse instead.
                 continue;
             }
-            if (other.reclaimEligible) {
-                // A sibling that still holds its cross-screen reclaim credit is
-                // not stale duplicate float memory. It is the evidence
-                // peekForReclaim needs to bring a future same-app window home to
-                // the monitor this record remembers, and pruning it strands that
-                // window silently — nothing else reports a bucket that has lost
-                // its last credit.
-                //
-                // The keeper cannot stand in for it. This collapse runs ONLY
-                // from close-capture paths, and keepWindowId is always the
-                // CLOSING window, whose own credit markInstanceClosed revokes
-                // moments later (WindowTrackingAdaptor::windowClosed captures,
-                // then revokes). So absorbing the credit the way engine slots
-                // and geometry are absorbed would hand it to a record that is
-                // about to lose it anyway. Keeping the sibling is the only place
-                // the credit can survive.
-                //
-                // This does not blunt the collapse's own job. The duplicates it
-                // exists to converge are siblings that closed earlier in THIS
-                // session, and markInstanceClosed revokes unconditionally, so
-                // they still prune. What survives is the un-reopened record
-                // deserialized from disk, whose credit serialize re-derived at
-                // the last save from liveness plus the shutdown-close grace.
-                // That is exactly the set peekForReclaim reads.
-                continue;
-            }
             bool sharesScreen = false;
             for (auto git = other.freeGeometryByScreen.constBegin(); git != other.freeGeometryByScreen.constEnd();
                  ++git) {
@@ -370,11 +347,7 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
                     keep.engines.insert(eit.key(), eit.value());
                 }
             }
-            // The sibling's reclaim credit needs no absorbing here: a
-            // credit-bearing sibling is never pruned in the first place (see the
-            // reclaimEligible guard above), so everything reaching this point
-            // has already spent or lost its credit.
-            dropClaimsNaming(bucket.at(i).windowId); // same reason as in evictForCapacity
+            forgetRemovedRecord(bucket.at(i).windowId); // same reason as in evictForCapacity
             bucket.removeAt(i);
             removedAny = true;
             changed = true;
@@ -412,7 +385,7 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
                     // the uuid is stable and this branch always wins), and — if
                     // the claim named a DIFFERENT record than the one consumed —
                     // held that other record away from every sibling.
-                    dropClaimsNaming(p.windowId);
+                    forgetRemovedRecord(p.windowId);
                     releaseOpenClaim(windowId);
                     return p;
                 }
@@ -434,7 +407,7 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
                 // The record is about to be re-bound to the live window, so the
                 // claim has served its purpose and would otherwise name an id
                 // that no longer exists.
-                dropClaimsNaming(p.windowId);
+                forgetRemovedRecord(p.windowId);
                 releaseOpenClaim(windowId);
                 return p;
             };
@@ -572,7 +545,7 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
                 if (bucket.isEmpty()) {
                     m_byApp.erase(it);
                 }
-                dropClaimsNaming(rec->windowId);
+                forgetRemovedRecord(rec->windowId);
                 releaseOpenClaim(windowId);
             }
         }
@@ -583,136 +556,39 @@ std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString
                                   << rec->slotFor(engineId).order << "screen" << rec->screenId;
         // Re-bind to the live windowId and re-record — header contract rule 2.
         rec->windowId = windowId;
-        // The consumed record's DEATH metadata belongs to the instance that
-        // died, not to the live one adopting its placement — and the append
-        // branch would copy both across. Left alone, a dead sibling's revoked
-        // credit and its close timestamp became the live window's, so this
-        // window's own close later found the credit already false (harmless)
-        // while every save in between read a stale close time for the grace
-        // arm. Reset to the defaults a live window is entitled to; its close
-        // re-revokes through markInstanceClosed.
-        rec->reclaimEligible = true;
-        rec->closedAtMsecs = 0;
         record(*rec);
     } else {
         qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "no restorable record for" << windowId << "appId"
                                   << appId << "on" << screenId;
     }
-    // Per-open reclaim-credit burn — see the header contract. Hit or miss,
-    // and AFTER any consumption/re-record above (the bucket may have been
-    // erased and re-created by it, so the helper re-finds it). The move-return
-    // excuse lives inside the helper rather than here, so BOTH burn channels
-    // honour it — see markInstanceMovedLive.
-    burnReclaimCredit(windowId, appId);
     return rec;
 }
 
 bool WindowPlacementStore::burnReclaimCredit(const QString& windowId, const QString& appId)
 {
-    // MOVE RETURN excuse, consumed here rather than at either call site
-    // because there are TWO per-open burn channels and both must honour it:
-    // takeForReopen for tiling-screen arrivals, and the snap adaptor's
-    // open-path resolve for snap-mode ones (see the header). The daemon's
-    // live-release funnel untracked this window in its engine, so the
-    // announce that follows reaches whichever channel it lands in looking
-    // exactly like a first observation while actually being the second half
-    // of a user's move; spending a session-restore credit on it takes the
-    // credit from a sibling that has not reopened yet. One-shot, so the
-    // window's later genuine opens still burn (markInstanceMovedLive).
-    //
-    // AHEAD of the appId guard below: the one-shot answers "was this announce
-    // a move return", which is true whether or not the window has a bucket to
-    // burn from, and leaving it armed past a bucket-less announce would hand
-    // the excuse to some later genuine open instead.
-    if (m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId)) > 0) {
-        qCDebug(lcPlacementStore) << "burnReclaimCredit: move return for" << windowId << "— burn excused";
-        return false;
-    }
-    if (appId.isEmpty()) {
-        return false;
-    }
-    const auto bit = m_byApp.find(appId);
-    if (bit == m_byApp.end()) {
-        return false;
-    }
-    // Own-instance and live records are skipped: a live window's credit is
-    // revoked by its close (markInstanceClosed), never by an open.
-    int newest = -1;
-    QList<WindowPlacement>& bucket = bit.value();
-    for (int i = 0; i < bucket.size(); ++i) {
-        const WindowPlacement& p = bucket.at(i);
-        if (!p.reclaimEligible || sameWindowInstance(p.windowId, windowId) || boundToLiveOther(windowId, p)) {
-            continue;
-        }
-        if (newest < 0 || p.sequence > bucket.at(newest).sequence) {
-            newest = i;
-        }
-    }
-    if (newest < 0) {
-        return false;
-    }
-    bucket[newest].reclaimEligible = false;
-    qCDebug(lcPlacementStore) << "burnReclaimCredit: retired credit of" << bucket.at(newest).windowId << "for open of"
-                              << windowId;
-    return true;
+    // Inert, kept for ABI: the reclaim credit retired with the cross-screen
+    // reclaim it rationed. See the header.
+    Q_UNUSED(windowId)
+    Q_UNUSED(appId)
+    return false;
 }
 
 void WindowPlacementStore::markInstanceMovedLive(const QString& windowId)
 {
-    if (windowId.isEmpty()) {
-        return;
-    }
-    m_movedLiveInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    // Inert, kept for ABI: it excused the credit burn above.
+    Q_UNUSED(windowId)
 }
 
 bool WindowPlacementStore::markInstanceClosed(const QString& windowId, bool graceEligible)
 {
-    if (windowId.isEmpty()) {
-        return false;
-    }
-    // A window that closed is not coming back to spend its move excuse, and
-    // the instance id is unique so the entry could never fire again — but the
-    // set must not accumulate corpses. This and clear() are the store's only
-    // reap points, and between them they cover both of the daemon's close
-    // funnels: the observed close and the alive-set prune backstop, which
-    // calls this with graceEligible=false. (The TilingAdaptor sibling reaps on
-    // its own four events instead — it is armed from the same line, but the
-    // two sets live in different objects and see different signals.)
-    m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-    // The open claim dies with the instance for the same reason, and on the
-    // same two funnels: the prune backstop reaches ONLY this method, so a
-    // window that died without a close signal otherwise kept its claim on
-    // the record it took at open, and no later same-app open could pair with
-    // that record until eviction.
+    // What survives of the close mark is the open claim, which dies with the
+    // instance: the alive-set prune reaches a window that died without a close
+    // signal, and a claim left standing would hold the record it took at open
+    // away from every later same-app open until eviction. There is no credit
+    // left to revoke and no close time to stamp, so the answer is always false.
+    Q_UNUSED(graceEligible)
     releaseOpenClaim(windowId);
-    // An OBSERVED close is authoritative and stamps the time. An unobserved one
-    // contributes no time at all and must not overwrite a stamp an earlier
-    // observed close already wrote: logout tears windows down and can push an
-    // alive report through the prune backstop before the final save, and
-    // clearing the stamp there would strip the shutdown grace from exactly the
-    // windows that legitimately earned it — the login reclaim the grace exists
-    // for. Leaving it at its default 0 for a never-stamped record is the
-    // "closed at an unknown earlier moment, no grace" answer serialize() wants.
-    const qint64 now = graceEligible ? QDateTime::currentMSecsSinceEpoch() : 0;
-    bool revoked = false;
-    // Sweep every bucket — appId drift can file one instance's records under
-    // two keys (the releaseEngineSlot rationale), and a surviving credit in
-    // the missed bucket is exactly the teleport this method exists to end.
-    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
-        for (WindowPlacement& p : it.value()) {
-            if (!sameWindowInstance(p.windowId, windowId)) {
-                continue;
-            }
-            if (now > 0) {
-                p.closedAtMsecs = now;
-            }
-            if (p.reclaimEligible) {
-                p.reclaimEligible = false;
-                revoked = true;
-            }
-        }
-    }
-    return revoked;
+    return false;
 }
 
 std::optional<WindowPlacement> WindowPlacementStore::peek(const QString& windowId, const QString& appId,
@@ -788,10 +664,9 @@ WindowPlacementStore::peekForReclaim(const QString& windowId, const QString& app
         if (boundToLiveOther(windowId, p)) {
             continue; // an open sibling's record is not evidence about THIS window
         }
-        if (!p.reclaimEligible) {
-            // No reclaim credit: the record's window closed mid-session (or
-            // its credit was burned by an earlier open). Reopen memory, not
-            // session-restore evidence — see the header's credit bullet.
+        if (!pairingAllows(windowId, p)) {
+            // Another opening window reserved this record. Read past it so the
+            // claim answers with the same record the claimer's take consumes.
             continue;
         }
         if (!best || p.sequence > best->sequence) {
@@ -822,8 +697,8 @@ bool WindowPlacementStore::releaseEngineSlot(const QString& windowId, const QStr
             }
             // Downgrade in place: the slot stays present (so takeForReopen's
             // exact-final gate still recognises this instance as one the
-            // engine has seen) while ceasing to be managed (so the
-            // cross-screen reclaim no longer reads it as a home).
+            // engine has seen) while ceasing to be managed (so the reopen
+            // claim no longer reads it as a restorable home).
             slotIt->state = QString(WindowPlacement::stateReleased());
             slotIt->zoneIds.clear();
             // The per-desktop map goes with the zones it elaborates. Left
@@ -833,6 +708,9 @@ bool WindowPlacementStore::releaseEngineSlot(const QString& windowId, const QStr
             // desktops the engine no longer manages it on.
             slotIt->zonesByDesktop.clear();
             slotIt->order = -1;
+            // No fresh stamp (a loss is not newer truth), so the mark is what
+            // says a live window touched it (remapRestoredDesktopZones).
+            m_touchedThisSession.insert(p.windowId);
             changed = true;
         }
     }
@@ -858,9 +736,8 @@ bool WindowPlacementStore::forgetDesktopZones(const QString& windowId, const QSt
             }
             // A forget is a real content change, so the record earns a fresh
             // sequence like record() and renumberDesktopZones do. (The
-            // downgrades — releaseEngineSlot, clearFreeGeometry, the credit
-            // burns — deliberately do not: a loss is not newer truth for the
-            // newest-first readers.)
+            // downgrades, releaseEngineSlot and clearFreeGeometry, deliberately
+            // do not: a loss is not newer truth for the newest-first readers.)
             p.sequence = ++m_sequence;
             changed = true;
         }
@@ -873,44 +750,98 @@ int WindowPlacementStore::renumberDesktopZones(int removedDesktop)
     if (removedDesktop < 1) {
         return 0;
     }
+    // The removal map must reach every number stored, or an entry above its
+    // old count would read as outside the list and stay put.
+    int highest = removedDesktop;
+    for (auto it = m_byApp.cbegin(); it != m_byApp.cend(); ++it) {
+        for (const WindowPlacement& p : it.value()) {
+            highest = std::max(highest, p.virtualDesktop);
+            for (const EngineSlot& slot : p.engines) {
+                for (auto d = slot.zonesByDesktop.constBegin(); d != slot.zonesByDesktop.constEnd(); ++d) {
+                    highest = std::max(highest, d.key());
+                }
+            }
+        }
+    }
+    return remapDesktopZones(DesktopRemap::removal(removedDesktop, highest));
+}
+
+namespace {
+/// Move @p p's per-desktop zones and its record-level desktop through @p remap.
+/// True when anything moved.
+bool remapPlacementDesktops(WindowPlacement& p, const DesktopRemap& remap)
+{
+    bool touched = false;
+    for (auto slot = p.engines.begin(); slot != p.engines.end(); ++slot) {
+        QHash<int, QStringList>& byDesktop = slot->zonesByDesktop;
+        if (byDesktop.isEmpty()) {
+            continue;
+        }
+        // A removed desktop's entry goes and the rest move with their
+        // desktop, mirroring what the engines do to their live
+        // per-desktop stores. Rebuilt into a fresh map so a moving
+        // entry cannot land on one not yet visited; a moved entry
+        // outranks a stale number it lands on.
+        QHash<int, QStringList> moved;
+        QHash<int, QStringList> kept;
+        for (auto d = byDesktop.constBegin(); d != byDesktop.constEnd(); ++d) {
+            const int to = remap.map(d.key());
+            touched = touched || to != d.key();
+            if (to < 1) {
+                continue;
+            }
+            (to != d.key() ? moved : kept).insert(to, d.value());
+        }
+        kept.insert(moved);
+        byDesktop = std::move(kept);
+    }
+    // The record-level desktop indexes the same numbering. A record
+    // ON a removed desktop reads as unknown (0).
+    if (const int to = remap.map(p.virtualDesktop); to != p.virtualDesktop) {
+        p.virtualDesktop = to;
+        touched = true;
+    }
+    return touched;
+}
+} // namespace
+
+int WindowPlacementStore::remapDesktopZones(const DesktopRemap& remap)
+{
+    if (remap.isIdentity()) {
+        return 0;
+    }
     int changed = 0;
     for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
         for (WindowPlacement& p : it.value()) {
-            bool touched = false;
-            for (auto slot = p.engines.begin(); slot != p.engines.end(); ++slot) {
-                QHash<int, QStringList>& byDesktop = slot->zonesByDesktop;
-                if (byDesktop.isEmpty()) {
-                    continue;
-                }
-                // The removed desktop's entry goes; every entry above it
-                // shifts down one, mirroring what the engines do to their
-                // live per-desktop stores. Rebuilt into a fresh map so a
-                // shifting entry cannot land on one not yet visited.
-                QHash<int, QStringList> shifted;
-                for (auto d = byDesktop.constBegin(); d != byDesktop.constEnd(); ++d) {
-                    if (d.key() == removedDesktop) {
-                        touched = true;
-                        continue;
-                    }
-                    if (d.key() > removedDesktop) {
-                        touched = true;
-                        shifted.insert(d.key() - 1, d.value());
-                    } else {
-                        shifted.insert(d.key(), d.value());
-                    }
-                }
-                byDesktop = std::move(shifted);
-            }
-            // The record-level desktop indexes the same numbering.
-            if (p.virtualDesktop == removedDesktop) {
-                p.virtualDesktop = 0;
-                touched = true;
-            } else if (p.virtualDesktop > removedDesktop) {
-                --p.virtualDesktop;
-                touched = true;
-            }
-            if (touched) {
+            if (remapPlacementDesktops(p, remap)) {
                 p.sequence = ++m_sequence;
+                ++changed;
+            }
+        }
+    }
+    return changed;
+}
+
+int WindowPlacementStore::remapRestoredDesktopZones(const DesktopRemap& remap, quint64 restoredUpTo)
+{
+    if (remap.isIdentity()) {
+        return 0;
+    }
+    int changed = 0;
+    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+        for (WindowPlacement& p : it.value()) {
+            // Seen live, so already in the live numbering: a capture, a forget
+            // or a renumber since the load stamped it above the mark, a
+            // downgrade changed it without a stamp, an opening window claimed
+            // it, or it is an open window's own record (a daemon restart inside
+            // one KWin session keeps the ids).
+            if (p.sequence > restoredUpTo || m_touchedThisSession.contains(p.windowId)
+                || m_claimedBy.contains(p.windowId) || isLiveInstance(p.windowId)) {
+                continue;
+            }
+            // No fresh stamp: a renumber is not newer truth, and a stamp above
+            // the session's captures would let a newest-first reader prefer it.
+            if (remapPlacementDesktops(p, remap)) {
                 ++changed;
             }
         }
@@ -944,18 +875,16 @@ bool WindowPlacementStore::clear(const QString& windowId)
     if (windowId.isEmpty()) {
         return false;
     }
-    // The move excuse names a record that is going away — same reaping
-    // rationale as markInstanceClosed's. The instance's own claim goes with
-    // it: dropClaimsNaming below drops only claims naming the REMOVED records,
-    // and this instance may hold a claim on a sibling's record that stays.
-    m_movedLiveInstances.remove(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    // The instance's own claim goes with it: forgetRemovedRecord below drops only
+    // claims naming the REMOVED records, and this instance may hold a claim on
+    // a sibling's record that stays.
     releaseOpenClaim(windowId);
     bool removed = false;
     for (auto it = m_byApp.begin(); it != m_byApp.end();) {
         QList<WindowPlacement>& bucket = it.value();
         for (int i = bucket.size() - 1; i >= 0; --i) {
             if (sameWindowInstance(bucket.at(i).windowId, windowId)) {
-                dropClaimsNaming(bucket.at(i).windowId);
+                forgetRemovedRecord(bucket.at(i).windowId);
                 bucket.removeAt(i);
                 removed = true;
             }
@@ -984,6 +913,7 @@ bool WindowPlacementStore::clearFreeGeometry(const QString& windowId)
         for (WindowPlacement& p : it.value()) {
             if (sameWindowInstance(p.windowId, windowId) && !p.freeGeometryByScreen.isEmpty()) {
                 p.freeGeometryByScreen.clear();
+                m_touchedThisSession.insert(p.windowId);
                 cleared = true;
             }
         }
@@ -1005,6 +935,7 @@ bool WindowPlacementStore::clearFreeGeometry(const QString& windowId, const QStr
     for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
         for (WindowPlacement& p : it.value()) {
             if (sameWindowInstance(p.windowId, windowId) && p.freeGeometryByScreen.remove(screenId) > 0) {
+                m_touchedThisSession.insert(p.windowId);
                 cleared = true;
             }
         }
@@ -1038,7 +969,7 @@ int WindowPlacementStore::removeIf(const std::function<bool(const WindowPlacemen
         QList<WindowPlacement>& bucket = it.value();
         for (int i = bucket.size() - 1; i >= 0; --i) {
             if (pred(bucket.at(i))) {
-                dropClaimsNaming(bucket.at(i).windowId);
+                forgetRemovedRecord(bucket.at(i).windowId);
                 bucket.removeAt(i);
                 ++removed;
             }

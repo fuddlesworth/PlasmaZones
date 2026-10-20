@@ -95,14 +95,19 @@ MembershipReconcileResult ScrollEngine::applyMembershipWork(const QString& scree
     }
     bool touchedCurrent = false;
     for (const PendingMembership& entry : pending) {
+        // Adopt BEFORE releasing: adoptIntoContext reads the float, the min
+        // size and the FloatRestore from the contexts the window still holds,
+        // and the one it is leaving is the one that knows (F1001). The release
+        // then finds it still floating where it was adopted and keeps the
+        // float mirror.
+        if (entry.adopt && adoptIntoContext(entry.windowId, currentKey)) {
+            result.adopted.append({entry.windowId, currentKey});
+            touchedCurrent = true;
+        }
         for (const PlacementStateKey& stale : entry.stale) {
             releaseMembership(entry.windowId, stale);
             result.released.append({entry.windowId, stale});
             touchedCurrent |= (stale == currentKey);
-        }
-        if (entry.adopt && adoptIntoContext(entry.windowId, currentKey)) {
-            result.adopted.append({entry.windowId, currentKey});
-            touchedCurrent = true;
         }
     }
     if (touchedCurrent) {
@@ -162,6 +167,19 @@ MembershipReconcileResult ScrollEngine::reconcileWindowMemberships(const QString
         return {};
     }
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    const DesktopSpan span = spanOf(windowId);
+    // A stash entry the window's span no longer covers is a desktop or
+    // activity it LEFT, and its column there is given up, BEFORE the untracked
+    // return: a window whose strip was stashed by a mode change is tracked
+    // nowhere, and the stash is its only memory of that context (F696). Only
+    // the contexts left: a window still on a desktop keeps its column there,
+    // however many others it spans (F714). A key under its screen's sticky pin
+    // is the pin's, as in collectMembershipWork.
+    if (span.known) {
+        forgetStashedWindowWhere(windowId, [this, &span](const PlacementStateKey& key) {
+            return !span.coversKey(key) && key.desktop != m_context.stickyPinnedDesktop(key.screenId);
+        });
+    }
     // A window is on exactly one screen: every membership shares it, and the
     // first one names it. An untracked window has no context to reconcile.
     QString screenId;
@@ -174,7 +192,6 @@ MembershipReconcileResult ScrollEngine::reconcileWindowMemberships(const QString
     if (screenId.isEmpty()) {
         return {};
     }
-    const DesktopSpan span = spanOf(windowId);
     const bool adoptAllowed = m_scrollingScreens.contains(screenId)
         && (!span.sticky
             || effectiveStickyWindowHandling(screenId) == PhosphorEngine::StickyWindowHandling::TreatAsNormal);
@@ -329,8 +346,9 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
     // The window's float state is per store; the daemon's mirror is per
     // window. A float that lived only on the released desktop has to be
     // withdrawn from the mirror, or the effect keeps float chrome on a window
-    // that is a tile everywhere it still lives. Answered from the membership
-    // in view: if the window still floats there, nothing changed.
+    // that is a tile everywhere it still lives. A floating arrival the
+    // membership pass adopted keeps it, because the adopt ran first and the
+    // window still floats in the context it was adopted into.
     bool stillFloating = false;
     for (const PlacementStateKey& other : m_states.membershipsForWindow(windowId)) {
         if (const ScrollState* s = m_states.stateForKey(other); s && s->isFloating(windowId)) {
@@ -351,8 +369,9 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
         m_forceEmitScreens.insert(key.screenId);
         scheduleRetileForScreen(key.screenId);
     }
-    // placementChanged is the sole producer of the strip's dirty mark. A
-    // release on a background desktop mutates persisted structure just as a
+    // placementChanged is this engine's only way to mark DirtyScrollStrips
+    // (the tracking service's scheduleSaveState, DirtyAll, also sets that
+    // bit). A release on a background desktop mutates persisted structure just as a
     // close does, and a save landing before that desktop's next batch would
     // otherwise persist the column the window just left.
     Q_EMIT placementChanged(key.screenId);
