@@ -15,6 +15,7 @@
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include "core/utils/dbusvariantutils.h"
+#include "dbus/dbushelpers.h"
 
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -401,6 +402,9 @@ void WindowTrackingAdaptor::pruneExcludedPlacements(const QStringList& patterns)
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty()) {
         return;
     }
@@ -414,6 +418,9 @@ void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky
 
 void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("clean up closed window"))) {
         return;
     }
@@ -531,6 +538,9 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                                               const QString& windowRole, int pid, int virtualDesktop,
                                               const QString& activity, int windowType, const QVariantMap& extended)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!m_windowRegistry) {
         // Teardown or a registry-less unit test. The effect re-emits anyway.
         return;
@@ -769,6 +779,9 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
 
 void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int y, int width, int height)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty() || width <= 0 || height <= 0) {
         return;
     }
@@ -804,6 +817,9 @@ bool WindowTrackingAdaptor::isInteractiveDragWindow(const QString& windowId) con
 void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth,
                                                 int oldHeight, int newX, int newY, int newWidth, int newHeight)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("reflow after interactive resize"))) {
         return;
     }

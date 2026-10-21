@@ -1762,6 +1762,10 @@ add_executable(test_adaptor_bus_context dbus/test_adaptor_bus_context.cpp helper
 target_link_libraries(test_adaptor_bus_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_adaptor_bus_context COMMAND test_adaptor_bus_context)
 
+add_executable(test_compositor_only_gate dbus/test_compositor_only_gate.cpp helpers/BusPeer.h)
+target_link_libraries(test_compositor_only_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_compositor_only_gate COMMAND test_compositor_only_gate)
+
 add_executable(test_compositor_bridge dbus/test_compositor_bridge.cpp)
 target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)

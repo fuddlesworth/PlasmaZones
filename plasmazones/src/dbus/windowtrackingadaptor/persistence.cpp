@@ -16,6 +16,7 @@
 #include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
+#include "dbus/dbushelpers.h"
 #include <QScreen>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -27,6 +28,9 @@ namespace PlasmaZones {
 void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x, int y, int width, int height,
                                                  const QString& screenId, bool overwrite)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("store pre-tile geometry"))) {
         return;
     }

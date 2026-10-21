@@ -17,6 +17,7 @@
 #include "internal.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
@@ -161,6 +162,9 @@ void WindowTrackingAdaptor::releaseLeftScreens(const QString& windowId, const QS
 void WindowTrackingAdaptor::windowCrossedScreens(const QString& windowId, const QString& fromScreenId,
                                                  const QString& toScreenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!m_service || !validateWindowId(windowId, QStringLiteral("crossed screens"))) {
         return;
     }
@@ -351,6 +355,9 @@ void WindowTrackingAdaptor::announceOutputMove(const QString& windowId, const QS
 
 void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const QString& newScreenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!m_service)
         return;
     if (!validateWindowId(windowId, QStringLiteral("screen changed"))) {

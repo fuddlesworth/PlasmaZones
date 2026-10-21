@@ -481,14 +481,25 @@ QString DBusScreenAdaptor::getPrimaryScreen()
     return physId;
 }
 
+void DBusScreenAdaptor::setCompositorReportGate(CompositorReportGate gate)
+{
+    m_compositorReportGate = std::move(gate);
+}
+
 void DBusScreenAdaptor::setPrimaryScreenFromKWin(const QString& connectorName)
 {
+    if (m_compositorReportGate && !m_compositorReportGate(QLatin1StringView(__func__))) {
+        return;
+    }
     m_primaryScreenOverride = connectorName;
     qCInfo(lcPhosphorScreens) << "Primary screen override set from compositor:" << connectorName;
 }
 
 void DBusScreenAdaptor::setAvailableGeometryFromKWin(const QString& screenName, int x, int y, int width, int height)
 {
+    if (m_compositorReportGate && !m_compositorReportGate(QLatin1StringView(__func__))) {
+        return;
+    }
     if (!m_screenManager) {
         return;
     }

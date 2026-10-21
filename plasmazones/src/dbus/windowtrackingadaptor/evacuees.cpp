@@ -17,6 +17,7 @@
 #include "internal.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -158,6 +159,9 @@ void WindowTrackingAdaptor::setContextModeResolver(
 PhosphorProtocol::OutputSettleVerdictList
 WindowTrackingAdaptor::reportOutputSettle(const PhosphorProtocol::OutputSettleRowList& rows)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return {};
+    }
     PhosphorProtocol::OutputSettleVerdictList verdicts;
     PhosphorScreens::ScreenManager* mgr = m_service ? m_service->screenManager() : nullptr;
     QSet<QString> reassertedScreens;

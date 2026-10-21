@@ -641,6 +641,9 @@ void SettingsAdaptor::requestRunningWindows()
 
 void SettingsAdaptor::provideRunningWindows(const QString& json)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     // The payload is caller-supplied and fans out to every subscriber, where it
     // becomes the rule-authoring window picker's list. This slot is reachable by
     // any session-bus peer, not only the KWin effect, so gate the shape before

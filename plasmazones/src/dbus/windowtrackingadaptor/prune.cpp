@@ -10,6 +10,7 @@
 #include "lifecyclerelay.h"
 #include "internal.h"
 #include "core/platform/logging.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorEngine/WindowPlacement.h>
@@ -26,6 +27,9 @@ namespace PlasmaZones {
 
 void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     // Fail CLOSED on an empty alive set, agreeing with both callees
     // (pruneStaleAssignments and pruneStaleInstances refuse it with a
     // warning): the effect's one-shot alive report at daemon-ready can fire

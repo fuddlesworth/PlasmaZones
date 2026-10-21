@@ -58,6 +58,7 @@
 #include "core/types/baselinecleanup.h"
 #include "core/types/constants.h"
 #include "core/resolve/crosssurfaceresolver.h"
+#include "dbus/dbushelpers.h"
 #include "core/resolve/animationbootstrap.h"
 #include "core/resolve/screenmoderouter.h"
 #include "core/utils/geometryutils.h"
@@ -258,6 +259,11 @@ void Daemon::initCoreAdaptors()
     // m_virtualScreenSwapper. One store per process, one change-signal
     // channel, no parallel Settings observer.
     m_screenAdaptor = new PhosphorScreens::DBusScreenAdaptor(m_screenManager.get(), m_virtualScreenStore.get(), this);
+    // Its compositor reports answer to the registered bridge, like every
+    // other adaptor's (#1155).
+    m_screenAdaptor->setCompositorReportGate([adaptor = m_screenAdaptor](QLatin1StringView member) {
+        return DbusHelpers::admitCompositorReport(adaptor, member);
+    });
 
     // Window drag adaptor - handles drag events from KWin script
     // All drag logic (modifiers, zones, snapping) handled here
