@@ -152,9 +152,13 @@ struct ScrollCommandedRect
     quint64 commandStamp = 0; ///< the stamp of the strip apply that recorded this rect (WindowCommandStamps)
     bool outOfView = false; ///< @c rect leaves the strip's output (a park or a cropped straddler)
     bool parked = false; ///< @c rect lies off every output (TilingHandler::rectAtScrollPark)
+    /// The foreign size an X11 window was last put back from under this command
+    /// (ScrollDecisions::x11ForeignSizeVerdict); empty for none. A batch writes
+    /// a fresh entry, so a new command starts with none.
+    QSize putBackSize{};
 };
 
-/// The column a strip batch last delivered to a Wayland window, and where the
+/// The column a strip batch last delivered to a window, and where the
 /// client's answer to it stands. See PlasmaZonesEffect::m_scrollOfferedColumn.
 struct ScrollOfferedColumn
 {

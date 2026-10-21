@@ -120,12 +120,26 @@ bool TilingHandler::isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& 
     }
     // Parked is either end at a park: the strip's rect while the client has
     // not committed it yet, the frame once it has. The frame rounded as
-    // atScrollPark rounds the live one.
+    // atScrollPark rounds the live one. The commanded rect's recorded flag as
+    // well: a park tests against the CURRENT output union, so an output that
+    // arrives under an old park makes the rect test fail, and the recorded
+    // flag is what keeps that park from reading as a move.
     const QRect frameRect(qRound(frame.x()), qRound(frame.y()), qRound(frame.width()), qRound(frame.height()));
-    const KWin::LogicalOutput* const stripOutput = KWin::effects->screenAt(stripRect.center());
-    return ScrollDecisions::isKWinMoveOffStrip(
-        frame, stripOutput ? QRectF(QRect(stripOutput->geometry())) : QRectF(), m_expectedOutputMove.contains(windowId),
-        rectAtScrollPark(frameRect) || rectAtScrollPark(stripRect), w->isUserMove());
+    const bool recordedPark = commanded != m_effect->m_scrollCommandedRects.constEnd() && commanded->parked;
+    const KWin::LogicalOutput* const centreOutput = KWin::effects->screenAt(stripRect.center());
+    const QString trackedScreen = scrollTrackedScreenFor(windowId);
+    const KWin::LogicalOutput* const trackedOutput =
+        trackedScreen.isEmpty() ? nullptr : m_effect->outputForScreenId(trackedScreen);
+    ScrollDecisions::KWinMoveOffStripFacts facts;
+    facts.frame = frame;
+    facts.trackedOutput = trackedOutput ? QRectF(QRect(trackedOutput->geometry())) : QRectF();
+    facts.centreOutput = centreOutput ? QRectF(QRect(centreOutput->geometry())) : QRectF();
+    facts.coordinatesHold =
+        !m_effect->m_screenChangeHandler->isScreenChangeInProgress() && !stripOutputMovedSinceBatch(trackedScreen);
+    facts.markerArmed = m_expectedOutputMove.contains(windowId);
+    facts.parked = recordedPark || rectAtScrollPark(frameRect) || rectAtScrollPark(stripRect);
+    facts.userMove = w->isUserMove();
+    return ScrollDecisions::isKWinMoveOffStrip(facts);
 }
 
 bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w, ReAdd readd)

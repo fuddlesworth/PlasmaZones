@@ -183,8 +183,24 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
             && m_effect->m_daemonGate.commandStamps.isCurrent(w, cit->commandStamp) && coordinatesHold
             && !(m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())) {
             const QRect actual = w->frameGeometry().toRect();
-            if (ScrollDecisions::counterAssertsByPosition(cit->outOfView, w->isWaylandClient(), maximizedMember,
-                                                          actual.size() == cit->rect.size())) {
+            bool byPosition = ScrollDecisions::counterAssertsByPosition(
+                cit->outOfView, w->isWaylandClient(), maximizedMember, actual.size() == cit->rect.size());
+            // An X11 client at a size its batch did not command: put back the
+            // first time, kept when it insists and the frame reads as its
+            // answer to the column, which the frame hook then reports (#1157).
+            if (!byPosition && !w->isWaylandClient() && actual.size() != cit->rect.size()) {
+                const auto offer = m_effect->m_scrollOfferedColumn.constFind(windowId);
+                const bool readsAsAnswer = offer != m_effect->m_scrollOfferedColumn.constEnd()
+                    && m_effect->frameReadsAsColumnAnswer(w, windowId, *offer, actual);
+                if (ScrollDecisions::x11ForeignSizeVerdict(cit->rect.size(), actual.size(), cit->putBackSize,
+                                                           readsAsAnswer)
+                    == ScrollDecisions::ForeignSizeVerdict::Learn) {
+                    byPosition = true;
+                } else {
+                    cit->putBackSize = actual.size();
+                }
+            }
+            if (byPosition) {
                 // Seated in the column the strip OFFERED where there is one, as
                 // the offered-column centring and the paint resolver seat it,
                 // so the three agree. A maximized column and an X11 window have
@@ -663,7 +679,8 @@ void TilingHandler::noteMinSizeDecorationChanged(KWin::EffectWindow* w, const QS
 }
 
 TilingHandler::StripCommitReport TilingHandler::reportStripCommit(const QString& windowId, const QString& screenId,
-                                                                  const QRect& offered, const QRect& committed)
+                                                                  const QRect& offered, const QSize& expected,
+                                                                  const QRect& committed)
 {
     // The engine owns the column extent and only this side sees the commit,
     // so a client whose settled answer differs from the column it was offered
@@ -682,7 +699,8 @@ TilingHandler::StripCommitReport TilingHandler::reportStripCommit(const QString&
     }
     const bool vertical = scrollAxisForScreen(screenId) == PhosphorProtocol::ScrollAxis::Vertical;
     if (m_committedSizeReportUnsupported
-        || !ScrollDecisions::shouldReportCommittedSize(offered.size(), committed.size(), vertical)) {
+        || !ScrollDecisions::shouldReportCommittedSize(expected, committed.size(), vertical,
+                                                       rectAtScrollPark(offered))) {
         return StripCommitReport::NothingToReport;
     }
     qCDebug(lcEffect) << "Reporting committed size for" << windowId << "offered=" << offered.size()

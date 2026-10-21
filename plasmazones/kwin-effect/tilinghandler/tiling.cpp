@@ -1968,9 +1968,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // Null unless this batch is a plain strip entry that reaches
                 // the record below; see the capture site for why the two are
                 // separated.
+                //
+                // X11 windows are offered a column too, and their answer is
+                // read the same way, so a client that resizes itself past the
+                // column widens it rather than sitting under the next one
+                // (#1157). Only the size-continuity carry below stays
+                // Wayland's: it ends Wayland's asynchronous renegotiation,
+                // which X11's synchronous applies never had.
                 QRect stripOfferedColumn;
-                if (isScrollingScreen(snap.screenId) && !snap.isWindowedFullscreen && !snap.isMaximizedToEdges
-                    && snap.window->isWaylandClient()) {
+                if (isScrollingScreen(snap.screenId) && !snap.isWindowedFullscreen && !snap.isMaximizedToEdges) {
                     const QSize columnSize = geo.size();
                     const QSize committedSize = snap.window->frameGeometry().toRect().size();
                     const auto offeredIt = m_effect->m_scrollOfferedColumn.constFind(snap.windowId);
@@ -2008,7 +2014,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     KWin::Window* kwCarry = snap.window->window();
                     const bool resizeInFlight =
                         kwCarry && QRectF(kwCarry->moveResizeGeometry()).toRect().size() != committedSize;
-                    if (!resizeInFlight
+                    if (snap.window->isWaylandClient() && !resizeInFlight
                         && ScrollDecisions::mayCarryCommittedSize(/*declaredRect=*/false, columnUnchanged,
                                                                   committedSize, columnSize)) {
                         // Centred the same way the paint resolver centres
@@ -2042,9 +2048,6 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // column that is merely maximized to edges. A monocle entry
                 // never reaches this arm: the monocle drop is the tail arm of
                 // this lambda, and it is the only one, so it must stay.
-                //
-                // Removing an absent key costs nothing, so no isWaylandClient
-                // term is needed: an entry is only ever written for one.
                 if (isScrollingScreen(snap.screenId) && (snap.isMaximizedToEdges || snap.isWindowedFullscreen)) {
                     m_effect->m_scrollOfferedColumn.remove(snap.windowId);
                 }
@@ -2145,13 +2148,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (deliversStripOffer && (snap.window->isUserMove() || snap.window->isUserResize())) {
                     deferredStripOffer = stripOfferedColumn;
                 } else if (deliversStripOffer) {
+                    // Against the size the apply asks for, which for an X11
+                    // window is its size hints' answer to the column
+                    // (constrainTileGeometry): a terminal with size increments
+                    // is asked the same narrowed size on every batch, which
+                    // asks it nothing new. Unchanged for Wayland.
                     const KWin::Window* const kwOffer = snap.window->window();
                     const bool sendsSize =
                         kwOffer
                         && ScrollDecisions::stripEntrySendsSize(
                             kwinTileDrop.dropped ? kwinTileDrop.requested
                                                  : QRectF(kwOffer->moveResizeGeometry()).toRect().size(),
-                            geo.size());
+                            m_effect->constrainTileGeometry(snap.window, geo).size());
                     m_effect->recordStripOffer(snap.window, snap.windowId, stripOfferedColumn, sendsSize);
                 }
 
@@ -2882,12 +2890,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     snap.window->isUserMove() || snap.window->isUserResize() || fullscreenBailSkippedCommit;
                 if (commitDeferredOrBailed) {
                     m_effect->m_scrollCommandedRects.remove(snap.windowId);
-                    // Defensive on this arm, not load-bearing: the offer is only
-                    // ever written for a Wayland client, and this is the X11
-                    // leg, so the entry is normally absent. Kept because the
-                    // Wayland arm now applies this same predicate at its own
-                    // record site, and the two should stay legible as one rule;
-                    // removing an absent key costs nothing.
+                    // The offer goes with it: an X11 window is offered its
+                    // column too (#1157), and an entry for a commit that never
+                    // went out would read as answered.
                     m_effect->m_scrollOfferedColumn.remove(snap.windowId);
                 } else {
                     const QRect committed = snap.window->frameGeometry().toRect();

@@ -1071,6 +1071,13 @@ void PlasmaZonesEffect::recordStripOffer(KWin::EffectWindow* w, const QString& w
         // so the answer is owed again, whatever became of the last one.
         entry.answer = ColumnAnswer::Owed;
         armColumnAnswerWatch(w, windowId, entry);
+        // An X11 apply commits its frame synchronously, inside the apply
+        // bracket, where the frame hook declines to read it, and nothing need
+        // commit again afterwards. The catch-up walk reads it once the batch
+        // is done (#1157).
+        if (!w->isWaylandClient()) {
+            scheduleColumnAnswerCatchUp();
+        }
         return;
     }
     // No size goes out (a pure move, or the window already holds the size):
@@ -1152,11 +1159,37 @@ void PlasmaZonesEffect::readColumnAnswer(KWin::EffectWindow* w, const QString& w
         return;
     }
     const ScrollOfferedColumn offer = *found;
-    KWin::Window* const kw = w->window();
-    if (!kw) {
+    const QRect live = w->frameGeometry().toRect();
+    QString screenId;
+    if (!frameReadsAsColumnAnswer(w, windowId, offer, live, &screenId)) {
         return;
     }
-    const QRect live = w->frameGeometry().toRect();
+    // The report: once per answer (ScrollDecisions::isNewColumnAnswer). An
+    // answer the report could not take yet (no daemon, no axis map) stays
+    // owed for the catch-up walk; one it took, or found nothing in, is read.
+    // An X11 answer is judged against its size hints' answer to the column,
+    // so a terminal narrowed to its cell grid reports nothing.
+    const QSize expected = constrainTileGeometry(w, offer.rect).size();
+    if (ScrollDecisions::isNewColumnAnswer(offer.answer, offer.answeredSize, live.size())
+        && m_tilingHandler->reportStripCommit(windowId, screenId, offer.rect, expected, live)
+            != TilingHandler::StripCommitReport::Deferred) {
+        if (const auto entry = m_scrollOfferedColumn.find(windowId); entry != m_scrollOfferedColumn.end()) {
+            entry->answer = ColumnAnswer::Read;
+            entry->answeredSize = live.size();
+        }
+    }
+    centreOnColumnAnswer(w, windowId, offer, live);
+}
+
+bool PlasmaZonesEffect::frameReadsAsColumnAnswer(KWin::EffectWindow* w, const QString& windowId,
+                                                 const ScrollOfferedColumn& offer, const QRect& live,
+                                                 QString* screenId) const
+{
+    using ScrollDecisions::ColumnAnswer;
+    KWin::Window* const kw = w ? w->window() : nullptr;
+    if (!kw) {
+        return false;
+    }
     // The gates the answer is read through (ScrollDecisions::
     // readsAsColumnAnswer), the cheap ones first: this runs on every frame
     // change of a strip window and on every commit while an answer is owed,
@@ -1180,17 +1213,17 @@ void PlasmaZonesEffect::readColumnAnswer(KWin::EffectWindow* w, const QString& w
     gates.kwinStateAtRest = kw->requestedMaximizeMode() == KWin::MaximizeRestore && !kw->isRequestedFullScreen()
         && !kw->isFullScreen() && !kw->requestedTile();
     gates.resizeHeld = m_resizeHold.window == w;
-    // One tracked-screen resolve for both its readers below (F156).
-    QString screenId;
+    // One tracked-screen resolve for both its readers (F156).
+    QString trackedScreen;
     if (gates.settled && gates.kwinStateAtRest && !gates.resizeHeld && offer.answer != ColumnAnswer::Foreign
         && !live.isEmpty() && live.intersects(offer.rect)) {
         gates.managed = scrollManagedOutputFor(w) != nullptr;
         if (gates.managed) {
-            screenId = m_tilingHandler->scrollTrackedScreenFor(windowId);
+            trackedScreen = m_tilingHandler->scrollTrackedScreenFor(windowId);
             // Not while the outputs change or the strip's output has moved
             // since its batch: the offer is in the old coordinates (F815).
             gates.coordinatesHold = !m_screenChangeHandler->isScreenChangeInProgress()
-                && !m_tilingHandler->stripOutputMovedSinceBatch(screenId);
+                && !m_tilingHandler->stripOutputMovedSinceBatch(trackedScreen);
         }
     }
     if (!ScrollDecisions::readsAsColumnAnswer(gates, offer.answer, offer.rect, live)) {
@@ -1198,18 +1231,20 @@ void PlasmaZonesEffect::readColumnAnswer(KWin::EffectWindow* w, const QString& w
             qCDebug(lcEffect) << "Column answer for" << windowId << "not settled: commanded"
                               << QRectF(kw->moveResizeGeometry()) << "frame" << live;
         }
-        return;
+        return false;
     }
-    // The report: once per answer (ScrollDecisions::isNewColumnAnswer). An
-    // answer the report could not take yet (no daemon, no axis map) stays
-    // owed for the catch-up walk; one it took, or found nothing in, is read.
-    if (ScrollDecisions::isNewColumnAnswer(offer.answer, offer.answeredSize, live.size())
-        && m_tilingHandler->reportStripCommit(windowId, screenId, offer.rect, live)
-            != TilingHandler::StripCommitReport::Deferred) {
-        if (const auto entry = m_scrollOfferedColumn.find(windowId); entry != m_scrollOfferedColumn.end()) {
-            entry->answer = ColumnAnswer::Read;
-            entry->answeredSize = live.size();
-        }
+    if (screenId) {
+        *screenId = trackedScreen;
+    }
+    return true;
+}
+
+void PlasmaZonesEffect::centreOnColumnAnswer(KWin::EffectWindow* w, const QString& windowId,
+                                             const ScrollOfferedColumn& offer, const QRect& live)
+{
+    KWin::Window* const kw = w->window();
+    if (!kw) {
+        return;
     }
     // The centring. The strip offers the full column rect the first time it
     // sees a column SIZE, because until the client has answered there is
@@ -1280,6 +1315,14 @@ void PlasmaZonesEffect::noteForeignStripRequest(KWin::EffectWindow* w)
         it->answer = ColumnAnswer::Foreign;
         return;
     }
+    // An X11 window's request is answered by the counter-assert. A put-back
+    // from here would change the move-resize geometry KWin is about to apply
+    // anyway, since X11's moveResizeInternal applies its own rect after this
+    // signal, and the request may be the client's own resize, which marked
+    // Foreign could never be learned (x11ForeignSizeVerdict, #1157).
+    if (!w->isWaylandClient()) {
+        return;
+    }
     KWin::Window* const kw = w->window();
     if (!kw) {
         return;
@@ -1342,9 +1385,7 @@ void PlasmaZonesEffect::noteForeignStripRequest(KWin::EffectWindow* w)
         if (gates.managed) {
             gates.coordinatesHold = !m_screenChangeHandler->isScreenChangeInProgress()
                 && !m_tilingHandler->stripOutputMovedSinceBatch(m_tilingHandler->scrollTrackedScreenFor(windowId));
-            gates.leavesOutput = ScrollDecisions::requestLeavesStripOutput(
-                m_tilingHandler->isKWinMoveOfStripTile(w, windowId, requested), requested,
-                QRectF(QRect(managedOutput->geometry())));
+            gates.leavesOutput = m_tilingHandler->isKWinMoveOfStripTile(w, windowId, requested);
         }
     }
     // The commanded rect only while the strip apply that recorded it is still

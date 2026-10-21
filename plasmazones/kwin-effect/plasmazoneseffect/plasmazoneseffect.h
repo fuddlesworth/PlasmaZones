@@ -1575,6 +1575,16 @@ private:
     void recordStripOffer(KWin::EffectWindow* w, const QString& windowId, const QRect& column, bool sendsSize);
     /// Read @p w's frame as its answer to the column it was offered, if it reads as one.
     void readColumnAnswer(KWin::EffectWindow* w, const QString& windowId);
+    /// Whether @p live, @p w's frame, reads as its client's answer to @p offer
+    /// (ScrollDecisions::readsAsColumnAnswer, through the live gates). The one
+    /// question the report and the X11 counter-assert share. @p screenId, when
+    /// given, receives the strip's tracked screen once the gates resolved it.
+    bool frameReadsAsColumnAnswer(KWin::EffectWindow* w, const QString& windowId, const ScrollOfferedColumn& offer,
+                                  const QRect& live, QString* screenId = nullptr) const;
+    /// readColumnAnswer's offered-column centring of an answer @p live that
+    /// is not the column's size.
+    void centreOnColumnAnswer(KWin::EffectWindow* w, const QString& windowId, const ScrollOfferedColumn& offer,
+                              const QRect& live);
     /// Read the client's commits while @p entry's answer is owed.
     void armColumnAnswerWatch(KWin::EffectWindow* w, const QString& windowId, ScrollOfferedColumn& entry);
     /// KWin (or the user) is about to change @p w's geometry outside any effect apply. A resize on KWin's account is
@@ -2934,14 +2944,17 @@ private:
     /// this column, so recording one for a placement that never went out would
     /// make the next batch read it as answered.
     ///
-    /// Wayland only. Every write goes through recordStripOffer: the strip
-    /// batch, behind isWaylandClient(); the gesture-end replay of a batch apply
-    /// the gesture deferred, carrying the column that batch offered
+    /// Wayland and X11 alike (#1157). Every write goes through recordStripOffer:
+    /// the strip batch; the gesture-end replay of a batch apply the gesture
+    /// deferred, carrying the column that batch offered
     /// (stripOfferOnDeferredReplay); and the cancels that put a strip tile back
     /// after KWin's quick tile or axis-only maximize
     /// (TilingHandler::cancelStripQuickTile, TilingHandler::cancelAxisOnlyMaximize),
-    /// which re-record an entry already there and create none. So the map is
-    /// empty for X11 and every consumer of it is inert there.
+    /// which re-record an entry already there and create none. The
+    /// size-continuity carry stays Wayland's; an X11 answer is judged against
+    /// its size hints' answer to the column (constrainTileGeometry), and the
+    /// counter-assert decides a size the batch did not command
+    /// (ScrollDecisions::x11ForeignSizeVerdict).
     ///
     /// The discriminator for size continuity (see the strip apply). A genuine
     /// column change is "this size differs from the one recorded here" — our

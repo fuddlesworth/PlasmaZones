@@ -792,14 +792,17 @@ public:
         NothingToReport, ///< nothing the engine acts on, or a daemon without the method this session
         Deferred, ///< not yet: no daemon registered, or its axis map has not landed
     };
-    /// Report a Wayland strip window's settled answer to the column it was offered
+    /// Report a strip window's settled answer to the column it was offered
     /// (Scrolling.reportCommittedSize), when ScrollDecisions::shouldReportCommittedSize
     /// says it differs: along the strip either way, across it only when longer.
     /// The caller (PlasmaZonesEffect::readColumnAnswer) has already read the
     /// frame as an answer; @p screenId is the strip's screen, which says which
-    /// extent is the main one. Defined in framecentering.cpp.
+    /// extent is the main one. @p expected is the size the client's answer is
+    /// judged against: the column's own for Wayland, its size hints' answer to
+    /// the column for X11 (constrainTileGeometry), so a size increment is no
+    /// answer. The engine is still told @p offered. Defined in framecentering.cpp.
     StripCommitReport reportStripCommit(const QString& windowId, const QString& screenId, const QRect& offered,
-                                        const QRect& committed);
+                                        const QSize& expected, const QRect& committed);
     /// @p w's decoration changed, which moves its declared minimum as a frame
     /// size (declaredMinSize): re-report it through the change-gated writer,
     /// only for a window the engine holds a minimum for (the announce seeds the
