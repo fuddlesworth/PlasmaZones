@@ -1,17 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// This header carried a sanctioned 1250-line exception while it was over the
-// project ceiling. Removing the shader-preview surface brought it back under,
-// so the ordinary CLAUDE.md limit applies again and no exception is in force.
-//
-// It stays a single Q_OBJECT declaration on purpose: moc needs the whole class
-// in one header, and the bulk here is the Q_PROPERTY / Q_INVOKABLE surface QML
-// binds to, which cannot move without rewriting every binding in
-// src/editor/qml. The implementation is already split by concern under
-// src/editor/controller/ (settings.cpp, scrollingtemplate.cpp, and siblings),
-// which is where the real per-concern boundary is. Long rationale belongs on
-// the definition in the matching controller/*.cpp when it will not fit here.
+// One Q_OBJECT declaration, since moc needs the whole class in one header.
+// The implementation is split by concern under src/editor/controller/
+// (settings.cpp, scrollingtemplate.cpp and siblings), and long rationale
+// belongs on the definition in the matching controller/*.cpp.
 
 #pragma once
 

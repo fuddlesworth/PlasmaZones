@@ -5,12 +5,19 @@
  * @file test_scrollengine_boundary.cpp
  *
  * The screen-boundary contract: a straddling edge column is committed CLAMPED
- * at both screen edges in the default mode, keeps its TRUE rect in crop mode,
- * parks below its peek floor, and every park lands below the union of all
- * outputs. These are the applyLayout branches the smoke fixtures cannot reach
- * (their columns are either fully on screen or fully off), driven here by an
- * always-center settings stub so the neighbours of the focused column
- * genuinely straddle.
+ * at both screen edges in the default mode, keeps its TRUE rect in crop mode
+ * (globally and as a per-screen rule), parks below its peek floor, and every
+ * park lands below the union of all outputs. These are the applyLayout
+ * branches the smoke fixtures cannot reach (their columns are either fully on
+ * screen or fully off), driven here by an always-center settings stub so the
+ * neighbours of the focused column genuinely straddle.
+ *
+ * Also the boundary's other edges: a rotation re-resolving the strip axis, a
+ * stack whose minimums overflow the work area parking its tail across the
+ * strip (in crop mode too), the hidden tabs of an on-screen tabbed column and
+ * the tab bar of a fully parked one, and a user resize that overshoots the
+ * work area across the strip being committed back. A client that commits a
+ * frame other than its column is test_scrollengine_committedfloor's.
  */
 
 #include <QJsonArray>
@@ -50,8 +57,8 @@ const QString kS2 = QStringLiteral("S2");
 ScrollTestUtils::StubScrollSettings* makeBoundarySettings(QObject* owner)
 {
     auto* settings = new ScrollTestUtils::StubScrollSettings(owner);
-    // Half-work-area columns: the straddler fixtures below reason in 500px
-    // columns on the 1000px inset work area.
+    // Half-work-area columns: 600px on the plain 1200px screen, and 500px on
+    // the 1000px inset work area of the clamp case.
     settings->widthValue = 0.5;
     // Always-center is the straddler generator — it is what makes BOTH
     // neighbours of the focused column cross a screen edge.
@@ -106,7 +113,7 @@ private Q_SLOTS:
     /// provider hands back a portrait rect on the second pass, so Auto
     /// resolves the other axis. What is ASSERTED is exactly the re-resolve
     /// (the committed aspect inverts); the axis-flip sweep's state drop
-    /// (anchor re-derivation, pinned-intent conversion) has no clean
+    /// (anchor re-derivation, the parked-edge eviction) has no clean
     /// observable at this level and is NOT claimed here — the name used to
     /// say "AndDropsOldAxisState", which nothing below ever checked.
     ///
@@ -316,7 +323,8 @@ private Q_SLOTS:
     {
         QObject owner;
         auto* settings = makeBoundarySettings(&owner);
-        settings->centerFocused = 0; // plain edge-aligned view
+        // Plain edge-aligned view.
+        settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never);
         const QRect top = defaultScreenRect();
         // Stacked directly BENEATH the primary, keyed off it rather than
         // hardcoded. Ax::t() would be wrong here: transposing puts the second
@@ -361,7 +369,7 @@ private Q_SLOTS:
         auto* settings = makeBoundarySettings(&owner);
         settings->cropStraddlers = true;
         settings->respectMinimumSize = true;
-        settings->centerFocused = 0;
+        settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never);
         settings->insertPosition = static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::IntoActiveColumn);
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
         engine->setEngineSettings(settings);
@@ -398,7 +406,7 @@ private Q_SLOTS:
     {
         QObject owner;
         auto* settings = makeBoundarySettings(&owner);
-        settings->centerFocused = 0;
+        settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never);
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
         engine->setEngineSettings(settings);
         engine->refreshConfigFromSettings();

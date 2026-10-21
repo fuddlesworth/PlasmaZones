@@ -9,13 +9,14 @@
 
 namespace PhosphorScrollEngine {
 
-// Minimum-size bookkeeping and the client-driven resize it feeds: the clamp a
-// window reports, the re-layout its change forces, and the resize echo that has
-// to tell an effect-applied rect apart from a user drag. Split from
-// engine_lifecycle.cpp on that file's fourth size crossing, on the concern seam
-// its earlier splits established — this trio answers "how big may this window
-// be" rather than "is it here yet", and the open/close/focus arrivals it left
-// behind never call into it except through the engine's own retile scheduling.
+// Minimum-size bookkeeping and the user's resize it feeds: the clamp a window
+// reports, the re-layout its change forces, and the resize echo that has to
+// tell an effect-applied rect apart from a user drag. Split from
+// engine_lifecycle.cpp on the concern seam its earlier splits established —
+// these answer "how big may this window be" rather than "is it here yet", and
+// the open/close/focus arrivals it left behind never call into it except
+// through the engine's own retile scheduling. The size a client settled on
+// when offered its tile (reportCommittedSize) lives in engine_committed.cpp.
 
 QSize ScrollEngine::windowMinimumSize(const QString& rawWindowId) const
 {
@@ -48,34 +49,62 @@ QSize ScrollEngine::windowMinimumSize(const QString& rawWindowId) const
 void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth, int minHeight)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
-    // While the window floats there is no tile to write to, and unfloat
-    // re-applies the captured clamp — so without this write-through the
-    // restore puts back whatever the client reported at float time. The
-    // compositor's fullscreen return re-inserts with this clamp and does not
-    // re-run the oversized verdict below; a client that pinned fullscreen-size
-    // hints during the hold seats oversized until the next min-size report
-    // re-floats it through the active channel.
-    if (const auto it = m_floatRestore.find(windowId); it != m_floatRestore.end()) {
-        // Clamped like seedFloatRestoreForOpen: a negative floor flows from
-        // here into insertWindowIntoColumnAt and on to Tile::minWidth/
-        // minHeight, and the relayout slack math is not written for one.
-        it->minWidth = qMax(0, minWidth);
-        it->minHeight = qMax(0, minHeight);
-    }
+    // qMax(0, ...): same negative-floor contract as insertOpenedWindow's
+    // boundary clamp and seedFloatRestoreForOpen — a negative floor flows from
+    // here into Tile::minWidth/minHeight (directly, or through the
+    // FloatRestore entry an unfloat re-applies), and the relayout slack math
+    // is not written for one. (No live crash today; every consumer happens to
+    // guard, but this is exported LGPL API and the sibling paths all clamp at
+    // the boundary.)
+    const int clampedMinWidth = qMax(0, minWidth);
+    const int clampedMinHeight = qMax(0, minHeight);
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
+    // The minimum this report replaces, read before any write below: the
+    // strip tile while the window tiles, the FloatRestore entry while it
+    // floats (windowMinimumSize answers both).
+    const QSize previousMin = windowMinimumSize(windowId);
+    // While the window floats there is no tile to write to, and unfloat
+    // re-applies the captured clamp — so without this write-through the
+    // restore puts back whatever the client reported at float time.
+    if (const auto it = m_floatRestore.find(windowId); it != m_floatRestore.end()) {
+        it->minWidth = clampedMinWidth;
+        it->minHeight = clampedMinHeight;
+    }
+    // A LOWERED minimum along a strip's main axis is the client saying it can
+    // now be narrower there, so what its earlier commits taught on that axis
+    // is stale: it may have answered at the old minimum. Dropped, the column
+    // is offered as asked, and a client that still will not take it teaches
+    // the floor again. A raised minimum takes nothing.
+    //
+    // Whether the drop changed the layout is MEASURED, on the column the
+    // window holds in the strip this report acts on, before and after: a
+    // floor in the orientation that strip does not run, a floating window's
+    // floor, a floor its column already outgrows, or one read while minimum
+    // sizes are off moves nothing, and announcing it would republish and
+    // retile a strip that did not change. Measured ahead of the minimum write
+    // below, so only the floor's part of the change is counted here.
+    const bool mayHoldFloor = state && m_committedExtents.contains(windowId) && state->strip().containsWindow(windowId);
+    const ScrollLayoutParams floorParams = mayHoldFloor ? layoutParamsForKey(key) : ScrollLayoutParams{};
+    const int extentBeforeDrop = mayHoldFloor ? state->strip().windowColumnMainExtentPx(windowId, floorParams) : -1;
+    dropCommittedForLoweredMinimum(windowId, previousMin, QSize(clampedMinWidth, clampedMinHeight));
+    const bool floorDropped =
+        mayHoldFloor && state->strip().windowColumnMainExtentPx(windowId, floorParams) != extentBeforeDrop;
     if (!state) {
         return;
     }
-    // qMax(0, ...): same negative-floor contract as the FloatRestore write
-    // above and insertOpenedWindow's boundary clamp — a negative floor flows
-    // from here into Tile::minWidth/minHeight, and the relayout slack math
-    // is not written for one. (No live crash today; every consumer happens
-    // to guard, but this is exported LGPL API and the sibling paths all
-    // clamp at the boundary.)
-    const int clampedMinWidth = qMax(0, minWidth);
-    const int clampedMinHeight = qMax(0, minHeight);
-    const bool minChanged = state->strip().setWindowMinimumSize(windowId, clampedMinWidth, clampedMinHeight);
+    // EVERY context the window holds a column in, not just the one in view:
+    // the compositor reports a minimum per window and only when it changes, so
+    // a desktop whose strip missed this write would keep the clamp it adopted
+    // the window with for as long as the window lives.
+    bool minChanged = false;
+    for (const PhosphorEngine::PlacementStateKey& member : m_states.membershipsForWindow(windowId)) {
+        ScrollState* memberState = m_states.stateForKey(member);
+        if (memberState && memberState->strip().setWindowMinimumSize(windowId, clampedMinWidth, clampedMinHeight)
+            && member == key) {
+            minChanged = true;
+        }
+    }
     // Re-run insertOpenedWindow's oversized verdict on the updated clamp. The
     // open path floats a window whose minimum no column slot can honour, but
     // clients that pin their size hints AFTER mapping (a Wine game maps
@@ -84,8 +113,9 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     // never satisfy — exactly the stranded state the refused-ack latch in
     // onWindowResized documents waiting on "something else" to heal.
     // Evaluated whatever minChanged says: an adoption path can seat a tiled
-    // window with an already-oversized clamp, and the effect's idempotent
-    // re-report is then the only revisit this state ever gets.
+    // window with an already-oversized clamp, and since the compositor
+    // re-reports a minimum only when it changes, a report that changed
+    // nothing here may still be the only one this state ever gets.
     // floatWindowInternal owns the whole transition (slot memory for the
     // eventual unfloat, float-focus seeding, context-guarded apply,
     // placementChanged), and the strip write above means the FloatRestore it
@@ -93,23 +123,20 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     // absent — a min that shrinks back below the work area does not
     // auto-unfloat, because the float may have been rearranged meanwhile and
     // the manual unfloat path already restores the remembered slot.
-    if (state->strip().containsWindow(windowId)) {
-        const ScrollLayoutParams params = layoutParamsForKey(key);
-        if (params.workArea.isValid()
-            && (clampedMinWidth > params.workArea.width() || clampedMinHeight > params.workArea.height())) {
-            qCInfo(lcScrollEngine) << "windowMinSizeUpdated:" << windowId << "min" << clampedMinWidth << "x"
-                                   << clampedMinHeight << "outgrew work area" << params.workArea.size() << "on"
-                                   << key.screenId << "— floating (open-time oversized policy)";
-            floatWindowInternal(state, key, windowId, key.screenId);
-            return;
-        }
+    if (floatIfOutgrowsWorkArea(state, key, windowId, "windowMinSizeUpdated:")) {
+        return;
+    }
+    // A dropped floor changes the strip's layout with no verb behind it, so
+    // it is republished like reportCommittedSize's own changes.
+    if (floorDropped) {
+        Q_EMIT placementChanged(key.screenId);
     }
     // Background-context guard, the same one windowClosed and the float paths
     // carry: a scheduled retile resolves the screen's CURRENT context, so a
     // min-size report for a window on another desktop would relayout a strip
     // this change did not touch. The model write still lands; the switch back
     // retiles the mutated strip.
-    if (minChanged && key == currentKeyForScreen(key.screenId)) {
+    if ((minChanged || floorDropped) && key == currentKeyForScreen(key.screenId)) {
         scheduleRetileForScreen(key.screenId);
     }
 }
@@ -117,7 +144,6 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
 void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldFrame, const QRect& newFrame,
                                    const QString& screenId)
 {
-    Q_UNUSED(oldFrame)
     // key.screenId is authoritative below; a mismatched caller value would
     // retile the wrong strip.
     Q_UNUSED(screenId)
@@ -166,19 +192,39 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // acked size with. Comparing physical width/height here while the
     // reconcile reads main/cross would make each guard protect the intent it
     // was not written for.
+    //
+    // Measured against the gesture's own START frame (@p oldFrame), which is
+    // what the user's drag actually moved from. The last applied rect is the
+    // OFFER, and differs from the frame on an axis the user never touched
+    // whenever the client did not take its offer (a client committed wider
+    // than its column, say): measured against it, a bottom-edge drag read as
+    // a main-axis resize and pinned a proportional width to Fixed pixels. The
+    // applied rect stands in only for a caller that sends no usable start.
+    const QRect gestureStart = oldFrame.isValid() ? oldFrame : lastApplied;
     const ScrollLayoutParams resizeParams = layoutParamsForKey(key);
     const StripAxis resizeAxis = resizeParams.axis;
-    const bool mainChanged = resizeAxis.mainSize(lastApplied) != resizeAxis.mainSize(newFrame);
-    const bool crossChanged = resizeAxis.crossSize(lastApplied) != resizeAxis.crossSize(newFrame);
-    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), mainChanged, crossChanged, resizeParams)) {
+    const bool mainChanged = resizeAxis.mainSize(gestureStart) != resizeAxis.mainSize(newFrame);
+    const bool crossChanged = resizeAxis.crossSize(gestureStart) != resizeAxis.crossSize(newFrame);
+    // The user's own resize ALONG the strip settles the window's extent there,
+    // so whatever its client's commits taught on this axis is superseded:
+    // without the drop the floor kept the column wider than the size the user
+    // released it at (a narrowing drag reverted, or a game that rescales
+    // narrower under a bottom-edge drag left a dead gap). This is the one
+    // entry point that counts as a user resize — reconcileWindowSize is
+    // reached from nowhere else — and the keyboard and D-Bus width verbs
+    // deliberately do not: they write intents a floor can still outrank.
+    const bool floorDropped = mainChanged && dropCommittedForUserResize(windowId, resizeAxis);
+    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), mainChanged, crossChanged, resizeParams)
+        || floorDropped) {
         // The reconcile WROTE persisted intent (the column's Fixed width, the
         // tile's Fixed height — both serialized by serializeStripState), and
         // placementChanged is this engine's only way to mark DirtyScrollStrips
         // (the tracking service's scheduleSaveState, DirtyAll, also sets that
-        // bit). Without
-        // this emit a resize that is the session's last strip interaction is
-        // never saved and the column comes back at its old width.
-        // reconcileWindowSize returns true only on a genuine change, so
+        // bit). Without this emit a resize that is the session's last strip
+        // interaction is never saved and the column comes back at its old
+        // width.
+        // reconcileWindowSize returns true only on a genuine change, and a
+        // dropped floor is one too (the column's extent moves with it), so
         // emit-on-change holds.
         Q_EMIT placementChanged(key.screenId);
         // The window now SITS at newFrame, not at the rect this map still
@@ -205,21 +251,20 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // relayout as "nothing moved" and never re-issue the rect. Drop the
     // memory and retile so the authoritative geometry is re-applied.
     //
-    // EXCEPT when the displacement is the window's own minimum floor: a
-    // client pinned at a min the slot cannot honour (KWin clamps every
-    // commit to it) re-asserts the same oversized frame after every
-    // corrective re-apply, and the reconcile above keeps refusing because
-    // the Fixed intent already records that size — so the retile can never
-    // converge and the pair loops at the client's re-assert rate. The known
-    // floor is not a displacement to correct, so the SELF-DRIVING retile is
-    // skipped — but the gate memory is still dropped: the frame genuinely
-    // differs from the engine's rect, and keeping the memory would make the
-    // eventual healing relayout (a later min-size drop, a focus move, any
-    // scheduled retile) read as "nothing moved" and stay silent, stranding
-    // the window oversized forever. With the memory gone each such relayout
-    // re-emits once; the client re-asserts once; no retile is scheduled
-    // from here, so the pair advances only when something else drives a
-    // relayout instead of ping-ponging on its own.
+    // EXCEPT when the displacement is the window's own minimum floor: the
+    // user's drag ended with KWin holding the frame at a frame minimum the
+    // slot cannot honour, and the reconcile above refused because the Fixed
+    // intent already records that size. Re-applying the slot rect would offer
+    // the client the very size it already refused and change nothing anyone
+    // can see, so the retile is skipped — but the gate memory is still
+    // dropped: the frame genuinely differs from the engine's rect, and keeping
+    // the memory would make the eventual healing relayout (a later min-size
+    // drop, a focus move, any scheduled retile) read as "nothing moved" and
+    // stay silent, stranding the window oversized forever. With the memory
+    // gone each such relayout re-emits once, and nothing here schedules one.
+    // This path is reached by a user's finished resize only (see the
+    // reconcile's note); a client answering its offer with another size is
+    // reportCommittedSize's to handle, not this arm's.
     if (lastApplied != newFrame) {
         const QSize knownMin = state->strip().windowMinimumSize(windowId);
         const bool pinnedAtMinW =

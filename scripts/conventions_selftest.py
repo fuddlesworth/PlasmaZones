@@ -3,12 +3,12 @@
 """Self-test for check-conventions.py's two pure detectors, its two split rules and its
 readability precondition.
 
-Split out of the gate itself, which crossed the 1150-line ceiling when two
-branches each landed a new rule. This is the most separable concern in it: test
-DATA plus one function, depending on nothing it is not handed: the two detectors
-(`prose_problems`, `iter_json_prose`) and the readability precondition
-(`partition_readable`), through whose `__globals__` the arms that need the gate's own
-namespace reach `rule_spdx`, `CODE_SUFFIXES`, `SPDX_HEAD_LINES` and `REPO`.
+Split out of the gate itself, which grew long when two branches each landed a new rule.
+This is the most separable concern in it: test DATA plus one function, depending on
+nothing it is not handed: the two detectors (`prose_problems`, `iter_json_prose`) and
+the readability precondition (`partition_readable`), through whose `__globals__` the
+arms that need the gate's own namespace reach `rule_spdx`, `CODE_SUFFIXES`,
+`SPDX_HEAD_LINES` and `REPO`.
 
 Imported lazily by the gate's `--selftest` arm rather than importing it at module
 scope, so the two files cannot form a cycle. The gate keeps the flag, because
@@ -22,8 +22,8 @@ WHAT IS HERE AND WHAT IS NOT. This file holds the PURE-DETECTOR probes: test dat
 assertions about `prose_problems`, `iter_json_prose` and the shared-text and dep5
 detectors, none of which builds a tree. The arms that drive a real RULE over a fake tree
 live in conventions_selftest_rules.py and arrive through one `rule_coverage_failures`
-call. They were split out when this file crossed the 1150-line ceiling, along the line
-those two concerns already fell on.
+call. They were split out when this file grew long, along the line those two concerns
+already fell on.
 """
 from __future__ import annotations
 
@@ -534,8 +534,8 @@ def _dep5_failures() -> list[str]:
         return text[:index].count("\n") + 1
 
     bad: list[str] = []
-    # DEP5_HEAD_LINES' value, pinned to its literal, for the reason SIZE_CEILING and
-    # JS_PRAGMA_WINDOW carry the same pin: the dangerous direction is invisible any other
+    # DEP5_HEAD_LINES' value, pinned to its literal, for the reason JS_PRAGMA_WINDOW
+    # carries the same pin: the dangerous direction is invisible any other
     # way. Narrowing it to 2 left BOTH the selftest and a whole-tree run green while every
     # header whose tags sit on lines 3-8 silently stopped being read, so those files' licences
     # and holders went unchecked. NEITHER direction is tree-caught anywhere near the current
@@ -819,37 +819,33 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     guarding on it, so a caller that forgot it lost that coverage in silence rather
     than failing."""
     failures = []
-    # Captured for the post-condition at the tail. SEVEN arms now redirect the gate's REPO
-    # (and CODE_SUFFIXES, BASELINE, read_error or tracked_files with it) at a temp tree and
-    # restore them in a finally, and several of them no longer run last. The post-condition is
-    # what catches a dropped restore in any of them: a later arm would otherwise run against a
-    # deleted directory and raise, which reads like a broken gate rather than a finding.
-    # frozenset(), not the set itself: CODE_SUFFIXES is mutable, so binding a reference
-    # would compare equal to itself after an arm mutated it IN PLACE, and the comparison
-    # could never fire for the one shape nobody would notice.
+    # Captured for the post-condition at the tail. FIVE arms now redirect the gate's
+    # REPO (and CODE_SUFFIXES or read_error with it) at a temp tree and restore them in
+    # a finally, and several of them no longer run last. The post-condition is what
+    # catches a dropped restore in any of them: a later arm would otherwise run against
+    # a deleted directory and raise, which reads like a broken gate rather than a
+    # finding. frozenset(), not the set itself: CODE_SUFFIXES is mutable, so binding a
+    # reference would compare equal to itself after an arm mutated it IN PLACE, and the
+    # comparison could never fire for the one shape nobody would notice.
     #
-    # SIX gate globals, plus a table AND a function in two sibling modules. Each was added
+    # FOUR gate globals, plus a table AND a function in two sibling modules. Each was added
     # after a mutation proved the suite green — or worse, red for the wrong reason — without
-    # it. THREE are written by the arm they belong to (the wiring arm stubs `read_error` and
-    # wraps `conventions_dep5._dead_stanza_problems`, the baseline-writer arm stubs
-    # `tracked_files`) and `_SELECTED_RULES` by the main() the wiring arm drives. EACH OF THE
-    # FOUR matters beyond tidiness because a later arm inherits it, and all four mechanisms are
-    # named here rather than three, because an earlier version listed three under an "all four"
-    # lead-in: rule_license's no-identifier deferral reads _SELECTED_RULES and a license arm
-    # runs AFTER the wiring arm, a leaked tracked_files would hand every later rule a temp file
-    # list, a leaked _dead_stanza_problems makes the dead-stanza arm report TWO failures that
-    # both accuse the check under test rather than the leak, and a leaked read_error is read by
-    # every later rule, which is what turns a well-formed file into a "malformed JSON" finding.
+    # it. TWO are written by the arm they belong to (the wiring arm stubs `read_error` and
+    # wraps `conventions_dep5._dead_stanza_problems`) and `_SELECTED_RULES` by the main() the
+    # wiring arm drives. EACH OF THE THREE matters beyond tidiness because a later arm
+    # inherits it: rule_license's no-identifier deferral reads _SELECTED_RULES and a license
+    # arm runs AFTER the wiring arm, a leaked _dead_stanza_problems makes the dead-stanza arm
+    # report TWO failures that both accuse the check under test rather than the leak, and a
+    # leaked read_error is read by every later rule, which is what turns a well-formed file
+    # into a "malformed JSON" finding.
     # conventions_shared_text.SHARED_PARAM_TEXT is redirected by two arms in this file and is
-    # the same shape. All of them are compared here
-    # rather than left to the arm that set them, because the arm that leaks is not the arm
-    # that fails — which is also why none of these messages names a culprit.
+    # the same shape. All of them are compared here rather than left to the arm that set
+    # them, because the arm that leaks is not the arm that fails — which is also why none
+    # of these messages names a culprit.
     entry_globals = partition_readable.__globals__
     entry_repo, entry_suffixes = entry_globals["REPO"], frozenset(entry_globals["CODE_SUFFIXES"])
-    entry_baseline = entry_globals["BASELINE"]
     entry_read_error = entry_globals["read_error"]
     entry_selected = frozenset(entry_globals["_SELECTED_RULES"])
-    entry_tracked = entry_globals["tracked_files"]
     import conventions_dep5
     import conventions_shared_text
 
@@ -906,17 +902,12 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
         failures.append(f"an arm left the gate's REPO at {entry_globals['REPO']}, not {entry_repo}")
     if entry_globals["CODE_SUFFIXES"] != entry_suffixes:
         failures.append("an arm left the gate's CODE_SUFFIXES changed")
-    if entry_globals["BASELINE"] != entry_baseline:
-        failures.append(f"an arm left the gate's BASELINE at {entry_globals['BASELINE']}, not {entry_baseline}")
     if entry_globals["read_error"] is not entry_read_error:
         failures.append("an arm left the gate's read_error stubbed, so every later rule reads through it")
     if frozenset(entry_globals["_SELECTED_RULES"]) != entry_selected:
         failures.append(f"an arm left the gate's _SELECTED_RULES as "
                         f"{sorted(entry_globals['_SELECTED_RULES'])}, not {sorted(entry_selected)}; "
                         f"rule_license's deferral arm reads it, so a later arm inherits the change")
-    if entry_globals["tracked_files"] is not entry_tracked:
-        failures.append("an arm left the gate's tracked_files stubbed, so every later rule and "
-                        "main() would walk that arm's temp file list instead of the tree")
     if conventions_shared_text.SHARED_PARAM_TEXT is not entry_shared_text:
         failures.append("an arm left conventions_shared_text.SHARED_PARAM_TEXT redirected, so "
                         "rule_shared_param_text would check that arm's table instead of the real one")

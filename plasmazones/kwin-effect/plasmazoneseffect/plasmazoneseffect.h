@@ -1,15 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): PlasmaZonesEffect is the KWin plugin's
-// single entry class — the Effect interface overrides plus every handler
-// back-pointer surface the split-out implementation files
-// (plasmazoneseffect/*.cpp, handlers, autotilehandler) call back through.
-// The implementation is already partitioned; the class declaration is the
-// one place KWin's plugin contract requires to be whole. Grew with the
-// cross-output bounce fix (#1124) and its audit: the per-window wiring split
-// and the members those fixes add.
-
 #pragma once
 
 #include <PhosphorCompositor/TilingState.h>
@@ -1180,11 +1171,16 @@ private:
     //
     // statementOnDeferredReplay: preparePlacement writes nothing under a live gesture, which is when
     // this DEFERS; the replay prepares again with this purpose before its moveResize (deferral only).
+    //
+    // stripOfferOnDeferredReplay: the column a strip batch offers with this apply, which the batch does not
+    // record while the gesture defers it; the replay records it once it has delivered the rect
+    // (recordStripOffer), so the client's answer is read against the column it was sent (deferral only).
     void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
                              bool skipAnimation = false,
                              const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF(),
-                             std::optional<PlacementStatement::Purpose> statementOnDeferredReplay = std::nullopt);
+                             std::optional<PlacementStatement::Purpose> statementOnDeferredReplay = std::nullopt,
+                             std::optional<QRect> stripOfferOnDeferredReplay = std::nullopt);
     bool fullscreenBailsApply(KWin::EffectWindow* window) const; ///< applyWindowGeometry's (fullscreenBails)
     quint64 beginGeometryCommand(KWin::EffectWindow* window); ///< bump its command stamp, drop a pending replay
     void notifyActiveWindowRawFirst(); ///< KWin's raw active window, else the stacking walk's (F523)
@@ -1568,6 +1564,25 @@ private:
     void armResizeAckWatch(KWin::EffectWindow* w);
     /// Settle a held move tail (MoveTailHold) once: its crossing, if any (F751), then the drop's held context edits.
     void drainMoveTail();
+
+    // The client's answer to its strip column (window_connections.cpp). The strip batch records each column it
+    // delivers through recordStripOffer; readColumnAnswer reads the answer (the report to the engine, then the
+    // offered-column centring) from the frame hook, from the commit watch while an answer is owed, and from the
+    // catch-up walk; noteForeignStripRequest puts back a resize KWin made on its own account, or marks one nobody on
+    // the strip asked for.
+    /// Record @p column as the column the batch delivered to @p w. @p sendsSize: the batch is sending the client a
+    /// new size, which makes its answer owed and arms the commit watch.
+    void recordStripOffer(KWin::EffectWindow* w, const QString& windowId, const QRect& column, bool sendsSize);
+    /// Read @p w's frame as its answer to the column it was offered, if it reads as one.
+    void readColumnAnswer(KWin::EffectWindow* w, const QString& windowId);
+    /// Read the client's commits while @p entry's answer is owed.
+    void armColumnAnswerWatch(KWin::EffectWindow* w, const QString& windowId, ScrollOfferedColumn& entry);
+    /// KWin (or the user) is about to change @p w's geometry outside any effect apply. A resize on KWin's account is
+    /// put back to the strip's rect from inside the request (ScrollDecisions::putsBackKWinResize, under a budget);
+    /// one that is not, and the user's resize, make the answer Foreign.
+    void noteForeignStripRequest(KWin::EffectWindow* w);
+    /// Read every owed answer once more on the next event-loop turn, after a gate that refused one has cleared.
+    void scheduleColumnAnswerCatchUp();
 
     void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
 
@@ -2919,8 +2934,14 @@ private:
     /// this column, so recording one for a placement that never went out would
     /// make the next batch read it as answered.
     ///
-    /// Wayland only: the single writer sits behind isWaylandClient(), so the
-    /// map is empty for X11 and every consumer of it is inert there.
+    /// Wayland only. Every write goes through recordStripOffer: the strip
+    /// batch, behind isWaylandClient(); the gesture-end replay of a batch apply
+    /// the gesture deferred, carrying the column that batch offered
+    /// (stripOfferOnDeferredReplay); and the cancels that put a strip tile back
+    /// after KWin's quick tile or axis-only maximize
+    /// (TilingHandler::cancelStripQuickTile, TilingHandler::cancelAxisOnlyMaximize),
+    /// which re-record an entry already there and create none. So the map is
+    /// empty for X11 and every consumer of it is inert there.
     ///
     /// The discriminator for size continuity (see the strip apply). A genuine
     /// column change is "this size differs from the one recorded here" — our
@@ -2935,7 +2956,25 @@ private:
     /// round trip and a screen change, where m_lastReportedMinSize
     /// deliberately persists. A settled size surviving either would place the
     /// window at a stale size on re-entry.
-    QHash<QString, QRect> m_scrollOfferedColumn;
+    ///
+    /// The value also carries where the client's ANSWER to the column stands
+    /// (ScrollDecisions::ColumnAnswer), so every remover above retires it with
+    /// the rect. A batch that sends the client a size makes the answer Owed; the
+    /// first settled frame that reads as an answer (ScrollDecisions::
+    /// readsAsColumnAnswer) is reported to the engine when it differs and makes
+    /// it Read. A commit watch reads the client's commits while the answer is
+    /// owed, because a settle that leaves the frame unchanged emits no frame
+    /// change. A geometry request KWin or the user makes outside an effect apply
+    /// that resizes the window is decided when the request is made
+    /// (noteForeignStripRequest): KWin's is put back to the strip's rect, under
+    /// a budget each delivery re-arms, and leaves the answer as it was; the
+    /// user's, and KWin's when it is not put back, make it Foreign until the
+    /// next delivery.
+    QHash<QString, ScrollOfferedColumn> m_scrollOfferedColumn;
+    /// Hands out ScrollOfferedColumn::answerWatch ids. Never restarted.
+    quint64 m_columnAnswerWatchSeq = 0;
+    /// A catch-up walk of the owed answers is queued (scheduleColumnAnswerCatchUp).
+    bool m_columnAnswerCatchUpQueued = false;
 
     /// Per-output-pass state for the compositor-drawn tab indicators (see
     /// paintScrollTabIndicators). Recomputed by prePaintScreen at the top of

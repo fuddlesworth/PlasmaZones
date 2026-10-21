@@ -4,9 +4,9 @@
 // The placement-map surfaces of TilingAdaptor: the per-screen replay of the
 // last tile batch (currentTilesJson) and the engine-managed focused window
 // with its change signal (managedFocusedWindow / focusedWindowChanged).
-// Split from tilingadaptor.cpp and relay.cpp by concern, both of which sit
-// near the file-size ceiling; the lifecycle dispatch and the engine relays
-// stay where they were and call the hooks defined here.
+// Split from tilingadaptor.cpp and relay.cpp by concern. The lifecycle
+// dispatch and the engine relays stay where they were and call the hooks
+// defined here.
 
 #include "tilingadaptor.h"
 

@@ -8,9 +8,8 @@ import org.phosphor.animation
  * @brief The card's timing-axis seed and commit bodies.
  *
  * The timing half of the split AnimationEventCardShaderIo made on the shader
- * half, and for the same reason: AnimationEventCard sits against the project's
- * size ceiling, and one axis's read-and-write pair is a coherent slice rather
- * than an arbitrary cut. `_applyEffective` seeds the working controls from a
+ * half, and for the same reason: one axis's read-and-write pair is a coherent
+ * slice rather than an arbitrary cut. `_applyEffective` seeds the working controls from a
  * resolved profile; the two commit functions push the user's edits back.
  *
  * The card keeps a thin forwarder for each, so every call site still reads

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorScrollEngine/ScrollTypes.h>
 #include <PhosphorScrollEngine/StripAxis.h>
 
 #include <QRect>
@@ -23,7 +24,7 @@ constexpr int kParkMargin = 16;
 
 /// Minimum visible sliver a straddling tile keeps on screen, on BOTH axes:
 /// the main-axis edge clamps and the cross-axis stack-overflow clamp share
-/// this floor (each raises it to the client's declared minimum under
+/// this floor (each raises it to ParkInputs::tileMin under
 /// respectMinimumSize).
 constexpr int kMinVisiblePeekPx = 48;
 
@@ -40,9 +41,13 @@ struct ParkInputs
     QRect columnRect;
     QRect workArea;
     QRect screenRect;
-    /// The client's declared minimum, or a null size when minimum sizes are
-    /// not being respected. NEVER transposed: it is a fact about the window
-    /// in screen coordinates, not a strip-axis quantity.
+    /// The window's declared minimum frame size, raised along the strip to the last
+    /// extent the client committed to its whole tile (the engine's peek
+    /// memory, ScrollEngine::committedPeekPx), or a null size when minimum
+    /// sizes are not being respected. NEVER transposed: it is a fact about the
+    /// window in screen coordinates, not a strip-axis quantity, so the raise
+    /// lands on the width for a horizontal strip and the height for a vertical
+    /// one.
     QSize tileMin;
     StripAxis axis;
     /// Where a park lands: below the union of every output.
@@ -51,6 +56,16 @@ struct ParkInputs
     bool hidden = false;
     bool cropStraddlers = false;
 };
+
+/// The ParkInputs of @p tile in @p column under @p params, parked at
+/// @p parkTop and clamped to @p screenRect, with @p tileMin as its minimum
+/// (ParkInputs::tileMin says what that holds). The one builder for both
+/// readers of the decision: applyLayout's emit loop, which commits it, and
+/// ScrollEngine::endStalePeeks, which asks what it would be without the peek
+/// memory. Built apart, the question could drift from the placement it asks
+/// about.
+ParkInputs parkInputsFor(const ResolvedTile& tile, const ResolvedColumn& column, const ScrollLayoutParams& params,
+                         const QRect& screenRect, int parkTop, const QSize& tileMin);
 
 /// The decision. The caller owns m_parkedScrollEdge and applies @ref
 /// rememberedEdge to it, which keeps this function pure and testable.

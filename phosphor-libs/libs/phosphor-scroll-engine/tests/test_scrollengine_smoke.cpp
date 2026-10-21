@@ -1,20 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file is around 2400 lines, past the
-// 1150 hard ceiling.
-//
-// The case for it: the split-by-concern work the rule asks for has already
-// been done. Fourteen siblings carry the rest of the suite (enumerated below),
-// each owning a coherent concern, and what remains here is the core smoke
-// path — tracking, ordering, float state, capture, context teardown, handoff.
-// Splitting that residue again would divide one narrative across two files
-// without giving either a concern of its own, and a reader following an
-// engine regression would then have to know which half to open.
-//
-// Reviewed at the same time as the file's other exception-worthy neighbours;
-// if a further concern emerges, it takes a sibling rather than growing this.
-
 // Headless ScrollEngine smoke test: tracking, ordering, float state, capture,
 // context teardown, and handoff semantics.
 //
@@ -24,8 +10,8 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Fourteen siblings carry the rest of the suite, split off at this file's size
-// ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
+// Siblings carry the rest of the suite, each owning a concern of its own:
+// test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
 // zone-number walk and the verbs that address it, test_scrollengine_perscreen
 // owns the per-screen override resolution, test_scrollengine_draginsert owns
@@ -406,11 +392,12 @@ void TestScrollEngineSmoke::lastManagedRectSurvivesClose()
 
 void TestScrollEngineSmoke::pruneStaleWindowsReclaimsRectsAndSeeds()
 {
-    // Aliveness sweep: because the rect memory is retained through close and
-    // handoffRelease, this prune is its SOLE reclaimer, and it is keyed on
-    // aliveness alone — the window below was untracked long before the
-    // prune, so the tracking sweep (whose count the return value reports)
-    // cannot be what dropped it.
+    // Aliveness sweep: the rect memory is retained through close and
+    // handoffRelease, and when no post-capture forgetClosedFullscreenHold
+    // reaches a closed window (the daemon's capture never ran) this prune is
+    // its reclaimer, keyed on aliveness alone — the window below was untracked
+    // long before the prune, so the tracking sweep (whose count the return
+    // value reports) cannot be what dropped it.
     {
         QObject owner;
         ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});

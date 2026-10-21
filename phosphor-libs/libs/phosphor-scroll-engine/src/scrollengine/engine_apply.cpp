@@ -17,11 +17,11 @@
 
 namespace PhosphorScrollEngine {
 
-// kParkMargin and kMinVisiblePeekPx moved to scrollpark_p.h alongside the
+// kParkMargin and kMinVisiblePeekPx live in scrollpark_p.h alongside the
 // placement decision they govern; this TU only needs the margin, to derive
 // the park line that separates "was parked last batch" from "was on screen".
-// (The self-activation cap that used to sit here is a ScrollEngine class
-// constant now — kMaxPendingSelfActivations — shared with the verb TU.)
+// The self-activation cap is the class constant kMaxPendingSelfActivations,
+// enforced in queueSelfActivation at the end of this file.
 
 void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
 {
@@ -71,8 +71,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // a context-keyed guard for a screen-keyed flag, and that flag is spendable
     // by any later pass; a pass that promotes and then bails without emitting
     // would hand the force to whichever context runs next, which is the very
-    // failure the key compare exists to prevent. Everything from here on
-    // reaches the emit gate.
+    // failure the key compare exists to prevent. Two exits remain below it,
+    // the empty resolve and the batch whose only tile is the dragged window.
+    // Neither consumes the flag, and neither has an entry a forced batch could
+    // carry, so the flag stays armed for the next pass on this screen.
     if (m_pendingFocusEmitContexts.remove(currentKey)) {
         m_forceEmitScreens.insert(screenId);
     }
@@ -146,6 +148,13 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         state->setResolvedAxis(params.axis);
     }
 
+    // Committed-floor sweep (settleCommittedFloors), ahead of the re-anchor
+    // below because one of its drops moves the layout: a floor a work-area
+    // shrink left past the work area is dropped, and the column narrows.
+    // Deferred while a drag preview steers the view, for the axis sweep's
+    // DETACH-ONCE reason; the next pass after the drop or cancel runs it.
+    const bool floorsDropped = !dragPreviewSteersView && settleCommittedFloors(*state, currentKey, params);
+
     // Re-apply the centering policy before resolving: a work-area change
     // (resolution, panels, outer gaps) or a centering-settings flip leaves
     // the stored anchor relative to the OLD width, and nothing else
@@ -162,8 +171,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // scheduled retile), which have no emit of their own — so without this a
     // re-anchor that is the session's last strip event is never saved and the
     // strip comes back scrolled to the pre-change view. Emitted at the tail,
-    // once the geometry has actually been applied.
-    const bool anchorMoved = state->strip().viewAnchor() != anchorBefore;
+    // once the geometry has actually been applied. A floor the sweep above
+    // dropped rides the same emit: the strip's layout changed with no verb
+    // behind it, and placementChanged is what republishes the strip to its
+    // readers (the placement map, the Monitors view, the scroll-cap list).
+    const bool anchorMoved = state->strip().viewAnchor() != anchorBefore || floorsDropped;
     const ResolvedStrip resolved = state->strip().relayout(params);
     if (resolved.columns.isEmpty()) {
         // The strip just emptied (last window closed / floated / released),
@@ -210,8 +222,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // captured one at begin: a preview detached on another desktop of this
         // same screen says nothing about whether THIS context's strip is
         // genuinely finished, and treating it as a hold left that context's
-        // cursor standing forever.
-        const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
+        // cursor standing forever. currentKey is the key resolved at the top
+        // of this function, which nothing since has moved.
         const bool dragHoldsWindowHere = m_dragInsertPreview
             && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetKey.screenId, screenId)
             && m_dragInsertPreview->targetKey.desktop == currentKey.desktop
@@ -263,9 +275,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // the same stuck-off-screen-folklore guard the old parks carried.
     int unionBottom = screenRect.bottom();
     if (m_screenManager) {
-        // screens() copies the vector; accepted — this runs per retile, not
-        // per frame, and caching it would add a screen-change invalidation
-        // path for a handful of small structs.
+        // screens() copies the vector; accepted. This runs per applyLayout,
+        // which is per retile except during an edge auto-scroll, where it
+        // runs on every tick; the copy is a handful of small structs either
+        // way, and caching it would add a screen-change invalidation path.
         const auto allScreens = m_screenManager->screens();
         for (const auto& s : allScreens) {
             unionBottom = qMax(unionBottom, s.geometry.bottom());
@@ -276,16 +289,6 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             unionBottom = qMax(unionBottom, r.bottom());
         }
     }
-    // A window under a compositor interactive move keeps its geometry with
-    // KWin — skip it in the batch (and leave its m_lastAppliedRect memory
-    // alone) while neighbours animate. The one live source is the daemon's
-    // whole-drag interactive mark, which covers trigger-not-held stretches
-    // of the drag, where the window is still modelled as a strip tile the
-    // effect merely floats visually. (A drag-insert preview's window never
-    // appears in a resolved tile: begin DETACHES it, and commit/cancel
-    // reset the preview before re-inserting, so no second filter source is
-    // needed.) The daemon clears the mark BEFORE the drop settles, so the
-    // finalizing relayout runs unfiltered.
     // How far the VIEW slid since the last emitted batch, as opposed to how
     // far any one window moved. Every carried window in this batch shares it,
     // so the effect can spring it ONCE per output and let the strip ride it
@@ -408,15 +411,6 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // Consumed at the strip loop.
     QHash<int, bool> columnAllParked;
     QSet<int> columnHadSkippedTile;
-    // Resolved ONCE for the whole batch, not per tile: crop mode is a
-    // per-SCREEN verdict, and the screenId accessor rebuilds this screen's
-    // override map on every call — which, inside the emit loop, is once per
-    // window per relayout. Same doctrine as layoutParamsForScreen's single
-    // fetch at the top of this file.
-    // Resolved once with the rest of the per-screen bools in
-    // layoutParamsForScreen — reading it off params keeps this batch from
-    // fetching the override map a second time for one value.
-    const bool cropStraddlers = params.cropStraddlers;
     // The park's top edge, the one number that separates "was on screen last
     // batch" from "was parked last batch" in m_lastAppliedRect. Every park
     // this pass commits lands exactly here (the park lambda moves only the
@@ -436,8 +430,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // BOTH pairing predicates demand POSITIVE evidence, symmetrically: an
     // entry must exist AND sit on the right side of the park line. A missing
     // entry means neither — onWindowResized's refused-ack arm drops a live
-    // tile's rect memory on purpose (see the m_parkedScrollEdge contract
-    // note below), and reading "no memory" as "was on screen" let such a tab
+    // tile's rect memory on purpose (that arm documents why), and reading
+    // "no memory" as "was on screen" let such a tab
     // be named as the outgoing half of a swap that never happened, or shadow
     // the genuinely-outgoing sibling in a 3+ tab column.
     const auto wasParked = [&](const QString& windowId) {
@@ -453,11 +447,36 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // plus an indexOfWindow per window, which is quadratic in the strip's
     // window count; walking the columns directly is linear. Only built when
     // the park actually consumes it.
+    //
+    // The peek floor along the strip also rises to the last extent the client
+    // committed to its whole tile (committedPeekPx), which outlives the column
+    // floor: once the column satisfies that floor it is dropped, but the
+    // client still answers at that width, and a clamped peek would hand it a
+    // sliver it answers at full width. At the TRAILING screen edge that answer
+    // grows across the boundary onto the neighbouring output; at the LEADING
+    // edge, where the answer is anchored at the offer's origin, it grows over
+    // the on-screen neighbour instead. Either way the column parks.
+    //
+    // The memory itself ends here, just ahead of the read, once the column
+    // offers less than it with no floor held, this pass offers the tile its
+    // whole rect without it, and no other column the window holds still
+    // offers it (endStalePeeks). Judged on the resolve above, after the
+    // re-anchor, because whether the tile straddles the screen edge is a fact
+    // about the view this batch commits. Deferred while a drag preview steers
+    // the view, with the floor sweep it follows; the next pass after the drop
+    // or cancel runs it.
+    if (!dragPreviewSteersView) {
+        endStalePeeks(state->strip(), resolved, currentKey, params, screenRect, parkTop);
+    }
     QHash<QString, QSize> tileMinSizes;
     if (params.respectMinimumSize) {
+        const bool horizontal = params.axis.isHorizontal();
         for (const Column& column : state->strip().columns()) {
             for (const Tile& tile : column.tiles) {
-                tileMinSizes.insert(tile.windowId, QSize(tile.minWidth, tile.minHeight));
+                const int committedMain = committedPeekPx(tile.windowId, params.axis);
+                tileMinSizes.insert(tile.windowId,
+                                    horizontal ? QSize(qMax(tile.minWidth, committedMain), tile.minHeight)
+                                               : QSize(tile.minWidth, qMax(tile.minHeight, committedMain)));
             }
         }
     }
@@ -523,6 +542,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         const bool maximizedToEdges = column.maximizedToEdges;
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
+                // A window under a compositor interactive move keeps its
+                // geometry with KWin — skip it in the batch (and leave its
+                // m_lastAppliedRect memory alone) while neighbours animate.
+                // The one live source is the daemon's whole-drag interactive
+                // mark, which covers trigger-not-held stretches of the drag,
+                // where the window is still modelled as a strip tile the
+                // effect merely floats visually. (A drag-insert preview's
+                // window never appears in a resolved tile: begin DETACHES it,
+                // and commit/cancel reset the preview before re-inserting, so
+                // no second filter source is needed.) The daemon clears the
+                // mark BEFORE the drop settles, so the finalizing relayout
+                // runs unfiltered.
+                //
                 // The dragged window gets NO entry at all for the whole
                 // gesture, maximizedToEdges included — and since absence is the
                 // only encoding of "not maximized", it is worth stating what
@@ -550,16 +582,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // past are exactly the ones that have parked, and without this the
             // screen goes empty instead of showing the strip move.
             const QRect stripRect = rect;
-            Detail::ParkInputs parkIn;
-            parkIn.tileRect = rect;
-            parkIn.columnRect = column.rect;
-            parkIn.workArea = params.workArea;
-            parkIn.screenRect = screenRect;
-            parkIn.tileMin = params.respectMinimumSize ? tileMinSizes.value(tile.windowId, QSize(0, 0)) : QSize();
-            parkIn.axis = params.axis;
-            parkIn.parkTop = parkTop;
-            parkIn.hidden = tile.hidden;
-            parkIn.cropStraddlers = cropStraddlers;
+            const Detail::ParkInputs parkIn = Detail::parkInputsFor(
+                tile, column, params, screenRect, parkTop,
+                params.respectMinimumSize ? tileMinSizes.value(tile.windowId, QSize(0, 0)) : QSize());
             const Detail::ParkResult parkOut =
                 Detail::resolveTilePlacement(parkIn, m_parkedScrollEdge.value(tile.windowId));
             rect = parkOut.rect;
@@ -574,8 +599,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // which does.
             //
             // Retaining here on top of that would be strictly worse than
-            // redundant. It keyed on m_lastAppliedRect, which some fifteen
-            // unrelated paths drop for their own reasons — onWindowResized's
+            // redundant. It keyed on m_lastAppliedRect, which many unrelated
+            // paths drop for their own reasons — onWindowResized's
             // refused-ack arm most often, and that fires for exactly the
             // off-screen hidden tabs this was meant to steady — so the
             // retention silently lapsed and the ping-pong came back (seen live
@@ -745,7 +770,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 m_lastAppliedWindowedFs.remove(tile.windowId);
             }
             // The maximize-to-edges flag needs the same leg: a toggle on a
-            // column pinned wider than the raw area by its client minimum
+            // column pinned wider than the raw area by its frame minimum
             // moves no rect at all, and the un-maximize half of any toggle
             // can land rect-identical when the stored width still renders
             // full. Without this the batch is suppressed and the compositor
@@ -932,10 +957,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // effect repaints pills and columns from the same tick's state on the
     // same frame. Effect-side the push is not free — the painter's equality
     // gate compares rect-bearing indicators, so a pure translation still
-    // re-rasterises the band and re-uploads its texture per tick; a
-    // position-only fast path there (detect uniform translation, re-blit the
-    // texture) is the accepted follow-up, deferred because it needs
-    // live-verified painter surgery and the band is small.
+    // re-rasterises the band and re-uploads its texture per tick. That is
+    // correct as it stands; a position-only fast path in the painter (detect
+    // a uniform translation, re-blit the texture) would be an optional
+    // optimisation for a small band.
     if (!strips.isEmpty()) {
         const QString payload = QString::fromUtf8(QJsonDocument(strips).toJson(QJsonDocument::Compact));
         if (m_lastTabStripPayload.value(screenId) != payload) {

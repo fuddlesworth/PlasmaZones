@@ -6,11 +6,11 @@
 // P_SCROLL_TILE_FOCUS_VERB — refusing while the float layer holds focus, and
 // handing a panned view back to the centering policy on success.
 //
-// Its own file rather than more of test_scrollengine_smoke, whose sanctioned
-// size exception says in as many words that a new concern takes a sibling.
-// The strip-level primitives these verbs drive (focusAdjacentTile,
-// focusTileAtEnd, focusTileByOrdinal) are pinned in test_scrollstrip_ops;
-// what this file owns is what the ENGINE adds on top of them.
+// Its own file rather than more of test_scrollengine_smoke, because a new
+// concern takes a sibling suite. The strip-level primitives these verbs drive
+// (focusAdjacentTile, focusTileAtEnd, focusTileByOrdinal) are pinned in
+// test_scrollstrip_ops; what this file owns is what the ENGINE adds on top of
+// them.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>

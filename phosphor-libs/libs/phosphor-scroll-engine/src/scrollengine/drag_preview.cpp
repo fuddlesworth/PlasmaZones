@@ -299,6 +299,11 @@ void ScrollEngine::commitDragInsertPreview()
         // with the membership intact — that is the detached-residue limbo
         // every other path heals.
         m_states.removeMembership(p.windowId, p.targetKey);
+        // A window that membership was the last of has left the engine, and
+        // what its client taught goes with it, as on every leave path.
+        if (!m_states.hasWindow(p.windowId)) {
+            forgetCommittedExtents(p.windowId);
+        }
         return;
     }
     // The STATE above came from the preview's captured key; params and the
@@ -336,6 +341,20 @@ void ScrollEngine::commitDragInsertPreview()
     // after would answer for the wrong column). reanchorForDropCommit turns
     // this into the on-screen position the indicator promised.
     const int preDropViewOffset = strip.relayout(params).viewOffset;
+    // A cross-OUTPUT drop is a migration: what the client's commits taught
+    // answered the prior output's tiles, and it answers the target's column
+    // afresh. Forgotten BEFORE the insert, because params reads the floors
+    // live and the insert, the focus and the drop re-anchor below all lay the
+    // column out; forgotten after, they placed it at the old floor and the
+    // relayout then drew it narrower than the view was anchored for. Every
+    // arm below is on the target output, the float degrade included. A drop
+    // on the same output is a reorder and keeps it, which is what the
+    // indicator probe drew the slot with (it masks the floor for a
+    // cross-output drop the same way).
+    const bool crossOutput = p.hadPriorState && p.priorKey.screenId != p.targetScreenId;
+    if (crossOutput) {
+        forgetCommittedExtents(p.windowId);
+    }
     bool inserted = false;
     // Whether the drop CREATED a column. The maximize-to-edges flag below
     // rides only those arms: a join makes the window a tile of a host column
@@ -411,7 +430,7 @@ void ScrollEngine::commitDragInsertPreview()
         m_lastAppliedWindowedFs.remove(p.windowId);
         m_lastAppliedMaximizedToEdges.remove(p.windowId);
         m_states.addMembership(p.windowId, p.targetKey);
-        if (p.hadPriorState && p.priorKey.screenId != p.targetScreenId) {
+        if (crossOutput) {
             dropFromOtherContexts(p.windowId, p.targetKey); // it left its prior output for good
         }
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
@@ -455,7 +474,8 @@ void ScrollEngine::commitDragInsertPreview()
     // A cross-OUTPUT drop: the window left its prior screen for good, so the
     // places it held on that screen's other desktops go too (begin moved only
     // the membership the drag started from, so a cancel could leave them).
-    if (p.hadPriorState && p.priorKey.screenId != p.targetScreenId) {
+    // What its client's commits taught went ahead of the insert above.
+    if (crossOutput) {
         dropFromOtherContexts(p.windowId, p.targetKey);
     }
 
@@ -610,6 +630,15 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
         // TARGET strip rather than orphaning it, and sync bookkeeping.
         ScrollState* targetState = stateForKey(p.targetKey, /*createIfMissing=*/true);
         if (targetState) {
+            // Re-homed onto ANOTHER output, the window has migrated as surely
+            // as a cross-output drop does, so what its client taught goes the
+            // same way, and ahead of the insert for the same reason: params
+            // reads the floors live. Refused by the target too (the else arm
+            // below), the window migrates nowhere and its floor goes only
+            // with its last membership.
+            if (p.priorKey.screenId != p.targetScreenId) {
+                forgetCommittedExtents(p.windowId);
+            }
             const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
             targetState->strip().insertWindow(p.windowId, p.carried.width, p.carried.display, params,
                                               p.carried.minWidth, p.carried.minHeight, ScrollInsertPosition::Last);
@@ -655,6 +684,9 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
             // against a key holding it nowhere. Drop that membership
             // instead of latching the detached-residue limbo.
             m_states.removeMembership(p.windowId, p.targetKey);
+            if (!m_states.hasWindow(p.windowId)) {
+                forgetCommittedExtents(p.windowId);
+            }
         }
         return;
     }
@@ -884,7 +916,13 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // as one — so the live params describe a work area the dropped window
     // never occupies.
     const int postDropColumns = probe.columnCount() + ((target.newSlot || probe.isEmpty()) ? 1 : 0);
-    const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId, postDropColumns);
+    // A cross-OUTPUT drop forgets the dragged window's committed floor before
+    // it inserts (commitDragInsertPreview), so the slot it promises is the
+    // unfloored one. Masked rather than forgotten: a cancel still returns the
+    // window to its own output, floor and all.
+    const bool crossOutput = p.hadPriorState && p.priorKey.screenId != p.targetScreenId;
+    const ScrollLayoutParams liveParams = layoutParamsForScreen(p.targetScreenId, postDropColumns);
+    const ScrollLayoutParams params = crossOutput ? withoutCommittedFloorOf(liveParams, p.windowId) : liveParams;
     if (!params.workArea.isValid()) {
         return {};
     }

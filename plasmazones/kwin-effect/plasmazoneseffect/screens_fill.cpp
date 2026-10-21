@@ -11,8 +11,7 @@
 // screen for a tiling-tracked window comes first (a monocle tile moved between
 // two monocle virtual screens keeps the restore rect of the one it left,
 // because the monocle arm skips maximize() for a window already MaximizeFull),
-// then the virtual screen holding its restore rect, then its last stamp. Its
-// own translation unit because screens.cpp is at the file-size ceiling.
+// then the virtual screen holding its restore rect, then its last stamp.
 
 #include "plasmazoneseffect.h"
 #include "windowscreendecisions.h"

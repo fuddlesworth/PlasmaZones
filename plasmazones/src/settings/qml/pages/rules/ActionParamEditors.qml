@@ -12,8 +12,8 @@ import org.plasmazones.common as PZCommon
  *
  * ActionRow's `_params` Repeater/Loader picks one of these `Component`s by the
  * param `kind` (never an action-type ladder). They live here rather than inline
- * so ActionRow stays under the file-size ceiling; the split is purely a home for
- * the Components, not a behavioural boundary.
+ * in ActionRow; the split is purely a home for the Components, not a
+ * behavioural boundary.
  *
  * Each Component body is UNCHANGED from when it lived in ActionRow: it still
  * reads `row.*` (the ActionRow instance, injected below) and `parent.modelData`
@@ -1022,12 +1022,11 @@ QtObject {
     property Component _shaderEffectEditor: Component {
         // Cascading category menu (the same widget ActionRow.qml uses for its
         // action-type picker, and the animations page for its shader picker)
-        // instead of a flat combo, so
-        // shaders group by category. The list is path-aware: it is pre-filtered
-        // to the shaders that can drive this action's target event, so a
-        // geometry-only shader (window-morph) is omitted on a show/hide event,
-        // matching the animations page and the WHEN/THEN pickers in this same
-        // editor.
+        // instead of a flat combo, so shaders group by category. The list is
+        // path-aware: it is pre-filtered to the shaders that can drive this
+        // action's target event, so a geometry-only shader (window-morph) is
+        // omitted on a show/hide event, matching the animations page and the
+        // WHEN/THEN pickers in this same editor.
         PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
             // Reading `row.action.event` re-filters the list when the user
@@ -1129,10 +1128,9 @@ QtObject {
     }
 
     // Inline shader-uniform editor shared by both shader-override actions
-    // (OverrideAnimationShader and OverrideOverlayShader). Its body lives in
-    // ActionShaderParamsEditor.qml rather than here, because this file is past the
-    // size ceiling and the preset merge it needs could not be added in place — the
-    // same move ActionPresetEditor.qml made.
+    // (OverrideAnimationShader and OverrideOverlayShader). Its body, preset merge
+    // included, lives in ActionShaderParamsEditor.qml, as the preset combo's
+    // lives in ActionPresetEditor.qml.
     property Component _shaderParamsEditor: Component {
         ActionShaderParamsEditor {
             row: editors.row

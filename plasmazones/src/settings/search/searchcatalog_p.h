@@ -53,9 +53,8 @@ inline void addSection(PhosphorControl::SearchController* search, const QString&
 } // namespace SearchCatalogDetail
 
 /// Seed the animation-event anchors (the reveal-tagged per-event rows on the
-/// Animations pages). Split out of seedSearchCatalog by concern — the single
-/// catalog TU had crossed the file-size ceiling. Called only by
-/// seedSearchCatalog.
+/// Animations pages). Split out of seedSearchCatalog by concern. Called only
+/// by seedSearchCatalog.
 void seedAnimationEventAnchors(PhosphorControl::SearchController* search);
 
 /// Seed the condensed simple-mode pages' anchors. Same split-by-concern as

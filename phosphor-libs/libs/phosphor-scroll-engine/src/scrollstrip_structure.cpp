@@ -3,6 +3,8 @@
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
+#include "scrollengine/enginelimits.h"
+
 namespace PhosphorScrollEngine {
 
 namespace {
@@ -36,8 +38,9 @@ int nearestVisibleTileIdx(const QVector<Tile>& tiles, int fromIdx)
 /// fallback scan only while the owner is still SOMEWHERE — tabbedColumnCrossPx
 /// does not scan for an unresolvable owner, so an owner that left the strip's
 /// column entirely snaps the column to the full work-area cross extent. Every
-/// site that removes a tile by hand shares this ONE definition with
-/// removeWindowInternal's chokepoint so the four cannot drift apart.
+/// site that removes a tile by hand (the consume and expel verbs) shares this
+/// ONE definition with removeWindowInternal's chokepoint so they cannot drift
+/// apart.
 ///
 /// Call AFTER the removal and after @p col.activeTileIdx has been re-clamped.
 void handOffTabbedHeightOwner(Column& col, const QString& departedId)
@@ -361,8 +364,11 @@ bool ScrollStrip::insertWindowAt(int columnIndex, const QString& windowId, const
     // the first-adopted (active) column, and the unclamped anchor left the
     // active column pinned at the viewport's left edge with every other
     // column parked off-screen and dead space on the right (the "toggle
-    // into scrolling shows one window" bug). Clamping is a no-op while the
-    // strip is narrower than the viewport.
+    // into scrolling shows one window" bug). On a strip that fits the
+    // viewport the clamp pins the view at the strip's start, so it also
+    // flattens the overhang a centred anchor carries (centerActiveColumn
+    // stores one by design); under Always or the lone-column rule the next
+    // layout pass re-centres it.
     if (params.workArea.isValid()) {
         m_viewAnchor = clampedAnchor(m_viewAnchor, params);
     }
@@ -634,9 +640,8 @@ bool ScrollStrip::setWindowMinimumSize(const QString& windowId, int minWidth, in
     // NOT a policy about oversized windows. A minimum that legitimately
     // exceeds the work area is already handled, and handled elsewhere: the
     // engine floats that window rather than trying to tile it.
-    constexpr int kMaxClientMinExtent = 100000;
-    minWidth = qBound(0, minWidth, kMaxClientMinExtent);
-    minHeight = qBound(0, minHeight, kMaxClientMinExtent);
+    minWidth = qBound(0, minWidth, kMaxClientExtentPx);
+    minHeight = qBound(0, minHeight, kMaxClientExtentPx);
     if (tile.minWidth == minWidth && tile.minHeight == minHeight) {
         return false;
     }
@@ -805,7 +810,13 @@ bool ScrollStrip::consumeWindowIntoColumn(const ScrollLayoutParams& params)
         takeIdx = visible;
     }
     const Tile taken = source.tiles.takeAt(takeIdx);
-    if (source.activeTileIdx >= source.tiles.size()) {
+    // The walk above can take a tile ABOVE a minimized active one, and the
+    // take then shifts that tile up a slot: follow it, or the slot names the
+    // tile that used to sit below it. Taking the active tile itself leaves
+    // the index on the tile that slid into its place, clamped at the end.
+    if (source.activeTileIdx > takeIdx) {
+        --source.activeTileIdx;
+    } else if (source.activeTileIdx >= source.tiles.size()) {
         source.activeTileIdx = qMax(0, source.tiles.size() - 1);
     }
     // The take is by INDEX, so it bypasses removeWindowInternal's chokepoint:
@@ -989,20 +1000,37 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
     // Rotate tiles + active-tile slot through the visible columns; width
     // and display stay with the SLOT so the strip's geometry holds still.
     //
-    // heightOwnerId travels WITH THE TILES, not with the slot: it names one of
-    // them. Left behind it would name a window now sitting in another column,
-    // and tabbedColumnCrossPx does not scan for an unresolvable owner — the
-    // rotated tabbed column would snap to the full work-area cross extent.
+    // maximizedToEdges travels WITH THE TILES: it is declared per window as
+    // far as the compositor is concerned (the effect mirrors it onto each
+    // window's own maximize bit), so leaving it on the slot would un-maximize
+    // the user's window and maximize whichever neighbour rotated in.
+    //
+    // heightOwnerId names one of the tiles, so it travels with them too, and
+    // is then reconciled against the slot's display, which stayed put. A
+    // Tabbed slot receiving a Tabbed column's tabs keeps the owner they
+    // brought: left behind it would name a window now sitting in another
+    // column, and tabbedColumnCrossPx does not scan for an unresolvable owner,
+    // so the column would snap to the full work-area cross extent. A Tabbed
+    // slot receiving a Normal column's stack names the tab on show, the rule
+    // applyColumnDisplay follows when a column enters tabbed. A Normal slot
+    // holds no owner at all, applyColumnDisplay's rule for leaving tabbed.
     QVector<QVector<Tile>> tiles;
     QVector<int> activeTileIdx;
     QVector<QString> heightOwnerId;
+    QVector<ColumnDisplay> display;
+    QVector<bool> maximizedToEdges;
     tiles.reserve(visible.size());
     activeTileIdx.reserve(visible.size());
     heightOwnerId.reserve(visible.size());
+    display.reserve(visible.size());
+    maximizedToEdges.reserve(visible.size());
     for (const int idx : visible) {
-        tiles.append(m_columns.at(idx).tiles);
-        activeTileIdx.append(m_columns.at(idx).activeTileIdx);
-        heightOwnerId.append(m_columns.at(idx).heightOwnerId);
+        const Column& source = m_columns.at(idx);
+        tiles.append(source.tiles);
+        activeTileIdx.append(source.activeTileIdx);
+        heightOwnerId.append(source.heightOwnerId);
+        display.append(source.display);
+        maximizedToEdges.append(source.maximizedToEdges);
     }
     int rotated = 0;
     const int n = visible.size();
@@ -1012,7 +1040,14 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
         Column& dest = m_columns[visible.at(i)];
         dest.tiles = tiles.at(from);
         dest.activeTileIdx = activeTileIdx.at(from);
-        dest.heightOwnerId = heightOwnerId.at(from);
+        dest.maximizedToEdges = maximizedToEdges.at(from);
+        if (dest.display != ColumnDisplay::Tabbed || dest.tiles.isEmpty()) {
+            dest.heightOwnerId.clear();
+        } else if (display.at(from) == ColumnDisplay::Tabbed) {
+            dest.heightOwnerId = heightOwnerId.at(from);
+        } else {
+            dest.heightOwnerId = dest.tiles.at(qBound(0, dest.activeTileIdx, dest.tiles.size() - 1)).windowId;
+        }
         // Count non-minimized tiles only: the total feeds the user-facing
         // "Rotated %n windows" OSD copy, and a partly-minimized column's
         // hidden tiles did not visibly move. (visibleColumnIndices already
@@ -1026,13 +1061,15 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
         }
     }
     // Width/display intents stayed with the slot, but a column's RESOLVED
-    // width also carries its tiles' min-width clamp — so a rotate that lands
-    // a wide-minimum window in a narrow slot really does change pixel widths,
-    // and the total strip width with them. Re-clamp so the view cannot be
-    // stranded past the end of a strip that just SHRANK — and only then:
-    // centerActiveColumn deliberately stores out-of-range anchors
-    // (restoreViewAnchor / updateViewForFocus document not clamping them),
-    // so an unconditional clamp here would silently undo an explicit
+    // width also carries its tiles' floors along the strip (the declared
+    // minimum and any committed floor, both of which travel with the window)
+    // and the maximize-to-edges flag that travelled above — so a rotate that
+    // lands a wide-floored or maximized window in a narrow slot really does
+    // change pixel widths, and the total strip width with them. Re-clamp so
+    // the view cannot be stranded past the end of a strip that just SHRANK —
+    // and only then: centerActiveColumn deliberately stores out-of-range
+    // anchors (restoreViewAnchor / updateViewForFocus document not clamping
+    // them), so an unconditional clamp here would silently undo an explicit
     // centerColumn on a first/last column on the next rotate.
     if (params.workArea.isValid() && stripExtentPx(params) < extentBefore) {
         m_viewAnchor = clampedAnchor(m_viewAnchor, params);

@@ -7,13 +7,12 @@
 // which column the window-scoped verbs act on, and what survives the state
 // transitions that discard the strip's single pre-maximize slot.
 //
-// Its own file rather than more of test_scrollengine_smoke, whose sanctioned
-// size exception says in as many words that a new concern takes a sibling. The
-// strip-level toggle arms live in test_scrollstrip_sizing (the width toggle)
-// and test_scrollstrip_maximize (to-edges); what this file owns is the
-// ENGINE's half — the wire flag, the verb's targeting (including the
-// window-addressed tab expel), and the compositions no single-step test
-// covers.
+// Its own file rather than more of test_scrollengine_smoke, because a new
+// concern takes a sibling suite. The strip-level toggle arms live in
+// test_scrollstrip_sizing (the width toggle) and test_scrollstrip_maximize
+// (to-edges); what this file owns is the ENGINE's half — the wire flag, the
+// verb's targeting (including the window-addressed tab expel), and the
+// compositions no single-step test covers.
 //
 // Three neighbours ride along: the stash-latch slots at the tail (shown tab
 // and extent owner across a mode round trip) share this file's tabbed-column
@@ -23,7 +22,7 @@
 // per-column key (round trip and the absent-key fallback), the cross-session
 // fuzzy appId claim's transfer, and what the FloatRestore slot carries out and
 // back. They belong with the concern rather than in test_scrollengine_persistence,
-// which owns the stash mechanics and is already past the file-size ceiling.
+// which owns the stash mechanics.
 //
 // The flag is deliberately published for tiles the user cannot see (parked
 // columns, hidden tabs). Suppressing it there cycled the client's maximize bit
@@ -788,8 +787,8 @@ void TestScrollEngineMaximize::maximizedToEdgesRoundTripsThroughTheBlob()
     // in-memory stash tests green, so this one drives the blob itself.
     //
     // Lives here rather than in test_scrollengine_persistence, which owns the
-    // stash and blob mechanics but is already past the file-size ceiling: the
-    // maximize concern is this file's, and the blob is one more surface of it.
+    // stash and blob mechanics: the maximize concern is this file's, and the
+    // blob is one more surface of it.
     QObject owner;
     ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);

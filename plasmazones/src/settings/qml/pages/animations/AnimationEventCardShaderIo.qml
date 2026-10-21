@@ -6,12 +6,11 @@ import QtQuick
 /**
  * @brief The card's shader-axis read and parameter-write bodies.
  *
- * Split out of AnimationEventCard for the same reason AnimationEventCardWriters
- * was: that file is over the project's size ceiling, and this is a coherent
- * slice rather than an arbitrary cut. Everything here concerns ONE axis (the
- * shader) and ONE direction pair — read the resolved state back out of the
- * tree, and write parameter values into it. The timing axis, the group writers
- * and the card's own view state stay where they are.
+ * Split out of AnimationEventCard as a coherent slice rather than an arbitrary
+ * cut. Everything here concerns ONE axis (the shader) and ONE direction pair —
+ * read the resolved state back out of the tree, and write parameter values into
+ * it. The timing axis, the group writers and the card's own view state stay
+ * where they are.
  *
  * The card keeps a thin forwarder for every function below, so `root._foo(...)`
  * reads the same at every call site: handlers, bindings, and the QML-contract

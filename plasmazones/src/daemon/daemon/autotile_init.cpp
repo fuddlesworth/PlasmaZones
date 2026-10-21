@@ -3,9 +3,8 @@
 //
 // Daemon::initializeAutotile() — the autotile engine's signal wiring and its
 // eight shortcut handlers — plus Daemon::handleTilingModeToggle(), the
-// three-mode cycle the toggle shortcut drives. Split out of daemon/signals.cpp
-// to keep that file under the size ceiling; the rest of the daemon's signal
-// wiring stays there.
+// three-mode cycle the toggle shortcut drives. Split out of daemon/signals.cpp;
+// the rest of the daemon's signal wiring stays there.
 
 #include "daemon/daemon.h"
 #include "helpers.h"

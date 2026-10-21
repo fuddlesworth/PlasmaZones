@@ -11,9 +11,9 @@
 // list is built (buildActionTypeEntries, ruleauthoring_actions.cpp) and are NOT
 // covered by the canary. No descriptor in the tree sets it false today.
 //
-// Own translation unit rather than ruleauthoring_actions.cpp: the ladder
-// carries one entry per registered action type, and that file already sits at
-// the size guideline.
+// Own translation unit rather than ruleauthoring_actions.cpp: the ladder is
+// hover help, one entry per registered action type, and that file owns the
+// picker side.
 
 #include "ruleauthoring.h"
 
@@ -344,8 +344,9 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::SetScrollRespectMinimumSize) {
         return PhosphorI18n::tr(
-            "Keeps columns on the matched context at least as large as each window asks to be. "
-            "Off lets a column go smaller, which the compositor then clamps on its own.");
+            "Keeps columns on the matched context at least as large as each window's minimum size, and "
+            "grows a column to fit a window that stays larger than it. Off lets a column go smaller, which "
+            "the compositor then clamps on its own.");
     }
     if (type == ActionType::SetScrollCropStraddlers) {
         return PhosphorI18n::tr(

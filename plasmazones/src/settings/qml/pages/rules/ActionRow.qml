@@ -272,8 +272,7 @@ ColumnLayout {
     readonly property string _zoneNamesKey: "zoneNames"
     // Param-editor Components — one per param `kind`, keyed off `parent.modelData`
     // (the hosting Loader's descriptor). They live in ActionParamEditors.qml
-    // (instantiated below as `paramEditors`) so this file stays under the
-    // file-size ceiling; the Loaders resolve each template via
+    // (instantiated below as `paramEditors`); the Loaders resolve each template via
     // `paramEditors._…ParamEditor`. Purely a home for the templates — they still
     // read `row.*` for state through the `row: row` handle.
     property ActionParamEditors paramEditors: ActionParamEditors {

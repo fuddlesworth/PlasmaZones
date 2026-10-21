@@ -4,7 +4,7 @@
 // The offline pack validator's metadata lints, across two of the four
 // authoring models: ANIMATION and OVERLAY. The pointer arm has its own file,
 // test_pointer_pack_validator.cpp, and the surface arm now has
-// test_surface_pack_validator.cpp. That split follows the file-size ceiling
+// test_surface_pack_validator.cpp. That split followed file length
 // rather than the family boundary, and since every executable compiles all four
 // arms, a lint deleted from one family's arm breaks no test in the file that
 // covers it. Which arm a slot is actually about is therefore worth stating, and

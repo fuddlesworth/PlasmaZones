@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The DEP-5 copyright rule for check-conventions.py.
 
-Split out of the gate for the reason its two siblings record: the gate reached its
-1150-line ceiling, and CLAUDE.md says to split past it rather than shave comments.
-This is the most separable rule — self-contained, the only one that walks every
+Split out of the gate for the reason its two siblings record: the gate had grown
+long. This is the most separable rule — self-contained, the only one that walks every
 tracked path rather than a suffix-filtered subset, and dependent on nothing but the
 repo root and two gate helpers, which arrive as keyword arguments the way
 run_selftest's do.

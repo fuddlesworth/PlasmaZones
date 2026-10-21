@@ -6,8 +6,8 @@
 // centering policy, and the three verbs that rewrite several column widths
 // at once (equalize, minimize, reset). Placed in its own file rather than
 // grown into test_scrollstrip_ops, which owns the per-operation surface over
-// one shared strip fixture and already carries a file-size exception; every
-// slot here builds its own strip against the shared screen constants.
+// one shared strip fixture; every slot here builds its own strip against the
+// shared screen constants.
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
@@ -802,8 +802,24 @@ void TestScrollStripView::expandReclaimsAStraddlersPixels()
     // Taken = 500 + 500 + one gap between them = 1010, so 190 is reclaimable
     // and b grows to 690.
     QVERIFY(strip.expandActiveColumnToAvailableWidth(params));
-    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 690);
+    const ResolvedStrip after = strip.relayout(params);
+    QCOMPARE(Ax::mainLen(rectOf(after, QStringLiteral("b"))), 690);
     QCOMPARE(strip.columns().at(2).width, ColumnWidth::makeFixed(500)); // c untouched
+
+    // And the pixels really are reclaimed rather than pushed off the far
+    // side: the group's lead column lands at the lead edge, so the grown
+    // group ends exactly at the trailing edge and the straddler leaves the
+    // view. Holding the active column where it was instead left a still
+    // showing 180px and pushed c 190px past the trailing edge.
+    QCOMPARE(Ax::mainPos(rectOf(after, QStringLiteral("b"))), 0);
+    const QRect c = rectOf(after, QStringLiteral("c"));
+    QCOMPARE(Ax::mainPos(c) + Ax::mainLen(c), ScrollTestUtils::kMainExtent);
+    const QRect a = rectOf(after, QStringLiteral("a"));
+    QVERIFY2(Ax::mainPos(a) + Ax::mainLen(a) <= 0, "the straddler must be pushed fully out of view");
+    // The next layout pass keeps it: a fully visible active column is left
+    // where it is by the non-centering policies.
+    strip.updateViewForFocus(params);
+    QCOMPARE(Ax::mainPos(rectOf(strip.relayout(params), QStringLiteral("b"))), 0);
 }
 
 void TestScrollStripView::expandMaximizesWhenTheActiveColumnIsAloneOnScreen()

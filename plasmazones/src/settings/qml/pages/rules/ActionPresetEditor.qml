@@ -8,9 +8,6 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief The named preset a shader-override rule's `params` are deltas against.
  *
- * Its own file rather than one more Component inside ActionParamEditors.qml,
- * which is already past the size ceiling.
- *
  * Offered for whichever pack the row's OTHER param names, because a preset only
  * means anything against its own pack: the animation action names an animation
  * pack, the overlay action an overlay one.

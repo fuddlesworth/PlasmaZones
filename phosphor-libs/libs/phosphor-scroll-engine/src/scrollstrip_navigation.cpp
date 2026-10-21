@@ -102,7 +102,7 @@ bool ScrollStrip::focusTileByOrdinal(int ordinal)
         return false;
     }
     // Ordinals count the FOCUSABLE tiles, not the raw tile slots: a minimized
-    // tile draws no tab (ResolvedTile::tabCount excludes them, and the sibling
+    // tile draws no tab (ScrollVisibleTile::tabCount excludes them, and the sibling
     // walks refuse to land on one), so counting slots would make the visible
     // tabs and the numbers the user presses disagree the moment a tile in the
     // column is minimized.

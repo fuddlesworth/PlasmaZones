@@ -63,6 +63,21 @@ void ScrollEvacueePark::forgetUnowed(const QString& windowId)
         floating.remove(windowId);
         minSizes.remove(windowId);
     }
+    forgetCommittedIfUnheld(windowId);
+}
+
+bool ScrollEvacueePark::hasGrantFor(const QString& windowId) const
+{
+    return std::any_of(grants.cbegin(), grants.cend(), [&windowId](const QHash<QString, bool>& windows) {
+        return windows.contains(windowId);
+    });
+}
+
+void ScrollEvacueePark::forgetCommittedIfUnheld(const QString& windowId)
+{
+    if (!owes(windowId) && !hasGrantFor(windowId)) {
+        committed.remove(windowId);
+    }
 }
 
 void ScrollEvacueePark::dropContextsWhere(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& gone)
@@ -121,6 +136,7 @@ std::optional<bool> ScrollEvacueePark::takeGrant(const PhosphorEngine::Placement
     if (it->isEmpty()) {
         grants.erase(it);
     }
+    forgetCommittedIfUnheld(windowId);
     return parkedFloating;
 }
 
@@ -136,6 +152,14 @@ void ScrollEvacueePark::dropGrantsWhere(const QString& windowId,
             }
         }
         it = it->isEmpty() ? grants.erase(it) : std::next(it);
+    }
+    if (!windowId.isEmpty()) {
+        forgetCommittedIfUnheld(windowId);
+        return;
+    }
+    const QStringList held = committed.keys();
+    for (const QString& id : held) {
+        forgetCommittedIfUnheld(id);
     }
 }
 
@@ -171,6 +195,11 @@ QStringList ScrollEngine::parkOutput(const QString& physicalScreenId)
                 m_evacueePark->floating.insert(windowId);
             }
             m_evacueePark->minSizes.insert(windowId, windowMinimumSize(windowId));
+            // The release below forgets the window's committed extents with
+            // the rest of its engine state; the park carries them back.
+            if (const auto committed = m_committedExtents.constFind(windowId); committed != m_committedExtents.cend()) {
+                m_evacueePark->committed.insert(windowId, *committed);
+            }
             if (!windows.contains(windowId)) {
                 windows.append(windowId);
             }
@@ -199,6 +228,17 @@ bool ScrollEngine::readoptParked(const QString& windowId, const QString& parkedP
     }
     const QString canonical = canonicalizeForLookup(windowId);
     bool seated = false;
+    // The committed extents the park carried go back BEFORE any seat below:
+    // the in-view open path lays the column out at once, and it has to read
+    // the floor the client already taught. Taken back out after the walk when
+    // nothing here ended up holding the window (a grant keeps the park's copy
+    // for the arrival instead). A window some strip already holds keeps its
+    // own live entry.
+    const bool committedRestored = !isWindowTracked(canonical) && !m_committedExtents.contains(canonical)
+        && m_evacueePark->committed.contains(canonical);
+    if (committedRestored) {
+        m_committedExtents.insert(canonical, m_evacueePark->committed.value(canonical));
+    }
     // Contexts whose stash moved onto the key they return under, put back
     // under that key once the walk is done.
     QList<QPair<PhosphorEngine::PlacementStateKey, QSet<QString>>> rekeyed;
@@ -347,6 +387,9 @@ bool ScrollEngine::readoptParked(const QString& windowId, const QString& parkedP
         }
         seated = true;
         Q_EMIT placementChanged(key.screenId);
+    }
+    if (committedRestored && !isWindowTracked(canonical)) {
+        m_committedExtents.remove(canonical);
     }
     m_evacueePark->forgetUnowed(canonical);
     if (seated) {

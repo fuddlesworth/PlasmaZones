@@ -5,8 +5,8 @@
 // and the openTabGroup rule key, their precedence against the consume rule,
 // the stash, the order seed, migration and unfloat, the focus-new-windows
 // rewind of a background host, and the hosts the scan must not offer. Split
-// out of test_scrollengine_behaviour.cpp at the file-size ceiling; the same
-// two-screen provider engine and the same settings stub, read live.
+// out of test_scrollengine_behaviour.cpp; the same two-screen provider engine
+// and the same settings stub, read live.
 //
 // Everything asserted here is an OBSERVABLE (which column a window landed
 // in, a column's display and tile count, the strip's active window, the tab

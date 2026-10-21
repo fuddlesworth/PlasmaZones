@@ -7,8 +7,7 @@
 // honest, and the membership-aware walk over every snap store's zone
 // assignments that the occupancy and resnap consumers read.
 //
-// Its own translation unit because WindowTrackingService.cpp is over the
-// file-size ceiling, and these are one concern: what the membership pass
+// Its own translation unit because these are one concern: what the membership pass
 // reads, what it writes back, and how a window present on several desktops
 // is reported to the consumers that ask about every store at once. The
 // float path's unsnap lives here too: it is the one writer that forgets a

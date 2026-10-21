@@ -21,7 +21,10 @@
  *     past the end), and answers a press on the active column with the
  *     no-target feedback rather than silence.
  *  3. scrollViewByPx refuses zero and the same gates silently, and pans by
- *     exactly the pixel count it was given, detaching the view.
+ *     exactly the pixel count it was given, detaching the view. The pan is
+ *     quiet: neither a pan that moves nor one pinned at the strip end it
+ *     moves toward raises navigation feedback, and only an owned screen
+ *     with an empty strip still answers, with no_windows.
  */
 
 #include <QJsonArray>
@@ -316,8 +319,9 @@ private Q_SLOTS:
         QSignalSpy feedback(m_engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
         QSignalSpy activateSpy(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
 
-        // Zero is refused at the boundary: no feedback, unlike the engine's
-        // own no_movement answer to a zero-pixel percent.
+        // Zero is refused at the boundary. On this populated strip the engine
+        // would stay quiet either way, so the empty-strip leg at the end is
+        // the one that tells the boundary refusal apart.
         m_adaptor->scrollViewByPx(QStringLiteral("DP-1"), 0);
         m_adaptor->scrollViewByPx(QStringLiteral("HDMI-2"), -100); // not ours
         m_adaptor->scrollViewByPx(QString(), -100); // no screen at all
@@ -336,20 +340,21 @@ private Q_SLOTS:
             return false;
         });
 
-        // A forward pan from the end clamps: anchor holds, no_target answers.
+        // A forward pan from the end clamps: the anchor holds, and the engine
+        // answers nothing. The map keeps calling while the user drags past
+        // the end, so a no_target card here would flash for every frame.
         m_adaptor->scrollViewByPx(QStringLiteral("DP-1"), 100);
         QCOMPARE(state->strip().viewAnchor(), anchorBefore);
-        QCOMPARE(feedback.count(), 1);
-        QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+        QCOMPARE(feedback.count(), 0);
 
         // The positive control: EXACTLY the pixels asked for, no step
         // rounding, and the view detaches from the centering policy while
-        // focus stays where it was.
+        // focus stays where it was. A pan that moves is quiet too: the map's
+        // moving lens is its feedback.
         m_adaptor->scrollViewByPx(QStringLiteral("DP-1"), -137);
         QCOMPARE(state->strip().viewAnchor(), anchorBefore + 137);
         QVERIFY(state->strip().viewDetached());
-        QCOMPARE(feedback.count(), 2);
-        QCOMPARE(feedback.last().at(0).toBool(), true);
+        QCOMPARE(feedback.count(), 0);
         QCOMPARE(activateSpy.count(), 0);
         QCOMPARE(m_engine->managedFocusedWindow(QStringLiteral("DP-1")), QStringLiteral("app|c"));
         // A second call is a second pan, and the model reports the moved view.
@@ -358,6 +363,17 @@ private Q_SLOTS:
         const PhosphorScrollEngine::ScrollStripModel model = m_engine->stripModelForScreen(QStringLiteral("DP-1"));
         QCOMPARE(parse(m_adaptor->stripModelJson(QStringLiteral("DP-1"))).value(Key::ViewOffsetPx).toInt(),
                  model.viewOffsetPx);
+
+        // The one refusal that still answers, and the proof the spy above
+        // can see this verb's feedback at all: an owned screen whose strip
+        // holds no windows answers no_windows. A zero goes first and must
+        // stay silent, because handed down it would get that same answer.
+        m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        m_adaptor->scrollViewByPx(QStringLiteral("DP-2"), 0);
+        QCOMPARE(feedback.count(), 0);
+        m_adaptor->scrollViewByPx(QStringLiteral("DP-2"), -100);
+        QCOMPARE(feedback.count(), 1);
+        QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_windows"));
     }
 
 private:

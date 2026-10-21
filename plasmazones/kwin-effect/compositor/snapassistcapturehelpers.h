@@ -3,9 +3,9 @@
 #pragma once
 
 // TU-local helpers of snapassistthumbnailcapture.cpp: the capture timing
-// constants, the fd owner, and the two small predicates. Split out only to keep
-// that file under the 1150-line ceiling; nothing here is shared with another
-// translation unit and nothing here belongs to the class's interface.
+// constants, the fd owner, and the two small predicates. Nothing here is shared
+// with another translation unit and nothing here belongs to the class's
+// interface.
 
 #include <QImage>
 #include <QSize>

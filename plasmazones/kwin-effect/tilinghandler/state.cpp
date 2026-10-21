@@ -54,7 +54,7 @@
 #include <QVariant>
 
 #include <optional>
-#include <utility> // std::as_const over the collected sets and lists
+#include <utility> // std::as_const over the collected sets and lists, std::exchange on the seed
 
 namespace PlasmaZones {
 
@@ -224,7 +224,14 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // legitimately all-empty on a session with no scrolling screen. Gating the
     // flag would leave blocksDirectScanout permanently falling back to the
     // global setting there.
-    m_scrollEffectBehaviourSeeded = true;
+    //
+    // The first seed of a session also releases the answers the committed-size
+    // report deferred for want of an axis map (reportStripCommit). The walk is
+    // queued, so it reads the axis set this function writes below, on either
+    // side of its change gate (F138).
+    if (!std::exchange(m_scrollEffectBehaviourSeeded, true)) {
+        m_effect->scheduleColumnAnswerCatchUp();
+    }
     m_scrollFocusFollowsMouseScreens = ffm;
     // This write can take the LAST focus-follows-mouse screen away while the
     // autotile global was already off. handleCursorMoved would disarm the

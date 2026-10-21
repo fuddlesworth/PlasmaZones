@@ -8,8 +8,7 @@
 namespace PlasmaZones {
 
 // Chain link 8: the Shortcuts.Scrolling chord defaults. Split out of
-// configdefaults_scrolling.h to keep that file inside the size ceiling; the
-// engine's own Scrolling defaults stay there (link 6) and its behaviour
+// configdefaults_scrolling.h; the engine's own Scrolling defaults stay there (link 6) and its behaviour
 // tunables in configdefaults_scrolling_behavior.h (link 7). Every accessor here
 // reaches call sites through the ConfigDefaults leaf as before, so no consumer
 // changes.

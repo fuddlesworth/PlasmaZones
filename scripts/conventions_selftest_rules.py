@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Rule-COVERAGE arms of the gate self-test: each one drives a real rule over a fake tree.
 
-Split from conventions_selftest.py, which crossed the 1150-line ceiling once the size
-ratchet, the wiring call sites and the remaining prose-extraction arms got the coverage
-they had been missing. The cut is a real concern boundary rather than a line count:
+Split from conventions_selftest.py, which grew too long once the wiring call sites and the
+remaining prose-extraction arms got the coverage they had been missing. The cut is a real
+concern boundary rather than a line count:
 
   * conventions_selftest.py holds the arms that test a DETECTOR or a constant against
     data: the prose probes, `iter_json_prose`, the shared-text and dep5 detectors, and the
@@ -13,22 +13,21 @@ they had been missing. The cut is a real concern boundary rather than a line cou
     round.
   * this module holds the arms that reach INTO the gate's own namespace. Each takes
     `partition_readable.__globals__` and redirects a global there — REPO, CODE_SUFFIXES,
-    BASELINE, tracked_files, read_error — before calling the rule. That is the real
-    criterion. Two arms here (`_precondition_failures`, `_dead_stanza_failures`) pass
-    `repo=` as an argument instead and redirect nothing; they sit here because they belong
-    with the fake-tree work, not because they meet that test.
+    read_error — before calling the rule. That is the real criterion. Two arms here
+    (`_precondition_failures`, `_dead_stanza_failures`) pass `repo=` as an argument
+    instead and redirect nothing; they sit here because they belong with the fake-tree
+    work, not because they meet that test.
 
 That is also where the gate's own blind spots have all been: a detector nobody handed the
 text to, a rule whose arm could be deleted with a green suite, a helper pinned while its
 only call site was not, and a constant whose probes were sized relative to itself.
 
 Everything here reaches the gate through `partition_readable.__globals__`, which IS the
-gate's namespace, so the gate grows no line and no export for any of it. Nothing here
+gate's namespace, so the gate needs no export for any of it. Nothing here
 imports the gate, so no cycle is possible.
 """
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 from pathlib import Path
@@ -72,7 +71,7 @@ def _precondition_failures(partition_readable) -> list[str]:
 def _spdx_suffix_failures(partition_readable) -> list[str]:
     """rule_spdx's CODE_SUFFIXES reach, against a fake tree.
 
-    Reached WITHOUT the gate growing a line, which an audit round wrongly recorded as
+    Reached WITHOUT any change to the gate, which an audit round wrongly recorded as
     impossible. partition_readable is already a module-level function of the gate, so
     its __globals__ IS the gate's namespace: the rule, the suffix set and the REPO the
     rule resolves against are all reachable from here. That matters because the set is
@@ -84,7 +83,7 @@ def _spdx_suffix_failures(partition_readable) -> list[str]:
     # MEMBERSHIP pinned in BOTH directions against the literal below, because neither
     # direction is visible any other way: every tracked file the set already covers carries
     # a header, so narrowing it changes no tree finding, and widening it is what quietly
-    # brought .spec into the size ratchet. A deliberate change edits this literal in the
+    # brought .spec under every rule that reads it. A deliberate change edits this literal in the
     # same commit and says so.
     expected = frozenset({".c", ".cc", ".cmake", ".cpp", ".cxx", ".desktop", ".frag", ".glsl",
                           ".h", ".hpp", ".js", ".luau", ".py", ".qml", ".sh", ".spec", ".vert"})
@@ -465,193 +464,6 @@ def _wiring_failures(partition_readable) -> list[str]:
     return bad
 
 
-def _size_ratchet_failures(partition_readable) -> list[str]:
-    """rule_size, both arms, against a fake tree and a fake baseline.
-
-    This rule had ZERO positive coverage from either the selftest or a clean whole-tree
-    run: disabling the growth arm, disabling the new-file arm, or raising SIZE_CEILING to
-    5000 each left `--selftest` green AND the tree at 0 findings, because a clean tree by
-    construction contains no file the rule reports. It is also the rule with real
-    historical drift, the one CLAUDE.md singles out, and the one an audit round broke on
-    itself by pushing a file from 1148 to 1151.
-
-    Redirects REPO the way the two arms below do, and BASELINE with it, so it adds no line
-    to the gate and reads no repo file."""
-    g = partition_readable.__globals__
-    rule_size = g["rule_size"]
-    bad: list[str] = []
-
-    # The ceiling's VALUE, pinned to the literal CLAUDE.md states. Every probe below is
-    # sized RELATIVE to SIZE_CEILING, which is correct for the arms but blind to the
-    # constant itself: raising it to 5000 raised the probes with it and left the whole
-    # suite green while every file in the tree became compliant. CLAUDE.md fixes this
-    # number ("hard ceiling 1150"), and the baseline ratchet means nothing if it can drift.
-    if g["SIZE_CEILING"] != 1150:
-        bad.append(f"SIZE_CEILING is {g['SIZE_CEILING']}, not the 1150 CLAUDE.md states as the hard ceiling")
-
-    with tempfile.TemporaryDirectory() as d:
-        root = Path(d)
-        ceiling = g["SIZE_CEILING"]
-        # A NEW file one line over the ceiling, absent from the baseline. Disabling that arm
-        # or raising the ceiling both silence this.
-        newbig = "newbig.cpp"
-        (root / newbig).write_text("//\n" * (ceiling + 1), encoding="utf-8")
-        # A file at EXACTLY the ceiling must pass, which pins the comparison as <= rather
-        # than <. CLAUDE.md tolerates 1000-1150 and several tracked files sit on 1150.
-        atceiling = "atceiling.cpp"
-        (root / atceiling).write_text("//\n" * ceiling, encoding="utf-8")
-        # A baselined file GROWN by one line, and its twin SHRUNK by one. The rule is
-        # growth-only by design (a net shrink is allowed even while over the ceiling), so
-        # both directions have to be asserted or `elif n > base[f]` could become `!=`.
-        grown = "grown.cpp"
-        (root / grown).write_text("//\n" * (ceiling + 20), encoding="utf-8")
-        shrunk = "shrunk.cpp"
-        (root / shrunk).write_text("//\n" * (ceiling + 20), encoding="utf-8")
-        # A non-CODE_SUFFIXES file far over the ceiling must be skipped entirely.
-        notcode = "huge.md"
-        (root / notcode).write_text("x\n" * (ceiling + 500), encoding="utf-8")
-
-        (root / "scripts").mkdir()
-        (root / "scripts" / "oversize-baseline.json").write_text(
-            json.dumps({"files": {grown: ceiling + 19, shrunk: ceiling + 21}}), encoding="utf-8")
-
-        saved_repo, saved_baseline = g["REPO"], g["BASELINE"]
-        g["REPO"] = root
-        g["BASELINE"] = root / "scripts" / "oversize-baseline.json"
-        try:
-            reported = {v.path: v.message for v in rule_size([newbig, atceiling, grown, shrunk, notcode])}
-        finally:
-            g["REPO"], g["BASELINE"] = saved_repo, saved_baseline
-
-        if newbig not in reported:
-            bad.append(f"rule_size missed a NEW file at {ceiling + 1} lines, one over the ceiling")
-        elif "hard ceiling" not in reported[newbig]:
-            bad.append(f"rule_size reported the new file through the wrong arm: {reported[newbig]}")
-        if atceiling in reported:
-            bad.append(f"rule_size reported a file at exactly the {ceiling}-line ceiling, which is allowed")
-        if grown not in reported:
-            bad.append("rule_size missed a baselined file grown by one line")
-        elif "grandfathered" not in reported[grown]:
-            bad.append(f"rule_size reported the grown file through the wrong arm: {reported[grown]}")
-        if shrunk in reported:
-            bad.append("rule_size reported a baselined file that SHRANK; the ratchet is growth-only")
-        if notcode in reported:
-            bad.append("rule_size reported a file outside CODE_SUFFIXES")
-    return bad
-
-
-def _baseline_writer_failures(partition_readable) -> list[str]:
-    """update_baseline(), which owns the ratchet's data and had NO coverage at all.
-
-    Every other arm here tests a rule that READS the baseline; nothing tested the function
-    that WRITES it. Two mutations survived both the selftest and a clean whole-tree run:
-    dropping the unreadable-file arm that preserves the prior entry (the exact bug that
-    arm's own comment describes), and relaxing `n > SIZE_CEILING` to `>=`. A broken writer
-    silently drops or inflates entries, and the size rule then mis-grandfathers on the next
-    run — a file whose entry vanished is reported as new-over-ceiling, and one recorded a
-    line too low fails on its very next edit.
-
-    Drives the real function with REPO, BASELINE and tracked_files redirected, then reads
-    back the JSON it wrote. A second run adds files the writer must REFUSE to absorb (a raise
-    and an addition with no FILE-SIZE EXCEPTION comment) and checks that it fails and leaves
-    the baseline untouched."""
-    g = partition_readable.__globals__
-    update_baseline = g["update_baseline"]
-    marker = g["SIZE_EXCEPTION_MARKER"]
-    bad: list[str] = []
-
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        ceiling = g["SIZE_CEILING"]
-
-        # New and over the ceiling, so it is recorded only because it carries the marker.
-        over = "over.cpp"
-        (root / over).write_text(f"// {marker}: one class.\n" + "//\n" * (ceiling + 4), encoding="utf-8")
-        # Grandfathered with no marker, unchanged and shrunk: both re-record freely.
-        same = "same.cpp"
-        (root / same).write_text("//\n" * (ceiling + 5), encoding="utf-8")
-        shrunk = "shrunk.cpp"
-        (root / shrunk).write_text("//\n" * (ceiling + 3), encoding="utf-8")
-        # The two shapes the writer must refuse without a marker.
-        grown = "grown.cpp"
-        (root / grown).write_text("//\n" * (ceiling + 5), encoding="utf-8")
-        added = "added.cpp"
-        (root / added).write_text("//\n" * (ceiling + 5), encoding="utf-8")
-        at = "at.cpp"
-        (root / at).write_text("//\n" * ceiling, encoding="utf-8")
-        under = "under.cpp"
-        (root / under).write_text("//\n" * 10, encoding="utf-8")
-        notcode = "big.md"
-        (root / notcode).write_text("x\n" * (ceiling + 5), encoding="utf-8")
-        # A file the sweep cannot read, with a PRIOR entry that must survive. A directory
-        # where a file is expected makes read_error report, portably and as any uid —
-        # chmod 000 is a no-op as root, which CI containers run as.
-        unreadable = "unreadable.cpp"
-        (root / unreadable).mkdir()
-
-        (root / "scripts").mkdir()
-        baseline = root / "scripts" / "oversize-baseline.json"
-        prior = {unreadable: ceiling + 99, "gone.cpp": ceiling + 1, same: ceiling + 5, shrunk: ceiling + 9,
-                 grown: ceiling + 2}
-        baseline.write_text(json.dumps({"files": prior}), encoding="utf-8")
-
-        saved = (g["REPO"], g["BASELINE"], g["tracked_files"])
-        g["REPO"] = root
-        g["BASELINE"] = baseline
-        try:
-            import contextlib
-            import io
-            # Refusal first, so the baseline it must leave alone is still the prior one.
-            g["tracked_files"] = lambda: [over, same, shrunk, grown, added, unreadable]
-            refusal_err = io.StringIO()
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(refusal_err):
-                refused_rc = update_baseline()
-            after_refusal = json.loads(baseline.read_text(encoding="utf-8"))
-            g["tracked_files"] = lambda: [over, at, under, notcode, unreadable, same, shrunk]
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                rc = update_baseline()
-            written = json.loads(baseline.read_text(encoding="utf-8"))
-        finally:
-            g["REPO"], g["BASELINE"], g["tracked_files"] = saved
-
-    if refused_rc != 1:
-        bad.append(f"update_baseline returned {refused_rc}, not 1, for a raise and an addition with no "
-                   f"{marker} comment; it absorbed growth silently")
-    if after_refusal.get("files") != prior:
-        bad.append("update_baseline wrote the baseline on a run it refused; a partial write hides the refusal")
-    for name in (grown, added):
-        if name not in refusal_err.getvalue():
-            bad.append(f"update_baseline's refusal did not name {name}")
-    for name in (over, same, shrunk):
-        if name in refusal_err.getvalue():
-            bad.append(f"update_baseline refused {name}, which carries the marker or did not grow")
-    if rc != 0:
-        bad.append(f"update_baseline returned {rc}, not 0")
-    rec = written.get("files", {})
-    if rec.get(over) != ceiling + 5:
-        bad.append(f"update_baseline did not record a file over the ceiling at its real length: {rec.get(over)}")
-    if rec.get(same) != ceiling + 5:
-        bad.append(f"update_baseline did not re-record an unchanged grandfathered file: {rec.get(same)}")
-    if rec.get(shrunk) != ceiling + 3:
-        bad.append(f"update_baseline did not ratchet a shrunk file down to its length: {rec.get(shrunk)}")
-    if at in rec:
-        bad.append(f"update_baseline recorded a file at EXACTLY the ceiling ({ceiling}), which is not an overrun; "
-                   f"the comparison must be > and not >=")
-    if under in rec:
-        bad.append("update_baseline recorded a file under the ceiling")
-    if notcode in rec:
-        bad.append("update_baseline recorded a file outside CODE_SUFFIXES")
-    if rec.get(unreadable) != ceiling + 99:
-        bad.append(f"update_baseline did not preserve the prior entry of an UNREADABLE file "
-                   f"({rec.get(unreadable)}); its entry vanishes and the size rule then reports a grandfathered "
-                   f"file as new-over-ceiling once the mode is fixed")
-    if "gone.cpp" in rec:
-        bad.append("update_baseline kept an entry for a file no longer tracked")
-    if written.get("ceiling") != ceiling:
-        bad.append(f"update_baseline wrote ceiling {written.get('ceiling')}, not {ceiling}")
-    return bad
-
-
 def _license_tree_failures(partition_readable) -> list[str]:
     """rule_license's per-tier split, against a fake tree.
 
@@ -663,7 +475,7 @@ def _license_tree_failures(partition_readable) -> list[str]:
     the machine check for it could be deleted invisibly.
 
     Reaches the rule the same way _spdx_suffix_failures does, by redirecting the gate's
-    REPO, so it adds no line to the gate."""
+    REPO."""
     g = partition_readable.__globals__
     rule_license = g["rule_license"]
     bad: list[str] = []
@@ -728,8 +540,8 @@ def _license_tree_failures(partition_readable) -> list[str]:
 def _remaining_rule_failures(partition_readable) -> list[str]:
     """The three rules that still had no positive case: i18n-cpp, config-keys, js-pragma.
 
-    Same defect class as rule_size before it got an arm, and the same reason it was
-    invisible: a clean tree holds nothing for any of them to report, so neutering a rule
+    Same defect class as the license split before it got an arm, and the same reason it
+    was invisible: a clean tree holds nothing for any of them to report, so neutering a rule
     or narrowing one of its carve-outs changed no finding anywhere. Each case below is
     asserted in BOTH directions, because the carve-outs are the part that rots — the
     `/tests/` exemptions, the allow-lists, and js-pragma's four filename filters, none of
@@ -877,7 +689,7 @@ def _remaining_rule_failures(partition_readable) -> list[str]:
 def rule_coverage_failures(partition_readable) -> list[str]:
     """Every fake-tree arm in this module, in one call.
 
-    One entry point rather than nine imports, so conventions_selftest.py names this module
+    One entry point rather than seven imports, so conventions_selftest.py names this module
     once and adding an arm here needs no edit there. Order reads cheapest-first — the
     precondition and the SPDX window, then the wiring, then the rules — but it is only a
     reading order: no arm depends on running before or after another, which was checked by
@@ -886,8 +698,6 @@ def rule_coverage_failures(partition_readable) -> list[str]:
     return [*_precondition_failures(partition_readable),
             *_spdx_suffix_failures(partition_readable),
             *_wiring_failures(partition_readable),
-            *_size_ratchet_failures(partition_readable),
-            *_baseline_writer_failures(partition_readable),
             *_license_tree_failures(partition_readable),
             *_remaining_rule_failures(partition_readable),
             *_dead_stanza_failures(),

@@ -18,8 +18,8 @@
 /// logic is covered by including this file directly (the established pattern
 /// for the anchor-uniform and shader-timing helpers). The KWin-facing side
 /// effects (setFullScreen, moveResize, layer demotion, D-Bus dispatch) stay
-/// at the call sites in tiling.cpp — these functions decide, they do not
-/// act.
+/// at the call sites in the tiling handler's and the effect's translation
+/// units. These functions decide, they do not act.
 namespace PlasmaZones::ScrollDecisions {
 
 /// What the windowed-fullscreen half of a batch entry does for one window.
@@ -35,9 +35,11 @@ enum class WfsAction {
 struct WfsDecision
 {
     WfsAction action = WfsAction::None;
-    /// A flag-off entry is the authoritative echo of a clearWindowedFullscreen
-    /// this effect sent — the in-flight marker is consumed BEFORE the action
-    /// so a completed clear cannot latch the adopt guard.
+    /// Consume the clear-in-flight marker, BEFORE the action runs. Set by the
+    /// two entries that spend it: a flag-off entry, the authoritative echo of
+    /// a clearWindowedFullscreen this effect sent, and the flagged entry whose
+    /// stale adopt the armed marker refuses, which spends it in the refusal
+    /// (single-shot, see resolveWindowedFullscreenAction).
     bool consumeClearMarker = false;
 };
 
@@ -115,7 +117,7 @@ enum class MaximizeAction {
     Release, ///< engine dropped the maximize while we hold the bit
 };
 
-/// The column-maximize batch decision over its three inputs.
+/// The column-maximize batch decision over its four inputs.
 ///
 /// TAKES AN IN-FLIGHT MARKER, like its windowed-fullscreen sibling above,
 /// though for a different reason. That one needs one because its dispatch
@@ -146,13 +148,11 @@ enum class MaximizeAction {
 ///
 /// @p flagOnWire     the batch entry's maximizedToEdges
 /// @p inSet          effect-side membership (m_maximizedToEdgesWindows)
-/// @p kwinMaximized  whether KWin holds MaximizeFull. The batch arm passes
-///                   requestedMaximizeMode(), not the committed maximizeMode():
-///                   the committed bit trails a client round trip on Wayland,
-///                   and reading it re-resolves to Apply on every batch that
-///                   lands inside that window. The interception passes the
-///                   COMMITTED mode instead, because there it is comparing
-///                   against what actually landed.
+/// @p kwinMaximized  whether KWin holds MaximizeFull. The batch arm, the one
+///                   caller, passes requestedMaximizeMode(), not the committed
+///                   maximizeMode(): the committed bit trails a client round
+///                   trip on Wayland, and reading it re-resolves to Apply on
+///                   every batch that lands inside that window.
 /// @p toggleInFlight a dispatched toggleMaximizeToEdges for this window whose
 ///                   reply has not arrived. Deliberately has NO default
 ///                   argument: a defaulted parameter would let the call site
@@ -217,13 +217,18 @@ inline QRect viewCarriedOrigin(const QRectF& from, int viewDelta, bool vertical)
 }
 
 /// Whether an apply that finds the window already commanded to its target
-/// still owes a leg (F989). Only the answer to a claimed press does: KWin's own
-/// flip already commanded the batch's rect, so the leg from the press's
-/// departure is the only motion the press gets. It needs an origin that is not
-/// the target itself. Every other apply at its target stays a no-op.
-inline bool claimedPressOwesLeg(bool answeringClaimedPress, const QRectF& origin, const QRect& target)
+/// still owes a leg. Only one departing from where the window was last seen,
+/// after a request KWin made itself already commanded the batch's rect, does
+/// (@p departureOwed): the answer to a claimed press, whose flip KWin made, so
+/// the leg from the press's departure is the only motion the press gets
+/// (F989), and a batch that took KWin's quick tile off a window whose untile
+/// moved it at once to a restore rect that is the column itself, so the leg
+/// from the tile is the only motion the window gets (CR2-24). It needs an
+/// origin that is not the target itself. Every other apply at its target stays
+/// a no-op.
+inline bool departureOwesLeg(bool departureOwed, const QRectF& origin, const QRect& target)
 {
-    return answeringClaimedPress && origin.isValid() && !origin.isEmpty() && origin.toRect() != target;
+    return departureOwed && origin.isValid() && origin.toRect() != target;
 }
 
 /// The counter-assert burst budget for scroll-managed windows an EXTERNAL
@@ -258,8 +263,8 @@ inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 no
 /// keep-visible clamp it applies to a commit that acks a configure or changes
 /// the window geometry, which pulls a column the strip committed outside its
 /// output (@p outOfViewEntry: a park, or a straddler cropped at the edge) back
-/// in. Never mid maximize
-/// transition: that frame change is a maximize or restore, not a mover.
+/// in. Never mid maximize transition: that frame change is a maximize or
+/// restore, not a mover.
 inline constexpr bool counterAssertMovable(bool inMaximizeTransition, bool waylandClient, bool maximizedMember,
                                            bool outOfViewEntry)
 {
@@ -316,18 +321,323 @@ inline QPoint reseatOrigin(const QRect& column, const QSize& live)
 /// @p committed     the client's current frame size.
 /// @p column        this batch's column size.
 ///
-/// A committed size LARGER than the column on either axis is refused too: it
-/// is not an answer to this column but a stale frame from a bigger one the
-/// client has not been reconfigured out of yet. That is reachable on the
-/// un-maximize batch — the column is back at its stored width while the client
-/// still holds the raw work area — where carrying it forward would commit the
-/// maximized size at the restored column's origin.
+/// A committed size LARGER than the column on either axis is refused too. It
+/// can be a stale frame from a bigger column the client has not been
+/// reconfigured out of yet, which is reachable on the un-maximize batch: the
+/// column is back at its stored width while the client still holds the raw
+/// work area, and carrying it forward would commit the maximized size at the
+/// restored column's origin. It can also be a genuine answer from a client that
+/// will not fit the column, and that one is not this cache's to settle either:
+/// the frame hook reports it to the engine (shouldReportCommittedSize), which
+/// widens the column to it, and re-offering the column keeps the client's
+/// answer readable until then. Carrying it forward would freeze an overhang the
+/// engine has not been told about.
 inline bool mayCarryCommittedSize(bool declaredRect, bool columnAnswered, const QSize& committed, const QSize& column)
 {
     if (declaredRect || !columnAnswered || committed.isEmpty() || committed == column) {
         return false;
     }
     return committed.width() <= column.width() && committed.height() <= column.height();
+}
+
+/// Whether a strip batch's entry is a new offer to a Wayland client: it sends
+/// the client a SIZE, so whatever the client settles on next answers this
+/// column (ColumnAnswer::Owed). @p commanded is KWin's move-resize size before
+/// the apply, @p delivered the size the entry delivers (the column, or a size
+/// mayCarryCommittedSize carried). It is the split both arms of
+/// applyWindowGeometry take: an equal size goes out as a pure move, or not at
+/// all, and asks the client nothing.
+///
+/// No rect has to move for an entry to be an offer. At rest KWin's move-resize
+/// size is the client's committed frame, so a batch the engine forces with
+/// every rect unchanged, as it does when minimum sizes are turned on (F50),
+/// offers the column again to a client whose frame differs from it, and the
+/// answer the engine could not learn while they were off is read again. A
+/// client whose smaller answer is carried is not re-offered, and needs not
+/// be: a narrower answer never sets a floor.
+inline bool stripEntrySendsSize(const QSize& commanded, const QSize& delivered)
+{
+    return commanded != delivered;
+}
+
+/// Whether a geometry request made outside every effect apply resizes a strip
+/// window on KWin's account (its Expand and Shrink Window verbs, a script
+/// setting the frame), so the strip puts it back (putsBackKWinResize) or, where
+/// it cannot, the frame the client acks for it must not read as the client's
+/// answer to its column (F141). @p requested is KWin's
+/// move-resize geometry at the request: Window::moveResize, move and resize
+/// store it before the frameGeometryAboutToChange signal that carries the
+/// request. A request that keeps the frame's size, or asks for exactly the
+/// column the strip offered, resizes nothing of KWin's own: the keep-visible
+/// clamp, a script's move, or a move while the strip's own resize is in
+/// flight.
+///
+/// The sizes are rounded on their own (QSizeF::toSize), never through
+/// QRectF::toRect, whose rounded size depends on where the rect sits: a move
+/// that keeps a fractional size would round the two rects a pixel apart and
+/// read as a resize.
+inline bool resizesOnKWinsAccount(const QRectF& requested, const QRectF& frame, const QSize& offered)
+{
+    const QSize requestedSize = requested.size().toSize();
+    return requestedSize != frame.size().toSize() && requestedSize != offered;
+}
+
+/// Whether the configure KWin sent for a quick tile it has just been made to
+/// drop can still be acked at the tile's size after the strip put the column
+/// back, so the effect must answer that ack (WindowCommandStamps::StaleAck)
+/// rather than let the tile's frame land and read as the client's answer to
+/// its column (F123).
+///
+/// @p requestedAtDrop  KWin's move-resize size just before the drop: the
+///                     tile's size, which a configure may already carry.
+/// @p committedAtDrop  the client's frame size then.
+/// @p commandedAfter   KWin's move-resize size once the column is back.
+/// @p committedAfter   the client's frame size then.
+///
+/// Outstanding when a size other than the frame's was requested at the drop
+/// (the tile's configure may already be sent, or only scheduled) and the
+/// column put back asks for the size the client already has, which KWin
+/// applies with no configure of its own (XdgSurfaceWindow::moveResizeInternal),
+/// so nothing supersedes a tile configure already sent. One only scheduled
+/// goes out carrying the column instead, because KWin builds it from the
+/// move-resize geometry it holds when it sends it, and its ack moves nothing:
+/// the answer then waits, armed, until a newer command, the user's gesture, an
+/// output move or a KWin request for another size voids it
+/// (requestVoidsStaleAck). A tile the client had already acked is left with
+/// the frame at the tile's size, and the column then goes out in a configure
+/// of its own.
+inline bool droppedTileAckOutstanding(const QSize& requestedAtDrop, const QSize& committedAtDrop,
+                                      const QSize& commandedAfter, const QSize& committedAfter)
+{
+    return requestedAtDrop != committedAtDrop && commandedAfter == committedAfter;
+}
+
+/// Where a Wayland strip window's answer to the column it was offered stands
+/// (ScrollOfferedColumn::answer in the effect).
+///
+/// The answer is the frame the client settles on after the strip sent it a
+/// column SIZE, and each such offer owes one reading of it: from the frame
+/// change that carries it, or from the client's commit when the settle leaves
+/// the frame unchanged (a client answering with the frame it already had, or
+/// settling on a state-only configure that followed the resize), which emits no
+/// frame change at all. Once read, a size the client later settles on by
+/// itself is read too (isNewColumnAnswer).
+enum class ColumnAnswer : quint8 {
+    Owed, ///< a batch sent the client this column's size; no settled answer has been read since
+    Read, ///< the settled answer was read: reported to the engine, or nothing to report
+    /// The frame answers a resize nobody on the strip asked for: KWin's own
+    /// (its Expand and Shrink Window verbs, a script setting the frame, an
+    /// axis-only maximize, a quick tile) or the user's. Decided when the
+    /// request is made, from the size KWin requests then
+    /// (resizesOnKWinsAccount). A KWin resize the strip puts back at once
+    /// (putsBackKWinResize) never reaches the client and leaves the answer as
+    /// it was; this marks the rest. A re-decoration is not one: KWin makes no
+    /// geometry request for it and configures the client to keep its frame
+    /// size. Nothing the client commits answers the strip's column until the
+    /// column is delivered again: the next batch, or a cancel that puts it
+    /// back.
+    Foreign,
+};
+
+/// The facts readsAsColumnAnswer weighs, each gathered by the effect at the
+/// moment of reading. Named rather than positional, so a call site and a test
+/// row say which gate they set.
+struct ColumnAnswerGates
+{
+    /// scroll-managed: tracked on a strip, not floating, not deleted, not
+    /// under a user move or resize (PlasmaZonesEffect::scrollManagedOutputFor)
+    bool managed = false;
+    /// no output change is in progress and the strip's output has not moved
+    /// since its batch: the offer is in the coordinates the frame is (F815)
+    bool coordinatesHold = false;
+    /// KWin requests no maximize, fullscreen or tile for the window and it is
+    /// not fullscreen. KWin commits the frame of its own maximize, fullscreen
+    /// and quick tile before the state change that explains it.
+    bool kwinStateAtRest = false;
+    /// the resize hold still waits for the client's answer to the user's
+    /// resize (PlasmaZonesEffect::m_resizeHold)
+    bool resizeHeld = false;
+    /// KWin's move-resize geometry equals the frame, so the frame is not one
+    /// a configure still in flight is about to replace
+    bool settled = false;
+};
+
+/// Whether a strip window's frame reads as its client's answer to the column
+/// it was offered. The ONE predicate both consumers of the answer ask, the
+/// report to the engine and the offered-column centring, so neither can act on
+/// a frame the other would refuse.
+///
+/// @p settled is a statement about KWin's bookkeeping, not about configures:
+/// KWin brings its move-resize geometry back in line with the frame once the
+/// client acknowledges the last configure that places the window, so a client
+/// acking an older configure late reads unsettled and its frame is not passed
+/// off as the answer to the newest offer. It is not proof that nothing is in
+/// flight: a move clears the placing flag of the configures still queued, so
+/// after a move issued while several configures were queued, an older one's
+/// ack can read settled (F49). The centring this predicate gates no longer
+/// moves an unsettled window, which leaves a batch's size-preserving move
+/// issued over queued resizes as the one producer of that ordering.
+///
+/// @p offered is the column rect, @p live the frame. A frame that left the
+/// column entirely was moved elsewhere (KWin's Move to Screen, F973, F738).
+/// An empty one, a mid-unmap commit, is refused on its own term: the
+/// intersects test cannot refuse it, because QRect::intersects is true for an
+/// empty rect lying strictly inside the other (a zero-width frame at an
+/// interior x).
+inline bool readsAsColumnAnswer(const ColumnAnswerGates& gates, ColumnAnswer answer, const QRect& offered,
+                                const QRect& live)
+{
+    return gates.managed && gates.coordinatesHold && gates.kwinStateAtRest && !gates.resizeHeld && gates.settled
+        && answer != ColumnAnswer::Foreign && !live.isEmpty() && live.intersects(offered);
+}
+
+/// Whether a readable answer is one the engine has not heard yet: always while
+/// the answer is Owed, and once Read only when the client has since settled on
+/// another size by itself (@p lastRead is the size read then). A frame change
+/// that kept the size, such as a pure move, repeats nothing.
+inline bool isNewColumnAnswer(ColumnAnswer answer, const QSize& lastRead, const QSize& live)
+{
+    return answer == ColumnAnswer::Owed || (answer == ColumnAnswer::Read && live != lastRead);
+}
+
+/// The facts putsBackKWinResize weighs, gathered by the effect when KWin makes
+/// the request (PlasmaZonesEffect::noteForeignStripRequest).
+struct KWinResizePutBackGates
+{
+    /// scroll-managed: tracked on a strip, not floating, not deleted, not
+    /// under a user move or resize (PlasmaZonesEffect::scrollManagedOutputFor)
+    bool managed = false;
+    /// no output change is in progress and the strip's output has not moved
+    /// since its batch, so the rect put back is in the coordinates the window
+    /// is (F815)
+    bool coordinatesHold = false;
+    /// KWin requests no maximize, fullscreen or tile for the window and it is
+    /// not fullscreen. KWin stores each of those requests before the
+    /// moveResize that carries it, and each has its own corrector
+    /// (cancelAxisOnlyMaximize, cancelStripQuickTile, the fullscreen arms).
+    bool kwinStateAtRest = false;
+    /// the user's gesture still holds the window: a drag the tracker owns past
+    /// KWin's own move, or the resize hold waiting for the client's answer to
+    /// the user's resize (PlasmaZonesEffect::m_resizeHold)
+    bool userGesture = false;
+    /// the request moves the window to another output, as KWin's Move to
+    /// Screen does (Window::sendToOutput resizes a column larger than the new
+    /// work area on the way): the requested rect read through the very test
+    /// the output-change arm hands such a move over by (isKWinMoveOffStrip,
+    /// TilingHandler::isKWinMoveOfStripTile), so a move that arm would take is
+    /// never put back onto the old output, where its output change never
+    /// comes. A request at a park, or one still overlapping the strip's
+    /// output (a straddler growing past its edge), is no such move, and nor is
+    /// one still on the output of the window's tracked strip screen
+    /// (requestLeavesStripOutput).
+    bool leavesOutput = false;
+};
+
+/// Whether a resize KWin requested for a strip window on its own account
+/// (resizesOnKWinsAccount) is put back (CR2-kwin-resize): the strip owns the
+/// column's rect, as it does against KWin's quick tile and axis-only
+/// maximize, and an X11 window gets the same answer from the counter-assert.
+/// The caller then asks the put-back budget (shouldCounterAssert, re-armed by
+/// every delivery of a column) and only for a request these gates pass, so a
+/// refused one costs nothing. A request it does not put back leaves the
+/// client's answer Foreign until the column is delivered again.
+inline bool putsBackKWinResize(const KWinResizePutBackGates& gates)
+{
+    return gates.managed && gates.coordinatesHold && gates.kwinStateAtRest && !gates.userGesture && !gates.leavesOutput;
+}
+
+/// Where putsBackKWinResize puts a strip window back. @p commanded is the
+/// rect the strip apply that is still the window's latest command delivered,
+/// where the counter-assert keeps one (a column placed outside its output),
+/// and empty otherwise: the strip's own rect, carried size included. Without
+/// one, the column while the client's answer to it is owed, because the frame
+/// is then the one the strip's resize is replacing, and otherwise @p frame,
+/// the frame the client settled on before the request: the answer the strip
+/// already holds, the column or a size it carried centred in the column. A
+/// Foreign answer, or an empty frame (a mid-unmap commit), puts back nothing.
+///
+/// The frame is taken and given back exact, never through QRectF::toRect,
+/// whose rounded size depends on where the rect sits: a fractional frame
+/// rounded there could be put back a pixel off the client's own size, and the
+/// put-back would itself send the client a resize.
+inline QRectF kwinResizePutBackRect(const QRect& commanded, ColumnAnswer answer, const QRect& offered,
+                                    const QRectF& frame)
+{
+    if (!commanded.isEmpty()) {
+        return QRectF(commanded);
+    }
+    switch (answer) {
+    case ColumnAnswer::Owed:
+        return QRectF(offered);
+    case ColumnAnswer::Read:
+        return frame.isEmpty() ? QRectF() : frame;
+    case ColumnAnswer::Foreign:
+        return QRectF();
+    }
+    return QRectF();
+}
+
+/// Whether a geometry request made outside every effect apply voids the answer
+/// an armed stale ack owes (WindowCommandStamps::StaleAck), from KWin's
+/// move-resize size at the request (@p requested) and the rect the answer
+/// would re-issue (@p staleTarget). A request for another size makes KWin send
+/// a configure of its own, built from whatever it then holds, which supersedes
+/// the stale one: the window answers that request now, and re-issuing the old
+/// command over it would undo a resize KWin made, or one the strip has just
+/// put back (CR2-22). A request that keeps the size (a move, the keep-visible
+/// clamp) sends no configure and leaves the stale one outstanding. More than a
+/// pixel either way, so fractional-scale residue in the request is not read as
+/// a new size.
+inline bool requestVoidsStaleAck(const QSizeF& requested, const QSize& staleTarget)
+{
+    return qAbs(requested.width() - staleTarget.width()) > 1.0 || qAbs(requested.height() - staleTarget.height()) > 1.0;
+}
+
+/// The largest difference between a committed and an offered extent that is
+/// not an answer. A server-side decoration with fractional borders at a
+/// fractional scale rounds the frame of a client that took its column exactly
+/// a pixel either way, depending on where the frame sits, and reporting that
+/// pixel would leave the engine a floor the client never asked for.
+///
+/// MUST equal the engine's kCommittedExtentSlackPx (phosphor-scroll-engine,
+/// enginelimits.h), which reads an answer within that slack of the offer as
+/// the offer. The two sides cannot share the constant, because the engine's
+/// is private to its library. A tolerance wider here would withhold answers
+/// the engine would act on, and a narrower one would send it answers it
+/// discards as the offer.
+inline constexpr int CommittedSizeTolerancePx = 1;
+
+/// Whether a readable answer goes to the engine (Scrolling.reportCommittedSize).
+///
+/// The engine lays a column out at the extent it asked for, so a client that
+/// commits WIDER along the strip sits across the next column until the engine
+/// hears about it, and one that later commits narrower than a column the
+/// engine widened for it leaves that width standing empty.
+///
+/// @p offered    the column size the strip offered.
+/// @p committed  the frame size the client committed.
+/// @p vertical   the strip runs vertically, so its main axis is the height.
+///
+/// The MAIN axis reports a difference either way. The CROSS axis reports only
+/// a longer answer, which hangs past the work area's edge and is the engine's
+/// to judge (one that exceeds the work area floats the window like an
+/// oversized declared minimum). A shorter cross answer is not reported: the
+/// commit path centres it, and a client holding an aspect ratio answers a
+/// full-height column a little short on every placement, which would
+/// otherwise send the engine a no-op each time. Differences of
+/// CommittedSizeTolerancePx or less are rounding, never answers.
+///
+/// Stateless itself; the effect asks it once per answer (isNewColumnAnswer),
+/// so a client that keeps its answer is not reported again on every frame
+/// change.
+inline bool shouldReportCommittedSize(const QSize& offered, const QSize& committed, bool vertical)
+{
+    if (offered.isEmpty() || committed.isEmpty()) {
+        return false;
+    }
+    const int mainDelta = vertical ? committed.height() - offered.height() : committed.width() - offered.width();
+    const int crossDelta = vertical ? committed.width() - offered.width() : committed.height() - offered.height();
+    return qAbs(mainDelta) > CommittedSizeTolerancePx || crossDelta > CommittedSizeTolerancePx;
 }
 
 // ── Compositor-state claims ────────────────────────────────────────────────
@@ -355,11 +665,10 @@ enum class Claim {
 /// deliberate blank is a cell a reader can see rather than a call nobody
 /// wrote.
 ///
-/// MODEFLIP, FULLSCREENEXITWHILEFLOATING AND TEARDOWN HAVE NO PRODUCTION
-/// CALLER, and that is a decision, not a gap. Every other scope routes its
-/// releases through releaseAllClaims, directly or through
-/// cleanupAutotileTracking. These do not, because the funnel's shape is wrong
-/// for them:
+/// MODEFLIP AND TEARDOWN HAVE NO PRODUCTION CALLER, and that is a decision,
+/// not a gap. Every other scope routes its releases through releaseAllClaims,
+/// directly or through cleanupAutotileTracking. These two do not, because the
+/// funnel's shape is wrong for them:
 ///
 ///  - ModeFlip's release is deliberately SPLIT IN TWO. The demote pass sheds
 ///    before the engines re-place, and the pre-tile restores run after; one
@@ -369,51 +678,48 @@ enum class Claim {
 ///    re-entrant (the daemon can drop mid-sweep). It handles that itself,
 ///    per claimReleaseOrder; funnelling it per-window would re-enter the
 ///    funnel's own guards N times to no benefit.
-///  - FullscreenExitWhileFloating has no funnel call for no argued reason:
-///    its repair site releases directly, and nobody has routed it. Unlike
-///    the two above, this one is an OMISSION rather than a decision. It is
-///    recorded as such instead of quietly fixed here, because routing it
-///    changes which claims release on a fullscreen exit and that belongs in
-///    its own commit with its own live check (the same standing as the
-///    UntrackFunnel monocle blank below).
 ///
 /// They stay in the enum because the table is what the tests drive, and
 /// because the answer to "does monocle release on a mode flip" has to be
 /// written down somewhere a reader can find it. Do not "finish the wiring"
-/// by pointing the first two at releaseAllClaims without re-deriving their
-/// reasons.
+/// by pointing them at releaseAllClaims without re-deriving their reasons.
 enum class ClaimScope {
     /// The window is leaving the strip outright and no later batch will carry
-    /// it: the untile diff, the active float channel, the leaving-scrolling
-    /// loop.
+    /// it: the untile diff and the active float channel (and the passive one
+    /// on a scrolling screen, see passiveFloatScope).
     StripExit,
-    /// The untrack funnel: a close, a cross-output transfer to a screen this
-    /// handler's engines do not manage, and the effect-only releases that pass
-    /// no scope.
-    ///
-    /// Identical to StripExit except that monocle does NOT release here, and
-    /// that blank is RECORDED rather than filled because it is unresolved, not
-    /// decided. Monocle rides cleanupClosedWindowState's bare scrub on this
-    /// path instead, which is right for a close (a dying window has nothing to
-    /// restore) and questionable for the cross-output half (the window
-    /// survives on a screen this handler no longer manages, holding a maximize
-    /// bit nothing will hand back).
-    ///
-    /// Filling it changes shipped monocle handling on a path the nested
-    /// harness cannot drive — the engine re-places script-driven cross-output
-    /// moves — so it wants a live check and its own argued commit. Encoded so
-    /// the next reader sees a cell with a reason rather than an omission with
-    /// none.
+    /// The untrack funnel for a LIVE window, the scope cleanupAutotileTracking
+    /// and releaseWindowTracking default to: a cross-output move
+    /// (handleWindowOutputChanged's transfer, and its cross-mode arm), the
+    /// flags-settle eviction, a drag whose start screen no engine owns any
+    /// more, a suspended tile dropped on the snap path, and a batch float onto
+    /// another screen. Every claim releases, the monocle maximize included,
+    /// on LiveDeparture's terms: the window survives, and the screen it lands
+    /// on re-claims what it runs. Left to the scrub, a monocle member kept
+    /// KWin's maximize with no membership, which nothing hands back: the
+    /// monocle arm takes no membership over a window already at MaximizeFull,
+    /// and a float or a snapping screen sends no batch to clear it. A release
+    /// that has to wait (fullscreen, a gesture) keeps its membership for the
+    /// fullscreen exit or the gesture end to pay.
     UntrackFunnel,
+    /// The untrack funnel for a closing window (onWindowClosed). Monocle does
+    /// not release: a dying window has nothing to restore, so its membership
+    /// is dropped bare by cleanupClosedWindowState's scrub.
+    Close,
     /// The daemon's passive float channel, whose producers never reach the
     /// active funnel.
     PassiveFloat,
-    /// A screen changed mode, desktop or activity: the demote pass, the
+    /// A screen changed mode, desktop or activity: the demote pass (the loop
+    /// over the windows of a screen leaving scrolling or autotile), the
     /// removed-screens sweep, the pre-tile restores.
     ModeFlip,
-    /// A window left fullscreen while floating — the repair arm for a claim
-    /// that was retained through the fullscreen hold.
-    FullscreenExitWhileFloating,
+    /// A window left fullscreen on an exit arm no batch follows
+    /// (slotWindowFullScreenChanged): a windowed-fullscreen member leaving it
+    /// by itself, a window this handler no longer tracks, one with no tracked
+    /// screen or on a screen no longer managed, and one floated during the
+    /// hold. The repair for a maximize claim retained through the hold, whose
+    /// release skipped while the window was fullscreen.
+    FullscreenExit,
     /// Engine disable, daemon loss, daemon bring-up, effect unload. Every
     /// claim answers, and the ORDER matters (see claimReleaseOrder).
     Teardown,
@@ -436,9 +742,8 @@ enum class ClaimScope {
 
 /// Whether @p claim releases on @p scope.
 ///
-/// Every blank below is deliberate and load-bearing; none is an oversight.
-/// Changing one is a behaviour change and belongs in its own commit with its
-/// own argument.
+/// Every blank below is decided, and its reason is at its case or on the
+/// scope. Changing one is a behaviour change and needs its own argument.
 inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
 {
     switch (scope) {
@@ -446,7 +751,10 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
         // All three: the defining case. Nothing else will carry the window.
         return true;
     case ClaimScope::UntrackFunnel:
-        // Monocle blank, and UNRESOLVED rather than decided — see the enum.
+        // All three: the window survives, and nothing here carries it on.
+        return true;
+    case ClaimScope::Close:
+        // Monocle blank: a dying window has nothing to restore.
         return claim != Claim::MonocleMaximize;
     case ClaimScope::PassiveFloat:
         // Monocle is EXCLUDED, and documented at its site: re-driving a
@@ -457,10 +765,12 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
         return claim != Claim::MonocleMaximize;
     case ClaimScope::ModeFlip:
         return true;
-    case ClaimScope::FullscreenExitWhileFloating:
-        // Windowed fullscreen is not held here by construction — this arm
-        // runs BECAUSE the window left fullscreen. The other two may have
-        // retained a claim through the hold, and this is their repair.
+    case ClaimScope::FullscreenExit:
+        // Windowed fullscreen blank: the window has just left fullscreen,
+        // and the one arm that still holds a membership (a member leaving it
+        // with the daemon gone) keeps it on purpose, for the batch consumer's
+        // deferred reconcile. The other two may have retained a claim through
+        // the hold, and this is their repair.
         return claim != Claim::WindowedFullscreen;
     case ClaimScope::Teardown:
         return true;
@@ -513,6 +823,22 @@ inline bool isKWinMoveOffStrip(const QRectF& frame, const QRectF& commandedOutpu
         && !frame.intersects(commandedOutput);
 }
 
+/// Whether a resize KWin requested for a strip window moves it off the strip's
+/// output (KWinResizePutBackGates::leavesOutput). @p movesOffStrip is the
+/// output-change arm's own answer for the requested rect (isKWinMoveOffStrip,
+/// through TilingHandler::isKWinMoveOfStripTile), which finds the strip's
+/// output at the centre of the rect the strip last gave the window. For a
+/// straddler cropped at its output's edge that centre can sit on the
+/// neighbour, and a request that keeps the window wholly on its own strip
+/// output would read as a move off it, so the request must also miss
+/// @p trackedOutput, the output of the window's tracked strip screen. Both
+/// together keep the answer to moves that arm hands over. An invalid
+/// @p trackedOutput leaves the arm's answer as it is.
+inline bool requestLeavesStripOutput(bool movesOffStrip, const QRectF& requested, const QRectF& trackedOutput)
+{
+    return movesOffStrip && (!trackedOutput.isValid() || !requested.intersects(trackedOutput));
+}
+
 /// The scope the passive float channel releases under (F723). On a scrolling
 /// screen a float ends every claim (StripExit): a strip runs no monocle batch
 /// that could own the membership, so a monocle member left over from an
@@ -524,7 +850,9 @@ inline constexpr ClaimScope passiveFloatScope(bool onScrollingScreen)
     return onScrollingScreen ? ClaimScope::StripExit : ClaimScope::PassiveFloat;
 }
 
-/// Teardown release order, lowest first.
+/// Release order, lowest first. releaseAllClaims static-asserts it, and the
+/// bulk teardowns (the engine disable, the daemon loss, the effect unload)
+/// follow it by hand.
 ///
 /// Windowed fullscreen goes BEFORE either maximize claim. Both maximize
 /// releases skip a window that still holds (or has requested) fullscreen, and
@@ -543,19 +871,6 @@ inline constexpr int claimReleaseOrder(Claim claim)
         return 2;
     }
     return 3;
-}
-
-/// Whether a claim keeps its ledger entry when its release is SKIPPED because
-/// the window still holds fullscreen.
-///
-/// The two maximize claims retain: shedding an entry whose bit was never
-/// handed back strands that bit with nothing recording it is owed, and a
-/// later batch or the fullscreen-exit repair can still pay it. Windowed
-/// fullscreen does not retain, because its membership is shed by its caller
-/// (forgetWindowedFullscreen) before the compositor half runs at all.
-inline constexpr bool claimRetainsOnFullscreenSkip(Claim claim)
-{
-    return claim != Claim::WindowedFullscreen;
 }
 
 /// The screens a scrolling-set change flips between engines inside the tiling

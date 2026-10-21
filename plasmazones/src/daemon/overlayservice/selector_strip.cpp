@@ -5,8 +5,8 @@
 // provides the drag-insert selector): the popup model built from the
 // injected strip-cards provider, and the hit-test that classifies the
 // cursor into a DragInsertTarget mirror. Split out of selector.cpp /
-// overlayservice.cpp by concern (both sit near their size ceilings) and
-// because everything here is dead weight on snap/autotile screens.
+// overlayservice.cpp by concern, because everything here is dead weight on
+// snap/autotile screens.
 
 #include "internal.h"
 #include "daemon/overlayservice.h"

@@ -798,9 +798,10 @@ void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int old
     if (!validateWindowId(windowId, QStringLiteral("reflow after interactive resize"))) {
         return;
     }
-    // Validate both frames at this untrusted D-Bus boundary. Autotile derives
-    // the resize delta from the old frame (the scroll engine ignores it);
-    // reject a non-positive one here so the boundary's contract is explicit.
+    // Validate both frames at this untrusted D-Bus boundary. Both engines read
+    // the old frame: autotile derives the resize delta from it, and the scroll
+    // engine measures from it which axis the user's gesture moved. Reject a
+    // non-positive one here so the boundary's contract is explicit.
     if (oldWidth <= 0 || oldHeight <= 0 || newWidth <= 0 || newHeight <= 0) {
         return;
     }

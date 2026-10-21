@@ -55,8 +55,19 @@ QSize TilingHandler::declaredMinSize(KWin::EffectWindow* w)
     if (kw && !kw->isInternal()) {
         const QSizeF minSize = kw->minSize();
         if (minSize.isValid()) {
-            minWidth = qCeil(minSize.width());
-            minHeight = qCeil(minSize.height());
+            // KWin's minSize() is the CLIENT's minimum: the WM_NORMAL_HINTS
+            // minimum KWin documents it as, or the xdg-toplevel minimum, which
+            // is in window-geometry units, so neither includes a server-side
+            // decoration. Every engine consumer treats the declared
+            // minimum as a FRAME extent (the column floor, the oversized
+            // verdict), so a window with a server-side decoration at its
+            // minimum would otherwise be given a column its frame overflows by
+            // the borders, the whole title bar on a vertical strip (F105). Only
+            // a declared axis is converted: an undeclared one stays 0, which
+            // the engine reads as "none", rather than becoming the border.
+            const QSizeF frameMin = kw->clientSizeToFrameSize(minSize);
+            minWidth = minSize.width() > 0 ? qCeil(frameMin.width()) : 0;
+            minHeight = minSize.height() > 0 ? qCeil(frameMin.height()) : 0;
         }
     }
     return QSize(minWidth, minHeight);
@@ -741,9 +752,9 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
 void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecisions::ClaimScope scope)
 {
     // A scope that releases the monocle maximize does so first: the scrub below drops the membership the release
-    // reads (LiveDeparture, F675). A release that has to wait (fullscreen, a gesture) keeps its membership and owed
-    // restore past the scrub, for the fullscreen exit or the gesture end to pay (F1078). The monocle gesture hold
-    // goes with the tracking (F775).
+    // reads (UntrackFunnel, LiveDeparture, F675). A release that has to wait (fullscreen, a gesture) keeps its
+    // membership and owed restore past the scrub, for the fullscreen exit or the gesture end to pay (F1078). The
+    // monocle gesture hold goes with the tracking (F775).
     bool monocleRetained = false;
     if (ScrollDecisions::claimReleasesOn(ScrollDecisions::Claim::MonocleMaximize, scope)) {
         unmaximizeMonocleWindow(windowId);
@@ -803,8 +814,9 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
     // too: on the close path slotWindowClosed already removed the membership (this is belt), and on a cross-output
     // transfer nothing else does, so a window landing on a snapping screen would stay KWin-fullscreen forever
     // (snapping emits no tile batch to un-flag it). Forget-then-release, membership first, so a synchronous
-    // re-entry from setFullScreen finds the entry already gone. The default UntrackFunnel leaves monocle to
-    // cleanupClosedWindowState's scrub (the scope table records why); a scope that releases it did so at the top.
+    // re-entry from setFullScreen finds the entry already gone. A scope that releases monocle did so at the top,
+    // so the funnel's own monocle call finds the membership gone or retained; Close leaves monocle to
+    // cleanupClosedWindowState's scrub (the scope table records why).
     // The window is resolved so the bit goes back while it is alive and the release can re-seed the tracked-screen
     // map after its suppressed move. An evacuee (Evacuation) releases nothing and is scrubbed bare instead: KWin
     // keeps its maximize or fullscreen, so it can still return the window as it was when its output comes back.
@@ -851,8 +863,10 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, ScrollDecis
 void TilingHandler::onWindowClosed(const QString& windowId, const QString& screenId)
 {
     // The spawn-provenance and deferred-route entries are cleared by
-    // cleanupAutotileTracking, which owns them for every caller.
-    cleanupAutotileTracking(windowId);
+    // cleanupAutotileTracking, which owns them for every caller. Close, not the
+    // live untrack's default: a dying window's monocle maximize is scrubbed,
+    // not restored.
+    cleanupAutotileTracking(windowId, ScrollDecisions::ClaimScope::Close);
 
     // The column ledger gets an unconditional scrub HERE and nowhere else.
     //
@@ -1172,6 +1186,9 @@ void TilingHandler::clearPerSessionDaemonState()
     m_effect->m_scrollCommandedRects.clear();
     m_effect->m_scrollOfferedColumn.clear();
     m_effect->m_lastReportedMinSize.clear();
+    // Whether the daemon has reportCommittedSize is a fact about ONE daemon
+    // session: the new one may be newer than the one that lacked it (F215).
+    resetCommittedSizeReportLatch();
     // The announced-epoch memo is per-session for the same reason as its neighbours: it records what a
     // PARTICULAR daemon said. Symmetry and bookkeeping, not a repair: the epoch is a seeded-at-zero hash of the
     // context key, so a restarted daemon announces the SAME value for the same strip and a retained entry would

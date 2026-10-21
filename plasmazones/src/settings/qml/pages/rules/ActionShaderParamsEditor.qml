@@ -7,9 +7,9 @@ import org.plasmazones.common as PZCommon
 /**
  * @brief The shader-uniform editor shared by both shader-override rule actions.
  *
- * Its own file rather than one more Component inside ActionParamEditors.qml, which
- * is past the size ceiling — the same move ActionPresetEditor.qml made, and for the
- * same reason.
+ * Its own file rather than one more Component inside ActionParamEditors.qml, like
+ * ActionPresetEditor.qml, because the preset merge below makes it a component with
+ * its own state and contract.
  *
  * Bound to `row._activeShaderParamSchema`, which selects the matching registry's
  * schema per action type (OverrideAnimationShader or OverrideOverlayShader). The

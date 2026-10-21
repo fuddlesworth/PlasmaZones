@@ -92,11 +92,11 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema);
 void appendZoneSelectorSchema(PhosphorConfig::Schema& schema);
 void appendActivationSchema(PhosphorConfig::Schema& schema);
 void appendBehaviorSchema(PhosphorConfig::Schema& schema);
-// The tiling entry point lives in settingsschema_tiling.cpp (split out for
-// file-size, the scrolling shape).
+// The tiling entry point lives in settingsschema_tiling.cpp (split out by
+// domain, the scrolling shape).
 void appendAutotilingSchema(PhosphorConfig::Schema& schema);
 // The three scrolling entry points live in settingsschema_scrolling.cpp (split
-// out for file-size). appendScrollingShortcutsSchema is called from
+// out by domain). appendScrollingShortcutsSchema is called from
 // appendShortcutsSchema, not from buildSettingsSchema.
 void appendScrollingSchema(PhosphorConfig::Schema& schema);
 void appendScrollingZoneSelectorSchema(PhosphorConfig::Schema& schema);

@@ -254,15 +254,15 @@ void TilingHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool 
     if (!m_monocleMaximizedWindows.contains(windowId)) {
         return;
     }
-    if (horizontal || vertical) {
-        return;
-    }
-    // A Restore commit while KWin still holds the Full request is the late ack
+    // A commit with either axis still maximized is no un-maximize, and a
+    // Restore commit while KWin still holds the Full request is the late ack
     // of a configure a monocle batch has since superseded, not the user (F1013).
     const KWin::Window* const kwMono = w->window();
     if (!ScrollDecisions::isUserMonocleUnmaximize(horizontal, vertical,
                                                   kwMono && kwMono->requestedMaximizeMode() == KWin::MaximizeFull)) {
-        qCInfo(lcEffect) << "Monocle window committed a superseded restore:" << windowId << "- keeping membership";
+        if (!horizontal && !vertical) {
+            qCInfo(lcEffect) << "Monocle window committed a superseded restore:" << windowId << "- keeping membership";
+        }
         return;
     }
     // KWin un-maximizes a maximized window the user starts to drag or resize
@@ -496,9 +496,10 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // both releases skipped while the window was still fullscreen — this
         // is the first point at which they can succeed. Leaving them unpaid
         // relies on the next batch, and the engine emits on change, so a
-        // strip at rest schedules none. Both are no-ops for a non-member.
-        unmaximizeMonocleWindow(windowId);
-        releaseMaximizedToEdges(windowId, w);
+        // strip at rest schedules none. Both are no-ops for a non-member, and
+        // the scope's windowed-fullscreen blank keeps the membership the
+        // daemon-gone leg above holds for the deferred reconcile.
+        releaseAllClaims(windowId, w, ScrollDecisions::ClaimScope::FullscreenExit);
         return;
     }
     if (!w->isFullScreen()) {
@@ -572,17 +573,15 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             // the untrack funnel already dropped m_notifiedWindows, so the
             // repair the retention arms in windowedfullscreen.cpp point at can
             // never be reached from here, and the entry would outlive the
-            // window with its bit still set. Both calls are no-ops for a
+            // window with its bit still set. Both releases are no-ops for a
             // non-member, and the branch is already under !isFullScreen().
-            unmaximizeMonocleWindow(windowId);
-            releaseMaximizedToEdges(windowId, w);
+            releaseAllClaims(windowId, w, ScrollDecisions::ClaimScope::FullscreenExit);
             m_effect->updateAllDecorations();
             return;
         }
         if (screenId.isEmpty()) {
             logDroppedFullscreenFloat("no notified screen");
-            unmaximizeMonocleWindow(windowId);
-            releaseMaximizedToEdges(windowId, w);
+            releaseAllClaims(windowId, w, ScrollDecisions::ClaimScope::FullscreenExit);
             m_effect->updateAllDecorations();
             return;
         }
@@ -603,8 +602,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
                 return;
             }
             logDroppedFullscreenFloat("screen no longer managed");
-            unmaximizeMonocleWindow(windowId);
-            releaseMaximizedToEdges(windowId, w);
+            releaseAllClaims(windowId, w, ScrollDecisions::ClaimScope::FullscreenExit);
             m_notifiedWindows.remove(windowId);
             m_notifiedWindowScreens.remove(windowId);
             m_effect->updateAllDecorations();
@@ -659,16 +657,15 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             // whole branch is under !isFullScreen()) and confirmed floating, so
             // the call cannot un-maximize a legitimate monocle tile, and it is
             // a no-op for any window that is not a member.
-            unmaximizeMonocleWindow(windowId);
-            // The column mirror needs the identical repair, and now shares the
+            //
+            // The column mirror needs the identical repair, and shares the
             // shape that makes it work: releaseMaximizedToEdges also retains
             // membership on its fullscreen skip, so a float taken during the
             // hold leaves the window KWin-maximized with the ledger held and
-            // no reader — no batch reaches a window that stays floating. Same
-            // two guarantees as the call above make this safe: the branch is
-            // under !isFullScreen() and the window is confirmed floating, and
-            // it is a no-op for a non-member.
-            releaseMaximizedToEdges(windowId, w);
+            // no reader — no batch reaches a window that stays floating. The
+            // same two guarantees make it safe, and it is a no-op for a
+            // non-member. Both go through the funnel, in claimReleaseOrder.
+            releaseAllClaims(windowId, w, ScrollDecisions::ClaimScope::FullscreenExit);
             m_effect->updateAllDecorations();
             return;
         }
@@ -707,21 +704,19 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // window" — and going fullscreen does not change that fact. Dropping it here
     // was a permanent loss: XdgToplevelWindow::setFullScreen never touches the
     // requested maximize mode, so on fullscreen EXIT the window still reads
-    // MaximizeFull, the sole insert site (tiling.cpp's monocle apply) is gated on
-    // the window not being already maximized and so never re-inserts, and nothing
-    // else inserts. The window was then stranded KWin-maximized with no owner
-    // able to restore it. Retaining the entry fixes the two paths that CAN
+    // MaximizeFull, and the monocle apply in tiling.cpp, the one insert that
+    // establishes a new claim, is gated on the window not being already maximized
+    // and so never re-inserts. The window was then stranded KWin-maximized with no
+    // owner able to restore it. Retaining the entry fixes the two paths that CAN
     // restore, both of which now find the membership still there: a later tile
     // demotion (the batch's non-monocle arm), and a float-out taken once the
     // window is no longer fullscreen. A float taken DURING the hold is covered
     // by the re-drive on this file's fullscreen-exit floating arm — note that
     // the exit branch itself restores nothing on its own, so retention buys
-    // accuracy there rather than a restore. It does NOT fix a teardown that happens
-    // while the window is still fullscreen (autotile-disable, daemon-loss):
-    // restoreAllMonocleMaximized sheds membership for the whole set and skips the
-    // compositor call for a fullscreen member, so that window stays maximized.
-    // That is unchanged from before rather than a new loss, and there is nothing
-    // left to own the flag at teardown by definition.
+    // accuracy there rather than a restore. A teardown that happens while the
+    // window is still fullscreen (autotile-disable, daemon-loss) keeps it too:
+    // restoreAllMonocleMaximized skips the compositor call for a fullscreen
+    // member and puts its membership back, for a later arm to pay.
     // The drop also ignored the daemon gate that the manual-unmaximize slot above
     // states as the rule for shedding this membership.
     // Drop any unconsumed zone-centering entries: a window that fullscreens

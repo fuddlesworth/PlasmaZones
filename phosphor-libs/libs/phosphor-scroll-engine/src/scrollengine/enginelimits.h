@@ -80,6 +80,39 @@ inline constexpr int kMaxRestoredTilesPerColumn = 32;
 /// rejects the malformed, it is not a layout constraint.
 inline constexpr double kMaxFixedExtentPx = 65535.0;
 
+/// Sanity ceiling for a pixel extent a CLIENT reports about itself: its
+/// declared minimum (ScrollStrip::setWindowMinimumSize) and the size it
+/// committed when offered its tile (ScrollEngine::reportCommittedSize). Both
+/// are summed with gaps, sibling floors and tab reservations in the relayout,
+/// so a value near INT_MAX would overflow those sums. Like kMaxFixedExtentPx it
+/// rejects the malformed rather than constraining a layout: an extent past the
+/// work area is handled by floating the window, not by this cap.
+inline constexpr int kMaxClientExtentPx = 100000;
+
+/// Sanity ceiling for one view pan along the strip (scrollViewByPercent's
+/// pixels before they are rounded, scrollViewByPx's caller-supplied ones),
+/// the same band the D-Bus adaptor bounds the pixel pan to. The percent verb
+/// needs it to keep qRound defined; ScrollStrip::scrollViewBy sums wide and
+/// takes any int, so for the pixel verb it only trims a pan the strip would
+/// clamp at its end anyway. Far wider than any meaningful pan (a hundred
+/// viewports and more) and far inside int.
+inline constexpr int kMaxScrollViewPx = 1'000'000;
+
+/// How far a committed extent may differ from the offer and still count as
+/// the offer (ScrollEngine::reportCommittedSize). Fractional scaling rounds a
+/// logical size to whole device pixels and back, so a client that took its
+/// tile can commit one pixel either side of it; reading that as an answer
+/// would plant or give back a one-pixel floor and relayout the strip for it.
+///
+/// KEEP EQUAL to the compositor's CommittedSizeTolerancePx
+/// (plasmazones/kwin-effect/tilinghandler/scrolldecisions.h), hand-mirrored
+/// because the effect does not link this library. That one decides which
+/// answers are reported at all and this one which reported answers teach
+/// anything: a smaller value here would only judge answers the effect never
+/// sends, and a larger one would leave the effect reporting answers this
+/// engine always reads as the offer.
+inline constexpr int kCommittedExtentSlackPx = 1;
+
 /// Sanity bounds for tab-indicator geometry. Deliberately NOT the rules
 /// layer's constants — this library does not depend on phosphor-rules — but
 /// the same numbers, because both ultimately mirror the config schema's

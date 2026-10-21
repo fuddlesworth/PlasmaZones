@@ -4,8 +4,8 @@
 // The surface validator's remaining metadata lints, one negative slot each.
 //
 // WHY A SECOND FILE. test_surface_pack_validator.cpp covers the arm's binding
-// lints, its preset arm, its buffer-scale arm and its stage bakes, and adding
-// these to it would push it past the file-size ceiling. The cut is by COVERAGE
+// lints, its preset arm, its buffer-scale arm and its stage bakes, and these
+// went to a file of their own. The cut is by COVERAGE
 // GAP rather than by subject, so this file is the answer to one question: which
 // lints could be deleted with the suite still green? Each slot below existed only
 // as a line of validator code until it was written.

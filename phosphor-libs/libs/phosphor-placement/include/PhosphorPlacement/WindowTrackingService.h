@@ -1,13 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): WindowTrackingService is the engine-
-// agnostic facade every placement engine and the daemon share, and this is an
-// INSTALLED public header — splitting the class is an API break for the
-// third-party consumers the LGPL boundary exists to serve. The implementation
-// is already split by concern across src/ (WindowTrackingService.cpp and its _sticky part, snap, resnap, navigation,
-// virtualscreenmigration, lifecycle), and the member ordering here encodes which of those owns what. Same rationale
-// as PhosphorTileEngine/AutotileEngine.h.
+// WindowTrackingService is the engine-agnostic facade every placement engine
+// and the daemon share. The implementation is split by concern across src/
+// (WindowTrackingService.cpp and its _sticky part, snap, resnap, navigation,
+// virtualscreenmigration, lifecycle), and the member ordering here encodes which of those owns what.
 
 #pragma once
 

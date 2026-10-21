@@ -15,10 +15,15 @@
 #include <PhosphorAnimation/RetargetPolicy.h>
 
 #include <effect/effecthandler.h>
+#include <wayland/surface.h>
 #include <window.h>
 
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QTimer>
+
+#include <memory>
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -219,7 +224,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // quick tile is not one of these: it un-maximizes and
                 // moveResizes to the tile, so it lands as a frame change (on a
                 // column-maximize member, as the full-to-restore edge the
-                // interception claims).
+                // interception claims), and its own requestedTileChanged
+                // connection below takes the tile back off.
                 //
                 // CANCEL ONLY, never a dispatch. Routing this through
                 // interceptMaximizeRequest would dispatch a toggle,
@@ -373,6 +379,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
         });
 
+    // KWin's quick tile of a strip tile: the strip owns the tile's rect, so the
+    // tile is taken back off and the column put back
+    // (TilingHandler::cancelStripQuickTile). Queued, so KWin has finished the
+    // request that emitted this before the cancel issues a request of its own.
+    if (KWin::Window* kwTile = w->window()) {
+        const QPointer<KWin::EffectWindow> safeW = w;
+        connect(
+            kwTile, &KWin::Window::requestedTileChanged, this,
+            [this, safeW]() {
+                if (safeW) {
+                    m_tilingHandler->cancelStripQuickTile(safeW.data());
+                }
+            },
+            Qt::QueuedConnection);
+    }
+
     // TilingHandler::slotWindowFullScreenChanged: a windowed-fullscreen
     // member's enter and exit, and for any other tiled window the enter's
     // untrack (clearWindowTiledAllScreens; monocle membership survives) and
@@ -404,6 +426,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         pushWindowMetadata(window);
         if (window->isFullScreen()) {
             pushRestoreRect(window);
+        } else {
+            // A tile KWin took for a strip tile while it was fullscreen: the
+            // quick-tile corrector declined it then, and KWin's
+            // requestedTileChanged will not repeat (F123). After the tiling
+            // handler's slot above, which re-marks a strip tile returning
+            // from its own fullscreen.
+            m_tilingHandler->cancelStripQuickTile(window);
         }
     });
 
@@ -449,15 +478,58 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         });
     }
 
-    // Autotile: center undersized Wayland windows as soon as they commit constrained size
+    // The tiling handler's frame-commit slot: the strip counter-assert against
+    // an external mover, the virtual-screen crossing detector for tracked
+    // tiles, and the autotile centring of a Wayland window that committed a
+    // smaller size than its tile. Connected ahead of the lambda below, so a
+    // re-seat the counter-assert makes is in place before the offered-column
+    // read runs.
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFrameGeometryChanged);
+
+    // A geometry request for the window outside every effect apply: KWin's
+    // own (its Expand and Shrink Window verbs, a script setting the frame, an
+    // axis-only maximize, its keep-visible clamp) or the user's resize. KWin
+    // emits this at the top of each request and never for a client's commit,
+    // so the request is decided there and then from the size KWin has just
+    // stored for it. A request for another size first voids the answer an
+    // armed stale ack owes (Body -1.5 below): KWin's configure for it
+    // supersedes the stale one, and re-issuing the old command over it would
+    // undo a resize KWin made, or one the strip puts back below
+    // (ScrollDecisions::requestVoidsStaleAck, CR2-22). Then a request that
+    // resizes a strip window is put back to its column, or marks its frame as
+    // no longer answering the column the strip offered
+    // (noteForeignStripRequest). The user-move test first of all, because
+    // KWin issues a request per pointer step of an interactive move; the
+    // stale-ack probe and the offered-column probe are each one hash lookup,
+    // which a session with no strip and no stale ack pays.
+    connect(w, &KWin::EffectWindow::windowFrameGeometryAboutToChange, this,
+            [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
+                if (!safeW || safeW->isUserMove() || m_daemonGate.inGeometryApply || safeW->isDeleted()) {
+                    return;
+                }
+                auto& staleAcks = m_daemonGate.commandStamps.staleAcks;
+                if (const auto stale = staleAcks.find(safeW.data()); stale != staleAcks.end()) {
+                    if (const KWin::Window* kwStale = safeW->window(); kwStale
+                        && ScrollDecisions::requestVoidsStaleAck(QRectF(kwStale->moveResizeGeometry()).size(),
+                                                                 stale->target.size())) {
+                        qCDebug(lcEffect) << "Stale-ack answer for" << getWindowId(safeW.data())
+                                          << "superseded by a request for" << QRectF(kwStale->moveResizeGeometry());
+                        staleAcks.erase(stale);
+                    }
+                }
+                if (m_scrollOfferedColumn.isEmpty()) {
+                    return;
+                }
+                noteForeignStripRequest(safeW.data());
+            });
 
     // One windowFrameGeometryChanged lambda for the effect-side
     // per-tick work, in the order the bodies run: the answer to a superseded
     // configure's late ack (Body -1.5), a strip-animation retarget onto the
-    // rect the client actually committed, unless that is a park (Body -1), the offered-column
-    // centring for a client that would not take its column (Body -0.5),
+    // rect the client actually committed, unless that is a park (Body -1), the
+    // client's answer to its strip column, reported to the engine and centred
+    // in the column (Body -0.5),
     // deferred maximize completion (Body 0), first-frame suppression release
     // (Body 1), and the throttled daemon push (Body 2). Keeping the last two
     // as separate connections (which they were originally) doubled the per-geometry-
@@ -491,19 +563,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // below is owed anything for a corpse.
             //
             // It is a HAZARD guard, not merely an early-out, and the hazard
-            // is the same one the maximize lambda's guard names: Body -0.5
-            // and Body 2 both call getWindowId BEFORE the checks that would
-            // decline for them, and getWindowId re-populates the id caches
-            // on a miss — the caches slotWindowClosed has just scrubbed for
-            // a window not riding a close animation. The re-populated
-            // mapping then waits for the windowDeleted backstop. The moves
-            // and the daemon flush themselves do decline on their own
+            // is the same one the maximize lambda's guard names: the id
+            // lookup just below runs BEFORE the checks that would decline for
+            // the bodies, and getWindowId re-populates the id caches on a
+            // miss — the caches slotWindowClosed has just scrubbed for a
+            // window not riding a close animation. The re-populated mapping
+            // then waits for the windowDeleted backstop. The moves and the
+            // daemon flush themselves do decline on their own
             // (scrollManagedOutputFor and flushPendingFrameGeometry both
             // refuse a deleted window); what they do not do is decline
             // before the lookup.
             if (!safeW || safeW->isDeleted()) {
                 return;
             }
+            // One lookup for every body. Body 2 needs it on every tick
+            // anyway, so asking it first costs nothing extra.
+            const QString windowId = getWindowId(safeW.data());
             // Body -1.5 — answer a superseded configure's late ack. An
             // apply that asked for the size the client already had, while a
             // different size was still in flight, was applied by KWin with
@@ -517,21 +592,39 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // An answer whose superseded configure the client acked at the
             // target size stays armed for the rest of its command: KWin hands
             // an effect no configure serials, and an ack that moves nothing
-            // emits no frame change to consume it on. What it can still do is
-            // re-issue its own command's rect, once, against a later resize
-            // the client makes on its own while that command is current.
+            // emits no frame change to consume it on. The quick-tile corrector
+            // arms one that way whenever KWin's tile configure was only
+            // scheduled when the tile was dropped, since that configure then
+            // goes out carrying the column (ScrollDecisions::
+            // droppedTileAckOutstanding). A geometry request KWin makes for
+            // another size voids it (the frameGeometryAboutToChange hook
+            // above). What it can still do is re-issue its own command's rect,
+            // once, against a later resize the client makes on its own while
+            // that command is current.
+            //
+            // Nor while the outputs change or the strip's output has moved
+            // since its batch (F196): the target is in the coordinates the
+            // command was built in, which an output move invalidates without
+            // superseding the command, so the re-issue would pull the window
+            // back to where the output used to be. The same gate the
+            // offered-column read and the counter-assert take (F815); the next
+            // command arrives in the new coordinates.
             if (const auto staleIt = m_daemonGate.commandStamps.staleAcks.find(safeW.data());
                 staleIt != m_daemonGate.commandStamps.staleAcks.end() && !m_daemonGate.inGeometryApply) {
                 const WindowCommandStamps::StaleAck stale = *staleIt;
                 const QSize committed = safeW->frameGeometry().toRect().size();
+                const bool coordinatesStale = m_screenChangeHandler->isScreenChangeInProgress()
+                    || (m_tilingHandler->hasScrollingScreens()
+                        && m_tilingHandler->stripOutputMovedSinceBatch(
+                            m_tilingHandler->scrollTrackedScreenFor(windowId)));
                 if (!m_daemonGate.commandStamps.isCurrent(safeW.data(), stale.stamp) || safeW->isUserMove()
-                    || safeW->isUserResize()) {
+                    || safeW->isUserResize() || coordinatesStale) {
                     m_daemonGate.commandStamps.staleAcks.erase(staleIt);
                 } else if (committed != stale.target.size()) {
                     m_daemonGate.commandStamps.staleAcks.erase(staleIt);
                     if (KWin::Window* kwStale = safeW->window()) {
                         qCInfo(lcEffect) << "Re-issuing" << stale.target << "over a superseded configure's ack"
-                                         << committed << "for" << getWindowId(safeW.data());
+                                         << committed << "for" << windowId;
                         const auto staleGuard = geometryApplyScope();
                         kwStale->moveResize(QRectF(stale.target));
                     }
@@ -541,10 +634,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // client actually committed.
             //
             // Only fires for a client that did not take the geometry it
-            // was handed. A programmatic moveResize commits synchronously,
-            // so for an ordinary window frameGeometry() already equals the
-            // animation's target by the time any leg is running and the
-            // isAnimatingToTarget test short-circuits. A client with a
+            // was handed. A programmatic move lands at once, an X11 resize
+            // with it, and a Wayland resize lands on the client's ack of the
+            // configure; a client that takes its rect commits exactly the
+            // animation's target, so the isAnimatingToTarget test
+            // short-circuits for it whenever its commit arrives. A client with a
             // size constraint it enforces itself — an aspect ratio, a
             // minimum bigger than its column — negotiates asynchronously
             // and lands somewhere else, usually centred within the rect it
@@ -622,31 +716,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     }
                 }
             }
-            // Body -0.5 — centre a client that answered its column with
-            // a different size.
-            //
-            // The strip offers the full column rect the first time it
-            // sees a column SIZE, because until the client has answered
-            // there is nothing else to offer. A client that will not take
-            // that size commits its own at the column's top-left, so a
-            // freshly inserted window — or one that just went full width —
-            // hugs the top (or the left) until the next batch, which is
-            // the first placement able to offer the settled size centred.
-            //
-            // Correct it here instead of waiting: the commit that just
-            // arrived IS the answer, so the centred position is known now.
-            // Measured rather than predicted, like every other placement
-            // decision on this path — the alternative would be modelling
-            // the client's own size rule, which is not knowable up front.
-            //
-            // A pure move(), so it cannot renegotiate the size it just
-            // settled on. It also retargets the configures still queued to
-            // the centred position (KWin 6.7 drops their position, 6.8 moves
-            // their bounds there anchored at the top-left), so a queued resize
-            // acks at that top-left with its new size and this body centres
-            // it again on that ack. Each step converges: the guard compares
-            // against the position it is about to install, so the synchronous
-            // frameGeometryChanged this emits re-enters and does nothing.
+            // Body -0.5 — read the frame as the client's answer to its strip
+            // column: report it to the engine when it differs, then centre
+            // it in the column (readColumnAnswer). The commit watch reads the
+            // same answer when a settle changes no frame.
             //
             // Cheapest test first, and the ordering is load-bearing for
             // cost rather than correctness. scrollManagedOutputFor memoises
@@ -654,67 +727,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // cycle, so once any screen is scrolling — its own first test
             // is hasScrollingScreens, which costs nothing when none is —
             // every call pays a tracked-screen resolve, a float probe and
-            // an output lookup uncached. Asking it before the
-            // offered-column probe made every window's every geometry tick
-            // pay that, including plain snap and autotile windows that miss
-            // the map. The hash probe answers the common case for one
-            // lookup. Body -1 above already orders it this way.
+            // an output lookup uncached. The empty-map test here and the
+            // offered-column probe that opens readColumnAnswer answer the
+            // common case, plain snap and autotile windows that miss the
+            // map, before any of that. Body -1 above already orders it this
+            // way.
             if (!m_daemonGate.inGeometryApply && !m_scrollOfferedColumn.isEmpty()) {
-                const QString scrollId = getWindowId(safeW.data());
-                // Copied out, not held as an iterator across the predicate
-                // below. scrollManagedOutputFor does not touch this map
-                // today, so the iterator would survive — but it resolves a
-                // screen, a float verdict and an output, and a future
-                // reader has no reason to expect an unrelated call to be
-                // iterator-critical. The value is a QRect. The hit/miss
-                // answer is kept as its own bool rather than inferred from
-                // the copied rect, so the test stays exactly the one the
-                // iterator comparison made.
-                const auto colIt = m_scrollOfferedColumn.constFind(scrollId);
-                const bool haveOffer = colIt != m_scrollOfferedColumn.constEnd();
-                const QRect offered = haveOffer ? *colIt : QRect();
-                // Not while the outputs change or the strip's output has moved
-                // since its batch: the offer is in the old coordinates (F815).
-                if (haveOffer && scrollManagedOutputFor(safeW.data())
-                    && !m_screenChangeHandler->isScreenChangeInProgress()
-                    && !m_tilingHandler->stripOutputMovedSinceBatch(
-                        m_tilingHandler->scrollTrackedScreenFor(scrollId))) {
-                    const QRect live = safeW->frameGeometry().toRect();
-                    // A tile at rest answering its column. KWin's own
-                    // fullscreen and maximize commit the new size before the
-                    // new state, so the requested state says which this is,
-                    // and a frame that left the column was moved elsewhere,
-                    // by KWin's Move to Screen (F973, F738).
-                    const KWin::Window* const kwOffer = safeW->window();
-                    const bool atRest = kwOffer && kwOffer->requestedMaximizeMode() == KWin::MaximizeRestore
-                        && !kwOffer->isRequestedFullScreen() && !kwOffer->isFullScreen();
-                    if (atRest && live.intersects(offered) && live.size() != offered.size() && !live.size().isEmpty()) {
-                        // Same centring as the strip apply and the paint
-                        // resolver: the same toRect() rounding, and the
-                        // same clamp at zero, so a frame whose minimum
-                        // exceeds its column stays anchored at the column's
-                        // origin rather than shifting past its edge.
-                        //
-                        // isEmpty rather than isValid: QSize::isValid()
-                        // admits 0x0, which would centre a degenerate
-                        // mid-unmap commit by the whole column.
-                        const QPoint centred(offered.x() + qMax(0, offered.width() - live.width()) / 2,
-                                             offered.y() + qMax(0, offered.height() - live.height()) / 2);
-                        if (live.topLeft() != centred && safeW->window()) {
-                            // Bracketed like the effect's other commits
-                            // (applies, centring). The move emits a synchronous
-                            // frameGeometryChanged, which re-enters this
-                            // signal's whole connection list from the top
-                            // — including the virtual-screen crossing
-                            // detector and the autotile reactive centring
-                            // pass, both connected ahead of this lambda.
-                            // Without the gate they treat a move the effect
-                            // itself made as a user-driven one.
-                            const auto restoreGate = geometryApplyScope();
-                            safeW->window()->move(QPointF(centred));
-                        }
-                    }
-                }
+                readColumnAnswer(safeW.data(), windowId);
             }
             // Body 0 — deferred maximize-morph completion. The maximize
             // state edge above arms this entry when it fires before the
@@ -774,7 +793,6 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // its cached exclusion verdict routinely misses). Per tick it
             // ran on every frame of an interactive move or resize
             // (discussion #816).
-            const QString windowId = getWindowId(safeW);
             if (windowId.isEmpty()) {
                 return;
             }
@@ -783,8 +801,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // window the manager already believes it hidden, so the
             // synchronous resync in updateAllDecorations bails ("still
             // suppressed") when it runs before KWin re-evaluates the
-            // decoration. KWin grows the frame by the title-bar height
-            // when it re-decorates, firing this very signal: resyncWindow
+            // decoration. On X11 KWin keeps the client size when it
+            // re-decorates (X11Window::updateDecoration), so the frame
+            // grows by the title-bar height, firing this very signal. A
+            // Wayland client is instead configured to keep its frame size
+            // (XdgToplevelWindow::sendRoleConfigure takes the new borders
+            // off the client size), so its frame grows, and this fires,
+            // only when the client keeps its client size anyway. resyncWindow
             // re-hides exactly the windows the manager owns and believes
             // hidden whose decoration drifted back, and is a self-guarding
             // no-op otherwise. Kept PER TICK, not behind the flush: it is
@@ -1027,6 +1050,359 @@ QRectF PlasmaZonesEffect::endRunningPlacementLeg(KWin::EffectWindow* w, bool end
         repaintSnapRegions(w, drawn, frame.toRect());
     }
     return drawn;
+}
+
+void PlasmaZonesEffect::recordStripOffer(KWin::EffectWindow* w, const QString& windowId, const QRect& column,
+                                         bool sendsSize)
+{
+    using ScrollDecisions::ColumnAnswer;
+    if (!w) {
+        return;
+    }
+    ScrollOfferedColumn& entry = m_scrollOfferedColumn[windowId];
+    entry.rect = column;
+    // A fresh delivery re-arms the put-back budget (noteForeignStripRequest),
+    // as a fresh batch re-arms the counter-assert's.
+    entry.putBackBurstStartMs = 0;
+    entry.putBackBurstCount = 0;
+    KWin::Window* const kw = w->window();
+    if (sendsSize) {
+        // A new offer: whatever the client commits next answers THIS column,
+        // so the answer is owed again, whatever became of the last one.
+        entry.answer = ColumnAnswer::Owed;
+        armColumnAnswerWatch(w, windowId, entry);
+        return;
+    }
+    // No size goes out (a pure move, or the window already holds the size):
+    // the client has nothing new to answer.
+    if (entry.answer == ColumnAnswer::Owed) {
+        // An answer still owed from an earlier offer stays owed. One that has
+        // already settled was refused by a gate this batch has just cleared
+        // (the strip's output moved, an output change), and no commit is
+        // coming to read it again, so the catch-up walk reads it.
+        if (kw && QRectF(kw->moveResizeGeometry()).toRect() == w->frameGeometry().toRect()) {
+            scheduleColumnAnswerCatchUp();
+        }
+        return;
+    }
+    // Read or Foreign, or a fresh entry: the batch placed the window at the
+    // size it holds, which is the answer standing from here on, so a later
+    // frame change reports only a size the client moves to by itself.
+    entry.answer = ColumnAnswer::Read;
+    entry.answeredSize = kw ? QRectF(kw->moveResizeGeometry()).toRect().size() : w->frameGeometry().toRect().size();
+}
+
+void PlasmaZonesEffect::armColumnAnswerWatch(KWin::EffectWindow* w, const QString& windowId, ScrollOfferedColumn& entry)
+{
+    // A watch already serving this entry serves the new offer too: it reads
+    // whatever the entry says when the next commit lands.
+    if (entry.answerWatch != 0) {
+        return;
+    }
+    KWin::Window* const kw = w ? w->window() : nullptr;
+    if (!kw || !kw->surface()) {
+        // No surface to watch: the frame hook alone reads the answer.
+        return;
+    }
+    const quint64 watchId = ++m_columnAnswerWatchSeq;
+    entry.answerWatch = watchId;
+    // A client whose settle leaves its frame unchanged emits no frame change:
+    // one answering with the frame it already had, or one whose answering
+    // commit read unsettled because a state-only configure (activation, a
+    // suspend, a scale change) followed the resize and settles later with
+    // nothing left to move. Its commits are read instead, for as long as the
+    // answer is owed. KWin connected its own commit handler when it made the
+    // window, so it has run, and moveResizeGeometry() is current, when this one
+    // does (the resize hold's ack watch relies on the same order).
+    //
+    // The watch retires itself on the first commit after the answer stops
+    // being owed: the entry was read, removed, or replaced by one serving
+    // another watch. That keeps it out of every remover of the map, at the
+    // cost of one more call after the answer is read.
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection =
+        connect(kw->surface(), &KWin::SurfaceInterface::committed, this,
+                [this, safeW = QPointer<KWin::EffectWindow>(w), windowId, watchId, connection]() {
+                    const auto it = m_scrollOfferedColumn.find(windowId);
+                    const bool serving = it != m_scrollOfferedColumn.end() && it->answerWatch == watchId;
+                    if (!safeW || safeW->isDeleted() || !serving || it->answer != ScrollDecisions::ColumnAnswer::Owed) {
+                        if (serving) {
+                            it->answerWatch = 0;
+                        }
+                        disconnect(*connection);
+                        return;
+                    }
+                    // Declined inside an effect apply, as the frame hook declines.
+                    if (!m_daemonGate.inGeometryApply) {
+                        readColumnAnswer(safeW.data(), windowId);
+                    }
+                });
+}
+
+void PlasmaZonesEffect::readColumnAnswer(KWin::EffectWindow* w, const QString& windowId)
+{
+    using ScrollDecisions::ColumnAnswer;
+    // Copied out, not held as an iterator across the gates below.
+    // scrollManagedOutputFor does not touch this map today, so the iterator
+    // would survive, but it resolves a screen, a float verdict and an output,
+    // and a future reader has no reason to expect an unrelated call to be
+    // iterator-critical.
+    const auto found = m_scrollOfferedColumn.constFind(windowId);
+    if (found == m_scrollOfferedColumn.constEnd() || !w || w->isDeleted()) {
+        return;
+    }
+    const ScrollOfferedColumn offer = *found;
+    KWin::Window* const kw = w->window();
+    if (!kw) {
+        return;
+    }
+    const QRect live = w->frameGeometry().toRect();
+    // The gates the answer is read through (ScrollDecisions::
+    // readsAsColumnAnswer), the cheap ones first: this runs on every frame
+    // change of a strip window and on every commit while an answer is owed,
+    // and the scroll-managed resolve is the costly one.
+    //
+    // Settled compares the whole rect, exactly, unlike the autotile centring
+    // pass's one-pixel tolerance. KWin syncs its move-resize geometry to the
+    // very rect it commits as the frame, skipping the sync only while a
+    // configure that places the window is unacknowledged or about to be sent,
+    // so at rest the two are the same value and round alike. A tolerance would
+    // admit a one-pixel resize still in flight, and the position half catches
+    // a placing configure still queued.
+    //
+    // KWin's own maximize, fullscreen and quick tile commit the new frame
+    // before the state change that explains it, so their REQUESTED state says
+    // which this is; a frame committed for one is not the client's answer to
+    // its column (F123). The resize hold waits for the client's answer to the
+    // user's resize, which is the user's frame (F35).
+    ScrollDecisions::ColumnAnswerGates gates;
+    gates.settled = QRectF(kw->moveResizeGeometry()).toRect() == live;
+    gates.kwinStateAtRest = kw->requestedMaximizeMode() == KWin::MaximizeRestore && !kw->isRequestedFullScreen()
+        && !kw->isFullScreen() && !kw->requestedTile();
+    gates.resizeHeld = m_resizeHold.window == w;
+    // One tracked-screen resolve for both its readers below (F156).
+    QString screenId;
+    if (gates.settled && gates.kwinStateAtRest && !gates.resizeHeld && offer.answer != ColumnAnswer::Foreign
+        && !live.isEmpty() && live.intersects(offer.rect)) {
+        gates.managed = scrollManagedOutputFor(w) != nullptr;
+        if (gates.managed) {
+            screenId = m_tilingHandler->scrollTrackedScreenFor(windowId);
+            // Not while the outputs change or the strip's output has moved
+            // since its batch: the offer is in the old coordinates (F815).
+            gates.coordinatesHold = !m_screenChangeHandler->isScreenChangeInProgress()
+                && !m_tilingHandler->stripOutputMovedSinceBatch(screenId);
+        }
+    }
+    if (!ScrollDecisions::readsAsColumnAnswer(gates, offer.answer, offer.rect, live)) {
+        if (offer.answer == ColumnAnswer::Owed && !gates.settled) {
+            qCDebug(lcEffect) << "Column answer for" << windowId << "not settled: commanded"
+                              << QRectF(kw->moveResizeGeometry()) << "frame" << live;
+        }
+        return;
+    }
+    // The report: once per answer (ScrollDecisions::isNewColumnAnswer). An
+    // answer the report could not take yet (no daemon, no axis map) stays
+    // owed for the catch-up walk; one it took, or found nothing in, is read.
+    if (ScrollDecisions::isNewColumnAnswer(offer.answer, offer.answeredSize, live.size())
+        && m_tilingHandler->reportStripCommit(windowId, screenId, offer.rect, live)
+            != TilingHandler::StripCommitReport::Deferred) {
+        if (const auto entry = m_scrollOfferedColumn.find(windowId); entry != m_scrollOfferedColumn.end()) {
+            entry->answer = ColumnAnswer::Read;
+            entry->answeredSize = live.size();
+        }
+    }
+    // The centring. The strip offers the full column rect the first time it
+    // sees a column SIZE, because until the client has answered there is
+    // nothing else to offer. A client that will not take that size commits
+    // its own at the column's top-left, so a freshly inserted window — or one
+    // that just went full width — hugs the top (or the left) until the next
+    // batch, which is the first placement able to offer the settled size
+    // centred.
+    //
+    // Corrected here instead of waiting: the answer is in, so the centred
+    // position is known now. Measured rather than predicted, like every other
+    // placement decision on this path — the alternative would be modelling the
+    // client's own size rule, which is not knowable up front.
+    //
+    // Only on a settled frame (F49, F154). A move retargets the configures
+    // still queued to the new position, so centring a frame that a queued
+    // resize is about to replace landed that resize displaced, and undid the
+    // stale-ack re-issue (Body -1.5) positionally on the very tick it was
+    // sent.
+    if (live.size() == offer.rect.size()) {
+        return;
+    }
+    // Not a column the strip placed outside its output (a park, or a straddler
+    // cropped at the edge): its seat is the counter-assert's, which re-seats
+    // it against KWin 6.8's keep-visible clamp under a budget that stops the
+    // configure, ack and clamp loop a handover to another output starts. A
+    // move here would make the very re-seat the budget had just refused, with
+    // nothing charged for it (F172).
+    if (const auto commanded = m_scrollCommandedRects.constFind(windowId);
+        commanded != m_scrollCommandedRects.constEnd() && commanded->outOfView) {
+        return;
+    }
+    // Same seat as the counter-assert and the paint resolver
+    // (ScrollDecisions::reseatOrigin), so the three agree: the same toRect()
+    // rounding, and the same clamp at zero, so a frame whose minimum exceeds
+    // its column stays anchored at the column's origin rather than shifting
+    // past its edge (F173).
+    const QPoint centred = ScrollDecisions::reseatOrigin(offer.rect, live.size());
+    if (live.topLeft() == centred) {
+        return;
+    }
+    // A pure move(), so it cannot renegotiate the size the client settled on.
+    // Bracketed like the effect's other commits (applies, centring). The move
+    // emits a synchronous frameGeometryChanged, which re-enters that signal's
+    // whole connection list from the top: the tiling handler's slot (the
+    // counter-assert, the virtual-screen crossing detector and the autotile
+    // centring pass) and the frame hook itself. Under the bracket the slot
+    // treats the move as the effect's own rather than an external or
+    // user-driven one, and the frame hook's read declines at its
+    // inGeometryApply gate, so the re-entry neither reports nor moves again.
+    const auto restoreGate = geometryApplyScope();
+    kw->move(QPointF(centred));
+}
+
+void PlasmaZonesEffect::noteForeignStripRequest(KWin::EffectWindow* w)
+{
+    using ScrollDecisions::ColumnAnswer;
+    const QString windowId = getWindowId(w);
+    const auto it = m_scrollOfferedColumn.find(windowId);
+    if (it == m_scrollOfferedColumn.end() || it->answer == ColumnAnswer::Foreign) {
+        return;
+    }
+    // The user's resize: the frame is the user's from its first step, and the
+    // resize drain reports it to the engine as a resize (notifyWindowResized).
+    // Read as an answer, its late ack planted a floor at the user's width and
+    // centred the window in the column it was dragged out of (F35).
+    if (w->isUserResize()) {
+        it->answer = ColumnAnswer::Foreign;
+        return;
+    }
+    KWin::Window* const kw = w->window();
+    if (!kw) {
+        return;
+    }
+    // KWin's own request, readable here because Window::moveResize, move and
+    // resize store it before moveResizeInternal emits this signal. One that
+    // resizes on KWin's account would otherwise read as the client's answer
+    // once the client acks it, and become a floor no width verb or drag could
+    // clear, or float the window outright when it passes the work area
+    // (ScrollDecisions::resizesOnKWinsAccount, F141).
+    const QRectF requested(kw->moveResizeGeometry());
+    const QRectF frame(w->frameGeometry());
+    if (!ScrollDecisions::resizesOnKWinsAccount(requested, frame, it->rect.size())) {
+        return;
+    }
+    // The strip owns the column's rect, so the resize is put back
+    // (ScrollDecisions::putsBackKWinResize), as an X11 window's is by the
+    // counter-assert. Here, from inside the request, before KWin acts on it:
+    // XdgSurfaceWindow::moveResizeInternal emits this signal first, and for a
+    // size other than the client's it only schedules a configure, which
+    // XdgToplevelWindow::sendRoleConfigure builds from the move-resize
+    // geometry KWin holds when it sends it. Put back now, KWin's size never
+    // reaches the client: the configure carries the rect put back, and the
+    // client's answer to its column stands as it was. Put back later, the
+    // configure could already have gone out. A raw moveResize rather than an
+    // apply, like the stale-ack re-issue: the window keeps its command stamp,
+    // a strip leg still running keeps running, and no stale ack is armed for a
+    // configure KWin never sent.
+    //
+    // Where the frame ends up. KWin's request has not touched it when this
+    // runs. The put-back's own moveResize moves it at once when the rect put
+    // back is at the client's own size (moveResizeInternal applies such a
+    // rect without a configure), and leaves it where it is otherwise. KWin's
+    // request then resumes with its own rect. One that needs a configure only
+    // schedules it, and that configure carries the rect put back. One that
+    // needs none (a pure move, or a size that snaps to the client's own)
+    // moves the frame to KWin's position after the put-back, at the client's
+    // size, and the frame can stay there until the column is next delivered.
+    // A resize on KWin's account needs a configure, so for the requests this
+    // answers those are edges, not the rule.
+    //
+    // Not a request that moves the window to another output
+    // (KWinResizePutBackGates::leavesOutput): put back on the old output, its
+    // frame would never leave it, so the output change that hands the window
+    // over (TilingHandler::isKWinMoveOfStripTile, F738) would never come.
+    //
+    // Copied out, not held as an iterator across the gates below, as
+    // readColumnAnswer does, and found again for the writes.
+    const ColumnAnswer answer = it->answer;
+    const QRect offered = it->rect;
+    ScrollDecisions::KWinResizePutBackGates gates;
+    gates.kwinStateAtRest = kw->requestedMaximizeMode() == KWin::MaximizeRestore && !kw->isRequestedFullScreen()
+        && !kw->isFullScreen() && !kw->requestedTile();
+    gates.userGesture =
+        m_resizeHold.window == w || (m_dragTracker->isDragging() && windowId == m_dragTracker->draggedWindowId());
+    if (gates.kwinStateAtRest && !gates.userGesture) {
+        // The output of the window's tracked strip screen.
+        const KWin::LogicalOutput* const managedOutput = scrollManagedOutputFor(w);
+        gates.managed = managedOutput != nullptr;
+        if (gates.managed) {
+            gates.coordinatesHold = !m_screenChangeHandler->isScreenChangeInProgress()
+                && !m_tilingHandler->stripOutputMovedSinceBatch(m_tilingHandler->scrollTrackedScreenFor(windowId));
+            gates.leavesOutput = ScrollDecisions::requestLeavesStripOutput(
+                m_tilingHandler->isKWinMoveOfStripTile(w, windowId, requested), requested,
+                QRectF(QRect(managedOutput->geometry())));
+        }
+    }
+    // The commanded rect only while the strip apply that recorded it is still
+    // the window's latest command, as the counter-assert reads it.
+    QRect commanded;
+    if (const auto cit = m_scrollCommandedRects.constFind(windowId);
+        cit != m_scrollCommandedRects.constEnd() && m_daemonGate.commandStamps.isCurrent(w, cit->commandStamp)) {
+        commanded = cit->rect;
+    }
+    const QRectF putBack = ScrollDecisions::kwinResizePutBackRect(commanded, answer, offered, frame);
+    const auto entry = m_scrollOfferedColumn.find(windowId);
+    if (entry == m_scrollOfferedColumn.end()) {
+        return;
+    }
+    // The budget last, so a request the gates refuse spends none of it. A
+    // script that keeps writing the frame is put back three times per rolling
+    // second at most (the counter-assert's budget, re-armed by every delivery
+    // of a column, recordStripOffer); past that its size stands, Foreign,
+    // until the next delivery.
+    if (ScrollDecisions::putsBackKWinResize(gates) && !putBack.isEmpty()
+        && ScrollDecisions::shouldCounterAssert(entry->putBackBurstStartMs, entry->putBackBurstCount,
+                                                ShaderInternal::shaderClockNowMs(), /*frameDiffers=*/true)) {
+        qCInfo(lcEffect) << "Putting strip window" << windowId << "back at" << putBack
+                         << "over a resize KWin requested:" << frame.size() << "->" << requested.size();
+        const auto putBackGuard = geometryApplyScope();
+        kw->moveResize(putBack);
+        return;
+    }
+    qCDebug(lcEffect) << "Column answer for" << windowId << "superseded by a resize KWin requested:" << frame.size()
+                      << "->" << requested.size();
+    entry->answer = ColumnAnswer::Foreign;
+}
+
+void PlasmaZonesEffect::scheduleColumnAnswerCatchUp()
+{
+    if (m_columnAnswerCatchUpQueued) {
+        return;
+    }
+    m_columnAnswerCatchUpQueued = true;
+    // Queued, so the caller's own state is written by the time it runs (the
+    // axis map behind the behaviour seed, the batch's applies) and every
+    // trigger in one turn costs one walk.
+    QTimer::singleShot(0, this, [this]() {
+        m_columnAnswerCatchUpQueued = false;
+        // Collected first: reading an answer can move the window, and that
+        // move's frame change re-enters the frame hook, which reads the map.
+        QStringList owed;
+        for (auto it = m_scrollOfferedColumn.constBegin(); it != m_scrollOfferedColumn.constEnd(); ++it) {
+            if (it->answer == ScrollDecisions::ColumnAnswer::Owed) {
+                owed.append(it.key());
+            }
+        }
+        for (const QString& windowId : std::as_const(owed)) {
+            if (KWin::EffectWindow* const w = findWindowByIdExact(windowId)) {
+                readColumnAnswer(w, windowId);
+            }
+        }
+    });
 }
 
 } // namespace PlasmaZones

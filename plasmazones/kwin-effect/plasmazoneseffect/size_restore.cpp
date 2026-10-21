@@ -3,7 +3,7 @@
 
 // The size-only half of slotApplyGeometryRequested (#1106): a free size the
 // daemon gives back to a window where it stands. Split from daemon_apply.cpp
-// by concern (and to keep that file under the size ceiling).
+// by concern.
 
 #include "plasmazoneseffect.h"
 #include "compositor/effectlogging.h"

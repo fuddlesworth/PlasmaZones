@@ -7,10 +7,10 @@
  *        (the settings-side twin of the compositor's
  *        syncStockEffectSuppression ownership gate) and its NOTIFY inputs.
  *
- * Split out of test_animations_page_controller.cpp, which had crossed the
- * repo's 1150-line hard ceiling; these slots are the file's one
- * self-contained concern with no fixture shared beyond the standard
- * controller setup. See that file's header for the companion-test map.
+ * Split out of test_animations_page_controller.cpp: these slots are the
+ * file's one self-contained concern, with no fixture shared beyond the
+ * standard controller setup. See that file's header for the
+ * companion-test map.
  */
 
 #include <QSignalSpy>

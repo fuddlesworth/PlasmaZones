@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The condensed simple-mode pages' search anchors, split out of
-// searchcatalog.cpp by concern (the single catalog TU had crossed the
-// file-size ceiling; same split as searchcatalog_animations.cpp). Their
-// rows duplicate settings the advanced pages also expose, deliberately:
-// a search in simple mode must land on a page that mode can actually
-// show, and the advanced twins are filtered out of the rail there.
-// Anchors match the ids the simple pages register. Called only by
-// seedSearchCatalog.
+// searchcatalog.cpp by concern (the same split as
+// searchcatalog_animations.cpp). Their rows duplicate settings the advanced
+// pages also expose, deliberately: a search in simple mode must land on a
+// page that mode can actually show, and the advanced twins are filtered out
+// of the rail there. Anchors match the ids the simple pages register.
+// Called only by seedSearchCatalog.
 
 #include "searchcatalog_p.h"
 
@@ -99,7 +98,9 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("smart"), PhosphorI18n::tr("single"),
                 PhosphorI18n::tr("column"), PhosphorI18n::tr("strip")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRespectMinimumSize"),
-               PhosphorI18n::tr("Respect minimum size"), {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size")});
+               PhosphorI18n::tr("Respect minimum size"),
+               {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size"), PhosphorI18n::tr("wider"),
+                PhosphorI18n::tr("overlap")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingCenterShortColumns"),
                PhosphorI18n::tr("Center short columns"), {PhosphorI18n::tr("center"), PhosphorI18n::tr("short")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRestoreStripsOnLogin"),

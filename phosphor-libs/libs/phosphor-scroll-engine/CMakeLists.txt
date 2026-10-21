@@ -100,6 +100,7 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/engine_float_open.cpp
     src/scrollengine/engine_focus.cpp
     src/scrollengine/engine_minsize.cpp
+    src/scrollengine/engine_committed.cpp
     src/scrollengine/engine_reopen.cpp
     src/scrollengine/engine_handoff.cpp
     src/scrollengine/engine_float.cpp

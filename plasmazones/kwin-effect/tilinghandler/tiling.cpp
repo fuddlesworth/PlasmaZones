@@ -4,15 +4,6 @@
 // Tiling request handling for TilingHandler: the tile batch pipeline. Part of
 // TilingHandler — split from tilinghandler.cpp for SRP. The frame-commit
 // centring lives in framecentering.cpp, the engine's focus request in signals.cpp.
-//
-// FILE-SIZE EXCEPTION (sanctioned): slotWindowsTileRequested is one batch
-// pipeline — parse, float split, view-leg seeding, cascade ordering, the
-// apply lambda and its completion — whose stages hand per-batch state
-// (generations, seeded sets, the residual-origin gates) straight down the
-// function. Over the 1150 ceiling before PR #891 and accepted as such;
-// a future split should carve at the batch-parse / apply boundary, not
-// mid-pipeline. Grew with the cross-output bounce fix (#1124) and its audit:
-// the instance-first tile resolve and its scoped fuzzy candidates.
 
 #include "tilinghandler.h"
 #include "stackdecisions.h"
@@ -1904,6 +1895,35 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     && !kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize()) {
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
+                // KWin's tile on a window the strip is placing, the batch's half of
+                // the quick-tile corrector (F123). A window that carried a tile
+                // before it became a strip tile (a quick-tiled floater unfloated
+                // back, a tile requested while it was fullscreen, a rule that tiles
+                // it as it maps) raises no requestedTileChanged the corrector would
+                // hear, and left standing the tile keeps its frame from ever
+                // reading as its answer while KWin puts it back on the tile at
+                // every re-check. Dropped ahead of the apply below, which lands
+                // last and places the column, so KWin's own restore rect goes out
+                // in no configure. Not under a gesture, whose end runs the
+                // corrector, nor for a window going fullscreen, whose apply bails.
+                // A column maximized to the edges has none by now: KWin's maximize
+                // exits quick tile mode.
+                //
+                // KWin's untile moves the window to its restore rect at once where
+                // that needs no configure (an X11 window, or a Wayland restore
+                // rect at the client's own size), a rect never painted. The
+                // frame the tile held is where the window was last seen, so the
+                // leg below departs from it (tileDropOrigin) instead.
+                KWinTileDrop kwinTileDrop;
+                QRectF tileDropOrigin;
+                if (isScrollingScreen(snap.screenId) && !snap.isWindowedFullscreen && !fullscreenBailSkippedCommit
+                    && !snap.window->isUserMove() && !snap.window->isUserResize()) {
+                    const QRectF frameAtTile = snap.window->frameGeometry();
+                    kwinTileDrop = dropKWinTile(snap.window);
+                    if (kwinTileDrop.dropped && QRectF(snap.window->frameGeometry()) != frameAtTile) {
+                        tileDropOrigin = frameAtTile;
+                    }
+                }
                 QRect geo = snap.geometry;
 
                 // Size continuity for a strip client that will not take its
@@ -1958,7 +1978,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // step while its size does not, and it is the size that
                     // decides whether the client has answered for this column.
                     const bool columnUnchanged =
-                        offeredIt != m_effect->m_scrollOfferedColumn.constEnd() && offeredIt->size() == columnSize;
+                        offeredIt != m_effect->m_scrollOfferedColumn.constEnd() && offeredIt->rect.size() == columnSize;
                     // The whole rect is captured: the commit-time correction
                     // below needs the column's position to centre within it.
                     //
@@ -2090,8 +2110,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // commit mid-gesture (applyWindowGeometry hands those to
                 // windowFinishUserMovedResized), and the non-member fullscreen
                 // bail, which commits nothing at all. In each case the client
-                // has not been offered THIS column, so nothing is written — a
-                // recorded offer that never went out would be read as answered.
+                // has not been offered THIS column yet, so nothing is written
+                // now — a recorded offer that never went out would be read as
+                // answered. The deferred commit records it when it goes out.
                 //
                 // Not written, and equally NOT removed. Any entry already there
                 // describes a column an earlier batch genuinely delivered and
@@ -2104,9 +2125,34 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // decided by the size comparison above, which a genuine column
                 // change fails on its own; membership loss is handled by the
                 // teardown removers.
-                if (!stripOfferedColumn.isNull() && !skipMoveResize && !snap.window->isUserMove()
-                    && !snap.window->isUserResize() && !fullscreenBailSkippedCommit) {
-                    m_effect->m_scrollOfferedColumn.insert(snap.windowId, stripOfferedColumn);
+                //
+                // A batch that sends the client a SIZE is a new offer, whose
+                // answer the frame hook and the commit watch then read
+                // (recordStripOffer). The test is the size-preserving split
+                // both arms of applyWindowGeometry take below, against the
+                // same commanded rect, read before the apply: a size equal to
+                // the commanded one goes out as a pure move, or not at all,
+                // and asks the client nothing. Where KWin's tile was dropped
+                // above, the size the client was last asked for is the tile's,
+                // read before KWin's untile replaced it with its restore rect.
+                //
+                // Mid-gesture the apply below defers to the gesture's end, and
+                // the column rides along with it: the replay records it once it
+                // has sent the rect (stripOfferOnDeferredReplay).
+                std::optional<QRect> deferredStripOffer;
+                const bool deliversStripOffer =
+                    !stripOfferedColumn.isNull() && !skipMoveResize && !fullscreenBailSkippedCommit;
+                if (deliversStripOffer && (snap.window->isUserMove() || snap.window->isUserResize())) {
+                    deferredStripOffer = stripOfferedColumn;
+                } else if (deliversStripOffer) {
+                    const KWin::Window* const kwOffer = snap.window->window();
+                    const bool sendsSize =
+                        kwOffer
+                        && ScrollDecisions::stripEntrySendsSize(
+                            kwinTileDrop.dropped ? kwinTileDrop.requested
+                                                 : QRectF(kwOffer->moveResizeGeometry()).toRect().size(),
+                            geo.size());
+                    m_effect->recordStripOffer(snap.window, snap.windowId, stripOfferedColumn, sendsSize);
                 }
 
                 if (!skipMoveResize) {
@@ -2146,6 +2192,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     QRectF originOverride;
                     QRectF visualTargetOverride;
                     bool skipScrollAnimation = false;
+                    // Where the window was last seen: the frame KWin's tile held
+                    // where the drop above moved it, else the live frame.
+                    const QRectF seenFrame =
+                        tileDropOrigin.isValid() ? tileDropOrigin : QRectF(snap.window->frameGeometry());
                     // The rect applyWindowGeometry will actually COMMIT for
                     // this request. For an X11 client with size hints that is
                     // the constrained frame centred in the column, NOT the
@@ -2289,7 +2339,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                 // at-park-now treatment of the sibling arms.
                                 skipScrollAnimation = true;
                             } else {
-                                const KWin::RectF cur = snap.window->frameGeometry();
+                                const QRectF& cur = seenFrame;
                                 const QRect liveRect =
                                     QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
                                 visualTargetOverride = QRectF(anchorPastEdge(liveRect, screenRect, snap.scrollEdge));
@@ -2371,9 +2421,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                 const bool vertical =
                                     scrollAxisForScreen(snap.screenId) == PhosphorProtocol::ScrollAxis::Vertical;
                                 originOverride = QRectF(ScrollDecisions::viewCarriedOrigin(
-                                    claimedDeparture.isValid() ? claimedDeparture
-                                                               : QRectF(snap.window->frameGeometry()),
-                                    snap.viewDelta, vertical));
+                                    claimedDeparture.isValid() ? claimedDeparture : seenFrame, snap.viewDelta,
+                                    vertical));
                             }
                         }
                     } else if (!snap.scrollEdge.isEmpty()) {
@@ -2389,7 +2438,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // rather than jumping to the park's row first.
                             QRect atEdge = committedGeo;
                             if (!arriving) {
-                                const KWin::RectF cur = snap.window->frameGeometry();
+                                const QRectF& cur = seenFrame;
                                 atEdge =
                                     QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
                             }
@@ -2495,6 +2544,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     if (!originOverride.isValid() && preMaximize.isValid() && !preMaximize.isEmpty()) {
                         originOverride = preMaximize;
                     }
+                    // A leg no arm above anchored departs from the live frame,
+                    // which the tile drop moved to a rect never painted.
+                    if (!originOverride.isValid() && tileDropOrigin.isValid()) {
+                        originOverride = tileDropOrigin;
+                    }
                     // Terminal backstop for every arm above, and for arms that
                     // do not exist yet: a commit whose target lies off the
                     // union of every output (a park) must NEVER take an
@@ -2548,15 +2602,22 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // placeOut.
                     const bool releasingMaximize = maximizeBitReleasedThisBatch || monocleBitReleased;
                     // KWin's flip usually commanded this rect already, and the apply's no-op skip would drop the
-                    // claimed press's only leg (claimedPressOwesLeg, F989).
+                    // claimed press's only leg (F989). So does an untile that moved the window at once to a restore
+                    // rect that is the column itself, which would drop the leg from the tile (departureOwesLeg). An
+                    // apply that skips its animation owes no leg, and the no-op skip stands for it.
                     const bool prevLegOwed =
-                        std::exchange(m_effect->m_daemonGate.claimedPressLegOwed, claimedDeparture.isValid());
+                        std::exchange(m_effect->m_daemonGate.departureLegOwed,
+                                      !skipScrollAnimation && (claimedDeparture.isValid() || tileDropOrigin.isValid()));
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   releasingMaximize ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
                                                                     : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
-                                                  originOverride, visualTargetOverride);
-                    m_effect->m_daemonGate.claimedPressLegOwed = prevLegOwed;
+                                                  originOverride, visualTargetOverride, std::nullopt,
+                                                  deferredStripOffer);
+                    m_effect->m_daemonGate.departureLegOwed = prevLegOwed;
                 }
+                // The tile dropped above may have a configure the client can
+                // still ack at the tile's size, now the column is placed.
+                answerDroppedTileAck(snap.window, kwinTileDrop);
             }
 
             // Tab swap: cross-fade the outgoing tab into this one.

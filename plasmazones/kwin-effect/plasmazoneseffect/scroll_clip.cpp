@@ -50,9 +50,10 @@ PlasmaZonesEffect::ScrollManagedAnswer PlasmaZonesEffect::scrollManagedFor(KWin:
     // No null guard on m_tilingHandler (nor on m_navigationHandler below, nor
     // on m_stripViewAnimator in scrollParkedOffscreen): all three are
     // constructed in the effect's ctor init list and never reset, and every
-    // caller of this predicate is a paint-path or input-filter site that only
-    // runs long after construction. A guard here would be dead code that reads
-    // as a live possibility.
+    // caller of this predicate (the paint path, the input filter, the frame
+    // and commit readers, the strip and desktop transitions, the tab
+    // indicators) runs long after construction. A guard here would be dead
+    // code that reads as a live possibility.
     if (!m_tilingHandler->hasScrollingScreens()) {
         return {};
     }
@@ -61,14 +62,18 @@ PlasmaZonesEffect::ScrollManagedAnswer PlasmaZonesEffect::scrollManagedFor(KWin:
     }
     // Memoised per pass, and ONLY within a pass: prePaintWindow and
     // paintWindow both ask, for every window, on every output pass, and one
-    // pass guarantees the strip state cannot change under the answer. TWO
-    // caller classes run outside any pass and always compute fresh: the
-    // INPUT filter (via scrollClipGeometryFor — a tile batch can land
-    // between passes and is exactly what moves a column across the
-    // boundary), and postPaintScreen's park-reap driver (m_currentPassOutput
-    // is deliberately cleared at its top, so its per-parked-window resolve
-    // is uncached by design — bounded by the parked population, and the
-    // per-pass validity argument would not hold there either). Stale keys
+    // pass guarantees the strip state cannot change under the answer. A
+    // caller outside any pass always computes fresh. Among them: the INPUT
+    // filter (via scrollClipGeometryFor — a tile batch can land between
+    // passes and is exactly what moves a column across the boundary),
+    // postPaintScreen's park-reap driver (m_currentPassOutput is
+    // deliberately cleared at its top, so its per-parked-window resolve is
+    // uncached by design — bounded by the parked population, and the
+    // per-pass validity argument would not hold there either), and the
+    // frame-geometry hook's readers, the column-answer read that gates the
+    // committed-size report and the offered-column centring
+    // (readColumnAnswer, also run from the client's commits and the
+    // catch-up walk) among them. Stale keys
     // for windows that died between passes CAN sit in the map until the
     // next prePaintScreen's clear, but they are never read before that
     // clear (every read is behind the same in-pass gate) and keys are only

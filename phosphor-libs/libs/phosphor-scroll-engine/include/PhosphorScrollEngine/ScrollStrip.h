@@ -39,32 +39,37 @@ namespace PhosphorScrollEngine {
 /// Because the anchor is active-relative, the centering policy owns the view:
 /// `updateViewForFocus` re-derives it at the top of every applyLayout, so a
 /// view the POLICY did not choose cannot survive a layout pass. That is right
-/// for every mutator except one. `scrollViewBy` moves the view because the user
-/// pointed somewhere, not because focus, structure or policy changed, and a pan
-/// the next layout pass undoes is not a pan at all.
+/// for every mutator except the ones that place the view on purpose.
+/// `scrollViewBy` moves the view because the user pointed somewhere, not
+/// because focus, structure or policy changed, and a pan the next layout pass
+/// undoes is not a pan at all.
 ///
 /// So a successful `scrollViewBy` DETACHES the view, and `updateViewForFocus`
 /// then leaves the anchor entirely alone — not even a re-clamp, for the reason
 /// that function documents. `equalizeVisibleColumnWidths` detaches too: it
 /// positions the group edge to edge on purpose, and a policy that re-centered
 /// the active column afterwards would hand a second press a different group.
+/// `reanchorForDropCommit` detaches outside the centering policies, because a
+/// drop owns the view the way a pan does.
 /// Any focus-driven or structural re-anchor (every reanchorAfterFocusChange
-/// caller: the COLUMN-focus and move verbs, the inserts, an active column
-/// that vanished), the Always policy's own re-centering, or either centering
-/// verb re-attaches it and the policy takes the view back. The TILE-focus
-/// ops here never re-anchor, so ScrollEngine clears the latch on their behalf
-/// instead: cycleTab, focusTab, focusWindowTop, focusWindowBottom and the
-/// cross-axis leg of a directional focus press all hand the view back the way
-/// windowFocused does when the pointer picks the same tab. A bystander's removal
-/// that leaves focus where it was does not. One re-attach lives OUTSIDE this
-/// class, in ScrollEngine::windowFocused: a compositor report naming the
-/// window the strip already calls active reaches no re-anchor at all (it is
-/// refused, or it moves a tile inside the active column), and the engine
-/// clears the latch through `setViewDetached` there so the next layout pass
-/// lets the policy answer. Detachment travels with the anchor through the
-/// mode-round-trip stash and the persisted blob for the
-/// same reason the anchor does: restoring the position while dropping the
-/// detachment hands the view straight back to the policy that would move it.
+/// caller: the COLUMN-focus and move verbs, insertWindow,
+/// insertWindowIntoColumnAt, the expel verbs, a removal that has to scroll
+/// focus back into view), an active column that vanished, the first column
+/// of an empty strip, the Always policy's own re-centering, or either
+/// centering verb re-attaches it and the policy takes the view back. A
+/// bystander's removal that leaves focus where it was does not.
+///
+/// The TILE-focus ops here never re-anchor, so ScrollEngine clears the latch
+/// through `setViewDetached` on their behalf: the tile-focus verb macro
+/// behind cycleTab, focusTab, focusWindowTop and focusWindowBottom; the
+/// cross-axis leg of a directional focus press; and ScrollEngine::windowFocused,
+/// when a compositor report names the window the strip already calls active
+/// (it is refused here, or moves a tile inside the active column, so it
+/// reaches no re-anchor). The next layout pass then lets the policy answer.
+/// Detachment travels with the anchor through the mode-round-trip stash and
+/// the persisted blob for the same reason the anchor does: restoring the
+/// position while dropping the detachment hands the view straight back to the
+/// policy that would move it.
 ///
 /// ## Naming exemption
 ///
@@ -109,13 +114,14 @@ public:
     /// If that tile is MINIMIZED it falls back to the column's first
     /// non-minimized tile, so this can name a different window than
     /// `activeColumn()->activeTileIdx` points at. The mutating verbs
-    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight, consumeWindowIntoColumn, consumeOrExpel) all act
-    /// on activeTileIdx, so a caller pairing this accessor with one of them
-    /// could report a window the operation did not touch. Not reachable in
-    /// production today, where the daemon models minimize as float and a
-    /// minimized window is not a strip tile at all.
+    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight,
+    /// consumeOrExpel) all act on activeTileIdx, so a caller pairing this
+    /// accessor with one of them could report a window the operation did not
+    /// touch. Not reachable in production today, where the daemon models
+    /// minimize as float and a minimized window is not a strip tile at all.
     ///
-    /// The two height SIZING verbs are not on that list: both measure through
+    /// The height SIZING verbs (the preset cycle, adjust, maximize, minimize
+    /// and expand) are not on that list: each measures through
     /// activeTileCrossPx, which resolves activeTileIdx's tile from a relayout
     /// and answers -1 when it is minimized, so they refuse rather than act on
     /// a window this accessor did not name.
@@ -214,7 +220,7 @@ public:
     bool isWindowMinimized(const QString& windowId) const;
     /// Update a tile's stored minimum size. Returns true when it changed.
     bool setWindowMinimumSize(const QString& windowId, int minWidth, int minHeight);
-    /// The tile's client-reported minimum size, or 0x0 when untracked.
+    /// The tile's minimum frame size (Tile::minWidth), or 0x0 when untracked.
     QSize windowMinimumSize(const QString& windowId) const;
 
     // ── Focus ────────────────────────────────────────────────────────────────
@@ -277,12 +283,17 @@ public:
     bool consumeOrExpel(int delta, const ScrollLayoutParams& params);
     /// Remove @p windowId with no focus policy beyond index fixups — the
     /// cross-context transfer / float path (the caller re-homes the window).
+    /// Everything the tile carried goes with it, so a caller that re-homes the
+    /// window reads its intents first. A committed floor is not tile state:
+    /// the engine holds it per window (ScrollLayoutParams::committedFloor), and
+    /// neither this nor removeWindow touches it.
     bool takeWindow(const QString& windowId, const ScrollLayoutParams& params);
 
     // ── Sizing ───────────────────────────────────────────────────────────────
-    /// Set the active column's width intent, verbatim. The direct write the
-    /// cycle/adjust/maximize verbs below are built on, and the absolute
-    /// set-column-width verb's (and the tests') way to reach an exact intent.
+    /// Set the active column's width intent, verbatim, dropping a
+    /// maximize-to-edges override (the drop alone is a change). The absolute
+    /// set-column-width verb's (and the tests') way to reach an exact intent;
+    /// the cycle, adjust and maximize verbs below write the column directly.
     /// Callers own validation — nothing here clamps. The width is the
     /// column's extent ALONG the strip.
     bool setActiveColumnWidth(const ColumnWidth& width);
@@ -290,22 +301,26 @@ public:
     /// Entry follows niri's rule (cyclePresetIndexByExtent): a forward press
     /// takes the narrowest preset WIDER than what the column renders at and
     /// wraps to the narrowest of all when nothing is wider; a backward press
-    /// takes the widest preset narrower and wraps to the widest of all,
-    /// so every entry is reachable in both directions even when the
-    /// vocabulary was typed out of size order. Measured from the
-    /// RENDERED extent, so a column held at its client minimum enters where
-    /// it looks like it should.
+    /// takes the widest preset narrower and wraps to the widest of all, so
+    /// every entry is reachable in both directions even when the vocabulary was
+    /// typed out of size order. Measured from the RENDERED extent, so a column
+    /// held at its floor (a frame minimum or a committed floor,
+    /// columnMinExtentPx) enters where it looks like it should, and a press
+    /// whose entry would still render at that same extent refuses rather than
+    /// writing an intent the floor hides.
     bool cycleActiveColumnPresetWidth(int delta, const ScrollLayoutParams& params);
     /// Adjust the active column's width by @p deltaPercent of the work area's
     /// MAIN extent (niri set-column-width "+10%"/"-10%"). Measured from the
     /// RENDERED extent rather than the bare intent, and floored at the greater
-    /// of MinColumnWidthFraction and the column's own client minimum (the
-    /// client half drops out while @c respectMinimumSize is off, the same way
-    /// it does for the height verb), so a repeated shrink stops at the floor
-    /// instead of burying an ever smaller
-    /// intent under it. Refuses when the target lands on the current extent,
-    /// so a column already rendering below the floor refuses a shrink rather
-    /// than growing.
+    /// of MinColumnWidthFraction and the column's own floor (columnMinExtentPx:
+    /// its frame minimum and any committed floor, which drop out while
+    /// @c respectMinimumSize is off, the same way the client half does for the
+    /// height verb), so a repeated shrink stops at the floor instead of
+    /// burying an ever smaller intent under it. Refuses when the target lands
+    /// on the current extent, so a column already rendering below the floor
+    /// refuses a shrink rather than growing. A non-finite @p deltaPercent
+    /// refuses, and a finite one is bounded to ±100 (a larger step clamps to
+    /// the same extent).
     bool adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Full work-area MAIN extent, still tiled (niri maximize-column). Toggles
     /// back to the pre-maximize intent when already maximized.
@@ -325,9 +340,10 @@ public:
     ///  - If the default is ITSELF full width, it takes half the work area,
     ///    because otherwise that user could never un-maximize.
     ///
-    /// Refuses (false) only for a column pinned at or past the work area by
-    /// its client minimum, which is a dead end the verb cannot resolve; the
-    /// definition documents why.
+    /// Refuses (false) when there is no active column, on a degenerate work
+    /// area, and for a column whose floor (columnMinExtentPx: a frame minimum
+    /// or a committed floor) pins it at or past the work area, a dead end the
+    /// verb cannot resolve; the definition documents why.
     bool toggleMaximizeActiveColumn(const ScrollLayoutParams& params);
     /// The same verb aimed at the column OWNING @p windowId rather than at the
     /// active one. Refuses (false) when this strip does not hold the window.
@@ -365,7 +381,10 @@ public:
     /// the expansion reclaims its on-screen pixels and pushes it out of view.
     /// Refuses when the active column is not itself fully visible (there is no
     /// meaningful answer for a straddler), and when the column already fills
-    /// the viewport.
+    /// the viewport. After a width write the anchor is re-derived so the
+    /// group's lead column sits at the viewport's lead edge (the
+    /// equalizeVisibleColumnWidths rule): the grown group then fills the
+    /// viewport edge to edge and a lead-edge straddler leaves the view.
     ///
     /// Two cases route through toggleMaximizeActiveColumn instead of writing
     /// Fixed pixels, both niri's: a centering policy that pins the active
@@ -385,8 +404,9 @@ public:
     /// viewport edge is what the split must not be dragged by. Written as
     /// Fixed pixels like adjustActiveColumnWidth, and the remainder of the
     /// division goes to the LAST column so the group still tiles the
-    /// viewport edge to edge. A column whose minimum size (columnMinExtentPx)
-    /// exceeds its share keeps that minimum and the rest share what is left.
+    /// viewport edge to edge. A column whose floor (columnMinExtentPx: its
+    /// minimum size or a committed floor) exceeds its share keeps that floor
+    /// and the rest share what is left.
     /// The group's lead column lands AT the viewport's lead edge: the anchor
     /// is re-derived after the rewrite so a column ahead of the active one
     /// growing does not slide the group under the active column, and a
@@ -395,7 +415,7 @@ public:
     /// does not undo the edge-to-edge position on the next pass and a second
     /// press finds nothing to change. Refuses when fewer than two columns
     /// are fully visible, when the active column is not one of them, when
-    /// the minimums alone fill the viewport, or when every extent is already
+    /// the floors alone fill the viewport, or when every extent is already
     /// what it would become.
     bool equalizeVisibleColumnWidths(const ScrollLayoutParams& params);
     /// The active column at its narrowest: the smallest preset, or
@@ -403,7 +423,8 @@ public:
     /// minimize-width; the empty-list arm is reachable only from a test or an
     /// embedder, since the engine never hands down an empty vocabulary).
     /// Refuses when already there, measured in RENDERED pixels so a column
-    /// whose minimum size already pins it at or above the target refuses too.
+    /// whose floor (a minimum size or a committed floor) already pins it at
+    /// or above the target refuses too.
     bool minimizeActiveColumnWidth(const ScrollLayoutParams& params);
     /// Every column back to @p defaultWidth and @p defaultDisplay, and every
     /// tile back to @p defaultHeight: the scrolling half of the Retile
@@ -424,14 +445,22 @@ public:
     /// once every column is back at that default — including when no column
     /// needed rewriting. Under a std::nullopt width a maximized column stays
     /// maximized and keeps its restore slot.
+    ///
+    /// Intents only: a column's floors are not intents and stay where they
+    /// are. A column floored by its frame minimum or by its client's own
+    /// commits (ScrollLayoutParams::committedFloor) is back at the default
+    /// INTENT and still renders at its floor, so this can answer true with
+    /// that column unmoved.
     bool resetToDefaults(const std::optional<ColumnWidth>& defaultWidth,
                          const std::optional<WindowHeight>& defaultHeight, ColumnDisplay defaultDisplay,
                          const ScrollLayoutParams& params);
     /// Set the active tile's height intent, verbatim. The height twin of
-    /// setActiveColumnWidth: the direct write under the cycle/adjust verbs,
-    /// the restore and open paths' setWindowHeightIntent, and the absolute
-    /// set-window-height verb. Callers own validation. The height is the
-    /// tile's extent ACROSS the strip.
+    /// setActiveColumnWidth and the absolute set-window-height verb's write:
+    /// it drops a maximize-to-edges override and the tile's restore slot,
+    /// and a non-Auto height claims a tabbed column's extent for the tile.
+    /// The cycle and adjust verbs write the tile directly, and the restore
+    /// and open paths go through setWindowHeightIntent instead. Callers own
+    /// validation. The height is the tile's extent ACROSS the strip.
     bool setActiveWindowHeight(const WindowHeight& height);
     /// Cycle the active tile through the preset height list. @p delta -1/+1.
     /// Entry follows the same niri rule the width cycle uses (nearest entry
@@ -448,9 +477,10 @@ public:
     /// CROSS extent. The current height is read off a fresh relayout, since an
     /// Auto tile only gets a pixel value from the whole column distribution,
     /// and the result is floored the way adjustActiveColumnWidth floors its
-    /// width (MinWindowHeightFraction, raised to the client minimum while
+    /// width (MinWindowHeightFraction, raised to the frame minimum while
     /// @c respectMinimumSize is on). A TABBED column adjusts too, in the same
-    /// column-extent space the cycle measures in.
+    /// column-extent space the cycle measures in. @p deltaPercent is refused
+    /// and bounded the way adjustActiveColumnWidth's is.
     bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Toggle the active tile between filling its column's cross budget and
     /// the height it had before, falling back to the even auto-split when it
@@ -466,7 +496,7 @@ public:
     /// how the tile shares the column the moment a sibling arrives.
     ///
     /// The maximized test reads the stored intent as well as the rendered
-    /// extent: siblings held up by their client minimums can stop the tile
+    /// extent: siblings held up by their frame minimums can stop the tile
     /// reaching the budget on screen, and a pixel-only test would then
     /// maximize forever and never come back. Both non-Auto spellings count —
     /// a Preset whose fraction RESOLVES to the budget is maximized just as a
@@ -484,8 +514,10 @@ public:
     /// is a user's finished interactive resize, and a user who has just
     /// dragged this window to a size of their own SHOULD stop reading as
     /// maximized. A client resizing itself — a terminal quantising to its
-    /// character cell — is never reported to the daemon at all and cannot
-    /// erase the maximize.
+    /// character cell — never reaches reconcile and cannot erase the
+    /// maximize. Its answer to an offered tile does reach the engine, through
+    /// ScrollEngine::reportCommittedSize, which learns only a floor along the
+    /// strip from it and never writes an intent.
     ///
     /// Do not "fix" this by refusing the ack in reconcile. That makes
     /// onWindowResized's refused-ack branch schedule a retile which re-applies
@@ -552,24 +584,41 @@ public:
     /// to pixels. The acked CROSS extent becomes the tile's Fixed height
     /// intent symmetrically, only when @p crossChanged; a lone tile is
     /// included, because relayout honours a solo tile's Fixed height (niri
-    /// parity). On a TABBED column that cross intent sizes the COLUMN rather
-    /// than the window, so the ack is lifted by @c tabbedCrossReservationPx
-    /// on the way in, the same conversion the two height verbs make. Other
-    /// columns are untouched.
+    /// parity). On a TABBED column both intents size the COLUMN rather than
+    /// the window, so each ack is lifted on the way in by the reservation the
+    /// indicator takes on its axis (@c tabbedMainReservationPx along the
+    /// strip, @c tabbedCrossReservationPx across it), the conversion the
+    /// height sizing verbs make. Other columns are untouched.
     ///
-    /// These two bools were spelled @c widthChanged / @c heightChanged before
-    /// the strip gained a second axis, and they now mean main/cross. The
-    /// signature did not change shape, so an out-of-tree caller still passing
-    /// physical width/height flags compiles and is silently wrong on a
-    /// vertical strip: each guard then protects the intent it was not written
-    /// for.
     /// @p mainChanged / @p crossChanged say which axis the interactive resize
     /// actually moved, in ROLE terms. @p ackedSize is the compositor's
     /// physical QSize and is decoded through @p params.axis, so the caller
-    /// must derive the two flags against that same axis or each guard ends up
-    /// protecting the intent it was not written for.
+    /// must derive the two flags against that same axis, or each guard ends
+    /// up protecting the intent it was not written for. The bools were
+    /// spelled @c widthChanged / @c heightChanged before the strip gained a
+    /// second axis, and the signature kept its shape, so an out-of-tree
+    /// caller still passing physical width/height flags compiles and is
+    /// silently wrong on a vertical strip.
     bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool mainChanged, bool crossChanged,
                              const ScrollLayoutParams& params);
+    /// The extent ALONG the strip of the column holding @p windowId under
+    /// @p params, exactly as the relayout resolves it (columnExtentPx: the
+    /// intent raised to the column's floors, capped at the work area, or the
+    /// raw extent of a maximized-to-edges column), or -1 when this strip does
+    /// not hold the window. The tile itself is offered this less
+    /// tabbedMainReservationPx. The engine's committed-floor bookkeeping
+    /// (ScrollEngine::reportCommittedSize) measures with it, passing params
+    /// whose ScrollLayoutParams::committedFloor it has masked when it needs
+    /// the extent a column resolves to without one window's floor.
+    int windowColumnMainExtentPx(const QString& windowId, const ScrollLayoutParams& params) const;
+    /// Pixels the tab indicator takes out of column @p c ALONG the strip: the
+    /// difference between the column's main extent and the one its tiles are
+    /// offered. 0 for a column that is not tabbed, and whenever the
+    /// indicator's thickness eats the CROSS axis instead (which of the two it
+    /// eats depends on the strip's axis, see TabIndicatorParams::reservedThickness).
+    /// The main-axis twin of tabbedCrossReservationPx, and the reservation
+    /// columnMinExtentPx adds to each tile's floor.
+    static int tabbedMainReservationPx(const Column& c, const ScrollLayoutParams& params);
 
     // ── Display ──────────────────────────────────────────────────────────────
     /// Toggle the active column between Normal and Tabbed presentation.
@@ -591,8 +640,12 @@ public:
     /// active one). The mode-round-trip restore path re-applies stashed
     /// heights through this, the open path commits a client-decided height
     /// and a migration re-states the height the window carried over, and the
-    /// per-window open-height rule resolves through it too. Returns false for
-    /// an unknown window or an unchanged intent.
+    /// per-window open-height rule resolves through it too. A non-Auto height
+    /// claims a TABBED column's extent for the tile (claimTabbedHeightOwnership),
+    /// and a claim that moves the owner is a change even when the intent was
+    /// already the one asked for. Returns false for an unknown window, and for
+    /// an unchanged intent that moved no ownership. Unlike setActiveWindowHeight
+    /// it leaves a maximize-to-edges override standing.
     bool setWindowHeightIntent(const QString& windowId, const WindowHeight& height);
 
     /// The height intent @p windowId's tile carries, or a default-constructed
@@ -614,8 +667,7 @@ public:
     /// Strip indices of the columns currently intersecting the viewport, in
     /// strip order — a viewport-intersection helper, NOT the zone-number
     /// space. Zone numbers are per-TILE and live one layer up, in
-    /// ScrollEngine::visibleTiles; rotateVisibleColumns is this helper's
-    /// only consumer.
+    /// ScrollEngine::visibleTiles.
     QVector<int> visibleColumnIndices(const ScrollLayoutParams& params) const;
 
     /// Strip indices of the columns lying ENTIRELY inside the viewport, in
@@ -641,12 +693,20 @@ public:
     /// towards its end, and the last visible wraps to the first). Width and
     /// display INTENTS stay with the SLOT, like autotile's rotate through
     /// fixed zones, so the strip's geometry holds still for the ordinary
-    /// case. It is not an absolute: a column's resolved width also honours
-    /// its tiles' min-MAIN clamp, so rotating a window with a large minimum
-    /// into a small slot does grow that slot. The anchor is re-clamped afterwards for exactly
-    /// that reason. The active column index stays put (focus follows the
-    /// slot; callers activate its new window). Returns the number of
-    /// windows rotated, 0 when fewer than two columns are visible.
+    /// case. The maximize-to-edges flag travels with the WINDOWS, since the
+    /// compositor mirrors it onto each window's own maximize bit, and so does
+    /// the tabbed height owner, which is then reconciled against the slot's
+    /// display (a Tabbed slot receiving a Normal stack names the tab on show,
+    /// a Normal slot holds none). The geometry is not an absolute either: a
+    /// column's resolved width also honours its tiles' floors along the strip
+    /// (columnMinExtentPx: the min-MAIN clamp and any committed floor, both of
+    /// which travel with the window) and that flag, so rotating a window with
+    /// a large floor into a small slot grows that slot and shrinks the one it
+    /// left. The anchor is re-clamped afterwards when the strip as a whole
+    /// shrank, so the view cannot be stranded past its end. The active column
+    /// index stays put (focus follows the slot; callers activate its new
+    /// window). Returns the number of windows rotated, 0 when fewer than two
+    /// columns are visible.
     int rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& params);
 
     // ── View ─────────────────────────────────────────────────────────────────
@@ -668,11 +728,11 @@ public:
     /// that drops that anchor (the stash's axis-mismatch arm) must drop this
     /// too, or the view stays pinned wherever the focus restore left it.
     ///
-    /// Clearing it standalone is the engine-side re-attach the class doc
-    /// names (ScrollEngine::windowFocused): it hands the view to the policy
-    /// while leaving the anchor for the next updateViewForFocus to derive,
-    /// which is the one thing a re-anchor here could not do without a focus
-    /// change to derive from.
+    /// Clearing it standalone is how the engine re-attaches on behalf of the
+    /// tile-focus ops (the class doc lists the sites): it hands the view to
+    /// the policy while leaving the anchor for the next updateViewForFocus to
+    /// derive, which is the one thing a re-anchor here could not do without a
+    /// focus change to derive from.
     void setViewDetached(bool detached)
     {
         m_viewDetached = detached;
@@ -741,9 +801,10 @@ public:
     /// and can stop. A move DETACHES the view from the centering policy (see
     /// the class doc); a refusal leaves the latch as it found it. This is the
     /// only mutator that moves the view without a focus, structure or policy
-    /// change behind it; the drag-insert edge auto-scroll and the engine's
-    /// view-scroll verb (behind the wheel and the keyboard page pair) are its
-    /// callers.
+    /// change behind it; the drag-insert edge auto-scroll, the engine's
+    /// view-scroll verb (behind the wheel and the keyboard page pair) and its
+    /// pixel pan (behind the placement map's lens drag) are its callers.
+    /// @p delta may be any int: the clamp is computed wide.
     bool scrollViewBy(int delta, const ScrollLayoutParams& params);
 
     /// How far the view WOULD move, in pixels along the strip, if column
@@ -770,9 +831,12 @@ public:
     /// (ScrollStripModel documents each field). ONE relayout pass plus one
     /// cumulative walk over the columns, so the cost is the same as a
     /// relayout rather than a columnStripPos per column. Pure function of the
-    /// current model state; does not mutate. On a degenerate work area the
-    /// columns still carry their positions and extents while every tile's
-    /// cross extent is 0, since the relayout resolves nothing there.
+    /// current model state; does not mutate. On a degenerate work area (no
+    /// extent along the strip) the columns resolve no extent, so none takes a
+    /// strip position, and every tile's cross extent is 0 because the
+    /// relayout lays nothing out there. The exception is a maximized-to-edges
+    /// column, which resolves against the raw work area while that still has
+    /// an extent.
     ScrollStripModel stripModel(const ScrollLayoutParams& params) const;
 
     /// True when the whole strip already fits the viewport, i.e. there is
@@ -781,8 +845,9 @@ public:
     ///
     /// Exists so a per-frame caller can ask the question without paying for a
     /// full relayout: relayout() allocates a ResolvedColumn (with a nested
-    /// tile vector) per column, and the edge auto-scroll's disarm gate needs
-    /// only a predicate.
+    /// tile vector) per column, and a predicate needs none of that. The edge
+    /// auto-scroll's disarm gate asks stripSettledInViewport, which is built
+    /// on this one.
     bool stripFitsViewport(const ScrollLayoutParams& params) const;
 
     /// stripFitsViewport AND the derived view offset is settled inside
@@ -836,10 +901,10 @@ private:
     /// The shortest the active tile may be written, in the space the height
     /// verbs WRITE in (the column's, so a tabbed indicator's cross reservation
     /// is already added). MinWindowHeightFraction of the work area's cross
-    /// extent, raised to the client minimum while @c respectMinimumSize is on
+    /// extent, raised to the frame minimum while @c respectMinimumSize is on
     /// — and while tabbed, to the tallest minimum in the whole tab set, since
     /// every visible tab is committed at that one rect. Capped at the work
-    /// area's cross extent so a client minimum larger than the screen cannot
+    /// area's cross extent so a frame minimum larger than the screen cannot
     /// invert a qBound. Answers -1 when there is no active tile or the work
     /// area is degenerate.
     int activeWindowHeightFloorPx(const ScrollLayoutParams& params) const;
@@ -866,39 +931,57 @@ private:
     /// drops it. The ONE way display is written for an existing column, so the
     /// invariant cannot be skipped at a call site. Returns whether it changed.
     static bool applyColumnDisplay(Column& c, ColumnDisplay display);
+    /// Shared core of the two maximize-toggle entry points. Out-of-range
+    /// @p columnIndex (including columnOfWindow's -1 miss) refuses.
+    bool toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutParams& params);
+    /// Shared core of the two maximize-to-edges entry points; the same
+    /// refusal shape as toggleMaximizeColumnAt minus the pinned-by-minimum
+    /// arm (the flag is declared state, never measured).
+    bool toggleMaximizeToEdgesAt(int columnIndex, const ScrollLayoutParams& params);
 
     // scrollstrip_structure.cpp
+    Column* activeColumnMutable();
+    Tile* activeTileMutable();
+    void clampActiveIndices();
     void removeColumnAt(int columnIndex);
     /// Shared body of removeWindow/takeWindow: drop the tile, close up an
     /// emptied column, fix every index, and keep the view anchored. When
     /// @p refocus is true the niri close-focus policy picks the new focus.
     bool removeWindowInternal(const QString& windowId, const ScrollLayoutParams& params, bool refocus);
     // scrollstrip_relayout.cpp
-    /// Pixel MAIN extent of column @p c under @p params including its tiles'
-    /// min-MAIN clamp (a fully-minimized column resolves to 0).
+    /// Pixel MAIN extent of column @p c under @p params including the floor
+    /// columnMinExtentPx raises it to (a fully-minimized column resolves to 0).
     int columnExtentPx(const Column& c, const ScrollLayoutParams& params) const;
     /// The MAIN-extent floor columnExtentPx raises column @p c to under
-    /// @p params: its visible tiles' min-MAIN plus the tab-indicator
-    /// reservation when the indicator eats the main axis. 0 when minimum
-    /// sizes are not respected. Shared with equalizeVisibleColumnWidths so a
-    /// share the floor would overrule is never written as if it could render.
+    /// @p params: the largest of its visible tiles' floors along the strip
+    /// (each tile's min-MAIN, raised to the extent its client's own commits
+    /// hold it to, committedMainFloorPx) plus the tab-indicator reservation
+    /// when the indicator eats the main axis. 0 when minimum sizes are not
+    /// respected. Shared with the width verbs (adjust, equalize, minimize,
+    /// the maximize refusal) so an extent the floor would overrule is never
+    /// written as if it could render.
     int columnMinExtentPx(const Column& c, const ScrollLayoutParams& params) const;
-    /// Pixel CROSS extent of TABBED column @p c: the height intent of the
-    /// tab that OWNS the extent (Column::heightOwnerId), not the tab on show,
-    /// resolved exactly the way the stack branch resolves a single
-    /// tile's Fixed/Preset height, so an entry of the preset vocabulary lands
-    /// on the same pixels whichever display the column is in. Auto means the
-    /// whole work area, which is what a tabbed column used to be pinned at.
+    /// The extent along the strip @p windowId's client holds its column to by
+    /// its own commits, read through @p params.committedFloor under
+    /// @p params' axis, or 0 when there is none, no lookup is set, or minimum
+    /// sizes are not respected.
+    static int committedMainFloorPx(const QString& windowId, const ScrollLayoutParams& params);
+    /// Pixel CROSS extent of TABBED column @p c: the height intent of the tab
+    /// that OWNS the extent (Column::heightOwnerId), not the tab on show,
+    /// resolved exactly the way the stack branch resolves a single tile's
+    /// Fixed/Preset height, so an entry of the preset vocabulary lands on the
+    /// same pixels whichever display the column is in. Auto means the whole
+    /// work area, which is what a tabbed column used to be pinned at.
     /// Raised to the tallest visible tab's own cross minimum plus
     /// @c tabbedCrossReservationPx while minimum sizes are respected: every
     /// tab is committed at this column's content rect, including the hidden
     /// ones, so the floor is the whole set's and not just the shown tab's.
     static int tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params);
     /// Pixels the tab indicator takes out of column @p c ACROSS the strip, the
-    /// cross-axis twin of the main-axis reservation columnMinExtentPx applies.
-    /// 0 for a column that is not tabbed, and whenever the indicator's
-    /// thickness eats the MAIN axis instead (which of the two it eats depends
-    /// on the strip's axis, see TabIndicatorParams::reservedThickness).
+    /// cross-axis twin of tabbedMainReservationPx. 0 for a column that is not
+    /// tabbed, and whenever the indicator's thickness eats the MAIN axis
+    /// instead (which of the two it eats depends on the strip's axis, see
+    /// TabIndicatorParams::reservedThickness).
     static int tabbedCrossReservationPx(const Column& c, const ScrollLayoutParams& params);
     /// Strip-coordinate LEADING edge of @p columnIndex under @p params.
     int columnStripPos(int columnIndex, const ScrollLayoutParams& params) const;
@@ -947,16 +1030,6 @@ private:
     {
         m_viewDetached = false;
     }
-    Column* activeColumnMutable();
-    /// Shared core of the two maximize-toggle entry points. Out-of-range
-    /// @p columnIndex (including columnOfWindow's -1 miss) refuses.
-    bool toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutParams& params);
-    /// Shared core of the two maximize-to-edges entry points; the same
-    /// refusal shape as toggleMaximizeColumnAt minus the pinned-by-minimum
-    /// arm (the flag is declared state, never measured).
-    bool toggleMaximizeToEdgesAt(int columnIndex, const ScrollLayoutParams& params);
-    Tile* activeTileMutable();
-    void clampActiveIndices();
 
     QVector<Column> m_columns;
     int m_activeColumnIdx = -1;

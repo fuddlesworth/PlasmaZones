@@ -6,7 +6,7 @@
  * @brief The Scrolling.ZoneSelector settings family: the strip-mode drag popup.
  *
  * A sibling of test_scrolling_settings.cpp rather than an extension of it, per
- * that file's own sanctioned-exception note: this is a separate concern with
+ * that file's own header note: this is a separate concern with
  * its own fixtures and its own store.
  *
  * The family is the Snapping.ZoneSelector twin minus LayoutMode, GridColumns

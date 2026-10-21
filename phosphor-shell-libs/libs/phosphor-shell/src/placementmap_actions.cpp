@@ -528,9 +528,25 @@ void PlacementMapScreen::applyMenuChoice(const QString& kind, const QString& id)
     m_map->m_bus->call(Iface::LayoutRegistry, QStringLiteral("applyAssignmentChanges"), {});
 }
 
+QString PlacementMapScreen::verbTargetWindowId() const
+{
+    // Only this screen's own focus, never the map-wide fallback. The
+    // fallback is the window the daemon last asked the compositor to focus,
+    // which can sit on another screen, and the engine acts on a named
+    // window's own context, so a verb would act on a screen the user was
+    // not looking at. A pinned screen has none for the same reason: the
+    // relayed focus is the current desktop's, not the pinned desktop the map
+    // shows (rebuildFromSource draws no focus there either).
+    if (isPinned() || !m_focusFromDaemon) {
+        return QString();
+    }
+    return m_focusedWindowId;
+}
+
 void PlacementMapScreen::runVerb(const QString& id)
 {
-    const QString focused = effectiveFocusedWindowId();
+    // The window verbs act on verbTargetWindowId(). With none the click does
+    // nothing, and a successful verb's only feedback is the map's redraw.
     if (id == VerbEditLayout) {
         if (!m_state.layoutId.isEmpty()) {
             m_map->m_bus->call(Iface::LayoutRegistry, QStringLiteral("openEditorForLayoutOnScreen"),
@@ -541,12 +557,14 @@ void PlacementMapScreen::runVerb(const QString& id)
     } else if (id == VerbRetile) {
         m_map->m_bus->call(Iface::Tiling, QStringLiteral("retile"), {m_screenId});
     } else if (id == VerbPromoteToMaster) {
-        if (!focused.isEmpty()) {
-            m_map->m_bus->call(Iface::Autotile, QStringLiteral("promoteToMaster"), {focused});
+        const QString target = verbTargetWindowId();
+        if (!target.isEmpty()) {
+            m_map->m_bus->call(Iface::Autotile, QStringLiteral("promoteToMaster"), {target});
         }
     } else if (id == VerbToggleMaximizeColumn) {
-        if (!focused.isEmpty()) {
-            m_map->m_bus->call(Iface::Scrolling, QStringLiteral("toggleMaximizeColumn"), {m_screenId, focused});
+        const QString target = verbTargetWindowId();
+        if (!target.isEmpty()) {
+            m_map->m_bus->call(Iface::Scrolling, QStringLiteral("toggleMaximizeColumn"), {m_screenId, target});
         }
     }
 }

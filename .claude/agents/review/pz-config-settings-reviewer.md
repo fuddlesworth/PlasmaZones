@@ -39,4 +39,4 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 - **Per-page reset/discard**: baseline snapshot + `pageOwnedConfigKeys` manifest + value-based dirty check; a page's reset must only touch its own subtree (shared-blob domains wiped siblings before — check any new page wiring).
 - **Editor settings are separate** (EditorController, separate process) — daemon settings leaking into the editor path or vice versa is an architecture finding.
 - **Profiles**: config+rules delta/inheritance with staged apply — mutations must go through the staging path, not direct backend writes.
-- **Qt6 strings, i18n, QUuid, SPDX/licensing, file-size** rules apply as everywhere: `QLatin1String` for JSON keys, `PhosphorI18n::tr()` in C++, braces except in filesystem paths, GPL for plasmazones/src/**, LGPL for phosphor libs.
+- **Qt6 strings, i18n, QUuid, SPDX/licensing** rules apply as everywhere: `QLatin1String` for JSON keys, `PhosphorI18n::tr()` in C++, braces except in filesystem paths, GPL for plasmazones/src/**, LGPL for phosphor libs.

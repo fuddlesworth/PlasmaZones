@@ -10,8 +10,7 @@ import org.kde.kirigami as Kirigami
  * @brief Banner stack for AnimationEventCard: inheritance info, shadowing
  * warning, mirror-divergence warning, and the italic "Current:" line.
  *
- * Pure presentation split out of the card so the card stays within the
- * project file-size ceiling; every value is fed in by the card and the
+ * Pure presentation split out of the card; every value is fed in by the card and the
  * one action (clear shadowing children) is emitted back. The component
  * hides itself entirely when no banner has anything to say, so it never
  * contributes a phantom spacing slot to the card's column.

@@ -276,10 +276,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     glDisable(GL_BLEND);
     namespace SC = PhosphorSurfaceShaders::SurfaceShaderContract;
 
-    // Function-local rather than a member: plasmazoneseffect.h sits AT its recorded
-    // ceiling, so a new member breaches the growth gate, and this is a pure
-    // session-scoped diagnostic latch with
-    // no other reader. Same shape the capture path's allocation-failure latch uses.
+    // Function-local rather than a member: a session-scoped diagnostic latch
+    // with no other reader. Same shape the capture path's allocation-failure
+    // latch uses.
     static bool fallbackUnavailableWarned = false;
 
     // Upload the audio spectrum ONCE per fold, up front, before any pass binds

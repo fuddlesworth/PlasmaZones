@@ -397,7 +397,7 @@ Item {
     }
 
     // ── Timing read / writes ────────────────────────────────────────
-    // Same split, same reason, as the shader block below: the bodies live in
+    // Split by axis like the shader block below: the bodies live in
     // AnimationEventCardTimingIo and these forwarders keep every call site —
     // handlers, bindings and the QML-contract scrape — reading `root._foo(...)`.
     function _applyEffective() {
@@ -418,11 +418,11 @@ Item {
     }
 
     // ── Shader read / parameter writes ──────────────────────────────
-    // The bodies live in AnimationEventCardShaderIo, for the same size reason
-    // the group writers live in AnimationEventCardWriters. These forwarders
-    // keep every `root._foo(...)` call site reading exactly as before, the
-    // QML-contract scrape included. `arguments` forwarding rather than named
-    // parameters so a signature change needs no edit here.
+    // The bodies live in AnimationEventCardShaderIo, one axis per sibling like
+    // the timing block above. These forwarders keep every `root._foo(...)` call
+    // site reading exactly as before, the QML-contract scrape included.
+    // `arguments` forwarding rather than named parameters so a signature
+    // change needs no edit here.
     function _writeShaderParam() {
         return shaderIo._writeShaderParam.apply(shaderIo, arguments);
     }
@@ -449,12 +449,11 @@ Item {
     }
 
     // ── Group writers ───────────────────────────────────────────────
-    // The bodies live in AnimationEventCardWriters, one of the two siblings
-    // this card is split across to stay under the project's size ceiling (the
-    // other is AnimationEventCardShaderIo above). These forwarders keep every
-    // `root._foo(...)` call site — handlers, bindings and the QML-contract
-    // scrape — reading exactly as before. `arguments` forwarding rather than
-    // named parameters so a signature change needs no edit here.
+    // The bodies live in AnimationEventCardWriters, beside the timing and
+    // shader siblings above. These forwarders keep every `root._foo(...)` call
+    // site — handlers, bindings and the QML-contract scrape — reading exactly
+    // as before. `arguments` forwarding rather than named parameters so a
+    // signature change needs no edit here.
     function _setShaderOverrideOnAll() {
         return writers._setShaderOverrideOnAll.apply(writers, arguments);
     }
@@ -820,8 +819,7 @@ Item {
             spacing: Kirigami.Units.smallSpacing
 
             // ── Inheritance banners + "Current:" line ─────────────────
-            // Presentation-only stack, split into its own component to
-            // keep this card within the project file-size ceiling. Every
+            // Presentation-only stack, split into its own component. Every
             // value is fed from the card's derived state; the shadowing
             // warning's one action is emitted back.
             AnimationEventCardBanners {

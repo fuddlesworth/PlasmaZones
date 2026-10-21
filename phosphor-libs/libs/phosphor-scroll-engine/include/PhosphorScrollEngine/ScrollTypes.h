@@ -7,9 +7,11 @@
 
 #include <QList>
 #include <QRect>
+#include <QSize>
 #include <QString>
 #include <QVector>
 
+#include <functional>
 #include <optional>
 
 namespace PhosphorScrollEngine {
@@ -813,25 +815,28 @@ struct Tile
     /// Layout ignores this flag entirely — it only rides the apply payload so
     /// the compositor side can flip the client's fullscreen state.
     bool windowedFullscreen = false;
-    /// Client-reported minimum size (0 = unconstrained), stored PHYSICALLY as
+    /// The window's minimum FRAME size (0 = unconstrained): the minimum its
+    /// client declares, converted by the compositor to the frame size it
+    /// implies on each declaring axis (decorations included), so it compares
+    /// directly with the frame rects this engine commits. Stored PHYSICALLY as
     /// the compositor reports it. Relayout clamps the resolved rect to it; a
     /// window that cannot honour its slot at all is the engine's cue to float
     /// it instead.
     ///
     /// Layout wants this by ROLE, so read it through minMain/minCross rather
-    /// than naming a field: on a vertical strip a client's minimum WIDTH is
+    /// than naming a field: on a vertical strip a window's minimum WIDTH is
     /// what constrains the tile ACROSS the strip, and its minimum HEIGHT is
     /// what constrains the column ALONG it. Picking by name silently applies
     /// each constraint to the wrong axis.
     int minWidth = 0;
     int minHeight = 0;
 
-    /// The client minimum along the strip (a column-width floor).
+    /// The frame minimum along the strip (a column-width floor).
     int minMain(StripAxis axis) const
     {
         return axis.isHorizontal() ? minWidth : minHeight;
     }
-    /// The client minimum across the strip (a stacked-tile floor).
+    /// The frame minimum across the strip (a stacked-tile floor).
     int minCross(StripAxis axis) const
     {
         return axis.isHorizontal() ? minHeight : minWidth;
@@ -1020,12 +1025,15 @@ struct ScrollLayoutParams
     QList<qreal> presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     CenterFocusedColumn centerFocusedColumn = CenterFocusedColumn::Never;
     bool alwaysCenterSingleColumn = false;
-    /// Whether the strip's layout math honours client minimum sizes (the
+    /// Whether the strip's layout math honours windows' minimum frame sizes (the
     /// column MAIN floor, the tile CROSS floor and its rebalance, and the
-    /// interactive-resize floor). Off, the resolved rects obey the user's
-    /// intents and the compositor's own min-size enforcement decides what
-    /// overhangs. The open-time work-area-oversized float escape ignores
-    /// this flag.
+    /// interactive-resize floor), and with them the extent a client's own
+    /// commits hold its column to (committedFloor below) and the peek floor
+    /// that memory raises. Off, the resolved rects obey the user's intents and
+    /// the compositor's own min-size enforcement decides what overhangs, and
+    /// no committed extent is learned or read. The work-area-oversized float
+    /// escape for a DECLARED minimum ignores this flag; the one for a
+    /// committed extent cannot fire without it, since nothing is learned.
     bool respectMinimumSize = true;
     /// Whether a column whose visible tiles resolve to less than the column's
     /// own CROSS extent is centred on that axis instead of hugging the start
@@ -1052,6 +1060,18 @@ struct ScrollLayoutParams
     /// Default-constructed = the family's own defaults, so a caller that never
     /// sets it gets an indicator that reserves nothing.
     TabIndicatorParams tabIndicator{};
+    /// Per window: the extent along the strip a client's own commits hold its
+    /// column to (ScrollEngine::reportCommittedSize), read by the strip
+    /// exactly like the tile's declared minimum along the strip and under the
+    /// same respectMinimumSize gate. Answered as a size whose WIDTH is the
+    /// floor along a horizontal strip and whose HEIGHT is the floor along a
+    /// vertical one, so the strip takes axis.mainSize() of it and a floor
+    /// learned on a strip running the other way never reads as its own. 0 on
+    /// either axis is no floor. Empty (the default) is no floor for any
+    /// window, which is what a strip laid out outside an engine gets; the
+    /// engine sets it on every params it resolves, so the drag-insert probe
+    /// and every verb read the same floors the apply does.
+    std::function<QSize(const QString& windowId)> committedFloor;
 };
 
 /// One tile's resolved output for a relayout pass.
@@ -1098,14 +1118,15 @@ struct ResolvedColumn
     /// indicator's long axis without re-deriving it from the rect's aspect (a
     /// one-tab indicator can be square).
     TabIndicatorPosition tabIndicatorPosition = TabIndicatorPosition::Left;
-    /// True when the column's main extent came from its MINIMUM rather than
-    /// from its stored width intent — its tiles' declared minimum (plus any
-    /// main-axis indicator reservation) is at least as wide as the intent.
-    /// A consumer publishing "this column is maximized" must not do so off
-    /// @c rect alone: a column whose floor already reaches the work area
-    /// renders at full extent no matter what the user asks for, so it would
-    /// read as permanently maximized and every toggle would report success
-    /// while changing nothing the user can see.
+    /// True when the column's main extent came from its FLOOR rather than
+    /// from its stored width intent — its tiles' declared minimum or committed
+    /// floor (plus any main-axis indicator reservation) is at least as wide as
+    /// the intent. A consumer inferring "this column is maximized" from
+    /// @c rect must exclude these: a column whose floor already reaches the
+    /// work area renders at full extent no matter what the user asks for.
+    /// Nothing in this repository reads it (the apply pass publishes the
+    /// declared @c maximizedToEdges instead); it stays for out-of-tree
+    /// consumers of this installed struct.
     bool extentPinnedByMinimum = false;
     /// The column's declared maximize-to-edges state, copied through from
     /// Column::maximizedToEdges so the apply pass publishes the DECLARED

@@ -317,6 +317,9 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         m_scrollCommandedRects.clear();
         m_scrollOfferedColumn.clear();
         m_lastReportedMinSize.clear();
+        // The daemon lacking reportCommittedSize was a fact about the one
+        // that just left (F215); the bring-up drain repeats this.
+        m_tilingHandler->resetCommittedSizeReportLatch();
         m_lastPushedCaption.clear();
         // The autotile centring targets too, mirroring the bring-up drain.
         // Their consumer is the reactive centring pass, which is driven by

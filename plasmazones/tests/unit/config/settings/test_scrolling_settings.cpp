@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file is well past the 1150 hard
-// ceiling. The case for it: the shortcut-invariant guards (duplicate
+// This file stays whole: the shortcut-invariant guards (duplicate
 // defaults, Shift+symbol spellings, the advertised-chord value pins) and the
 // scrolling schema guards read each other's fixtures and pin the
 // SAME defaults table, so a split would duplicate the advertised-chord

@@ -11,7 +11,9 @@
  * pins. The wire VERBS (the wheel pair and the absolute setters) are pinned
  * by test_scrolling_adaptor_verbs.cpp on the same fixture
  * (scrollingadaptortestfixture.h); this file owns the read-side surface,
- * the screen set, the relays and the teardown contract.
+ * the screen set, the relays, the teardown contract and the compositor's
+ * window-keyed reconciliation calls (clearWindowedFullscreen,
+ * reapplyWindowGeometry, reportCommittedSize).
  *
  *  1. (moved to test_scrolling_adaptor_verbs.cpp: focusColumn's gates and
  *     direction mapping.)
@@ -39,13 +41,17 @@
  *     also names the screens leaving for autotile (not those leaving for
  *     snapping) and carries the context switch.
  * 10. clearEngine leaves every slot answering safely AND stops relaying.
+ *     The sweep calls every slot the adaptor exports, so dropping any one
+ *     slot's `!m_engine` conjunct is a null dereference that fails it.
  * 11. The scrollingScreens property never emits PropertiesChanged (change
- *     traffic rides the dedicated signal only).
+ *     traffic rides the dedicated signal only), checked with the interface
+ *     really exported on a bus (a Properties.Get answers through it).
  * 12. clearWindowedFullscreen refuses an empty id, an unknown window and an
  *     unflagged tile as silent no-ops, and clears a genuinely flagged tile
  *     exactly once (placementChanged discriminates: every refusal returns
- *     before emitting). The null-engine arm rides item 10's clearEngine
- *     sweep like every other slot.
+ *     before emitting). The refusals are the engine's, seen through the
+ *     wire; the adaptor adds only the null-engine and empty-id terms. The
+ *     null-engine arm rides item 10's clearEngine sweep like every other slot.
  * 13. reapplyWindowGeometry refuses an empty and an unknown id silently,
  *     and its evict makes a rect-stable relayout re-emit — with a control
  *     first proving that same relayout is silent WITHOUT the evict. Its
@@ -70,12 +76,27 @@
  *     different one. clearEngine severs it: that relay is a bare forward with
  *     no engine test, so the disconnect is load-bearing rather than defence
  *     in depth.
+ * 20. The focus-follows-mouse blocked-window list and the behaviour map
+ *     publish independently: moving one leaves the other's value and signal
+ *     alone, both are sorted and de-duplicated at the boundary, and each has
+ *     its own emit-on-change gate.
+ * 21. clearEngine empties the engine-derived screen set but keeps both
+ *     daemon-built published values.
+ * 22. reportCommittedSize forwards a well-formed report, so a wider commit
+ *     to the whole tile widens the column, and no malformed size pair (a
+ *     non-positive dimension on either side) reaches a floor. The size
+ *     refusals are pinned as OUTCOMES: the engine repeats the adaptor's size
+ *     check, so most legs stay green with either layer's check deleted, and
+ *     only deleting both lets the empty-commit leg plant a floor. Minimum
+ *     sizes are respected explicitly, since the floor is learned only then.
+ *     Its null-engine arm rides the item 10 sweep.
  */
 
 #include <QTest>
 #include <QSignalSpy>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusVariant>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -107,7 +128,11 @@ private Q_SLOTS:
     }
 
     // The XML promises an empty array for a screen with no strip or one that
-    // is not scrolling. Each refusal below leaves through a DIFFERENT guard.
+    // is not scrolling. Each refusal below is AIMED at a different guard, but
+    // none of them isolates its guard: HDMI-2 never held a strip, so the
+    // engine answers it empty too and the leg stays green with the
+    // isActiveOnScreen gate deleted. The sibling-context slot below is the
+    // one that fails without that gate.
     void testVisibleStripJson_refusesForeignScreen()
     {
         // Owned, scrolling, but no windows yet: the "no strip" half of the
@@ -116,8 +141,9 @@ private Q_SLOTS:
 
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
 
-        // The isActiveOnScreen ownership gate: the engine does not own this
-        // screen, so its strip is not described.
+        // Aimed at the isActiveOnScreen ownership gate: the engine does not
+        // own this screen, so its strip is not described (documentation, per
+        // the note above, not discrimination).
         QCOMPARE(m_adaptor->visibleStripJson(QStringLiteral("HDMI-2")), QStringLiteral("[]"));
         // The screenId.isEmpty() wire-boundary check. Boundary hygiene, not a
         // discriminating assertion: isActiveOnScreen would reject "" anyway,
@@ -136,11 +162,12 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("payload is not compact JSON: %1").arg(payload)));
     }
 
-    // After the screen leaves scrolling mode the preview goes empty, and the
-    // adaptor's isActiveOnScreen gate is what produces that. setActiveScreens
-    // prunes only the screen's CURRENT (desktop, activity) key, so a strip
-    // built on a sibling desktop survives the departure and still resolves.
-    // The sibling-context test below is the one that pins it.
+    // After the screen leaves scrolling mode the preview goes empty. Here the
+    // strip lives on the screen's CURRENT (desktop, activity) key, which
+    // setActiveScreens prunes, so the engine itself answers empty and this
+    // leg stays green with the adaptor's isActiveOnScreen gate deleted. A
+    // strip built on a sibling desktop survives the departure and still
+    // resolves; the sibling-context test below is the one that pins the gate.
     void testVisibleStripJson_emptyAfterModeExit()
     {
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
@@ -264,7 +291,7 @@ private Q_SLOTS:
 
         // Stacked but NOT tabbed: no tab key on either element. The absent
         // key is the contract, not a zero — the settings app forwards only
-        // what is present, so a stray zeroed triple here would be indis-
+        // what is present, so stray zeroed tab keys here would be indis-
         // tinguishable from a daemon that genuinely has no tab data.
         const QJsonArray plain =
             QJsonDocument::fromJson(m_adaptor->visibleStripJson(QStringLiteral("DP-1")).toUtf8()).array();
@@ -307,8 +334,9 @@ private Q_SLOTS:
         m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-2"), 0, 0);
         m_engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("DP-2"), 0, 0);
 
-        // The fixture's geometry providers ignore screenId, so the two
-        // payloads differ by TILE COUNT, not by rect values.
+        // DP-2 has geometry of its own in the fixture, but the assertion is
+        // the TILE COUNT, which tells the two strips apart whatever their
+        // rects are.
         const QJsonArray first =
             QJsonDocument::fromJson(m_adaptor->visibleStripJson(QStringLiteral("DP-1")).toUtf8()).array();
         const QJsonArray second =
@@ -480,7 +508,6 @@ private Q_SLOTS:
         m_engine->setActiveScreens({QStringLiteral("DP-1")});
         QCOMPARE(spy.count(), 2);
         QCOMPARE(spy.last().at(2).toStringList(), QStringList{QStringLiteral("DP-2")});
-        m_adaptor->setAutotileScreenResolver({});
     }
 
     // A screen leaving for snapping is not listed: it leaves the union too.
@@ -494,7 +521,6 @@ private Q_SLOTS:
         m_engine->setActiveScreens({QStringLiteral("DP-1")});
         QCOMPARE(spy.count(), 2);
         QVERIFY(spy.last().at(2).toStringList().isEmpty());
-        m_adaptor->setAutotileScreenResolver({});
     }
 
     // A change a desktop switch made is said to be one (F231); a plain change
@@ -503,15 +529,23 @@ private Q_SLOTS:
     {
         QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollingScreensChanged);
         m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        // Counted before every last(): last() on an empty spy is undefined,
+        // and a stale entry from an earlier push would answer for a push that
+        // emitted nothing.
+        QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.last().at(1).toBool(), false);
         // The first setCurrentDesktop primes the tracker; the second arms.
+        // The primed push repeats the set unarmed, so it emits nothing.
         m_engine->setCurrentDesktop(2);
         m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        QCOMPARE(spy.count(), 1);
         m_engine->setCurrentDesktop(3);
         m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        QCOMPARE(spy.count(), 2);
         QCOMPARE(spy.last().at(0).toStringList(), QStringList{QStringLiteral("DP-1")});
         QCOMPARE(spy.last().at(1).toBool(), true);
         m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-3")});
+        QCOMPARE(spy.count(), 3);
         QCOMPARE(spy.last().at(1).toBool(), false);
     }
 
@@ -581,8 +615,20 @@ private Q_SLOTS:
         // in the same sweep — without it, dropping that conjunct is a null
         // dereference on the shutdown path with nothing failing.
         QCOMPARE(m_adaptor->blueprintProgressJson(QStringLiteral("DP-1")), QStringLiteral("{}"));
+        QCOMPARE(m_adaptor->stripModelJson(QStringLiteral("DP-1")), QStringLiteral("{}"));
         QVERIFY(m_adaptor->scrollingScreens().isEmpty());
         m_adaptor->focusColumn(QStringLiteral("DP-1"), -1); // must not crash
+        // scrollView tests its step provider BEFORE the engine, so without one
+        // the call refuses on that term and never reaches the `!m_engine` one.
+        // Installed here so the leg exercises the engine guard.
+        m_adaptor->setViewScrollStepProvider([]() {
+            return 10;
+        });
+        m_adaptor->scrollView(QStringLiteral("DP-1"), 1); // must not crash
+        // The placement-map verbs share the same guard.
+        m_adaptor->focusColumnAt(QStringLiteral("DP-1"), 0); // must not crash
+        m_adaptor->moveColumnTo(QStringLiteral("DP-1"), 0, 1); // must not crash
+        m_adaptor->scrollViewByPx(QStringLiteral("DP-1"), 40); // must not crash
         // The four setters open with the same `!m_engine` guard — this test
         // is the shutdown path that guard exists for.
         m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.5);
@@ -591,9 +637,13 @@ private Q_SLOTS:
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
         m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a")); // must not crash
         m_adaptor->reapplyWindowGeometry(QStringLiteral("app|a")); // must not crash
-        // Same `!m_engine` conjunct, and the verb most likely to be called on
-        // the shutdown path: the KWin effect dispatches it from a user's
-        // maximize click, which can land while the daemon is going down.
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), 600, 800, 700, 800); // must not crash
+        QCOMPARE(m_adaptor->setWindowFullscreenFloat(QStringLiteral("app|a"), QStringLiteral("DP-1"), true), false);
+        // Same `!m_engine` conjunct on both maximize twins. toggleMaximizeToEdges
+        // is the verb most likely to be called on the shutdown path: the KWin
+        // effect dispatches it from a user's maximize click, which can land
+        // while the daemon is going down. toggleMaximizeColumn's one wire
+        // caller is the shell's placement map, from its column menu.
         m_adaptor->toggleMaximizeColumn(QStringLiteral("DP-1"), QStringLiteral("app|a")); // must not crash
         m_adaptor->toggleMaximizeToEdges(QStringLiteral("DP-1"), QStringLiteral("app|a")); // must not crash
     }
@@ -715,11 +765,10 @@ private Q_SLOTS:
         QCOMPARE(m_engine->visibleTiles(QStringLiteral("DP-1")).first().activeTabIndex, 1);
         spy.clear();
         // Through the VERB, which is the deterministic trigger. The other
-        // route to the same change — a windowFocused report from the
-        // compositor — reaches the same emit through
-        // ScrollStrip::focusWindow, so this arm covers both; what neither
-        // route emits is a wake-up for a focus that moves nothing, which is
-        // the emit-on-change rule and not a gap.
+        // route to the same change, a windowFocused report from the
+        // compositor, emits from a site of its own, so this arm does NOT
+        // cover it; what neither route emits is a wake-up for a focus that
+        // moves nothing, which is the emit-on-change rule and not a gap.
         // The premise, enforced rather than asserted in prose: this really is
         // a change no rect-watching poll could have seen. Captured either side
         // of the verb — if a future relayout DID move a rect here, the case
@@ -855,9 +904,12 @@ private Q_SLOTS:
         QDBusConnection bus = QDBusConnection::sessionBus();
         QVERIFY2(bus.isConnected(), "this suite runs under a private bus; see phosphor_apply_test_isolation");
         const QString path = QStringLiteral("/PropertiesChangedProbe");
-        QVERIFY(bus.registerObject(path, m_parent, QDBusConnection::ExportAllContents));
+        // ExportAdaptors, not ExportAllContents: the latter exports the
+        // parent's OWN slots and properties and leaves its adaptors off the
+        // bus, so org.plasmazones.Scrolling was never on the wire and the
+        // absence below held whatever QtDBus did.
+        QVERIFY(bus.registerObject(path, m_parent, QDBusConnection::ExportAdaptors));
 
-        QDBusMessage changed;
         QVERIFY(bus.connect(bus.baseService(), path, QStringLiteral("org.freedesktop.DBus.Properties"),
                             QStringLiteral("PropertiesChanged"), this, SLOT(onPropertiesChanged(QDBusMessage))));
 
@@ -868,17 +920,36 @@ private Q_SLOTS:
         // Emitted synchronously through the engine connection, so it is
         // already counted rather than something to wait for.
         QVERIFY2(own.count() > 0, "the adaptor's own change signal must fire");
+
+        // Positive control for the EXPORT: the property answers through the
+        // interface on the bus, so a NOTIFY relay would have somewhere to
+        // come from. Without it the absence below proves nothing.
+        QDBusMessage get = QDBusMessage::createMethodCall(
+            bus.baseService(), path, QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+        get << QStringLiteral("org.plasmazones.Scrolling") << QStringLiteral("scrollingScreens");
+        const QDBusMessage reply = bus.call(get);
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(qvariant_cast<QDBusVariant>(reply.arguments().value(0)).variant().toStringList(),
+                 (QStringList{QStringLiteral("DP-1"), QStringLiteral("DP-2")}));
+
         // A relayed PropertiesChanged would arrive over the bus, which is
         // asynchronous — give it a window rather than concluding from the
         // same turn that emitted the signal above.
         //
         // Known limitation of asserting an ABSENCE on a wall clock: a loaded
         // machine that merely delayed the relay past this window passes too.
-        // There is no positive control available (the whole claim is that
-        // nothing is emitted on this path), so the window is the guarantee.
         QTest::qWait(200);
 
         QCOMPARE(m_propertiesChangedCount, 0);
+
+        // Positive control for the SUBSCRIPTION: a PropertiesChanged for this
+        // interface sent on this path does reach the slot, so the zero above
+        // is not a match rule that hears nothing.
+        QDBusMessage probe = QDBusMessage::createSignal(path, QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                        QStringLiteral("PropertiesChanged"));
+        probe << QStringLiteral("org.plasmazones.Scrolling") << QVariantMap() << QStringList();
+        QVERIFY(bus.send(probe));
+        QTRY_COMPARE(m_propertiesChangedCount, 1);
         // Pair the match rule with the unregister: the test QObject lives
         // for the whole binary, so an undisconnected rule would outlive the
         // probe (hygiene only — nothing later reads the counter).
@@ -891,6 +962,9 @@ private Q_SLOTS:
     // id, unknown window, unflagged tile) is a silent no-op, and a genuine
     // clear reaches the strip. placementChanged discriminates — the engine
     // returns before emitting on every refusal path, and emits on success.
+    // The adaptor itself checks only the engine pointer and the empty id, so
+    // the unknown and unflagged legs pin the ENGINE's refusals as seen
+    // through the wire, not any check of this layer's.
     void testClearWindowedFullscreen_gatesAndClears()
     {
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
@@ -904,9 +978,9 @@ private Q_SLOTS:
         // the isEmpty conjunct would fall through to the same lookup, find
         // nothing and refuse anyway, so deleting that conjunct leaves this leg
         // green. It documents the wire boundary rather than defending it. The
-        // two legs below it DO discriminate — "tracked but unflagged"
-        // especially, which is the only one that separates "this adaptor
-        // checks the flag" from "this adaptor checks membership".
+        // two legs below it pin the engine's refusals as the wire sees them;
+        // "tracked but unflagged" is the one that fails if the clear acts on
+        // any tile it holds rather than only a flagged one.
         m_adaptor->clearWindowedFullscreen(QString()); // empty id
         m_adaptor->clearWindowedFullscreen(QStringLiteral("nobody|9")); // unknown window
         m_adaptor->clearWindowedFullscreen(QStringLiteral("app|b")); // tracked but unflagged
@@ -960,6 +1034,57 @@ private Q_SLOTS:
             }
         }
         QVERIFY2(sawA, "the re-emitted batch must carry the re-applied window");
+    }
+
+    // reportCommittedSize shares the same wire-boundary policy and adds a
+    // size check: a non-positive dimension on either pair is malformed. The
+    // positive case is a genuine widening, so a refusal is told apart from an
+    // accepted report by whether the window's committed rect moved.
+    //
+    // The refusal legs pin OUTCOMES, not this layer's checks. The engine
+    // repeats the size check (QSize::isEmpty) and owns the id lookup, and the
+    // empty-offer, zero-offered-height and negative-commit legs are refused
+    // further in as well (an offer that is not the tile's rect, a narrower
+    // answer with nothing to give back). Only the empty-commit leg plants a
+    // floor when BOTH size checks are deleted; deleting just the adaptor's
+    // conjuncts leaves every leg green.
+    void testReportCommittedSize_gatesAndWidens()
+    {
+        // Respected explicitly rather than inherited from the engine's
+        // default: a floor is learned only while minimum sizes are respected,
+        // so a changed default would fail the positive control below for a
+        // reason that has nothing to do with this adaptor.
+        m_engine->applyPerScreenConfig(
+            QStringLiteral("DP-1"),
+            QVariantMap{{PhosphorScrollEngine::ScrollPerScreenKeys::respectMinimumSize(), true}});
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+        // Focused, so the widened column stays wholly on screen and its
+        // committed rect is the column rather than a clamp at the edge.
+        m_engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("DP-1"));
+        m_engine->retile(QStringLiteral("DP-1"));
+        QCoreApplication::processEvents();
+        const QRect offered = m_engine->lastManagedRect(QStringLiteral("app|a"));
+        QVERIFY2(offered.isValid(), "precondition: a is committed before the report");
+        const int ow = offered.width();
+        const int oh = offered.height();
+        const int wider = ow + 150;
+
+        m_adaptor->reportCommittedSize(QString(), ow, oh, wider, oh); // empty id
+        m_adaptor->reportCommittedSize(QStringLiteral("nobody|9"), ow, oh, wider, oh); // unknown window
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), 0, oh, wider, oh); // empty offer
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), ow, 0, wider, oh); // zero offered height
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), ow, oh, -1, oh); // negative commit
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), ow, oh, wider, 0); // empty commit
+        QCoreApplication::processEvents();
+        QCOMPARE(m_engine->lastManagedRect(QStringLiteral("app|a")), offered);
+
+        // Positive control: a well-formed report of a wider commit widens the
+        // column (this fixture's strip runs horizontally). Fails if the
+        // adaptor stops forwarding a well-formed report to the engine.
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), ow, oh, wider, oh);
+        QCoreApplication::processEvents();
+        QCOMPARE(m_engine->lastManagedRect(QStringLiteral("app|a")).width(), wider);
     }
 
 public Q_SLOTS:

@@ -464,7 +464,7 @@ Evaluate in order. This predicate is the ONLY thing that may end the loop — no
 
 1. **Any finding in `audit-state.json` with `status: "open"`** → go to step 4. Not optional.
 2. **New findings exist** (not previously raised in earlier passes) → go to step 4, repeat through 11.
-3. **Only carry-over findings persist** (same finding re-flagged from a prior pass) → resolve them now: fix, or descope to a tracked artifact (issue link, PR description note, removal from scope) with the reason written into the state file. The skill is NOT allowed to re-flag the same finding for 3+ passes without action. File-size violations, missing test coverage, lossy collapses — these accumulate forever when "stay in scope" is used as a dodge. Once every carry-over is `fixed` or `descoped`, go to step 11.5.
+3. **Only carry-over findings persist** (same finding re-flagged from a prior pass) → resolve them now: fix, or descope to a tracked artifact (issue link, PR description note, removal from scope) with the reason written into the state file. The skill is NOT allowed to re-flag the same finding for 3+ passes without action. Missing test coverage and lossy collapses accumulate forever when "stay in scope" is used as a dodge. Once every carry-over is `fixed` or `descoped`, go to step 11.5.
 4. **Zero findings** → go to step 11.5, then step 12.
 5. **8 passes done, findings persist** → go to step 11.5, then step 12, with the verdict recording what is stuck and why.
 

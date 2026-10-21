@@ -3,7 +3,7 @@
 
 // The tiling half of the settings schema: the Tiling.* groups (Algorithm,
 // Behavior, Gaps) and the Tiling.Enabled toggle. Split out of
-// settingsschema.cpp for file-size the way the scrolling TU was; the shared
+// settingsschema.cpp by domain, the way the scrolling TU was. The shared
 // validator helpers live in settingsschema_p.h and the entry point
 // (appendAutotilingSchema) is declared alongside every other appendXxxSchema
 // in settingsschema.h. sanitizePerAlgorithmSettings stays file-local: the

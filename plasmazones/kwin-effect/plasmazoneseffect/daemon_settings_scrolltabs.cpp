@@ -16,10 +16,9 @@
 // that mirror the daemon's Scrolling.TabIndicator style / gaps / radius /
 // colours and its five own font keys into the effect's cached members, the
 // change funnel that rebuilds the pills when any of them moves, and the
-// label-font builder. Split from daemon_settings.cpp (which hosts
-// loadCachedSettings and the ~50 other loaders) for the file-size ceiling;
-// loadCachedSettings calls loadScrollTabIndicatorSettings() in the same
-// position the block used to sit.
+// label-font builder. Split from daemon_settings.cpp, which hosts
+// loadCachedSettings and the other loaders; loadCachedSettings calls
+// loadScrollTabIndicatorSettings() in the same position the block used to sit.
 namespace PlasmaZones {
 
 void PlasmaZonesEffect::loadScrollTabIndicatorSettings()

@@ -30,6 +30,21 @@ ScrollLayoutParams ScrollEngine::layoutParamsForKey(const PhosphorEngine::Placem
                                                     int columnCountOverride) const
 {
     const QString& screenId = key.screenId;
+    // Which context these params describe. The screen-only spelling (desktop
+    // 0, no activity) and the screen's current key are the SAME context, and
+    // both resolve the way applyLayout does: the gap provider is asked for
+    // "whatever the screen shows now", and the override map and the smart-gaps
+    // column count come from the current key. That matters under a sticky
+    // pin, where the current key names the PINNED desktop while the provider's
+    // current-context answer is the live desktop's rules: a caller naming the
+    // pinned key must get the gaps the apply laid the strip out with, or an
+    // exact compare against an applied rect (reportCommittedSize's whole-tile
+    // check) refuses a genuine answer. Any other key is a BACKGROUND context
+    // and resolves entirely against itself: its own gap rules, its own
+    // override map, its own strip's column count.
+    const PhosphorEngine::PlacementStateKey currentKey = m_context.currentKeyForScreen(screenId);
+    const bool currentContext = key == currentKey || (key.desktop == 0 && key.activity.isEmpty());
+    const PhosphorEngine::PlacementStateKey contextKey = currentContext ? currentKey : key;
     ScrollLayoutParams params;
     QRect area = m_screenManager ? m_screenManager->screenAvailableGeometry(screenId)
                                  : (m_availableGeometryProvider ? m_availableGeometryProvider(screenId) : QRect());
@@ -68,7 +83,8 @@ ScrollLayoutParams ScrollEngine::layoutParamsForKey(const PhosphorEngine::Placem
     if (m_contextGapProvider) {
         namespace PSK = PhosphorEngine::PerScreenKeys;
         namespace GR = PhosphorEngine::GapResolution;
-        const QVariantMap overrides = m_contextGapProvider(screenId, key.desktop, key.activity);
+        const QVariantMap overrides = currentContext ? m_contextGapProvider(screenId, 0, QString())
+                                                     : m_contextGapProvider(screenId, key.desktop, key.activity);
         // The shared atomic-layer resolution both sibling pipelines use (the
         // snap-side GeometryUtils and the autotile PerScreenConfigResolver):
         // an override map that carries outer-gap info wins WHOLESALE, and
@@ -101,9 +117,10 @@ ScrollLayoutParams ScrollEngine::layoutParamsForKey(const PhosphorEngine::Placem
     // agrees: the geometry producers and the pure-math verbs (navigation,
     // anchor math, the maximize compare) all have to see the same work area
     // or the strip resolves against one rect and applies another. The basis
-    // is the screen's CURRENT-context strip, which is the one applyLayout
-    // ever puts on screen; a background context resolving params for the
-    // same screen borrows that verdict rather than inventing a second one.
+    // is the strip of the context these params describe: the current one for
+    // every current-context caller, which is the strip applyLayout puts on
+    // screen, and a background context's own strip for a mutation on it, so a
+    // background desktop's column count is never judged by the one in view.
     // Accepted quirk: while a drag-insert preview holds the dragged window
     // DETACHED, a two-column strip counts as one here, so the outer gaps
     // drop for the duration of the hold and snap back at commit/cancel.
@@ -114,7 +131,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForKey(const PhosphorEngine::Placem
     // down: smart gaps is now a per-screen rule slot too, and its gate runs
     // before the rest of the effective* reads. One fetch still serves them
     // all — the later reads take this same map.
-    const QVariantMap overrides = overridesForScreen(screenId);
+    const QVariantMap overrides = m_perScreenOverrides.value(contextKey);
     // The Auto axis basis, captured BEFORE smart gaps may zero the outer
     // gaps. Smart-gap zeroing is CONTENT-driven — it reads the strip's live
     // column count — and folding it into the axis basis coupled the resolved
@@ -135,7 +152,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForKey(const PhosphorEngine::Placem
                 top = bottom = left = right = 0;
             }
         } else {
-            const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+            const ScrollState* state = m_states.stateForKey(contextKey);
             if (state && state->strip().columnCount() == 1) {
                 top = bottom = left = right = 0;
             }
@@ -187,6 +204,13 @@ ScrollLayoutParams ScrollEngine::layoutParamsForKey(const PhosphorEngine::Placem
     params.alwaysCenterSingleColumn = effectiveAlwaysCenterSingleColumn(overrides);
     params.defaultColumnWidth = effectiveDefaultColumnWidth(overrides, params.presetColumnWidths);
     params.tabIndicator = effectiveTabIndicator(overrides);
+    // Every params this engine resolves reads the per-window committed floors,
+    // so the apply, the verbs and the drag-insert probe all lay a floored
+    // column out alike. The capture is the engine itself; the params are
+    // transient values that never outlive the call that resolved them.
+    params.committedFloor = [this](const QString& windowId) {
+        return committedFloorFor(windowId);
+    };
     return params;
 }
 
@@ -269,14 +293,18 @@ QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& scr
         // tab-strip payload starts too (engine_apply.cpp): that one rect folds
         // in the master switch, the single-tab skip and "not tabbed".
         //
-        // The emitter's gate is a SUPERSET, not a match. It additionally drops
-        // a column that is out of view and one whose tiles are all parked.
-        // This walk runs its own relayout and never consults park state at
-        // all, so a fully-parked tabbed column is emitted here with its tab
-        // fields while the screen draws no bar for it. Deliberate: the
-        // preview draws that tile, so drawing the tile's indicator is the
-        // self-consistent answer, and importing park state into a read-only
-        // query would couple it to the apply pipeline's ordering.
+        // The emitter's gate is not a match, and it differs both ways. It
+        // drops a column still in view whose tiles are all parked: this walk
+        // runs its own relayout and never consults park state at all, so such
+        // a column is emitted here with its tab fields while the screen draws
+        // no bar for it. Deliberate: the preview draws that tile, so drawing
+        // the tile's indicator is the self-consistent answer, and importing
+        // park state into a read-only query would couple it to the apply
+        // pipeline's ordering. And it KEEPS a departing column, one this
+        // batch's view slide took out of view, for the outgoing leg of the
+        // slide (tabStripsChanged), which this walk never lists: it reads only
+        // what is on screen now, and a column out of view has no tile here to
+        // carry an indicator.
         //
         // Derived per COLUMN, not per tile: a tabbed column resolves exactly
         // one non-hidden tile, so the walk below stamps the data onto that one

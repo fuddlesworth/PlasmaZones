@@ -8,9 +8,8 @@
 // is named here only for its clamp (the widen that lands exactly on the work
 // area); its own refusal contract lives with the width verbs in
 // test_scrollstrip_ops.cpp. Placed in its own file rather than grown into test_scrollstrip_ops,
-// which owns the per-operation surface over one shared strip fixture and already
-// carries a file-size exception; every slot here builds its own strip against
-// the shared screen constants.
+// which owns the per-operation surface over one shared strip fixture; every slot
+// here builds its own strip against the shared screen constants.
 //
 // These verbs are held down on a key repeat, so a bool that says "changed"
 // while nothing moved is the failure mode worth pinning: it costs a relayout
@@ -28,6 +27,8 @@
 #include "scrollstriptestutils.h"
 
 #include <QtTest>
+
+#include <limits>
 
 using namespace PhosphorScrollEngine;
 
@@ -60,6 +61,7 @@ private Q_SLOTS:
     void heightPresetCycleMeasuresATabbedColumnInColumnSpace();
     void maximizeToggleRefusesAColumnPinnedByItsMinimum();
     void heightAdjustMeasuresATabbedColumnInColumnSpace();
+    void aMainEdgeDragOfATabbedColumnSettlesWhereItWasReleased();
     void heightAdjustFloorsATabbedColumnAtTheTallestTabsMinimum();
     void switchingTabsDoesNotResizeATabbedColumn();
     void aHeightPressTakesTabbedOwnershipFromTheOtherTab();
@@ -68,6 +70,7 @@ private Q_SLOTS:
     void closingTheOwningTabHandsTheExtentToTheTabOnShow();
     void heightGrowLeavesTheColumnTilingItsBudget();
     void bothPresetCyclesRefuseADeltaThatIsNotOneStep();
+    void bothAdjustVerbsBoundAnOutOfRangeDelta();
     void widthPresetCycleWrapsByExtentNotByPosition();
     void maximizeToggleEntersOnRenderedWidthNotIntentKind();
     void maximizeUnmaximizeSkipsAStaleFullWidthRestoreSlot();
@@ -310,6 +313,45 @@ void TestScrollStripSizing::heightAdjustMeasuresATabbedColumnInColumnSpace()
     // part an off-by-a-reservation entry rule loses.
     QVERIFY(strip.adjustActiveWindowHeight(25.0, params));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), crossExtent - reservation);
+}
+
+void TestScrollStripSizing::aMainEdgeDragOfATabbedColumnSettlesWhereItWasReleased()
+{
+    // The MAIN-axis half of reconcileWindowSize's column-space lift. An
+    // indicator placed within the column and thick along the strip takes
+    // tabbedMainReservationPx out of the column before the tabs are offered
+    // it, and the user's drag reports the WINDOW's extent. Written as the
+    // column's width unlifted, the released 700px tab relayouted one
+    // reservation narrower than where the user let go.
+    ScrollLayoutParams params = defaultParams();
+    params.tabIndicator.placeWithinColumn = true;
+    // A Left/Right indicator is thick along x, which is the MAIN axis only
+    // while the strip runs horizontally; Top/Bottom inverts with it.
+    params.tabIndicator.position = params.axis.isHorizontal() ? TabIndicatorPosition::Left : TabIndicatorPosition::Top;
+    const int reservation = params.tabIndicator.reservedThickness(2);
+    QVERIFY2(reservation > 0, "the fixture must actually reserve, or the slot proves nothing");
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    {
+        const ResolvedStrip resolved = strip.relayout(params);
+        QCOMPARE(Ax::mainLen(rectOf(resolved, QStringLiteral("b"))),
+                 Ax::mainLen(resolved.columns.first().rect) - reservation);
+    }
+
+    const int released = 700;
+    const int releasedCross = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), Ax::t(QSize(released, releasedCross)),
+                                      /*mainChanged=*/true, /*crossChanged=*/false, params));
+    const ResolvedStrip settled = strip.relayout(params);
+    QCOMPARE(Ax::mainLen(rectOf(settled, QStringLiteral("b"))), released);
+    QCOMPARE(Ax::mainLen(settled.columns.first().rect), released + reservation);
+    // The settled size is now what the column holds, so the same ack again
+    // is no change.
+    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), Ax::t(QSize(released, releasedCross)),
+                                       /*mainChanged=*/true, /*crossChanged=*/false, params));
 }
 
 // The floor a tabbed column shrinks onto is the whole tab SET's, not the
@@ -708,6 +750,47 @@ void TestScrollStripSizing::bothPresetCyclesRefuseADeltaThatIsNotOneStep()
     // check here would pass for a cycle that reported a change and moved
     // nothing, which is precisely the failure this slot is about.
     QVERIFY(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))) != heightBefore);
+}
+
+void TestScrollStripSizing::bothAdjustVerbsBoundAnOutOfRangeDelta()
+{
+    // deltaPercent is exported API. A product past int's range made the verb's
+    // qRound undefined, and a non-finite one has no meaning at all. A finite
+    // delta past a whole work area is bounded to one, which lands exactly
+    // where a 100% step does; a non-finite one refuses with nothing moved.
+    const auto params = defaultParams();
+    const auto build = [&](ScrollStrip& s) {
+        QVERIFY(s.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+        QVERIFY(s.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    };
+    const auto geometry = [&](const ScrollStrip& s) {
+        const ResolvedStrip resolved = s.relayout(params);
+        return QPair<int, int>(Ax::mainLen(rectOf(resolved, QStringLiteral("b"))),
+                               Ax::crossLen(rectOf(resolved, QStringLiteral("b"))));
+    };
+
+    for (const qreal huge : {1e12, -1e12}) {
+        const qreal whole = huge > 0 ? 100.0 : -100.0;
+        ScrollStrip bounded;
+        build(bounded);
+        ScrollStrip reference;
+        build(reference);
+        QVERIFY(bounded.adjustActiveColumnWidth(huge, params));
+        QVERIFY(reference.adjustActiveColumnWidth(whole, params));
+        QVERIFY(bounded.adjustActiveWindowHeight(huge, params));
+        QVERIFY(reference.adjustActiveWindowHeight(whole, params));
+        QCOMPARE(geometry(bounded), geometry(reference));
+    }
+
+    ScrollStrip strip;
+    build(strip);
+    const auto before = geometry(strip);
+    for (const qreal bad : {std::numeric_limits<qreal>::quiet_NaN(), std::numeric_limits<qreal>::infinity(),
+                            -std::numeric_limits<qreal>::infinity()}) {
+        QVERIFY(!strip.adjustActiveColumnWidth(bad, params));
+        QVERIFY(!strip.adjustActiveWindowHeight(bad, params));
+        QCOMPARE(geometry(strip), before);
+    }
 }
 
 void TestScrollStripSizing::widthPresetCycleWrapsByExtentNotByPosition()

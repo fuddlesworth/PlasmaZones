@@ -1,21 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file exceeds the 1150-line ceiling
-// because it owns the whole PURE STRIP-MODEL operation surface in one
-// narrative — consume/expel, column and tile moves, the width and height
-// intent families, tabbed columns, reconcile, viewport queries and the
-// anchoring/centering policies. Each slot is a short self-contained scenario
-// over the same threeColumns fixture; splitting by operation family would
-// duplicate the fixture and the declaration-order table of contents below is
-// what keeps the length navigable. The view-ownership slots (the pan's detach
-// latch) and the group-width verbs were placed in test_scrollstrip_view.cpp
-// from the start rather than grown into this file; only the pan's own
-// delta-clamp slot below predates that file. The view suite shares the
-// screen fixture's constants but no strip fixture: every slot there builds
-// its own strip. The ENGINE-level behaviour is already split across
-// the sibling test_scrollengine_* files (deliberately uncounted here: the
-// split grows, and a stale number reads as a claim about coverage).
+// The whole PURE STRIP-MODEL operation surface in one narrative — consume/
+// expel, column and tile moves, the width and height intent families, tabbed
+// columns, reconcile, viewport queries and the anchoring/centering policies.
+// Each slot is a short self-contained scenario over the same threeColumns
+// fixture, and the declaration-order table of contents below is what keeps it
+// navigable. The view-ownership slots (the pan's detach latch) and the
+// group-width verbs were placed in test_scrollstrip_view.cpp from the start
+// rather than grown into this file; only the pan's own delta-clamp slot below
+// predates that file. The view suite shares the screen fixture's constants
+// but no strip fixture: every slot there builds its own strip. The
+// ENGINE-level behaviour is already split across the sibling
+// test_scrollengine_* files (deliberately uncounted here: the split grows,
+// and a stale number reads as a claim about coverage).
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
@@ -90,6 +88,8 @@ private Q_SLOTS:
     // chasing a failure could not find the body by scrolling.
     void visibleColumnIndicesTrackTheViewport();
     void rotateVisibleColumnsCyclesWindowsThroughSlots();
+    void rotateCarriesMaximizeToEdgesWithTheWindow();
+    void rotateReconcilesTheTabbedOwnerWithTheSlotsDisplay();
     void reconcileLoneTileRecordsHeightIntent();
     void degenerateWorkAreaNeverAsserts();
     void monsterFixedSiblingLeavesAutoTilesVisible();
@@ -623,7 +623,8 @@ void TestScrollStripOps::focusTileByOrdinalSkipsUndrawnTiles()
     // FLOAT toggle, which takes the window out of the column entirely. So
     // this arm pins the embedder-facing contract. The production analogue,
     // where floating a middle tab renumbers the rest, is covered at the
-    // engine level in test_scrollengine_smoke.
+    // engine level by floatingATabRenumbersTheOrdinals in
+    // test_scrollengine_tabfocus.
     QVERIFY(strip.setWindowMinimized(QStringLiteral("b"), true, params));
     QVERIFY(strip.focusTileByOrdinal(1));
     QCOMPARE(strip.activeWindowId(), QStringLiteral("a"));
@@ -767,6 +768,88 @@ void TestScrollStripOps::rotateVisibleColumnsCyclesWindowsThroughSlots()
     ScrollStrip lone;
     QVERIFY(lone.insertWindow(QStringLiteral("solo"), kHalf, ColumnDisplay::Normal, params));
     QCOMPARE(lone.rotateVisibleColumns(true, params), 0);
+}
+
+void TestScrollStripOps::rotateCarriesMaximizeToEdgesWithTheWindow()
+{
+    // The compositor mirrors maximizedToEdges onto each window's OWN maximize
+    // bit, so the flag is the window's even though it lives on its column.
+    // Left on the slot, a rotate un-maximized the window the user maximized
+    // and maximized whichever neighbour rotated into its slot.
+    const auto params = defaultParams();
+    ScrollStrip strip = threeColumns(params);
+    QCOMPARE(strip.columnCount(), 3);
+    QVERIFY(strip.toggleMaximizeToEdgesForWindow(QStringLiteral("b"), params));
+    // b now spans the viewport, and the view still shows part of it beside
+    // the active c, so both are rotated.
+    QCOMPARE(strip.visibleColumnIndices(params), QVector<int>({1, 2}));
+    const auto maximized = [&](const char* id) {
+        return strip.columns().at(strip.columnOfWindow(QString::fromLatin1(id))).maximizedToEdges;
+    };
+
+    QCOMPARE(strip.rotateVisibleColumns(true, params), 2);
+    QCOMPARE(strip.windowsInOrder(), QStringList({QStringLiteral("a"), QStringLiteral("c"), QStringLiteral("b")}));
+    QVERIFY(maximized("b"));
+    QVERIFY(!maximized("c"));
+    const ResolvedStrip r = strip.relayout(params);
+    QCOMPARE(Ax::mainLen(rectOf(r, QStringLiteral("b"))), ScrollTestUtils::kMainExtent);
+    QCOMPARE(Ax::mainLen(rectOf(r, QStringLiteral("c"))), Ax::mainLen(rectOf(r, QStringLiteral("a"))));
+}
+
+void TestScrollStripOps::rotateReconcilesTheTabbedOwnerWithTheSlotsDisplay()
+{
+    // Display stays with the SLOT while the tiles move, so the height owner
+    // the tiles bring has to be squared with the display they land in. A
+    // Tabbed slot receiving a Normal stack names the tab on show, the rule a
+    // column entering tabbed follows, rather than leaving no owner for the
+    // resolver to guess at. A Normal slot holds none, rather than keeping the
+    // stale owner the tabs brought (which the persisted blob would carry).
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("x"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("y"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    QCOMPARE(strip.columns().at(0).heightOwnerId, QStringLiteral("y")); // the tab on show
+    QVERIFY(strip.insertWindow(QStringLiteral("z"), kHalf, ColumnDisplay::Normal, params));
+    QCOMPARE(strip.visibleColumnIndices(params), QVector<int>({0, 1}));
+
+    QCOMPARE(strip.rotateVisibleColumns(true, params), 3);
+    QCOMPARE(strip.columns().at(0).display, ColumnDisplay::Tabbed);
+    QCOMPARE(strip.columns().at(0).heightOwnerId, QStringLiteral("z"));
+    QCOMPARE(strip.columns().at(1).display, ColumnDisplay::Normal);
+    QVERIFY(strip.columns().at(1).heightOwnerId.isEmpty());
+
+    // Back again: the stack lands in the Tabbed slot as a Normal column's
+    // tiles, so its tab on show (y, still the active tile) takes the extent.
+    QCOMPARE(strip.rotateVisibleColumns(false, params), 3);
+    QCOMPARE(strip.columns().at(0).heightOwnerId, QStringLiteral("y"));
+    QVERIFY(strip.columns().at(1).heightOwnerId.isEmpty());
+
+    // A Tabbed slot receiving a TABBED column's tabs keeps the owner they
+    // brought, even when that owner is not the tab on show: the tab on show
+    // is only the rule for a column ENTERING tabbed. Each column's owner here
+    // is the tab that was on show when it was tabbed, and focus has since
+    // moved to its other tab, so the carried owner and the tab on show
+    // differ in both columns.
+    ScrollStrip tabs;
+    QVERIFY(tabs.insertWindow(QStringLiteral("p"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(tabs.insertWindowIntoActiveColumn(QStringLiteral("q"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(tabs.toggleActiveColumnTabbed());
+    QVERIFY(tabs.focusTileByOrdinal(1));
+    QVERIFY(tabs.insertWindow(QStringLiteral("r"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(tabs.insertWindowIntoActiveColumn(QStringLiteral("s"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(tabs.toggleActiveColumnTabbed());
+    QVERIFY(tabs.focusTileByOrdinal(1));
+    QCOMPARE(tabs.columns().at(0).heightOwnerId, QStringLiteral("q"));
+    QCOMPARE(tabs.activeWindowId(), QStringLiteral("r"));
+    QCOMPARE(tabs.columns().at(1).heightOwnerId, QStringLiteral("s"));
+    QCOMPARE(tabs.visibleColumnIndices(params), QVector<int>({0, 1}));
+
+    QCOMPARE(tabs.rotateVisibleColumns(true, params), 4);
+    QCOMPARE(tabs.columns().at(0).tiles.at(0).windowId, QStringLiteral("r"));
+    QCOMPARE(tabs.columns().at(0).heightOwnerId, QStringLiteral("s"));
+    QCOMPARE(tabs.columns().at(1).tiles.at(0).windowId, QStringLiteral("p"));
+    QCOMPARE(tabs.columns().at(1).heightOwnerId, QStringLiteral("q"));
 }
 
 void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()

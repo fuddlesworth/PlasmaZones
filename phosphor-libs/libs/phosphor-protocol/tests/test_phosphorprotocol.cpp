@@ -393,6 +393,8 @@ private Q_SLOTS:
         // passive-channel float instead of a user float, so the toggle has no
         // fullscreen tile left to release. An old effect calling the missing
         // method errors on the wire; an old daemon's signal goes unheard.
+        // Scrolling.reportCommittedSize came after v10 shipped and takes no
+        // bump: see the "After v10, WITHOUT a bump" note in ServiceConstants.h.
         QCOMPARE(Service::ApiVersion, 10);
         QCOMPARE(Service::MinPeerApiVersion, 10);
     }

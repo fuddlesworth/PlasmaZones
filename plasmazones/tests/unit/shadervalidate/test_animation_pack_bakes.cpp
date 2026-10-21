@@ -9,8 +9,8 @@
 // slots build a deliberately broken pack in a temp dir and assert the
 // diagnostic, most with a clean twin, so a bake quietly turned back into a
 // skip is caught. The built-in vertex stages are compiled directly, with no
-// pack, and the surface link slot lives here because the surface test files
-// sit at the file-size ceiling.
+// pack, and the surface link slot lives here rather than in the surface test
+// files.
 //
 // Every slot shells out to glslang for the compositor arm and QSKIPs without
 // it, unlike the CI gate, which fails: the gate is what must never silently

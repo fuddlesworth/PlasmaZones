@@ -8,12 +8,12 @@
 // Every field is public and seeded with the value that keeps the layout maths
 // out of the way (zero gaps, no smart gaps, no minimum-size clamping, never
 // center), so a resolved rect is a clean function of the ONE value a case
-// drives. Two suites read it: the default-channel tests
-// (test_scrollengine_perscreen) and the behaviour-toggle tests
-// (test_scrollengine_behaviour), which layer per-screen override maps over
-// exactly these globals — a second copy of the stub would let the two suites'
-// notion of "the configured default" drift apart, which is the one thing
-// those tests are comparing against.
+// drives. Every engine suite that needs configured globals reads it, among
+// them the default-channel tests (test_scrollengine_perscreen) and the
+// behaviour-toggle tests (test_scrollengine_behaviour), which layer per-screen
+// override maps over exactly these globals — a second copy of the stub would
+// let the suites' notion of "the configured default" drift apart, which is
+// the one thing those tests are comparing against.
 
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
