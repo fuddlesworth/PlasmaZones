@@ -272,7 +272,7 @@ bool ScrollEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& oldK
         // not one record is written — the exact loss the comment above says
         // this arm prevents. removeStatesIf documents the same ordering
         // ("invoke onRemove BEFORE dropping the entry") for its callers.
-        releaseScreenState(existing, displacedWindows);
+        releaseScreenState(newKey, existing, displacedWindows);
         m_states.takeState(newKey);
     }
     m_states.takeState(oldKey);
@@ -720,7 +720,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         [&matches](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return matches(key.screenId);
         },
-        [this, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+        [this, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
             releasedScreens.insert(state->screenId());
             // Removed screen: the per-context rule overrides go with the state
             // too — this prune is their documented purger, and releaseScreenState
@@ -737,7 +737,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
             // that carries the scrolling slot across the release.
             // AutotileEngine's twin routes this path through its full teardown
             // for exactly these reasons.
-            releaseScreenState(state, releasedWindows);
+            releaseScreenState(key, state, releasedWindows);
         });
     m_states.removeWindowsIf([&matches](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
@@ -855,7 +855,8 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     }
 }
 
-void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedWindows)
+void ScrollEngine::releaseScreenState(const PhosphorEngine::PlacementStateKey& key, ScrollState* state,
+                                      QStringList& releasedWindows)
 {
     const QString screenId = state->screenId();
     const QStringList windows = state->managedWindows();
@@ -865,9 +866,13 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // structure, so without this a window floated in scrolling loses its
     // floating slot across a mode round trip and comes back tiled with a stale
     // slot.order. AutotileEngine::releaseScreenStateForTeardown does the same.
+    // Against THIS state and its key, as autotile's capturePlacementForKey
+    // does: capturePlacement answers for the window's primary membership,
+    // which for a window on several desktops can be another desktop's strip,
+    // so the record named a context other than the one released.
     if (m_windowTracker) {
         for (const QString& windowId : windows) {
-            if (auto record = capturePlacement(windowId)) {
+            if (auto record = capturePlacementIn(windowId, state, key)) {
                 m_windowTracker->placementStore().record(*record);
             }
         }

@@ -21,6 +21,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "core/platform/logging.h"
 #include "core/resolve/screenmoderouter.h"
+#include "dbus/dbushelpers.h"
 #include "core/utils/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -446,6 +447,9 @@ void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* re
 
 void WindowTrackingAdaptor::reapplyWindowAppearance()
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     // Fan out to all three engines through the common IPlacementEngine
     // contract. Each engine re-emits its placement geometry for the windows it
     // manages, which the compositor turns back into per-window chrome (borders

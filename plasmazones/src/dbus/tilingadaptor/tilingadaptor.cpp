@@ -4,6 +4,7 @@
 #include "tilingadaptor.h"
 
 #include "core/platform/logging.h"
+#include "dbus/dbushelpers.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -694,11 +695,17 @@ void TilingAdaptor::flushPendingWindowOpens()
 
 void TilingAdaptor::windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     announceWindow("windowOpened", windowId, screenId, minWidth, minHeight, /*focusEligible=*/true);
 }
 
 void TilingAdaptor::windowReannounced(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     announceWindow("windowReannounced", windowId, screenId, minWidth, minHeight, /*focusEligible=*/false);
 }
 
@@ -738,6 +745,9 @@ void TilingAdaptor::announceWindow(const char* method, const QString& windowId, 
 
 void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!ensurePipeline("windowsOpenedBatch")) {
         return;
     }
@@ -790,6 +800,9 @@ void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
 
 void TilingAdaptor::windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!ensurePipeline("windowMinSizeUpdated")) {
         return;
     }
@@ -806,6 +819,9 @@ void TilingAdaptor::windowMinSizeUpdated(const QString& windowId, int minWidth, 
 
 void TilingAdaptor::windowClosed(const QString& windowId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty()) {
         qCDebug(lcDbusTiling) << "windowClosed: empty window ID";
         return;
@@ -947,6 +963,9 @@ void TilingAdaptor::forgetFloatBroadcast(const QString& windowId)
 
 void TilingAdaptor::releaseWindowTracking(const QString& windowId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     releaseWindowTrackingVia(windowId, nullptr);
 }
 
@@ -1021,6 +1040,9 @@ void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEn
 
 void TilingAdaptor::notifyWindowFocused(const QString& windowId, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!ensurePipeline("notifyWindowFocused")) {
         return;
     }
@@ -1087,6 +1109,7 @@ void TilingAdaptor::clearEngine()
     // Held behind the announce just voided, and naming the dead session's
     // windows and rects — a restart's first announce must not flush them.
     m_tileBatchesHeldForAnnounce.clear();
+    m_workHeldForAnnounce.clear();
     m_unclaimedOpens.clear();
     m_pendingOpens.clear();
     m_lastFloatBroadcast.clear();

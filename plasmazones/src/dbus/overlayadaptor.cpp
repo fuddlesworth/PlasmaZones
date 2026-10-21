@@ -262,6 +262,9 @@ int OverlayAdaptor::getMinimumZoneDisplaySizePx()
 bool OverlayAdaptor::showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
                                     const PhosphorProtocol::SnapAssistCandidateList& candidates)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return false;
+    }
     if (!m_overlayService) {
         qCWarning(lcDbus) << "showSnapAssist: overlay service not wired";
         return false;

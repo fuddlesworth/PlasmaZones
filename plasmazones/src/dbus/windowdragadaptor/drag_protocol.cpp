@@ -18,6 +18,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "core/interfaces/settings_interfaces.h"
 #include "core/platform/logging.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <QGuiApplication>
 #include <QTimer>
@@ -236,6 +237,9 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
                                                           int frameWidth, int frameHeight, const QString& startScreenId,
                                                           int mouseButtons)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return {};
+    }
     if (windowId.isEmpty()) {
         qCWarning(lcDbusWindow) << "beginDrag: empty windowId";
         return PhosphorProtocol::DragPolicy{};
@@ -615,6 +619,9 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
 {
     PhosphorProtocol::DragOutcome outcome;
     outcome.windowId = windowId;
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return outcome;
+    }
 
     if (windowId.isEmpty()) {
         qCWarning(lcDbusWindow) << "endDrag: empty windowId";
@@ -886,6 +893,9 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
 void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers,
                                          int mouseButtons)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty()) {
         return;
     }

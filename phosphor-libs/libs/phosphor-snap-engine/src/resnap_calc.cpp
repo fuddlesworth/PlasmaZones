@@ -103,9 +103,30 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
         const int newZoneCount = newZones.size();
 
         for (const ResnapEntry* entry : screenIt.value()) {
+            // A return to the layout the window was snapped in (a screen coming
+            // back to snapping from tiling or scrolling, the same layout picked
+            // again) gets its exact zones back, a span included. Only the
+            // position mapping below collapsed a span (#1151).
+            if (!entry->fromRemovedLayout && !entry->zoneIds.isEmpty()
+                && PhosphorZones::LayoutUtils::layoutHoldsZones(newLayout, entry->zoneIds)) {
+                const QRect geo = m_windowTracker->resolveZoneGeometry(entry->zoneIds, screenId);
+                if (geo.isValid()) {
+                    ZoneAssignmentEntry assignEntry;
+                    assignEntry.windowId = entry->windowId;
+                    assignEntry.targetZoneId = entry->zoneIds.constFirst();
+                    if (entry->zoneIds.size() > 1) {
+                        assignEntry.targetZoneIds = entry->zoneIds;
+                    }
+                    assignEntry.targetGeometry = geo;
+                    assignEntry.targetScreenId = screenId;
+                    assignEntry.virtualDesktop = entry->virtualDesktop;
+                    result.append(assignEntry);
+                    continue;
+                }
+            }
             // Map the window's primary zone position 1:1 into the new layout
             // (1->1, 2->2). A multi-zone span is specific to the layout it was
-            // made in, so on a layout switch a spanning window collapses to its
+            // made in, so on a switch to another layout a spanning window collapses to its
             // primary zone rather than trying to reconstruct the span across a
             // different zone arrangement. Windows whose primary position exceeds
             // the new zone count are restored to their pre-tile geometry — a

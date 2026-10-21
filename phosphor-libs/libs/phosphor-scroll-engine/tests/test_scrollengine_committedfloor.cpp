@@ -17,6 +17,13 @@
  * fullscreen hold, a cancelled drag, a drag reorder, consume, Retile, the
  * evacuee park). Plus the strip-level verbs whose honesty the floor tests:
  * the preset cycles and minimize-width.
+ *
+ * Across the strip: the floor a taller answer holds its stacked tile's share
+ * to, the float when the stack can never hold it, and its own drops (alone in
+ * its column, a stack that can no longer hold it, a moved offer along the
+ * strip, a user resize across, a lowered minimum across, a leave). And the
+ * parked tile's matched answer, which ends a peek memory the client no longer
+ * draws to.
  */
 
 #include <QCoreApplication>
@@ -124,6 +131,24 @@ int extentOf(ScrollEngine* engine, const QString& screenId, const QString& windo
 int extentOf(ScrollEngine* engine, const QString& windowId)
 {
     return extentOf(engine, kS1, windowId);
+}
+
+/// The extent across the strip of the tile last applied to @p windowId.
+int crossOf(ScrollEngine* engine, const QString& windowId)
+{
+    return Ax::crossLen(engine->lastManagedRect(windowId));
+}
+
+/// The floor fixture with b consumed into a's column: one 300px column
+/// stacking a over b, 400px each across the 800px work area.
+ScrollEngine* makeStackEngine(QObject* owner, StubScrollSettings** outSettings = nullptr,
+                              bool respectMinimumSize = true, GeometryFn screenGeometry = {})
+{
+    ScrollEngine* engine = makeFloorEngine(owner, outSettings, respectMinimumSize, screenGeometry);
+    engine->consumeWindowIntoColumn(kS1);
+    engine->retile(kS1);
+    QCoreApplication::processEvents();
+    return engine;
 }
 
 /// @p windowId answers the tile it was last applied with @p main along the
@@ -822,6 +847,148 @@ private Q_SLOTS:
             QCoreApplication::processEvents();
             QVERIFY2(isParked(engine, kA), "a pass under the drag judges nothing about the dragged window");
         }
+        {
+            // The client takes the park and says so: the compositor reports a
+            // parked tile's settled commit even when it equals the offer
+            // along the strip. That is an answer to the park itself, not
+            // silence, so the memory ends and the next pass peeks.
+            QObject owner;
+            auto available = std::make_shared<QRect>(defaultScreenRect());
+            ScrollEngine* engine = straddleAtNarrowedColumn(&owner, available);
+            QVERIFY(isParked(engine, kA));
+            QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+            answer(engine, kA, Ax::mainLen(engine->lastManagedRect(kA))); // took the parked 675
+            QVERIFY2(!isParked(engine, kA), "a taken park ends the memory, and the straddler peeks");
+            QVERIFY(Ax::mainLen(engine->lastManagedRect(kA)) < 675);
+            // Only the park/clamp choice moved, not the model.
+            QCOMPARE(placement.count(), 0);
+        }
+        {
+            // A matched answer to a park a newer batch has since replaced is
+            // refused at the whole-tile gate like any other: the work area
+            // narrows again, the column is parked at 660, and the client's
+            // late answer to the 675 park ends nothing. Its answer to the 660
+            // park does.
+            QObject owner;
+            auto available = std::make_shared<QRect>(defaultScreenRect());
+            ScrollEngine* engine = straddleAtNarrowedColumn(&owner, available);
+            QVERIFY(isParked(engine, kA));
+            const QSize stale = engine->lastManagedRect(kA).size();
+            *available = Ax::t(QRect(0, 0, 880, 800));
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(extentOf(engine, kA), 660);
+            QVERIFY2(isParked(engine, kA), "precondition: the narrower column still parks on the memory");
+            engine->reportCommittedSize(kA, stale, stale);
+            QCoreApplication::processEvents();
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            QVERIFY2(isParked(engine, kA), "a matched answer to a replaced park ends nothing");
+            answer(engine, kA, Ax::mainLen(engine->lastManagedRect(kA))); // took the parked 660
+            QVERIFY2(!isParked(engine, kA), "the matched answer to the current park ends the memory");
+        }
+        {
+            // A frame under an interactive move is motion, not an answer, so
+            // a matched report for the dragged window ends nothing.
+            QObject owner;
+            auto available = std::make_shared<QRect>(defaultScreenRect());
+            ScrollEngine* engine = straddleAtNarrowedColumn(&owner, available);
+            QVERIFY(isParked(engine, kA));
+            engine->setInteractiveDragWindow(kA);
+            answer(engine, kA, Ax::mainLen(engine->lastManagedRect(kA)));
+            engine->setInteractiveDragWindow(QString());
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            QVERIFY2(isParked(engine, kA), "a dragged window's matched answer is ignored");
+        }
+    }
+
+    // The memory is the window's, and a matched answer on one desktop ends
+    // it only once every other column the window holds offers less too,
+    // endStalePeeks' own rule. Here desktop 2's column still offers 800, so
+    // desktop 1's taken park keeps the memory and the straddler parks again.
+    void aTakenParkKeepsThePeekWhileAnotherDesktopOffersIt()
+    {
+        QObject owner;
+        StubScrollSettings* settings = makeFloorSettings(&owner);
+        settings->widthValue = 0.5;
+        settings->centerFocused = static_cast<int>(CenterFocusedColumn::Always);
+        ScrollEngine* engine = engineWith(&owner, settings, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        engine->windowOpened(kD1, kS1, 0, 0);
+        engine->windowOpened(kSticky, kS1, 0, 0);
+        engine->windowFocused(kSticky, kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        answer(engine, kSticky, 700);
+
+        switchTo(engine, 2);
+        engine->windowOpened(kD2, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        adopt(engine, [](const QString& windowId) {
+            PhosphorEngine::DesktopSpan span;
+            span.known = true;
+            span.sticky = (windowId == kSticky);
+            if (!span.sticky) {
+                span.desktops = {windowId == kD2 ? 2 : 1};
+            }
+            return span;
+        });
+        QVERIFY2(engine->heldKeyForWindow(kSticky).has_value(), "precondition: adopted onto desktop 2");
+        engine->windowFocused(kSticky, kS1);
+        engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1);
+        QCoreApplication::processEvents();
+        switchTo(engine, 1);
+        engine->windowFocused(kSticky, kS1);
+        engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1); // satisfied on both: the floor goes
+        QCoreApplication::processEvents();
+        engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1); // offers less here only
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kSticky), 600);
+
+        engine->windowFocused(kD1, kS1);
+        QCoreApplication::processEvents();
+        QVERIFY2(isParked(engine, kSticky), "precondition: desktop 2 still offers the memory, so this straddle parks");
+        answer(engine, kSticky, Ax::mainLen(engine->lastManagedRect(kSticky))); // took the parked 600
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QVERIFY2(isParked(engine, kSticky), "a column elsewhere that still offers the memory keeps it");
+    }
+
+    // A held floor is never touched by a matched answer: the column is held
+    // at it, so a matched answer to the park only says the client took the
+    // floor it taught, and nothing is republished.
+    void aMatchedAnswerUnderAFloorChangesNothing()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStraddleEngine(&owner);
+        answer(engine, kA, 700);
+        engine->windowFocused(kB, kS1);
+        QCoreApplication::processEvents();
+        QVERIFY2(isParked(engine, kA), "precondition: the floored straddler parks");
+
+        QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+        answer(engine, kA, Ax::mainLen(engine->lastManagedRect(kA))); // took the parked 700
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(placement.count(), 0);
+        QCOMPARE(extentOf(engine, kA), 700);
+        QVERIFY2(isParked(engine, kA), "the floor still parks the straddler");
+    }
+
+    // A matched answer from a window nothing has been learned about is the
+    // compositor's steady state: refused before anything resolves, with no
+    // republish and no batch.
+    void aMatchedAnswerWithoutMemoryIsSilent()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        answer(engine, kA, 300);
+        QCOMPARE(placement.count(), 0);
+        QCOMPARE(tiled.count(), 0);
+        QCOMPARE(extentOf(engine, kA), 300);
     }
 
     // The memory is judged on the view the batch commits, after the
@@ -997,9 +1164,11 @@ private Q_SLOTS:
     }
 
     // An answer longer than the work area ACROSS the strip can never fit any
-    // tile, and floats too. A shorter cross overshoot teaches nothing: the
-    // stack tile here is offered 400 and answers 500, inside the 800 work
-    // area, and stays tiled at its column's width.
+    // tile, and floats too. A shorter cross overshoot does not: the stack
+    // tile here is offered 400 and answers 500, inside the 800 work area, and
+    // stays tiled at its column's width, held at that share of the column
+    // (the cross floor cases below). The longer answer then answers the 500
+    // the tile is offered from there on.
     void aCrossAnswerPastTheWorkAreaFloatsTheWindow()
     {
         QObject owner;
@@ -1015,7 +1184,9 @@ private Q_SLOTS:
         QVERIFY(!engine->isWindowFloatingInScroll(kA));
         QCOMPARE(extentOf(engine, kA), 300);
 
-        engine->reportCommittedSize(kA, offered.size(), roleSize(300, 900));
+        const QRect held = engine->lastManagedRect(kA);
+        QCOMPARE(Ax::crossLen(held), 500);
+        engine->reportCommittedSize(kA, held.size(), roleSize(300, 900));
         QCoreApplication::processEvents();
         QVERIFY(engine->isWindowFloatingInScroll(kA));
     }
@@ -1627,6 +1798,355 @@ private Q_SLOTS:
         QCOMPARE(extentOf(engine, kSticky), 450);
     }
 
+    // ── Across the strip ────────────────────────────────────────────────
+
+    // A stacked tile whose client commits longer than its share of the
+    // column, inside the work area, overlapped the tile under it. The share is
+    // held at the answer, the sibling shrinks, and the column's extent along
+    // the strip does not move. The change is republished like a floor along
+    // the strip.
+    void aTallerCommitHoldsItsShareOfTheStack()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        QCOMPARE(crossOf(engine, kA), 400);
+        QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+        answer(engine, kA, 300, 100); // offered 400, answers 500
+
+        QVERIFY(!engine->isWindowFloatingInScroll(kA));
+        QCOMPARE(placement.count(), 1);
+        QCOMPARE(crossOf(engine, kA), 500);
+        QCOMPARE(crossOf(engine, kB), 300);
+        QCOMPARE(Ax::crossPos(engine->lastManagedRect(kB)), Ax::crossEnd(engine->lastManagedRect(kA)) + 1);
+        QCOMPARE(extentOf(engine, kA), 300);
+    }
+
+    // The steady state: the client answering the share it is now held at,
+    // and a late copy of the answer that taught the floor, are both silent.
+    void aRepeatedTallerAnswerIsSilent()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        const QSize firstOffer = engine->lastManagedRect(kA).size();
+        answer(engine, kA, 300, 100);
+        QCOMPARE(crossOf(engine, kA), 500);
+
+        QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        answer(engine, kA, 300); // the held 500, answered as offered
+        engine->reportCommittedSize(kA, firstOffer, roleSize(300, 500)); // the teaching answer again
+        QCoreApplication::processEvents();
+        QCOMPARE(placement.count(), 0);
+        QCOMPARE(tiled.count(), 0);
+        QCOMPARE(crossOf(engine, kA), 500);
+    }
+
+    // A share the stack can never hold beside its siblings' own floors floats
+    // the window, the policy any window that outgrows its slot gets. A share
+    // that fits exactly takes the sibling down to its minimum instead.
+    void aCrossFloorTheStackCannotHoldFloatsTheWindow()
+    {
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStackEngine(&owner);
+            const QSize min400 = roleSize(0, 400);
+            engine->windowMinSizeUpdated(kB, min400.width(), min400.height());
+            QCoreApplication::processEvents();
+            answer(engine, kA, 300, 100); // 500 beside a 400 minimum in 800
+            QVERIFY(engine->isWindowFloatingInScroll(kA));
+            QVERIFY(!engine->isWindowFloatingInScroll(kB));
+        }
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStackEngine(&owner);
+            const QSize min300 = roleSize(0, 300);
+            engine->windowMinSizeUpdated(kB, min300.width(), min300.height());
+            QCoreApplication::processEvents();
+            answer(engine, kA, 300, 100); // 500 beside a 300 minimum: fits exactly
+            QVERIFY(!engine->isWindowFloatingInScroll(kA));
+            QCOMPARE(crossOf(engine, kA), 500);
+            QCOMPARE(crossOf(engine, kB), 300);
+        }
+    }
+
+    // Alone in its column the tile is offered the whole work area, which
+    // satisfies the floor, so it goes. A sibling that joins later is split
+    // as asked until the client answers again.
+    void aCrossFloorDropsWhenItsTileIsAlone()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        answer(engine, kA, 300, 100);
+        QCOMPARE(crossOf(engine, kA), 500);
+
+        engine->windowClosed(kB);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 800);
+
+        engine->windowOpened(kC, kS1, 0, 0);
+        engine->windowFocused(kA, kS1);
+        engine->consumeWindowIntoColumn(kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        ScrollState* state = stateOf(engine);
+        QVERIFY(state);
+        QCOMPARE(state->strip().columnCount(), 1);
+        QCOMPARE(crossOf(engine, kA), 400);
+    }
+
+    // A sibling that raises its own minimum past what the stack can give the
+    // floored tile leaves a floor it can no longer hold. It is dropped rather
+    // than floating the window, and the stack is split as asked. A client
+    // that still answers longer then gets the float.
+    void aCrossFloorDropsWhenTheStackCanNoLongerHoldIt()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        answer(engine, kA, 300, 100);
+        QCOMPARE(crossOf(engine, kA), 500);
+
+        QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+        const QSize min400 = roleSize(0, 400);
+        engine->windowMinSizeUpdated(kB, min400.width(), min400.height());
+        QCoreApplication::processEvents();
+        QVERIFY(!engine->isWindowFloatingInScroll(kA));
+        QVERIFY(placement.count() > 0);
+        QCOMPARE(crossOf(engine, kA), 400);
+        QCOMPARE(crossOf(engine, kB), 400);
+
+        answer(engine, kA, 300, 100); // offered 400, answers 500 again
+        QVERIFY(engine->isWindowFloatingInScroll(kA));
+    }
+
+    // The floor's premise is the tile's offer along the strip. A client that
+    // picks its height from its width answers a new width differently, and
+    // never reports a shorter cross answer, so a column offered another width
+    // drops the floor.
+    void aWidthChangeDropsTheCrossFloor()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        answer(engine, kA, 300, 100);
+        QCOMPARE(crossOf(engine, kA), 500);
+
+        engine->setColumnWidth(ColumnWidth::makeFixed(400), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 400);
+        QCOMPARE(crossOf(engine, kA), 400);
+    }
+
+    // The user's own resize across the strip settles the tile's share, so
+    // the floor goes and the height the user released it at stands. A resize
+    // along the strip leaves the cross floor to its premise: here it lands on
+    // the width the column already had, and the floor holds.
+    void aUserResizeAcrossTheStripDropsTheCrossFloor()
+    {
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStackEngine(&owner);
+            answer(engine, kA, 300, 100);
+            const QRect applied = engine->lastManagedRect(kA);
+            QCOMPARE(Ax::crossLen(applied), 500);
+            QRect settled = Ax::t(applied);
+            settled.setHeight(450);
+            settled = Ax::t(settled);
+            engine->onWindowResized(kA, applied, settled, kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(crossOf(engine, kA), 450);
+            QCOMPARE(crossOf(engine, kB), 350);
+        }
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStackEngine(&owner);
+            answer(engine, kA, 300, 100);
+            const QRect applied = engine->lastManagedRect(kA);
+            QRect start = Ax::t(applied);
+            start.setWidth(320); // the gesture started from the client's own frame
+            start = Ax::t(start);
+            engine->onWindowResized(kA, start, applied, kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(extentOf(engine, kA), 300);
+            QCOMPARE(crossOf(engine, kA), 500);
+        }
+    }
+
+    // A LOWERED declared minimum across the strip drops the cross floor and
+    // announces the change. One lowered along the strip leaves it.
+    void aLoweredMinimumAcrossDropsTheCrossFloor()
+    {
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStackEngine(&owner);
+            const QSize min100 = roleSize(0, 100);
+            engine->windowMinSizeUpdated(kA, min100.width(), min100.height());
+            QCoreApplication::processEvents();
+            answer(engine, kA, 300, 100);
+            QCOMPARE(crossOf(engine, kA), 500);
+
+            QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+            const QSize min50 = roleSize(0, 50);
+            engine->windowMinSizeUpdated(kA, min50.width(), min50.height());
+            QCOMPARE(placement.count(), 1);
+            QCoreApplication::processEvents();
+            QCOMPARE(crossOf(engine, kA), 400);
+        }
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStackEngine(&owner);
+            const QSize min100 = roleSize(100, 0);
+            engine->windowMinSizeUpdated(kA, min100.width(), min100.height());
+            QCoreApplication::processEvents();
+            answer(engine, kA, 300, 100);
+
+            QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+            const QSize min50 = roleSize(50, 0);
+            engine->windowMinSizeUpdated(kA, min50.width(), min50.height());
+            QCOMPARE(placement.count(), 0);
+            QCoreApplication::processEvents();
+            QCOMPARE(crossOf(engine, kA), 500);
+        }
+    }
+
+    // A float round trip brings the tile back into its stack held to the
+    // share its client taught, like the floor along the strip. Closing the
+    // window, one of the leave paths, takes it.
+    void aCrossFloorSurvivesAFloatRoundTripAndDropsOnALeave()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        answer(engine, kA, 300, 100);
+        engine->setWindowFloat(kA, true, kS1);
+        engine->setWindowFloat(kA, false, kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        ScrollState* state = stateOf(engine);
+        QVERIFY(state);
+        QCOMPARE(state->strip().columnCount(), 1);
+        QCOMPARE(crossOf(engine, kA), 500);
+
+        engine->windowClosed(kA);
+        engine->windowOpened(kA, kS1, 0, 0);
+        engine->windowFocused(kB, kS1);
+        engine->consumeWindowIntoColumn(kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        state = stateOf(engine);
+        QVERIFY(state);
+        QCOMPARE(state->strip().columnCount(), 1);
+        QCOMPARE(crossOf(engine, kA), 400);
+    }
+
+    // A height learned across a horizontal strip is not a width across a
+    // vertical one. A rotation flips the strip's axis and splits the stack
+    // the other way with no floor read; the rotation back finds the floor
+    // again, its premise (the column's width) unchanged.
+    void aRotationNeverReadsACrossFloorAcrossTheOtherWay()
+    {
+        QObject owner;
+        auto geometry = std::make_shared<QRect>(defaultScreenRect());
+        ScrollEngine* engine = makeStackEngine(&owner, nullptr, true, [geometry](const QString&) {
+            return *geometry;
+        });
+        answer(engine, kA, 300, 300); // offered 400, answers 700
+        QCOMPARE(crossOf(engine, kA), 700);
+
+        // The rotated strip runs along what was the cross axis, so its own
+        // cross extent is the suite's main one.
+        *geometry = Ax::t(QRect(0, 0, 800, 1200));
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(Ax::mainLen(engine->lastManagedRect(kA)), Ax::mainLen(engine->lastManagedRect(kB)));
+
+        *geometry = defaultScreenRect();
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 700);
+    }
+
+    // Longer on both axes teaches both floors in one answer, and the cross
+    // floor's premise is the widened offer, so it holds.
+    void aWiderAndTallerAnswerTeachesBoth()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        answer(engine, kA, 450, 100);
+        QCOMPARE(extentOf(engine, kA), 450);
+        QCOMPARE(crossOf(engine, kA), 500);
+        QCOMPARE(crossOf(engine, kB), 300);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 500);
+    }
+
+    // The minimum sizes setting gates the cross floor on both ends, like the
+    // floor along the strip, and a maximized-to-edges column neither reads a
+    // held one nor learns from its client.
+    void theCrossFloorRidesRespectMinimumSizeAndMaximizeToEdges()
+    {
+        {
+            QObject owner;
+            StubScrollSettings* settings = nullptr;
+            ScrollEngine* engine = makeStackEngine(&owner, &settings, /*respectMinimumSize=*/false);
+            answer(engine, kA, 300, 100);
+            QCOMPARE(crossOf(engine, kA), 400);
+            settings->respectMinimumSize = true;
+            engine->refreshConfigFromSettings();
+            QCoreApplication::processEvents();
+            QCOMPARE(crossOf(engine, kA), 400);
+        }
+        {
+            QObject owner;
+            StubScrollSettings* settings = nullptr;
+            ScrollEngine* engine = makeStackEngine(&owner, &settings);
+            answer(engine, kA, 300, 100);
+            QCOMPARE(crossOf(engine, kA), 500);
+            settings->respectMinimumSize = false;
+            engine->refreshConfigFromSettings();
+            QCoreApplication::processEvents();
+            QCOMPARE(crossOf(engine, kA), 400);
+            settings->respectMinimumSize = true;
+            engine->refreshConfigFromSettings();
+            QCoreApplication::processEvents();
+            QCOMPARE(crossOf(engine, kA), 500);
+        }
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStackEngine(&owner);
+            answer(engine, kA, 300, 100);
+            QVERIFY(engine->toggleMaximizeToEdges(kS1));
+            QCoreApplication::processEvents();
+            QCOMPARE(crossOf(engine, kA), 400);
+            answer(engine, kA, Ax::mainLen(engine->lastManagedRect(kA)), 200);
+            QVERIFY(!engine->isWindowFloatingInScroll(kA));
+            QVERIFY(engine->toggleMaximizeToEdges(kS1));
+            QCoreApplication::processEvents();
+            QCOMPARE(crossOf(engine, kA), 500);
+        }
+    }
+
+    // A lone tile with a Fixed height shorter than its client's answer is
+    // raised to the answer and placed the way a declared minimum places it:
+    // centred here, since short columns centre, and tiled.
+    void aLoneFixedTileIsRaisedToTheCommit()
+    {
+        QObject owner;
+        StubScrollSettings* settings = nullptr;
+        ScrollEngine* engine = makeFloorEngine(&owner, &settings);
+        settings->centerShortColumns = true;
+        engine->refreshConfigFromSettings();
+        engine->setWindowHeight(WindowHeight::makeFixed(400), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 400);
+        QCOMPARE(Ax::crossPos(engine->lastManagedRect(kA)), 200);
+
+        answer(engine, kA, 300, 100);
+        QVERIFY(!engine->isWindowFloatingInScroll(kA));
+        QCOMPARE(crossOf(engine, kA), 500);
+        QCOMPARE(Ax::crossPos(engine->lastManagedRect(kA)), 150);
+    }
+
     // ── Context ─────────────────────────────────────────────────────────
 
     // A report for a window whose strip is in the BACKGROUND is judged
@@ -1810,6 +2330,53 @@ private Q_SLOTS:
 
         QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
         QCOMPARE(Ax::crossLen(ScrollTestUtils::rectOf(strip.relayout(params), QStringLiteral("a"))), 800);
+    }
+
+    // The same refusal under a committed cross floor: the tile renders at
+    // the floor whatever shorter preset is asked for.
+    void aHeightCycleUnderACrossFloorRefusesAnEntryThatRendersTheSame()
+    {
+        ScrollLayoutParams params = ScrollTestUtils::defaultParams();
+        params.respectMinimumSize = true;
+        params.committedCrossFloor = [](const QString& windowId) {
+            return windowId == QLatin1String("a") ? 700 : 0;
+        };
+        ScrollStrip strip;
+        QVERIFY(strip.insertWindow(QStringLiteral("a"), ScrollTestUtils::kHalf, ColumnDisplay::Normal, params));
+        const WindowHeight third = WindowHeight::makePreset(1.0 / 3.0);
+        QVERIFY(strip.setActiveWindowHeight(third));
+        QCOMPARE(Ax::crossLen(ScrollTestUtils::rectOf(strip.relayout(params), QStringLiteral("a"))), 700);
+
+        QVERIFY(!strip.cycleActiveWindowPresetHeight(-1, params));
+        QVERIFY(strip.columns().at(0).tiles.at(0).height == third);
+
+        QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
+        QCOMPARE(Ax::crossLen(ScrollTestUtils::rectOf(strip.relayout(params), QStringLiteral("a"))), 800);
+    }
+
+    // The stack's rebalance takes the overflow a floor causes from the tiles
+    // that still have slack above their own floors, and a committed cross
+    // floor leaves its tile none: a is held at 500 and b alone gives way,
+    // down to 290 of the 790 the 10px gap leaves.
+    void aRebalanceNeverShrinksATileHeldByACrossFloor()
+    {
+        ScrollLayoutParams params = ScrollTestUtils::defaultParams();
+        params.respectMinimumSize = true;
+        params.committedCrossFloor = [](const QString& windowId) {
+            return windowId == QLatin1String("a") ? 500 : 0;
+        };
+        ScrollStrip strip;
+        QVERIFY(strip.insertWindow(QStringLiteral("a"), ScrollTestUtils::kHalf, ColumnDisplay::Normal, params));
+        QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), ScrollTestUtils::kHalf, ColumnDisplay::Normal,
+                                                   params));
+        QCOMPARE(strip.columnCount(), 1);
+        const ResolvedStrip resolved = strip.relayout(params);
+        QCOMPARE(Ax::crossLen(ScrollTestUtils::rectOf(resolved, QStringLiteral("a"))), 500);
+        QCOMPARE(Ax::crossLen(ScrollTestUtils::rectOf(resolved, QStringLiteral("b"))), 290);
+
+        // Without the lookup the stack splits evenly.
+        params.committedCrossFloor = {};
+        QCOMPARE(Ax::crossLen(ScrollTestUtils::rectOf(strip.relayout(params), QStringLiteral("a"))), 395);
     }
 };
 

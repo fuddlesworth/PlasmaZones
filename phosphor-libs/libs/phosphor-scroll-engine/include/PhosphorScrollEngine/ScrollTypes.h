@@ -1027,13 +1027,12 @@ struct ScrollLayoutParams
     bool alwaysCenterSingleColumn = false;
     /// Whether the strip's layout math honours windows' minimum frame sizes (the
     /// column MAIN floor, the tile CROSS floor and its rebalance, and the
-    /// interactive-resize floor), and with them the extent a client's own
-    /// commits hold its column to (committedFloor below) and the peek floor
-    /// that memory raises. Off, the resolved rects obey the user's intents and
-    /// the compositor's own min-size enforcement decides what overhangs, and
-    /// no committed extent is learned or read. The work-area-oversized float
-    /// escape for a DECLARED minimum ignores this flag; the one for a
-    /// committed extent cannot fire without it, since nothing is learned.
+    /// interactive-resize floor), and with them the extents a client's own
+    /// commits hold its column and its tile to (committedFloor and
+    /// committedCrossFloor below) and the peek floor that memory raises. Off, the resolved rects obey the user's
+    /// intents and the compositor's own min-size enforcement decides what overhangs, and no committed extent is learned
+    /// or read. The work-area-oversized float escape for a DECLARED minimum ignores this flag; the one for a committed
+    /// extent cannot fire without it, since nothing is learned.
     bool respectMinimumSize = true;
     /// Whether a column whose visible tiles resolve to less than the column's
     /// own CROSS extent is centred on that axis instead of hugging the start
@@ -1072,6 +1071,14 @@ struct ScrollLayoutParams
     /// engine sets it on every params it resolves, so the drag-insert probe
     /// and every verb read the same floors the apply does.
     std::function<QSize(const QString& windowId)> committedFloor;
+    /// Per window: the share of its column ACROSS the strip a client's own
+    /// commits hold its tile to (ScrollEngine::reportCommittedSize), read by
+    /// the strip exactly like the tile's declared minimum across the strip,
+    /// and only under respectMinimumSize. Already resolved for this params'
+    /// axis, so a floor learned across a strip running the other way never
+    /// reads here. 0 is no floor, and empty (the default) is no floor for any
+    /// window, like committedFloor.
+    std::function<int(const QString& windowId)> committedCrossFloor;
 };
 
 /// One tile's resolved output for a relayout pass.

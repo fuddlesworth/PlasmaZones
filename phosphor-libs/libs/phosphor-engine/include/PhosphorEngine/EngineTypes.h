@@ -165,6 +165,10 @@ struct ResnapEntry
     /// leaves on no layout sends it to its float-back, or the prune unsnaps it in place; a plain switch to no
     /// layout keeps the zone (cr1_f1093_context_layout_delete, none_layout_memory). Appended for ABI.
     bool fromRemovedLayout = false;
+    /// Every zone the window held, primary first. A layout that still holds them all gets them back
+    /// as they were, so a span survives a round trip through tiling or scrolling on the same layout;
+    /// any other layout takes zonePosition. Appended for ABI.
+    QStringList zoneIds{};
 };
 
 struct SnapResult

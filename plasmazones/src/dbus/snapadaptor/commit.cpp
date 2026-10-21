@@ -5,6 +5,7 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowtrackingadaptor/internal.h"
 #include "core/platform/logging.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -22,6 +23,9 @@ namespace PlasmaZones {
 
 void SnapAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("track window snap"))) {
         return;
     }
@@ -78,6 +82,9 @@ void SnapAdaptor::releaseSnapSlotIfFree(const QString& windowId)
 
 void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationList& entries)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     qCInfo(lcDbusWindow) << "windowsSnappedBatch: processing" << entries.size() << "entries";
 
     for (const auto& entry : entries) {
@@ -109,6 +116,9 @@ void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationLi
 
 void SnapAdaptor::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty()) {
         return;
     }

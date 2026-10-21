@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "dbushelpers.h"
+#include "compositorbridgeadaptor.h"
 #include "core/utils/utils.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -13,6 +14,7 @@
 #include <QMetaClassInfo>
 #include <QMetaObject>
 #include <QScreen>
+#include <QSet>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -84,22 +86,62 @@ QString busCaller(const QObject* adaptor)
     return context ? context->message().service() : QString();
 }
 
+namespace {
+
+/// Whether @p message is a method call addressed to @p adaptor's own D-Bus
+/// interface, or one naming none, which Qt dispatches by member name.
+bool isCallToOwnInterface(const QObject* adaptor, const QDBusMessage& message)
+{
+    if (message.type() != QDBusMessage::MethodCallMessage) {
+        return false;
+    }
+    const QString called = message.interface();
+    if (called.isEmpty()) {
+        return true;
+    }
+    const QMetaObject* const meta = adaptor->metaObject();
+    const int info = meta->indexOfClassInfo("D-Bus Interface");
+    return info >= 0 && called == QLatin1String(meta->classInfo(info).value());
+}
+
+} // namespace
+
 bool sendBusError(const QObject* adaptor, QDBusError::ErrorType type, const QString& message)
 {
     const QDBusContext* const context = busContext(adaptor);
-    if (!context || context->message().type() != QDBusMessage::MethodCallMessage) {
+    if (!context || !isCallToOwnInterface(adaptor, context->message())) {
         return false;
-    }
-    const QString called = context->message().interface();
-    if (!called.isEmpty()) {
-        const QMetaObject* const meta = adaptor->metaObject();
-        const int info = meta->indexOfClassInfo("D-Bus Interface");
-        if (info < 0 || called != QLatin1String(meta->classInfo(info).value())) {
-            return false;
-        }
     }
     context->sendErrorReply(type, message);
     return true;
+}
+
+bool admitCompositorReport(const QObject* adaptor, QLatin1StringView member)
+{
+    const QDBusContext* const context = busContext(adaptor);
+    if (!context) {
+        return true;
+    }
+    const QDBusMessage& message = context->message();
+    if (message.member() != member || !isCallToOwnInterface(adaptor, message)) {
+        return true;
+    }
+    const QObject* const host = adaptor->parent();
+    const CompositorBridgeAdaptor* const bridge =
+        host ? host->findChild<CompositorBridgeAdaptor*>(QString(), Qt::FindDirectChildrenOnly) : nullptr;
+    const QString caller = message.service();
+    if (bridge && bridge->isBridgeService(caller)) {
+        return true;
+    }
+    // Once per caller: a peer that keeps calling would otherwise fill the log.
+    static QSet<QString> warned;
+    if (!warned.contains(caller)) {
+        warned.insert(caller);
+        qCWarning(lcDbus) << member << "refused for" << caller << "- reserved for the registered compositor bridge";
+    }
+    sendBusError(adaptor, QDBusError::AccessDenied,
+                 QStringLiteral("%1 is reserved for the registered compositor bridge").arg(member));
+    return false;
 }
 
 } // namespace DbusHelpers

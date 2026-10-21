@@ -321,11 +321,13 @@ open() { client plain_gtk.py "$1" "${2:-400}" "${3:-300}"; }
 openapp() { client appid_gtk.py "$1" "$2" "${3:-400}" "${4:-300}"; }
 xopen() { xclient plain_gtk.py "$1" "${2:-400}" "${3:-300}"; }
 # xdisplay -> ":N", the nested Xwayland's display: the X socket that was not there before run.sh
-# started the session (PZR_X11_BEFORE) and is not the host's own display.
+# started the session (PZR_X11_BEFORE) and is not the host's own display. The LOWEST such number:
+# KWin opens two X sockets a few nanoseconds apart and starts Xwayland on the first, so the newest
+# one (what ls -t lists first) names a display nothing serves, and a client sent there never maps.
 xdisplay() {
     local s n
     for _ in $(seq 15); do
-        for s in $(ls -t /tmp/.X11-unix/ 2>/dev/null); do
+        for s in $(ls /tmp/.X11-unix/ 2>/dev/null | sort -V); do
             n=":${s#X}"
             [ "$n" = "${PZR_HOST_DISPLAY:-}" ] && continue
             case " ${PZR_X11_BEFORE:-} " in *" $s "*) continue ;; esac

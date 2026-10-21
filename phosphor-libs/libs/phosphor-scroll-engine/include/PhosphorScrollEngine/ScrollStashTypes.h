@@ -440,6 +440,32 @@ struct CommittedMainExtent
     }
 };
 
+/// What a client's own commits have taught the engine about one window's
+/// extent ACROSS a strip that runs one way (ScrollEngine::reportCommittedSize):
+/// a tile in a stacked column that the client answers longer than its share of
+/// the column, inside the work area. Runtime state with CommittedMainExtent's
+/// lifetime, since it lives in the same CommittedExtent value.
+struct CommittedCrossExtent
+{
+    /// The least share of its column across the strip the tile is laid out
+    /// with, exactly like a declared minimum across the strip (0: none). The
+    /// strip reads it through ScrollLayoutParams::committedCrossFloor, so the
+    /// stack's split gives the tile at least this and shrinks its siblings.
+    int floorPx = 0;
+    /// The tile's offer ALONG the strip when the floor was learned: the
+    /// floor's premise. A client that answers its cross extent from its main
+    /// one (a whole-number scale picked from the column's width) answers a
+    /// different width differently, and it never reports a shorter cross
+    /// answer, so a column whose offer along the strip has moved past this
+    /// drops the floor rather than holding the tile to a stale one.
+    int mainPx = 0;
+
+    bool isEmpty() const
+    {
+        return floorPx == 0;
+    }
+};
+
 /// One window's CommittedMainExtent per strip orientation, the value type of
 /// ScrollEngine::m_committedExtents. Kept per orientation because a window on
 /// several desktops can sit in a horizontal strip on one and a vertical strip
@@ -449,10 +475,18 @@ struct CommittedExtent
 {
     CommittedMainExtent horizontal;
     CommittedMainExtent vertical;
+    /// The cross-axis floors, per strip orientation like the two above and
+    /// kept apart from them: horizontalCross is the floor a HORIZONTAL strip
+    /// reads across itself (a height), so a height learned across a
+    /// horizontal strip never reads as a vertical strip's floor along it.
+    /// Every leave and carry path moves or forgets the whole value, these
+    /// with it.
+    CommittedCrossExtent horizontalCross = {};
+    CommittedCrossExtent verticalCross = {};
 
     bool isEmpty() const
     {
-        return horizontal.isEmpty() && vertical.isEmpty();
+        return horizontal.isEmpty() && vertical.isEmpty() && horizontalCross.isEmpty() && verticalCross.isEmpty();
     }
 };
 

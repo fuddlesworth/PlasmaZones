@@ -52,6 +52,15 @@ public:
     explicit DBusScreenAdaptor(ScreenManager* manager, IConfigStore* store, QObject* parent = nullptr);
     ~DBusScreenAdaptor() override;
 
+    /// The admission check for the methods only the compositor may call
+    /// (setPrimaryScreenFromKWin, setAvailableGeometryFromKWin), which report
+    /// what the compositor saw. Called with the method's name first thing in
+    /// each; false means the gate has answered the caller and the method
+    /// returns. Unset, every caller is admitted: the embedder decides who the
+    /// compositor is.
+    using CompositorReportGate = std::function<bool(QLatin1StringView member)>;
+    void setCompositorReportGate(CompositorReportGate gate);
+
 public Q_SLOTS:
     // Screen queries
     QStringList getScreens();
@@ -148,6 +157,8 @@ private:
     QHash<QString, QString> m_cachedScreenInfoJson;
 
     bool m_qGuiAppSignalsWired = false;
+    /// See setCompositorReportGate. Appended last (installed class).
+    CompositorReportGate m_compositorReportGate;
 };
 
 } // namespace PhosphorScreens

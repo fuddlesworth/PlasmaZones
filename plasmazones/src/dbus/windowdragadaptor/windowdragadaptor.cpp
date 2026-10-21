@@ -27,6 +27,7 @@
 #include "core/types/zoneselectorlayout.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/types/constants.h"
 #include "config/settings.h"
@@ -566,6 +567,9 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
 
 void WindowDragAdaptor::cancelSnap()
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     // Layout picker takes precedence: Escape on a visible picker should
     // dismiss the picker, not also cancel any underlying drag. KGlobalAccel
     // routes one action per key, so the picker-open path piggybacks on this
@@ -867,6 +871,9 @@ void WindowDragAdaptor::hideOverlayAndSelector()
 
 void WindowDragAdaptor::clearForCompositorReconnect()
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     hideOverlayAndClearZoneState();
     // A live drag-insert preview belongs to the dead session too, and nothing
     // else here reaches it. hideOverlayAndClearZoneState() does NOT cover it:

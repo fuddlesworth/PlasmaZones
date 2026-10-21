@@ -675,6 +675,22 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       a bump would instead refuse the whole bridge over a missing nicety. A
 //       later change that makes the method REQUIRED, or changes its arguments,
 //       needs v11.
+//
+//   Also after v10, WITHOUT a bump: reportCommittedSize widens in MEANING,
+//       with the same (s i i i i) signature. The engine now reads an answer
+//       longer ACROSS the strip, inside the work area, as a floor on the
+//       tile's share of its stacked column (#1156), where it used to ignore
+//       it. The effect now also reports a parked tile's settled commit when
+//       it equals the offer along the strip, and the engine ends a peek
+//       memory on that matched answer (#1154). Both pairings degrade safely.
+//       A new effect on a daemon from before this change sends matched
+//       answers the old engine reads as steady state and drops, and cross
+//       answers it was already sending, so a straddle-only column keeps
+//       parking and a tall stacked window keeps overlapping, as before. An
+//       old effect on a new daemon never sends a matched answer, so the
+//       memory ends only the old way, and the cross answers it already sends
+//       start holding their tiles. Neither gives a wrong answer, so neither
+//       needs v11.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

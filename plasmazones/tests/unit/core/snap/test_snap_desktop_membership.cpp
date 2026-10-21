@@ -724,6 +724,66 @@ private Q_SLOTS:
         m_engine->setLiveModeResolver({});
     }
 
+    // #1151: a sticky window snapped on desktop 1 while desktop 2 runs a
+    // tiling mode holds ONE snap membership, since a tiling desktop grants
+    // none. The tiling engine placed it on desktop 2, and it is one window,
+    // so back on desktop 1 it stands at the strip or tile rect. The return
+    // re-applies its zone there even though no second snap store holds it.
+    void aReturnFromATilingDesktopReappliesAWindowShownOnBoth()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        snapOn(1, kOther, m_zoneIds[2]);
+        m_engine->setLiveModeResolver([](const QString&) {
+            return PhosphorZones::AssignmentEntry::Mode::Autotile;
+        });
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        QVERIFY2(zonesOn(2, kWindow).isEmpty(), "a tiling desktop grants no snap membership");
+
+        m_engine->setLiveModeResolver([](const QString&) {
+            return PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        QVERIFY(m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky())).isEmpty());
+        QCOMPARE(resnapSpy.count(), 1);
+        const auto entries =
+            PhosphorEngine::GeometryUtils::deserializeZoneAssignments(resnapSpy.first().at(0).toString(), nullptr);
+        QCOMPARE(entries.size(), 1);
+        QCOMPARE(entries.first().windowId, kWindow);
+        QCOMPARE(entries.first().targetZoneId, m_zoneIds[0]);
+        QVERIFY(entries.first().restatement);
+        m_engine->setLiveModeResolver({});
+    }
+
+    // #1149: a window snapped to a different zone on each of its desktops
+    // goes back to the entered desktop's zone on every switch, in both
+    // directions. Exactly one entry per switch: the window is moved once, to
+    // the zone of the desktop now shown, and a single-desktop bystander is not
+    // re-committed. The entry is a re-statement, so a user maximize survives.
+    void aSwitchReappliesOnlyTheEnteredDesktopsZone()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        snapOn(2, kWindow, m_zoneIds[1]);
+        snapOn(1, kOther, m_zoneIds[2]);
+
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        for (const auto& [desktop, zone] : {std::pair{1, m_zoneIds[0]}, std::pair{2, m_zoneIds[1]}}) {
+            resnapSpy.clear();
+            m_engine->setCurrentDesktopForScreen(kScreen, desktop);
+            QVERIFY(m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky())).isEmpty());
+            QCOMPARE(resnapSpy.count(), 1);
+            const auto entries =
+                PhosphorEngine::GeometryUtils::deserializeZoneAssignments(resnapSpy.first().at(0).toString(), nullptr);
+            QCOMPARE(entries.size(), 1);
+            QCOMPARE(entries.first().windowId, kWindow);
+            QCOMPARE(entries.first().targetZoneId, zone);
+            QVERIFY(entries.first().restatement);
+        }
+    }
+
     // Discussion #1124: a snap committed on ANOTHER screen, as a keyboard move
     // across outputs makes, added a membership there beside the one on the
     // screen the window left. The old screen's stayed primary, so every read

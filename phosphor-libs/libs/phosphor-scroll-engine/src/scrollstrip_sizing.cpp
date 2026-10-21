@@ -79,7 +79,9 @@ int ScrollStrip::activeWindowHeightFloorPx(const ScrollLayoutParams& params) con
     // fraction); the repeatable verbs would otherwise be the ones that could
     // walk a window down to a single pixel with minimum sizes off.
     const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
-    int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
+    // tileMinCrossPx: the frame minimum raised to any share the client's own
+    // commits hold the tile to, which the relayout clamps to the same way.
+    int clientFloor = params.respectMinimumSize ? tileMinCrossPx(*tile, *col, params) : 0;
     if (tabbed && params.respectMinimumSize) {
         // The whole tab SET's minimum, matching tabbedColumnCrossPx: every
         // visible tab is committed at this one rect, so a shrink stopped at
@@ -88,7 +90,7 @@ int ScrollStrip::activeWindowHeightFloorPx(const ScrollLayoutParams& params) con
         // nothing moving.
         for (const Tile& t : col->tiles) {
             if (!t.minimized) {
-                clientFloor = qMax(clientFloor, t.minCross(params.axis));
+                clientFloor = qMax(clientFloor, tileMinCrossPx(t, *col, params));
             }
         }
     }

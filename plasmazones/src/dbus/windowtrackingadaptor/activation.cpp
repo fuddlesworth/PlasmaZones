@@ -9,6 +9,7 @@
 #include "internal.h"
 #include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -37,6 +38,9 @@ void WindowTrackingAdaptor::replayHeldScreenReports()
 
 void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     m_heldScreenReports.remove(QStringLiteral("cursor")); // a later report supersedes a held one
     if (screenId.isEmpty()) {
         return;
@@ -72,6 +76,9 @@ QString WindowTrackingAdaptor::resolveFocusedWindowScreen(const QString& windowI
 
 void WindowTrackingAdaptor::activeWindowScreenChanged(const QString& windowId, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty() || screenId.isEmpty()) {
         return;
     }
@@ -105,6 +112,9 @@ void WindowTrackingAdaptor::activeWindowScreenChanged(const QString& windowId, c
 
 void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int desktop)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager) {
         return;
     }
@@ -126,6 +136,9 @@ void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int de
 
 void WindowTrackingAdaptor::seedScreenDesktop(const QString& screenId, int desktop)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager
         || (desktopCount() > 0 && desktop > desktopCount())) {
         return;
@@ -135,6 +148,9 @@ void WindowTrackingAdaptor::seedScreenDesktop(const QString& screenId, int deskt
 
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("process windowActivated"))) {
         return;
     }

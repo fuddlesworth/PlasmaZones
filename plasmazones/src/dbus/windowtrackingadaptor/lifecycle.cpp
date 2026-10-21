@@ -15,6 +15,7 @@
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include "core/utils/dbusvariantutils.h"
+#include "dbus/dbushelpers.h"
 
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -401,6 +402,9 @@ void WindowTrackingAdaptor::pruneExcludedPlacements(const QStringList& patterns)
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty()) {
         return;
     }
@@ -414,6 +418,9 @@ void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky
 
 void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("clean up closed window"))) {
         return;
     }
@@ -531,6 +538,9 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                                               const QString& windowRole, int pid, int virtualDesktop,
                                               const QString& activity, int windowType, const QVariantMap& extended)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!m_windowRegistry) {
         // Teardown or a registry-less unit test. The effect re-emits anyway.
         return;
@@ -624,15 +634,24 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             // causes this: WindowRegistry::remapDesktops moves the span with
             // the scalar) therefore arrives with a fresh scalar beside a span
             // from before the move, which breaks WindowMetadata's stated
-            // invariant that a non-empty span starts with the scalar. Drop the
-            // span in that case: it describes a membership the window no
-            // longer has, and the next full push re-establishes it. Consumers
-            // then read the scalar, which is the one field this push knows.
-            if (!meta.virtualDesktops.isEmpty() && meta.virtualDesktops.constFirst() != meta.virtualDesktop) {
+            // invariant that a non-empty span starts with the scalar. Compare
+            // by membership, not position: KWin does not keep a window's
+            // desktop list in a stable order, so a window on {1,3} can tick in
+            // with 3 as its scalar without having moved (#1147). A scalar still
+            // inside the span is moved to its front, which restores the
+            // invariant and keeps the span. A scalar outside it means the
+            // window really moved: the span describes a membership the window
+            // no longer has, so it goes, and the next full push re-establishes
+            // it. Consumers then read the scalar, the one field this push knows.
+            if (const qsizetype at = meta.virtualDesktops.indexOf(meta.virtualDesktop); at > 0) {
+                meta.virtualDesktops.move(at, 0);
+            } else if (at < 0) {
                 meta.virtualDesktops.clear();
             }
             // The activity span, likewise (F426).
-            if (!meta.activities.isEmpty() && meta.activities.constFirst() != meta.activity) {
+            if (const qsizetype at = meta.activities.indexOf(meta.activity); at > 0) {
+                meta.activities.move(at, 0);
+            } else if (at < 0) {
                 meta.activities.clear();
             }
         }
@@ -760,6 +779,9 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
 
 void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int y, int width, int height)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty() || width <= 0 || height <= 0) {
         return;
     }
@@ -795,6 +817,9 @@ bool WindowTrackingAdaptor::isInteractiveDragWindow(const QString& windowId) con
 void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth,
                                                 int oldHeight, int newX, int newY, int newWidth, int newHeight)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("reflow after interactive resize"))) {
         return;
     }

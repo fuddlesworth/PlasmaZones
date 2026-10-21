@@ -11119,7 +11119,7 @@
         <location filename=".qml-stubs/plasmazones/src/editor/qml/ActionButtons.qml.cpp" line="97"/>
         <source>Remove this zone from the layout</source>
         <comment>@info:tooltip</comment>
-        <translation>Remove esta zona do layout</translation>
+        <translation>Remover esta zona do layout</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/ActionButtons.qml.cpp" line="98"/>
@@ -14239,7 +14239,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="260"/>
         <source>Remove this trigger. At least one must remain.</source>
-        <translation>Remove este acionador. Pelo menos um precisa permanecer.</translation>
+        <translation>Remover este acionador. Pelo menos um precisa permanecer.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="271"/>
@@ -17645,7 +17645,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="598"/>
         <source>Remove this action</source>
-        <translation>Remove esta ação</translation>
+        <translation>Remover esta ação</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/AddRuleWizard.qml.cpp" line="155"/>
@@ -17700,7 +17700,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="309"/>
         <source>Remove this condition group</source>
-        <translation>Remove este grupo de condições</translation>
+        <translation>Remover este grupo de condições</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="216"/>
@@ -17798,7 +17798,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="341"/>
         <source>Remove this condition</source>
-        <translation>Remove esta condição</translation>
+        <translation>Remover esta condição</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="368"/>
@@ -17985,7 +17985,7 @@
         <location filename=".qml-stubs/plasmazones/src/editor/qml/TemplateStripCanvas.qml.cpp" line="613"/>
         <source>Remove this column from the template</source>
         <comment>@info:tooltip</comment>
-        <translation>Remove esta coluna do modelo</translation>
+        <translation>Remover esta coluna do modelo</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/TemplateStripCanvas.qml.cpp" line="614"/>
@@ -18860,7 +18860,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="1015"/>
         <source>Remove all virtual screen subdivisions from this monitor</source>
-        <translation>Remove todas as subdivisões de tela virtual deste monitor</translation>
+        <translation>Remover todas as subdivisões de tela virtual deste monitor</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="1017"/>
@@ -22575,7 +22575,7 @@
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="203"/>
         <source>Remove this preset</source>
-        <translation>Remove esta predefinição</translation>
+        <translation>Remover esta predefinição</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="226"/>
@@ -22667,7 +22667,7 @@
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PresetChipEditor.qml.cpp" line="279"/>
         <source>Remove this preset</source>
         <comment>@info:tooltip</comment>
-        <translation>Remove esta predefinição</translation>
+        <translation>Remover esta predefinição</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PresetChipEditor.qml.cpp" line="320"/>

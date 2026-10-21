@@ -16,6 +16,7 @@
 #include "core/platform/logging.h"
 #include "core/interfaces/interfaces.h"
 #include "core/resolve/screenmoderouter.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
@@ -65,6 +66,9 @@ void WindowTrackingAdaptor::reportNavigationFeedback(bool success, const QString
                                                      const QString& sourceZoneId, const QString& targetZoneId,
                                                      const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     qCDebug(lcDbusWindow) << "Navigation feedback: success=" << success << "action=" << action << "reason=" << reason
                           << "sourceZone=" << sourceZoneId << "targetZone=" << targetZoneId << "screen=" << screenId;
     Q_EMIT navigationFeedback(success, action, reason, sourceZoneId, targetZoneId, screenId);

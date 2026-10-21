@@ -247,6 +247,18 @@ void TilingAdaptor::flushTileBatchesHeldForAnnounce()
     }
 }
 
+void TilingAdaptor::runBehindScreensAnnounce(std::function<void()> work)
+{
+    if (!work) {
+        return;
+    }
+    if (m_screensAnnouncePending) {
+        m_workHeldForAnnounce.append(std::move(work));
+        return;
+    }
+    work();
+}
+
 void TilingAdaptor::relayWindowsReleased(const QStringList& windowIds)
 {
     // The one relay with no change gate — every in-tree producer already
@@ -294,6 +306,7 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
                 // dead session; clearEngine already swept them, and this
                 // sweep is redundant with it the way the bail itself is.
                 m_tileBatchesHeldForAnnounce.clear();
+                m_workHeldForAnnounce.clear();
                 return;
             }
             // Stamp the announce with the desktop each screen was resolved
@@ -344,6 +357,11 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
             // itself produce a batch, and that one must trail the held
             // ones, which the engines resolved first.
             flushTileBatchesHeldForAnnounce();
+            // Then the other placements held behind this announce
+            // (runBehindScreensAnnounce), in arrival order.
+            for (const std::function<void()>& work : std::exchange(m_workHeldForAnnounce, {})) {
+                work();
+            }
             // Retry opens parked during the flip (see m_unclaimedOpens):
             // engines have their post-flip screen sets by now. Insertion
             // order is preserved (column order / master assignment depend

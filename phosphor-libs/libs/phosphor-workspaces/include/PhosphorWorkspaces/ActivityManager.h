@@ -53,6 +53,9 @@ private:
     bool m_running = false;
     QString m_currentActivity;
     bool m_activitiesAvailable = false;
+    /// start() was called and stop() has not undone it. Lets the service
+    /// status handler connect the signals when the service comes up late.
+    bool m_startRequested = false;
 };
 
 } // namespace PhosphorWorkspaces

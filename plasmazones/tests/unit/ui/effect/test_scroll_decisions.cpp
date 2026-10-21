@@ -11,8 +11,8 @@
 // the release order is static-asserted where releaseAllClaims uses it), the
 // size-continuity carry-forward table, when a strip entry is a new offer,
 // when a request resizes on KWin's account (resizesOnKWinsAccount), whether
-// and where such a resize is put back and which requests leave the output
-// (requestLeavesStripOutput), when a dropped quick tile's configure is still
+// and where such a resize is put back, which moves and requests leave the
+// strip's output (isKWinMoveOffStrip), when a dropped quick tile's configure is still
 // outstanding (droppedTileAckOutstanding), when a request voids a stale-ack
 // answer, the engine-flip screen set, the wire screen-list filter, the
 // maximize-membership and claimed-press answers, when an apply at its target
@@ -766,34 +766,6 @@ private Q_SLOTS:
         QCOMPARE(putsBackKWinResize(gates), putsBack);
     }
 
-    // Which resizes KWin requested leave the strip's output
-    // (requestLeavesStripOutput): the output-change arm's answer for the
-    // requested rect, held to the output of the window's tracked strip screen.
-    // The arm's own shapes are pinned on isKWinMoveOffStrip; its wiring to the
-    // request is the nested-KWin probe's to cover. The live shape: a 1908 px
-    // column on a 3840 px output sent to a 1280 px one to its right, where
-    // Window::sendToOutput's keepInArea shrinks it to the new area.
-    void kwinResizePutBack_leavesOnlyTheTrackedOutput()
-    {
-        const QRectF tracked(0, 0, 3840, 2160);
-        // Move to Screen onto the smaller output: the arm hands it over and it
-        // misses the tracked output, so it leaves.
-        QVERIFY(requestLeavesStripOutput(/*movesOffStrip=*/true, QRectF(3848, 8, 1264, 1004), tracked));
-        // A straddler cropped at the right edge, whose strip rect's centre sits
-        // on the neighbour: the arm, measuring against the neighbour, reads a
-        // resize back wholly onto the tracked output as a move off it. It
-        // stays, and is put back.
-        QVERIFY(!requestLeavesStripOutput(/*movesOffStrip=*/true, QRectF(2000, 8, 1592, 2052), tracked));
-        // Nor does one that still overlaps the tracked output.
-        QVERIFY(!requestLeavesStripOutput(/*movesOffStrip=*/true, QRectF(3000, 8, 1592, 2052), tracked));
-        // What the arm does not hand over never leaves, wherever it lands, so
-        // nothing is let go that the arm would not take.
-        QVERIFY(!requestLeavesStripOutput(/*movesOffStrip=*/false, QRectF(3848, 8, 1264, 1004), tracked));
-        // No tracked output to hold it to: the arm's answer stands.
-        QVERIFY(requestLeavesStripOutput(/*movesOffStrip=*/true, QRectF(2000, 8, 1592, 2052), QRectF()));
-        QVERIFY(!requestLeavesStripOutput(/*movesOffStrip=*/false, QRectF(2000, 8, 1592, 2052), QRectF()));
-    }
-
     // Where the put-back lands. The strip's commanded rect wins where the
     // counter-assert keeps one; else the column while its answer is owed, and
     // the settled frame once it was read.
@@ -836,7 +808,7 @@ private Q_SLOTS:
         QVERIFY(!mayCarryCommittedSize(false, /*columnAnswered=*/true, wider, column));
         QVERIFY(stripEntrySendsSize(/*commanded=*/wider, /*delivered=*/column));
         QVERIFY(isNewColumnAnswer(ColumnAnswer::Owed, wider, wider));
-        QVERIFY(shouldReportCommittedSize(column, wider, /*vertical=*/false));
+        QVERIFY(shouldReportCommittedSize(column, wider, /*vertical=*/false, /*offerParked=*/false));
         // Longer across it: also never carried, so also re-offered.
         const QSize taller(1908, 2400);
         QVERIFY(!mayCarryCommittedSize(false, true, taller, column));
@@ -848,7 +820,7 @@ private Q_SLOTS:
         QVERIFY(!stripEntrySendsSize(narrower, narrower));
         // A client that took the column has nothing to answer.
         QVERIFY(!stripEntrySendsSize(column, column));
-        QVERIFY(!shouldReportCommittedSize(column, column, false));
+        QVERIFY(!shouldReportCommittedSize(column, column, false, false));
     }
 
     // The engine flip inside the tiling union (F231, F286, F1004): only a
@@ -1055,44 +1027,124 @@ private Q_SLOTS:
     }
 
     // KWin's own Move to Screen of a strip tile is a real move; the engine's
-    // handoffs, a parked column, a drag and a straddling column are not (F738).
-    void kwinMoveOffStrip_frameOnAnotherOutput_true()
+    // handoffs, a parked column, a drag and a straddling column are not
+    // (F738). Measured against the TRACKED output while the coordinates hold
+    // (#1153). A is the strip's 3840 px output, B a 1920 px one to its right.
+    // The resize put-back reads the same predicate with KWin's requested rect
+    // as the frame; its live shape is a 1908 px column sent to B, where
+    // Window::sendToOutput's keepInArea shrinks it to B's area.
+    void kwinMoveOffStrip_data()
     {
-        QVERIFY(isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
-                                   /*parked=*/false, /*userMove=*/false));
+        QTest::addColumn<QRectF>("frame");
+        QTest::addColumn<QRectF>("tracked");
+        QTest::addColumn<QRectF>("centre");
+        QTest::addColumn<bool>("coordinatesHold");
+        QTest::addColumn<bool>("markerArmed");
+        QTest::addColumn<bool>("parked");
+        QTest::addColumn<bool>("userMove");
+        QTest::addColumn<bool>("moved");
+
+        const QRectF a(0, 0, 3840, 2160);
+        const QRectF b(3840, 0, 1920, 1080);
+        const QRectF c(0, 2160, 1920, 1080); // an output plugged in below A
+        const QRectF none;
+
+        // The #1153 shape: a straddler cropped at A's right edge has the
+        // centre of its strip rect on B, so against the centre a move onto B
+        // never left. Against A it did.
+        QTest::newRow("cropped straddler moved to B")
+            << QRectF(3848, 8, 1264, 1004) << a << b << true << false << false << false << true;
+        // The PR #1129 shape: a resize back wholly onto A stays.
+        QTest::newRow("request back onto A")
+            << QRectF(2000, 8, 1592, 2052) << a << b << true << false << false << false << false;
+        QTest::newRow("still overlapping A")
+            << QRectF(3000, 8, 1592, 2052) << a << b << true << false << false << false << false;
+        QTest::newRow("plain move to B") << QRectF(3848, 8, 500, 752) << a << a << true << false << false << false
+                                         << true;
+        // A park under an output that arrived after it: the rect test fails
+        // against the new union, so the recorded flag is what holds.
+        QTest::newRow("park under new output, recorded")
+            << QRectF(0, 2177, 1908, 2052) << a << c << true << false << true << false << false;
+        QTest::newRow("park under new output, unrecorded, screens settling")
+            << QRectF(0, 2177, 1908, 2052) << a << c << false << false << false << false << false;
+        // Why the caller passes the recorded flag: without it, the tracked
+        // test alone reads that park as a move once the coordinates hold.
+        QTest::newRow("park under new output, unrecorded, coordinates hold")
+            << QRectF(0, 2177, 1908, 2052) << a << c << true << false << false << false << true;
+        // Stale coordinates need both outputs missed: the cropped straddler is
+        // not handed over while the screens settle (accepted).
+        QTest::newRow("cropped straddler, screens settling")
+            << QRectF(3848, 8, 1264, 1004) << a << b << false << false << false << false << false;
+        QTest::newRow("no tracked output, frame on B")
+            << QRectF(3848, 8, 500, 752) << none << a << true << false << false << false << true;
+        QTest::newRow("no tracked output, frame on A")
+            << QRectF(100, 8, 500, 752) << none << a << true << false << false << false << false;
+        QTest::newRow("no output at all")
+            << QRectF(3848, 8, 500, 752) << none << none << true << false << false << false << false;
+        QTest::newRow("engine handoff") << QRectF(3848, 8, 500, 752) << a << a << true << true << false << false
+                                        << false;
+        QTest::newRow("parked column") << QRectF(3848, 8, 500, 752) << a << a << true << false << true << false
+                                       << false;
+        QTest::newRow("drag") << QRectF(3848, 8, 500, 752) << a << a << true << false << false << true << false;
+        // A degenerate frame (a mid-unmap commit) intersects nothing, which is
+        // no evidence of a move.
+        QTest::newRow("no frame") << QRectF() << a << a << true << false << false << false << false;
     }
-    void kwinMoveOffStrip_engineHandoff_false()
+
+    void kwinMoveOffStrip()
     {
-        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/true,
-                                    /*parked=*/false, /*userMove=*/false));
+        QFETCH(QRectF, frame);
+        QFETCH(QRectF, tracked);
+        QFETCH(QRectF, centre);
+        QFETCH(bool, coordinatesHold);
+        QFETCH(bool, markerArmed);
+        QFETCH(bool, parked);
+        QFETCH(bool, userMove);
+        QFETCH(bool, moved);
+
+        KWinMoveOffStripFacts facts;
+        facts.frame = frame;
+        facts.trackedOutput = tracked;
+        facts.centreOutput = centre;
+        facts.coordinatesHold = coordinatesHold;
+        facts.markerArmed = markerArmed;
+        facts.parked = parked;
+        facts.userMove = userMove;
+        QCOMPARE(isKWinMoveOffStrip(facts), moved);
     }
-    void kwinMoveOffStrip_parkedColumn_false()
+
+    // An X11 strip window at a size its batch did not command is put back the
+    // first time and learned only when it insists from a readable frame, so a
+    // one-shot KWin resize is never learned and one commit is never both (#1157).
+    void x11ForeignSizeVerdictTable_data()
     {
-        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
-                                    /*parked=*/true, /*userMove=*/false));
+        QTest::addColumn<QSize>("commanded");
+        QTest::addColumn<QSize>("committed");
+        QTest::addColumn<QSize>("lastPutBack");
+        QTest::addColumn<bool>("readsAsAnswer");
+        QTest::addColumn<bool>("learn");
+
+        const QSize column(1264, 1004);
+        const QSize wider(1680, 1004);
+        QTest::newRow("a move, at the commanded size") << column << column << QSize() << true << false;
+        QTest::newRow("the first new size") << column << wider << QSize() << true << false;
+        QTest::newRow("insists, readable") << column << wider << wider << true << true;
+        QTest::newRow("insists within a pixel") << column << QSize(1681, 1004) << wider << true << true;
+        QTest::newRow("insists, not readable") << column << wider << wider << false << false;
+        QTest::newRow("a different second size") << column << QSize(1800, 1004) << wider << true << false;
+        QTest::newRow("insists on a narrower size") << column << QSize(1000, 1004) << QSize(1000, 1004) << true << true;
+        QTest::newRow("empty commit") << column << QSize() << QSize() << true << false;
     }
-    void kwinMoveOffStrip_drag_false()
+
+    void x11ForeignSizeVerdictTable()
     {
-        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
-                                    /*parked=*/false, /*userMove=*/true));
-    }
-    void kwinMoveOffStrip_straddlingColumn_false()
-    {
-        // Centre on the neighbour, but still overlapping the commanded output.
-        QVERIFY(!isKWinMoveOffStrip(QRectF(1700, 8, 600, 752), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false,
-                                    /*parked=*/false, /*userMove=*/false));
-    }
-    void kwinMoveOffStrip_noCommandedRect_false()
-    {
-        QVERIFY(!isKWinMoveOffStrip(QRectF(1928, 8, 500, 752), QRectF(), /*markerArmed=*/false, /*parked=*/false,
-                                    /*userMove=*/false));
-    }
-    // A degenerate frame (a mid-unmap commit) intersects nothing, which is no
-    // evidence of a move.
-    void kwinMoveOffStrip_noFrame_false()
-    {
-        QVERIFY(!isKWinMoveOffStrip(QRectF(), QRectF(0, 0, 1920, 1080), /*markerArmed=*/false, /*parked=*/false,
-                                    /*userMove=*/false));
+        QFETCH(QSize, commanded);
+        QFETCH(QSize, committed);
+        QFETCH(QSize, lastPutBack);
+        QFETCH(bool, readsAsAnswer);
+        QFETCH(bool, learn);
+        QCOMPARE(x11ForeignSizeVerdict(commanded, committed, lastPutBack, readsAsAnswer) == ForeignSizeVerdict::Learn,
+                 learn);
     }
 
     // When a strip window's frame reads as its client's answer to its column:
@@ -1193,40 +1245,49 @@ private Q_SLOTS:
         QTest::addColumn<QSize>("offered");
         QTest::addColumn<QSize>("committed");
         QTest::addColumn<bool>("vertical");
+        QTest::addColumn<bool>("parked");
         QTest::addColumn<bool>("reports");
 
         const QSize column(1908, 2052);
         // The shape that prompted this: wider along a horizontal strip, a
         // little short across it.
-        QTest::newRow("wider along the strip") << column << QSize(2880, 1948) << false << true;
-        QTest::newRow("narrower along the strip") << column << QSize(1500, 2052) << false << true;
+        QTest::newRow("wider along the strip") << column << QSize(2880, 1948) << false << false << true;
+        QTest::newRow("narrower along the strip") << column << QSize(1500, 2052) << false << false << true;
         // Shorter across the strip only: the commit path already centres it,
         // and reporting would send the engine a no-op on every placement.
-        QTest::newRow("shorter across, horizontal strip") << column << QSize(1908, 1948) << false << false;
+        QTest::newRow("shorter across, horizontal strip") << column << QSize(1908, 1948) << false << false << false;
         // Longer across the strip, main axis equal: it hangs past the work
         // area's edge, which is the engine's to judge (F166).
-        QTest::newRow("longer across, horizontal strip") << column << QSize(1908, 2200) << false << true;
-        QTest::newRow("matches the offer") << column << column << false << false;
+        QTest::newRow("longer across, horizontal strip") << column << QSize(1908, 2200) << false << false << true;
+        QTest::newRow("matches the offer") << column << column << false << false << false;
         // The axis decides which dimension is the main one. The pairs below
         // mirror the horizontal ones, so each axis's arm is driven in both
         // directions and a flipped comparison on either fails a row.
-        QTest::newRow("longer across, vertical strip") << column << QSize(2880, 2052) << true << true;
-        QTest::newRow("shorter across, vertical strip") << column << QSize(1500, 2052) << true << false;
-        QTest::newRow("taller along a vertical strip") << column << QSize(1908, 2400) << true << true;
-        QTest::newRow("shorter along a vertical strip") << column << QSize(1908, 1948) << true << true;
+        QTest::newRow("longer across, vertical strip") << column << QSize(2880, 2052) << true << false << true;
+        QTest::newRow("shorter across, vertical strip") << column << QSize(1500, 2052) << true << false << false;
+        QTest::newRow("taller along a vertical strip") << column << QSize(1908, 2400) << true << false << true;
+        QTest::newRow("shorter along a vertical strip") << column << QSize(1908, 1948) << true << false << true;
         // A pixel either way is decoration rounding at a fractional scale,
         // never an answer (F52); two pixels are.
-        QTest::newRow("a pixel wider along the strip") << column << QSize(1909, 2052) << false << false;
-        QTest::newRow("a pixel narrower along the strip") << column << QSize(1907, 2052) << false << false;
-        QTest::newRow("a pixel longer across the strip") << column << QSize(1908, 2053) << false << false;
-        QTest::newRow("two pixels wider along the strip") << column << QSize(1910, 2052) << false << true;
-        QTest::newRow("two pixels longer across the strip") << column << QSize(1908, 2054) << false << true;
+        QTest::newRow("a pixel wider along the strip") << column << QSize(1909, 2052) << false << false << false;
+        QTest::newRow("a pixel narrower along the strip") << column << QSize(1907, 2052) << false << false << false;
+        QTest::newRow("a pixel longer across the strip") << column << QSize(1908, 2053) << false << false << false;
+        QTest::newRow("two pixels wider along the strip") << column << QSize(1910, 2052) << false << false << true;
+        QTest::newRow("two pixels longer across the strip") << column << QSize(1908, 2054) << false << false << true;
         // Degenerate sizes carry no answer (a mid-unmap commit, a column not
         // yet known). The zero-height row pins isEmpty rather than isNull,
         // which would let a size with one zero extent through.
-        QTest::newRow("empty commit") << column << QSize(0, 0) << false << false;
-        QTest::newRow("zero-height commit") << column << QSize(2880, 0) << false << false;
-        QTest::newRow("empty offer") << QSize() << QSize(2880, 1948) << false << false;
+        QTest::newRow("empty commit") << column << QSize(0, 0) << false << false << false;
+        QTest::newRow("zero-height commit") << column << QSize(2880, 0) << false << false << false;
+        QTest::newRow("empty offer") << QSize() << QSize(2880, 1948) << false << false << false;
+        // At a park an answer that takes it along the strip is reported too:
+        // it is what ends a peek memory the client no longer draws to (#1154).
+        QTest::newRow("matches a park") << column << column << false << true << true;
+        QTest::newRow("a pixel off a park") << column << QSize(1909, 2052) << false << true << true;
+        QTest::newRow("matches a park, shorter across") << column << QSize(1908, 1948) << false << true << true;
+        QTest::newRow("matches a vertical park") << column << QSize(1500, 2052) << true << true << true;
+        QTest::newRow("wider than a park") << column << QSize(2880, 2052) << false << true << true;
+        QTest::newRow("matches a park, empty commit") << column << QSize(0, 0) << false << true << false;
     }
 
     void committedSizeReportTable()
@@ -1234,8 +1295,9 @@ private Q_SLOTS:
         QFETCH(QSize, offered);
         QFETCH(QSize, committed);
         QFETCH(bool, vertical);
+        QFETCH(bool, parked);
         QFETCH(bool, reports);
-        QCOMPARE(shouldReportCommittedSize(offered, committed, vertical), reports);
+        QCOMPARE(shouldReportCommittedSize(offered, committed, vertical, parked), reports);
     }
 };
 

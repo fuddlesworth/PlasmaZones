@@ -211,6 +211,9 @@ ScrollLayoutParams ScrollEngine::layoutParamsForKey(const PhosphorEngine::Placem
     params.committedFloor = [this](const QString& windowId) {
         return committedFloorFor(windowId);
     };
+    params.committedCrossFloor = [this, axis = params.axis](const QString& windowId) {
+        return committedCrossFloorFor(windowId, axis);
+    };
     return params;
 }
 

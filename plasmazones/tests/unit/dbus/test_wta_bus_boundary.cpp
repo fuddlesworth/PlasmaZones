@@ -246,9 +246,47 @@ private Q_SLOTS:
                  "a list not led by the scalar activity is no list");
 
         pushActivities(a, {{QString(Key::Width), 640}, {QString(Key::Activities), QVariantList{a, b}}});
-        pushActivities(b, {});
+        pushActivities(QStringLiteral("act-c"), {});
         QVERIFY2(f.registry.metadata(QStringLiteral("acts-1"))->activities.isEmpty(),
                  "a caption refresh that moved the scalar drops the stale list");
+    }
+
+    // KWin does not keep a window's desktop list in a stable order, so a
+    // caption refresh can carry a scalar that is the span's second entry
+    // without the window having moved. The span survives, re-led by the
+    // scalar. A scalar outside the span is a real move and drops it (#1147).
+    void captionRefreshKeepsAReorderedSpan()
+    {
+        FloatBackFixture f;
+        const QString id = QStringLiteral("span-flap-1");
+        push(f.wta, id, QStringLiteral("app"), 1,
+             {{QString(Key::Width), 640}, {QString(Key::VirtualDesktops), QVariantList{1, 3}}});
+        QCOMPARE(f.registry.metadata(id)->virtualDesktops, (QList<int>{1, 3}));
+
+        push(f.wta, id, QStringLiteral("app"), 3, {});
+        QCOMPARE(f.registry.metadata(id)->virtualDesktop, 3);
+        QCOMPARE(f.registry.metadata(id)->virtualDesktops, (QList<int>{3, 1}));
+
+        push(f.wta, id, QStringLiteral("app"), 2, {});
+        QCOMPARE(f.registry.metadata(id)->virtualDesktop, 2);
+        QVERIFY2(f.registry.metadata(id)->virtualDesktops.isEmpty(),
+                 "a scalar outside the carried span is a real move");
+    }
+
+    // The activity list takes the same membership rule on a caption refresh.
+    void captionRefreshKeepsAReorderedActivityList()
+    {
+        FloatBackFixture f;
+        const QString a = QStringLiteral("act-a");
+        const QString b = QStringLiteral("act-b");
+        const QString id = QStringLiteral("acts-flap-1");
+        const auto pushActivity = [&f, &id](const QString& activity, const QVariantMap& extended) {
+            f.wta->setWindowMetadata(id, QStringLiteral("app"), QString(), QStringLiteral("t"), QString(), 100, 1,
+                                     activity, static_cast<int>(PhosphorProtocol::WindowType::Normal), extended);
+        };
+        pushActivity(a, {{QString(Key::Width), 640}, {QString(Key::Activities), QVariantList{a, b}}});
+        pushActivity(b, {});
+        QCOMPARE(f.registry.metadata(id)->activities, (QStringList{b, a}));
     }
 
     // A non-positive size is unknown, not one the min-size gate compares.

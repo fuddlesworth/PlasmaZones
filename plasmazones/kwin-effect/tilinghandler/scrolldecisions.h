@@ -527,9 +527,7 @@ struct KWinResizePutBackGates
     /// TilingHandler::isKWinMoveOfStripTile), so a move that arm would take is
     /// never put back onto the old output, where its output change never
     /// comes. A request at a park, or one still overlapping the strip's
-    /// output (a straddler growing past its edge), is no such move, and nor is
-    /// one still on the output of the window's tracked strip screen
-    /// (requestLeavesStripOutput).
+    /// output (a straddler growing past its edge), is no such move.
     bool leavesOutput = false;
 };
 
@@ -614,9 +612,10 @@ inline constexpr int CommittedSizeTolerancePx = 1;
 /// hears about it, and one that later commits narrower than a column the
 /// engine widened for it leaves that width standing empty.
 ///
-/// @p offered    the column size the strip offered.
-/// @p committed  the frame size the client committed.
-/// @p vertical   the strip runs vertically, so its main axis is the height.
+/// @p offered      the column size the strip offered.
+/// @p committed    the frame size the client committed.
+/// @p vertical     the strip runs vertically, so its main axis is the height.
+/// @p offerParked  the offer is a park, off every output.
 ///
 /// The MAIN axis reports a difference either way. The CROSS axis reports only
 /// a longer answer, which hangs past the work area's edge and is the engine's
@@ -627,16 +626,26 @@ inline constexpr int CommittedSizeTolerancePx = 1;
 /// otherwise send the engine a no-op each time. Differences of
 /// CommittedSizeTolerancePx or less are rounding, never answers.
 ///
+/// A park is the exception: an answer that takes it along the strip is
+/// reported too. A column remembered wider than its clamp keeps parking on
+/// that memory, and only the client's own word that it took the park lets the
+/// engine end the memory and let the column peek again (#1154). The fact comes
+/// from the offer rect, so this side keeps no memory of its own, and a park
+/// that sends a size is rare (a pan moves parks without resizing them).
+///
 /// Stateless itself; the effect asks it once per answer (isNewColumnAnswer),
 /// so a client that keeps its answer is not reported again on every frame
 /// change.
-inline bool shouldReportCommittedSize(const QSize& offered, const QSize& committed, bool vertical)
+inline bool shouldReportCommittedSize(const QSize& offered, const QSize& committed, bool vertical, bool offerParked)
 {
     if (offered.isEmpty() || committed.isEmpty()) {
         return false;
     }
     const int mainDelta = vertical ? committed.height() - offered.height() : committed.width() - offered.width();
     const int crossDelta = vertical ? committed.width() - offered.width() : committed.height() - offered.height();
+    if (offerParked && qAbs(mainDelta) <= CommittedSizeTolerancePx) {
+        return true;
+    }
     return qAbs(mainDelta) > CommittedSizeTolerancePx || crossDelta > CommittedSizeTolerancePx;
 }
 
@@ -809,34 +818,91 @@ inline bool restoreRectOnOutput(const QRectF& restore, const QRectF& outputGeome
     return restore.isValid() && outputGeometry.contains(restore.center());
 }
 
+/// What the strip counter-assert does with an X11 strip window's frame at a
+/// size other than the one its batch commanded.
+enum class ForeignSizeVerdict : quint8 {
+    PutBack, ///< re-apply the commanded rect, as for any external resize
+    Learn, ///< keep the size and re-seat by position, so the report teaches the engine
+};
+
+/// The X11 half of the strip's answer to a size it did not command (#1157).
+///
+/// A Wayland client's answer to its column is read off its commit, but an X11
+/// client resizes itself with a request KWin grants at once, and from the
+/// frame hook that request cannot be told from KWin's own (Expand Window, a
+/// script). So the strip puts the first new size back, as it always has, and
+/// learns only a client that insists: the same size again under the same
+/// command, as SDL and friends answer every configure, from a frame that reads
+/// as the client's answer to its column (@p readsAsAnswer). A one-shot KWin
+/// resize is put back and never learned, and the same commit is never both put
+/// back and learned.
+///
+/// @p commanded    the size the batch commanded (the counter-assert's rect)
+/// @p committed    the size the frame holds now
+/// @p lastPutBack  the size last put back under this command; empty for none
+inline ForeignSizeVerdict x11ForeignSizeVerdict(const QSize& commanded, const QSize& committed,
+                                                const QSize& lastPutBack, bool readsAsAnswer)
+{
+    const auto within = [](const QSize& a, const QSize& b) {
+        return qAbs(a.width() - b.width()) <= CommittedSizeTolerancePx
+            && qAbs(a.height() - b.height()) <= CommittedSizeTolerancePx;
+    };
+    if (committed.isEmpty() || within(committed, commanded)) {
+        return ForeignSizeVerdict::PutBack;
+    }
+    if (lastPutBack.isEmpty() || !within(committed, lastPutBack)) {
+        return ForeignSizeVerdict::PutBack;
+    }
+    return readsAsAnswer ? ForeignSizeVerdict::Learn : ForeignSizeVerdict::PutBack;
+}
+
+/// What isKWinMoveOffStrip reads about a strip tile and its frame.
+struct KWinMoveOffStripFacts
+{
+    /// the live frame, or the rect KWin requested at the resize put-back
+    QRectF frame;
+    /// the output of the window's tracked strip screen; invalid when it has none
+    QRectF trackedOutput;
+    /// the output under the centre of the rect the strip last gave the window
+    /// (commanded, or the offered column)
+    QRectF centreOutput;
+    /// no screen change is settling and the strip's output has not moved since
+    /// its last batch, so the tracked output's geometry still describes the strip
+    bool coordinatesHold = false;
+    /// the engine's own move armed a marker
+    bool markerArmed = false;
+    /// the frame or the strip's rect sits at a park, or the strip recorded it parked
+    bool parked = false;
+    /// a drag holds the window; the drop owns the move
+    bool userMove = false;
+};
+
 /// Whether an output change of a strip tile is a move KWin made itself (its
 /// Move to Screen, a window rule), not a column the engine parked or handed
 /// over (F738). The engine's own moves arm a marker, a parked column sits off
 /// every output by design, and a drag is the drop's. Anything else whose frame
-/// has left the output of the rect the strip last gave it has gone to another
-/// output: a column straddling its output's edge still intersects it.
-/// @p commandedOutput the output under that rect (commanded, or the offered column)
-inline bool isKWinMoveOffStrip(const QRectF& frame, const QRectF& commandedOutput, bool markerArmed, bool parked,
-                               bool userMove)
+/// has left the strip's output has gone to another output: a column straddling
+/// its output's edge still intersects it.
+///
+/// The strip's output is the TRACKED one while the coordinates hold. A tile
+/// cropped at its output's edge can have the centre of its strip rect on the
+/// neighbour, and measured against that centre a move onto the neighbour never
+/// left it (#1153), while a resize that stays on its own output read as a move
+/// off it. While a screen change settles or the output has moved, the tracked
+/// geometry may be stale, so the frame must miss the centre's output as well,
+/// which is never more willing than the centre lookup alone. With no tracked
+/// output the centre's answer stands.
+inline bool isKWinMoveOffStrip(const KWinMoveOffStripFacts& f)
 {
-    return !markerArmed && !parked && !userMove && commandedOutput.isValid() && frame.isValid()
-        && !frame.intersects(commandedOutput);
-}
-
-/// Whether a resize KWin requested for a strip window moves it off the strip's
-/// output (KWinResizePutBackGates::leavesOutput). @p movesOffStrip is the
-/// output-change arm's own answer for the requested rect (isKWinMoveOffStrip,
-/// through TilingHandler::isKWinMoveOfStripTile), which finds the strip's
-/// output at the centre of the rect the strip last gave the window. For a
-/// straddler cropped at its output's edge that centre can sit on the
-/// neighbour, and a request that keeps the window wholly on its own strip
-/// output would read as a move off it, so the request must also miss
-/// @p trackedOutput, the output of the window's tracked strip screen. Both
-/// together keep the answer to moves that arm hands over. An invalid
-/// @p trackedOutput leaves the arm's answer as it is.
-inline bool requestLeavesStripOutput(bool movesOffStrip, const QRectF& requested, const QRectF& trackedOutput)
-{
-    return movesOffStrip && (!trackedOutput.isValid() || !requested.intersects(trackedOutput));
+    if (f.markerArmed || f.parked || f.userMove || !f.frame.isValid()) {
+        return false;
+    }
+    const bool missesCentre = f.centreOutput.isValid() && !f.frame.intersects(f.centreOutput);
+    if (!f.trackedOutput.isValid()) {
+        return missesCentre;
+    }
+    const bool missesTracked = !f.frame.intersects(f.trackedOutput);
+    return missesTracked && (f.coordinatesHold || missesCentre);
 }
 
 /// The scope the passive float channel releases under (F723). On a scrolling

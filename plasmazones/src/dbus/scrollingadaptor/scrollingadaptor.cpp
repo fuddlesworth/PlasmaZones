@@ -5,6 +5,7 @@
 
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
+#include "dbus/dbushelpers.h"
 
 #include <algorithm>
 
@@ -436,6 +437,9 @@ bool ScrollingAdaptor::toggleMaximizeToEdges(const QString& screenId, const QStr
 
 void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     // Malformed input is a silent no-op and the engine's own lookup rejects an
     // untracked window.
     //
@@ -455,6 +459,9 @@ void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
 
 void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     // Same wire-boundary policy as clearWindowedFullscreen above, including
     // its deliberate skip of the per-context gate and the reason for it:
     // malformed input is a silent no-op, and the engine's own lookup rejects
@@ -468,6 +475,9 @@ void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
 void ScrollingAdaptor::reportCommittedSize(const QString& windowId, int offeredWidth, int offeredHeight,
                                            int committedWidth, int committedHeight)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     // clearWindowedFullscreen's wire-boundary policy, context gate skipped
     // for its reason. Non-positive sizes are malformed and dropped here (the
     // engine repeats that check); the engine refuses an untracked window and
@@ -481,6 +491,9 @@ void ScrollingAdaptor::reportCommittedSize(const QString& windowId, int offeredW
 
 bool ScrollingAdaptor::setWindowFullscreenFloat(const QString& windowId, const QString& screenId, bool floating)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return false;
+    }
     // clearWindowedFullscreen's wire-boundary policy: a reconciliation call
     // reporting what the compositor has already done, so no ownership or
     // context gate. The engine refuses an untracked window and a float it

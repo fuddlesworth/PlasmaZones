@@ -426,5 +426,27 @@ PLASMAZONES_EXPORT QString busCaller(const QObject* adaptor);
  */
 PLASMAZONES_EXPORT bool sendBusError(const QObject* adaptor, QDBusError::ErrorType type, const QString& message);
 
+/**
+ * @brief The first statement of a compositor-only slot (#1155): true when the
+ *        slot may proceed.
+ *
+ * A compositor-only method reports what the compositor saw, and the engines
+ * take it as ground truth, so only the registered compositor bridge may call
+ * it over the bus: the unique bus name CompositorBridgeAdaptor recorded at
+ * registerBridge, read from the bridge adaptor on @p adaptor's host so there
+ * is one record of it. A bus caller with any other name, or any caller before
+ * a bridge registered over the bus, is answered with AccessDenied and the slot
+ * returns at once.
+ *
+ * Admitted without a check: a direct C++ call (no bus context, as the unit
+ * tests and the daemon's own calls make), and a call reached while the host
+ * serves a different message, which is the case when another slot calls this
+ * one (endDrag calling windowScreenChanged, say). That outer slot answers for
+ * its own caller. So the check runs only when the message being served is a
+ * method call of @p member on @p adaptor's own interface, or one naming no
+ * interface, which Qt dispatches by member name.
+ */
+PLASMAZONES_EXPORT bool admitCompositorReport(const QObject* adaptor, QLatin1StringView member);
+
 } // namespace DbusHelpers
 } // namespace PlasmaZones

@@ -8,6 +8,8 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
+#include <QDBusConnectionInterface>
+#include <QDBusContext>
 #include <QUuid>
 
 namespace PlasmaZones {
@@ -56,6 +58,28 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
         return result;
     }
 
+    // One bridge at a time. The registered bus name is what every
+    // compositor-only method admits (DbusHelpers::admitCompositorReport), so a
+    // registration from another peer while the bridge is still on the bus
+    // would hand that peer the compositor's methods and lock the real
+    // compositor out (#1155). The same name registering again (the effect
+    // reloading in a running KWin) and a new name once the old one has left
+    // the bus (KWin or the daemon restarted) are let through.
+    const QString caller = DbusHelpers::busCaller(this);
+    if (!caller.isEmpty() && !m_bridgeService.isEmpty() && caller != m_bridgeService) {
+        const QDBusContext* const context = DbusHelpers::busContext(this);
+        const QDBusConnectionInterface* const bus = context ? context->connection().interface() : nullptr;
+        if (bus && bus->isServiceRegistered(m_bridgeService)) {
+            qCWarning(lcDbusWindow) << "Compositor bridge REJECTED:" << caller << "tried to register while"
+                                    << m_bridgeService << "is still registered (compositor:" << compositorName << ")";
+            PhosphorProtocol::BridgeRegistrationResult result;
+            result.apiVersion = QString::number(DaemonApiVersion);
+            result.bridgeName = compositorName;
+            result.sessionId = QStringLiteral("REJECTED");
+            return result;
+        }
+    }
+
     // Logged only once every rejection gate has passed: a rejected peer
     // replaces nothing, so warning before the gates would mislead.
     if (!m_bridgeName.isEmpty()) {
@@ -68,7 +92,7 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
     m_capabilities = capabilities;
     // Remember WHO registered, so a later reportGesture can be attributed.
     // A direct (non-D-Bus) call has no peer and leaves this empty.
-    m_bridgeService = DbusHelpers::busCaller(this);
+    m_bridgeService = caller;
 
     qCInfo(lcDbusWindow) << "Compositor bridge registered:" << compositorName << "apiVersion=" << version
                          << "capabilities:" << capabilities;
@@ -103,13 +127,9 @@ void CompositorBridgeAdaptor::reportGesture(const QString& kind, const QString& 
         qCDebug(lcDbusWindow) << "reportGesture dropped: no bridge registered for gestures";
         return;
     }
-    if (const QString caller = DbusHelpers::busCaller(this); !caller.isEmpty() && caller != m_bridgeService) {
-        // Warned, not logged at debug: this is either a peer trying to drive
-        // the shell's surfaces, or the real bridge calling from a connection
-        // it never registered — which would take out every gesture in the
-        // session. Neither should be invisible at default log levels.
-        qCWarning(lcDbusWindow) << "reportGesture dropped: caller" << caller << "is not the registered bridge"
-                                << m_bridgeService;
+    // The caller's name is checked by the shared compositor-only gate, which
+    // answers a foreign caller with AccessDenied and warns once per caller.
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
         return;
     }
     // Boundary validation: the vocabulary is closed, so anything else is a

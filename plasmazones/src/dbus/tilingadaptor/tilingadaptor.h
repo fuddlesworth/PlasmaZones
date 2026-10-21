@@ -219,6 +219,13 @@ public:
     /// (restore-then-retile churn). One deferred emission carries the final
     /// state of the whole pass.
     void notifyEngineScreensChanged(bool isDesktopSwitch);
+    /// Run @p work right behind a queued screens announce, or now when none
+    /// is queued. For a placement the effect judges against the managed set
+    /// it last heard: a desktop switch off a scrolling desktop re-applies snap
+    /// zones in the same pass that queues the announce, and sent first, those
+    /// entries were judged as if the screen still tiled (#1151). Runs after
+    /// the held tile batches, and is swept by clearEngine with the announce.
+    void runBehindScreensAnnounce(std::function<void()> work);
     /// Per-screen tab-indicator model from the scroll engine, cached for the
     /// scrollTabStrips replay query and re-emitted as scrollTabStripsChanged.
     /// A "[]" (or empty) payload retracts the screen: the cache entry is
@@ -767,6 +774,8 @@ private:
     /// applied synchronously (relayTileRequestsJson documents the shape).
     /// Swept by clearEngine with the announce it was waiting on.
     QList<PhosphorProtocol::TileRequestList> m_tileBatchesHeldForAnnounce;
+    /// runBehindScreensAnnounce's queue, in arrival order.
+    QList<std::function<void()>> m_workHeldForAnnounce;
     /// Last enabled value broadcast (unset until the first emission).
     std::optional<bool> m_lastEnabledBroadcast;
     /// Last tab-strip payload per screen, the scrollTabStrips replay cache.
