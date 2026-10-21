@@ -4,15 +4,6 @@
 // Tiling request handling for TilingHandler: the tile batch pipeline. Part of
 // TilingHandler — split from tilinghandler.cpp for SRP. The frame-commit
 // centring lives in framecentering.cpp, the engine's focus request in signals.cpp.
-//
-// FILE-SIZE EXCEPTION (sanctioned): slotWindowsTileRequested is one batch
-// pipeline — parse, float split, view-leg seeding, cascade ordering, the
-// apply lambda and its completion — whose stages hand per-batch state
-// (generations, seeded sets, the residual-origin gates) straight down the
-// function. Over the 1150 ceiling before PR #891 and accepted as such;
-// a future split should carve at the batch-parse / apply boundary, not
-// mid-pipeline. Grew with the cross-output bounce fix (#1124) and its audit:
-// the instance-first tile resolve and its scoped fuzzy candidates.
 
 #include "tilinghandler.h"
 #include "stackdecisions.h"
@@ -2115,8 +2106,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (!stripOfferedColumn.isNull() && !skipMoveResize && !snap.window->isUserMove()
                     && !snap.window->isUserResize() && !fullscreenBailSkippedCommit) {
                     const KWin::Window* const kwOffer = snap.window->window();
-                    const bool sendsSize =
-                        kwOffer && QRectF(kwOffer->moveResizeGeometry()).toRect().size() != geo.size();
+                    const bool sendsSize = kwOffer
+                        && ScrollDecisions::stripEntrySendsSize(QRectF(kwOffer->moveResizeGeometry()).toRect().size(),
+                                                                geo.size());
                     m_effect->recordStripOffer(snap.window, snap.windowId, stripOfferedColumn, sendsSize);
                 }
 

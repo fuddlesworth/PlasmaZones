@@ -277,14 +277,16 @@ public:
     /// Toggle the maximized state of a column on @p screenId. An empty @p windowId
     /// targets the ACTIVE column; a named window targets the column owning it and
     /// refuses when the strip does not hold it. Answers whether the strip CHANGED, like
-    /// its twin below: false means no batch is coming, so the effect puts KWin's bit back.
+    /// its twin below. A pure width verb: it moves no maximize bit (only the twin's
+    /// declared state is mirrored onto KWin's).
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
     /// Toggle a column's maximize-to-edges state (full raw work area on both
     /// axes, gap-free; niri maximize-window-to-edges generalized to the
     /// column). Addressing and return as toggleMaximizeColumn. A named window
     /// that is the active tile of a SHARED column is first expelled into its own
     /// column. This is the verb the compositor's maximize interception
-    /// dispatches, and the KWin maximize bit mirrors THIS state alone.
+    /// dispatches, and the KWin maximize bit mirrors THIS state alone: false
+    /// means no batch is coming, so the effect puts KWin's bit back.
     bool toggleMaximizeToEdges(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
@@ -343,8 +345,13 @@ public:
     /// The pixel twin of scrollViewByPercent, for a caller that already holds
     /// a distance along the strip (the placement map's drag pan, over
     /// org.plasmazones.Scrolling.scrollViewByPx). Same detachment, clamping
-    /// and feedback: a zero @p px reports no_movement, a pan pinned at the
-    /// end it is asked to move toward reports no_target.
+    /// and refusals: a zero @p px reports no_movement, a pan pinned at the
+    /// end it is asked to move toward reports no_target, and an empty strip
+    /// no_windows. A successful pan reports nothing, because the map pans once
+    /// per frame of a drag and the navigation OSD would keep returning for the
+    /// whole of it. @p px is bounded to a million pixels either way, the band
+    /// the percent verb and the D-Bus adaptor use; that only trims a pan the
+    /// strip would clamp at its end anyway.
     void scrollViewByPx(int px, const QString& screenId);
     /// Focus the column at strip index @p index (ScrollStrip::focusColumn),
     /// re-anchoring the view under the same centering policy every other
@@ -503,11 +510,11 @@ public:
     /// gap-inset work area, so the fractions show the panel gap; that is the
     /// same basis the daemon's own OSD card uses (its twin renorm of the
     /// absolute rects in stripzones.h) WHENEVER the screen rect resolves, so
-    /// the settings thumbnail and the OSD draw the same shape. Its one
-    /// production consumer is the D-Bus strip payload (scrollingadaptor.cpp),
-    /// which pairs each rect with the zone number from the matching
-    /// visibleTiles entry: where a layout switch shows the layout's zones, a
-    /// scrolling screen shows what the strip actually looks like right now.
+    /// the settings thumbnail and the OSD draw the same shape. The D-Bus
+    /// strip payload (scrollingadaptor.cpp) carries these rects, each paired
+    /// with its zone number, through visibleTilesWithRects: where a layout
+    /// switch shows the layout's zones, a scrolling screen shows what the
+    /// strip actually looks like right now.
     /// Falls back to the work area as the basis only when no screen rect is
     /// resolvable — a KNOWN divergence from the OSD twin in that window (it
     /// falls back to QScreen::geometry() via the daemon's shared resolver,
@@ -761,8 +768,10 @@ public:
     /// on a parked column reports where it truly lands, and the overlay
     /// clips.
     QRect dragInsertIndicatorRect(const QString& screenId) const override;
-    /// While set, applyLayout never emits this window's rect and
-    /// onWindowResized never reconciles its acks: during a drag the effect
+    /// While set, applyLayout never emits this window's rect,
+    /// onWindowResized never reconciles its acks, reportCommittedSize learns
+    /// nothing from its commits, and a grouped open never joins its column as
+    /// a tab: during a drag the effect
     /// floats the window VISUALLY ONLY. The engine keeps its strip tile for a
     /// drag with no drag-insert preview armed; under DETACH-ONCE the tile is
     /// gone for the duration of a preview, and the mark still has to hold
@@ -1035,13 +1044,14 @@ Q_SIGNALS:
     /// touched produces no batch, and identity carried as a batch field would
     /// be silent in precisely the case a consumer most needs it.
     ///
-    /// Announced from setActiveScreens, for every screen in the resulting set,
-    /// and from the sticky-pin RELEASE path, which moves a screen's key without
-    /// going through that push. A pin ACQUIRE announces nothing because it
-    /// pins to the desktop the key already resolves to. Desktop and activity
-    /// switches therefore reach a consumer by way of the daemon's screen push
-    /// rather than by the setters themselves: a key change with no such push
-    /// behind it is not announced.
+    /// Announced from setActiveScreens, for every screen in the resulting set;
+    /// from the sticky-pin RELEASE path, which moves a screen's key without
+    /// going through that push; and from applyDesktopRemap, for a screen whose
+    /// strip a desktop-list change re-keyed. A pin ACQUIRE announces nothing
+    /// because it pins to the desktop the key already resolves to. Desktop and
+    /// activity switches therefore reach a consumer by way of the daemon's
+    /// screen push rather than by the setters themselves: a key change with no
+    /// such push behind it is not announced.
     ///
     /// There is no bring-up seed. The epoch is announce-only, with nothing to
     /// read it from, so a consumer that attaches after a screen was announced
@@ -1056,13 +1066,17 @@ Q_SIGNALS:
     void enabledChanged(bool enabled);
     /// Tab-indicator model for @p screenId, emitted when the resolved model
     /// changes (a relayout that produces an identical payload stays silent): a
-    /// JSON array with one entry per VISIBLE tabbed column that actually
-    /// resolves an indicator —
+    /// JSON array with one entry per tabbed column that actually resolves an
+    /// indicator and is in view, or was in view before this batch's view slide
+    /// (a DEPARTING column keeps its pills for the length of the outgoing
+    /// leg) —
     /// {x, y, width, height (the INDICATOR's absolute px rect, not the
     /// column's), position (TabIndicatorPosition), activeIndex,
     /// tabs: [windowId, ...]}.
     ///
-    /// Columns whose indicator is suppressed (the master switch off, or a
+    /// A column still in view whose every emitted tile parked is left out,
+    /// since nothing it labels is on screen. Columns whose indicator is
+    /// suppressed (the master switch off, or a
     /// single-tab column under hideWhenSingleTab) are simply absent, so a
     /// consumer never re-tests those conditions and cannot disagree with the
     /// relayout that sized the column around them. An empty array clears the
@@ -1107,26 +1121,14 @@ private:
     /// no screen's context forces nothing.
     bool announceStripContextIfChanged(const QString& screenId);
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
-    /// Point the live preview's drop target at the view's leading (@p
-    /// direction < 0) or trailing new-column slot, the two shapes the band
-    /// hit-test produces at the view's extremes. Called on every auto-scroll
-    /// tick INSTEAD of the hit-test, so the target cannot churn as columns
-    /// slide under a stationary cursor (drag_autoscroll.cpp). Returns true when
-    /// the target changed. @p cursorPos feeds the empty-viewport re-aim only.
-    ///
-    /// PRECONDITION: m_dragInsertPreview must be live (asserted, with a
-    /// release-build refusal, since the signature reads preview-independent).
-    bool writeDragAutoScrollTarget(const ScrollState& state, const ScrollLayoutParams& params, int direction,
-                                   const QPoint& cursorPos);
-    /// Re-aim the live preview's drop target at @p cursorPos with the ordinary
-    /// hit-test, undoing an edge slot the auto-scroll wrote. Called wherever
-    /// ownership ends with a usable cursor on the preview's own screen. Returns
-    /// true when the target changed. PRECONDITION: m_dragInsertPreview is live.
-    bool repairDragAutoScrollTarget(const QPoint& cursorPos);
     ScrollState* stateForWindow(const QString& canonicalId, PhosphorEngine::PlacementStateKey* outKey = nullptr) const;
     /// The screen the engine should operate on for a screen-hinted verb:
     /// @p screenId when it is a scrolling screen, else the active screen.
     QString resolveOperationScreen(const QString& screenId) const;
+    /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
+    /// screen that had a strip showing, no-op otherwise.
+    void clearTabStripsForScreen(const QString& screenId);
+    // engine_context.cpp
     /// Tear down one context state: appends its windows to
     /// @p releasedWindows, drops the per-window unfloat-slot memory and the
     /// per-screen bookkeeping (pending seed, tab-strip latch), and
@@ -1147,10 +1149,6 @@ private:
     /// AutotileEngine has the same. The committed extents (m_committedExtents) do go here: a released
     /// window has left the engine, and an evacuee's were copied into the park first (parkOutput).
     void releaseScreenState(ScrollState* state, QStringList& releasedWindows);
-    /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
-    /// screen that had a strip showing, no-op otherwise.
-    void clearTabStripsForScreen(const QString& screenId);
-    // engine_context.cpp
     /// Shared per-window side-map sweep for the SILENT prune paths (desktop and activity teardown),
     /// which emit no windowsReleased. A fullscreen hold found here is queued for
     /// announceReleasedFullscreenHolds, which the prune runs after its reverse-map sweep; nothing else
@@ -1247,9 +1245,10 @@ private:
                                   const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& left);
     /// pruneStaleWindows' sweep of the stash on aliveness, and the restart-move arm.
     void sweepStripStashForAliveness(const QSet<QString>& aliveWindowIds);
+    // engine_desktopremap.cpp
     /// Move every desktop-number-keyed structure through @p remap; the removed desktops are pruned already.
     void applyDesktopRemap(const PhosphorEngine::DesktopRemap& remap);
-    // engine_apply.cpp
+    // engine_query.cpp
     /// The smart-gaps arm is resolved INSIDE, not passed in: a single-column
     /// strip on the screen's current context zeroes the OUTER gaps for every
     /// current-context caller alike (layoutParamsForKey judges a background
@@ -1262,9 +1261,10 @@ private:
     /// inter-column gap exists.
     /// @param columnCountOverride When >= 0, the smart-gaps arm judges the
     /// single-column case against THIS count instead of the live strip's.
-    /// Two callers pass it: the drop indicator (a preview holds the dragged
+    /// Passed wherever the live count is not the one the params will lay out
+    /// against: the drop indicator and its commit (a preview holds the dragged
     /// window detached, so the post-drop column count differs from the live
-    /// one) and windowOpened's height-rule arm, which re-resolves the work
+    /// one), and the open, unfloat and handoff paths that re-resolve the work
     /// area against the POST-insert column count.
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId, int columnCountOverride = -1) const;
 
@@ -1287,10 +1287,6 @@ private:
     /// adjust; stripAxisForScreen is the public door.
     StripAxis resolveStripAxis(const QRect& workArea) const;
 
-    /// The tri-state INTENT (per-screen key, else the global setting)
-    /// collapsed to a resolved axis, with Auto derived from @p workArea.
-    StripAxis effectiveStripAxis(const QVariantMap& overrides, const QRect& workArea) const;
-
     /// visibleTiles' real body, taking params the caller already resolved.
     /// The public overload is the thin wrapper; callers that hold params
     /// (the digit path, the normalized-rect walk) use this instead of paying
@@ -1298,6 +1294,7 @@ private:
     /// state itself is re-resolved here (a hash lookup, unlike the params);
     /// what the overload saves is the params resolution.
     QVector<VisibleTile> visibleTiles(const QString& screenId, const ScrollLayoutParams& params) const;
+    // engine_apply.cpp
     /// Relayout the strip and emit the geometry batch for @p screenId's
     /// current-context state. @p focusWindowAfter activates the strip's
     /// active window after the batch (engine-driven navigation only).
@@ -1376,6 +1373,7 @@ private:
     /// Consume @p windowId's EXACT stash tile on a float exit, mirroring restoreFromStripStash's blueprint carry.
     void consumeStripStashTileForFloat(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
                                        const QString& windowId);
+    // engine_float.cpp
     /// Active = user float (windowFloatingChanged), Passive = engine-initiated (windowFloatingStateSynced).
     enum class FloatAnnounce : quint8 {
         Active,
@@ -1428,19 +1426,20 @@ private:
     /// only when @p state is non-null, matching the macro's own contract.
     void focusInDirectionResolved(const QString& direction, const PhosphorEngine::NavigationContext& ctx,
                                   const QString& screen, ScrollState* state, const ScrollLayoutParams& params);
+    /// After a SUCCESSFUL focus crossing (either arm), the source state's
+    /// floatingHasFocus must drop — focus demonstrably left that output.
+    void clearSourceFloatFocusAfterCrossing(const QString& sourceScreenId);
 
     // engine_verbs.cpp
     /// The shared body of scrollViewByPercent and scrollViewByPx past the
     /// resolve and the empty-strip bail: pan @p state's strip by @p deltaPx,
     /// re-apply on a change, and report through navigationFeedback under the
-    /// "scroll" action. The two public verbs differ only in how they arrive
-    /// at the pixel count, and this is what keeps their refusal tokens and
-    /// detachment behaviour one definition.
-    void scrollViewResolved(int deltaPx, const QString& screen, ScrollState* state, const ScrollLayoutParams& params);
-
-    /// After a SUCCESSFUL focus crossing (either arm), the source state's
-    /// floatingHasFocus must drop — focus demonstrably left that output.
-    void clearSourceFloatFocusAfterCrossing(const QString& sourceScreenId);
+    /// "scroll" action. The two public verbs differ in how they arrive at the
+    /// pixel count and in @p announceSuccess (false skips the success
+    /// feedback, the pixel pan's per-frame shape), and this is what keeps
+    /// their refusal tokens and detachment behaviour one definition.
+    void scrollViewResolved(int deltaPx, const QString& screen, ScrollState* state, const ScrollLayoutParams& params,
+                            bool announceSuccess);
 
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
@@ -1468,10 +1467,10 @@ private:
     /// consume/clear contract is documented on windowFocused's drain
     /// (engine_focus.cpp).
     QStringList m_pendingSelfActivations;
+    // engine_apply.cpp
     /// Append to m_pendingSelfActivations and trim to the cap — the single
-    /// producer path, shared by all three emitters (applyLayout's focus arm,
-    /// the declined-open rewind in engine_lifecycle.cpp, and the verb TU's
-    /// float-to-tiling switch).
+    /// producer path every self-activation emitter shares (applyLayout's
+    /// focus arm among them), so the cap cannot be bypassed.
     void queueSelfActivation(const QString& windowId);
     /// Cap for m_pendingSelfActivations (enforced in queueSelfActivation).
     static constexpr int kMaxPendingSelfActivations = 16;
@@ -1503,7 +1502,8 @@ private:
     /// Why this exists: declining focus rewinds the STRIP's active column, but
     /// the compositor has already focused the arriving window on its own and
     /// reports that focus independently. Without this mark the report reaches
-    /// the strip adopt below and re-takes the column the rewind just left, so
+    /// windowFocused's strip adopt (engine_focus.cpp) and re-takes the column
+    /// the rewind just left, so
     /// the rule reads as a no-op. Confirmed live in a nested session before it
     /// was added.
     ///
@@ -1517,9 +1517,8 @@ private:
     /// A SET rather than a single slot: two non-burst opens can both decline
     /// focus before either compositor report lands, and a slot's overwrite
     /// did not merely degrade the OLDER arrival — its report then fell
-    /// through to the reclaim below, clearing BOTH queued prior-window
-    /// echoes and adopting the arrival, the exact rewind-undo the mark
-    /// exists to prevent. Growth is bounded the same way
+    /// through to windowFocused's adopt and re-took the column, the exact
+    /// rewind-undo the mark exists to prevent. Growth is bounded the same way
     /// m_pendingSelfActivations' is: entries are consumed on match and swept
     /// on windowClosed, handoffRelease and releaseScreenState.
     QSet<QString> m_declinedOpenFocus;
@@ -1702,9 +1701,10 @@ private:
     /// vertical one top/bottom. So that when the window scrolls back INTO the
     /// viewport the batch can tell the effect which side to animate it in
     /// from. Remembered rather than derived: the park position is
-    /// direction-agnostic, so the parked rect cannot answer. The
-    /// write/consume/eviction contract is documented at the park sites in
-    /// engine_apply.cpp.
+    /// direction-agnostic, so the parked rect cannot answer. Per tile,
+    /// Detail::resolveTilePlacement (scrollpark_p.h) decides whether the edge
+    /// is written, consumed or erased and applyLayout applies that verdict;
+    /// the paths that take a window out of its strip slot evict its entry.
     QHash<QString, QString> m_parkedScrollEdge;
     /// The two memos above, parked per CONTEXT for windows that hold a
     /// column in several of one screen's strips: both are keyed by window
@@ -1755,6 +1755,23 @@ private:
     /// hit-tested target when a NEIGHBOUR in the target strip closes (the
     /// remembered indexes were aimed at a structure that is changing).
     void dropClosedWindowFromDragPreview(const QString& windowId);
+    // drag_autoscroll.cpp
+    /// Point the live preview's drop target at the view's leading (@p
+    /// direction < 0) or trailing new-column slot, the two shapes the band
+    /// hit-test produces at the view's extremes. Called on every auto-scroll
+    /// tick INSTEAD of the hit-test, so the target cannot churn as columns
+    /// slide under a stationary cursor. Returns true when the target changed.
+    /// @p cursorPos feeds the empty-viewport re-aim only.
+    ///
+    /// PRECONDITION: m_dragInsertPreview must be live (asserted, with a
+    /// release-build refusal, since the signature reads preview-independent).
+    bool writeDragAutoScrollTarget(const ScrollState& state, const ScrollLayoutParams& params, int direction,
+                                   const QPoint& cursorPos);
+    /// Re-aim the live preview's drop target at @p cursorPos with the ordinary
+    /// hit-test, undoing an edge slot the auto-scroll wrote. Called wherever
+    /// ownership ends with a usable cursor on the preview's own screen. Returns
+    /// true when the target changed. PRECONDITION: m_dragInsertPreview is live.
+    bool repairDragAutoScrollTarget(const QPoint& cursorPos);
     /// Windows floated BY scroll mode (mode-transition marker, ephemeral).
     QSet<QString> m_scrollFloatedWindows;
     /// Restore-order seed for deterministic mode transitions. The captured
@@ -1775,6 +1792,7 @@ private:
     /// the arrivals that follow. Dropped on consumption, and on a seed
     /// replacement, so it can never re-anchor a strip the user has since moved.
     QHash<QString, QString> m_pendingInitialFocus;
+    // engine_core.cpp
     /// Snapshot @p state's strip as a stash entry: columns, focus, view
     /// anchor, captured axis, and the blueprint cursor with the blueprint
     /// identity it counts against. Empty columns list when the state is null
@@ -1799,7 +1817,8 @@ private:
     /// How long StashedStrip::fuzzyClaimWindow stays open, in ms. Seeded from
     /// kFuzzyClaimGraceMs in the constructor (the constant lives in the
     /// engine-internal enginelimits.h, which this exported header must not
-    /// pull in) and only ever changed by the test seam below.
+    /// pull in) and only ever changed by the test seam
+    /// setFuzzyClaimGraceMsForTesting.
     qint64 m_fuzzyClaimGraceMs;
     /// Ever-increasing stamp source for StashedStrip::sequence.
     quint64 m_stashSequence = 0;
@@ -1817,30 +1836,31 @@ private:
     /// Effective per-screen values: the rule override when present, else the
     /// cached config default. Each accessor is a thin screenId wrapper over a
     /// map-taking overload, so a caller resolving several values for one
-    /// screen (layoutParamsForScreen resolves eleven per relayout, and the open
-    /// path five more) fetches the override map ONCE and threads it through
-    /// instead of re-looking it up per accessor.
+    /// screen (layoutParamsForKey per relayout, and the open path) fetches
+    /// the override map ONCE and threads it through instead of re-looking it
+    /// up per accessor.
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
     CenterFocusedColumn effectiveCenterFocusedColumn(const QVariantMap& overrides) const;
-    /// The six scrolling BEHAVIOUR toggles with a per-screen rule channel,
-    /// rule-only per-screen keys layered over the config-seeded members. Five
-    /// of them (always-center-single-column, center-short-columns,
-    /// respect-minimum-size, smart gaps and the straddler clamp) are consumed
-    /// inside layoutParamsForScreen and exist ONLY in map-taking form, since
-    /// that is the one call site and it has already fetched the map. The
-    /// sixth (the open-path focus arm) is consumed outside it and carries a
-    /// screenId wrapper. The sticky gate is their int-valued sibling, not one
-    /// of the six bools: it carries both forms because the open path resolves
-    /// several values for one screen off a single fetch. groupSameAppAsTabs
-    /// below is not one of the six either: it is a global-only live read
-    /// with no per-screen key.
+    /// The scrolling BEHAVIOUR toggles with a per-screen rule channel,
+    /// rule-only per-screen keys layered over the config-seeded members. The
+    /// layout ones (always-center-single-column, center-short-columns,
+    /// respect-minimum-size, smart gaps and the straddler clamp) exist ONLY
+    /// in map-taking form: layoutParamsForKey reads them all off the one map
+    /// it has already fetched, and the other reader
+    /// (applyPerScreenConfig's respect-minimum-size compare) holds the maps
+    /// it compares. The open-path focus arm is consumed outside the params
+    /// and carries a screenId wrapper. The sticky gate is their int-valued
+    /// sibling: it carries both forms because the open path resolves several
+    /// values for one screen off a single fetch. groupSameAppAsTabs below is
+    /// not one of them either: it is a global-only live read with no
+    /// per-screen key.
     bool effectiveAlwaysCenterSingleColumn(const QVariantMap& overrides) const;
     bool effectiveCenterShortColumns(const QVariantMap& overrides) const;
     bool effectiveRespectMinimumSize(const QVariantMap& overrides) const;
     bool effectiveSmartGaps(const QVariantMap& overrides) const;
-    /// Hoisted out of the emit loop by its one caller: it is a per-SCREEN
-    /// verdict, so re-resolving it per tile would rebuild the override map
-    /// once per window on the relayout path.
+    /// Resolved once per params (layoutParamsForKey) rather than in the emit
+    /// loop: it is a per-SCREEN verdict, so re-resolving it per tile would
+    /// rebuild the override map once per window on the relayout path.
     bool effectiveCropStraddlers(const QVariantMap& overrides) const;
     /// Falls back to the LIVE IScrollSettings read rather than a cached
     /// member: focus-new-windows is one of the two behaviours the engine
@@ -1848,6 +1868,7 @@ private:
     /// live keeps a settings change effective without waiting for a
     /// settings-reload pass.
     bool effectiveFocusNewWindows(const QString& screenId) const;
+    // engine_grouping.cpp
     /// Live IScrollSettings read, for effectiveFocusNewWindows's reason: the
     /// verdict is consulted once per fresh open and a settings change should
     /// take effect on the very next one. Global only: there is no per-screen
@@ -1889,11 +1910,13 @@ private:
     bool insertGroupedOpen(ScrollState* state, const QString& windowId, const QString& appId, const QString& screenId,
                            const ScrollLayoutParams& params, int minWidth, int minHeight,
                            const ScrollOpenParams& openParams, QString* outDisplacedTab, bool* outNamed);
+    // engine_overrides.cpp
     PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QString& screenId) const;
     PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QVariantMap& overrides) const;
-    /// Shared bool-override reader for the six toggles above: takes the
-    /// override only when it is a real bool, so a hand-edited string cannot
-    /// coerce to false and silently disable a behaviour.
+    /// Shared bool-override reader for the behaviour toggles above and the
+    /// tab indicator's bool keys (effectiveTabIndicator): takes the override
+    /// only when it is a real bool, so a hand-edited string cannot coerce to
+    /// false and silently disable a behaviour.
     static bool effectiveBoolOverride(const QVariantMap& overrides, const QString& key, bool fallback);
     ColumnWidth effectiveDefaultColumnWidth(const QString& screenId) const;
     ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides) const;
@@ -1989,6 +2012,9 @@ private:
     /// the public section above), private because the override map is.
     QList<qreal> effectivePresetColumnWidths(const QVariantMap& overrides) const;
     QList<qreal> effectivePresetWindowHeights(const QVariantMap& overrides) const;
+    /// The tri-state INTENT (per-screen key, else the global setting)
+    /// collapsed to a resolved axis, with Auto derived from @p workArea.
+    StripAxis effectiveStripAxis(const QVariantMap& overrides, const QRect& workArea) const;
 
     /// Keyed per CONTEXT, not per screen, because that is how the producer
     /// resolves them: the daemon asks scrollingTemplateForContext(screen,
@@ -2022,6 +2048,7 @@ private:
     ModeResolver m_autotileModeResolver; ///< INERT (see setAutotileModeResolver)
     ContextGapProvider m_contextGapProvider;
 
+    // engine_evacueepark.cpp
     /// Whether @p key is a parked context, which the stash sweeps and the saves leave alone.
     bool isEvacueeParkedKey(const PhosphorEngine::PlacementStateKey& key) const;
     // Appended last (installed header). Created by the first parkOutput.

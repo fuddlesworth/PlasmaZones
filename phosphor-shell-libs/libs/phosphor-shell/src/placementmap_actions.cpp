@@ -545,8 +545,15 @@ void PlacementMapScreen::runVerb(const QString& id)
             m_map->m_bus->call(Iface::Autotile, QStringLiteral("promoteToMaster"), {focused});
         }
     } else if (id == VerbToggleMaximizeColumn) {
-        if (!focused.isEmpty()) {
-            m_map->m_bus->call(Iface::Scrolling, QStringLiteral("toggleMaximizeColumn"), {m_screenId, focused});
+        // Only this screen's own focus, never the map-wide fallback. The
+        // fallback is the window the daemon last asked the compositor to
+        // focus, which can sit on another screen, and the engine acts on a
+        // named window's own context, so the click would toggle a column on
+        // a screen the user was not looking at. With no per-screen focus the
+        // click does nothing, and the map's own redraw is its only feedback.
+        if (m_focusFromDaemon && !m_focusedWindowId.isEmpty()) {
+            m_map->m_bus->call(Iface::Scrolling, QStringLiteral("toggleMaximizeColumn"),
+                               {m_screenId, m_focusedWindowId});
         }
     }
 }

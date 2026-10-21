@@ -344,8 +344,9 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::SetScrollRespectMinimumSize) {
         return PhosphorI18n::tr(
-            "Keeps columns on the matched context at least as large as each window asks to be. "
-            "Off lets a column go smaller, which the compositor then clamps on its own.");
+            "Keeps columns on the matched context at least as large as each window's minimum size, and "
+            "grows a column to fit a window that stays larger than it. Off lets a column go smaller, which "
+            "the compositor then clamps on its own.");
     }
     if (type == ActionType::SetScrollCropStraddlers) {
         return PhosphorI18n::tr(

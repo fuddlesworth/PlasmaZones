@@ -89,6 +89,15 @@ inline constexpr double kMaxFixedExtentPx = 65535.0;
 /// work area is handled by floating the window, not by this cap.
 inline constexpr int kMaxClientExtentPx = 100000;
 
+/// Sanity ceiling for one view pan along the strip (scrollViewByPercent's
+/// pixels before they are rounded, scrollViewByPx's caller-supplied ones),
+/// the same band the D-Bus adaptor bounds the pixel pan to. The percent verb
+/// needs it to keep qRound defined; ScrollStrip::scrollViewBy sums wide and
+/// takes any int, so for the pixel verb it only trims a pan the strip would
+/// clamp at its end anyway. Far wider than any meaningful pan (a hundred
+/// viewports and more) and far inside int.
+inline constexpr int kMaxScrollViewPx = 1'000'000;
+
 /// How far a committed extent may differ from the offer and still count as
 /// the offer (ScrollEngine::reportCommittedSize). Fractional scaling rounds a
 /// logical size to whole device pixels and back, so a client that took its

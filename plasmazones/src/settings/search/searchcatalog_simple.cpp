@@ -99,7 +99,9 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("smart"), PhosphorI18n::tr("single"),
                 PhosphorI18n::tr("column"), PhosphorI18n::tr("strip")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRespectMinimumSize"),
-               PhosphorI18n::tr("Respect minimum size"), {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size")});
+               PhosphorI18n::tr("Respect minimum size"),
+               {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size"), PhosphorI18n::tr("wider"),
+                PhosphorI18n::tr("overlap")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingCenterShortColumns"),
                PhosphorI18n::tr("Center short columns"), {PhosphorI18n::tr("center"), PhosphorI18n::tr("short")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRestoreStripsOnLogin"),

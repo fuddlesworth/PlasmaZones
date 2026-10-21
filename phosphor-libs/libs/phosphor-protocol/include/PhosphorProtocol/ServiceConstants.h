@@ -660,6 +660,21 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       for that output. A re-seat inside a settle is unaffected: its Readopt
 //       verdict decides, and the effect ignores a parkReseated there. An old
 //       effect never connects it and reads the parkDropped as it always did.
+//
+//   After v10, WITHOUT a bump: Scrolling gains reportCommittedSize
+//       (s i i i i), through which the effect reports the size a Wayland
+//       client settled on when it differs from the rect the strip offered it,
+//       so the engine can hold the column to it. v10 shipped in 3.5.0, so the
+//       method cannot fold into it, and it takes no v11 because it is
+//       ADDITIVE and neither mismatched pairing gives a wrong answer, which is
+//       the failure the bump rule exists to refuse. A new effect on a 3.5.x
+//       daemon gets UnknownMethod, latches the method off once per daemon
+//       session, and lays the strip out as before the method existed. An old
+//       effect never calls it, with the same result. Both degrade to the
+//       pre-method behaviour, a column that does not widen to its window, and
+//       a bump would instead refuse the whole bridge over a missing nicety. A
+//       later change that makes the method REQUIRED, or changes its arguments,
+//       needs v11.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;

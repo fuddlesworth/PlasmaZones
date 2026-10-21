@@ -6,7 +6,8 @@
 // asked for and reports a minimum size it discovers on the way,
 // reportMinSizeIfChanged, the min-size reporter it shares with the batch, and
 // reportStripCommit, which reports a strip window's answer to its offered
-// column (read by PlasmaZonesEffect::readColumnAnswer).
+// column (read by PlasmaZonesEffect::readColumnAnswer), and
+// cancelStripQuickTile, which takes KWin's quick tile back off a strip tile.
 // Split out of tiling.cpp, which keeps the tile batch pipeline.
 
 #include "tilinghandler.h"
@@ -99,8 +100,9 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // on EVERY platform, XWayland included, and that exemption is what keeps
     // the counter off the user's own restore.
     //
-    // KWin emits frameGeometryChanged from INSIDE maximize(), before
-    // maximizedChanged, so on a restore click this slot runs first: the frame
+    // KWin emits frameGeometryChanged before maximizedChanged (on X11 both from
+    // inside maximize(), on Wayland both from the commit that answers it), so
+    // on a restore click this slot runs first: the frame
     // has already moved to the restore rect while m_scrollCommandedRects still
     // holds the maximized column's rect, and the interception has not yet run,
     // let alone dispatched the toggle the engine will answer with a narrower
@@ -699,6 +701,103 @@ TilingHandler::StripCommitReport TilingHandler::reportStripCommit(const QString&
                 qCWarning(lcEffect) << "reportCommittedSize failed:" << error.message();
             });
     return StripCommitReport::Sent;
+}
+
+void TilingHandler::cancelStripQuickTile(KWin::EffectWindow* w)
+{
+    // KWin's quick tile (its Quick Tile shortcuts, a window rule, a script)
+    // on a strip tile: the strip owns the tile's rect, and KWin's tile is a
+    // second authority over it that nothing else hands back. The engine emits
+    // on change, so no batch comes for a tile the layout never asked for, and
+    // KWin re-asserts the tile rect whenever it re-checks the window's
+    // workspace position. Left standing, the requested tile also keeps the
+    // window's frame from ever reading as its answer to its column, which
+    // refuses both the committed-size report and the offered-column centring
+    // (F123). Cancel only, with no dispatch: the engine has no tile to
+    // express, the same reasoning cancelAxisOnlyMaximize gives for an axis
+    // maximize.
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    KWin::Window* const kw = w->window();
+    // Our own requestTile(nullptr) below lands here too, with nothing left to
+    // cancel.
+    if (!kw || !kw->requestedTile()) {
+        return;
+    }
+    const QString windowId = m_effect->getWindowId(w);
+    if (!isScrollTiledWindow(windowId, w)) {
+        return;
+    }
+    // The user's gesture owns the frame, the guard cancelAxisOnlyMaximize
+    // takes: the geometry apply below defers during a drag or resize, so
+    // cancelling now would leave the window at whatever KWin restores under
+    // the pointer. The gesture end runs this again (windowFinishUserMovedResized),
+    // where a window the drag floated off the strip no longer qualifies. A
+    // dragged window the tracker still holds past KWin's own move is the
+    // drop's.
+    if (w->isUserMove() || w->isUserResize()
+        || (m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())) {
+        return;
+    }
+    // KWin owns the frame of a window going fullscreen, and its exit lands on
+    // the restore rect the fullscreen arms seat.
+    if (kw->isRequestedFullScreen()) {
+        return;
+    }
+    const QSize tileSize = QRectF(kw->moveResizeGeometry()).toRect().size();
+    qCInfo(lcEffect) << "Cancelling KWin's quick tile of strip tile" << windowId << "at" << tileSize;
+    const auto geomGuard = m_effect->geometryApplyScope();
+    kw->requestTile(nullptr);
+    // KWin's untile moves the window to a restore rect of its own, not
+    // necessarily where the strip has put the column since. The column goes
+    // back the way the counter-assert puts a commanded rect back. Not while a
+    // maximize is in flight against the mode the window rests in: where the
+    // tile un-maximized a column maximized to the edges, the interception
+    // claims that restore as an un-maximize request, and its answering batch
+    // places the column. Nor while the outputs change
+    // or the strip's output has moved since its batch: the rects are in the
+    // old coordinates, and the next batch re-places it.
+    const KWin::MaximizeMode modeAtRest =
+        m_maximizedToEdgesWindows.contains(windowId) ? KWin::MaximizeFull : KWin::MaximizeRestore;
+    if (kw->requestedMaximizeMode() != modeAtRest || m_effect->m_screenChangeHandler->isScreenChangeInProgress()
+        || stripOutputMovedSinceBatch(scrollTrackedScreenFor(windowId))) {
+        return;
+    }
+    // The commanded rect where the counter-assert keeps one (an X11 column, a
+    // column maximized to the edges, one placed outside its output), else the
+    // column the strip offered a Wayland window.
+    const auto commanded = m_effect->m_scrollCommandedRects.constFind(windowId);
+    const auto offer = m_effect->m_scrollOfferedColumn.constFind(windowId);
+    QRect column;
+    if (commanded != m_effect->m_scrollCommandedRects.constEnd()
+        && m_effect->m_daemonGate.commandStamps.isCurrent(w, commanded->commandStamp)) {
+        column = commanded->rect;
+    } else if (offer != m_effect->m_scrollOfferedColumn.constEnd()) {
+        column = offer->rect;
+    }
+    if (column.isEmpty()) {
+        return;
+    }
+    // Copied out of the hash nodes before the apply, which re-enters the frame
+    // slots synchronously on X11.
+    const bool hasOffer = offer != m_effect->m_scrollOfferedColumn.constEnd();
+    const QRect offeredColumn = hasOffer ? offer->rect : QRect();
+    // Putting the column back is not a new command, so the window keeps its
+    // stamp: a strip entry the next batch has already scheduled for it must
+    // still land.
+    const quint64 latestCommand = m_effect->m_daemonGate.commandStamps.current(w);
+    m_effect->applyWindowGeometry(w, column, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+    m_effect->m_daemonGate.commandStamps.reinstate(w, latestCommand);
+    // The client was sent the tile's size and is now sent the column's, so
+    // whatever it commits next answers the column: a new offer when the two
+    // sizes differ, as a batch that sends a size is (recordStripOffer). That
+    // also supersedes the Foreign mark KWin's tile request may have left.
+    if (hasOffer) {
+        m_effect->recordStripOffer(
+            w, windowId, offeredColumn,
+            ScrollDecisions::stripEntrySendsSize(tileSize, QRectF(kw->moveResizeGeometry()).toRect().size()));
+    }
 }
 
 bool TilingHandler::stripOutputMovedSinceBatch(const QString& screenId) const

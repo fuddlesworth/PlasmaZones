@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): the paint pipeline is one temporal
-// sequence — prePaintScreen through postPaintScreen with paintWindow and
-// drawWindow between — whose stages share per-pass latches
-// (m_currentPassOutput, the frame-clock pin, the strip-capture exclusion)
-// that only hold within one bracket. Splitting the bracket across TUs would
-// scatter the latch discipline that most of this file's comments exist to
-// defend. Over the 1150 ceiling before PR #891 and accepted as such.
-
 #include "plasmazoneseffect.h"
 #include "desktopvisibility.h"
 #include "kwincompat.h"

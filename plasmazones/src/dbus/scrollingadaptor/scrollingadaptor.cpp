@@ -8,7 +8,6 @@
 
 #include <algorithm>
 
-#include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -19,14 +18,16 @@
 #include <QJsonObject>
 #include <QRectF>
 #include <QSet>
+#include <QSize>
 #include <QVector>
 
 namespace PlasmaZones {
 
 namespace {
 /// The presetVocabularyJson payload keys, in one place so the two writes
-/// cannot drift apart (the sibling payloads use ZoneJsonKeys:: /
-/// ScrollOpenKeys:: the same way). The XML DocString spells them by hand,
+/// cannot drift apart (the sibling payloads in this file key on
+/// ZoneJsonKeys::, StripPreviewKey:: and StripModelKey:: the same way). The
+/// XML DocString spells them by hand,
 /// per the same kept-in-sync-BY-HAND rule the bounds literals follow.
 inline QLatin1String presetColumnWidthsKey()
 {
@@ -113,8 +114,8 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
     // payload-free bus message, not a relayout.
     connect(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, [this](const QString& screenId) {
         // A placement change for a screen this engine no longer owns
-        // describes a strip no reader can fetch: visibleStripJson
-        // answers "[]" for it through the same gate. Waking a reader
+        // describes a strip no reader can fetch: visibleStripJson and
+        // stripModelJson answer empty for it through the same gate. Waking a reader
         // to be told nothing is the one wake-up worth suppressing,
         // and unlike a payload gate this one is a set lookup.
         if (screenId.isEmpty() || !m_engine || !m_engine->isActiveOnScreen(screenId)) {
@@ -207,15 +208,11 @@ void ScrollingAdaptor::setScrollFocusScrollBlockedWindows(const QStringList& win
 void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
 {
     // Wire-boundary validation: only the two adjacent steps are meaningful,
-    // and the screen gate keeps a wheel event from a non-scrolling monitor
-    // from being redirected onto the active scrolling screen by
-    // resolveOperationScreen's fallback. The isEmpty check is kept even though
-    // isActiveOnScreen would reject "" anyway: rejecting a malformed argument
-    // at the wire boundary should not depend on how a callee treats it.
-    if (!m_engine || screenId.isEmpty() || (delta != -1 && delta != 1)) {
-        return;
-    }
-    if (!m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
+    // and the shared guard's ownership term keeps a wheel event from a
+    // non-scrolling monitor from being redirected onto the active scrolling
+    // screen by resolveOperationScreen's fallback. The range term is pure, so
+    // it goes first and a malformed delta never reaches the context gate.
+    if ((delta != -1 && delta != 1) || refusesScreenVerb(screenId)) {
         return;
     }
     // The delta is STRIP-RELATIVE (previous/next column) — the effect collapses
@@ -250,18 +247,17 @@ bool ScrollingAdaptor::refusesForContext(const QString& screenId) const
 
 bool ScrollingAdaptor::refusesScreenVerb(const QString& screenId) const
 {
-    // The four-term entry guard the screen-scoped verbs share. Written once
-    // because it had drifted into five identical copies, and a fifth term
-    // added to four of them is the shape this whole interface's refusal bugs
-    // take. ORDER IS LOAD-BEARING: the engine test comes first so the two
+    // The four-term entry guard every screen-scoped verb shares. Written once
+    // because it had drifted into identical copies, and a term added to some
+    // of them but not the rest is the shape this whole interface's refusal
+    // bugs take. ORDER IS LOAD-BEARING: the engine test comes first so the two
     // calls below it are never made through a null pointer, and the context
     // gate comes last because it is the only term that can call out into the
     // daemon.
     //
-    // scrollView and focusColumn deliberately do NOT use this: they carry
-    // extra terms of their own (a step provider, a delta range) and check the
-    // engine earlier, so folding them in would either reorder their guards or
-    // hide the extra terms.
+    // A verb's own terms (a delta or index range, the step provider) are pure
+    // and are tested at the call site AHEAD of this guard, so a malformed
+    // argument never reaches the context gate either.
     return !m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId);
 }
 
@@ -269,10 +265,7 @@ void ScrollingAdaptor::scrollView(const QString& screenId, int delta)
 {
     // focusColumn's wire-boundary gate, plus the provider: without a step
     // there is no distance to move, and a silent no-op beats inventing one.
-    if (!m_engine || !m_viewScrollStep || screenId.isEmpty() || (delta != -1 && delta != 1)) {
-        return;
-    }
-    if (!m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
+    if (!m_viewScrollStep || (delta != -1 && delta != 1) || refusesScreenVerb(screenId)) {
         return;
     }
     // Signed percent: the engine resolves the direction against the screen's
@@ -282,11 +275,10 @@ void ScrollingAdaptor::scrollView(const QString& screenId, int delta)
 
 void ScrollingAdaptor::focusColumnAt(const QString& screenId, int index)
 {
-    // focusColumn's gate chain through the shared guard (this verb carries
-    // no extra term beyond the index range, so unlike the wheel pair it
-    // folds in cleanly), plus the out-of-contract index. The strip's own
-    // clamp handles an index past the end; a negative one is refused here
-    // so it never reads as a press on the first column.
+    // focusColumn's gate chain through the shared guard, plus the
+    // out-of-contract index. The strip's own clamp handles an index past the
+    // end; a negative one is refused here so it never reads as a press on
+    // the first column.
     if (index < 0 || refusesScreenVerb(screenId)) {
         return;
     }
@@ -313,7 +305,11 @@ void ScrollingAdaptor::scrollViewByPx(const QString& screenId, int px)
     if (px == 0 || refusesScreenVerb(screenId)) {
         return;
     }
-    m_engine->scrollViewByPx(px, screenId);
+    // Bounded to the band scrollViewByPercent bounds its own pixels to (a
+    // hundred viewports and more), so a wire value near INT_MAX cannot
+    // overflow the strip's view arithmetic when it is added to the offset.
+    constexpr int kMaxPanPx = 1000000;
+    m_engine->scrollViewByPx(qBound(-kMaxPanPx, px, kMaxPanPx), screenId);
 }
 
 void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double proportion)
@@ -389,30 +385,27 @@ bool ScrollingAdaptor::toggleMaximizeColumn(const QString& screenId, const QStri
     //
     // WHETHER THE STRIP CHANGED IS REPORTED here only to keep the wire shape
     // identical to toggleMaximizeToEdges below, which is the verb whose caller
-    // actually steers on the answer; that method carries the reason. True on
-    // both means the strip changed. False covers a refusal at this boundary
-    // and an accepted call the engine acted on with nothing, and deliberately
-    // does not distinguish them.
+    // actually steers on the answer; that method carries the reason. This
+    // verb's one in-tree wire caller, the shell's placement map, discards it.
+    // True means the strip changed. False covers BOTH refusals and
+    // deliberately does not distinguish them: refused here at the boundary
+    // (no engine, empty screen id, the engine not active on that screen, the
+    // per-context gate closed), and accepted but acted on by nothing (no state
+    // for the context, an empty strip, a window no column holds, a column the
+    // toggle itself refuses).
     //
     // GATED ON THE CALLER'S SCREEN, ACTED ON THE WINDOW'S. For a named window
-    // the engine re-resolves to that window's own tracked screen and acts
+    // the engine re-resolves to that window's own tracked context and acts
     // there (ScrollEngine::toggleMaximizeColumn), while every term of the gate
     // below reads the screenId the caller passed. So a request can clear
     // screen A's gate and change a column on screen B, or be refused by A
     // while B would have allowed it. This is NOT a guarantee this layer makes,
-    // and it is recorded rather than closed: resolving the window's screen
-    // needs ScrollEngine::stateForWindow, which is private, and the adaptor
-    // deliberately holds no view of engine state beyond isActiveOnScreen.
-    // Same on toggleMaximizeToEdges below.
-    //
-    // False therefore covers BOTH refusals, and deliberately does not
-    // distinguish them: refused here at the boundary (no engine, empty screen
-    // id, the engine not active on that screen, the per-context gate closed),
-    // and accepted but acted on by nothing (no state for the context, an empty
-    // strip, a window no column holds, a column the toggle itself refuses).
-    // The effect's response is identical either way — put the bit back where
-    // the engine last had it — so splitting them would be a distinction with
-    // no consumer.
+    // and it is recorded rather than closed. The window's screen is a public
+    // lookup (screenForTrackedWindow), but the context gate answers for a
+    // screen's CURRENT context while the engine can act on a desktop not in
+    // view, so re-pointing the gate would still ask about the wrong context
+    // there; closing it needs a context-keyed gate the provider does not
+    // offer. Same on toggleMaximizeToEdges below.
     if (refusesScreenVerb(screenId)) {
         return false;
     }
@@ -473,8 +466,9 @@ void ScrollingAdaptor::reportCommittedSize(const QString& windowId, int offeredW
                                            int committedWidth, int committedHeight)
 {
     // clearWindowedFullscreen's wire-boundary policy, context gate skipped
-    // for its reason. Non-positive sizes are malformed and dropped here; the
-    // engine refuses an untracked window and the strip bounds a huge one.
+    // for its reason. Non-positive sizes are malformed and dropped here (the
+    // engine repeats that check); the engine refuses an untracked window and
+    // bounds a huge commit at its client-extent cap.
     if (!m_engine || windowId.isEmpty() || offeredWidth <= 0 || offeredHeight <= 0 || committedWidth <= 0
         || committedHeight <= 0) {
         return;
@@ -496,7 +490,9 @@ bool ScrollingAdaptor::setWindowFullscreenFloat(const QString& windowId, const Q
 
 QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
 {
-    // isEmpty kept for the same wire-boundary reason as in focusColumn.
+    // isEmpty kept even though isActiveOnScreen would reject "" anyway:
+    // rejecting a malformed argument at the wire boundary should not depend
+    // on how a callee treats it (refusesScreenVerb carries the same term).
     if (!m_engine || screenId.isEmpty()) {
         return QStringLiteral("[]");
     }
@@ -536,10 +532,10 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
         obj[PhosphorZones::ZoneJsonKeys::Height] = r.height();
         obj[PhosphorZones::ZoneJsonKeys::ZoneNumber] = entry.tile.zoneNumber;
         // Tab keys only for a tile whose column actually draws an indicator.
-        // Emitting a zeroed triple for every ordinary tile would put three
-        // dead keys on every element of a payload the settings app polls on a
-        // live timer, and "no tabCount key" and "tabCount 0" have to mean the
-        // same thing at the far end anyway (an older daemon sends neither).
+        // Emitting them zeroed for every ordinary tile would put dead keys on
+        // every element of a payload the settings app polls on a live timer,
+        // and "no tabCount key" and "tabCount 0" have to mean the same thing
+        // at the far end anyway (an older daemon sends neither).
         if (entry.tile.tabCount > 0) {
             obj[PhosphorProtocol::Service::StripPreviewKey::TabCount] = entry.tile.tabCount;
             obj[PhosphorProtocol::Service::StripPreviewKey::ActiveTab] = entry.tile.activeTabIndex;
@@ -624,8 +620,9 @@ QString ScrollingAdaptor::presetVocabularyJson(const QString& screenId) const
 QString ScrollingAdaptor::blueprintProgressJson(const QString& screenId) const
 {
     // Same wire-boundary and screen gates as its two siblings. The gate is
-    // what makes a non-scrolling screen report {0, 0} rather than the progress
-    // its surviving overrides and state would still resolve to.
+    // what makes a non-scrolling screen answer the empty object rather than
+    // the progress its surviving overrides and state would still resolve to;
+    // the {0, 0} an owned screen with no blueprint reports is the engine's.
     if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
         return QStringLiteral("{}");
     }
@@ -642,11 +639,12 @@ void ScrollingAdaptor::clearEngine()
         disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::scrollingScreensChanged, this, nullptr);
         // Three relays are wired in the constructor and all three die here: a
         // detached adaptor must not keep putting a dead engine's state on the
-        // bus. Two of them are load-bearing, because their lambdas are bare
-        // forwards with no engine test, so a surviving connection really does
-        // keep emitting and a spy discriminates the disconnect from its
-        // absence: the screen-set relay above, and the strip-identity relay
-        // below. The third, placementChanged, is defence in depth — its
+        // bus. Two of them are load-bearing, because their lambdas test no
+        // engine pointer, so a surviving connection really does keep emitting
+        // and a spy discriminates the disconnect from its absence: the
+        // screen-set relay above (its change gate and autotile lookup read
+        // only adaptor state), and the strip-identity relay below, a bare
+        // forward. The third, placementChanged, is defence in depth — its
         // lambda's own `!m_engine` conjunct already makes a surviving
         // connection inert rather than fatal.
         disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::stripContextChanged, this, nullptr);
@@ -660,8 +658,12 @@ void ScrollingAdaptor::clearEngine()
     // would just mean a detached adaptor whose "last broadcast" memory
     // contradicts every other slot it answers.
     m_lastBroadcastScreens.clear();
-    // The autotile resolver captures the autotile engine it reads, not this
-    // adaptor's scroll engine.
+    // The autotile resolver IS cleared, unlike the two providers below,
+    // because nulling the engine does not fence it the way it fences them:
+    // its one reader is the screen-set relay, whose lambda tests no engine
+    // pointer. The disconnect above already severs that relay, so this is
+    // the symmetric clear of a late-bound dependency rather than a live
+    // guard.
     m_isAutotileScreen = nullptr;
     // m_scrollEffectBehaviour and m_scrollFocusScrollBlockedWindows are
     // deliberately NOT cleared, and they are the two members that differ: the
@@ -673,10 +675,12 @@ void ScrollingAdaptor::clearEngine()
     // empty one that reads as "no screen has any of the three" and "the scroll
     // cap refuses nothing".
     //
-    // The two LATE-BOUND PROVIDERS (setViewScrollStepProvider,
-    // setContextGateProvider) are not cleared either, and unlike the pair
-    // above that is inertness rather than a decision worth defending. Every
-    // verb that consults them refuses on `!m_engine` first, so a surviving
+    // The other two LATE-BOUND PROVIDERS (setViewScrollStepProvider,
+    // setContextGateProvider) are not cleared, and unlike the pair above
+    // that is inertness rather than a decision worth defending. Every verb
+    // that consults them reaches them only past refusesScreenVerb's
+    // `!m_engine` term (scrollView tests the step provider's presence
+    // first, but never calls it there), so a surviving
     // std::function is unreachable once the pointer is null. They are also
     // owned by the daemon and re-installed on the next cycle, and clearing
     // them would not make this object any more detached than nulling the

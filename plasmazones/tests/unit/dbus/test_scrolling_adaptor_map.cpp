@@ -344,12 +344,12 @@ private Q_SLOTS:
 
         // The positive control: EXACTLY the pixels asked for, no step
         // rounding, and the view detaches from the centering policy while
-        // focus stays where it was.
+        // focus stays where it was. A pan that moves is quiet: the map's
+        // moving lens is its feedback, so no OSD joins the earlier refusal.
         m_adaptor->scrollViewByPx(QStringLiteral("DP-1"), -137);
         QCOMPARE(state->strip().viewAnchor(), anchorBefore + 137);
         QVERIFY(state->strip().viewDetached());
-        QCOMPARE(feedback.count(), 2);
-        QCOMPARE(feedback.last().at(0).toBool(), true);
+        QCOMPARE(feedback.count(), 1);
         QCOMPARE(activateSpy.count(), 0);
         QCOMPARE(m_engine->managedFocusedWindow(QStringLiteral("DP-1")), QStringLiteral("app|c"));
         // A second call is a second pan, and the model reports the moved view.

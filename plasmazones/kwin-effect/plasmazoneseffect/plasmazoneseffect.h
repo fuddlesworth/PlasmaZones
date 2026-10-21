@@ -1,15 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): PlasmaZonesEffect is the KWin plugin's
-// single entry class — the Effect interface overrides plus every handler
-// back-pointer surface the split-out implementation files
-// (plasmazoneseffect/*.cpp, handlers, autotilehandler) call back through.
-// The implementation is already partitioned; the class declaration is the
-// one place KWin's plugin contract requires to be whole. Grew with the
-// cross-output bounce fix (#1124) and its audit: the per-window wiring split
-// and the members those fixes add.
-
 #pragma once
 
 #include <PhosphorCompositor/TilingState.h>

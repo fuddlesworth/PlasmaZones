@@ -18,8 +18,8 @@
 /// logic is covered by including this file directly (the established pattern
 /// for the anchor-uniform and shader-timing helpers). The KWin-facing side
 /// effects (setFullScreen, moveResize, layer demotion, D-Bus dispatch) stay
-/// at the call sites in tiling.cpp — these functions decide, they do not
-/// act.
+/// at the call sites in the tiling handler's and the effect's translation
+/// units. These functions decide, they do not act.
 namespace PlasmaZones::ScrollDecisions {
 
 /// What the windowed-fullscreen half of a batch entry does for one window.
@@ -35,9 +35,11 @@ enum class WfsAction {
 struct WfsDecision
 {
     WfsAction action = WfsAction::None;
-    /// A flag-off entry is the authoritative echo of a clearWindowedFullscreen
-    /// this effect sent — the in-flight marker is consumed BEFORE the action
-    /// so a completed clear cannot latch the adopt guard.
+    /// Consume the clear-in-flight marker, BEFORE the action runs. Set by the
+    /// two entries that spend it: a flag-off entry, the authoritative echo of
+    /// a clearWindowedFullscreen this effect sent, and the flagged entry whose
+    /// stale adopt the armed marker refuses, which spends it in the refusal
+    /// (single-shot, see resolveWindowedFullscreenAction).
     bool consumeClearMarker = false;
 };
 
@@ -115,7 +117,7 @@ enum class MaximizeAction {
     Release, ///< engine dropped the maximize while we hold the bit
 };
 
-/// The column-maximize batch decision over its three inputs.
+/// The column-maximize batch decision over its four inputs.
 ///
 /// TAKES AN IN-FLIGHT MARKER, like its windowed-fullscreen sibling above,
 /// though for a different reason. That one needs one because its dispatch
@@ -146,13 +148,11 @@ enum class MaximizeAction {
 ///
 /// @p flagOnWire     the batch entry's maximizedToEdges
 /// @p inSet          effect-side membership (m_maximizedToEdgesWindows)
-/// @p kwinMaximized  whether KWin holds MaximizeFull. The batch arm passes
-///                   requestedMaximizeMode(), not the committed maximizeMode():
-///                   the committed bit trails a client round trip on Wayland,
-///                   and reading it re-resolves to Apply on every batch that
-///                   lands inside that window. The interception passes the
-///                   COMMITTED mode instead, because there it is comparing
-///                   against what actually landed.
+/// @p kwinMaximized  whether KWin holds MaximizeFull. The batch arm, the one
+///                   caller, passes requestedMaximizeMode(), not the committed
+///                   maximizeMode(): the committed bit trails a client round
+///                   trip on Wayland, and reading it re-resolves to Apply on
+///                   every batch that lands inside that window.
 /// @p toggleInFlight a dispatched toggleMaximizeToEdges for this window whose
 ///                   reply has not arrived. Deliberately has NO default
 ///                   argument: a defaulted parameter would let the call site
@@ -223,7 +223,7 @@ inline QRect viewCarriedOrigin(const QRectF& from, int viewDelta, bool vertical)
 /// the target itself. Every other apply at its target stays a no-op.
 inline bool claimedPressOwesLeg(bool answeringClaimedPress, const QRectF& origin, const QRect& target)
 {
-    return answeringClaimedPress && origin.isValid() && !origin.isEmpty() && origin.toRect() != target;
+    return answeringClaimedPress && origin.isValid() && origin.toRect() != target;
 }
 
 /// The counter-assert burst budget for scroll-managed windows an EXTERNAL
@@ -258,8 +258,8 @@ inline bool shouldCounterAssert(qint64& burstStartMs, int& burstCount, qint64 no
 /// keep-visible clamp it applies to a commit that acks a configure or changes
 /// the window geometry, which pulls a column the strip committed outside its
 /// output (@p outOfViewEntry: a park, or a straddler cropped at the edge) back
-/// in. Never mid maximize
-/// transition: that frame change is a maximize or restore, not a mover.
+/// in. Never mid maximize transition: that frame change is a maximize or
+/// restore, not a mover.
 inline constexpr bool counterAssertMovable(bool inMaximizeTransition, bool waylandClient, bool maximizedMember,
                                            bool outOfViewEntry)
 {
@@ -333,6 +333,26 @@ inline bool mayCarryCommittedSize(bool declaredRect, bool columnAnswered, const 
         return false;
     }
     return committed.width() <= column.width() && committed.height() <= column.height();
+}
+
+/// Whether a strip batch's entry is a new offer to a Wayland client: it sends
+/// the client a SIZE, so whatever the client settles on next answers this
+/// column (ColumnAnswer::Owed). @p commanded is KWin's move-resize size before
+/// the apply, @p delivered the size the entry delivers (the column, or a size
+/// mayCarryCommittedSize carried). It is the split both arms of
+/// applyWindowGeometry take: an equal size goes out as a pure move, or not at
+/// all, and asks the client nothing.
+///
+/// No rect has to move for an entry to be an offer. At rest KWin's move-resize
+/// size is the client's committed frame, so a batch the engine forces with
+/// every rect unchanged, as it does when minimum sizes are turned on (F50),
+/// offers the column again to a client whose frame differs from it, and the
+/// answer the engine could not learn while they were off is read again. A
+/// client whose smaller answer is carried is not re-offered, and needs not
+/// be: a narrower answer never sets a floor.
+inline bool stripEntrySendsSize(const QSize& commanded, const QSize& delivered)
+{
+    return commanded != delivered;
 }
 
 /// Where a Wayland strip window's answer to the column it was offered stands
@@ -478,11 +498,10 @@ enum class Claim {
 /// deliberate blank is a cell a reader can see rather than a call nobody
 /// wrote.
 ///
-/// MODEFLIP, FULLSCREENEXITWHILEFLOATING AND TEARDOWN HAVE NO PRODUCTION
-/// CALLER, and that is a decision, not a gap. Every other scope routes its
-/// releases through releaseAllClaims, directly or through
-/// cleanupAutotileTracking. These do not, because the funnel's shape is wrong
-/// for them:
+/// MODEFLIP AND TEARDOWN HAVE NO PRODUCTION CALLER, and that is a decision,
+/// not a gap. Every other scope routes its releases through releaseAllClaims,
+/// directly or through cleanupAutotileTracking. These two do not, because the
+/// funnel's shape is wrong for them:
 ///
 ///  - ModeFlip's release is deliberately SPLIT IN TWO. The demote pass sheds
 ///    before the engines re-place, and the pre-tile restores run after; one
@@ -492,51 +511,48 @@ enum class Claim {
 ///    re-entrant (the daemon can drop mid-sweep). It handles that itself,
 ///    per claimReleaseOrder; funnelling it per-window would re-enter the
 ///    funnel's own guards N times to no benefit.
-///  - FullscreenExitWhileFloating has no funnel call for no argued reason:
-///    its repair site releases directly, and nobody has routed it. Unlike
-///    the two above, this one is an OMISSION rather than a decision. It is
-///    recorded as such instead of quietly fixed here, because routing it
-///    changes which claims release on a fullscreen exit and that belongs in
-///    its own commit with its own live check (the same standing as the
-///    UntrackFunnel monocle blank below).
 ///
 /// They stay in the enum because the table is what the tests drive, and
 /// because the answer to "does monocle release on a mode flip" has to be
 /// written down somewhere a reader can find it. Do not "finish the wiring"
-/// by pointing the first two at releaseAllClaims without re-deriving their
-/// reasons.
+/// by pointing them at releaseAllClaims without re-deriving their reasons.
 enum class ClaimScope {
     /// The window is leaving the strip outright and no later batch will carry
-    /// it: the untile diff, the active float channel, the leaving-scrolling
-    /// loop.
+    /// it: the untile diff and the active float channel (and the passive one
+    /// on a scrolling screen, see passiveFloatScope).
     StripExit,
-    /// The untrack funnel: a close, a cross-output transfer to a screen this
-    /// handler's engines do not manage, and the effect-only releases that pass
-    /// no scope.
-    ///
-    /// Identical to StripExit except that monocle does NOT release here, and
-    /// that blank is RECORDED rather than filled because it is unresolved, not
-    /// decided. Monocle rides cleanupClosedWindowState's bare scrub on this
-    /// path instead, which is right for a close (a dying window has nothing to
-    /// restore) and questionable for the cross-output half (the window
-    /// survives on a screen this handler no longer manages, holding a maximize
-    /// bit nothing will hand back).
-    ///
-    /// Filling it changes shipped monocle handling on a path the nested
-    /// harness cannot drive — the engine re-places script-driven cross-output
-    /// moves — so it wants a live check and its own argued commit. Encoded so
-    /// the next reader sees a cell with a reason rather than an omission with
-    /// none.
+    /// The untrack funnel for a LIVE window, the scope cleanupAutotileTracking
+    /// and releaseWindowTracking default to: a cross-output move
+    /// (handleWindowOutputChanged's transfer, and its cross-mode arm), the
+    /// flags-settle eviction, a drag whose start screen no engine owns any
+    /// more, a suspended tile dropped on the snap path, and a batch float onto
+    /// another screen. Every claim releases, the monocle maximize included,
+    /// on LiveDeparture's terms: the window survives, and the screen it lands
+    /// on re-claims what it runs. Left to the scrub, a monocle member kept
+    /// KWin's maximize with no membership, which nothing hands back: the
+    /// monocle arm takes no membership over a window already at MaximizeFull,
+    /// and a float or a snapping screen sends no batch to clear it. A release
+    /// that has to wait (fullscreen, a gesture) keeps its membership for the
+    /// fullscreen exit or the gesture end to pay.
     UntrackFunnel,
+    /// The untrack funnel for a closing window (onWindowClosed). Monocle does
+    /// not release: a dying window has nothing to restore, so its membership
+    /// is dropped bare by cleanupClosedWindowState's scrub.
+    Close,
     /// The daemon's passive float channel, whose producers never reach the
     /// active funnel.
     PassiveFloat,
-    /// A screen changed mode, desktop or activity: the demote pass, the
+    /// A screen changed mode, desktop or activity: the demote pass (the loop
+    /// over the windows of a screen leaving scrolling or autotile), the
     /// removed-screens sweep, the pre-tile restores.
     ModeFlip,
-    /// A window left fullscreen while floating — the repair arm for a claim
-    /// that was retained through the fullscreen hold.
-    FullscreenExitWhileFloating,
+    /// A window left fullscreen on an exit arm no batch follows
+    /// (slotWindowFullScreenChanged): a windowed-fullscreen member leaving it
+    /// by itself, a window this handler no longer tracks, one with no tracked
+    /// screen or on a screen no longer managed, and one floated during the
+    /// hold. The repair for a maximize claim retained through the hold, whose
+    /// release skipped while the window was fullscreen.
+    FullscreenExit,
     /// Engine disable, daemon loss, daemon bring-up, effect unload. Every
     /// claim answers, and the ORDER matters (see claimReleaseOrder).
     Teardown,
@@ -559,9 +575,8 @@ enum class ClaimScope {
 
 /// Whether @p claim releases on @p scope.
 ///
-/// Every blank below is deliberate and load-bearing; none is an oversight.
-/// Changing one is a behaviour change and belongs in its own commit with its
-/// own argument.
+/// Every blank below is decided, and its reason is at its case or on the
+/// scope. Changing one is a behaviour change and needs its own argument.
 inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
 {
     switch (scope) {
@@ -569,7 +584,10 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
         // All three: the defining case. Nothing else will carry the window.
         return true;
     case ClaimScope::UntrackFunnel:
-        // Monocle blank, and UNRESOLVED rather than decided — see the enum.
+        // All three: the window survives, and nothing here carries it on.
+        return true;
+    case ClaimScope::Close:
+        // Monocle blank: a dying window has nothing to restore.
         return claim != Claim::MonocleMaximize;
     case ClaimScope::PassiveFloat:
         // Monocle is EXCLUDED, and documented at its site: re-driving a
@@ -580,10 +598,12 @@ inline constexpr bool claimReleasesOn(Claim claim, ClaimScope scope)
         return claim != Claim::MonocleMaximize;
     case ClaimScope::ModeFlip:
         return true;
-    case ClaimScope::FullscreenExitWhileFloating:
-        // Windowed fullscreen is not held here by construction — this arm
-        // runs BECAUSE the window left fullscreen. The other two may have
-        // retained a claim through the hold, and this is their repair.
+    case ClaimScope::FullscreenExit:
+        // Windowed fullscreen blank: the window has just left fullscreen,
+        // and the one arm that still holds a membership (a member leaving it
+        // with the daemon gone) keeps it on purpose, for the batch consumer's
+        // deferred reconcile. The other two may have retained a claim through
+        // the hold, and this is their repair.
         return claim != Claim::WindowedFullscreen;
     case ClaimScope::Teardown:
         return true;
@@ -647,7 +667,9 @@ inline constexpr ClaimScope passiveFloatScope(bool onScrollingScreen)
     return onScrollingScreen ? ClaimScope::StripExit : ClaimScope::PassiveFloat;
 }
 
-/// Teardown release order, lowest first.
+/// Release order, lowest first. releaseAllClaims static-asserts it, and the
+/// bulk teardowns (the engine disable, the daemon loss, the effect unload)
+/// follow it by hand.
 ///
 /// Windowed fullscreen goes BEFORE either maximize claim. Both maximize
 /// releases skip a window that still holds (or has requested) fullscreen, and
@@ -666,19 +688,6 @@ inline constexpr int claimReleaseOrder(Claim claim)
         return 2;
     }
     return 3;
-}
-
-/// Whether a claim keeps its ledger entry when its release is SKIPPED because
-/// the window still holds fullscreen.
-///
-/// The two maximize claims retain: shedding an entry whose bit was never
-/// handed back strands that bit with nothing recording it is owed, and a
-/// later batch or the fullscreen-exit repair can still pay it. Windowed
-/// fullscreen does not retain, because its membership is shed by its caller
-/// (forgetWindowedFullscreen) before the compositor half runs at all.
-inline constexpr bool claimRetainsOnFullscreenSkip(Claim claim)
-{
-    return claim != Claim::WindowedFullscreen;
 }
 
 /// The screens a scrolling-set change flips between engines inside the tiling

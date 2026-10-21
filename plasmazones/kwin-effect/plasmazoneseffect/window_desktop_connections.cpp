@@ -57,8 +57,7 @@ WindowContextEdge::IdSet activityIdsOf(const KWin::EffectWindow* window)
 // through one signal per axis; each is classified against the window's stamp
 // (WindowContextEdge::classify) and handed to applyWindowContextEdit, whose
 // arms depend only on that edge and on the window's tracking state, so both
-// axes share them. Its own translation unit because window_connections.cpp is
-// over the file-size ceiling.
+// axes share them.
 void PlasmaZonesEffect::wireContextChangeHandlers(KWin::EffectWindow* w)
 {
     // Seed the stamp so the window's very first edit is classifiable. The

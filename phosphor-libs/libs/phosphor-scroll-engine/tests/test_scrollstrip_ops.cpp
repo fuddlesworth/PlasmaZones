@@ -88,6 +88,8 @@ private Q_SLOTS:
     // chasing a failure could not find the body by scrolling.
     void visibleColumnIndicesTrackTheViewport();
     void rotateVisibleColumnsCyclesWindowsThroughSlots();
+    void rotateCarriesMaximizeToEdgesWithTheWindow();
+    void rotateReconcilesTheTabbedOwnerWithTheSlotsDisplay();
     void reconcileLoneTileRecordsHeightIntent();
     void degenerateWorkAreaNeverAsserts();
     void monsterFixedSiblingLeavesAutoTilesVisible();
@@ -765,6 +767,62 @@ void TestScrollStripOps::rotateVisibleColumnsCyclesWindowsThroughSlots()
     ScrollStrip lone;
     QVERIFY(lone.insertWindow(QStringLiteral("solo"), kHalf, ColumnDisplay::Normal, params));
     QCOMPARE(lone.rotateVisibleColumns(true, params), 0);
+}
+
+void TestScrollStripOps::rotateCarriesMaximizeToEdgesWithTheWindow()
+{
+    // The compositor mirrors maximizedToEdges onto each window's OWN maximize
+    // bit, so the flag is the window's even though it lives on its column.
+    // Left on the slot, a rotate un-maximized the window the user maximized
+    // and maximized whichever neighbour rotated into its slot.
+    const auto params = defaultParams();
+    ScrollStrip strip = threeColumns(params);
+    QCOMPARE(strip.columnCount(), 3);
+    QVERIFY(strip.toggleMaximizeToEdgesForWindow(QStringLiteral("b"), params));
+    // b now spans the viewport, and the view still shows part of it beside
+    // the active c, so both are rotated.
+    QCOMPARE(strip.visibleColumnIndices(params), QVector<int>({1, 2}));
+    const auto maximized = [&](const char* id) {
+        return strip.columns().at(strip.columnOfWindow(QString::fromLatin1(id))).maximizedToEdges;
+    };
+
+    QCOMPARE(strip.rotateVisibleColumns(true, params), 2);
+    QCOMPARE(strip.windowsInOrder(), QStringList({QStringLiteral("a"), QStringLiteral("c"), QStringLiteral("b")}));
+    QVERIFY(maximized("b"));
+    QVERIFY(!maximized("c"));
+    const ResolvedStrip r = strip.relayout(params);
+    QCOMPARE(Ax::mainLen(rectOf(r, QStringLiteral("b"))), ScrollTestUtils::kMainExtent);
+    QCOMPARE(Ax::mainLen(rectOf(r, QStringLiteral("c"))), Ax::mainLen(rectOf(r, QStringLiteral("a"))));
+}
+
+void TestScrollStripOps::rotateReconcilesTheTabbedOwnerWithTheSlotsDisplay()
+{
+    // Display stays with the SLOT while the tiles move, so the height owner
+    // the tiles bring has to be squared with the display they land in. A
+    // Tabbed slot receiving a Normal stack names the tab on show, the rule a
+    // column entering tabbed follows, rather than leaving no owner for the
+    // resolver to guess at. A Normal slot holds none, rather than keeping the
+    // stale owner the tabs brought (which the persisted blob would carry).
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("x"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("y"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    QCOMPARE(strip.columns().at(0).heightOwnerId, QStringLiteral("y")); // the tab on show
+    QVERIFY(strip.insertWindow(QStringLiteral("z"), kHalf, ColumnDisplay::Normal, params));
+    QCOMPARE(strip.visibleColumnIndices(params), QVector<int>({0, 1}));
+
+    QCOMPARE(strip.rotateVisibleColumns(true, params), 3);
+    QCOMPARE(strip.columns().at(0).display, ColumnDisplay::Tabbed);
+    QCOMPARE(strip.columns().at(0).heightOwnerId, QStringLiteral("z"));
+    QCOMPARE(strip.columns().at(1).display, ColumnDisplay::Normal);
+    QVERIFY(strip.columns().at(1).heightOwnerId.isEmpty());
+
+    // Back again: the stack lands in the Tabbed slot as a Normal column's
+    // tiles, so its tab on show (y, still the active tile) takes the extent.
+    QCOMPARE(strip.rotateVisibleColumns(false, params), 3);
+    QCOMPARE(strip.columns().at(0).heightOwnerId, QStringLiteral("y"));
+    QVERIFY(strip.columns().at(1).heightOwnerId.isEmpty());
 }
 
 void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()

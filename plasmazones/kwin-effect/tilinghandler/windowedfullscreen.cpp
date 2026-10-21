@@ -271,8 +271,10 @@ void TilingHandler::reconcileMaximizeAfterGesture(KWin::EffectWindow* w)
     // The return leaves no maximized-to-edges claim behind it. A window in
     // BOTH ledgers is unreachable: the column arm inserts only on a scrolling
     // screen and the monocle arm only under a tiling algorithm, the modes are
-    // exclusive per screen, and a tile batch on a non-scrolling screen releases (autotile) or hands over
-    // (monocle) a column claim before either arm runs, so owesMaximizedToEdges is false or paid by here.
+    // exclusive per screen, and a tile batch on a non-scrolling screen ends a
+    // column claim: a plain tile releases it before its apply, and a monocle
+    // tile moves it into the monocle ledger as that arm takes its claim. So
+    // owesMaximizedToEdges is false or paid by here.
     if (owesMonocle && m_monocleRestoreOwed.contains(windowId)) {
         unmaximizeMonocleWindow(windowId);
         return;
@@ -415,8 +417,10 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // This used to cancel first — put the bit back to whatever the engine last
     // said (membership) — and let the answering batch drive it to the result.
     // Correct, and it cost an extra visible jump on every press. KWin emits
-    // frameGeometryChanged from inside maximize() BEFORE maximizedChanged, so
-    // by the time this runs the window has already been moved once; cancelling
+    // frameGeometryChanged BEFORE maximizedChanged (on X11 both from inside
+    // maximize(), on Wayland both from the commit that answers it, the
+    // geometry first), so by the time this runs the window has already been
+    // moved once; cancelling
     // moved it a second time, and only then did the batch's placeIn leg
     // animate from wherever the cancel had left it. Two unanimated jumps and a
     // transition starting from the wrong origin, where the Meta+Alt+M path —
@@ -993,9 +997,9 @@ void TilingHandler::restoreAllMonocleMaximized()
     const QStringList ids = m_monocleMaximizedWindows.values();
     m_monocleMaximizedWindows.clear();
     // A recorded restore debt is paid or moot after this drain either way:
-    // every member gets the restore written below, and the one arm that
-    // retains (fullscreen) re-inserts membership without a direction, so the
-    // next real release pays it through the ordinary path.
+    // every member gets the restore written below, and the arms that retain
+    // (an unresolvable window, a fullscreen one) re-insert membership without
+    // a direction, so the next real release pays it through the ordinary path.
     m_monocleRestoreOwed.clear();
     const auto geomGuard = m_effect->geometryApplyScope();
     ++m_suppressMaximizeChanged;
@@ -1193,8 +1197,9 @@ void TilingHandler::restoreAllWindowedFullscreen()
     // The clear-in-flight markers die unconditionally, BEFORE the empty-hash
     // early return: this is the shared drain for disable, teardown, daemon
     // loss AND bring-up, and a marker surviving a daemon that died before
-    // echoing its clear would silently refuse the NEW daemon's adopt batches
-    // forever. Both marker-arm sites remove membership before inserting the
+    // echoing its clear would refuse the NEW daemon's first adopt of that
+    // window, which an emit-on-change engine may never send again. Both
+    // marker-arm sites remove membership before inserting the
     // marker, so the last-member case arrives here with the hash EMPTY and
     // the marker set — a drain gated behind the early return would miss it.
     m_windowedFsClearInFlight.clear();

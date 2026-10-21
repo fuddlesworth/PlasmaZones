@@ -6,6 +6,7 @@
 #include <PhosphorEngine/LayerFocusSwitch.h>
 #include <PhosphorEngine/WindowRegistry.h>
 
+#include "enginelimits.h"
 #include "scrollverbresolve_p.h"
 // lcScrollEngine is used below and reaches this file only through a sibling
 // translation unit under a UNITY build, so its absence breaks a non-unity
@@ -599,14 +600,14 @@ void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
     // undefined, and a caller outside this repo can pass 1e12 as easily as a
     // NaN — the same hazard `setColumnWidth` guards against a few functions
     // below, and for the same reason. Bounded before the round rather than
-    // after, since after is already too late. The band is far wider than any
-    // meaningful scroll (a hundred viewports) and far inside int.
-    constexpr qreal kMaxScrollPx = 1e6;
+    // after, since after is already too late. The band (kMaxScrollViewPx) is
+    // the one the pixel verb bounds to.
+    constexpr qreal kMaxScrollPx = kMaxScrollViewPx;
     const qreal rawPx = std::isfinite(percent)
         ? qBound(-kMaxScrollPx, percent / 100.0 * params.axis.mainSize(params.workArea), kMaxScrollPx)
         : 0.0;
     const int deltaPx = qRound(rawPx);
-    scrollViewResolved(deltaPx, screen, state, params);
+    scrollViewResolved(deltaPx, screen, state, params, /*announceSuccess=*/true);
 }
 
 void ScrollEngine::scrollViewByPx(int px, const QString& screenId)
@@ -621,11 +622,22 @@ void ScrollEngine::scrollViewByPx(int px, const QString& screenId)
                                   screen);
         return;
     }
-    scrollViewResolved(px, screen, state, params);
+    // A successful pan raises no OSD. The placement map calls this once per
+    // frame while the user drags its lens, and the navigation card would
+    // keep coming back for the whole drag; the user is already watching the
+    // strip move. The refusals still report, as the percent verb's do.
+    //
+    // Bounded here as well as at the D-Bus adaptor, to the band the percent
+    // verb uses: this is exported API, so the entry states its own range
+    // rather than leaning on one caller's. ScrollStrip::scrollViewBy sums wide
+    // and would take any int, so the bound only ever trims a pan the strip
+    // would clamp at its end anyway.
+    scrollViewResolved(qBound(-kMaxScrollViewPx, px, kMaxScrollViewPx), screen, state, params,
+                       /*announceSuccess=*/false);
 }
 
 void ScrollEngine::scrollViewResolved(int deltaPx, const QString& screen, ScrollState* state,
-                                      const ScrollLayoutParams& params)
+                                      const ScrollLayoutParams& params, bool announceSuccess)
 {
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = deltaPx != 0 && state->strip().scrollViewBy(deltaPx, params);
@@ -636,6 +648,9 @@ void ScrollEngine::scrollViewResolved(int deltaPx, const QString& screen, Scroll
         // floating window.
         applyLayout(screen, false);
         Q_EMIT placementChanged(screen);
+        if (!announceSuccess) {
+            return;
+        }
     }
     // The active window is unchanged either way — that is the verb's whole
     // point — so the target slot carries it back unchanged on success too.

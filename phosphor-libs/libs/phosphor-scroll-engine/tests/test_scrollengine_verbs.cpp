@@ -20,6 +20,8 @@
 #include <QSignalSpy>
 #include <QtTest>
 
+#include <limits>
+
 using namespace PhosphorScrollEngine;
 
 namespace Ax = ScrollTestUtils::Ax;
@@ -68,6 +70,7 @@ private Q_SLOTS:
     void absoluteWidthAndHeightIntents();
     void centerVisibleColumnsCentersOnceThenRefuses();
     void scrollViewByPercentPansWithoutMovingFocus();
+    void scrollViewByPxPansQuietly();
     void scrollViewSurvivesALateStashClaim();
     void refocusingTheActiveWindowHandsAPannedViewBack();
     void edgeAutoScrollThenCancelKeepsTheScrolledView();
@@ -418,6 +421,64 @@ void TestScrollEngineVerbs::scrollViewByPercentPansWithoutMovingFocus()
     QCOMPARE(feedback.last().at(0).toBool(), false);
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_movement"));
     QCOMPARE(placement.count(), placementAfterPin);
+}
+
+void TestScrollEngineVerbs::scrollViewByPxPansQuietly()
+{
+    // The placement map pans through the pixel verb once per frame while its
+    // lens is dragged, so a success OSD per call kept the navigation card
+    // coming back for the whole drag. A successful pixel pan therefore
+    // reports nothing, while still detaching the view and marking the anchor
+    // for persistence; its refusals report exactly as the percent verb's do.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    for (const char* id : {"app|a", "app|b", "app|c"}) {
+        engine->windowOpened(QString::fromLatin1(id), QStringLiteral("S1"), 0, 0);
+        engine->windowFocused(QString::fromLatin1(id), QStringLiteral("S1"));
+        engine->setColumnWidth(ColumnWidth::makeProportion(0.55), QStringLiteral("S1"));
+    }
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    const int anchorBefore = state->strip().viewAnchor();
+
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+    // Backward has room (the view starts at the strip's end).
+    engine->scrollViewByPx(-137, QStringLiteral("S1"));
+    QCOMPARE(state->strip().viewAnchor(), anchorBefore + 137);
+    QVERIFY(state->strip().viewDetached());
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    QCOMPARE(placement.count(), 1);
+    QCOMPARE(feedback.count(), 0);
+    engine->scrollViewByPx(-63, QStringLiteral("S1"));
+    QCOMPARE(state->strip().viewAnchor(), anchorBefore + 200);
+    QCOMPARE(feedback.count(), 0);
+
+    // Refusals still answer: zero pixels, and a pan pinned at the end it is
+    // asked to move toward.
+    engine->scrollViewByPx(0, QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_movement"));
+    // An extreme px is exported API's to receive: bounded at the entry, it
+    // pans to the strip's end like any over-long pan.
+    engine->scrollViewByPx(std::numeric_limits<int>::max(), QStringLiteral("S1"));
+    QCOMPARE(state->strip().viewAnchor(), anchorBefore);
+    engine->scrollViewByPx(1, QStringLiteral("S1"));
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+    engine->scrollViewByPx(std::numeric_limits<int>::min(), QStringLiteral("S1"));
+    QVERIFY(state->strip().viewAnchor() > anchorBefore);
+    engine->scrollViewByPx(-1, QStringLiteral("S1"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+
+    // The percent verb behind the keyboard keeps its success OSD. Forward,
+    // since the INT_MIN pan above left the view pinned at the strip's start.
+    const int feedbackBefore = feedback.count();
+    engine->scrollViewByPercent(25, QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), feedbackBefore + 1);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
 }
 
 void TestScrollEngineVerbs::scrollViewSurvivesALateStashClaim()

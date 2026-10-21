@@ -1039,8 +1039,8 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     // The compositor-drawn tab indicators' PAINT settings (style, gaps,
     // radius, three colours) and the six label-font keys they share with the
-    // QML overlays live in daemon_settings_scrolltabs.cpp: one loader block
-    // behind one function, so this file stays under the size ceiling.
+    // QML overlays live in daemon_settings_scrolltabs.cpp, one loader block
+    // behind one function.
     loadScrollTabIndicatorSettings();
 
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {

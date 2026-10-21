@@ -178,9 +178,10 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
     if (!col || params.presetColumnWidths.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
     }
-    // ONE path for every current kind — the F30 fix: there is no index to
-    // read back, so a short template vocabulary can never rewrite the
-    // anchor's original intent. Where the cycle ENTERS is niri's rule
+    // ONE path for every current kind, entered from the rendered extent
+    // rather than from a stored vocabulary index: there is no index to read
+    // back, so a short template vocabulary can never rewrite the anchor's
+    // original intent. Where the cycle ENTERS is niri's rule
     // (cyclePresetIndexByExtent, whose doc carries the parity note and the
     // wrap's reason): the nearest entry wider than what the column renders at
     // going forward, the nearest narrower going back, wrapping at each end to
@@ -238,14 +239,18 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
 
 bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params)
 {
-    // deltaPercent is public API and reaches qRound below. qRound on a NaN or
-    // an infinity is undefined, and the D-Bus verb surface hands this straight
-    // to an external caller, so refuse a non-finite delta at the boundary
-    // rather than letting it decide a column width. qFuzzyIsNull answers false
-    // for both, so the zero test does not already cover it.
+    // deltaPercent is exported API and reaches qRound below, which is
+    // undefined for a NaN, an infinity, or a product past int's range. The
+    // daemon only ever passes a shortcut's integer percent, but an embedder of
+    // this class can pass anything, so a non-finite delta is refused here
+    // (qFuzzyIsNull answers false for one, so the zero test does not cover it)
+    // and a finite one is bounded to a whole work area either way. That bound
+    // changes no result: a larger step already clamps to the work area going
+    // up and to the floor going down.
     if (!std::isfinite(deltaPercent)) {
         return false;
     }
+    deltaPercent = qBound(-100.0, deltaPercent, 100.0);
     Column* col = activeColumnMutable();
     if (!col || qFuzzyIsNull(deltaPercent)) {
         return false;
@@ -333,7 +338,8 @@ bool ScrollStrip::toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutPara
     if (params.axis.mainSize(params.workArea) <= 0) {
         return false;
     }
-    // A column PINNED BY ITS MINIMUM cannot be made narrower, so neither arm
+    // A column PINNED BY ITS FLOOR (a frame minimum or a committed floor,
+    // columnMinExtentPx) cannot be made narrower, so neither arm
     // below can move it. Refusing is the honest answer and the same shape the
     // sibling width verbs take at their own floors: without it the press
     // rewrites persisted intent, renders identical pixels, and still returns
@@ -461,10 +467,12 @@ bool ScrollStrip::toggleMaximizeToEdgesAt(int columnIndex, const ScrollLayoutPar
     // Pure declared state: no pinned-by-minimum refusal (nothing is measured
     // and the stored width is untouched, so there is no press that rewrites
     // intent while rendering identical pixels), and no pre-maximize slot
-    // (clearing the flag IS the restore). A column pinned wider than the raw
-    // area by its frame minimum renders the same both ways, and the toggle
-    // still moves the mirrored KWin bit, which is the half the titlebar
-    // button needs.
+    // (clearing the flag IS the restore). A column whose frame minimum is
+    // wider than the raw area still moves when toggled, since the flag swaps
+    // the gapped, floored extent for the raw one and its neighbours shift
+    // with it, but its client overhangs the column either way. The toggle
+    // also moves the mirrored KWin bit, which is the half the titlebar button
+    // needs.
     col.maximizedToEdges = !col.maximizedToEdges;
     return true;
 }
@@ -560,6 +568,17 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
     if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
         m_preMaximizeColumnIdx = -1;
     }
+    // The leftover was measured as if the fully visible group started at the
+    // lead edge, so put it there, equalizeVisibleColumnWidths' re-derive. The
+    // anchor is ACTIVE-relative, so keeping it would hold the active column
+    // where it was: a lead-edge straddler would keep its on-screen pixels and
+    // the growth would push the group's trailing columns past the trailing
+    // edge by exactly the pixels reclaimed. With the group's lead column at
+    // the lead edge the group fills the viewport and the straddler is pushed
+    // fully out of view, niri's result. No detach: a centering policy took
+    // the maximize branch above, and under the others updateViewForFocus
+    // leaves a fully visible active column where it is.
+    m_viewAnchor = columnStripPos(m_activeColumnIdx, params) - columnStripPos(visible.first(), params);
     return true;
 }
 
@@ -647,16 +666,16 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
             }
         }
     }
-    if (pool < free) {
-        return restoreEdges(); // the floors alone outrun the viewport: nothing to share
+    // The floors alone outrun the viewport: nothing to share. A group with
+    // every column floor-bound always lands here through pool < free, since
+    // each pin takes a floor larger than the share it was measured against;
+    // free == 0 is spelled out anyway because the share below divides by it.
+    if (free == 0 || pool < free) {
+        return restoreEdges();
     }
     // The remainder of the division goes to the LAST free column rather
     // than being dropped: dropping it would leave a sliver of dead space that
-    // expand-column would then report as reclaimable. With every column
-    // floor-bound there is nothing to equalize.
-    if (free == 0) {
-        return restoreEdges();
-    }
+    // expand-column would then report as reclaimable.
     const int share = pool / free;
     int remainder = pool - share * free;
     for (int k = n - 1; k >= 0; --k) {
@@ -830,9 +849,10 @@ bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth
     // half-width proportion instead of the width the user had before.
     //
     // "Un-maximized afterwards" holds for every default except one that
-    // itself RENDERS at full width. Those columns still measure maximized on
-    // the wire, and toggleMaximizeColumnAt's no-slot arm is what gives the
-    // user a way back out of them.
+    // itself RENDERS at full width. Those columns still render full width
+    // (the declared maximize-to-edges flag is cleared above, so nothing reads
+    // as maximized on the wire), and toggleMaximizeColumnAt's no-slot arm is
+    // what gives the user a way back out of them.
     if (defaultWidth) {
         m_preMaximizeColumnIdx = -1;
     }
@@ -874,7 +894,14 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
             col.maximizedToEdges = false;
             changed = true;
         }
-        const ColumnWidth acked = ColumnWidth::makeFixed(params.axis.mainSize(ackedSize));
+        // Lifted into COLUMN space, the main-axis twin of the cross arm's lift
+        // below: a tabbed column whose indicator eats the main axis offers its
+        // tabs the column less tabbedMainReservationPx, while the ack is the
+        // WINDOW's own extent. Written bare, a main-edge drag of such a tab
+        // settles one reservation narrower than where it was released. Zero
+        // on every other column.
+        const ColumnWidth acked =
+            ColumnWidth::makeFixed(params.axis.mainSize(ackedSize) + tabbedMainReservationPx(col, params));
         if (!(col.width == acked)) {
             col.width = acked;
             changed = true;
@@ -902,8 +929,8 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
             changed = true;
         }
         const int ti = col.indexOfWindow(windowId);
-        // Lifted into COLUMN space first, the conversion both height verbs
-        // make: on a tabbed column the height intent sizes the column
+        // Lifted into COLUMN space first, the conversion the height sizing
+        // verbs make: on a tabbed column the height intent sizes the column
         // (tabbedColumnCrossPx) and the tabs are then committed at the column
         // minus the indicator's cross-axis reservation, while the ack here is
         // the WINDOW's own extent. Without the lift every interactive

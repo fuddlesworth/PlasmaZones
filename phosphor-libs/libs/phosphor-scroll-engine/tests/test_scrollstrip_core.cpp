@@ -169,6 +169,7 @@ private Q_SLOTS:
     void tabReservationRaisesTheMinExtentFloorOnTheMainAxisOnly();
     void windowedFullscreenFlagsActiveTileOnly();
     void windowedFullscreenTravelsWithConsume();
+    void consumeAboveAMinimizedActiveTileKeepsTheSlotOnIt();
 };
 
 void TestScrollStripCore::openInsertsColumnAndResizesNothing()
@@ -922,6 +923,39 @@ void TestScrollStripCore::windowedFullscreenTravelsWithConsume()
     QCOMPARE(strip.columnCount(), 1);
     QVERIFY(strip.isWindowedFullscreen(QStringLiteral("b"))); // the MOVED tile kept its flag
     QVERIFY(!strip.isWindowedFullscreen(QStringLiteral("a"))); // negative control
+}
+
+void TestScrollStripCore::consumeAboveAMinimizedActiveTileKeepsTheSlotOnIt()
+{
+    // consumeWindowIntoColumn walks past a minimized active tile to the
+    // nearest visible one, which can sit ABOVE it. Taking that tile shifts the
+    // active one up a slot, and an index left where it was named the tile
+    // below instead. Minimize is a test seam (the daemon models it as float),
+    // so the state is built through it: removing the active tile of
+    // [a, y, x, z] leaves its index on x, and x and z are minimized.
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("p"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    for (const char* id : {"y", "x", "z"}) {
+        QVERIFY(strip.insertWindowIntoActiveColumn(QString::fromLatin1(id), kHalf, std::nullopt, params));
+    }
+    QVERIFY(strip.focusAdjacentTile(-1)); // x
+    QVERIFY(strip.focusAdjacentTile(-1)); // y
+    QVERIFY(strip.setWindowMinimized(QStringLiteral("x"), true, params));
+    QVERIFY(strip.setWindowMinimized(QStringLiteral("z"), true, params));
+    QVERIFY(strip.removeWindow(QStringLiteral("y"), params));
+    {
+        const Column& source = strip.columns().at(1);
+        QCOMPARE(source.tiles.at(source.activeTileIdx).windowId, QStringLiteral("x"));
+    }
+
+    QVERIFY(strip.focusColumn(0, params));
+    QVERIFY(strip.consumeWindowIntoColumn(params)); // takes a, the nearest visible tile
+    QCOMPARE(strip.columns().at(0).tiles.last().windowId, QStringLiteral("a"));
+    const Column& source = strip.columns().at(1);
+    QCOMPARE(source.tiles.size(), 2);
+    QCOMPARE(source.tiles.at(source.activeTileIdx).windowId, QStringLiteral("x"));
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripCore)

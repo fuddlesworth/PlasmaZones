@@ -1075,8 +1075,10 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
 // FIFTH time.
 
 // Minimum-size bookkeeping (windowMinimumSize / windowMinSizeUpdated) and the
-// client resize echo (onWindowResized) live in engine_minsize.cpp — split out
-// when this file crossed the size ceiling a FOURTH time.
+// user's finished interactive resize (onWindowResized) live in
+// engine_minsize.cpp — split out when this file crossed the size ceiling a
+// FOURTH time. A client's answer to its offered tile (reportCommittedSize)
+// lives in engine_committed.cpp.
 
 // The cross-engine handoff section (handoffRelease / handoffReceive and the
 // unified placement capture) lives in engine_handoff.cpp — split out when

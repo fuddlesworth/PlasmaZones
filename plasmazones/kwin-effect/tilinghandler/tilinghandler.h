@@ -1,22 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): TilingHandler is one class declaration,
-// and the implementation is already partitioned across the fifteen TUs in
-// this directory (tiling.cpp, framecentering.cpp, tilinghandler.cpp, state.cpp,
-// wiring.cpp, signals.cpp, windowedfullscreen.cpp, pretilegeometry.cpp,
-// floatcleanup.cpp, minimizefloat.cpp, outputchange.cpp, screenschanged.cpp,
-// scrolltabs.cpp, wheelchord.cpp, fullscreenhold.cpp) — every one of those TUs
-// calls back through this single declaration, which C++ requires to be whole.
-// Most of the length is the per-member invariant prose the split files depend
-// on: the per-session daemon state (managed/scrolling/axis sets and their
-// teardown pairings), the generation guards, and the inline predicates those
-// TUs share.
-// Splitting the class itself would mean a second handler type with the same
-// state, which is the coupling this file exists to avoid. Grew with the
-// cross-output bounce fix (#1124): dropCenteringTarget, which
-// applyWindowGeometry calls to retire a stale centring target.
-
 #pragma once
 
 #include "compositor/deferredwindowcommits.h"
@@ -157,7 +141,8 @@ public:
     /// The relay fires only when @p screenId is managed in the CURRENT context. Which desktop's state still lists a
     /// window is the daemon's question, answered by TilingAdaptor's desktop-membership reconcile off the registry
     /// desktop set (#1076), so the desktop handler relays only a genuine move, after the metadata push. A departure
-    /// passes ClaimScope::LiveDeparture (F675).
+    /// passes ClaimScope::LiveDeparture (F675); every other caller takes the default UntrackFunnel, which releases
+    /// every claim, the monocle maximize included.
     void releaseWindowTracking(const QString& windowId, const QString& screenId,
                                ScrollDecisions::ClaimScope scope = ScrollDecisions::ClaimScope::UntrackFunnel);
     /// Tear down all effect-side autotile tracking for @p windowId (shared + KWin-specific state, incl. the pending
@@ -165,7 +150,9 @@ public:
     /// releaseWindowTracking (which add their own daemon call) and the cross-mode-move marker path (the daemon
     /// already ran handoffRelease). No screenId parameter: every container this touches is keyed by windowId or
     /// swept across all screens (a per-screen prune once left the id on the cross-output DESTINATION's stacking
-    /// order). Claims release by @p scope; an evacuee passes ClaimScope::Evacuation and is scrubbed, not released.
+    /// order). Claims release by @p scope: the default UntrackFunnel releases all three for a live window,
+    /// onWindowClosed passes Close (monocle goes with the scrub), and an evacuee passes ClaimScope::Evacuation and is
+    /// scrubbed, not released.
     void cleanupAutotileTracking(const QString& windowId,
                                  ScrollDecisions::ClaimScope scope = ScrollDecisions::ClaimScope::UntrackFunnel);
     /// The settle's evacuee and returned-window verdicts (evacuees.cpp): what the effect held for @p w goes without
@@ -414,6 +401,15 @@ public:
     /// this through the interception would toggle the column instead.
     void cancelAxisOnlyMaximize(KWin::EffectWindow* w);
 
+    /// Take KWin's quick tile back off a strip tile and put its column back,
+    /// with no dispatch to the engine: the quick-tile twin of
+    /// cancelAxisOnlyMaximize (framecentering.cpp). Run off KWin's
+    /// requestedTileChanged and at the end of every gesture; a no-op for a
+    /// window with no requested tile, one off the strip, and one under a
+    /// gesture. Without it the requested tile keeps the window out of the
+    /// committed-size report and the offered-column centring for good (F123).
+    void cancelStripQuickTile(KWin::EffectWindow* w);
+
     /// The two halves of slotScreensChanged's removed-screens pass, split out
     /// because they reach opposite conclusions about the same event. A screen
     /// leaves the managed set either because the DESKTOP changed (the windows
@@ -535,17 +531,17 @@ public:
     void dispatchWindowedFullscreenClear(const QString& windowId);
     /// Shed half of applyFloatCleanup for the WindowTracking float channel
     /// (PlasmaZonesEffect::slotWindowFloatingChanged), whose floats never reach this handler's slot and so never
-    /// run applyFloatCleanup. Drops the windowed-fullscreen hold AND the column-maximize mirror (both through
-    /// releaseAllClaims, on the PassiveFloat scope), the clear-in-flight marker, the counter-assert rect and the
-    /// offered column, the tiled membership on every screen (the IsTiled flip, which re-resolves the window's
+    /// run applyFloatCleanup. Releases the claims through releaseAllClaims on the scope passiveFloatScope answers
+    /// for the screen the window is shed from, and drops the clear-in-flight marker, the counter-assert rect and
+    /// the offered column, the tiled membership on every screen (the IsTiled flip, which re-resolves the window's
     /// rules), the centering targets and the parked paint hint (with damage), and re-drives decorations when the
     /// windowed-fullscreen hold was released.
     ///
-    /// Monocle is the one claim this path does NOT release, and that blank is
-    /// the PassiveFloat row's recorded DECISION rather than an omission:
-    /// re-driving a maximize restore off a passive float signal has not been
-    /// shown safe against the monocle batch that owns that membership. The
-    /// definition carries the full argument.
+    /// On a scrolling screen that scope is StripExit, which releases every claim, the monocle maximize included:
+    /// no strip batch owns a monocle membership. Anywhere else it is PassiveFloat, which withholds monocle, and
+    /// that blank is the PassiveFloat row's recorded DECISION rather than an omission: re-driving a maximize
+    /// restore off a passive float signal has not been shown safe against the autotile monocle batch that owns
+    /// that membership. The definition carries the full argument.
     void applyPassiveFloatShed(const QString& windowId);
 
     /// Teardown only (daemon loss, effect destruction): drops tiled membership AND the managed-screen set, and
@@ -1862,11 +1858,11 @@ private:
     QSet<QString> m_windowedFsClearInFlight;
     /// A dispatched toggleMaximizeToEdges whose reply has not arrived.
     ///
-    /// Two distinct bugs need this, and neither is guarded by
-    /// resolveMaximizeToEdgesAction's contract note any more. That note argued
-    /// no marker was needed BECAUSE the interception cancelled KWin's flip
-    /// before dispatching, so a stale batch always resolved to None on its own
-    /// terms. The cancel is gone, so the guarantee went with it.
+    /// Two distinct bugs need this. resolveMaximizeToEdgesAction's contract
+    /// note used to argue no marker was needed BECAUSE the interception
+    /// cancelled KWin's flip before dispatching, so a stale batch always
+    /// resolved to None on its own terms. The cancel is gone, so the guarantee
+    /// went with it, and the note now says why the decision takes the marker.
     ///
     /// 1. A batch the daemon emitted BEFORE it dequeued the toggle still
     ///    carries the pre-toggle maximizedToEdges. On a RESTORE that is
@@ -1978,10 +1974,12 @@ private:
     /// claim is to be RELEASED at the gesture end rather than re-driven — without it, that function's only
     /// monocle action is to re-apply MaximizeFull, which would re-maximize a window the batch had just
     /// demoted, or one the drag had just floated. Cancelled by the monocle Apply arm (the claim is owed
-    /// again), by a manual unmaximize, and by the same teardown that drops membership. A gesture that ends
+    /// again), by a manual unmaximize, by a cancelled move KWin re-maximized (revokeDragStartMonocleRestore), by
+    /// a drop that placed a window KWin un-maximized mid-gesture (settleMonocleUnmaximizeAfterGesture), and by
+    /// the same teardown that drops membership. A gesture that ends
     /// while the window is fullscreen makes reconcile bail before this is read; the fullscreen-exit repairs
-    /// in slotWindowFullScreenChanged then call unmaximizeMonocleWindow with the gesture flags clear and pay
-    /// the debt instead.
+    /// in slotWindowFullScreenChanged then release the claim (ClaimScope::FullscreenExit) with the gesture flags
+    /// clear and pay the debt instead.
     QSet<QString> m_monocleRestoreOwed;
     QSet<QString> m_monocleUnmaximizedInGesture; ///< restore-on-drag un-maximizes awaiting the gesture's end (F775)
     /// Monocle claims an evacuee held, per physical output it left, taken back by the first monocle batch on that
@@ -2002,7 +2000,7 @@ private:
     /// Every path that ends the strip's claim on a window must release it, and the batch is not one of them for a
     /// window that LEAVES the strip: no entry arrives to carry a cleared flag. The float funnels (both channels),
     /// the untile diff, the demote and removed-screen sweeps, the no-strip-left output-change arm, the
-    /// leaving-scrolling loop, the fullscreen-exit-while-floating repair and the untrack funnel
+    /// fullscreen-exit repairs (ClaimScope::FullscreenExit) and the untrack funnel
     /// (cleanupAutotileTracking, via releaseAllClaims) all call it for that reason. The untrack funnel matters
     /// most for the cross-output transfer half: the window survives on a screen these engines do not manage, and
     /// nothing else would ever hand the bit back. The scroll-to-scroll handoff deliberately does NOT: the

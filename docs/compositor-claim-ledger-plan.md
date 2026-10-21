@@ -225,20 +225,20 @@ kwin-effect test target a genuine PREREQUISITE for the migration rather than a
 parallel nice-to-have, which is the opposite of what this document assumed.
 
 What landed first is the vocabulary and the policy: `Claim`, `ClaimScope`,
-`claimReleasesOn`, `claimReleaseOrder` and `claimRetainsOnFullscreenSkip` in
-`scrolldecisions.h`, with a row per cell in `test_scroll_decisions`. That is
-the specification made executable. It changes no behaviour, it pins the
-ordering rule whose reversal was a live regression, and it gives the migration
-something to be checked against.
+`claimReleasesOn` and `claimReleaseOrder` in `scrolldecisions.h`, with a row
+per cell in `test_scroll_decisions`. That is the specification made
+executable. It changes no behaviour, it pins the ordering rule whose reversal
+was a live regression, and it gives the migration something to be checked
+against.
 
-`claimReleaseOrder` and `claimRetainsOnFullscreenSkip` are specification rather
-than dispatch: the funnel writes its three releases in order and asserts that
-order against `claimReleaseOrder` at compile time, and the retention rule is
-implemented inside each release body. They are stated here so a future arm
-cannot contradict them silently. `ClaimScope::ModeFlip`, `Teardown` and
-`FullscreenExitWhileFloating` likewise name rows that have not been migrated
-yet; they are pinned by the table's tests so the migration inherits a decided
-answer instead of re-deriving one.
+`claimReleaseOrder` is specification rather than dispatch: the funnel writes
+its three releases in order and asserts that order against `claimReleaseOrder`
+at compile time. The fullscreen-skip retention rule is implemented inside each
+release body (an earlier `claimRetainsOnFullscreenSkip` helper restating it had
+no caller and was removed). `ClaimScope::ModeFlip` and `Teardown` name rows
+whose sites still release by hand; they are pinned by the table's tests so the
+migration inherits a decided answer instead of re-deriving one. The fullscreen
+exit arms now route through `releaseAllClaims` on `ClaimScope::FullscreenExit`.
 
 ### Three things the funnel had to get right
 
@@ -252,14 +252,12 @@ swallows that signal, and gating on "any claim released" instead is a
 behaviour change, because the column claim can release where windowed
 fullscreen did not. Return a per-claim result.
 
-**`UntrackFunnel` has to be its own scope.** Done, and still unresolved by
-design. `cleanupAutotileTracking` serves
-both close and cross-output transfer, and does NOT release monocle — that
-rides `cleanupClosedWindowState`'s bare scrub. Folding it into `StripExit`
-fills that blank silently. Whether the blank is right is genuinely open: it is
-correct for a close and questionable for the cross-output half, where the
-window survives holding a bit nothing will hand back. Encode it, flag it as
-unresolved, and settle it in its own commit.
+**`UntrackFunnel` has to be its own scope.** Done, and since settled by
+splitting it. `cleanupAutotileTracking` serves both close and the live-window
+exits (cross-output transfer, the flags-settle eviction, a drop onto another
+screen). A closed window has no maximize bit left to hand back, so
+`ClaimScope::Close` keeps the monocle blank. A live window would survive
+holding a bit nothing hands back, so `UntrackFunnel` now releases monocle too.
 
 **Some sites cannot collapse to one call.** Confirmed by the migration.
 `applyFloatCleanup` releases
@@ -309,8 +307,8 @@ Met by what has landed:
 - the matrix above reproduced exactly, as a table in code
 - scope policy unit-tested in `scrolldecisions.h`'s suite
 - every blank cell ruled a decision or an accident, in writing, before the
-  funnel fills it (`UntrackFunnel`'s monocle blank is recorded as unresolved
-  rather than filled)
+  funnel fills it (`UntrackFunnel`'s monocle blank was ruled an accident for
+  live windows and kept only for `Close`)
 
 Still open for the remaining thirteen rows:
 

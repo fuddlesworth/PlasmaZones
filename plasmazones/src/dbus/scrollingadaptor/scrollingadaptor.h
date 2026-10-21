@@ -89,9 +89,11 @@ public:
     /// re-parse and re-compare three screen lists that had not moved.
     ///
     /// The first two are per-context rule slots
-    /// (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) whose consumer
-    /// lives in the KWin effect, not the engine — so unlike their four
-    /// siblings they cannot ride the engine's per-screen override map. The
+    /// (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) with a consumer
+    /// in the KWin effect. focusFollowsMouse has no other, so it cannot ride
+    /// the engine's per-screen override map; cropStraddlers rides that map as
+    /// well, because the engine's straddler clamp reads it, and both consumers
+    /// resolve it from the same slot. The
     /// third is the strip axis as membership (see @ref verticalAxisKey). The
     /// daemon resolves `rule ?? config` per scrolling screen and publishes the
     /// RESOLVED membership, which keeps the effect free of any config
@@ -182,12 +184,14 @@ public:
     /// live. Unset, scrollView is a silent no-op.
     void setViewScrollStepProvider(std::function<int()> provider);
 
-    /// Install the per-context disable gate every geometry verb on this
-    /// surface consults: true when @p screenId's CURRENT scrolling context
-    /// is disabled. The keyboard verbs already pass through this gate in the
-    /// daemon (Daemon::isFocusedContextGatedForMode); the wheel and the
-    /// absolute setters arrive on the bus instead and would otherwise pan
-    /// and resize a context the user turned off. A provider rather than the
+    /// Install the per-context disable gate every screen-scoped verb on this
+    /// surface consults (the focus, pan and sizing verbs, not the window-keyed
+    /// reconciliation calls or the reads): true when @p screenId's CURRENT
+    /// scrolling context is disabled. The keyboard verbs already pass through
+    /// this gate in the daemon (Daemon::isFocusedContextGatedForMode); the
+    /// wheel, the placement map and the absolute setters arrive on the bus
+    /// instead and would otherwise pan and resize a context the user turned
+    /// off. A provider rather than the
     /// resolver type so this library never names the daemon's context
     /// machinery. FAIL-CLOSED: with no provider installed every gated verb
     /// refuses, the same way the daemon's gate refuses with no resolver, so
@@ -262,8 +266,9 @@ public Q_SLOTS:
      * column's active window afterwards. Same silent gates as focusColumn
      * (engine, empty screen id, ownership, per-context), plus a negative
      * index, which is out of contract. An index past the last column clamps
-     * to it, the strip's own rule, and the already-active column answers
-     * with the no-target OSD like the sibling focus verbs.
+     * to it, the strip's own rule. Like the sibling focus verbs, a focus move
+     * raises the navigation OSD, the already-active column answers with the
+     * no-target one, and an owned screen with an empty strip with no_windows.
      *
      * @param screenId Screen whose strip should move; an empty string is
      *                 ignored
@@ -277,13 +282,14 @@ public Q_SLOTS:
      * The structural twin of focusColumnAt: the map lets the user drag a
      * column past its neighbours, and this commits where it was dropped.
      * Routed to ScrollEngine::moveColumnToIndex, which leaves the moved
-     * column active and re-anchors the view like the keyboard move verbs.
-     * Same silent gates as focusColumnAt (engine, empty screen id,
-     * ownership, per-context) plus either index negative. An index past the
-     * last column, or from equal to to, names no move and answers with the
-     * no-target OSD rather than clamping: the map numbers its columns from
-     * stripModelJson, so an out-of-range index is a stale model, not a
-     * request for the last column.
+     * column active, re-anchors the view like the keyboard move verbs and
+     * raises the navigation OSD for the move. Same silent gates as
+     * focusColumnAt (engine, empty screen id, ownership, per-context) plus
+     * either index negative. An index past the last column, or from equal to
+     * to, names no move and answers with the no-target OSD rather than
+     * clamping: the map numbers its columns from stripModelJson, so an
+     * out-of-range index is a stale model, not a request for the last column.
+     * An owned screen with an empty strip answers with no_windows.
      *
      * @param screenId Screen whose strip should change; an empty string is
      *                 ignored
@@ -298,9 +304,13 @@ public Q_SLOTS:
      * The pixel twin of scrollView for a caller that already holds a distance
      * along the strip (the map's drag pan). Same detached-view contract and
      * the same gates as scrollView minus the step provider, which a pixel
-     * count does not need. A zero distance is a silent no-op HERE, before the
-     * engine: the engine would answer it with a no_movement OSD, and a drag
-     * that has not moved yet is not a pan the user should be told about.
+     * count does not need. A pan that moves the view raises no OSD, since the
+     * map pans once per drag frame; a pan pinned at the end it moves toward
+     * still answers no-target. A zero distance is a silent no-op HERE, before
+     * the engine: the engine would answer it with a no_movement OSD, and a
+     * drag that has not moved yet is not a pan the user should be told about.
+     * A distance past the band the percent twin bounds its pixels to is
+     * clamped to it here, so the strip's view arithmetic cannot overflow.
      *
      * @param screenId Screen whose strip should move; an empty string is
      *                 ignored
@@ -328,9 +338,11 @@ public Q_SLOTS:
      * (WindowHeight::Preset's value-anchored contract), so an exact height
      * needs the pixel form.
      *
-     * NOTE: nothing in this tree calls these four — they exist FOR external
-     * scripting, like presetVocabularyJson below. Do not re-justify them by
-     * naming an in-tree caller; there is none beyond the contract tests.
+     * NOTE: no shipped component calls these four. They exist FOR external
+     * scripting, like presetVocabularyJson below, and the only callers in the
+     * tree are the contract tests and the nested-KWin regression probes under
+     * scripts/nested-kwin/regression/probes, which drive the width setters as
+     * a script would.
      */
     void setColumnWidthProportion(const QString& screenId, double proportion);
     void setColumnWidthPixels(const QString& screenId, int px);
@@ -345,9 +357,11 @@ public Q_SLOTS:
      * touches neither KWin's maximize bit nor the maximizedToEdges state. The
      * maximize interception is toggleMaximizeToEdges below.
      *
-     * Like the four setters above, this one has no in-tree wire caller: the
-     * Scrolling maximize column shortcut reaches the engine IN-PROCESS and
-     * never crosses this boundary, so both spellings here exist for external
+     * The one in-tree wire caller is the Phosphor shell's placement map,
+     * whose column menu sends the NAMED spelling for the focused window and
+     * discards the answer (so its click raises no OSD). The Scrolling
+     * maximize column shortcut reaches the engine IN-PROCESS and never
+     * crosses this boundary, and the empty spelling exists for external
      * scripting. It is deliberately routed to the SAME ScrollEngine entry
      * point the shortcut drives rather than a parallel one.
      *
@@ -366,7 +380,8 @@ public Q_SLOTS:
      *         kinds of refusal and does not distinguish them: refused at this
      *         boundary, or accepted and acted on by nothing. Nothing in the
      *         tree steers on this verb's answer, which is toggleMaximizeToEdges'
-     *         job; it is reported so the twins keep one wire shape. No
+     *         job, and the placement map discards it; it is reported so the
+     *         twins keep one wire shape. No
      *         [[nodiscard]]: a caller that only wants the toggle legitimately
      *         discards it.
      */
@@ -402,9 +417,12 @@ public Q_SLOTS:
      * engine re-resolves a named window to that window's own tracked screen and
      * acts there. So a request can clear screen A's gate and change a column on
      * screen B, or be refused by A while B would have allowed it. Recorded
-     * rather than closed: resolving the window's screen needs
-     * ScrollEngine::stateForWindow, which is private, and this adaptor holds no
-     * view of engine state beyond isActiveOnScreen. Same on the width twin.
+     * rather than closed, and not for want of a lookup (screenForTrackedWindow
+     * is public): the context gate answers for a screen's CURRENT context,
+     * while the engine acts on the context holding the window, which can be a
+     * desktop not in view. Re-pointing the gate at the window's screen would
+     * still ask about the wrong context there, and closing it properly needs a
+     * context-keyed gate the provider does not offer. Same on the width twin.
      *
      * @param screenId Screen whose column to toggle; empty is ignored
      * @param windowId Window naming the column; empty targets the FOCUSED
@@ -443,9 +461,11 @@ public Q_SLOTS:
      * The KWin effect calls this when the compositor moved a window behind
      * the engine's back (KWin restores a fullscreen-exiting window to its
      * pre-fullscreen rect one round-trip after the batch). The engine
-     * evicts the window's emit-gate memory and relayouts its screen, so
-     * the next batch re-carries the rect the gate would otherwise keep
-     * silent. Silent no-op for an unknown window, same wire-boundary
+     * evicts the window's emit-gate memory and, when the window's context is
+     * the one its screen shows, relayouts that screen, so the next batch
+     * re-carries the rect the gate would otherwise keep silent. A window on a
+     * context not in view only loses the memory, and is re-carried when that
+     * context is shown. Silent no-op for an unknown window, same wire-boundary
      * policy as clearWindowedFullscreen: a repair call, so neither
      * ownership- nor context-gated.
      *
@@ -457,18 +477,29 @@ public Q_SLOTS:
      * @brief Report the size a strip window's client settled on (compositor
      *        reconciliation)
      *
-     * The KWin effect calls this when a strip window's committed frame
-     * differs from the column rect it was offered, once per distinct pair and
-     * only with no configure in flight. A commit wider than the column along
-     * the strip widens the column to it, so the neighbours are laid out
-     * beside the window instead of under it; a later narrower answer gives
-     * the widening back (ScrollStrip::recordCommittedSize). Same wire-boundary
-     * policy as clearWindowedFullscreen: neither ownership- nor
+     * The KWin effect calls this for a Wayland strip window whose settled
+     * frame differs from the rect it was offered (its own tile), once per
+     * batch that sent the client a new size and once per size the client then
+     * settles on by itself, only with no geometry configure in flight. A
+     * commit longer than the tile along the strip gives the column a floor
+     * at that extent, so the neighbours are laid out beside the window instead
+     * of under it; a floor past the work area, or an answer longer than the
+     * work area across the strip, floats the window instead. A later shorter
+     * answer gives the floor back, and the floor is learned only while
+     * minimum sizes are respected. ScrollEngine::reportCommittedSize carries
+     * the whole contract, the XML DocString its wire summary. Same
+     * wire-boundary policy as clearWindowedFullscreen: neither ownership- nor
      * context-gated, since it reports what the client has already done.
      *
+     * Refused HERE only for a null engine, an empty id or a non-positive
+     * size. The engine repeats the size check (QSize::isEmpty) and owns every
+     * other refusal: an interactive move, an unknown, floating or
+     * maximized-to-edges window, minimum sizes off, and an offer that is not
+     * the tile's whole current rect.
+     *
      * @param windowId Window whose commit to report; an empty string is ignored
-     * @param offeredWidth Width of the column rect the strip offered
-     * @param offeredHeight Height of the column rect the strip offered
+     * @param offeredWidth Width of the rect the strip offered the window
+     * @param offeredHeight Height of the rect the strip offered the window
      * @param committedWidth Width of the frame the client committed
      * @param committedHeight Height of the frame the client committed
      */
@@ -484,7 +515,10 @@ public Q_SLOTS:
      * leaves fullscreen. The engine floats the window with the same slot
      * memory a user float keeps, so the return lands in the same column and
      * width, but announces on its PASSIVE channel: no float OSD, no free
-     * geometry restore. A hold of a window that already floats under another
+     * geometry restore. A return whose window now outgrows the work area
+     * (declared minimum or learned committed floor) still answers true and is
+     * then floated again on the ordinary channel, the oversized-window
+     * policy. A hold of a window that already floats under another
      * owner, and a return of a window this call did not hold, both answer
      * false, so a user float is never taken over or undone. A repeat hold of
      * this call's own float answers true.
@@ -494,8 +528,8 @@ public Q_SLOTS:
      * rejects an untracked window.
      *
      * @param windowId Window to hold out or return; an empty string answers false
-     * @param screenId Screen hint; the engine acts on, and announces, the
-     *        window's own tracked screen
+     * @param screenId Ignored (the engine Q_UNUSEDs it); the engine acts on,
+     *        and announces, the window's own tracked screen
      * @param floating true to hold the window out of the strip, false to return it
      * @return true when the engine holds, or has returned, this call's own
      *         float: a first hold of a strip tile, a repeat hold of a tile this
@@ -512,7 +546,8 @@ public Q_SLOTS:
      * {x, y, width, height} plus zoneNumber, the 1-based visible tile slot
      * the rect occupies in strip order. The rects are 0.0 to 1.0 per axis,
      * normalized against the screen's FULL geometry — the tiles themselves
-     * are clipped to the gap-inset work area, so the fractions show the
+     * are clipped to the gap-inset work area (a maximized-to-edges column
+     * covers the gaps too), so the fractions show the
      * panel gap, and a consumer maps back to pixels by scaling against the
      * screen rectangle. Same basis as the daemon's own OSD strip card.
      *
@@ -526,8 +561,8 @@ public Q_SLOTS:
      *
      * Excluded and unnumbered: hidden tabs of a tabbed column, minimized
      * tiles, and tiles whose intersection with the work area is EMPTY (a
-     * stack whose minimum heights overflow the work area resolves its tail
-     * below the bottom edge). Partially visible columns are clipped rather
+     * stack whose minimum sizes overflow the work area resolves its tail
+     * past the work area's far edge across the strip). Partially visible columns are clipped rather
      * than dropped, with no minimum-visibility threshold, so an arbitrarily
      * thin sliver still carries its number — and a barely-visible column
      * parked below its peek floor keeps its number too, which is what makes
@@ -600,8 +635,10 @@ public Q_SLOTS:
      * An entry is spent once a column has taken it, so a closed column does
      * not return its entry to the pool, and @c used == @c total means further
      * columns open at the template's ordinary width and display instead.
-     * The count restarts when the strip empties or the screen is given a
-     * different template.
+     * The count restarts when the strip empties while it holds no floating
+     * window and no drag is holding a window out of it, or when the screen is
+     * given a different template, and @c used never reads below the strip's
+     * live column count.
      *
      * Reports the CURRENT (desktop, activity) context, matching
      * visibleStripJson. Same ownership gate as focusColumn (reads are not
@@ -624,7 +661,9 @@ Q_SIGNALS:
                                  const QStringList& leavingToAutotile);
 
     /// The identity of the strip @p screenId shows changed (desktop switch,
-    /// activity switch, sticky-pin release). A pin ACQUIRE does not announce:
+    /// activity switch, sticky-pin release, the screen joining or rejoining
+    /// the scrolling set, a desktop removal renumbering the desktop it shows).
+    /// A pin ACQUIRE does not announce:
     /// it pins the screen to the desktop its key already resolves to, so the
     /// strip does not change under it until a later switch.
     ///
@@ -652,7 +691,8 @@ Q_SIGNALS:
     void scrollFocusScrollBlockedWindowsChanged(const QStringList& windowIds);
 
     /// @p screenId's strip changed shape: a wake-up for anyone rendering it,
-    /// not a payload. A receiver re-reads @ref visibleStripJson if it cares.
+    /// not a payload. A receiver re-reads @ref visibleStripJson (the settings
+    /// app) or @ref stripModelJson (the shell's placement map) if it cares.
     ///
     /// Carries no payload and is NOT gated against the strip payload, which
     /// is the deliberate half. Payload-gating it would mean resolving the
@@ -666,7 +706,8 @@ Q_SIGNALS:
     /// That gate runs ONE WAY only, and a renderer must not read it as "every
     /// strip change wakes me". A settings, rule or template push re-resolves
     /// the rects through applyLayout, which announces the batch separately and
-    /// emits placementChanged only if the view anchor moved — so a relayout
+    /// emits placementChanged only if the view anchor moved or a learned
+    /// committed floor was dropped — so a relayout
     /// that changes column widths while the anchor stays put changes the strip
     /// without waking anything here. A periodic re-read is still the backstop;
     /// this signal only makes the common cases prompt.
@@ -686,10 +727,10 @@ private:
     std::function<bool(const QString&)> m_contextGated;
     /// Whether a screen runs autotile (setAutotileScreenResolver).
     std::function<bool(const QString&)> m_isAutotileScreen;
-    /// The shared entry guard for the screen-scoped verbs: no engine, empty
+    /// The shared entry guard for every screen-scoped verb: no engine, empty
     /// screen id, engine not active there, or the context gate refusing.
-    /// Order is load-bearing; the definition says why, and why scrollView and
-    /// focusColumn are deliberately not folded into it.
+    /// Order is load-bearing; the definition says why. A verb's own pure terms
+    /// (a delta or index range, a step provider) are tested ahead of it.
     bool refusesScreenVerb(const QString& screenId) const;
     /// Whether the verb must refuse for @p screenId's context: the gate
     /// says so, or no gate is installed (fail-closed, see the setter). Called

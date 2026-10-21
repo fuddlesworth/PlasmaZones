@@ -83,7 +83,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Respect minimum size")
             searchAnchor: "scrollingRespectMinimumSize"
-            description: i18n("Keep columns at least as wide and tall as their windows' minimum size, which can push other windows off screen")
+            description: i18n("Keep columns at least as wide and tall as their windows' minimum size, and grow a column to fit a window that stays larger than it. Both can push other windows off screen.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingRespectMinimumSize

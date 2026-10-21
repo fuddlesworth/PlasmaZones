@@ -224,7 +224,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // quick tile is not one of these: it un-maximizes and
                 // moveResizes to the tile, so it lands as a frame change (on a
                 // column-maximize member, as the full-to-restore edge the
-                // interception claims).
+                // interception claims), and its own requestedTileChanged
+                // connection below takes the tile back off.
                 //
                 // CANCEL ONLY, never a dispatch. Routing this through
                 // interceptMaximizeRequest would dispatch a toggle,
@@ -377,6 +378,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 m_shaderManager.m_pendingMaximizeMorph.insert(window, {preFrame, ShaderInternal::shaderClockNowMs()});
             }
         });
+
+    // KWin's quick tile of a strip tile: the strip owns the tile's rect, so the
+    // tile is taken back off and the column put back
+    // (TilingHandler::cancelStripQuickTile). Queued, so KWin has finished the
+    // request that emitted this before the cancel issues a request of its own.
+    if (KWin::Window* kwTile = w->window()) {
+        const QPointer<KWin::EffectWindow> safeW = w;
+        connect(
+            kwTile, &KWin::Window::requestedTileChanged, this,
+            [this, safeW]() {
+                if (safeW) {
+                    m_tilingHandler->cancelStripQuickTile(safeW.data());
+                }
+            },
+            Qt::QueuedConnection);
+    }
 
     // TilingHandler::slotWindowFullScreenChanged: a windowed-fullscreen
     // member's enter and exit, and for any other tiled window the enter's

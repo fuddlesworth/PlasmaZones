@@ -172,10 +172,12 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
 
 bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params)
 {
-    // Non-finite refused at the boundary, for adjustActiveColumnWidth's reason.
+    // Non-finite refused and the rest bounded to a whole work area, for
+    // adjustActiveColumnWidth's reason.
     if (!std::isfinite(deltaPercent)) {
         return false;
     }
+    deltaPercent = qBound(-100.0, deltaPercent, 100.0);
     // Lone tiles included: see setActiveWindowHeight.
     Tile* tile = activeTileMutable();
     if (!tile || qFuzzyIsNull(deltaPercent)) {

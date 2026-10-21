@@ -1118,14 +1118,15 @@ struct ResolvedColumn
     /// indicator's long axis without re-deriving it from the rect's aspect (a
     /// one-tab indicator can be square).
     TabIndicatorPosition tabIndicatorPosition = TabIndicatorPosition::Left;
-    /// True when the column's main extent came from its MINIMUM rather than
-    /// from its stored width intent — its tiles' declared minimum (plus any
-    /// main-axis indicator reservation) is at least as wide as the intent.
-    /// A consumer publishing "this column is maximized" must not do so off
-    /// @c rect alone: a column whose floor already reaches the work area
-    /// renders at full extent no matter what the user asks for, so it would
-    /// read as permanently maximized and every toggle would report success
-    /// while changing nothing the user can see.
+    /// True when the column's main extent came from its FLOOR rather than
+    /// from its stored width intent — its tiles' declared minimum or committed
+    /// floor (plus any main-axis indicator reservation) is at least as wide as
+    /// the intent. A consumer inferring "this column is maximized" from
+    /// @c rect must exclude these: a column whose floor already reaches the
+    /// work area renders at full extent no matter what the user asks for.
+    /// Nothing in this repository reads it (the apply pass publishes the
+    /// declared @c maximizedToEdges instead); it stays for out-of-tree
+    /// consumers of this installed struct.
     bool extentPinnedByMinimum = false;
     /// The column's declared maximize-to-edges state, copied through from
     /// Column::maximizedToEdges so the apply pass publishes the DECLARED

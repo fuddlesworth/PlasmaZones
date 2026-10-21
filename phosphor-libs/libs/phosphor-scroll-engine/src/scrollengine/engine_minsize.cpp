@@ -208,9 +208,9 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
         // tile's Fixed height — both serialized by serializeStripState), and
         // placementChanged is this engine's only way to mark DirtyScrollStrips
         // (the tracking service's scheduleSaveState, DirtyAll, also sets that
-        // bit). Without
-        // this emit a resize that is the session's last strip interaction is
-        // never saved and the column comes back at its old width.
+        // bit). Without this emit a resize that is the session's last strip
+        // interaction is never saved and the column comes back at its old
+        // width.
         // reconcileWindowSize returns true only on a genuine change, and a
         // dropped floor is one too (the column's extent moves with it), so
         // emit-on-change holds.

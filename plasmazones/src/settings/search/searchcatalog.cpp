@@ -891,7 +891,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 PhosphorI18n::tr("column"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("scroll")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingRespectMinimumSize"),
                PhosphorI18n::tr("Respect minimum size"),
-               {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size"), PhosphorI18n::tr("resize")});
+               {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size"), PhosphorI18n::tr("resize"),
+                PhosphorI18n::tr("wider"), PhosphorI18n::tr("overlap")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingCenterShortColumns"),
                PhosphorI18n::tr("Center short columns"),
                {PhosphorI18n::tr("center"), PhosphorI18n::tr("short"), PhosphorI18n::tr("column")});

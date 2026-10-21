@@ -7,9 +7,8 @@
 // which column the window-scoped verbs act on, and what survives the state
 // transitions that discard the strip's single pre-maximize slot.
 //
-// Its own file rather than more of test_scrollengine_smoke, whose sanctioned
-// size exception says in as many words that a new concern takes a sibling. The
-// strip-level toggle arms live in test_scrollstrip_sizing (the width toggle)
+// Its own file rather than more of test_scrollengine_smoke, because a new
+// concern takes a sibling suite. The strip-level toggle arms live in test_scrollstrip_sizing (the width toggle)
 // and test_scrollstrip_maximize (to-edges); what this file owns is the
 // ENGINE's half — the wire flag, the verb's targeting (including the
 // window-addressed tab expel), and the compositions no single-step test

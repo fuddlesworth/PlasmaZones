@@ -497,8 +497,8 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Remove the outer gaps while the strip holds a single column, so that column sits against the "
                         "screen edge at its own width.")},
         {CD::respectMinimumSizeKey(), CD::scrollingRespectMinimumSize(), QMetaType::Bool,
-         QStringLiteral("Keep columns at least as wide and tall as their windows' minimum size, which can push other "
-                        "windows off screen.")},
+         QStringLiteral("Keep columns at least as wide and tall as their windows' minimum size, and grow a column to "
+                        "fit a window that stays larger than it. Both can push other windows off screen.")},
         {CD::centerShortColumnsKey(), CD::scrollingCenterShortColumns(), QMetaType::Bool,
          QStringLiteral("Center the windows in a column that does not fill the screen, rather than leaving the unused "
                         "space at the end of the column.")},

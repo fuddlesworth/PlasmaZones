@@ -140,13 +140,13 @@ pse_add_test(test_scrollstrip_core test_scrollstrip_core.cpp)
 pse_add_test(test_scrollstrip_ops test_scrollstrip_ops.cpp)
 # The strip's view ownership (the pan's detach latch and what re-attaches
 # it) and the group-width verbs (equalize, minimize, reset), placed in their
-# own file rather than grown into the over-ceiling ops suite. Same pure
+# own file rather than grown into the ops suite. Same pure
 # model and the same screen constants, but no shared strip fixture: every
 # slot builds its own strip.
 pse_add_test(test_scrollstrip_view test_scrollstrip_view.cpp)
 # The repeatable size verbs' refusal contract (the client-minimum floor, the
-# tabbed refusal, the grow budget), likewise kept out of the over-ceiling ops
-# suite. Every slot builds its own strip and asserts geometry, not just the
+# tabbed refusal, the grow budget), likewise kept out of the ops suite.
+# Every slot builds its own strip and asserts geometry, not just the
 # verb's bool.
 pse_add_test(test_scrollstrip_sizing test_scrollstrip_sizing.cpp)
 pse_add_test(test_scrollstrip_height test_scrollstrip_height.cpp)

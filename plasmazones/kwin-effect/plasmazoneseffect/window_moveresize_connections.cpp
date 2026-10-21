@@ -349,6 +349,9 @@ void PlasmaZonesEffect::wireUserMoveResizeHandlers(KWin::EffectWindow* w)
         // that leaves the strip alone schedules no batch either. This is the
         // one point that always runs at the end of a gesture.
         m_tilingHandler->reconcileMaximizeAfterGesture(window);
+        // A quick tile KWin took during the gesture was declined then, for the
+        // same reason, and its requestedTileChanged will not repeat.
+        m_tilingHandler->cancelStripQuickTile(window);
     });
 }
 
