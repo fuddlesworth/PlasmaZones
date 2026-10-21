@@ -101,6 +101,11 @@ bool TilingHandler::adoptsDaemonArrival(KWin::EffectWindow* w, const QString& sc
 
 bool TilingHandler::isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& windowId) const
 {
+    return w && isKWinMoveOfStripTile(w, windowId, QRectF(w->frameGeometry()));
+}
+
+bool TilingHandler::isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& windowId, const QRectF& frame) const
+{
     if (!w || !isTiledWindow(windowId)) {
         return false;
     }
@@ -114,11 +119,13 @@ bool TilingHandler::isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& 
         return false;
     }
     // Parked is either end at a park: the strip's rect while the client has
-    // not committed it yet, the frame once it has.
+    // not committed it yet, the frame once it has. The frame rounded as
+    // atScrollPark rounds the live one.
+    const QRect frameRect(qRound(frame.x()), qRound(frame.y()), qRound(frame.width()), qRound(frame.height()));
     const KWin::LogicalOutput* const stripOutput = KWin::effects->screenAt(stripRect.center());
     return ScrollDecisions::isKWinMoveOffStrip(
-        w->frameGeometry(), stripOutput ? QRectF(QRect(stripOutput->geometry())) : QRectF(),
-        m_expectedOutputMove.contains(windowId), atScrollPark(w) || rectAtScrollPark(stripRect), w->isUserMove());
+        frame, stripOutput ? QRectF(QRect(stripOutput->geometry())) : QRectF(), m_expectedOutputMove.contains(windowId),
+        rectAtScrollPark(frameRect) || rectAtScrollPark(stripRect), w->isUserMove());
 }
 
 bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w, ReAdd readd)

@@ -411,10 +411,6 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // Consumed at the strip loop.
     QHash<int, bool> columnAllParked;
     QSet<int> columnHadSkippedTile;
-    // Crop mode is a per-SCREEN verdict, read off params: layoutParamsForKey
-    // resolved it once with the rest of the per-screen bools, so the emit
-    // loop never fetches the override map for it.
-    const bool cropStraddlers = params.cropStraddlers;
     // The park's top edge, the one number that separates "was on screen last
     // batch" from "was parked last batch" in m_lastAppliedRect. Every park
     // this pass commits lands exactly here (the park lambda moves only the
@@ -462,14 +458,15 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // the on-screen neighbour instead. Either way the column parks.
     //
     // The memory itself ends here, just ahead of the read, once the column
-    // offers less than it with no floor held and this pass offers the tile
-    // its whole rect without it (endStalePeeks). Judged on the resolve
-    // above, after the re-anchor, because whether the tile straddles the
-    // screen edge is a fact about the view this batch commits. Deferred while
-    // a drag preview steers the view, with the floor sweep it follows; the
-    // next pass after the drop or cancel runs it.
+    // offers less than it with no floor held, this pass offers the tile its
+    // whole rect without it, and no other column the window holds still
+    // offers it (endStalePeeks). Judged on the resolve above, after the
+    // re-anchor, because whether the tile straddles the screen edge is a fact
+    // about the view this batch commits. Deferred while a drag preview steers
+    // the view, with the floor sweep it follows; the next pass after the drop
+    // or cancel runs it.
     if (!dragPreviewSteersView) {
-        endStalePeeks(state->strip(), resolved, params, screenRect, parkTop);
+        endStalePeeks(state->strip(), resolved, currentKey, params, screenRect, parkTop);
     }
     QHash<QString, QSize> tileMinSizes;
     if (params.respectMinimumSize) {
@@ -585,16 +582,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // past are exactly the ones that have parked, and without this the
             // screen goes empty instead of showing the strip move.
             const QRect stripRect = rect;
-            Detail::ParkInputs parkIn;
-            parkIn.tileRect = rect;
-            parkIn.columnRect = column.rect;
-            parkIn.workArea = params.workArea;
-            parkIn.screenRect = screenRect;
-            parkIn.tileMin = params.respectMinimumSize ? tileMinSizes.value(tile.windowId, QSize(0, 0)) : QSize();
-            parkIn.axis = params.axis;
-            parkIn.parkTop = parkTop;
-            parkIn.hidden = tile.hidden;
-            parkIn.cropStraddlers = cropStraddlers;
+            const Detail::ParkInputs parkIn = Detail::parkInputsFor(
+                tile, column, params, screenRect, parkTop,
+                params.respectMinimumSize ? tileMinSizes.value(tile.windowId, QSize(0, 0)) : QSize());
             const Detail::ParkResult parkOut =
                 Detail::resolveTilePlacement(parkIn, m_parkedScrollEdge.value(tile.windowId));
             rect = parkOut.rect;

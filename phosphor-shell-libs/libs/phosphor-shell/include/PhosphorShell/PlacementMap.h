@@ -54,9 +54,9 @@ class Workspaces;
  * (`kind` "layout", "algorithm" or "template") followed by `{kind:
  * "verb", id}` entries (snapping: editLayout, snapAll; tiling: retile,
  * promoteToMaster; scrolling: toggleMaximizeColumn). `applyMenuChoice`
- * assigns the choice for this screen and desktop, or runs the verb. The
- * two window verbs act on the screen's own daemon-reported focus, and do
- * nothing without one or on a pinned screen.
+ * assigns the choice for this screen and desktop, or runs the verb.
+ * promoteToMaster and toggleMaximizeColumn act on the screen's own
+ * daemon-reported focus, and do nothing without one or on a pinned screen.
  *
  * `workArea` and `cellRect(id)` are in this screen's own pixels, origin
  * at the screen's top-left, so a full-screen surface on the screen can

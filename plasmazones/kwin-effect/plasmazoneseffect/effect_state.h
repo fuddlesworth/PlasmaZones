@@ -468,9 +468,11 @@ struct DaemonGateState
     /// is unsafe and must be skipped.
     bool inGeometryApply = false;
     bool quietApplyLog = false; ///< a heartbeat view tick's tile apply: applyWindowGeometry logs at debug (F100)
-    /// The tile apply answering a column maximize or restore the interception claimed: KWin's own flip may already
-    /// have put the window at the batch's rect, and the leg from the caller's origin is owed all the same (F989).
-    bool claimedPressLegOwed = false;
+    /// The tile apply departs from where the window was last seen, after a request KWin made itself may already have
+    /// put the window at the batch's rect: the answer to a column maximize or restore the interception claimed
+    /// (F989), or a batch whose quick-tile drop KWin's untile answered with an immediate move (CR2-24). The leg from
+    /// the caller's origin is owed all the same (ScrollDecisions::departureOwesLeg).
+    bool departureLegOwed = false;
     /// The window whose commit applyWindowGeometry's ANIMATED arm is making
     /// right now (null otherwise). That arm commits before it retargets its
     /// own leg, and the frame-change hook's strip retarget must not answer

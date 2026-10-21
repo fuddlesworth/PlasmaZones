@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorScrollEngine/ScrollTypes.h>
 #include <PhosphorScrollEngine/StripAxis.h>
 
 #include <QRect>
@@ -55,6 +56,16 @@ struct ParkInputs
     bool hidden = false;
     bool cropStraddlers = false;
 };
+
+/// The ParkInputs of @p tile in @p column under @p params, parked below
+/// @p parkTop and clamped to @p screenRect, with @p tileMin as its minimum
+/// (ParkInputs::tileMin says what that holds). The one builder for both
+/// readers of the decision: applyLayout's emit loop, which commits it, and
+/// ScrollEngine::endStalePeeks, which asks what it would be without the peek
+/// memory. Built apart, the question could drift from the placement it asks
+/// about.
+ParkInputs parkInputsFor(const ResolvedTile& tile, const ResolvedColumn& column, const ScrollLayoutParams& params,
+                         const QRect& screenRect, int parkTop, const QSize& tileMin);
 
 /// The decision. The caller owns m_parkedScrollEdge and applies @ref
 /// rememberedEdge to it, which keeps this function pure and testable.

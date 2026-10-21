@@ -2092,14 +2092,28 @@ private:
     /// it). True when a dropped floor changed the layout (the first kind; the second is layout-neutral).
     bool settleCommittedFloors(ScrollState& state, const PhosphorEngine::PlacementStateKey& key,
                                const ScrollLayoutParams& params);
-    /// applyLayout's second sweep, over @p resolved (@p strip relaid out under @p params after the re-anchor),
-    /// ahead of the peek floor that reads the memory: with no floor held, end a tile's peek memory once its
-    /// column offers it less, but only on a pass that offers the tile its whole rect without the memory (on
-    /// screen, parked, or kept whole by crop mode). A tile the screen edge would clamp keeps the memory and
-    /// parks on it, since a clamped sliver is an offer reportCommittedSize refuses to learn from.
-    /// @p screenRect and @p parkTop are the emit loop's park bounds.
-    void endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& resolved, const ScrollLayoutParams& params,
+    /// applyLayout's second sweep, over @p resolved (@p strip, the context at @p key, relaid out under @p params
+    /// after the re-anchor), ahead of the peek floor that reads the memory: with no floor held, end a tile's
+    /// whole extent (peek memory and give-back history) once its column offers it less than the memory, but
+    /// only on a pass that offers the tile its whole rect without the memory (on screen, parked, or kept whole
+    /// by crop mode), and only when every other column the window holds offers less too (a float or a
+    /// maximized-to-edges column there keeps it, as it keeps a floor). A clamped tile keeps the memory, since
+    /// a clamped offer is one reportCommittedSize refuses to learn from: one the screen edge would clamp parks
+    /// on it, and one the cross-axis stack clamp shortens is clamped across as before, the memory reading only
+    /// along the strip. The cost: a column that only ever straddles parks rather than peeks until it is shown
+    /// whole or leaves the viewport. Its park is a whole offer, but a client that takes an offer reports
+    /// nothing, so the engine cannot tell one that took the park from one whose wider answer to it has not
+    /// arrived, and ending the memory a pass after the park would hand a pixel pan's next frame a sliver the
+    /// client answers instead. @p screenRect and @p parkTop are the emit loop's park bounds.
+    void endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& resolved,
+                       const PhosphorEngine::PlacementStateKey& key, const ScrollLayoutParams& params,
                        const QRect& screenRect, int parkTop);
+    /// Whether @p accepts holds for what every column @p windowId holds outside the context at @p key offers its
+    /// tile along @p axis without the window's own floor. A torn-down context and a strip running the other way
+    /// are passed over; a membership with no column (a float there) or a maximized-to-edges one fails, since
+    /// what the client said waits for the column the window comes back to. The elsewhere half of both sweeps.
+    bool everyOtherColumnOffers(const QString& windowId, const PhosphorEngine::PlacementStateKey& key,
+                                const StripAxis& axis, const std::function<bool(int)>& accepts) const;
     /// @p params with @p windowId's own committed floor masked out, so a strip resolves that window's column
     /// the way it would without it. Every other window's floor still reads, since a sibling's floor holds
     /// the column too.

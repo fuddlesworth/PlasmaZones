@@ -7,9 +7,10 @@
 // honest afterwards: the sweep applyLayout runs (settleCommittedFloors) and the
 // oversized verdict a floor shares with a declared minimum
 // (outgrowsWorkArea). applyLayout's second sweep (endStalePeeks) ends a peek
-// memory the column no longer offers. The strip never holds any of this; it
-// reads the floors through ScrollLayoutParams::committedFloor, which
-// layoutParamsForKey points at committedFloorFor.
+// memory, and the extent with it, once no column the window holds offers it.
+// The strip never holds any of this; it reads the floors through
+// ScrollLayoutParams::committedFloor, which layoutParamsForKey points at
+// committedFloorFor.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
@@ -47,9 +48,9 @@ int tileMainOfferPx(const ScrollStrip& strip, const QString& windowId, const Scr
 
 /// End one orientation's floor outright, with the give-back history that
 /// belonged to it. The peek memory stays here: what the client last answered
-/// is still true after its column stops being held to it, for as long as the
-/// column still offers at least that much (endStalePeeks ends it once the
-/// column offers less on a pass that offers the tile whole).
+/// is still true after its column stops being held to it, for as long as a
+/// column still offers at least that much (endStalePeeks ends it once every
+/// column the window holds offers less, on a pass that offers this one whole).
 void dropFloor(CommittedMainExtent& extent)
 {
     extent.floorPx = 0;
@@ -184,6 +185,45 @@ bool ScrollEngine::floatIfOutgrowsWorkArea(ScrollState* state, const PhosphorEng
                                applyAfter);
 }
 
+bool ScrollEngine::everyOtherColumnOffers(const QString& windowId, const PhosphorEngine::PlacementStateKey& key,
+                                          const StripAxis& axis, const std::function<bool(int)>& accepts) const
+{
+    for (const PhosphorEngine::PlacementStateKey& other : m_states.membershipsForWindow(windowId)) {
+        if (other == key) {
+            continue;
+        }
+        const ScrollState* otherState = m_states.stateForKey(other);
+        if (!otherState) {
+            continue; // torn down: no column there to hold anything
+        }
+        // A float there, or a membership whose strip does not hold a tile,
+        // has no column to measure, and what the client said is waiting for
+        // the column the window comes back to.
+        const ScrollStrip& otherStrip = otherState->strip();
+        const int otherColIdx = otherStrip.columnOfWindow(windowId);
+        if (otherColIdx < 0) {
+            return false;
+        }
+        const ScrollLayoutParams otherParams = layoutParamsForKey(other);
+        // A strip running the other way never reads this orientation's
+        // extent, so it has nothing to say about it.
+        if (otherParams.axis != axis) {
+            continue;
+        }
+        // A maximized-to-edges column there is the in-view skip of both
+        // sweeps, seen from here: its extent is declared, so measuring it
+        // says nothing about the column it holds the window to once it is
+        // un-maximized, and what the client said waits for that column.
+        if (otherStrip.columns().at(otherColIdx).maximizedToEdges) {
+            return false;
+        }
+        if (!accepts(tileMainOfferPx(otherStrip, windowId, withoutCommittedFloorOf(otherParams, windowId)))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngine::PlacementStateKey& key,
                                          const ScrollLayoutParams& params)
 {
@@ -196,46 +236,6 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
     if (workMain <= 0) {
         return false;
     }
-    // Every other context a window holds a column in has to be satisfied too
-    // before its floor goes: the floor is the window's, read by each of those
-    // strips, and a column widened on this desktop says nothing about the
-    // column it holds on another.
-    const auto satisfiedElsewhere = [this, &key, &params](const QString& windowId, int floorPx) {
-        for (const PhosphorEngine::PlacementStateKey& other : m_states.membershipsForWindow(windowId)) {
-            if (other == key) {
-                continue;
-            }
-            const ScrollState* otherState = m_states.stateForKey(other);
-            if (!otherState) {
-                continue; // torn down: no column there to hold anything
-            }
-            // A float there, or a membership whose strip does not hold a
-            // tile, has no column to measure, and the floor is waiting for
-            // the column it will hold the window to when it comes back.
-            const ScrollStrip& otherStrip = otherState->strip();
-            const int otherColIdx = otherStrip.columnOfWindow(windowId);
-            if (otherColIdx < 0) {
-                return false;
-            }
-            const ScrollLayoutParams otherParams = layoutParamsForKey(other);
-            // A strip running the other way never reads this orientation's
-            // floor, so it has nothing to satisfy.
-            if (otherParams.axis != params.axis) {
-                continue;
-            }
-            // A maximized-to-edges column there is the in-view skip below,
-            // seen from here: its extent is declared, so measuring it says
-            // nothing about the column the floor holds the window to once it
-            // is un-maximized, and the floor waits for that column.
-            if (otherStrip.columns().at(otherColIdx).maximizedToEdges) {
-                return false;
-            }
-            if (tileMainOfferPx(otherStrip, windowId, withoutCommittedFloorOf(otherParams, windowId)) < floorPx) {
-                return false;
-            }
-        }
-        return true;
-    };
     bool layoutChanged = false;
     const ScrollStrip& strip = state.strip();
     for (const Column& column : strip.columns()) {
@@ -272,15 +272,21 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
             } else if (extent.floorPx > 0
                        && tileMainOfferPx(strip, tile.windowId, withoutCommittedFloorOf(params, tile.windowId))
                            >= extent.floorPx
-                       && satisfiedElsewhere(tile.windowId, extent.floorPx)) {
+                       && everyOtherColumnOffers(tile.windowId, key, params.axis,
+                                                 [floorPx = extent.floorPx](int offerPx) {
+                                                     return offerPx >= floorPx;
+                                                 })) {
                 // Satisfied: the column offers the tile at least the floor
                 // without it, because the user widened it or a sibling's floor
-                // did. The floor changes nothing now, but left standing it
-                // would come back into force the moment the column narrows and
-                // pin it to an answer the client gave under other conditions.
-                // Dropped, the narrower column is offered as asked, and a
-                // client that still will not take it answers with a new floor.
-                // Layout-neutral by construction.
+                // did, and so does every other column the window holds. The
+                // floor is the window's, read by each of those strips, and a
+                // column widened on this desktop says nothing about the column
+                // it holds on another. The floor changes nothing now, but left
+                // standing it would come back into force the moment the column
+                // narrows and pin it to an answer the client gave under other
+                // conditions. Dropped, the narrower column is offered as
+                // asked, and a client that still will not take it answers with
+                // a new floor. Layout-neutral by construction.
                 dropFloor(extent);
             }
             if (it->isEmpty()) {
@@ -292,7 +298,8 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
 }
 
 void ScrollEngine::endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& resolved,
-                                 const ScrollLayoutParams& params, const QRect& screenRect, int parkTop)
+                                 const PhosphorEngine::PlacementStateKey& key, const ScrollLayoutParams& params,
+                                 const QRect& screenRect, int parkTop)
 {
     // Off, nothing reads the memory, and ending it would discard what the
     // client said before the setting comes back.
@@ -307,7 +314,9 @@ void ScrollEngine::endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& 
         }
         for (const ResolvedTile& tile : column.tiles) {
             // Under an interactive move the window is committed nothing this
-            // pass, so it is offered nothing either.
+            // pass, so it is offered nothing either, whatever its strip rect
+            // says. The memory is judged again on the drop's own relayout,
+            // which runs once the mark is gone.
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
                 continue;
             }
@@ -325,8 +334,8 @@ void ScrollEngine::endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& 
             // stopped giving. The floor is 0 here, so params already reads
             // the column without it.
             CommittedMainExtent& extent = extentFor(*it, params.axis);
-            if (extent.floorPx > 0 || extent.peekPx == 0
-                || tileMainOfferPx(strip, tile.windowId, params) >= extent.peekPx) {
+            const int peekPx = extent.peekPx;
+            if (extent.floorPx > 0 || peekPx == 0 || tileMainOfferPx(strip, tile.windowId, params) >= peekPx) {
                 continue;
             }
             // Ended only on a pass that offers the tile its WHOLE rect once
@@ -337,23 +346,44 @@ void ScrollEngine::endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& 
             // to re-teach it, since reportCommittedSize refuses an answer to
             // anything but the whole tile. Kept, the straddler parks on the
             // memory, its park is the whole tile, and the memory ends on the
-            // first pass that offers the tile whole without it. The tile's
-            // minimum without the memory is its declared one, the same input
-            // the emit loop's park reads once the memory is gone.
-            Detail::ParkInputs parkIn;
-            parkIn.tileRect = tile.rect;
-            parkIn.columnRect = column.rect;
-            parkIn.workArea = params.workArea;
-            parkIn.screenRect = screenRect;
-            parkIn.tileMin = strip.windowMinimumSize(tile.windowId);
-            parkIn.axis = params.axis;
-            parkIn.parkTop = parkTop;
-            parkIn.hidden = tile.hidden;
-            parkIn.cropStraddlers = params.cropStraddlers;
-            if (Detail::resolveTilePlacement(parkIn, QString()).rect.size() != tile.rect.size()) {
+            // first pass that offers the tile whole without it. A tile the
+            // cross-axis stack clamp shortens is kept for the same reason
+            // (its clamped offer teaches nothing either), though nothing
+            // parks on the memory there until the tile also straddles a
+            // screen edge. The tile's minimum without the memory is its
+            // declared one, the same input the emit loop's park reads once
+            // the memory is gone.
+            //
+            // Not ended on the evidence of a park alone: the park at this
+            // size is a whole offer, but a client that took it says nothing,
+            // and the silence after one park cannot tell that client from one
+            // whose wider answer has not arrived yet. Ending the memory on the
+            // pass after a park (its rect already whole at this size) would
+            // offer a sliver one frame later on a pixel pan, the client would
+            // then answer the sliver instead of the park, and nothing would
+            // re-teach it. A column that only ever straddles therefore parks
+            // until it is shown whole or leaves the viewport.
+            const Detail::ParkInputs whatIf = Detail::parkInputsFor(tile, column, params, screenRect, parkTop,
+                                                                    strip.windowMinimumSize(tile.windowId));
+            if (Detail::resolveTilePlacement(whatIf, QString()).rect.size() != tile.rect.size()) {
                 continue;
             }
-            extent.peekPx = 0;
+            // The memory is the window's, read by the peek floor of every
+            // strip it holds a column in, and one column offering less says
+            // nothing about another that still offers the memory: that one
+            // is not stale, and ending the memory from here would clamp it
+            // to a sliver the next time it straddles. Kept until every
+            // column the window holds offers less.
+            if (!everyOtherColumnOffers(tile.windowId, key, params.axis, [peekPx](int offerPx) {
+                    return offerPx < peekPx;
+                })) {
+                continue;
+            }
+            // The whole extent ends, the give-back history with it: with no
+            // floor left and nothing remembered, nothing the client said
+            // still stands, and history kept on its own would pin the next
+            // floor it teaches as though that were a re-teach.
+            extent = CommittedMainExtent{};
             if (it->isEmpty()) {
                 m_committedExtents.erase(it);
             }

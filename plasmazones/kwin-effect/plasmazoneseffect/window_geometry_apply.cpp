@@ -354,10 +354,11 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // no-op, it is the command that cancels the pending one. Integer-aligned:
     // the geometry carries qreal precision and fractional-scale residue, so a
     // float-bit-exact equality against an integer `geo` would silently miss.
-    // Not when the answer to a claimed maximize press is applied (F989): KWin's own flip already commanded the
-    // batch's rect, and the leg departing from the caller's origin is the only motion the press gets.
+    // Not when a request KWin made itself already commanded the batch's rect and the leg departing from the caller's
+    // origin is the only motion the window gets: the answer to a claimed maximize press (F989), or a batch whose
+    // quick-tile drop KWin's untile answered by moving the window at once (ScrollDecisions::departureOwesLeg).
     if (geo == commandedRectOf(window) && !m_windowAnimator->hasAnimation(window)
-        && !ScrollDecisions::claimedPressOwesLeg(m_daemonGate.claimedPressLegOwed, originOverride, geo)) {
+        && !ScrollDecisions::departureOwesLeg(m_daemonGate.departureLegOwed, originOverride, geo)) {
         qCDebug(lcEffect) << "moveResize: window already at target geometry, skipping:" << geo;
         // Release first-frame open suppression here. The settle-detection
         // hook on windowFrameGeometryChanged would otherwise wait forever

@@ -217,13 +217,18 @@ inline QRect viewCarriedOrigin(const QRectF& from, int viewDelta, bool vertical)
 }
 
 /// Whether an apply that finds the window already commanded to its target
-/// still owes a leg (F989). Only the answer to a claimed press does: KWin's own
-/// flip already commanded the batch's rect, so the leg from the press's
-/// departure is the only motion the press gets. It needs an origin that is not
-/// the target itself. Every other apply at its target stays a no-op.
-inline bool claimedPressOwesLeg(bool answeringClaimedPress, const QRectF& origin, const QRect& target)
+/// still owes a leg. Only one departing from where the window was last seen,
+/// after a request KWin made itself already commanded the batch's rect, does
+/// (@p departureOwed): the answer to a claimed press, whose flip KWin made, so
+/// the leg from the press's departure is the only motion the press gets
+/// (F989), and a batch that took KWin's quick tile off a window whose untile
+/// moved it at once to a restore rect that is the column itself, so the leg
+/// from the tile is the only motion the window gets (CR2-24). It needs an
+/// origin that is not the target itself. Every other apply at its target stays
+/// a no-op.
+inline bool departureOwesLeg(bool departureOwed, const QRectF& origin, const QRect& target)
 {
-    return answeringClaimedPress && origin.isValid() && origin.toRect() != target;
+    return departureOwed && origin.isValid() && origin.toRect() != target;
 }
 
 /// The counter-assert burst budget for scroll-managed windows an EXTERNAL
@@ -515,6 +520,15 @@ struct KWinResizePutBackGates
     /// KWin's own move, or the resize hold waiting for the client's answer to
     /// the user's resize (PlasmaZonesEffect::m_resizeHold)
     bool userGesture = false;
+    /// the request moves the window to another output, as KWin's Move to
+    /// Screen does (Window::sendToOutput resizes a column larger than the new
+    /// work area on the way): the requested rect read through the very test
+    /// the output-change arm hands such a move over by (isKWinMoveOffStrip,
+    /// TilingHandler::isKWinMoveOfStripTile), so a move that arm would take is
+    /// never put back onto the old output, where its output change never
+    /// comes. A request at a park, or one still overlapping the strip's
+    /// output (a straddler growing past its edge), is no such move.
+    bool leavesOutput = false;
 };
 
 /// Whether a resize KWin requested for a strip window on its own account
@@ -527,7 +541,7 @@ struct KWinResizePutBackGates
 /// client's answer Foreign until the column is delivered again.
 inline bool putsBackKWinResize(const KWinResizePutBackGates& gates)
 {
-    return gates.managed && gates.coordinatesHold && gates.kwinStateAtRest && !gates.userGesture;
+    return gates.managed && gates.coordinatesHold && gates.kwinStateAtRest && !gates.userGesture && !gates.leavesOutput;
 }
 
 /// Where putsBackKWinResize puts a strip window back. @p commanded is the
@@ -539,21 +553,26 @@ inline bool putsBackKWinResize(const KWinResizePutBackGates& gates)
 /// the frame the client settled on before the request: the answer the strip
 /// already holds, the column or a size it carried centred in the column. A
 /// Foreign answer, or an empty frame (a mid-unmap commit), puts back nothing.
-inline QRect kwinResizePutBackRect(const QRect& commanded, ColumnAnswer answer, const QRect& offered,
-                                   const QRect& frame)
+///
+/// The frame is taken and given back exact, never through QRectF::toRect,
+/// whose rounded size depends on where the rect sits: a fractional frame
+/// rounded there could be put back a pixel off the client's own size, and the
+/// put-back would itself send the client a resize.
+inline QRectF kwinResizePutBackRect(const QRect& commanded, ColumnAnswer answer, const QRect& offered,
+                                    const QRectF& frame)
 {
     if (!commanded.isEmpty()) {
-        return commanded;
+        return QRectF(commanded);
     }
     switch (answer) {
     case ColumnAnswer::Owed:
-        return offered;
+        return QRectF(offered);
     case ColumnAnswer::Read:
-        return frame.isEmpty() ? QRect() : frame;
+        return frame.isEmpty() ? QRectF() : frame;
     case ColumnAnswer::Foreign:
-        return QRect();
+        return QRectF();
     }
-    return QRect();
+    return QRectF();
 }
 
 /// Whether a geometry request made outside every effect apply voids the answer

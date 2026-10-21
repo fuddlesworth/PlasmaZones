@@ -806,6 +806,12 @@ void TilingHandler::cancelStripQuickTile(KWin::EffectWindow* w)
     // stamp: a strip entry the next batch has already scheduled for it must
     // still land.
     const quint64 latestCommand = m_effect->m_daemonGate.commandStamps.current(w);
+    // Unanimated, unlike the batch that drops a tile the window carried in and
+    // was drawn on (tileDropOrigin in slotWindowsTileRequested). The tile
+    // answered here from requestedTileChanged has only just been requested:
+    // Window::requestTile moves the window onto it and emits the signal in
+    // the same call, and this runs on the next event-loop turn, so the window
+    // was last seen at the column and there is no motion to draw.
     m_effect->applyWindowGeometry(w, column, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
     // A stale-ack answer the apply armed carries its stamp, which the
     // reinstate below takes back; it follows the reinstated one, or the frame

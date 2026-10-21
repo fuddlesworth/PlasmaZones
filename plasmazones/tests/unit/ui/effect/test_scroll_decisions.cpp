@@ -11,11 +11,12 @@
 // the release order is static-asserted where releaseAllClaims uses it), the
 // size-continuity carry-forward table, when a strip entry is a new offer,
 // when a request resizes on KWin's account (resizesOnKWinsAccount), whether
-// and where such a resize is put back and its budget, when a dropped quick
-// tile's configure is still outstanding (droppedTileAckOutstanding), when a
-// request voids a stale-ack answer, the engine-flip screen set, the
-// wire screen-list filter, the maximize-membership and claimed-press answers,
-// the view-carried origin, the passive float scope, the user Monocle
+// and where such a resize is put back and which requests leave the output,
+// when a dropped quick tile's configure is still outstanding
+// (droppedTileAckOutstanding), when a request voids a stale-ack answer, the
+// engine-flip screen set, the wire screen-list filter, the
+// maximize-membership and claimed-press answers, when an apply at its target
+// still owes a leg (departureOwesLeg), the view-carried origin, the passive float scope, the user Monocle
 // unmaximize read, the restore-rect output check, the KWin move off a
 // strip, when a strip window's frame reads as its client's answer to its
 // column, whether that answer is new, and which answers are reported to the
@@ -729,19 +730,23 @@ private Q_SLOTS:
         QTest::addColumn<bool>("coordinatesHold");
         QTest::addColumn<bool>("kwinStateAtRest");
         QTest::addColumn<bool>("userGesture");
+        QTest::addColumn<bool>("leavesOutput");
         QTest::addColumn<bool>("putsBack");
 
         // KWin's Expand or Shrink Window, or a script setting the frame.
-        QTest::newRow("every gate open") << true << true << true << false << true;
+        QTest::newRow("every gate open") << true << true << true << false << false << true;
         // Floating, untracked, or under a user move or resize.
-        QTest::newRow("not scroll-managed") << false << true << true << false << false;
+        QTest::newRow("not scroll-managed") << false << true << true << false << false << false;
         // The rect to put back is in coordinates the output has left (F815).
-        QTest::newRow("coordinates stale") << true << false << true << false << false;
+        QTest::newRow("coordinates stale") << true << false << true << false << false << false;
         // KWin's maximize, fullscreen or quick tile, which have correctors of
         // their own.
-        QTest::newRow("KWin state requested") << true << true << false << false << false;
+        QTest::newRow("KWin state requested") << true << true << false << false << false << false;
         // A drag the tracker still owns, or the resize hold.
-        QTest::newRow("user gesture") << true << true << true << true << false;
+        QTest::newRow("user gesture") << true << true << true << true << false << false;
+        // KWin's Move to Screen onto a work area smaller than the column, which
+        // resizes on the way: put back, it would never reach the other output.
+        QTest::newRow("moves to another output") << true << true << true << false << true << false;
     }
 
     void kwinResizePutBackTable()
@@ -750,13 +755,34 @@ private Q_SLOTS:
         QFETCH(bool, coordinatesHold);
         QFETCH(bool, kwinStateAtRest);
         QFETCH(bool, userGesture);
+        QFETCH(bool, leavesOutput);
         QFETCH(bool, putsBack);
         KWinResizePutBackGates gates;
         gates.managed = managed;
         gates.coordinatesHold = coordinatesHold;
         gates.kwinStateAtRest = kwinStateAtRest;
         gates.userGesture = userGesture;
+        gates.leavesOutput = leavesOutput;
         QCOMPARE(putsBackKWinResize(gates), putsBack);
+    }
+
+    // Which requests leave the output, read through the output-change arm's
+    // own test (isKWinMoveOffStrip) with the requested rect as the frame. The
+    // live shape: a 1908 px column on a 3840 px output sent to a 1280 px one,
+    // where Window::sendToOutput's keepInArea shrinks it to the new area.
+    void kwinResizePutBack_leavesOutputOnlyForAMoveOff()
+    {
+        const QRectF stripOutput(0, 0, 3840, 2160);
+        // Move to Screen onto the smaller output to the right: handed over.
+        QVERIFY(isKWinMoveOffStrip(QRectF(3848, 8, 1264, 1004), stripOutput, /*markerArmed=*/false,
+                                   /*parked=*/false, /*userMove=*/false));
+        // Expand Window of a column straddling the output's right edge: its
+        // centre crosses onto the neighbour, but it still overlaps the strip's
+        // output, so it is put back.
+        QVERIFY(!isKWinMoveOffStrip(QRectF(3000, 8, 1592, 2052), stripOutput, false, false, false));
+        // Expand Window of a parked column: off every output by design, and
+        // its nearest output says nothing about a move, so it is put back.
+        QVERIFY(!isKWinMoveOffStrip(QRectF(8, 2200, 2400, 2052), stripOutput, false, /*parked=*/true, false));
     }
 
     // Where the put-back lands. The strip's commanded rect wins where the
@@ -765,38 +791,26 @@ private Q_SLOTS:
     void kwinResizePutBackRect_followsTheStripsRect()
     {
         const QRect column(8, 8, 1908, 2052);
-        const QRect carried(108, 8, 1708, 2052);
+        const QRectF carried(108, 8, 1708, 2052);
         const QRect park(8, 5000, 1908, 2052);
         // A column placed outside its output: the rect the strip committed.
-        QCOMPARE(kwinResizePutBackRect(park, ColumnAnswer::Read, column, carried), park);
-        QCOMPARE(kwinResizePutBackRect(park, ColumnAnswer::Owed, column, carried), park);
+        QCOMPARE(kwinResizePutBackRect(park, ColumnAnswer::Read, column, carried), QRectF(park));
+        QCOMPARE(kwinResizePutBackRect(park, ColumnAnswer::Owed, column, carried), QRectF(park));
         // Owed: the frame is the one the strip's resize is replacing.
-        QCOMPARE(kwinResizePutBackRect(QRect(), ColumnAnswer::Owed, column, QRect(8, 8, 1000, 2052)), column);
+        QCOMPARE(kwinResizePutBackRect(QRect(), ColumnAnswer::Owed, column, QRectF(8, 8, 1000, 2052)), QRectF(column));
         // Read: the size the client settled on, which the strip carries
         // centred in the column.
         QCOMPARE(kwinResizePutBackRect(QRect(), ColumnAnswer::Read, column, carried), carried);
-        QCOMPARE(kwinResizePutBackRect(QRect(), ColumnAnswer::Read, column, column), column);
+        QCOMPARE(kwinResizePutBackRect(QRect(), ColumnAnswer::Read, column, QRectF(column)), QRectF(column));
+        // A fractional frame goes back exact. Through QRectF::toRect this one
+        // rounds to 789 wide, a pixel off the client's own size, and the
+        // put-back would itself send the client a resize.
+        const QRectF fractional(8.4, 8, 788.4, 2052);
+        QCOMPARE(fractional.toRect().width(), 789);
+        QCOMPARE(kwinResizePutBackRect(QRect(), ColumnAnswer::Read, column, fractional), fractional);
         // Nothing to put back: a Foreign answer, or an empty frame.
-        QVERIFY(kwinResizePutBackRect(QRect(), ColumnAnswer::Foreign, column, column).isEmpty());
-        QVERIFY(kwinResizePutBackRect(QRect(), ColumnAnswer::Read, column, QRect(100, 8, 0, 2052)).isEmpty());
-    }
-
-    // The put-back budget is the counter-assert's: three per rolling second,
-    // and a delivery of the column re-arms it by resetting the pair, as
-    // recordStripOffer does. A script writing the frame every 16 ms is put
-    // back three times, then its size stands until the next delivery.
-    void kwinResizePutBack_budgetedLikeTheCounterAssert()
-    {
-        qint64 start = 0;
-        int count = 0;
-        QVERIFY(shouldCounterAssert(start, count, 10000, true));
-        QVERIFY(shouldCounterAssert(start, count, 10016, true));
-        QVERIFY(shouldCounterAssert(start, count, 10032, true));
-        QVERIFY(!shouldCounterAssert(start, count, 10048, true));
-        // The next delivery.
-        start = 0;
-        count = 0;
-        QVERIFY(shouldCounterAssert(start, count, 10064, true));
+        QVERIFY(kwinResizePutBackRect(QRect(), ColumnAnswer::Foreign, column, QRectF(column)).isEmpty());
+        QVERIFY(kwinResizePutBackRect(QRect(), ColumnAnswer::Read, column, QRectF(100, 8, 0, 2052)).isEmpty());
     }
 
     // The engine forces a batch with every rect unchanged when minimum sizes
@@ -933,21 +947,24 @@ private Q_SLOTS:
     }
     // The answer to a claimed press owes its leg even when KWin's flip already
     // commanded the batch's rect (F989): maximize from the column, restore from
-    // the maximize area.
-    void claimedPressOwesLeg_atTargetStillAnimates()
+    // the maximize area. So does a batch whose quick-tile drop KWin's untile
+    // answered by moving the window at once to the column itself: the leg runs
+    // from the tile (CR2-24).
+    void departureOwesLeg_atTargetStillAnimates()
     {
-        QVERIFY(claimedPressOwesLeg(true, QRectF(8, 8, 500, 752), QRect(0, 0, 1024, 768)));
-        QVERIFY(claimedPressOwesLeg(true, QRectF(0, 0, 1024, 768), QRect(8, 8, 500, 752)));
+        QVERIFY(departureOwesLeg(true, QRectF(8, 8, 500, 752), QRect(0, 0, 1024, 768)));
+        QVERIFY(departureOwesLeg(true, QRectF(0, 0, 1024, 768), QRect(8, 8, 500, 752)));
+        QVERIFY(departureOwesLeg(true, /*tile=*/QRectF(0, 0, 960, 1080), /*column=*/QRect(8, 8, 788, 1064)));
     }
     // Any other apply at its target stays a no-op, and so does one with no
     // departure of its own.
-    void claimedPressOwesLeg_otherwiseNoOp()
+    void departureOwesLeg_otherwiseNoOp()
     {
-        QVERIFY(!claimedPressOwesLeg(false, QRectF(8, 8, 500, 752), QRect(0, 0, 1024, 768)));
-        QVERIFY(!claimedPressOwesLeg(true, QRectF(0, 0, 1024, 768), QRect(0, 0, 1024, 768)));
-        QVERIFY(!claimedPressOwesLeg(true, QRectF(), QRect(0, 0, 1024, 768)));
+        QVERIFY(!departureOwesLeg(false, QRectF(8, 8, 500, 752), QRect(0, 0, 1024, 768)));
+        QVERIFY(!departureOwesLeg(true, QRectF(0, 0, 1024, 768), QRect(0, 0, 1024, 768)));
+        QVERIFY(!departureOwesLeg(true, QRectF(), QRect(0, 0, 1024, 768)));
         // A degenerate origin with a position but no width is no departure.
-        QVERIFY(!claimedPressOwesLeg(true, QRectF(8, 8, 0, 752), QRect(0, 0, 1024, 768)));
+        QVERIFY(!departureOwesLeg(true, QRectF(8, 8, 0, 752), QRect(0, 0, 1024, 768)));
     }
     // A view-carried leg starts a view delta behind where it should first
     // paint, along the strip's axis only: the X11 maximize of the second column

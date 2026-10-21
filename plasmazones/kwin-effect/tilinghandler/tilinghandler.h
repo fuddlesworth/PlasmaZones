@@ -310,6 +310,9 @@ public:
     bool handleWindowOutputChanged(KWin::EffectWindow* w, ReAdd readd = ReAdd::Announce);
     /// KWin moved a strip tile to another output itself (ScrollDecisions::isKWinMoveOffStrip, F738).
     bool isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& windowId) const;
+    /// The same question asked of @p frame, the frame a geometry request is about to give the window, instead of
+    /// the live one: whether the output change that request will make is one the overload above hands over.
+    bool isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& windowId, const QRectF& frame) const;
 
     // D-Bus signal connections and settings
     void connectSignals();

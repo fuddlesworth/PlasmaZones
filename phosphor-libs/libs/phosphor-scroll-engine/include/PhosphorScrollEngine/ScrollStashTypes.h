@@ -417,13 +417,15 @@ struct CommittedMainExtent
     /// peek floor, which must keep protecting a column the client answers at
     /// full width after the floor itself has been satisfied and dropped. A
     /// wider answer sets it with the floor, and a narrower one replaces it.
-    /// With no floor held it ends once the column offers the tile less than
-    /// this, on a pass that offers the tile its whole rect
-    /// (ScrollEngine::endStalePeeks): a client that took the narrower offer
-    /// reports nothing, so nothing else would ever revise it.
+    /// With no floor held it ends, and the whole extent with it, once the
+    /// column offers the tile less than this on a pass that offers the tile
+    /// its whole rect, while every other column the window holds offers less
+    /// too (ScrollEngine::endStalePeeks): a client that took the narrower
+    /// offer reports nothing, so nothing else would ever revise it.
     int peekPx = 0;
     /// A narrower answer has given part or all of floorPx back since it was
-    /// learned.
+    /// learned. It outlives a floor given back entirely, so that a re-teach
+    /// pins, and ends with the floor's other drops or with the peek memory.
     bool gaveBack = false;
     /// A wider answer re-taught the floor after a give-back. The client is not
     /// answering the same offer the same way twice, and following it down

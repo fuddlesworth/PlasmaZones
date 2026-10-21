@@ -53,6 +53,7 @@ const QString kA = QStringLiteral("app|a");
 const QString kB = QStringLiteral("app|b");
 const QString kC = QStringLiteral("app|c");
 const QString kD1 = QStringLiteral("app|d1");
+const QString kD2 = QStringLiteral("app|d2");
 const QString kSticky = QStringLiteral("app|sticky");
 
 /// A size in ROLE terms, transposed with the arm into the physical size the
@@ -706,6 +707,26 @@ private Q_SLOTS:
             QCoreApplication::processEvents();
             QVERIFY2(isParked(engine, kA), "a column offering exactly the memory keeps it");
         }
+        {
+            // Ending the memory ends the whole extent, the give-back history
+            // with it. A floor taught at 450 and given back entirely by a 300
+            // answer leaves a 300 memory and that history; the column then
+            // narrows to 200 and the client takes it. The next floor taught
+            // is an ordinary one, so a narrower answer gives it back rather
+            // than meeting a pin.
+            QObject owner;
+            ScrollEngine* engine = makeFloorEngine(&owner);
+            answer(engine, kA, 450); // offered 300
+            answer(engine, kA, 300); // offered 450: given back entirely
+            QCOMPARE(extentOf(engine, kA), 300);
+            engine->setColumnWidth(ColumnWidth::makeFixed(200), kS1); // offers less than the 300 remembered
+            QCoreApplication::processEvents();
+            QCOMPARE(extentOf(engine, kA), 200);
+            answer(engine, kA, 450); // offered 200: taught afresh
+            QCOMPARE(extentOf(engine, kA), 450);
+            answer(engine, kA, 200); // offered 450: given back
+            QCOMPARE(extentOf(engine, kA), 200);
+        }
     }
 
     // The memory ends only on a pass that offers the tile its whole rect. A
@@ -766,6 +787,135 @@ private Q_SLOTS:
             answer(engine, kA, 700); // offered the parked 675
             QCOMPARE(extentOf(engine, kA), 700);
         }
+        {
+            // A pass that comes before the client answers the park parks it
+            // again, so a late answer still teaches. The park is a whole
+            // offer, but silence after one proves nothing yet: ending the
+            // memory once a park at this size had gone out would make this
+            // pass offer a sliver, and the client's answer would then answer
+            // the sliver and be refused.
+            QObject owner;
+            auto available = std::make_shared<QRect>(defaultScreenRect());
+            ScrollEngine* engine = straddleAtNarrowedColumn(&owner, available);
+            QVERIFY(isParked(engine, kA));
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            QVERIFY2(isParked(engine, kA), "an unanswered park is no evidence the client took it");
+            answer(engine, kA, 700); // offered the parked 675
+            QCOMPARE(extentOf(engine, kA), 700);
+        }
+        {
+            // A window under an interactive move is offered nothing, so a
+            // pass that shows its tile whole on the strip ends nothing: a is
+            // focused mid-drag, which centres it whole, and straddles again
+            // before the drop, whose relayout keeps the memory and parks it.
+            QObject owner;
+            auto available = std::make_shared<QRect>(defaultScreenRect());
+            ScrollEngine* engine = straddleAtNarrowedColumn(&owner, available);
+            engine->setInteractiveDragWindow(kA);
+            engine->windowFocused(kA, kS1);
+            QCoreApplication::processEvents();
+            engine->windowFocused(kB, kS1);
+            QCoreApplication::processEvents();
+            engine->setInteractiveDragWindow(QString());
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            QVERIFY2(isParked(engine, kA), "a pass under the drag judges nothing about the dragged window");
+        }
+    }
+
+    // The memory is judged on the view the batch commits, after the
+    // re-anchor. Here the column sits whole under the view the pass starts
+    // from and straddles only once the pass re-centres b in a narrower work
+    // area. Judged on the old view, the memory would end on a pass that
+    // clamps the tile.
+    void thePeekIsJudgedAfterTheReanchor()
+    {
+        QObject owner;
+        auto available = std::make_shared<QRect>(defaultScreenRect());
+        ScrollEngine* engine = makeStraddleEngine(
+            &owner,
+            [](const QString&) {
+                return defaultScreenRect();
+            },
+            [available](const QString&) {
+                return *available;
+            });
+        answer(engine, kA, 700);
+        engine->setColumnWidth(ColumnWidth::makeProportion(0.6), kS1); // 720: satisfied, the floor goes
+        QCoreApplication::processEvents();
+        engine->windowFocused(kB, kS1); // b centred at 300, a parked off the leading edge
+        QCoreApplication::processEvents();
+
+        // At 480 the columns are 288 and 240. Under the view the pass starts
+        // from, b still sits at 300 and a whole at 12; re-centred, b sits at
+        // 120 and a straddles the leading screen edge with 120 on screen.
+        *available = Ax::t(QRect(0, 0, 480, 300));
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 288);
+        QVERIFY2(isParked(engine, kA), "a tile the re-anchor makes straddle keeps the memory");
+    }
+
+    // The memory is the window's, read by every column it holds, so it ends
+    // only once every one of them offers less. A column on another desktop
+    // that still offers the memory is not stale, and ending the memory from
+    // here would clamp that one to a sliver the next time it straddles.
+    void aPeekEndsOnlyWhenEveryDesktopOffersLess()
+    {
+        QObject owner;
+        StubScrollSettings* settings = makeFloorSettings(&owner);
+        settings->widthValue = 0.5;
+        settings->centerFocused = static_cast<int>(CenterFocusedColumn::Always);
+        ScrollEngine* engine = engineWith(&owner, settings, {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        engine->windowOpened(kD1, kS1, 0, 0);
+        engine->windowOpened(kSticky, kS1, 0, 0);
+        engine->windowFocused(kSticky, kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        answer(engine, kSticky, 700);
+
+        switchTo(engine, 2);
+        engine->windowOpened(kD2, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        adopt(engine, [](const QString& windowId) {
+            PhosphorEngine::DesktopSpan span;
+            span.known = true;
+            span.sticky = (windowId == kSticky);
+            if (!span.sticky) {
+                span.desktops = {windowId == kD2 ? 2 : 1};
+            }
+            return span;
+        });
+        QVERIFY2(engine->heldKeyForWindow(kSticky).has_value(), "precondition: adopted onto desktop 2");
+        engine->windowFocused(kSticky, kS1);
+        engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1);
+        QCoreApplication::processEvents();
+        switchTo(engine, 1);
+        engine->windowFocused(kSticky, kS1);
+        engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1); // satisfied on both: the floor goes
+        QCoreApplication::processEvents();
+        engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1); // offers less here, shown whole
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kSticky), 600);
+
+        // Desktop 2's column still offers 800, so the memory stands there.
+        switchTo(engine, 2);
+        engine->windowFocused(kD2, kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kSticky), 800);
+        QVERIFY2(isParked(engine, kSticky), "a column that still offers the memory keeps it");
+
+        // Once it offers less too, the memory ends and the next straddle
+        // peeks.
+        engine->windowFocused(kSticky, kS1);
+        engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1);
+        QCoreApplication::processEvents();
+        engine->windowFocused(kD2, kS1);
+        QCoreApplication::processEvents();
+        QVERIFY2(!isParked(engine, kSticky), "the memory ends once every column offers less");
+        QVERIFY(Ax::mainLen(engine->lastManagedRect(kSticky)) < 600);
     }
 
     // A narrower whole-tile answer REPLACES the memory rather than ending it,

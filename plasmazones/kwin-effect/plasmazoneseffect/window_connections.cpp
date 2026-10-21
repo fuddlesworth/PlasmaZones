@@ -1291,8 +1291,8 @@ void PlasmaZonesEffect::noteForeignStripRequest(KWin::EffectWindow* w)
     // clear, or float the window outright when it passes the work area
     // (ScrollDecisions::resizesOnKWinsAccount, F141).
     const QRectF requested(kw->moveResizeGeometry());
-    const QRect frame = w->frameGeometry().toRect();
-    if (!ScrollDecisions::resizesOnKWinsAccount(requested, QRectF(w->frameGeometry()), it->rect.size())) {
+    const QRectF frame(w->frameGeometry());
+    if (!ScrollDecisions::resizesOnKWinsAccount(requested, frame, it->rect.size())) {
         return;
     }
     // The strip owns the column's rect, so the resize is put back
@@ -1302,13 +1302,29 @@ void PlasmaZonesEffect::noteForeignStripRequest(KWin::EffectWindow* w)
     // size other than the client's it only schedules a configure, which
     // XdgToplevelWindow::sendRoleConfigure builds from the move-resize
     // geometry KWin holds when it sends it. Put back now, KWin's size never
-    // reaches the client: the configure carries the rect put back, the frame
-    // KWin's request has not touched stays where it is, and the client's
-    // answer to its column stands as it was. Put back later, the configure
-    // could already have gone out. A raw moveResize rather than an apply,
-    // like the stale-ack re-issue: the window keeps its command stamp, a
-    // strip leg still running keeps running, and no stale ack is armed for a
+    // reaches the client: the configure carries the rect put back, and the
+    // client's answer to its column stands as it was. Put back later, the
+    // configure could already have gone out. A raw moveResize rather than an
+    // apply, like the stale-ack re-issue: the window keeps its command stamp,
+    // a strip leg still running keeps running, and no stale ack is armed for a
     // configure KWin never sent.
+    //
+    // Where the frame ends up. KWin's request has not touched it when this
+    // runs. The put-back's own moveResize moves it at once when the rect put
+    // back is at the client's own size (moveResizeInternal applies such a
+    // rect without a configure), and leaves it where it is otherwise. KWin's
+    // request then resumes with its own rect. One that needs a configure only
+    // schedules it, and that configure carries the rect put back. One that
+    // needs none (a pure move, or a size that snaps to the client's own)
+    // moves the frame to KWin's position after the put-back, at the client's
+    // size, and the frame can stay there until the column is next delivered.
+    // A resize on KWin's account needs a configure, so for the requests this
+    // answers those are edges, not the rule.
+    //
+    // Not a request that moves the window to another output
+    // (KWinResizePutBackGates::leavesOutput): put back on the old output, its
+    // frame would never leave it, so the output change that hands the window
+    // over (TilingHandler::isKWinMoveOfStripTile, F738) would never come.
     //
     // Copied out, not held as an iterator across the gates below, as
     // readColumnAnswer does, and found again for the writes.
@@ -1324,6 +1340,7 @@ void PlasmaZonesEffect::noteForeignStripRequest(KWin::EffectWindow* w)
         if (gates.managed) {
             gates.coordinatesHold = !m_screenChangeHandler->isScreenChangeInProgress()
                 && !m_tilingHandler->stripOutputMovedSinceBatch(m_tilingHandler->scrollTrackedScreenFor(windowId));
+            gates.leavesOutput = m_tilingHandler->isKWinMoveOfStripTile(w, windowId, requested);
         }
     }
     // The commanded rect only while the strip apply that recorded it is still
@@ -1333,7 +1350,7 @@ void PlasmaZonesEffect::noteForeignStripRequest(KWin::EffectWindow* w)
         cit != m_scrollCommandedRects.constEnd() && m_daemonGate.commandStamps.isCurrent(w, cit->commandStamp)) {
         commanded = cit->rect;
     }
-    const QRect putBack = ScrollDecisions::kwinResizePutBackRect(commanded, answer, offered, frame);
+    const QRectF putBack = ScrollDecisions::kwinResizePutBackRect(commanded, answer, offered, frame);
     const auto entry = m_scrollOfferedColumn.find(windowId);
     if (entry == m_scrollOfferedColumn.end()) {
         return;
@@ -1349,12 +1366,11 @@ void PlasmaZonesEffect::noteForeignStripRequest(KWin::EffectWindow* w)
         qCInfo(lcEffect) << "Putting strip window" << windowId << "back at" << putBack
                          << "over a resize KWin requested:" << frame.size() << "->" << requested.size();
         const auto putBackGuard = geometryApplyScope();
-        kw->moveResize(QRectF(putBack));
+        kw->moveResize(putBack);
         return;
     }
-    qCDebug(lcEffect) << "Column answer for" << windowId
-                      << "superseded by a resize KWin requested:" << w->frameGeometry().size() << "->"
-                      << requested.size();
+    qCDebug(lcEffect) << "Column answer for" << windowId << "superseded by a resize KWin requested:" << frame.size()
+                      << "->" << requested.size();
     entry->answer = ColumnAnswer::Foreign;
 }
 

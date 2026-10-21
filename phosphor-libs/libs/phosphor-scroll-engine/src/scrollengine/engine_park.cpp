@@ -25,6 +25,22 @@ QString trailingEdge(StripAxis axis)
 
 } // namespace
 
+ParkInputs parkInputsFor(const ResolvedTile& tile, const ResolvedColumn& column, const ScrollLayoutParams& params,
+                         const QRect& screenRect, int parkTop, const QSize& tileMin)
+{
+    ParkInputs in;
+    in.tileRect = tile.rect;
+    in.columnRect = column.rect;
+    in.workArea = params.workArea;
+    in.screenRect = screenRect;
+    in.tileMin = tileMin;
+    in.axis = params.axis;
+    in.parkTop = parkTop;
+    in.hidden = tile.hidden;
+    in.cropStraddlers = params.cropStraddlers;
+    return in;
+}
+
 void parkRect(QRect& rect, const QRect& screenRect, int parkTop, ParkAlign align)
 {
     // maxLeft is the rightmost origin that still fits the rect in the span,
