@@ -12,8 +12,7 @@ import org.plasmazones.common as PZCommon
  *
  * Sibling of the zone/overlay preview pane that lives inline in
  * ShaderBrowserDetailDialog. Kept in its own file rather than inlined beside
- * it: the two share no state, and folding a second pane into that dialog would
- * push it past the file-size ceiling.
+ * it: the two share no state.
  *
  * ## What it renders
  *

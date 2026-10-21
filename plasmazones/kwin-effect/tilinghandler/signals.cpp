@@ -4,8 +4,7 @@
 // Signal slot handlers for TilingHandler, from BOTH sources: the daemon's D-Bus
 // broadcasts (enabled state, per-window floating state, and the engine's focus
 // request) and KWin's own per-window compositor signals (maximized state,
-// fullscreen state, and the strip commit a frame-geometry change reports to
-// the engine).
+// fullscreen state).
 // Part of TilingHandler — split from tilinghandler.cpp for SRP.
 
 #include "tilinghandler.h"
@@ -851,33 +850,6 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // layer until the next focus change, which is the very Alt+Tab the stale
     // bit would hide the result of.
     m_effect->reconcileRuleWindowLayer(windowId, w);
-}
-
-void TilingHandler::reportStripCommit(KWin::EffectWindow* w, const QString& windowId, const QRect& offered,
-                                      const QRect& committed)
-{
-    // The engine owns the column extent and only this side sees the commit,
-    // so a client that answered its column with a different extent along the
-    // strip is reported as it lands (ScrollDecisions::shouldReportCommittedSize
-    // says when). The caller is the frame-geometry hook's strip body, whose
-    // scrollManagedOutputFor gate has already excluded a window under a user
-    // move or resize: those frames are the user's, reconciled at the gesture
-    // end through notifyWindowResized, not the client's answer.
-    KWin::Window* const kw = w ? w->window() : nullptr;
-    if (!kw || !m_effect->m_daemonGate.serviceRegistered) {
-        return;
-    }
-    const QRect placedAt = kw->moveResizeGeometry().toRect();
-    const bool vertical =
-        scrollAxisForScreen(scrollTrackedScreenFor(windowId)) == PhosphorProtocol::ScrollAxis::Vertical;
-    if (!ScrollDecisions::shouldReportCommittedSize(placedAt == committed, offered.size(), committed.size(),
-                                                    vertical)) {
-        return;
-    }
-    PhosphorProtocol::ClientHelpers::fireAndForget(
-        m_effect, PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("reportCommittedSize"),
-        {windowId, offered.width(), offered.height(), committed.width(), committed.height()},
-        QStringLiteral("reportCommittedSize"));
 }
 
 // The hold's return, park and record drops live in fullscreenhold.cpp.

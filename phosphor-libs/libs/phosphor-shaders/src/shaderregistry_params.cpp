@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // ShaderRegistry's parameter validation / preset / coercion methods, split out
-// of shaderregistry.cpp to keep it under the file-size ceiling. Same class,
+// of shaderregistry.cpp. Same class,
 // separate TU, no API change. These use only public helpers (no anonymous-
 // namespace member of shaderregistry.cpp), so the split is clean.
 

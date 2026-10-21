@@ -7,32 +7,12 @@
 // into page-scoped sub-controllers (EditorPageController, …) hung off this
 // class via child Q_PROPERTYs so QML reads `settingsController.<page>.<prop>`.
 //
-// FILE-SIZE EXCEPTION (sanctioned), CEILING 1370 LINES: what remains here after that
-// split is the root object QML binds to. Its Q_PROPERTY surface IS the QML contract, so
-// moving another group of properties out means either a new child controller every page
-// URL and binding has to be rewritten for, or a second root QML cannot see. The
-// implementation is already split across settingscontroller_*.cpp, same shape as
-// daemon.h.
-//
-// The number above is a real budget, not a description of wherever the file happens to
-// sit: the exception is for the QML contract, so a new declaration that pushes past it
-// buys its room by removing another (a retired Q_INVOKABLE, a property moved to a child
-// controller). It does NOT license a comment block — those belong on the definition in
-// the matching settingscontroller_*.cpp when they will not fit here.
-//
-// The 1370 above supersedes the general 1150 hard ceiling in CLAUDE.md for this
-// file, the same way the repo's other sanctioned file-size exceptions do, so
-// sitting between the two figures is not a review finding here.
-//
-// Raise history, because each raise has to say what bought the room. From 1215 when the
-// per-screen selector stores grew their per-card has/clear pairs (chip-invoked
-// Q_INVOKABLEs belonging on the root the chips call by method name). Then to 1370 for
-// the named-parameter-presets work: four ShaderPresetBridge members, one per family,
-// plus the Q_PROPERTY accessors QML binds them through. That IS the QML contract this
-// exception exists for, since every preset surface reads
-// `settingsController.<family>Presets`, so it cannot move to a child controller without
-// rewriting the binding at every call site. Splitting this class by page group is the
-// follow-up the ceiling is asking for.
+// What remains here after that split is the root object QML binds to. Its Q_PROPERTY
+// surface IS the QML contract, so moving another group of properties out means either a
+// new child controller every page URL and binding has to be rewritten for, or a second
+// root QML cannot see. The implementation is split across settingscontroller_*.cpp,
+// same shape as daemon.h. Long comment blocks belong on the definition in the matching
+// settingscontroller_*.cpp when they will not fit here.
 
 #pragma once
 

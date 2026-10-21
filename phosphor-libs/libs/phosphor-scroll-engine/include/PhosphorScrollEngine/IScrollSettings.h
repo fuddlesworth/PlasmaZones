@@ -49,9 +49,13 @@ public:
     /// (insertion is active management); the engine's desktop-pin logic is
     /// deliberately not gated on this.
     virtual int scrollingStickyWindowHandling() const = 0;
-    /// Whether the strip's layout math honours client minimum sizes (column
-    /// width floor, tile height floor, interactive-resize floor). The
-    /// work-area-oversized float escape ignores this and always fires.
+    /// Whether the strip's layout math honours windows' minimum sizes (column
+    /// width floor, tile height floor, interactive-resize floor), and with
+    /// them the extent a client's own commits hold its column to and the peek
+    /// floor that raises (ScrollLayoutParams::respectMinimumSize). The
+    /// work-area-oversized float escape for a declared minimum ignores this
+    /// and always fires; a committed extent is learned, and so can float its
+    /// window, only while this is on.
     virtual bool scrollingRespectMinimumSize() const = 0;
     /// Whether a column whose windows do not fill the cross axis is centred
     /// on it instead of hugging the start edge. See

@@ -23,7 +23,7 @@
 // per-column key (round trip and the absent-key fallback), the cross-session
 // fuzzy appId claim's transfer, and what the FloatRestore slot carries out and
 // back. They belong with the concern rather than in test_scrollengine_persistence,
-// which owns the stash mechanics and is already past the file-size ceiling.
+// which owns the stash mechanics.
 //
 // The flag is deliberately published for tiles the user cannot see (parked
 // columns, hidden tabs). Suppressing it there cycled the client's maximize bit
@@ -788,8 +788,8 @@ void TestScrollEngineMaximize::maximizedToEdgesRoundTripsThroughTheBlob()
     // in-memory stash tests green, so this one drives the blob itself.
     //
     // Lives here rather than in test_scrollengine_persistence, which owns the
-    // stash and blob mechanics but is already past the file-size ceiling: the
-    // maximize concern is this file's, and the blob is one more surface of it.
+    // stash and blob mechanics: the maximize concern is this file's, and the
+    // blob is one more surface of it.
     QObject owner;
     ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);

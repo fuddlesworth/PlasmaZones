@@ -3,7 +3,7 @@
 
 // Per-context rule/template override resolution: the effective* readers that
 // layer a screen's override map over the cached config defaults. Split out of
-// engine_core.cpp at the file-size ceiling; the map's writers
+// engine_core.cpp; the map's writers
 // (applyPerScreenConfig / clearPerScreenConfig) stay there with the rest of
 // the engine's state handling.
 

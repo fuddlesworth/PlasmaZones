@@ -1569,6 +1569,22 @@ private:
     /// Settle a held move tail (MoveTailHold) once: its crossing, if any (F751), then the drop's held context edits.
     void drainMoveTail();
 
+    // The client's answer to its strip column (window_connections.cpp). The strip batch records each column it
+    // delivers through recordStripOffer; readColumnAnswer reads the answer (the report to the engine, then the
+    // offered-column centring) from the frame hook, from the commit watch while an answer is owed, and from the
+    // catch-up walk; noteForeignStripRequest marks a resize nobody on the strip asked for.
+    /// Record @p column as the column the batch delivered to @p w. @p sendsSize: the batch is sending the client a
+    /// new size, which makes its answer owed and arms the commit watch.
+    void recordStripOffer(KWin::EffectWindow* w, const QString& windowId, const QRect& column, bool sendsSize);
+    /// Read @p w's frame as its answer to the column it was offered, if it reads as one.
+    void readColumnAnswer(KWin::EffectWindow* w, const QString& windowId);
+    /// Read the client's commits while @p entry's answer is owed.
+    void armColumnAnswerWatch(KWin::EffectWindow* w, const QString& windowId, ScrollOfferedColumn& entry);
+    /// KWin (or the user) is about to change @p w's geometry outside any effect apply.
+    void noteForeignStripRequest(KWin::EffectWindow* w);
+    /// Read every owed answer once more on the next event-loop turn, after a gate that refused one has cleared.
+    void scheduleColumnAnswerCatchUp();
+
     void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
 
     /// Poll-defer a decorated, minimized window's teardown while an animation
@@ -2935,7 +2951,21 @@ private:
     /// round trip and a screen change, where m_lastReportedMinSize
     /// deliberately persists. A settled size surviving either would place the
     /// window at a stale size on re-entry.
-    QHash<QString, QRect> m_scrollOfferedColumn;
+    ///
+    /// The value also carries where the client's ANSWER to the column stands
+    /// (ScrollDecisions::ColumnAnswer), so every remover above retires it with
+    /// the rect. A batch that sends the client a size makes the answer Owed; the
+    /// first settled frame that reads as an answer (ScrollDecisions::
+    /// readsAsColumnAnswer) is reported to the engine when it differs and makes
+    /// it Read. A commit watch reads the client's commits while the answer is
+    /// owed, because a settle that leaves the frame unchanged emits no frame
+    /// change. A geometry request KWin or the user makes outside an effect apply
+    /// that resizes the window makes it Foreign until the next delivery.
+    QHash<QString, ScrollOfferedColumn> m_scrollOfferedColumn;
+    /// Hands out ScrollOfferedColumn::answerWatch ids. Never restarted.
+    quint64 m_columnAnswerWatchSeq = 0;
+    /// A catch-up walk of the owed answers is queued (scheduleColumnAnswerCatchUp).
+    bool m_columnAnswerCatchUpQueued = false;
 
     /// Per-output-pass state for the compositor-drawn tab indicators (see
     /// paintScrollTabIndicators). Recomputed by prePaintScreen at the top of

@@ -24,9 +24,11 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
     // m_lastAppliedRect entries are retained through windowClosed and
-    // handoffRelease (poison-guard memory), so THIS sweep is their sole
-    // reclaimer — keyed on aliveness, independent of tracking (a window
-    // whose key was dropped long ago must still age out here).
+    // handoffRelease (poison-guard memory). A re-adoption and the post-capture
+    // forgetClosedFullscreenHold reclaim them in the ordinary run; this sweep
+    // is the backstop for a window that died without either reaching it —
+    // keyed on aliveness, independent of tracking (a window whose key was
+    // dropped long ago must still age out here).
     for (auto it = m_lastAppliedRect.begin(); it != m_lastAppliedRect.end();) {
         if (!aliveWindowIds.contains(it.key())) {
             it = m_lastAppliedRect.erase(it);
@@ -73,6 +75,16 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     m_closedFullscreenHolds.removeIf([&aliveWindowIds](const QString& id) {
         return !aliveWindowIds.contains(id);
     });
+    // The committed extents have no eviction funnel of their own: every leave
+    // path forgets them itself, and this is the belt for a window that died
+    // while none of those paths could run.
+    for (auto it = m_committedExtents.begin(); it != m_committedExtents.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            it = m_committedExtents.erase(it);
+        } else {
+            ++it;
+        }
+    }
     QStringList dead;
     // One entry per window: the teardown below drops every membership, so a
     // multi-desktop window must not appear twice in the dead list.
@@ -494,6 +506,10 @@ void ScrollEngine::dropWindowBookkeeping(const PhosphorEngine::PlacementStateKey
         rememberReleasedFullscreenHold(windowId); // announced at the end of the silent prune
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
+        // The window has lost its last context here: a window still alive
+        // re-enters wherever KWin puts it as a fresh arrival, which is a move
+        // to another context, and its client answers there afresh.
+        forgetCommittedExtents(windowId);
         // The dying context's windows can never answer their queued echoes;
         // a stale entry would swallow the first genuine focus of a reused
         // id (windowClosed and releaseScreenState sweep the same way).
@@ -864,10 +880,13 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // report on the way back. The parked-edge and windowed-fullscreen memories
     // go for eviction symmetry: neither feeds windowsReleased, and nothing can
     // sweep them later. A fullscreen HOLD is remembered for
-    // announceReleasedFullscreenHolds, since its slot dies here.
+    // announceReleasedFullscreenHolds, since its slot dies here. The committed
+    // extents go with the window, which is leaving the engine; an evacuee's
+    // were copied into the park before this ran (parkOutput).
     for (const QString& windowId : windows) {
         rememberReleasedFullscreenHold(windowId);
         m_floatRestore.remove(windowId);
+        forgetCommittedExtents(windowId);
         m_pendingSelfActivations.removeAll(windowId);
         m_pendingSelfActivationQueuedAt.remove(windowId);
         m_declinedOpenFocus.remove(windowId);

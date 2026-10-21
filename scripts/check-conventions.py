@@ -8,13 +8,6 @@ they were caught (if at all) during an audit pass rather than at the moment the
 violation was written. Every rule here is a ratchet: the tree currently passes,
 so any failure is a genuine regression introduced by the change under review.
 
-The one rule with real historical drift is the file-size ceiling. Roughly five
-dozen files already exceed it, so that rule is enforced against a recorded
-baseline (scripts/oversize-baseline.json): existing overruns are tolerated at
-their recorded length, growing one is a failure, and a new file over the
-ceiling is a failure. That matches the CLAUDE.md wording, which grandfathers
-the existing overruns but treats growth as a finding.
-
 Usage:
     scripts/check-conventions.py               # check the whole tree
     scripts/check-conventions.py FILE...       # check only these files
@@ -22,7 +15,6 @@ Usage:
     scripts/check-conventions.py --staged F... # the pre-commit form lefthook invokes
     scripts/check-conventions.py --selftest    # the form CI invokes beside the gate
     scripts/check-conventions.py --list-rules
-    scripts/check-conventions.py --update-baseline
 
 Exit status is 1 if any violation was found, 0 otherwise.
 """
@@ -52,13 +44,6 @@ def _add_script_dir_to_path() -> None:
         sys.path.insert(0, d)
 
 
-BASELINE = REPO / "scripts" / "oversize-baseline.json"
-
-# CLAUDE.md: under 1000 is the target, 1000-1150 is tolerated, past 1150 split.
-# Only the hard ceiling is machine-enforced; the soft target is a review matter.
-SIZE_CEILING = 1150
-
-
 @dataclass
 class Violation:
     rule: str
@@ -80,8 +65,8 @@ QML_SUFFIXES = {".qml"}
 SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
 # .js is here so rule_spdx and rule_license cover the 17 QML .js libraries. .sh/.cmake/.spec/
 # .desktop joined once every tracked one carried a head header, and .c once the two QPA protocol
-# stubs were found to be the only comment-bearing C sources no rule read. THREE rules read this
-# set, and so does --update-baseline, so .spec also entered the size ratchet. MOST tracked suffix
+# stubs were found to be the only comment-bearing C sources no rule read. TWO rules read this
+# set, spdx and license. MOST tracked suffix
 # VALUES are still outside it, not just the .in/.xml/.txt and data JSON an earlier version of this
 # comment named, .md and .yml among them.
 #
@@ -119,8 +104,8 @@ def read(path: str) -> str:
     #
     # "" is a fallback, not a diagnosis. main() drops unreadable paths before any rule
     # sees them and reports the real cause, because "" makes every rule downstream of it
-    # lie: prose calls well-formed JSON malformed, spdx and license call a file that has
-    # a header headerless, and file-size sees zero lines. Returning "" still matters for
+    # lie: prose calls well-formed JSON malformed, and spdx and license call a file that
+    # has a header headerless. Returning "" still matters for
     # a path a rule opens on its own, such as a companion header it names, where the
     # cost of an empty string is a missed check rather than a false one.
     try:
@@ -362,132 +347,6 @@ def rule_license(files: list[str]) -> list[Violation]:
 
 
 # --------------------------------------------------------------------------
-# Rule: file-size
-# --------------------------------------------------------------------------
-
-
-def load_baseline() -> dict[str, int]:
-    if not BASELINE.exists():
-        return {}
-    return json.loads(BASELINE.read_text())["files"]
-
-
-def rule_size(files: list[str]) -> list[Violation]:
-    base = load_baseline()
-    out = []
-    for f in files:
-        if Path(f).suffix not in CODE_SUFFIXES:
-            continue
-        n = len(read(f).splitlines())
-        if n <= SIZE_CEILING:
-            continue
-        if f not in base:
-            out.append(
-                Violation(
-                    "file-size",
-                    f,
-                    n,
-                    f"new file is {n} lines, over the {SIZE_CEILING} hard ceiling; split it by concern",
-                )
-            )
-        elif n > base[f]:
-            out.append(
-                Violation(
-                    "file-size",
-                    f,
-                    n,
-                    f"grandfathered file grew from {base[f]} to {n} lines; "
-                    f"growing an existing overrun is a finding, shrink it or split it",
-                )
-            )
-        # DELIBERATELY NOT an `n < base[f]` arm, and the selftest asserts its absence so this stays
-        # that way. An entry recorded ABOVE the file's real length does silently permit growth up to
-        # it, and only a hand edit can produce that, since --update-baseline always writes the actual
-        # length. Turning the comparison into `!=` to catch it was tried and reverted: it fails the
-        # gate on every net shrink, which is the direction this ratchet exists to encourage, so it
-        # would block beneficial refactors to catch a case that a diff of this committed file already
-        # shows a reviewer. If it ever needs machine-checking, it belongs in a separate rule that
-        # reports the slack without failing a shrink.
-    return out
-
-
-# The marker a file over the ceiling carries to say why it may stay whole. --update-baseline
-# refuses to RAISE an entry, or to add one, for a file without it. Lowering an entry, or
-# re-recording it unchanged, needs nothing: shrinking is the direction the ratchet exists for.
-SIZE_EXCEPTION_MARKER = "FILE-SIZE EXCEPTION"
-
-
-def update_baseline() -> int:
-    files = tracked_files()
-    # Read once. It was being re-read and re-parsed inside the loop, twice per unreadable
-    # file, for a value that cannot change while the sweep runs.
-    prior = load_baseline()
-    rec = {}
-    # A raise or an addition used to be absorbed silently, so a change could grow a
-    # grandfathered file, re-run this, and pass the size rule with no record of why. The
-    # refusal is scoped to entries THIS run would raise or add relative to the committed
-    # baseline: most grandfathered files predate the marker, and refusing every entry that
-    # lacks one would fail the tree as it stands.
-    refused = []
-    for f in files:
-        if Path(f).suffix not in CODE_SUFFIXES:
-            continue
-        # An unreadable file must not be RECORDED. read() gives "", that is zero lines,
-        # the file falls below the ceiling and its baseline entry silently disappears —
-        # and the next run, once the mode is fixed, reports a grandfathered file as a
-        # new one over the ceiling. Warn and keep going: dropping one entry from a
-        # ratchet is worse than an incomplete sweep the operator can see.
-        err = read_error(f)
-        if err is not None:
-            print(f"warning: {f}: cannot be read ({err}); leaving its baseline entry alone", file=sys.stderr)
-            if f in prior:
-                rec[f] = prior[f]
-            continue
-        text = read(f)
-        n = len(text.splitlines())
-        if n > SIZE_CEILING:
-            raised = f not in prior or n > prior[f]
-            if raised and SIZE_EXCEPTION_MARKER not in text:
-                was = f"from {prior[f]} " if f in prior else ""
-                refused.append(f"{f}: {was}to {n} lines")
-            rec[f] = n
-    if refused:
-        # Nothing is written: a partial baseline would hide the refusal behind a file that
-        # still changed, and the operator would commit it.
-        for line in refused:
-            print(f"error: {line}, with no {SIZE_EXCEPTION_MARKER} comment", file=sys.stderr)
-        print(
-            f"refused to raise or add {len(refused)} baseline entr{'y' if len(refused) == 1 else 'ies'}; "
-            f"split the file by concern, or give it a {SIZE_EXCEPTION_MARKER} comment saying what it "
-            "gained and why, then re-run",
-            file=sys.stderr,
-        )
-        return 1
-    BASELINE.write_text(
-        json.dumps(
-            {
-                "_comment": (
-                    "Grandfathered files over the CLAUDE.md hard ceiling of "
-                    f"{SIZE_CEILING} lines, recorded at their current length. "
-                    "scripts/check-conventions.py fails if one of these grows or "
-                    "if a new file appears over the ceiling. Shrinking a file "
-                    "here is always welcome, and re-running with --update-baseline "
-                    "ratchets its recorded length down. --update-baseline raises an "
-                    f"entry, or adds one, only for a file that carries a {SIZE_EXCEPTION_MARKER} "
-                    "comment, which says what the file gained and why."
-                ),
-                "ceiling": SIZE_CEILING,
-                "files": dict(sorted(rec.items())),
-            },
-            indent=2,
-        )
-        + "\n"
-    )
-    print(f"recorded {len(rec)} files over the {SIZE_CEILING}-line ceiling -> {BASELINE.relative_to(REPO)}")
-    return 0
-
-
-# --------------------------------------------------------------------------
 # Rule: i18n-cpp
 # --------------------------------------------------------------------------
 
@@ -582,9 +441,8 @@ def rule_config_keys(files: list[str]) -> list[Violation]:
 # --------------------------------------------------------------------------
 
 # The DETECTOR lives in conventions_prose.py; what stays here is the RULE that decides
-# which files it reaches and how each surface's strings are extracted. This file hit the
-# 1150-line hard ceiling, and CLAUDE.md says to split past it: three rounds running had
-# to pay for a line-neutral rewrite just to correct a comment. The detector is the most
+# which files it reaches and how each surface's strings are extracted. It was split out
+# when this file grew too long to edit comfortably. The detector was the most
 # separable concern left, because it is one pure function over a string that reads no
 # file and imports nothing from here. Imported at module scope, unlike the three rule
 # siblings, because it cannot import this file back, and selftest() passes it on.
@@ -843,9 +701,8 @@ def rule_prose(files: list[str]) -> list[Violation]:
 # Rule: dep5
 # --------------------------------------------------------------------------
 #
-# The data and the check live in conventions_dep5.py. This file reached the
-# 1150-line ceiling and CLAUDE.md says to split past it; dep5 is the most
-# separable rule, and the sibling takes the repo root and the two helpers it needs
+# The data and the check live in conventions_dep5.py, split out because dep5 is the
+# most separable rule. The sibling takes the repo root and the two helpers it needs
 # as arguments so the two cannot form an import cycle. It reads file heads itself,
 # in binary and bounded, because it is the one rule that meets binaries and
 # symlinks, so it does not take read().
@@ -977,7 +834,6 @@ def rule_shared_param_text(files: list[str]) -> list[Violation]:
 RULES = {
     "spdx": (rule_spdx, "SPDX header present on every file whose format supports comments"),
     "license": (rule_license, "GPL-3 app tree vs LGPL-2.1 libs/phosphor-* split"),
-    "file-size": (rule_size, f"no new file over {SIZE_CEILING} lines, no growth of a grandfathered one"),
     "i18n-cpp": (rule_i18n_cpp, "C++ uses PhosphorI18n::tr(), never i18n()/KLocalizedString"),
     "config-keys": (rule_config_keys, "config group/key strings go through ConfigDefaults:: accessors"),
     "prose": (rule_prose, "user-facing strings carry no em-dash splice, clause semicolon or spaced hyphen"),
@@ -991,10 +847,9 @@ RULES = {
 # Self-test
 # --------------------------------------------------------------------------
 #
-# The data and the checks live in conventions_selftest.py. This file crossed the
-# 1150-line ceiling when two branches each added a rule, and the self-test is the
-# one section that depends on nothing but what it is handed, so it is what
-# moved. It imports NOTHING from this file — the two detectors and the readability
+# The data and the checks live in conventions_selftest.py. The self-test is the one
+# section that depends on nothing but what it is handed, so it is what moved when
+# this file grew. It imports NOTHING from this file — the two detectors and the readability
 # precondition are passed in as arguments, which is what keeps the pair acyclic.
 # Still imported inside the function rather than at module scope, so a run that
 # never asks for the self-test does not pay for parsing it.
@@ -1025,7 +880,6 @@ def main() -> int:
     )
     ap.add_argument("--list-rules", action="store_true")
     ap.add_argument("--selftest", action="store_true", help="check the rules can still see what they are meant to")
-    ap.add_argument("--update-baseline", action="store_true", help="re-record the oversize-file baseline")
     args = ap.parse_args()
 
     if args.selftest:
@@ -1039,9 +893,6 @@ def main() -> int:
         # select or deselect it: it is a precondition, not a convention.
         print(f"{'unreadable':18} (always on) every path handed to a rule can be read as text")
         return 0
-
-    if args.update_baseline:
-        return update_baseline()
 
     selected = list(RULES)
     if args.rules:

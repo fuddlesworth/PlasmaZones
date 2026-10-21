@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): the Daemon class is the composition root
-// — every service, adaptor, engine, and timer member plus the phase-method
-// declarations their wiring documentation hangs off. The implementation is
-// already split across daemon/*.cpp by phase; splitting the class DECLARATION
-// would scatter the ownership/destruction-order contract the header's member
-// ordering encodes.
+// The Daemon class is the composition root — every service, adaptor, engine,
+// and timer member plus the phase-method declarations their wiring
+// documentation hangs off. The implementation is split across daemon/*.cpp by
+// phase, and the header's member ordering encodes the ownership/destruction-
+// order contract.
 
 #pragma once
 

@@ -146,6 +146,13 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         state->setResolvedAxis(params.axis);
     }
 
+    // Committed-floor sweep (settleCommittedFloors), ahead of the re-anchor
+    // below because one of its drops moves the layout: a floor a work-area
+    // shrink left past the work area is dropped, and the column narrows.
+    // Deferred while a drag preview steers the view, for the axis sweep's
+    // DETACH-ONCE reason; the next pass after the drop or cancel runs it.
+    const bool floorsDropped = !dragPreviewSteersView && settleCommittedFloors(*state, currentKey, params);
+
     // Re-apply the centering policy before resolving: a work-area change
     // (resolution, panels, outer gaps) or a centering-settings flip leaves
     // the stored anchor relative to the OLD width, and nothing else
@@ -162,11 +169,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // scheduled retile), which have no emit of their own — so without this a
     // re-anchor that is the session's last strip event is never saved and the
     // strip comes back scrolled to the pre-change view. Emitted at the tail,
-    // once the geometry has actually been applied.
-    const bool anchorMoved = state->strip().viewAnchor() != anchorBefore;
+    // once the geometry has actually been applied. A floor the sweep above
+    // dropped rides the same emit: the strip's layout changed with no verb
+    // behind it, and placementChanged is what republishes the strip to its
+    // readers (the placement map, the Monitors view, the scroll-cap list).
+    const bool anchorMoved = state->strip().viewAnchor() != anchorBefore || floorsDropped;
     const ResolvedStrip resolved = state->strip().relayout(params);
-    // Layout-neutral by construction, so the strip just resolved stays valid.
-    state->strip().dropSatisfiedCommittedFloors(resolved, params);
     if (resolved.columns.isEmpty()) {
         // The strip just emptied (last window closed / floated / released),
         // or every column is minimized away. The tab-strip clear must still
@@ -456,17 +464,20 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // window count; walking the columns directly is linear. Only built when
     // the park actually consumes it.
     //
-    // A client that committed wider than its column along the strip holds
-    // that extent as a floor exactly like a declared minimum, so the peek
-    // floor rises to it too. Clamping such a column at the screen edge would
-    // otherwise hand the client a sliver it answers at full width, straight
-    // across the boundary onto the neighbouring output.
+    // The peek floor along the strip also rises to the last extent the client
+    // committed to its whole tile (committedPeekPx), which outlives the column
+    // floor: once the column satisfies that floor it is dropped, but the
+    // client still answers at that width, and a clamped peek would hand it a
+    // sliver it answers at full width. At the TRAILING screen edge that answer
+    // grows across the boundary onto the neighbouring output; at the LEADING
+    // edge, where the answer is anchored at the offer's origin, it grows over
+    // the on-screen neighbour instead. Either way the column parks.
     QHash<QString, QSize> tileMinSizes;
     if (params.respectMinimumSize) {
         const bool horizontal = params.axis.isHorizontal();
         for (const Column& column : state->strip().columns()) {
             for (const Tile& tile : column.tiles) {
-                const int committedMain = state->strip().committedMainFloorPx(tile.windowId);
+                const int committedMain = committedPeekPx(tile.windowId, params.axis);
                 tileMinSizes.insert(tile.windowId,
                                     horizontal ? QSize(qMax(tile.minWidth, committedMain), tile.minHeight)
                                                : QSize(tile.minWidth, qMax(tile.minHeight, committedMain)));
@@ -757,7 +768,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 m_lastAppliedWindowedFs.remove(tile.windowId);
             }
             // The maximize-to-edges flag needs the same leg: a toggle on a
-            // column pinned wider than the raw area by its client minimum
+            // column pinned wider than the raw area by its frame minimum
             // moves no rect at all, and the un-maximize half of any toggle
             // can land rect-identical when the stored width still renders
             // full. Without this the batch is suppressed and the compositor

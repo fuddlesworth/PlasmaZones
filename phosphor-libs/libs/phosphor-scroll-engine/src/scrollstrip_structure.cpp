@@ -3,6 +3,8 @@
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
+#include "scrollengine/enginelimits.h"
+
 namespace PhosphorScrollEngine {
 
 namespace {
@@ -394,7 +396,6 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     Column& col = m_columns[colIdx];
     const int tileIdx = col.indexOfWindow(windowId);
     col.tiles.removeAt(tileIdx);
-    m_committedMainFloor.remove(windowId);
     if (col.activeTileIdx > tileIdx || col.activeTileIdx >= col.tiles.size()) {
         col.activeTileIdx = qMax(0, col.activeTileIdx - 1);
     }
@@ -635,9 +636,8 @@ bool ScrollStrip::setWindowMinimumSize(const QString& windowId, int minWidth, in
     // NOT a policy about oversized windows. A minimum that legitimately
     // exceeds the work area is already handled, and handled elsewhere: the
     // engine floats that window rather than trying to tile it.
-    constexpr int kMaxClientMinExtent = 100000;
-    minWidth = qBound(0, minWidth, kMaxClientMinExtent);
-    minHeight = qBound(0, minHeight, kMaxClientMinExtent);
+    minWidth = qBound(0, minWidth, kMaxClientExtentPx);
+    minHeight = qBound(0, minHeight, kMaxClientExtentPx);
     if (tile.minWidth == minWidth && tile.minHeight == minHeight) {
         return false;
     }
@@ -1027,8 +1027,10 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
         }
     }
     // Width/display intents stayed with the slot, but a column's RESOLVED
-    // width also carries its tiles' min-width clamp — so a rotate that lands
-    // a wide-minimum window in a narrow slot really does change pixel widths,
+    // width also carries its tiles' floors along the strip (the declared
+    // minimum and any committed floor, both of which travel with the window)
+    // — so a rotate that lands a wide-floored window in a narrow slot really
+    // does change pixel widths,
     // and the total strip width with them. Re-clamp so the view cannot be
     // stranded past the end of a strip that just SHRANK — and only then:
     // centerActiveColumn deliberately stores out-of-range anchors

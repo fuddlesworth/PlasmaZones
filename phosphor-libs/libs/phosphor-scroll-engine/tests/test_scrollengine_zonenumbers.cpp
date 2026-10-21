@@ -5,9 +5,8 @@
 // (visibleTiles), what a digit press resolves to, what it actually MOVES (a
 // stack-mate reorder inside the column, a whole-column travel across columns),
 // what it refuses, and the cross-output crossings whose landing slots the swap
-// contract promises. Split out of test_scrollengine_smoke.cpp, which is at its
-// size ceiling; the engine fixture is the suite-wide one in
-// scrollstriptestutils.h.
+// contract promises. Split out of test_scrollengine_smoke.cpp; the engine
+// fixture is the suite-wide one in scrollstriptestutils.h.
 //
 // Geometry throughout: the suite's shared work area, 1200 ALONG the strip and
 // 800 ACROSS it on either axis, with no IScrollSettings (so the inner gap is 0)

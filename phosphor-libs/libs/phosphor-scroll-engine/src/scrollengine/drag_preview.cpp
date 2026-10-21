@@ -413,6 +413,7 @@ void ScrollEngine::commitDragInsertPreview()
         m_states.addMembership(p.windowId, p.targetKey);
         if (p.hadPriorState && p.priorKey.screenId != p.targetScreenId) {
             dropFromOtherContexts(p.windowId, p.targetKey); // it left its prior output for good
+            forgetCommittedExtents(p.windowId); // and what its client taught there with it
         }
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         Q_EMIT placementChanged(p.targetScreenId);
@@ -455,8 +456,13 @@ void ScrollEngine::commitDragInsertPreview()
     // A cross-OUTPUT drop: the window left its prior screen for good, so the
     // places it held on that screen's other desktops go too (begin moved only
     // the membership the drag started from, so a cancel could leave them).
+    // So does what its client's commits taught on that output: the drop is a
+    // migration, and the client answers the target's column afresh. A drop on
+    // the same output is a reorder and keeps it, which is what the indicator
+    // probe drew the slot with.
     if (p.hadPriorState && p.priorKey.screenId != p.targetScreenId) {
         dropFromOtherContexts(p.windowId, p.targetKey);
+        forgetCommittedExtents(p.windowId);
     }
 
     // Drop the last-applied memory so the re-tile emit survives the

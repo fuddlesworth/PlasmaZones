@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorScrollEngine/ScrollStashTypes.h>
 
 #include <QHash>
 #include <QSet>
@@ -25,6 +26,13 @@ struct ScrollEvacueePark
     QSet<QString> floating;
     /// Each parked window's minimum size, which the release forgot.
     QHash<QString, QSize> minSizes;
+    /// Each parked window's committed extents (ScrollEngine::m_committedExtents),
+    /// which the release forgot too. Carried like the minimum: a park is a
+    /// round trip, not a migration, so the window comes back held to what its
+    /// client already said. Kept while a context owes the window or a grant
+    /// waits for it, since a granted window arrives through the open path
+    /// later (insertOpenedWindow puts the entry back when it takes the grant).
+    QHash<QString, CommittedExtent> committed;
     /// Windows KWin returned while their screen was not scrolling yet, per
     /// context, each with whether it was parked floating. The window's arrival
     /// in that context takes its grant (insertOpenedWindow). A float has no
@@ -40,8 +48,14 @@ struct ScrollEvacueePark
     /// Whether a tile granted under @p key has not arrived yet.
     bool hasTileGrant(const PhosphorEngine::PlacementStateKey& key) const;
     /// Drop @p windowId's floating and minimum-size entries once no parked
-    /// context owes it.
+    /// context owes it, and its committed extents once no grant waits for it
+    /// either.
     void forgetUnowed(const QString& windowId);
+    /// Whether a grant under any key waits for @p windowId.
+    bool hasGrantFor(const QString& windowId) const;
+    /// Drop @p windowId's committed extents once no parked context owes it and
+    /// no grant waits for it.
+    void forgetCommittedIfUnheld(const QString& windowId);
     /// Drop every parked context @p gone accepts, and the side entries of each
     /// window none still owes, and the grants under a dropped key. The stash
     /// under a dropped key is the caller's.

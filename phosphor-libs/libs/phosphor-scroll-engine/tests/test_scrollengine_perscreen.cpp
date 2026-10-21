@@ -1,13 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE NOTE: over the 1000-line target, inside the 15% grace, and no
-// longer past the hard ceiling — splitting the template channel's blueprint
-// and cursor cases out to test_scrollengine_template.cpp is what brought it
-// back under. No exact figure is quoted here on purpose, since it goes stale
-// on the next slot added.
-//
-// The case for keeping the rest together: this file's concern is a single
+// The template channel's blueprint and cursor cases live in
+// test_scrollengine_template.cpp. The case for keeping the rest together:
+// this file's concern is a single
 // resolution cascade —
 // rule > per-screen settings trio > cached global, plus the template channel
 // that replaces the preset LISTS those kinds index into. The channels are not

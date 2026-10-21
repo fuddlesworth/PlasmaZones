@@ -820,8 +820,7 @@ Item {
             spacing: Kirigami.Units.smallSpacing
 
             // ── Inheritance banners + "Current:" line ─────────────────
-            // Presentation-only stack, split into its own component to
-            // keep this card within the project file-size ceiling. Every
+            // Presentation-only stack, split into its own component. Every
             // value is fed from the card's derived state; the shadowing
             // warning's one action is emitted back.
             AnimationEventCardBanners {

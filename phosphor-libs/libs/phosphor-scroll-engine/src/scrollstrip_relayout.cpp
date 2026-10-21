@@ -98,6 +98,38 @@ int ScrollStrip::tabbedCrossReservationPx(const Column& c, const ScrollLayoutPar
     return params.tabIndicator.reservedThickness(c.visibleTileCount());
 }
 
+int ScrollStrip::tabbedMainReservationPx(const Column& c, const ScrollLayoutParams& params)
+{
+    if (c.display != ColumnDisplay::Tabbed) {
+        return 0;
+    }
+    // The gate is whether the indicator's THICKNESS eats the MAIN axis, which
+    // is not the same question as whether it sits on a vertical screen edge:
+    // the two coincide on a horizontal strip and invert on a vertical one
+    // (columnMinExtentPx carries the full note). tabbedCrossReservationPx is
+    // the inverse arm.
+    if (isVerticalTabIndicator(params.tabIndicator.position) != params.axis.isHorizontal()) {
+        return 0;
+    }
+    return params.tabIndicator.reservedThickness(c.visibleTileCount());
+}
+
+int ScrollStrip::committedMainFloorPx(const QString& windowId, const ScrollLayoutParams& params)
+{
+    // Gated here as well as at columnMinExtentPx's head, so a caller outside
+    // that function cannot read a floor the setting has switched off.
+    if (!params.respectMinimumSize || !params.committedFloor) {
+        return 0;
+    }
+    return qMax(0, params.axis.mainSize(params.committedFloor(windowId)));
+}
+
+int ScrollStrip::windowColumnMainExtentPx(const QString& windowId, const ScrollLayoutParams& params) const
+{
+    const int colIdx = columnOfWindow(windowId);
+    return colIdx < 0 ? -1 : columnExtentPx(m_columns.at(colIdx), params);
+}
+
 int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params)
 {
     const int fullCross = crossExtent(params);
@@ -191,7 +223,7 @@ int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& 
         // Every visible tab is committed at this column's content rect, the
         // hidden ones included, so the floor is the tallest minimum in the
         // set and not just the shown tab's. Capped at the work area for the
-        // same reason the stack branch caps its own floors: a client minimum
+        // same reason the stack branch caps its own floors: a frame minimum
         // larger than the output must not size the column past the screen.
         int floorPx = 0;
         for (const Tile& tile : c.tiles) {
@@ -224,7 +256,7 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
     // Maximize-to-edges: the extent is DECLARED, not resolved from the width
     // intent (which stays stored, untouched, for the un-maximize restore).
     // No minimum floor and no work-area cap — the raw main extent already
-    // exceeds the capped answer, and a client minimum wider than the output
+    // exceeds the capped answer, and a frame minimum wider than the output
     // overhangs under the compositor's own enforcement, the same outcome the
     // respectMinimumSize=false arm accepts everywhere else.
     if (c.maximizedToEdges) {
@@ -269,17 +301,14 @@ int ScrollStrip::columnMinExtentPx(const Column& c, const ScrollLayoutParams& pa
         // TabIndicatorPosition stays a SCREEN-edge vocabulary on purpose (a
         // user who asked for the indicator on the left means the left of their
         // screen, and rotating a monitor must not move it), so the axis has to
-        // be brought in here rather than folded into the enum.
-        int reservationFloor = 0;
-        const bool indicatorEatsMainAxis =
-            isVerticalTabIndicator(params.tabIndicator.position) == params.axis.isHorizontal();
-        if (c.display == ColumnDisplay::Tabbed && indicatorEatsMainAxis) {
-            reservationFloor = params.tabIndicator.reservedThickness(c.visibleTileCount());
-        }
+        // be brought in here rather than folded into the enum. That gate lives
+        // in tabbedMainReservationPx, the one place it is spelled.
+        const int reservationFloor = tabbedMainReservationPx(c, params);
         for (const Tile& tile : c.tiles) {
             // minMain, not minWidth: the floor ALONG the strip (a vertical
-            // one's is the minimum height), raised to any wider commit.
-            const int tileMinMain = qMax(tile.minMain(params.axis), committedMainFloorPx(tile.windowId));
+            // one's is the minimum height), raised to any extent the client's
+            // own commits hold it to, which is read the same way.
+            const int tileMinMain = qMax(tile.minMain(params.axis), committedMainFloorPx(tile.windowId, params));
             if (!tile.minimized && tileMinMain + reservationFloor > floor) {
                 floor = tileMinMain + reservationFloor;
             }
@@ -1115,7 +1144,7 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             if (params.respectMinimumSize) {
                 for (int vi = 0; vi < n; ++vi) {
                     // minCross: heights[] divides the column ACROSS the
-                    // strip, so the floor is the client minimum on that axis.
+                    // strip, so the floor is the frame minimum on that axis.
                     const Tile& t = col.tiles.at(visible.at(vi));
                     const int floorPx = t.minCross(params.axis);
                     if (floorPx > 0 && heights[vi] < floorPx) {

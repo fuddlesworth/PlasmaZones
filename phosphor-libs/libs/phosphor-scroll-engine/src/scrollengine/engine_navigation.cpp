@@ -654,6 +654,9 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId); // eviction symmetry with the float/handoff paths
         m_lastAppliedMaximizedToEdges.remove(windowId);
+        // What its client's commits taught answered the source output's tiles;
+        // on the target it starts unfloored and teaches afresh.
+        forgetCommittedExtents(windowId);
     } else {
         // Refused, with the window already out of the source strip: adopt it
         // as a FLOAT of the source state rather than leaving it held by
@@ -707,6 +710,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
                 m_parkedScrollEdge.remove(partner);
                 m_lastAppliedWindowedFs.remove(partner);
                 m_lastAppliedMaximizedToEdges.remove(partner);
+                forgetCommittedExtents(partner);
             }
             // The put-back changed no output: the partner keeps its target
             // key, its last-applied rect and its edge memory untouched.

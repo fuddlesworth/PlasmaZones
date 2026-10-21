@@ -55,8 +55,19 @@ QSize TilingHandler::declaredMinSize(KWin::EffectWindow* w)
     if (kw && !kw->isInternal()) {
         const QSizeF minSize = kw->minSize();
         if (minSize.isValid()) {
-            minWidth = qCeil(minSize.width());
-            minHeight = qCeil(minSize.height());
+            // KWin's minSize() is the CLIENT's minimum: the WM_NORMAL_HINTS
+            // minimum KWin documents it as, or the xdg-toplevel minimum, which
+            // is in window-geometry units, so neither includes a server-side
+            // decoration. Every engine consumer treats the declared
+            // minimum as a FRAME extent (the column floor, the oversized
+            // verdict), so a window with a server-side decoration at its
+            // minimum would otherwise be given a column its frame overflows by
+            // the borders, the whole title bar on a vertical strip (F105). Only
+            // a declared axis is converted: an undeclared one stays 0, which
+            // the engine reads as "none", rather than becoming the border.
+            const QSizeF frameMin = kw->clientSizeToFrameSize(minSize);
+            minWidth = minSize.width() > 0 ? qCeil(frameMin.width()) : 0;
+            minHeight = minSize.height() > 0 ? qCeil(frameMin.height()) : 0;
         }
     }
     return QSize(minWidth, minHeight);
@@ -1172,6 +1183,9 @@ void TilingHandler::clearPerSessionDaemonState()
     m_effect->m_scrollCommandedRects.clear();
     m_effect->m_scrollOfferedColumn.clear();
     m_effect->m_lastReportedMinSize.clear();
+    // Whether the daemon has reportCommittedSize is a fact about ONE daemon
+    // session: the new one may be newer than the one that lacked it (F215).
+    resetCommittedSizeReportLatch();
     // The announced-epoch memo is per-session for the same reason as its neighbours: it records what a
     // PARTICULAR daemon said. Symmetry and bookkeeping, not a repair: the epoch is a seeded-at-zero hash of the
     // context key, so a restarted daemon announces the SAME value for the same strip and a retained entry would

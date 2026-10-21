@@ -1,15 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): one engine, one installed public header.
-// This is the scroll engine's complete public API surface; the value-type
-// hoists (ScrollEngineTypes.h, ScrollStashTypes.h) already carried out the
-// split-by-concern work, and splitting the remaining single class would
-// scatter one interface across headers for line count alone. Same rationale
-// as its peers (SnapEngine.h, AutotileEngine.h, LayoutRegistry.h). Grew with
-// the per-desktop membership change: the adopt / release / drop helpers,
-// the per-context rect memos, their forget, and the adoption insert flag.
-
 #pragma once
 
 #include <phosphorscrollengine_export.h>
@@ -167,7 +158,7 @@ public:
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
-    /// The window's client-reported minimum, from its strip tile, falling
+    /// The window's declared minimum as a FRAME size (Tile::minWidth), from its strip tile, falling
     /// back to the FloatRestore entry while it is floated (or minimized —
     /// the effect reports minimize as a float). The fallback matters at the
     /// cross-engine handoff, which queries this whatever state the window
@@ -240,20 +231,44 @@ public:
     /// restore). True when the engine holds, or has returned, this call's own float: a first
     /// hold of a strip tile, a repeat hold of a tile this call already holds, or a return of a
     /// tile this call held. False for an empty or untracked window, a window that floats under
-    /// another owner, and a return of a window this call did not hold.
+    /// another owner, and a return of a window this call did not hold. The return puts the window
+    /// back in its slot at its width, held to any committed floor it had (the hold does not end
+    /// one), and then re-runs the oversized verdict: a window whose minimum or committed floor no
+    /// longer fits the work area floats again, as it would at open.
     bool setWindowFullscreenFloat(const QString& windowId, bool floating, const QString& screenId);
     /// True while the slot carries the compositor's hold, and for a window that CLOSED mid-hold
     /// until WindowTracking.windowClosed has taken its capture (forgetClosedFullscreenHold).
     bool isFullscreenFloated(const QString& windowId) const;
     /// Drop the closed-mid-hold memory once the daemon's close capture has read it, or a live
-    /// release left no capture to read it.
+    /// release left no capture to read it. The same moment ends the last-applied rect a close
+    /// retained for that capture (lastManagedRect), when the window no longer holds a place in any
+    /// strip here: the capture was its only reader, and nothing else reclaims it while the daemon runs.
     void forgetClosedFullscreenHold(const QString& windowId);
     /// Compositor-driven reconciliation: the client left fullscreen on its own.
     void clearWindowedFullscreen(const QString& windowId);
     /// Compositor-driven repair: the compositor moved this window behind the engine's back (KWin's fullscreen-exit
     /// restore), so evict its emit-gate memory and relayout its screen to re-emit the true rect.
     void reapplyWindowGeometry(const QString& windowId);
-    /// Compositor-driven: the size a client settled on when offered its column rect (engine_minsize.cpp).
+    /// Compositor-driven: the size a client settled on when offered its tile rect, reported when it is not the
+    /// offer (engine_committed.cpp). Only an answer to the tile's WHOLE resolved rect counts, and only while
+    /// minimum sizes are respected; a peek clamped at the screen edge or a stack tile clamped across the strip
+    /// was never offered its column. What the engine learns, per window and per strip orientation
+    /// (CommittedExtent):
+    ///  - an extent ALONG the strip past the offer becomes a floor the column is held to like a declared
+    ///    minimum, and the screen-edge peek floor rises with it;
+    ///  - a narrower answer gives a floor back: down to the answer while that still overshoots what the column
+    ///    resolves to without the floor, entirely once it does not. A narrower answer never creates a floor.
+    ///    A floor re-taught after a give-back is pinned against further give-backs, so a client that does not
+    ///    answer one offer the same way twice settles instead of resizing its column on every round trip;
+    ///  - an answer within kCommittedExtentSlackPx of the offer along the strip counts as the offer;
+    ///  - an answer ACROSS the strip teaches nothing by itself.
+    /// A floor its column can never offer (the floor plus the tab reservation past the work area's main extent)
+    /// or an answer longer than the work area across the strip floats the window, the policy a declared minimum
+    /// past the work area already gets. A floor drops when its column satisfies it in every desktop the window
+    /// holds a column on, on the user's own interactive resize along the strip (onWindowResized), when the
+    /// client lowers its declared minimum on that axis, when a work-area shrink leaves it past the work area,
+    /// and when the window leaves the engine or its output; it survives float round trips (a user float,
+    /// minimize, the fullscreen hold, a cancelled drag), drag reorders, Retile, and the evacuee park.
     void reportCommittedSize(const QString& windowId, const QSize& offered, const QSize& committed);
     /// delta -1/+1 through the preset width list.
     void cycleColumnPresetWidth(int delta, const QString& screenId);
@@ -288,7 +303,10 @@ public:
     /// one (see resetDefaultColumnWidthFor and resetDefaultWindowHeightFor);
     /// the display always resets.
     /// Re-applies the layout the way the autotile and snapping halves
-    /// re-apply theirs.
+    /// re-apply theirs. Intents only: a column held to a floor (its client's
+    /// declared minimum, or a floor its client's own commits taught, see
+    /// reportCommittedSize) stays at that floor, since neither is an intent
+    /// the reset could write.
     void resetStripToDefaults(const QString& screenId);
     void cycleWindowPresetHeight(int delta, const QString& screenId);
     void adjustWindowHeight(qreal deltaPercent, const QString& screenId);
@@ -426,8 +444,8 @@ public:
     QString screenForTrackedWindow(const QString& windowId) const override;
     QRect lastManagedRect(const QString& rawWindowId) const override;
     QStringList managedWindowOrder(const QString& screenId) const override;
-    /// The zone-number unit. Declared in ScrollEngineTypes.h (the header's
-    /// file-size split) and aliased here, so ScrollEngine::VisibleTile keeps
+    /// The zone-number unit. Declared in ScrollEngineTypes.h and aliased
+    /// here, so ScrollEngine::VisibleTile keeps
     /// naming it for every consumer — the daemon's strip zones alias it by
     /// that spelling. Its full contract, including why a digit's ACTION is
     /// coarser than the address it resolves, lives on ScrollVisibleTile.
@@ -1123,7 +1141,11 @@ private:
     /// (clearing it per window) and lastManagedRect() (the float-back poison guard). A fullscreen
     /// HOLD is queued for announceReleasedFullscreenHolds, which fires before windowsReleased; the
     /// daemon's passive-false arm clears the WTS bit but leaves an UNTRACKED window's marker alone,
-    /// so the handler still sees it. pruneStaleWindows reclaims the rects. AutotileEngine has the same.
+    /// so the handler still sees it. The rects of these still-live windows are reclaimed when a path
+    /// re-adopts the window (windowOpened, handoffReceive, an unfloat) or by the aliveness prune once
+    /// it dies; the removed-output prune and the displaced release drop them right after the handler.
+    /// AutotileEngine has the same. The committed extents (m_committedExtents) do go here: a released
+    /// window has left the engine, and an evacuee's were copied into the park first (parkOutput).
     void releaseScreenState(ScrollState* state, QStringList& releasedWindows);
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
@@ -1230,7 +1252,8 @@ private:
     // engine_apply.cpp
     /// The smart-gaps arm is resolved INSIDE, not passed in: a single-column
     /// strip on the screen's current context zeroes the OUTER gaps for every
-    /// caller alike. It has to be every caller — the geometry producers
+    /// current-context caller alike (layoutParamsForKey judges a background
+    /// context by its own strip). It has to be every caller — the geometry producers
     /// (applyLayout, the visibleTiles walks) and the pure-math verbs
     /// (navigation, anchor math, the maximize compare) resolve against the
     /// same work area; a defaulted parameter only a handful of call sites
@@ -1251,6 +1274,11 @@ private:
     /// wrong ones through the screen-only form — the anchor it then derives is
     /// measured with the desktop-in-view's gaps and can survive the desktop
     /// return, because updateViewForFocus leaves a fully visible column alone.
+    /// A background key resolves everything against itself: its gap rules,
+    /// its override map and its own strip's column count for smart gaps. The
+    /// screen's CURRENT key resolves exactly as layoutParamsForScreen does
+    /// (gaps asked for desktop 0, "what the screen shows now"), so under a
+    /// sticky pin the pinned key gets the gaps the apply used.
     ScrollLayoutParams layoutParamsForKey(const PhosphorEngine::PlacementStateKey& key,
                                           int columnCountOverride = -1) const;
 
@@ -1530,8 +1558,10 @@ private:
     /// (engine_membership.cpp), and dropFromOtherContexts on the close /
     /// handoff / prune / cross-output paths, for a strip in view it adopted
     /// into or released from, since the rect memory belongs to another
-    /// desktop's strip; and forceReemit, the daemon re-asserting a strip KWin
-    /// moved back on an output's return.
+    /// desktop's strip; forceReemit, the daemon re-asserting a strip KWin
+    /// moved back on an output's return; and minimum sizes coming back on
+    /// (refreshConfigFromSettings, applyPerScreenConfig), whose fresh offer is
+    /// how a client's answer to its tile gets learned again (reportCommittedSize).
     ///
     /// An ADDED screen is armed too. It is not fresh: releaseScreenState keeps
     /// m_lastAppliedRect (see its contract) and the removal loop prunes only
@@ -1641,7 +1671,9 @@ private:
     /// newFrame, since the window sits there now and the emit-on-change gate
     /// must compare the corrective relayout against that, not against the
     /// rect it displaced). Also the float-back poison guard's comparand; see
-    /// PlacementEngineBase::lastManagedRect.
+    /// PlacementEngineBase::lastManagedRect. A close keeps the entry for the
+    /// daemon's close capture, and forgetClosedFullscreenHold ends it once
+    /// that capture has run.
     QHash<QString, QRect> m_lastAppliedRect;
     /// Windows whose last EMITTED batch entry carried windowedFullscreen —
     /// the flag's own leg of applyLayout's emit-on-change gate (a toggle
@@ -1659,7 +1691,7 @@ private:
     /// column twin of m_lastAppliedWindowedFs and its own leg of the same
     /// emit-on-change gate, for the same reason and one more: the flag can
     /// flip with every committed rect byte-identical (a toggle on a column
-    /// whose client minimum already outruns the raw area, or an un-maximize
+    /// whose frame minimum already outruns the raw area, or an un-maximize
     /// whose stored width still renders full). Without this leg the batch is
     /// suppressed and the compositor keeps asserting a maximize the engine
     /// has dropped. Maintained wherever m_lastAppliedWindowedFs is.
@@ -1685,8 +1717,8 @@ private:
     QHash<PhosphorEngine::PlacementStateKey, QHash<QString, QString>> m_contextParkedEdge;
     /// What a floated/minimized window's column held, so unfloat restores
     /// the slot AND the user's width/display intent (a Proportion/Preset
-    /// column must not come back as the default width). Value type hoisted
-    /// to ScrollStashTypes.h (the stash types' file-size-ceiling precedent).
+    /// column must not come back as the default width). Value type in
+    /// ScrollStashTypes.h beside the stash types.
     QHash<QString, FloatRestore> m_floatRestore;
     /// Holds found by releaseScreenState and the silent prunes, announced clear before the emit.
     QStringList m_releasedFullscreenHolds;
@@ -1994,6 +2026,45 @@ private:
     bool isEvacueeParkedKey(const PhosphorEngine::PlacementStateKey& key) const;
     // Appended last (installed header). Created by the first parkOutput.
     std::unique_ptr<ScrollEvacueePark> m_evacueePark;
+
+    // engine_committed.cpp: the extents clients' own commits taught (reportCommittedSize).
+    /// The ScrollLayoutParams::committedFloor answer for @p windowId: each orientation's floor.
+    QSize committedFloorFor(const QString& windowId) const;
+    /// @p windowId's peek-only memory along @p axis (CommittedMainExtent::peekPx), or 0. Read by
+    /// applyLayout's peek floor under respectMinimumSize, never by the strip.
+    int committedPeekPx(const QString& windowId, const StripAxis& axis) const;
+    /// Forget everything the window's commits taught: it left the engine or its output.
+    void forgetCommittedExtents(const QString& windowId);
+    /// The user's own interactive resize along @p axis settled the window's extent there: drop that
+    /// orientation's floor and peek memory. True when a floor went, which changes the layout.
+    bool dropCommittedForUserResize(const QString& windowId, const StripAxis& axis);
+    /// The client lowered its declared minimum from @p oldMin to @p newMin: drop each orientation's floor
+    /// and peek memory whose main-axis minimum went down. True when a floor went.
+    bool dropCommittedForLoweredMinimum(const QString& windowId, const QSize& oldMin, const QSize& newMin);
+    /// applyLayout's sweep over @p state's strip under @p params (the context at @p key): drop a floor its
+    /// column can never offer (floor plus tab reservation past the work area's main extent), and a floor its
+    /// column satisfies without it in EVERY context the window holds a column in, keeping the peek memory.
+    /// True when a dropped floor changed the layout (the first kind; the second is layout-neutral).
+    bool settleCommittedFloors(ScrollState& state, const PhosphorEngine::PlacementStateKey& key,
+                               const ScrollLayoutParams& params);
+    /// Whether @p windowId's column in @p state can never offer the window what it holds it to: a declared
+    /// minimum past the work area on either axis (whatever respectMinimumSize says, the open-time policy), or
+    /// a committed floor that with its column's tab reservation passes the work area's main extent.
+    bool outgrowsWorkArea(const ScrollState& state, const QString& windowId, const ScrollLayoutParams& params) const;
+    /// Float @p windowId out of @p state when outgrowsWorkArea says so (floatWindowInternal, the open-time
+    /// oversized policy). True when it floated. @p reason labels the log line.
+    bool floatIfOutgrowsWorkArea(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
+                                 const QString& windowId, const char* reason);
+
+    /// Per window: what its client's own commits taught about its extent along the strip, per strip
+    /// orientation (CommittedExtent; reportCommittedSize documents the learning, the drops and what survives).
+    /// Engine-level rather than per strip because a window holds a column in every desktop it spans and the
+    /// client's answer is about the window, not about one desktop's column; the strip reads it through
+    /// ScrollLayoutParams::committedFloor, which layoutParamsForKey points here. No per-window eviction
+    /// funnel exists, so every path on which a window leaves the engine or its output forgets its entry
+    /// itself (forgetCommittedExtents), with pruneStaleWindows sweeping it on aliveness as the backstop.
+    /// Appended after m_evacueePark (installed header).
+    QHash<QString, CommittedExtent> m_committedExtents;
 };
 
 } // namespace PhosphorScrollEngine

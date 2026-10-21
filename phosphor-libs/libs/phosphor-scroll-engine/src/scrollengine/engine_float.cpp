@@ -478,7 +478,17 @@ bool ScrollEngine::setWindowFullscreenFloat(const QString& rawWindowId, bool flo
     if (!m_floatRestore.value(windowId).fullscreenHold) {
         return false;
     }
-    return unfloatWindowInternal(state, windowId, key.screenId, true, FloatAnnounce::Passive);
+    if (!unfloatWindowInternal(state, windowId, key.screenId, true, FloatAnnounce::Passive)) {
+        return false;
+    }
+    // The return is the compositor's, so it re-runs the oversized verdict the
+    // open path and the min-size report apply: a client that pinned a minimum
+    // past the work area during the hold, or whose committed floor no longer
+    // fits it, would otherwise sit tiled at a size no column can honour, and
+    // the compositor re-reports a minimum only when it changes. A user's own
+    // unfloat stays manual (toggleWindowFloat does not come here).
+    floatIfOutgrowsWorkArea(state, key, windowId, "setWindowFullscreenFloat: return of");
+    return true;
 }
 
 void ScrollEngine::announceReleasedFullscreenHolds()
@@ -502,7 +512,18 @@ bool ScrollEngine::isFullscreenFloated(const QString& windowId) const
 
 void ScrollEngine::forgetClosedFullscreenHold(const QString& windowId)
 {
-    m_closedFullscreenHolds.remove(canonicalizeForLookup(windowId));
+    const QString id = canonicalizeForLookup(windowId);
+    m_closedFullscreenHolds.remove(id);
+    // The daemon calls this once its close capture has read lastManagedRect,
+    // which is the only reason windowClosed keeps the rect. A window no strip
+    // here holds any more has nothing left to read it, and nothing else would
+    // reclaim it while the daemon runs (the aliveness prune fires at bring-up).
+    // A window still held is either live (the capture ran ahead of the
+    // engine's own close, which then calls this again) or re-adopted, and its
+    // rect is the emit gate's memory, so it stays.
+    if (!m_states.hasWindow(id)) {
+        m_lastAppliedRect.remove(id);
+    }
 }
 
 void ScrollEngine::rememberReleasedFullscreenHold(const QString& windowId)
@@ -544,10 +565,15 @@ void ScrollEngine::settleReannouncedFullscreenHold(const QString& windowId)
             // windowOpened's burst path emits it unconditionally for the same
             // reason.
             Q_EMIT placementChanged(key.screenId);
+            // setWindowFullscreenFloat's return verdict, for its reason: this
+            // is the compositor's return too.
+            floatIfOutgrowsWorkArea(state, key, windowId, "windowOpened: return of");
         }
         return;
     }
-    unfloatWindowInternal(state, windowId, key.screenId, true, FloatAnnounce::Passive);
+    if (unfloatWindowInternal(state, windowId, key.screenId, true, FloatAnnounce::Passive)) {
+        floatIfOutgrowsWorkArea(state, key, windowId, "windowOpened: return of");
+    }
 }
 
 void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& screenId)

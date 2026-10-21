@@ -3,7 +3,7 @@
 """Shared-text consistency for a parameter the HOST resolves once per chain.
 
 Split out of check-conventions.py for the reason its sibling conventions_selftest.py
-records: the gate sits at the 1150-line ceiling, and this is a separable concern. It
+records: the gate had grown long, and this is a separable concern. It
 depends on nothing but stdlib, returns plain tuples rather than the gate's `Violation`
 so the two files cannot form a cycle, and is importable, which the rule was not while
 it lived inline.

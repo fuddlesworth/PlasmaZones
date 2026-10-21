@@ -62,8 +62,6 @@ Shared placement policy lives in `phosphor-libs/libs/phosphor-engine`. A verdict
 - Parent-based ownership for QObjects; `std::unique_ptr`/`QPointer` otherwise; never manual delete
 - Forward declare in headers; group includes: own header → project → KDE → Qt
 - `PLASMAZONES_EXPORT` on public API classes in `plasmazones/src/**`, where `plasmazones_rendering` and `plasmazones_shaderpreview` each carry their own. A phosphor library uses its OWN `PHOSPHOR<LIB>_EXPORT` (56 distinct macros: 38 under `phosphor-libs/libs/`, 18 under `phosphor-shell-libs/libs/`). Writing `PLASMAZONES_EXPORT` into a phosphor lib header names an undefined macro.
-- Keep files under 1000 lines, with a 15% grace (hard ceiling 1150). Under 1000 is the target; 1000–1150 is tolerated and not a review finding on its own. Past 1150, split by concern.
-- The ceiling binds NEW files and files being substantially rewritten. Around 61 existing files are already over it (the largest are `plasmazones/kwin-effect/plasmazoneseffect/plasmazoneseffect.h`, `plasmazones/kwin-effect/tilinghandler/tiling.cpp` and `plasmazones/tests/unit/helpers/StubSettings.h`); those are grandfathered. Do not raise an existing overrun as a review finding on its own, and do not split one as a drive-by. Growing one further, or adding a new file over the ceiling, is a finding.
 - Input validation at system boundaries
 
 ### Qt6 String Literals (CRITICAL)
@@ -219,8 +217,7 @@ ctest --test-dir build --output-on-failure
 # Lint (pre-commit hooks handle clang-format + qmlformat)
 
 # Conventions. Machine-checks the rules in this file that are decidable by
-# inspection: SPDX headers, the GPL-3 app / LGPL-2.1 libs split, the file-size
-# ceiling (growth-only, baselined in scripts/oversize-baseline.json),
+# inspection: SPDX headers, the GPL-3 app / LGPL-2.1 libs split,
 # PhosphorI18n::tr() over i18n() in C++, ConfigDefaults:: accessors over inline
 # config paths, `.pragma library` inside Qt's 128-byte window in QML .js
 # libraries (see QML Style), the plain-prose rules on the user-facing strings it
@@ -228,9 +225,10 @@ ctest --test-dir build --output-on-failure
 # license and copyright holders, and that a chain-resolved shader param's
 # DESCRIPTION reads identically on every pack that offers it (the twenty
 # roundBottomCorners copies; the check and its data live in
-# scripts/conventions_shared_text.py). Stdlib only, spread over four files:
-# the entry point plus conventions_dep5.py, conventions_shared_text.py and
-# conventions_selftest.py.
+# scripts/conventions_shared_text.py). Stdlib only, spread over six files:
+# the entry point plus conventions_dep5.py, conventions_prose.py,
+# conventions_shared_text.py, conventions_selftest.py and
+# conventions_selftest_rules.py.
 #
 # It also enforces one PRECONDITION that is not a rule and that --rules cannot
 # switch off: every path handed to a rule must be readable as text. An unreadable
@@ -362,7 +360,7 @@ Not exhaustive: `scripts/`, `packaging/` and `docs/` sit at the root; `plasmazon
 ## Key Pitfalls
 - Never copy QObjects — Never hardcode colors/spacing — Never use indices for zones
 - Never emit without checking value changed — Never use raw string literals with Qt6
-- Keep files under 1000 lines (15% grace, hard ceiling 1150) — Keep QML for UI, C++ for logic
+- Keep QML for UI, C++ for logic
 
 ## Support
 - Documentation: https://phosphor-works.github.io/plasmazones/

@@ -3,9 +3,8 @@
 
 // The compositor focus-report protocol (engine_focus.cpp): which reports the
 // self-activation echo filter swallows and which it adopts. Its own file
-// rather than more of the verbs suite, which is past the size ceiling and
-// whose subject is the verbs themselves, not the report ordering underneath
-// them.
+// rather than more of the verbs suite, whose subject is the verbs themselves,
+// not the report ordering underneath them.
 //
 // Every case here runs on the BARE fixture (no auto-echo): the whole subject
 // is the ORDER in which the engine's own activation echo and the compositor's

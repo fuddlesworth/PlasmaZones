@@ -7,7 +7,6 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 #include <phosphorscrollengine_export.h>
 
-#include <QHash>
 #include <QSize>
 #include <QString>
 #include <QStringList>
@@ -215,7 +214,7 @@ public:
     bool isWindowMinimized(const QString& windowId) const;
     /// Update a tile's stored minimum size. Returns true when it changed.
     bool setWindowMinimumSize(const QString& windowId, int minWidth, int minHeight);
-    /// The tile's client-reported minimum size, or 0x0 when untracked.
+    /// The tile's minimum frame size (Tile::minWidth), or 0x0 when untracked.
     QSize windowMinimumSize(const QString& windowId) const;
 
     // ── Focus ────────────────────────────────────────────────────────────────
@@ -278,6 +277,10 @@ public:
     bool consumeOrExpel(int delta, const ScrollLayoutParams& params);
     /// Remove @p windowId with no focus policy beyond index fixups — the
     /// cross-context transfer / float path (the caller re-homes the window).
+    /// Everything the tile carried goes with it, so a caller that re-homes the
+    /// window reads its intents first. A committed floor is not tile state:
+    /// the engine holds it per window (ScrollLayoutParams::committedFloor), and
+    /// neither this nor removeWindow touches it.
     bool takeWindow(const QString& windowId, const ScrollLayoutParams& params);
 
     // ── Sizing ───────────────────────────────────────────────────────────────
@@ -294,15 +297,18 @@ public:
     /// takes the widest preset narrower and wraps to the widest of all,
     /// so every entry is reachable in both directions even when the
     /// vocabulary was typed out of size order. Measured from the
-    /// RENDERED extent, so a column held at its client minimum enters where
-    /// it looks like it should.
+    /// RENDERED extent, so a column held at its floor (a frame minimum or a
+    /// committed floor, columnMinExtentPx) enters where it looks like it
+    /// should, and a press whose entry would still render at that same extent
+    /// refuses rather than writing an intent the floor hides.
     bool cycleActiveColumnPresetWidth(int delta, const ScrollLayoutParams& params);
     /// Adjust the active column's width by @p deltaPercent of the work area's
     /// MAIN extent (niri set-column-width "+10%"/"-10%"). Measured from the
     /// RENDERED extent rather than the bare intent, and floored at the greater
-    /// of MinColumnWidthFraction and the column's own client minimum (the
-    /// client half drops out while @c respectMinimumSize is off, the same way
-    /// it does for the height verb), so a repeated shrink stops at the floor
+    /// of MinColumnWidthFraction and the column's own floor (columnMinExtentPx:
+    /// its frame minimum and any committed floor, which drop out while
+    /// @c respectMinimumSize is off, the same way the client half does for the
+    /// height verb), so a repeated shrink stops at the floor
     /// instead of burying an ever smaller
     /// intent under it. Refuses when the target lands on the current extent,
     /// so a column already rendering below the floor refuses a shrink rather
@@ -327,7 +333,7 @@ public:
     ///    because otherwise that user could never un-maximize.
     ///
     /// Refuses (false) only for a column pinned at or past the work area by
-    /// its client minimum, which is a dead end the verb cannot resolve; the
+    /// its frame minimum, which is a dead end the verb cannot resolve; the
     /// definition documents why.
     bool toggleMaximizeActiveColumn(const ScrollLayoutParams& params);
     /// The same verb aimed at the column OWNING @p windowId rather than at the
@@ -425,6 +431,12 @@ public:
     /// once every column is back at that default — including when no column
     /// needed rewriting. Under a std::nullopt width a maximized column stays
     /// maximized and keeps its restore slot.
+    ///
+    /// Intents only: a column's floors are not intents and stay where they
+    /// are. A column floored by its frame minimum or by its client's own
+    /// commits (ScrollLayoutParams::committedFloor) is back at the default
+    /// INTENT and still renders at its floor, so this can answer true with
+    /// that column unmoved.
     bool resetToDefaults(const std::optional<ColumnWidth>& defaultWidth,
                          const std::optional<WindowHeight>& defaultHeight, ColumnDisplay defaultDisplay,
                          const ScrollLayoutParams& params);
@@ -449,7 +461,7 @@ public:
     /// CROSS extent. The current height is read off a fresh relayout, since an
     /// Auto tile only gets a pixel value from the whole column distribution,
     /// and the result is floored the way adjustActiveColumnWidth floors its
-    /// width (MinWindowHeightFraction, raised to the client minimum while
+    /// width (MinWindowHeightFraction, raised to the frame minimum while
     /// @c respectMinimumSize is on). A TABBED column adjusts too, in the same
     /// column-extent space the cycle measures in.
     bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
@@ -467,7 +479,7 @@ public:
     /// how the tile shares the column the moment a sibling arrives.
     ///
     /// The maximized test reads the stored intent as well as the rendered
-    /// extent: siblings held up by their client minimums can stop the tile
+    /// extent: siblings held up by their frame minimums can stop the tile
     /// reaching the budget on screen, and a pixel-only test would then
     /// maximize forever and never come back. Both non-Auto spellings count —
     /// a Preset whose fraction RESOLVES to the budget is maximized just as a
@@ -485,8 +497,10 @@ public:
     /// is a user's finished interactive resize, and a user who has just
     /// dragged this window to a size of their own SHOULD stop reading as
     /// maximized. A client resizing itself — a terminal quantising to its
-    /// character cell — is never reported to the daemon at all and cannot
-    /// erase the maximize.
+    /// character cell — never reaches reconcile and cannot erase the
+    /// maximize. Its answer to an offered tile does reach the engine, through
+    /// ScrollEngine::reportCommittedSize, which learns only a floor along the
+    /// strip from it and never writes an intent.
     ///
     /// Do not "fix" this by refusing the ack in reconcile. That makes
     /// onWindowResized's refused-ack branch schedule a retile which re-applies
@@ -571,52 +585,24 @@ public:
     /// protecting the intent it was not written for.
     bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool mainChanged, bool crossChanged,
                              const ScrollLayoutParams& params);
-    /// Record the size a client settled on after being offered @p offered,
-    /// when it is not the offer: the client's own answer, as opposed to the
-    /// user's resize reconcileWindowSize takes. Some clients commit a frame
-    /// WIDER than their column along the strip (a game holding a whole-number
-    /// scale of its native resolution picks the scale from the cross extent
-    /// alone), and a column laid out at its intent then puts the next column
-    /// underneath the window. A main extent past the offer is kept as a floor
-    /// on the column, read through committedMainFloorPx the way a declared
-    /// minimum is read, so neighbours make room for it. It is NOT a width
-    /// intent: nothing is serialized, and it leaves with the window.
-    ///
-    /// Only an answer to the tile's WHOLE rect counts. A peek clamped at the
-    /// screen edge, or a stack tile clamped across the strip, was never offered
-    /// the column, so what the client did with it says nothing about the
-    /// column; @p offered is compared against the tile's resolved rect.
-    ///
-    /// A later answer NARROWER than a widened offer gives the widening back:
-    /// the floor drops to that answer while it still overshoots what the
-    /// column resolves to without it, and goes entirely once it does not. A
-    /// narrower answer never creates a floor, so a client that merely rounds
-    /// its size down is never pinned to it. Nothing is recorded while
-    /// minimum sizes are not respected, since no consumer would read it.
-    /// Returns whether the column's resolved extent changed, which is the
-    /// caller's cue to relayout.
-    bool recordCommittedSize(const QString& windowId, const QSize& offered, const QSize& committed,
-                             const ScrollLayoutParams& params);
-    /// Drop every floor its column already satisfies without it: the column
-    /// offers the tile at least the extent the client last committed, because
-    /// the user widened it past that or another tile's floor did. Such a floor
-    /// changes nothing now, but left standing it would come back into force the
-    /// moment the column is narrowed again and pin it to an answer the client
-    /// gave under different conditions. Dropped, the narrower column is offered
-    /// as asked, and a client that still will not take it answers with a new
-    /// floor. Layout-neutral, so @p resolved (this strip's relayout under
-    /// @p params) stays valid across the call. A no-op while minimum sizes are
-    /// not respected: every floor then reads as satisfied, and dropping them
-    /// would discard what the clients said before the setting comes back.
-    void dropSatisfiedCommittedFloors(const ResolvedStrip& resolved, const ScrollLayoutParams& params);
-    /// The main extent @p windowId committed past its offer, as recorded by
-    /// recordCommittedSize, or 0 when it took its column. A floor exactly like
-    /// the tile's declared minimum along the strip, and read under the same
-    /// respectMinimumSize gate by every consumer of that minimum.
-    int committedMainFloorPx(const QString& windowId) const
-    {
-        return m_committedMainFloor.value(windowId);
-    }
+    /// The extent ALONG the strip of the column holding @p windowId under
+    /// @p params, exactly as the relayout resolves it (columnExtentPx: the
+    /// intent raised to the column's floors, capped at the work area, or the
+    /// raw extent of a maximized-to-edges column), or -1 when this strip does
+    /// not hold the window. The tile itself is offered this less
+    /// tabbedMainReservationPx. The engine's committed-floor bookkeeping
+    /// (ScrollEngine::reportCommittedSize) measures with it, passing params
+    /// whose ScrollLayoutParams::committedFloor it has masked when it needs
+    /// the extent a column resolves to without one window's floor.
+    int windowColumnMainExtentPx(const QString& windowId, const ScrollLayoutParams& params) const;
+    /// Pixels the tab indicator takes out of column @p c ALONG the strip: the
+    /// difference between the column's main extent and the one its tiles are
+    /// offered. 0 for a column that is not tabbed, and whenever the
+    /// indicator's thickness eats the CROSS axis instead (which of the two it
+    /// eats depends on the strip's axis, see TabIndicatorParams::reservedThickness).
+    /// The main-axis twin of tabbedCrossReservationPx, and the reservation
+    /// columnMinExtentPx adds to each tile's floor.
+    static int tabbedMainReservationPx(const Column& c, const ScrollLayoutParams& params);
 
     // ── Display ──────────────────────────────────────────────────────────────
     /// Toggle the active column between Normal and Tabbed presentation.
@@ -689,8 +675,10 @@ public:
     /// display INTENTS stay with the SLOT, like autotile's rotate through
     /// fixed zones, so the strip's geometry holds still for the ordinary
     /// case. It is not an absolute: a column's resolved width also honours
-    /// its tiles' min-MAIN clamp, so rotating a window with a large minimum
-    /// into a small slot does grow that slot. The anchor is re-clamped afterwards for exactly
+    /// its tiles' floors along the strip (columnMinExtentPx: the min-MAIN
+    /// clamp and any committed floor, both of which travel with the window),
+    /// so rotating a window with a large floor into a small slot does grow
+    /// that slot. The anchor is re-clamped afterwards for exactly
     /// that reason. The active column index stays put (focus follows the
     /// slot; callers activate its new window). Returns the number of
     /// windows rotated, 0 when fewer than two columns are visible.
@@ -883,10 +871,10 @@ private:
     /// The shortest the active tile may be written, in the space the height
     /// verbs WRITE in (the column's, so a tabbed indicator's cross reservation
     /// is already added). MinWindowHeightFraction of the work area's cross
-    /// extent, raised to the client minimum while @c respectMinimumSize is on
+    /// extent, raised to the frame minimum while @c respectMinimumSize is on
     /// — and while tabbed, to the tallest minimum in the whole tab set, since
     /// every visible tab is committed at that one rect. Capped at the work
-    /// area's cross extent so a client minimum larger than the screen cannot
+    /// area's cross extent so a frame minimum larger than the screen cannot
     /// invert a qBound. Answers -1 when there is no active tile or the work
     /// area is degenerate.
     int activeWindowHeightFloorPx(const ScrollLayoutParams& params) const;
@@ -921,15 +909,23 @@ private:
     /// @p refocus is true the niri close-focus policy picks the new focus.
     bool removeWindowInternal(const QString& windowId, const ScrollLayoutParams& params, bool refocus);
     // scrollstrip_relayout.cpp
-    /// Pixel MAIN extent of column @p c under @p params including its tiles'
-    /// min-MAIN clamp (a fully-minimized column resolves to 0).
+    /// Pixel MAIN extent of column @p c under @p params including the floor
+    /// columnMinExtentPx raises it to (a fully-minimized column resolves to 0).
     int columnExtentPx(const Column& c, const ScrollLayoutParams& params) const;
     /// The MAIN-extent floor columnExtentPx raises column @p c to under
-    /// @p params: its visible tiles' min-MAIN plus the tab-indicator
-    /// reservation when the indicator eats the main axis. 0 when minimum
-    /// sizes are not respected. Shared with equalizeVisibleColumnWidths so a
-    /// share the floor would overrule is never written as if it could render.
+    /// @p params: the largest of its visible tiles' floors along the strip
+    /// (each tile's min-MAIN, raised to the extent its client's own commits
+    /// hold it to, committedMainFloorPx) plus the tab-indicator reservation
+    /// when the indicator eats the main axis. 0 when minimum sizes are not
+    /// respected. Shared with the width verbs (adjust, equalize, minimize,
+    /// the maximize refusal) so an extent the floor would overrule is never
+    /// written as if it could render.
     int columnMinExtentPx(const Column& c, const ScrollLayoutParams& params) const;
+    /// The extent along the strip @p windowId's client holds its column to by
+    /// its own commits, read through @p params.committedFloor under
+    /// @p params' axis, or 0 when there is none, no lookup is set, or minimum
+    /// sizes are not respected.
+    static int committedMainFloorPx(const QString& windowId, const ScrollLayoutParams& params);
     /// Pixel CROSS extent of TABBED column @p c: the height intent of the
     /// tab that OWNS the extent (Column::heightOwnerId), not the tab on show,
     /// resolved exactly the way the stack branch resolves a single
@@ -1030,12 +1026,6 @@ private:
     /// all of that bookkeeping along with this pair.
     ColumnWidth m_preMaximizeWidth;
     int m_preMaximizeColumnIdx = -1;
-    /// Per window: the main extent its client committed past the column it
-    /// was offered (see recordCommittedSize). Keyed by window rather than held
-    /// on the Tile so it survives the tile moving between columns, where the
-    /// client's answer is unchanged until it answers again. Dropped when the
-    /// window leaves the strip (removeWindowInternal).
-    QHash<QString, int> m_committedMainFloor;
 };
 
 } // namespace PhosphorScrollEngine

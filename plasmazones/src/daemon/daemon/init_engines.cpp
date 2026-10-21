@@ -1,14 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): the engine-initialization phase of the
-// Daemon composition root — every engine's construction, provider wiring and
-// signal fan-out in the one place the ordering contract between them can be
-// read top to bottom. Splitting by engine would scatter the cross-engine
-// defer/reciprocity wiring this file exists to keep adjacent. Grew with the
-// per-desktop membership change: the snap resolver's membership arm. Grew
-// with the cross-output bounce fix (#1124): the tiling held-screen resolver
-// wired into the placement service.
+// The engine-initialization phase of the Daemon composition root — every
+// engine's construction, provider wiring and signal fan-out in the one place
+// the ordering contract between them can be read top to bottom. Splitting by
+// engine would scatter the cross-engine defer/reciprocity wiring this file
+// exists to keep adjacent.
 
 #include "daemon/daemon.h"
 #include "enginerouting.h"

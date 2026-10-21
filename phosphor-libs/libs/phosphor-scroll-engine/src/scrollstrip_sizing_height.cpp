@@ -149,7 +149,23 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     if (activeCol->tiles.at(ti).height == result) {
         return claimed || clearedEdges;
     }
+    const WindowHeight previous = activeCol->tiles.at(ti).height;
     activeCol->tiles[ti].height = result;
+    // The entry has to RENDER somewhere else too, the width cycle's rule: a
+    // tile held at its cross minimum (or a column at the tallest of its tabs'
+    // minimums) resolves the new intent to the extent it already draws, and
+    // keeping the write would report a resize nobody can see. Nothing else
+    // changed on this arm, so the intent goes back and the press refuses.
+    if (!claimed && !clearedEdges) {
+        int renderedPx = activeTileCrossPx(params);
+        if (renderedPx >= 0 && tabbed) {
+            renderedPx += tabbedCrossReservationPx(*activeCol, params);
+        }
+        if (renderedPx == currentPx) {
+            activeCol->tiles[ti].height = previous;
+            return false;
+        }
+    }
     activeCol->tiles[ti].preMaximizeHeight.reset();
     return true;
 }
@@ -269,7 +285,7 @@ bool ScrollStrip::toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& par
         currentPx += tabbedCrossReservationPx(*activeCol, params);
     }
     // Intent OR pixels, and the intent test is the load-bearing half. A stack
-    // whose other tiles are held up by their client minimums cannot give this
+    // whose other tiles are held up by their frame minimums cannot give this
     // one the whole budget, so after a maximize it still renders short — and a
     // pixel-only test would read that as "not maximized" and maximize again,
     // forever, with no press ever reaching the un-maximize arm. The pixel test
@@ -281,7 +297,7 @@ bool ScrollStrip::toggleMaximizeActiveWindowHeight(const ScrollLayoutParams& par
     // resolved the way relayout's Preset arm resolves it (the form
     // cycleActiveWindowPresetHeight caps its entries with). Without this arm a
     // tile holding the top preset in a stack whose siblings are pinned at
-    // their client minimums renders short, reads as "not maximized", and gets
+    // their frame minimums renders short, reads as "not maximized", and gets
     // its proportional anchor overwritten with a Fixed of the identical
     // extent: success reported, nothing moved, and the anchor a later
     // work-area change would have honoured is gone.
@@ -402,7 +418,7 @@ bool ScrollStrip::minimizeActiveWindowHeight(const ScrollLayoutParams& params)
     // form cycleActiveWindowPresetHeight caps its entries with.
     // Capped at the budget on the OUTSIDE as well as the inside: floorPx is
     // bounded by workH (activeWindowHeightFloorPx's cap), not by the column's
-    // budget, so in a crowded stack a client minimum can sit above the budget
+    // budget, so in a crowded stack a frame minimum can sit above the budget
     // and the bare qMax would answer a target no relayout can render — every
     // press would rewrite the intent and report success with nothing moving,
     // which is the exact no-op the rendered-pixel compare below exists to

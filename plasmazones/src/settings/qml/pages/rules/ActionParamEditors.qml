@@ -12,8 +12,8 @@ import org.plasmazones.common as PZCommon
  *
  * ActionRow's `_params` Repeater/Loader picks one of these `Component`s by the
  * param `kind` (never an action-type ladder). They live here rather than inline
- * so ActionRow stays under the file-size ceiling; the split is purely a home for
- * the Components, not a behavioural boundary.
+ * in ActionRow; the split is purely a home for the Components, not a
+ * behavioural boundary.
  *
  * Each Component body is UNCHANGED from when it lived in ActionRow: it still
  * reads `row.*` (the ActionRow instance, injected below) and `parent.modelData`

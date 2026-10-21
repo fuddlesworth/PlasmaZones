@@ -4,7 +4,7 @@
 // Strip-structure persistence: the mode-round-trip stash's focus/anchor
 // carry, and the serialize/restore blob a login restore rides — including
 // the appId claim that survives cross-session window-uuid drift. Split from
-// test_scrollengine_smoke.cpp (file-size ceiling); same headless setup.
+// test_scrollengine_smoke.cpp; same headless setup.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>

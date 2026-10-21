@@ -80,6 +80,22 @@ inline constexpr int kMaxRestoredTilesPerColumn = 32;
 /// rejects the malformed, it is not a layout constraint.
 inline constexpr double kMaxFixedExtentPx = 65535.0;
 
+/// Sanity ceiling for a pixel extent a CLIENT reports about itself: its
+/// declared minimum (ScrollStrip::setWindowMinimumSize) and the size it
+/// committed when offered its tile (ScrollEngine::reportCommittedSize). Both
+/// are summed with gaps, sibling floors and tab reservations in the relayout,
+/// so a value near INT_MAX would overflow those sums. Like kMaxFixedExtentPx it
+/// rejects the malformed rather than constraining a layout: an extent past the
+/// work area is handled by floating the window, not by this cap.
+inline constexpr int kMaxClientExtentPx = 100000;
+
+/// How far a committed extent may differ from the offer and still count as
+/// the offer (ScrollEngine::reportCommittedSize). Fractional scaling rounds a
+/// logical size to whole device pixels and back, so a client that took its
+/// tile can commit one pixel either side of it; reading that as an answer
+/// would plant or give back a one-pixel floor and relayout the strip for it.
+inline constexpr int kCommittedExtentSlackPx = 1;
+
 /// Sanity bounds for tab-indicator geometry. Deliberately NOT the rules
 /// layer's constants — this library does not depend on phosphor-rules — but
 /// the same numbers, because both ultimately mirror the config schema's

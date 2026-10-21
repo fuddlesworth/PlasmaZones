@@ -7,8 +7,8 @@
 // at the same width, never takes over or undoes a user float, keeps answering
 // the hold through a close until the daemon's capture has read it, and is
 // returned by a re-announce when the effect has lost its record (a restart).
-// Its own file because the maximize suite that holds the other fullscreen
-// arms is near the size ceiling.
+// Its own file rather than more of the maximize suite that holds the other
+// fullscreen arms, since the hold is a float transition with its own contract.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>

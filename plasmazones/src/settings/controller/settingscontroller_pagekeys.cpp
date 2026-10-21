@@ -121,8 +121,7 @@ const Settings::ConfigKeyList& animationConfigKeys()
 // moved to animationpagescope.{h,cpp}: pure page→event-root scoping logic
 // with no SettingsController dependency, split out for the same reason the
 // decoration equivalents were (direct unit-testability without building the
-// whole settings-app object graph, and to keep this translation unit inside
-// the file-size ceiling).
+// whole settings-app object graph).
 
 // Every decoration leaf reads/writes the single shared DecorationProfileTree
 // settings key (one JSON blob covering windows, OSDs, popups, shell surfaces

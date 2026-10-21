@@ -13,8 +13,9 @@
 // wire screen-list filter, the maximize-membership and claimed-press answers,
 // the view-carried origin, the passive float scope, the user Monocle
 // unmaximize read, the restore-rect output check, the KWin move off a
-// strip, and which commits are reported to the engine as a client's answer
-// to its column. Same header-only reach as
+// strip, when a strip window's frame reads as its client's answer to its
+// column, whether that answer is new, and which answers are reported to the
+// engine. Same header-only reach as
 // test_anchor_uniforms:
 // kwin-effect has no linkable test target, so the pure halves are extracted
 // into a header this test includes directly.
@@ -596,11 +597,15 @@ private Q_SLOTS:
             << true << true << QSize(833, 790) << QSize(1670, 939) << false;
         QTest::newRow("declared rect, client took it") << true << true << QSize(1670, 939) << QSize(1670, 939) << false;
 
+        // A frame larger than the column is never carried, for two reasons.
         // The paired hazard on the way back out: on the un-maximize batch the
         // column is restored while the client still holds the raw work area,
         // and a surviving pre-maximize entry matches the restored size. The
         // centring maths clamps at zero, so carrying this forward would commit
-        // the maximized size at the restored column's origin.
+        // the maximized size at the restored column's origin. And a client
+        // that genuinely will not fit the column answers larger, which is the
+        // engine's to settle through the committed-size report: carrying it
+        // would freeze an overhang the engine has not been told about.
         QTest::newRow("stale oversized frame, both axes") << false << true << QSize(1670, 939) << column << false;
         QTest::newRow("stale oversized frame, width only") << false << true << QSize(1670, 800) << column << false;
         QTest::newRow("stale oversized frame, height only") << false << true << QSize(1400, 939) << column << false;
@@ -825,14 +830,92 @@ private Q_SLOTS:
                                     /*userMove=*/false));
     }
 
-    // Which commits reach the engine as the client's answer to its column.
-    // The rows that matter most are the unsettled ones: a frame from a
-    // configure the client acked late must never be passed off as the answer
-    // to the newest offer, or the engine widens a column to a size the client
-    // is on its way out of.
+    // When a strip window's frame reads as its client's answer to its column:
+    // the ONE predicate the report and the offered-column centring share.
+    // Each refusing row clears exactly one gate from the all-open baseline,
+    // so a gate dropped from the predicate fails its own row.
+    void columnAnswerReadabilityTable_data()
+    {
+        QTest::addColumn<bool>("managed");
+        QTest::addColumn<bool>("coordinatesHold");
+        QTest::addColumn<bool>("kwinStateAtRest");
+        QTest::addColumn<bool>("resizeHeld");
+        QTest::addColumn<bool>("settled");
+        QTest::addColumn<int>("answer");
+        QTest::addColumn<QRect>("live");
+        QTest::addColumn<bool>("reads");
+
+        const int owed = static_cast<int>(ColumnAnswer::Owed);
+        const int read = static_cast<int>(ColumnAnswer::Read);
+        const int foreign = static_cast<int>(ColumnAnswer::Foreign);
+        // The column is (8, 8, 1908, 2052); the client answered wider.
+        const QRect wider(8, 8, 2880, 2052);
+
+        QTest::newRow("every gate open, answer owed") << true << true << true << false << true << owed << wider << true;
+        // A Read answer is still readable: a size the client settles on by
+        // itself later is the engine's to hear (isNewColumnAnswer decides).
+        QTest::newRow("every gate open, answer read") << true << true << true << false << true << read << wider << true;
+        // A late ack of an older configure, or a frame a queued resize is
+        // about to replace: never passed off as the answer to the newest
+        // offer, and never centred, since the centring move would retarget
+        // the queued resize to a displaced position (F49).
+        QTest::newRow("unsettled") << true << true << true << false << false << owed << wider << false;
+        // KWin's own maximize, fullscreen or quick tile: the frame comes
+        // before the state that explains it (F123).
+        QTest::newRow("KWin state requested") << true << true << false << false << true << owed << wider << false;
+        // The user's resize, until its drain: the user's frame (F35).
+        QTest::newRow("resize held") << true << true << true << true << true << owed << wider << false;
+        // KWin or the user resized it since the offer (F141).
+        QTest::newRow("foreign resize") << true << true << true << false << true << foreign << wider << false;
+        // Floating, untracked, or under a user move or resize.
+        QTest::newRow("not scroll-managed") << false << true << true << false << true << owed << wider << false;
+        // The offer is in coordinates the output has since left (F815).
+        QTest::newRow("coordinates stale") << true << false << true << false << true << owed << wider << false;
+        // A frame that left the column was moved elsewhere (KWin's Move to
+        // Screen); an empty one is a mid-unmap commit.
+        QTest::newRow("left the column") << true << true << true << false << true << owed << QRect(3000, 8, 1908, 2052)
+                                         << false;
+        QTest::newRow("empty frame") << true << true << true << false << true << owed << QRect(8, 8, 0, 2052) << false;
+    }
+
+    void columnAnswerReadabilityTable()
+    {
+        QFETCH(bool, managed);
+        QFETCH(bool, coordinatesHold);
+        QFETCH(bool, kwinStateAtRest);
+        QFETCH(bool, resizeHeld);
+        QFETCH(bool, settled);
+        QFETCH(int, answer);
+        QFETCH(QRect, live);
+        QFETCH(bool, reads);
+        ColumnAnswerGates gates;
+        gates.managed = managed;
+        gates.coordinatesHold = coordinatesHold;
+        gates.kwinStateAtRest = kwinStateAtRest;
+        gates.resizeHeld = resizeHeld;
+        gates.settled = settled;
+        QCOMPARE(readsAsColumnAnswer(gates, static_cast<ColumnAnswer>(answer), QRect(8, 8, 1908, 2052), live), reads);
+    }
+
+    // An answer is reported once. Owed always reads as new, whatever size it
+    // is, because the offer it answers is new. Once Read, only a size the
+    // client moves to by itself is new: a pure move that keeps the size, or
+    // KWin's keep-visible clamp, must not re-send the same answer.
+    void columnAnswerNewness()
+    {
+        const QSize answered(2880, 2052);
+        QVERIFY(isNewColumnAnswer(ColumnAnswer::Owed, answered, answered));
+        QVERIFY(isNewColumnAnswer(ColumnAnswer::Owed, QSize(), answered));
+        QVERIFY(!isNewColumnAnswer(ColumnAnswer::Read, answered, answered));
+        QVERIFY(isNewColumnAnswer(ColumnAnswer::Read, answered, QSize(3000, 2052)));
+        QVERIFY(!isNewColumnAnswer(ColumnAnswer::Foreign, answered, QSize(3000, 2052)));
+    }
+
+    // Which readable answers reach the engine. Along the strip a difference
+    // either way; across it only a longer answer, which hangs past the work
+    // area; within a pixel, never.
     void committedSizeReportTable_data()
     {
-        QTest::addColumn<bool>("settled");
         QTest::addColumn<QSize>("offered");
         QTest::addColumn<QSize>("committed");
         QTest::addColumn<bool>("vertical");
@@ -841,33 +924,44 @@ private Q_SLOTS:
         const QSize column(1908, 2052);
         // The shape that prompted this: wider along a horizontal strip, a
         // little short across it.
-        QTest::newRow("wider along the strip") << true << column << QSize(2880, 1948) << false << true;
-        QTest::newRow("narrower along the strip") << true << column << QSize(1500, 2052) << false << true;
-        QTest::newRow("unsettled wider") << false << column << QSize(2880, 1948) << false << false;
-        QTest::newRow("unsettled narrower") << false << column << QSize(1500, 2052) << false << false;
-        // Across the strip only: the commit path already centres it, and
-        // reporting would send the engine a no-op on every placement.
-        QTest::newRow("cross only, horizontal strip") << true << column << QSize(1908, 1948) << false << false;
-        QTest::newRow("matches the offer") << true << column << column << false << false;
-        // The axis decides which dimension is the main one. The same pair
-        // that is cross-only on a horizontal strip is a main-axis answer on a
-        // vertical one, and the other way round.
-        QTest::newRow("cross only, vertical strip") << true << column << QSize(2880, 2052) << true << false;
-        QTest::newRow("taller along a vertical strip") << true << column << QSize(1908, 2400) << true << true;
+        QTest::newRow("wider along the strip") << column << QSize(2880, 1948) << false << true;
+        QTest::newRow("narrower along the strip") << column << QSize(1500, 2052) << false << true;
+        // Shorter across the strip only: the commit path already centres it,
+        // and reporting would send the engine a no-op on every placement.
+        QTest::newRow("shorter across, horizontal strip") << column << QSize(1908, 1948) << false << false;
+        // Longer across the strip, main axis equal: it hangs past the work
+        // area's edge, which is the engine's to judge (F166).
+        QTest::newRow("longer across, horizontal strip") << column << QSize(1908, 2200) << false << true;
+        QTest::newRow("matches the offer") << column << column << false << false;
+        // The axis decides which dimension is the main one. The pairs below
+        // mirror the horizontal ones, so each axis's arm is driven in both
+        // directions and a flipped comparison on either fails a row.
+        QTest::newRow("longer across, vertical strip") << column << QSize(2880, 2052) << true << true;
+        QTest::newRow("shorter across, vertical strip") << column << QSize(1500, 2052) << true << false;
+        QTest::newRow("taller along a vertical strip") << column << QSize(1908, 2400) << true << true;
+        QTest::newRow("shorter along a vertical strip") << column << QSize(1908, 1948) << true << true;
+        // A pixel either way is decoration rounding at a fractional scale,
+        // never an answer (F52); two pixels are.
+        QTest::newRow("a pixel wider along the strip") << column << QSize(1909, 2052) << false << false;
+        QTest::newRow("a pixel narrower along the strip") << column << QSize(1907, 2052) << false << false;
+        QTest::newRow("a pixel longer across the strip") << column << QSize(1908, 2053) << false << false;
+        QTest::newRow("two pixels wider along the strip") << column << QSize(1910, 2052) << false << true;
+        QTest::newRow("two pixels longer across the strip") << column << QSize(1908, 2054) << false << true;
         // Degenerate sizes carry no answer (a mid-unmap commit, a column not
-        // yet known).
-        QTest::newRow("empty commit") << true << column << QSize(0, 0) << false << false;
-        QTest::newRow("empty offer") << true << QSize() << QSize(2880, 1948) << false << false;
+        // yet known). The zero-height row pins isEmpty rather than isNull,
+        // which would let a size with one zero extent through.
+        QTest::newRow("empty commit") << column << QSize(0, 0) << false << false;
+        QTest::newRow("zero-height commit") << column << QSize(2880, 0) << false << false;
+        QTest::newRow("empty offer") << QSize() << QSize(2880, 1948) << false << false;
     }
 
     void committedSizeReportTable()
     {
-        QFETCH(bool, settled);
         QFETCH(QSize, offered);
         QFETCH(QSize, committed);
         QFETCH(bool, vertical);
         QFETCH(bool, reports);
-        QCOMPARE(shouldReportCommittedSize(settled, offered, committed, vertical), reports);
+        QCOMPARE(shouldReportCommittedSize(offered, committed, vertical), reports);
     }
 };
 

@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // ScrollStrip::stripModel: the whole-strip description a strip MAP renders.
-// Its own translation unit because scrollstrip_relayout.cpp, where the
-// position walks it reuses live, already sits past the file-size ceiling.
+// Its own translation unit, beside scrollstrip_relayout.cpp where the position
+// walks it reuses live, because it answers a reader's question rather than
+// resolving the layout.
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 

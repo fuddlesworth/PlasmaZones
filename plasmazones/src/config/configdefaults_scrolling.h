@@ -13,9 +13,8 @@ namespace PlasmaZones {
 
 // Chain link 6: the scrolling engine's Scrolling defaults (the mode switch,
 // the strip geometry, the column width and window height vocabulary, and
-// the tab and drop indicators). Split out of configdefaults.h to keep that
-// file inside the size ceiling, and split again for the same reason: the
-// Scrolling.Behavior tunables and the Scrolling.ZoneSelector popup live in
+// the tab and drop indicators). Split out of configdefaults.h, and split
+// again: the Scrolling.Behavior tunables and the Scrolling.ZoneSelector popup live in
 // configdefaults_scrolling_behavior.h (link 7) and the Shortcuts.Scrolling
 // chord defaults in configdefaults_scrolling_shortcuts.h (link 8). Every
 // accessor here reaches call sites through the ConfigDefaults leaf as

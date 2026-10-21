@@ -1,15 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-//
-// FILE-SIZE EXCEPTION (sanctioned): AutotileEngine is one class — the tiling
-// engine's whole public and internal surface — and C++ cannot split a class
-// declaration across headers. The IMPLEMENTATION is already partitioned by
-// concern under src/autotileengine/; shrinking this header means extracting
-// collaborator classes (drag preview, script-state stash, per-screen config),
-// which is a deliberate refactor, not a mechanical file split. Same rationale
-// as plasmazoneseffect.h / daemon.h / windowtrackingadaptor.h. Grew with the
-// per-desktop membership change: the membership pass and its helpers, the
-// keyed capture, and the dirty-background retile memo.
 
 #pragma once
 

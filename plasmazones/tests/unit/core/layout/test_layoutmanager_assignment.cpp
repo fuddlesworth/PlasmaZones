@@ -11,8 +11,7 @@
  * banner when this file passed the 1150-line ceiling. Both share
  * LayoutManagerAssignmentFixture.
  *
- * FILE-SIZE EXCEPTION (sanctioned): this file is past the 1150 hard ceiling
- * again, and a second split was considered and rejected. What remains after
+ * A second split was considered and rejected. What remains after
  * the entry-shape half moved out is one subject — how a CONTEXT resolves to
  * an assignment — and every test here is a claim about that resolution: the
  * fallback cascade, the batch writers that rebuild the same rules, the

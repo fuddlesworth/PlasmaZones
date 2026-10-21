@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE SIZE: this TU stays whole deliberately. It is a flat sequence of one
+// This TU stays whole deliberately. It is a flat sequence of one
 // appendXxxSchema function per config domain plus the validator helpers several of them
 // share — one file-local (validStringOr), the rest at namespace scope in
 // settingsschema_p.h or declared in settingsschema.h because the per-domain TUs share
@@ -10,7 +10,7 @@
 // (settingsschema_scrolling.cpp's three entry points and settingsschema_tiling.cpp's
 // one); every remaining function is under ninety lines, and moving one out drags its
 // helpers into a header for a single consumer. When a domain grows past that, split it
-// the way scrolling and tiling were rather than letting this file cross the ceiling.
+// the way scrolling and tiling were.
 
 #include "settingsschema.h"
 

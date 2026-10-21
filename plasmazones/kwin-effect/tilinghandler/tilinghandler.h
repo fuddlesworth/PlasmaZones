@@ -731,28 +731,56 @@ public:
     /// the effect leaves the paint chain).
     void drainRetiredScrollTabTextures();
 
-    /// True when at least one scrolling screen resolves to cropping its straddlers. The direct-scanout gate needs
-    /// a whole-session answer (the hazard is any un-cropped overhang reaching a hardware plane), so it asks this
-    /// rather than per-screen membership. The per-screen distinction never reaches the paint CLIP: on a screen
-    /// that does not crop the engine clamps the geometry so no rect straddles, leaving the clip nothing to cut.
+    /// True when at least one scrolling screen resolves to cropping its
+    /// straddlers. The direct-scanout gate needs a whole-session answer (the
+    /// hazard is any un-cropped overhang reaching a hardware plane), so it
+    /// asks this rather than per-screen membership. The per-screen
+    /// distinction never reaches the paint CLIP: on a screen that does not
+    /// crop the engine clamps the geometry so no rect straddles, leaving the
+    /// clip nothing to cut.
     bool anyScreenCropsStraddlers() const
     {
         return !m_scrollCropStraddlerScreens.isEmpty();
     }
 
-    /// Which way @p screenId's strip runs. NEVER derive this from the output's aspect ratio: the axis is resolved
-    /// by the engine against the work area and may be an explicit user choice, so a guess here can disagree with
-    /// the geometry the daemon actually committed — and the disagreement shows up as a full-strip shear for the
-    /// length of every leg, on exactly the near-square topologies where a guess is least reliable.
+    /// Which way @p screenId's strip runs. NEVER derive this from the output's
+    /// aspect ratio: the axis is resolved by the engine against the work area
+    /// and may be an explicit user choice, so a guess here can disagree with
+    /// the geometry the daemon actually committed — and the disagreement shows
+    /// up as a full-strip shear for the length of every leg, on exactly the
+    /// near-square topologies where a guess is least reliable.
     PhosphorProtocol::ScrollAxis scrollAxisForScreen(const QString& screenId) const
     {
         return m_scrollVerticalAxisScreens.contains(screenId) ? PhosphorProtocol::ScrollAxis::Vertical
                                                               : PhosphorProtocol::ScrollAxis::Horizontal;
     }
 
-    /// Tell the engine what a strip window committed when it differs from its offered column (signals.cpp).
-    void reportStripCommit(KWin::EffectWindow* w, const QString& windowId, const QRect& offered,
-                           const QRect& committed);
+    /// What reportStripCommit did with a client's answer to its column.
+    enum class StripCommitReport : quint8 {
+        Sent, ///< the answer differed from the offer and went to the engine
+        NothingToReport, ///< nothing the engine acts on, or a daemon without the method this session
+        Deferred, ///< not yet: no daemon registered, or its axis map has not landed
+    };
+    /// Report a Wayland strip window's settled answer to the column it was offered
+    /// (Scrolling.reportCommittedSize), when ScrollDecisions::shouldReportCommittedSize
+    /// says it differs: along the strip either way, across it only when longer.
+    /// The caller (PlasmaZonesEffect::readColumnAnswer) has already read the
+    /// frame as an answer; @p screenId is the strip's screen, which says which
+    /// extent is the main one. Defined in framecentering.cpp.
+    StripCommitReport reportStripCommit(const QString& windowId, const QString& screenId, const QRect& offered,
+                                        const QRect& committed);
+    /// @p w's decoration changed, which moves its declared minimum as a frame
+    /// size (declaredMinSize): re-report it through the change-gated writer,
+    /// only for a window the engine holds a minimum for (the announce seeds the
+    /// cache). Defined in framecentering.cpp.
+    void noteMinSizeDecorationChanged(KWin::EffectWindow* w, const QString& windowId);
+    /// Forget that the daemon lacks reportCommittedSize: a new daemon session may
+    /// have it. Called at daemon teardown and from the bring-up drain.
+    void resetCommittedSizeReportLatch()
+    {
+        m_committedSizeReportUnsupported = false;
+        ++m_committedSizeReportSession;
+    }
 
     /// True once the daemon's scrollEffectBehaviour map has landed (live
     /// signal or the bring-up Properties.Get reply), false again after either
@@ -1101,6 +1129,7 @@ private:
     /// | `StripViewAnimator` motion | how far THIS strip's view travelled | no | retire |
     /// | `m_scrollCommandedRects` | we commanded R and an external mover is arguing | yes | keep |
     /// | `m_scrollOfferedColumn` | the column rect its strip offered it | no (strip coordinate) | keep, see below |
+    /// | its `answer` | where the client's answer to that offer stands | yes (the client's) | keep, with the rect |
     /// | `m_scrollTabPayloadByScreen` | the pills for THIS strip's columns | no | keep anyway, see below |
     /// | `m_scrollTabScreensByWindow` | reverse index of the above | no | keep anyway, see below |
     ///
@@ -1134,7 +1163,10 @@ private:
     /// batch re-offers each window it seats, and a window it does not seat
     /// keeps the offer of the strip it still belongs to. Retiring it would
     /// re-offer the full column on return and restart the size renegotiation
-    /// it exists to end.
+    /// it exists to end. The answer state riding in the same value passes the
+    /// test on its own (it is about the client responding) and goes wherever
+    /// the rect goes: it lives in the value precisely so that no remover can
+    /// drop the rect and leave a stale answer, or its commit watch, behind.
     ///
     /// retireStripScopedState has no unit test because it mutates effect maps,
     /// so the rule is written here rather than left to the maps the loop
@@ -1402,9 +1434,12 @@ private:
     void applyFreeGeometryRestore(KWin::EffectWindow* w, const QString& windowId, const QRectF& rect);
 
     /**
-     * @brief Declared compositor min-size for @p w, rounded up to ints.
+     * @brief Declared compositor min-size for @p w as a FRAME size, rounded up to ints.
      *
-     * Returns 0×0 when the window declares none. Internal windows (our own
+     * The client's declared minimum with the current decoration added
+     * (clientSizeToFrameSize), per declared axis, so it depends on the
+     * decoration and is re-reported when that changes. Returns 0×0 when the
+     * window declares none. Internal windows (our own
      * overlays) are skipped entirely — KWin's InternalWindow::minSize()
      * segfaults when the backing QWindow is null (discussion #511).
      */
@@ -1693,7 +1728,10 @@ private:
     /// NOT the copy the paint path reads. StripViewAnimator stamps the axis
     /// per strip when a batch lands, and offsetFor / axisFor answer from that
     /// stamp — which is why the teardown clear here needs no repaint bookend.
-    /// This set is consulted only when a batch is in hand.
+    /// This set is consulted when a batch is in hand, and off batch by
+    /// reportStripCommit, which needs the main axis of the strip a client's
+    /// answer arrived on and refuses to guess it before the map has landed
+    /// (m_scrollEffectBehaviourSeeded).
     QSet<QString> m_scrollVerticalAxisScreens;
     /// Last strip epoch seen per screen, from Scrolling.stripContextChanged.
     ///
@@ -1710,8 +1748,21 @@ private:
     /// map, and the daemon's first publish is legitimately all-empty on a
     /// session with no scrolling screen). Cleared by
     /// clearScrollEffectBehaviourForTeardown. See scrollEffectBehaviourSeeded()
-    /// for the one consumer and why an empty set alone cannot answer for it.
+    /// for the direct-scanout consumer and why an empty set alone cannot answer
+    /// for it. reportStripCommit reads it too: an unseeded axis map reads every
+    /// strip as horizontal, so an answer waits for the seed, which schedules the
+    /// catch-up walk that reads it.
     bool m_scrollEffectBehaviourSeeded = false;
+    /// The daemon answered reportCommittedSize with UnknownMethod: it predates
+    /// the method (a 3.5.x daemon, which the handshake still admits), so nothing
+    /// more is sent for the rest of its session, and the strip behaves as it did
+    /// before the method existed. Without the latch every resize configure a
+    /// wide client answered would cost a failed call and a warning.
+    /// resetCommittedSizeReportLatch clears it at daemon teardown and bring-up.
+    bool m_committedSizeReportUnsupported = false;
+    /// Bumped with every latch reset, and captured by each report's reply, so a
+    /// dead session's late UnknownMethod cannot latch the next session.
+    quint64 m_committedSizeReportSession = 0;
     /// Same stale-reply guard for the scrolling-screens property fetch.
     /// Bumped by setScrollingScreens on EVERY authoritative write (live
     /// signal, property reply, daemon-restart clear) — even an identical

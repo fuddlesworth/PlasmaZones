@@ -109,7 +109,7 @@ bool TilingHandler::isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& 
     const auto commanded = m_effect->m_scrollCommandedRects.constFind(windowId);
     const QRect stripRect = commanded != m_effect->m_scrollCommandedRects.constEnd()
         ? commanded->rect
-        : m_effect->m_scrollOfferedColumn.value(windowId);
+        : m_effect->m_scrollOfferedColumn.value(windowId).rect;
     if (stripRect.isNull()) {
         return false;
     }

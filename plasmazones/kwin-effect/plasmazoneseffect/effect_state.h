@@ -11,6 +11,8 @@
 /// .cpp files is unqualified (inside PlasmaZonesEffect member functions), so it
 /// resolves here via ordinary namespace lookup. Included by plasmazoneseffect.h.
 
+#include "tilinghandler/scrolldecisions.h" // ScrollOfferedColumn's answer state
+
 #include <PhosphorCompositor/DecorationDefaults.h> // WindowAppearanceScope
 
 #include <QColor>
@@ -150,6 +152,23 @@ struct ScrollCommandedRect
     quint64 commandStamp = 0; ///< the stamp of the strip apply that recorded this rect (WindowCommandStamps)
     bool outOfView = false; ///< @c rect leaves the strip's output (a park or a cropped straddler)
     bool parked = false; ///< @c rect lies off every output (TilingHandler::rectAtScrollPark)
+};
+
+/// The column a strip batch last delivered to a Wayland window, and where the
+/// client's answer to it stands. See PlasmaZonesEffect::m_scrollOfferedColumn.
+struct ScrollOfferedColumn
+{
+    QRect rect;
+    ScrollDecisions::ColumnAnswer answer = ScrollDecisions::ColumnAnswer::Read;
+    /// The frame size last read as the client's answer, which a Read answer is
+    /// compared against so a frame change that kept it reports nothing.
+    QSize answeredSize;
+    /// Id of the commit watch serving an Owed answer
+    /// (PlasmaZonesEffect::armColumnAnswerWatch), 0 for none. Inside the value
+    /// so every remover of the entry retires the watch without knowing it
+    /// exists: a watch that finds no entry, or an entry naming another id,
+    /// disconnects itself on the next commit.
+    quint64 answerWatch = 0;
 };
 
 /// Minimize-shader stamp: the time and generation of the transition a minimize

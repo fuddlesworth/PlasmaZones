@@ -40,7 +40,6 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 - **i18n**: C++ uses `PhosphorI18n::tr()` — any `KLocalizedString`/`i18n()`/`i18nc()` in C++ is a finding. `%n` substitution only works in plural forms; `%1` inside `i18np` renders literally.
 - **D-Bus**: adaptors from XML via `qt6_add_dbus_adaptor()`; session bus; `QVariantMap` for complex payloads; validate inputs at the boundary.
 - **Licensing split**: `plasmazones/src/**` etc. are GPL-3.0-or-later; `phosphor-libs/libs/phosphor-*/**` including their own `tests/` are LGPL-2.1-or-later. A GPL header inside a phosphor lib taints the lib — real finding. SPDX header + `#pragma once` on every C++ file.
-- **File size**: target <1000 lines, tolerated to 1150, past 1150 must split by concern.
 - **Architecture**: service-oriented with constructor DI — the in-partition exemplar is `WindowTrackingService` in phosphor-placement (the editor-side `ILayoutService`/`ZoneManager`/`SnappingService` live in plasmazones/src/editor, which routes to pz-qml-ui-reviewer); business logic in C++, UI in QML; JSON persistence uses relative geometry 0.0–1.0. Flag layering violations and logic leaking into controllers/QML.
 
 ## Known past-bug shapes to check for (from prior audits)

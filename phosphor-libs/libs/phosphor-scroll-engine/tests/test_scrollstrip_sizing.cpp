@@ -8,9 +8,8 @@
 // is named here only for its clamp (the widen that lands exactly on the work
 // area); its own refusal contract lives with the width verbs in
 // test_scrollstrip_ops.cpp. Placed in its own file rather than grown into test_scrollstrip_ops,
-// which owns the per-operation surface over one shared strip fixture and already
-// carries a file-size exception; every slot here builds its own strip against
-// the shared screen constants.
+// which owns the per-operation surface over one shared strip fixture; every slot
+// here builds its own strip against the shared screen constants.
 //
 // These verbs are held down on a key repeat, so a bool that says "changed"
 // while nothing moved is the failure mode worth pinning: it costs a relayout

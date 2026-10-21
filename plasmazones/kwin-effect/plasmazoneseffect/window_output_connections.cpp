@@ -140,6 +140,17 @@ void PlasmaZonesEffect::wireOutputChangeHandlers(KWin::EffectWindow* w)
         connect(kw, &KWin::Window::decorationChanged, this, [flagEdge]() {
             flagEdge(Flag::Decoration);
         });
+        // The declared minimum reaches the engine as a FRAME size, the client's
+        // minimum with the decoration around it, so a decoration change moves
+        // it, and the effect flips decorations itself (the title-bar rules).
+        // The empty-cache test spares a session with no tiling engine the id
+        // lookup (F105).
+        connect(kw, &KWin::Window::decorationChanged, this, [this, safeW]() {
+            if (!safeW || safeW->isDeleted() || m_lastReportedMinSize.isEmpty()) {
+                return;
+            }
+            m_tilingHandler->noteMinSizeDecorationChanged(safeW.data(), getWindowId(safeW.data()));
+        });
         connect(kw, &KWin::Window::outputChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted()) {
                 return;

@@ -3,8 +3,6 @@
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
-#include "scrollengine/enginelimits.h"
-
 #include <QtGlobal>
 
 #include <algorithm>
@@ -97,7 +95,7 @@ int ScrollStrip::activeWindowHeightFloorPx(const ScrollLayoutParams& params) con
     // Both floors are in WINDOW space, and while tabbed the value being
     // clamped is the COLUMN, so the reservation is added once on the outside
     // rather than to either of them. Capped at the cross extent as well: a
-    // client minimum larger than the work area (reachable through a work-area
+    // frame minimum larger than the work area (reachable through a work-area
     // shrink after the minimum was recorded) would otherwise invert the
     // qBound its callers apply.
     return qBound(1, qMax(fractionFloor, clientFloor) + reservationPx, workH);
@@ -202,9 +200,10 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
     const bool clearedEdges = col->maximizedToEdges;
     col->maximizedToEdges = false;
     // The RENDERED extent, matching adjustActiveColumnWidth and the entry
-    // rule's premise: a column pinned to its client minimum resolves to a
-    // narrower intent than it draws, and entering from the intent would step
-    // to a preset it is already wider than, so the press moved nothing.
+    // rule's premise: a column pinned to its floor (columnMinExtentPx, a
+    // frame minimum or a committed floor) resolves to a narrower intent than
+    // it draws, and entering from the intent would step to a preset it is
+    // already wider than, so the press moved nothing.
     const int currentPx = columnExtentPx(*col, params);
     if (currentPx <= 0) {
         return clearedEdges; // empty or fully minimized column: nothing to size
@@ -217,6 +216,17 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
         // Single-entry preset list (or a step that landed where we already
         // are): report no change so the engine skips a pointless relayout —
         // unless dropping a maximize-to-edges override above IS the change.
+        return clearedEdges;
+    }
+    // The entry has to RENDER somewhere else too. Under a floor at or past it
+    // (a backward press from a floored column, or a wrap to the narrowest
+    // entry) the new intent resolves to the very extent the column already
+    // draws, and writing it would report a resize nobody can see while
+    // burying the old intent under one the floor hides. Measured on a copy so
+    // the refusal leaves the column exactly as it found it.
+    Column probe = *col;
+    probe.width = result;
+    if (columnExtentPx(probe, params) == currentPx) {
         return clearedEdges;
     }
     col->width = result;
@@ -250,7 +260,7 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
     const bool clearedEdges = col->maximizedToEdges;
     col->maximizedToEdges = false;
     // Measure from what is ON SCREEN, not from the bare intent: a column
-    // sitting at its minimum-size floor resolves to a narrower intent than it
+    // sitting at its floor (columnMinExtentPx) resolves to a narrower intent than it
     // renders, and stepping from the intent would let a shrink write ever
     // smaller values while nothing moved, so the matching grow presses then
     // did nothing visible until they climbed back out of that hole.
@@ -260,7 +270,8 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
     }
     // Floor, the twin of the one adjustActiveWindowHeight applies across the
     // strip: the engine's declared narrowest column, raised to the column's
-    // own client minimum when minimum sizes are respected. Every producer that
+    // own floor (columnMinExtentPx: its frame minimum and any committed
+    // floor) when minimum sizes are respected. Every producer that
     // spells a width as a FRACTION already clamps against it (the config
     // read's Proportion arm, the rule overrides, the preset list parser, the
     // persisted blob), and without this the repeatable verb was the one that
@@ -334,14 +345,16 @@ bool ScrollStrip::toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutPara
     // toggle, so this width verb has no wire mirror to keep in step with.
     //
     // DEAD END, deliberate and unfixable here: a column that was maximized and
-    // whose client THEN raises its minimum past the work area lands in this
-    // refusal on the un-maximize press, so it can never be un-maximized and
+    // whose floor THEN reaches the work area lands in this refusal on the
+    // un-maximize press, so it can never be un-maximized and
     // m_preMaximizeWidth stays armed for it indefinitely. Letting the press
-    // through would not help — the relayout floors the column at the client
-    // minimum, so it would render full width regardless, and the user would
-    // get the same pixels plus a spent slot. The window has outgrown the
-    // strip; the way out is the float path (minSizeOutgrowingWorkArea), not
-    // this verb.
+    // through would not help — the relayout floors the column there, so it
+    // would render full width regardless, and the user would get the same
+    // pixels plus a spent slot. The window has outgrown the strip, and the
+    // way out is the engine's oversized float, not this verb: a client
+    // minimum past the work area floats its window when it is reported
+    // (ScrollEngine::windowMinSizeUpdated), and so does a committed extent
+    // past it (ScrollEngine::reportCommittedSize).
     if (columnMinExtentPx(*col, params) >= params.axis.mainSize(params.workArea)) {
         return false;
     }
@@ -449,7 +462,7 @@ bool ScrollStrip::toggleMaximizeToEdgesAt(int columnIndex, const ScrollLayoutPar
     // and the stored width is untouched, so there is no press that rewrites
     // intent while rendering identical pixels), and no pre-maximize slot
     // (clearing the flag IS the restore). A column pinned wider than the raw
-    // area by its client minimum renders the same both ways, and the toggle
+    // area by its frame minimum renders the same both ways, and the toggle
     // still moves the mirrored KWin bit, which is the half the titlebar
     // button needs.
     col.maximizedToEdges = !col.maximizedToEdges;
@@ -484,7 +497,8 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
     // Measured from what is ON SCREEN, matching adjustActiveColumnWidth and
     // matching the `taken` walk below, which sums columnExtentPx. Stepping
     // from the bare intent would mismatch the two: a column held at its
-    // client minimum resolves to a narrower intent than it renders, so target
+    // floor (a frame minimum or a committed floor) resolves to a narrower
+    // intent than it renders, so target
     // could land BELOW the rendered extent, leaving the screen unchanged
     // while the verb reported success and buried the proportional anchor
     // under a smaller Fixed value.
@@ -731,9 +745,16 @@ bool ScrollStrip::minimizeActiveColumnWidth(const ScrollLayoutParams& params)
     // preset would move nothing on screen if the intent were rewritten, and
     // the verb would report success for a no-op (then refuse the second
     // press). Comparing the floored target against the floored current width
-    // makes the first press refuse too.
+    // makes the first press refuse too. Capped at the work area's main extent
+    // the way columnExtentPx caps what it measures: a floor PAST the work
+    // area (a frame minimum or committed floor wider than the output, or a
+    // work area that shrank under one) renders the column at the cap, and an
+    // uncapped target would never equal it, so every press would report a
+    // resize with nothing moving.
     const int floorPx = columnMinExtentPx(*col, params);
-    if (columnExtentPx(*col, params) == qMax(resolveColumnWidthPx(target, params), floorPx)) {
+    const int targetPx =
+        qMin(qMax(resolveColumnWidthPx(target, params), floorPx), params.axis.mainSize(params.workArea));
+    if (columnExtentPx(*col, params) == targetPx) {
         return clearedEdges;
     }
     col->width = target;
@@ -898,9 +919,11 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
         // nothing else: onWindowResized is called only from the daemon's
         // notifyWindowResized, which the effect fires only from
         // windowFinishUserMovedResized gated on KWin's isUserResize(). A
-        // client resizing itself is never reported, so this arm cannot be a
-        // client overruling the engine — it is the user choosing a size, and
-        // recording it is the whole point of the function.
+        // client resizing itself never reaches here (its answer to an offered
+        // tile goes to ScrollEngine::reportCommittedSize, which learns only a
+        // floor), so this arm cannot be a client overruling the engine — it is
+        // the user choosing a size, and recording it is the whole point of the
+        // function.
         //
         // Second, refusing to record it would not even be safe: returning
         // false sends onWindowResized into its refused-ack branch, which only
@@ -934,99 +957,6 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
         }
     }
     return changed;
-}
-
-bool ScrollStrip::recordCommittedSize(const QString& windowId, const QSize& offered, const QSize& committed,
-                                      const ScrollLayoutParams& params)
-{
-    const int colIdx = columnOfWindow(windowId);
-    // A maximized-to-edges column's extent is declared and takes no floor
-    // (columnExtentPx returns before reading one), so nothing a client says
-    // about it can change the layout.
-    if (!params.respectMinimumSize || colIdx < 0 || offered.isEmpty() || committed.isEmpty()
-        || m_columns.at(colIdx).maximizedToEdges) {
-        return false;
-    }
-    const int offeredMain = params.axis.mainSize(offered);
-    // Bounded like every other extent that arrives from outside: the floor is
-    // summed with the tab reservation and the gaps, so an absurd value has to
-    // be cut down before it can overflow those sums.
-    const int committedMain = qMin(params.axis.mainSize(committed), static_cast<int>(kMaxFixedExtentPx));
-    const int recorded = m_committedMainFloor.value(windowId);
-    // Nothing to learn, answered before the relayout below: the extent along
-    // the strip matches the offer, repeats the floor already held, or is
-    // narrower with no widening to give back. The compositor reports every
-    // divergent commit, so these are its steady state for a client whose
-    // answer the strip has already accounted for.
-    if (committedMain == offeredMain || committedMain == recorded || (committedMain < offeredMain && recorded == 0)) {
-        return false;
-    }
-    // The answer has to be to the tile's whole rect. applyLayout commits a
-    // clamped rect for a column peeking past the screen edge and for a stack
-    // tile overflowing the work area, and a client answering one of those was
-    // never offered its column.
-    bool offeredWholeTile = false;
-    const ResolvedStrip resolved = relayout(params);
-    for (const ResolvedColumn& rc : resolved.columns) {
-        for (const ResolvedTile& rt : rc.tiles) {
-            if (rt.windowId == windowId) {
-                offeredWholeTile = rt.rect.size() == offered;
-            }
-        }
-    }
-    if (!offeredWholeTile) {
-        return false;
-    }
-    const Column& col = m_columns.at(colIdx);
-    const int extentBefore = columnExtentPx(col, params);
-    if (committedMain > offeredMain) {
-        m_committedMainFloor.insert(windowId, committedMain);
-    } else {
-        // Narrower than an offer this floor had widened. What the tile is
-        // offered once the floor is gone is the column's extent without it,
-        // less whatever the tab indicator takes out of the column along the
-        // strip — the same difference that separates the offer from the
-        // column extent measured above.
-        m_committedMainFloor.remove(windowId);
-        const int reservation = extentBefore - offeredMain;
-        if (committedMain + reservation > columnExtentPx(col, params)) {
-            m_committedMainFloor.insert(windowId, committedMain);
-        }
-    }
-    return columnExtentPx(col, params) != extentBefore;
-}
-
-void ScrollStrip::dropSatisfiedCommittedFloors(const ResolvedStrip& resolved, const ScrollLayoutParams& params)
-{
-    if (m_committedMainFloor.isEmpty() || !params.respectMinimumSize) {
-        return;
-    }
-    for (const ResolvedColumn& rc : resolved.columns) {
-        // A declared extent takes no floor, so there is nothing to measure a
-        // floor against until the column is un-maximized, and the client's
-        // answer is as true afterwards as it was before.
-        if (rc.maximizedToEdges || rc.columnIndex < 0 || rc.columnIndex >= m_columns.size()) {
-            continue;
-        }
-        const Column& col = m_columns.at(rc.columnIndex);
-        for (const ResolvedTile& rt : rc.tiles) {
-            const auto it = m_committedMainFloor.find(rt.windowId);
-            if (it == m_committedMainFloor.end()) {
-                continue;
-            }
-            // Measured with the floor zeroed in place, which reads exactly as
-            // an absent entry does and keeps the iterator valid. The tab
-            // reservation is the column's resolved extent less the tile's.
-            const int floorPx = it.value();
-            it.value() = 0;
-            const int reservation = params.axis.mainSize(rc.rect) - params.axis.mainSize(rt.rect);
-            if (columnExtentPx(col, params) - reservation >= floorPx) {
-                m_committedMainFloor.erase(it);
-            } else {
-                it.value() = floorPx;
-            }
-        }
-    }
 }
 
 } // namespace PhosphorScrollEngine

@@ -3,7 +3,7 @@
 
 // Tab grouping on the open path: the live GroupSameAppAsTabs read, the host
 // column scan and the grouped insert verb insertOpenedWindow delegates to.
-// Split out of engine_lifecycle.cpp, which sits at the file-size ceiling; the
+// Split out of engine_lifecycle.cpp; the
 // open path's ORDERING (stash, consume rule, order seed, then grouping, then
 // the fresh-open block) stays there, this file only answers "which column,
 // by which key" and performs the join.

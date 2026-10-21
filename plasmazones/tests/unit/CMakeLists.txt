@@ -3,9 +3,7 @@
 #
 # PlasmaZones Unit Tests
 #
-# FILE SIZE (not an exception: .txt is outside CODE_SUFFIXES, so the size rule
-# never reads this file and it has no oversize-baseline entry): this file is one
-# flat list of test target declarations, and the isolation block at the bottom makes the
+# This file is one flat list of test target declarations, and the isolation block at the bottom makes the
 # length structural rather than incidental. That block walks
 # `get_property(DIRECTORY . PROPERTY TESTS)`, which is DIRECTORY-scoped, so
 # every target it covers has to be declared in THIS file. Moving a group out
@@ -52,7 +50,7 @@ p_add_test(test_window_placement_store core/windowtracking/test_window_placement
 p_add_test(test_window_placement_store_collapse core/windowtracking/test_window_placement_store_collapse.cpp)
 # The per-desktop zone map of a snap slot: merge on record, forget, renumber
 # on desktop removal, the save / load round trip and the restorable-content
-# predicates. Its own suite because the store suite sits at its size baseline.
+# predicates. Its own suite, beside the store suite.
 p_add_test(test_window_placement_store_desktops core/windowtracking/test_window_placement_store_desktops.cpp)
 # The live-sibling contract of take() / peekLiveSibling and the open-claim
 # release and re-key rules (#1106); its own suite for the same reason as the
@@ -181,8 +179,8 @@ add_executable(test_snap_engine_reopen_contract core/snap/test_snap_engine_reope
                helpers/SnapEngineTestFixture.h)
 target_link_libraries(test_snap_engine_reopen_contract PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_engine_reopen_contract COMMAND test_snap_engine_reopen_contract)
-# Free-size restore on the float terminals (#1106). Its own target because
-# test_snap_engine_restore sits inside the 1150-line grace band. Needs the
+# Free-size restore on the float terminals (#1106). Its own target, beside
+# test_snap_engine_restore. Needs the
 # FakePhysicalScreenSource: the screen-containment gate and the size clamp only
 # engage with real output geometry behind the ScreenManager.
 add_executable(test_snap_engine_free_size core/snap/test_snap_engine_free_size.cpp helpers/SnapEngineTestFixture.h
@@ -568,9 +566,8 @@ add_test(NAME test_scrolling_settings COMMAND test_scrolling_settings)
 
 # Scrolling.ZoneSelector, the strip-mode drag popup: schema defaults, the
 # stamped Horizontal layout mode, and the per-screen store's subset guard.
-# A sibling of test_scrolling_settings rather than part of it (that file is a
-# sanctioned size exception and says so); same explicit Qt6::Gui link, and for
-# the same reason.
+# A sibling of test_scrolling_settings rather than part of it; same explicit
+# Qt6::Gui link, and for the same reason.
 add_executable(test_scrolling_zone_selector_settings
                config/settings/test_scrolling_zone_selector_settings.cpp)
 target_link_libraries(test_scrolling_zone_selector_settings
@@ -1639,8 +1636,8 @@ add_test(NAME test_reopen_same_screen COMMAND test_reopen_same_screen)
 
 # WindowTrackingAdaptor windowScreenChanged tests — the stored-screen
 # comparison that keeps or drops a snap when the compositor reports a window
-# on a new output. Split out rather than folded into test_wta_convenience,
-# which is already at the file-size ceiling. Same shared fixture, so the same
+# on a new output. Split out rather than folded into test_wta_convenience.
+# Same shared fixture, so the same
 # FakePhysicalScreenSource compile-in and engine link set.
 add_executable(test_wta_screen_changed dbus/test_wta_screen_changed.cpp
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
@@ -2151,7 +2148,7 @@ add_test(NAME test_animations_qml_contracts COMMAND test_animations_qml_contract
 
 # Companion test executable: how inheritance resolution stays honest against
 # the debounced-watcher-fed PhosphorProfileRegistry. Split out of
-# test_animations_page_controller.cpp to keep both files under the size ceiling.
+# test_animations_page_controller.cpp.
 # No animationpagescope.cpp: nothing in these slots or in _animations_ctrl_SRCS
 # references AnimationPageScope. Only test_animations_qml_contracts needs it.
 add_executable(test_animations_profile_store_sync

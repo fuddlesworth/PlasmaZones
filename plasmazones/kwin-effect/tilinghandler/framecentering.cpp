@@ -3,8 +3,10 @@
 //
 // Frame-commit handling for TilingHandler: slotWindowFrameGeometryChanged,
 // which centres a tile whose client committed a smaller size than it was
-// asked for and reports a minimum size it discovers on the way, and
-// reportMinSizeIfChanged, the min-size reporter it shares with the batch.
+// asked for and reports a minimum size it discovers on the way,
+// reportMinSizeIfChanged, the min-size reporter it shares with the batch, and
+// reportStripCommit, which reports a strip window's answer to its offered
+// column (read by PlasmaZonesEffect::readColumnAnswer).
 // Split out of tiling.cpp, which keeps the tile batch pipeline.
 
 #include "tilinghandler.h"
@@ -27,6 +29,7 @@
 #include <window.h>
 #include <workspace.h>
 
+#include <QDBusError>
 #include <QDBusPendingCallWatcher>
 #include <QLoggingCategory>
 #include <QScopeGuard>
@@ -185,7 +188,7 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                 // no offer; their commanded rect is the column.
                 const auto offer = m_effect->m_scrollOfferedColumn.constFind(windowId);
                 const QPoint seat = ScrollDecisions::reseatOrigin(
-                    offer != m_effect->m_scrollOfferedColumn.constEnd() ? *offer : cit->rect, actual.size());
+                    offer != m_effect->m_scrollOfferedColumn.constEnd() ? offer->rect : cit->rect, actual.size());
                 // KWin's own test, mirrored: Window::move resolves the output at
                 // the float centre of the moved rect at its COMMANDED size and
                 // switches only when that differs from the one it holds.
@@ -632,6 +635,70 @@ void TilingHandler::reportMinSizeIfChanged(const QString& windowId, const QSize&
             m_effect->m_lastReportedMinSize.remove(windowId);
         }
     });
+}
+
+void TilingHandler::noteMinSizeDecorationChanged(KWin::EffectWindow* w, const QString& windowId)
+{
+    // The batch's change poll would catch the new frame minimum too, but only
+    // on the window's next batch, and the engine needs it before then: the
+    // effect flips a title bar on the window's own batch (the decoration
+    // sweep at its end), after the poll ran.
+    if (w && m_effect->m_lastReportedMinSize.contains(windowId)) {
+        reportMinSizeIfChanged(windowId, declaredMinSize(w));
+    }
+}
+
+TilingHandler::StripCommitReport TilingHandler::reportStripCommit(const QString& windowId, const QString& screenId,
+                                                                  const QRect& offered, const QRect& committed)
+{
+    // The engine owns the column extent and only this side sees the commit,
+    // so a client whose settled answer differs from the column it was offered
+    // is reported (ScrollDecisions::shouldReportCommittedSize says when). The
+    // caller read the frame as an answer through the one predicate the
+    // centring shares (ScrollDecisions::readsAsColumnAnswer), which refuses
+    // the user's own resize: the resize drain reports that to the engine as a
+    // resize (notifyWindowResized), and a user move never resizes.
+    //
+    // Deferred, not dropped, while the daemon cannot hear it or its axis map
+    // has not landed: the answer stays owed, and the bring-up and the seed
+    // schedule the catch-up walk that reads it again, since no further commit
+    // need come (F138).
+    if (!m_effect->m_daemonGate.serviceRegistered || !m_scrollEffectBehaviourSeeded) {
+        return StripCommitReport::Deferred;
+    }
+    const bool vertical = scrollAxisForScreen(screenId) == PhosphorProtocol::ScrollAxis::Vertical;
+    if (m_committedSizeReportUnsupported
+        || !ScrollDecisions::shouldReportCommittedSize(offered.size(), committed.size(), vertical)) {
+        return StripCommitReport::NothingToReport;
+    }
+    qCDebug(lcEffect) << "Reporting committed size for" << windowId << "offered=" << offered.size()
+                      << "committed=" << committed.size() << "vertical=" << vertical;
+    // Watched rather than fire-and-forget, for the one error that is not a
+    // failure: a daemon older than the method answers UnknownMethod on every
+    // call, and is latched off for the rest of its session (F215).
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(
+            PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("reportCommittedSize"),
+            {windowId, offered.width(), offered.height(), committed.width(), committed.height()}),
+        m_effect);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, session = m_committedSizeReportSession](QDBusPendingCallWatcher* pw) {
+                pw->deleteLater();
+                if (!pw->isError()) {
+                    return;
+                }
+                const QDBusError error = pw->error();
+                if (error.type() == QDBusError::UnknownMethod) {
+                    if (session == m_committedSizeReportSession && !m_committedSizeReportUnsupported) {
+                        m_committedSizeReportUnsupported = true;
+                        qCInfo(lcEffect) << "The daemon has no reportCommittedSize (it predates the method):"
+                                         << "committed sizes are not reported for the rest of its session";
+                    }
+                    return;
+                }
+                qCWarning(lcEffect) << "reportCommittedSize failed:" << error.message();
+            });
+    return StripCommitReport::Sent;
 }
 
 bool TilingHandler::stripOutputMovedSinceBatch(const QString& screenId) const

@@ -29,6 +29,8 @@
 #include <QLoggingCategory>
 #include <QTimer>
 
+#include <type_traits>
+
 namespace PlasmaZones {
 
 // Pass over the windows on screens that left the managed set because the
@@ -421,7 +423,17 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     // Entries whose window is gone are pruned unconditionally.
     // (Stagger timers were already invalidated by the bump at
     // function entry; no stagger can have been scheduled since.)
-    const auto pruneRemovedScreenEntries = [this, &removed](QHash<QString, QRect>& map) {
+    // The rect an entry is classified by: the value itself for the centring
+    // maps, the column for the offered-column map, whose value also carries
+    // the client's answer to it.
+    const auto entryRect = [](const auto& value) -> QRect {
+        if constexpr (std::is_same_v<std::decay_t<decltype(value)>, QRect>) {
+            return value;
+        } else {
+            return value.rect;
+        }
+    };
+    const auto pruneRemovedScreenEntries = [this, &removed, &entryRect](auto& map) {
         for (auto it = map.begin(); it != map.end();) {
             // EXACT resolve: the entry is keyed to a specific
             // instance's id, and a fuzzy same-app hit would keep a
@@ -433,7 +445,7 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
                 it = map.erase(it);
                 continue;
             }
-            const QPoint zoneCenter = it.value().center();
+            const QPoint zoneCenter = entryRect(it.value()).center();
             // Guarded like every other KWin::effects use in this file (see the
             // single-model note in slotScreensChanged); a null pointer resolves
             // the entry through the window's own screen instead.

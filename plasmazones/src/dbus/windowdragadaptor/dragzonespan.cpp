@@ -19,7 +19,7 @@
  * @brief The two multi-zone modifier handlers: zone span (paint a rectangle of
  * zones) and multi-zone (union two zones under the cursor).
  *
- * Split out of drag.cpp to keep that file inside the file-size ceiling. Both
+ * Split out of drag.cpp. Both
  * run off a dragMoved tick, both resolve their screen through
  * prepareHandlerContext, and both write the same m_currentMultiZoneGeometry /
  * m_paintedZoneIds state the drop reads, so they belong together and apart

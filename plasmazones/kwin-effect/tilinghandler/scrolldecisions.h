@@ -316,12 +316,17 @@ inline QPoint reseatOrigin(const QRect& column, const QSize& live)
 /// @p committed     the client's current frame size.
 /// @p column        this batch's column size.
 ///
-/// A committed size LARGER than the column on either axis is refused too: it
-/// is not an answer to this column but a stale frame from a bigger one the
-/// client has not been reconfigured out of yet. That is reachable on the
-/// un-maximize batch — the column is back at its stored width while the client
-/// still holds the raw work area — where carrying it forward would commit the
-/// maximized size at the restored column's origin.
+/// A committed size LARGER than the column on either axis is refused too. It
+/// can be a stale frame from a bigger column the client has not been
+/// reconfigured out of yet, which is reachable on the un-maximize batch: the
+/// column is back at its stored width while the client still holds the raw
+/// work area, and carrying it forward would commit the maximized size at the
+/// restored column's origin. It can also be a genuine answer from a client that
+/// will not fit the column, and that one is not this cache's to settle either:
+/// the frame hook reports it to the engine (shouldReportCommittedSize), which
+/// widens the column to it, and re-offering the column keeps the client's
+/// answer readable until then. Carrying it forward would freeze an overhang the
+/// engine has not been told about.
 inline bool mayCarryCommittedSize(bool declaredRect, bool columnAnswered, const QSize& committed, const QSize& column)
 {
     if (declaredRect || !columnAnswered || committed.isEmpty() || committed == column) {
@@ -330,40 +335,122 @@ inline bool mayCarryCommittedSize(bool declaredRect, bool columnAnswered, const 
     return committed.width() <= column.width() && committed.height() <= column.height();
 }
 
-/// Whether a strip window's commit goes to the engine as the client's answer
-/// to the column it was offered (Scrolling.reportCommittedSize).
+/// Where a Wayland strip window's answer to the column it was offered stands
+/// (ScrollOfferedColumn::answer in the effect).
+///
+/// The answer is the frame the client settles on after the strip sent it a
+/// column SIZE, and each such offer owes one reading of it: from the frame
+/// change that carries it, or from the client's commit when the settle leaves
+/// the frame unchanged (a client answering with the frame it already had, or
+/// settling on a state-only configure that followed the resize), which emits no
+/// frame change at all. Once read, a size the client later settles on by
+/// itself is read too (isNewColumnAnswer).
+enum class ColumnAnswer : quint8 {
+    Owed, ///< a batch sent the client this column's size; no settled answer has been read since
+    Read, ///< the settled answer was read: reported to the engine, or nothing to report
+    /// The frame answers a resize nobody on the strip asked for: KWin's own
+    /// (its Expand and Shrink Window verbs, a script setting the frame, a
+    /// re-decoration) or the user's. Nothing the client commits answers the
+    /// strip's column until the next batch delivers one.
+    Foreign,
+};
+
+/// The facts readsAsColumnAnswer weighs, each gathered by the effect at the
+/// moment of reading. Named rather than positional, so a call site and a test
+/// row say which gate they set.
+struct ColumnAnswerGates
+{
+    /// scroll-managed: tracked on a strip, not floating, not deleted, not
+    /// under a user move or resize (PlasmaZonesEffect::scrollManagedOutputFor)
+    bool managed = false;
+    /// no output change is in progress and the strip's output has not moved
+    /// since its batch: the offer is in the coordinates the frame is (F815)
+    bool coordinatesHold = false;
+    /// KWin requests no maximize, fullscreen or tile for the window and it is
+    /// not fullscreen. KWin commits the frame of its own maximize, fullscreen
+    /// and quick tile before the state change that explains it.
+    bool kwinStateAtRest = false;
+    /// the resize hold still waits for the client's answer to the user's
+    /// resize (PlasmaZonesEffect::m_resizeHold)
+    bool resizeHeld = false;
+    /// KWin's move-resize geometry equals the frame, so the frame is not one
+    /// a configure still in flight is about to replace
+    bool settled = false;
+};
+
+/// Whether a strip window's frame reads as its client's answer to the column
+/// it was offered. The ONE predicate both consumers of the answer ask, the
+/// report to the engine and the offered-column centring, so neither can act on
+/// a frame the other would refuse.
+///
+/// @p settled is a statement about KWin's bookkeeping, not about configures:
+/// KWin brings its move-resize geometry back in line with the frame once the
+/// client acknowledges the last configure that places the window, so a client
+/// acking an older configure late reads unsettled and its frame is not passed
+/// off as the answer to the newest offer. It is not proof that nothing is in
+/// flight: a move clears the placing flag of the configures still queued, so
+/// after a move issued while several configures were queued, an older one's
+/// ack can read settled (F49). The centring this predicate gates no longer
+/// moves an unsettled window, which leaves a batch's size-preserving move
+/// issued over queued resizes as the one producer of that ordering.
+///
+/// @p offered is the column rect, @p live the frame. A frame that left the
+/// column entirely was moved elsewhere (KWin's Move to Screen, F973, F738),
+/// and an empty one is a mid-unmap commit.
+inline bool readsAsColumnAnswer(const ColumnAnswerGates& gates, ColumnAnswer answer, const QRect& offered,
+                                const QRect& live)
+{
+    return gates.managed && gates.coordinatesHold && gates.kwinStateAtRest && !gates.resizeHeld && gates.settled
+        && answer != ColumnAnswer::Foreign && !live.size().isEmpty() && live.intersects(offered);
+}
+
+/// Whether a readable answer is one the engine has not heard yet: always while
+/// the answer is Owed, and once Read only when the client has since settled on
+/// another size by itself (@p lastRead is the size read then). A frame change
+/// that kept the size, such as a pure move, repeats nothing.
+inline bool isNewColumnAnswer(ColumnAnswer answer, const QSize& lastRead, const QSize& live)
+{
+    return answer == ColumnAnswer::Owed || (answer == ColumnAnswer::Read && live != lastRead);
+}
+
+/// The largest difference between a committed and an offered extent that is
+/// not an answer. A server-side decoration with fractional borders at a
+/// fractional scale rounds the frame of a client that took its column exactly
+/// a pixel either way, depending on where the frame sits, and reporting that
+/// pixel would leave the engine a floor the client never asked for.
+inline constexpr int CommittedSizeTolerancePx = 1;
+
+/// Whether a readable answer goes to the engine (Scrolling.reportCommittedSize).
 ///
 /// The engine lays a column out at the extent it asked for, so a client that
 /// commits WIDER along the strip sits across the next column until the engine
 /// hears about it, and one that later commits narrower than a column the
 /// engine widened for it leaves that width standing empty.
 ///
-/// @p settled    KWin has no configure in flight for the window: its
-///               move-resize geometry equals its frame. KWin brings the two
-///               back in line only once the last configure that places the
-///               window is acknowledged, so a client acking an OLDER configure
-///               late (a frame from the wider column it is being moved out of)
-///               reads unsettled, and its frame is never passed off as the
-///               answer to the newest offer.
 /// @p offered    the column size the strip offered.
 /// @p committed  the frame size the client committed.
 /// @p vertical   the strip runs vertically, so its main axis is the height.
 ///
-/// Only the MAIN axis is compared. Across the strip the commit path already
-/// centres a smaller answer, and a client holding an aspect ratio answers a
+/// The MAIN axis reports a difference either way. The CROSS axis reports only
+/// a longer answer, which hangs past the work area's edge and is the engine's
+/// to judge (one that exceeds the work area floats the window like an
+/// oversized declared minimum). A shorter cross answer is not reported: the
+/// commit path centres it, and a client holding an aspect ratio answers a
 /// full-height column a little short on every placement, which would
-/// otherwise send the engine a no-op each time.
+/// otherwise send the engine a no-op each time. Differences of
+/// CommittedSizeTolerancePx or less are rounding, never answers.
 ///
-/// Deliberately stateless. A repeat the engine cannot act on (minimum sizes
-/// not respected, a floor already recorded) is refused cheaply there, while a
-/// "sent already" memory here could only drift from the engine's own record
-/// and then withhold the one report the engine was missing.
-inline bool shouldReportCommittedSize(bool settled, const QSize& offered, const QSize& committed, bool vertical)
+/// Stateless itself; the effect asks it once per answer (isNewColumnAnswer),
+/// so a client that keeps its answer is not reported again on every frame
+/// change.
+inline bool shouldReportCommittedSize(const QSize& offered, const QSize& committed, bool vertical)
 {
-    if (!settled || offered.isEmpty() || committed.isEmpty()) {
+    if (offered.isEmpty() || committed.isEmpty()) {
         return false;
     }
-    return vertical ? committed.height() != offered.height() : committed.width() != offered.width();
+    const int mainDelta = vertical ? committed.height() - offered.height() : committed.width() - offered.width();
+    const int crossDelta = vertical ? committed.width() - offered.width() : committed.height() - offered.height();
+    return qAbs(mainDelta) > CommittedSizeTolerancePx || crossDelta > CommittedSizeTolerancePx;
 }
 
 // ── Compositor-state claims ────────────────────────────────────────────────

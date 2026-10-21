@@ -4,9 +4,9 @@
 #pragma once
 
 // Forward declarations (and the few must-be-complete includes threaded
-// between them) for daemon.h — split out so the class header itself stays
-// within the file-size policy. Every entity here is consumed by daemon.h
-// as a pointer/reference member or a signature type.
+// between them) for daemon.h, split out of the class header. Every entity
+// here is consumed by daemon.h as a pointer/reference member or a signature
+// type.
 
 namespace PhosphorScreens {
 class PlasmaPanelSource;

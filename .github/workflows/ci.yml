@@ -490,7 +490,7 @@ jobs:
         run: python3 scripts/validate-json-schemas.py
 
   # ─── Conventions: the CLAUDE.md rules that are decidable by inspection
-  # (SPDX headers, the GPL-3 app / LGPL-2.1 libs split, the file-size ceiling,
+  # (SPDX headers, the GPL-3 app / LGPL-2.1 libs split,
   # PhosphorI18n::tr() over i18n() in C++, ConfigDefaults:: accessors over
   # inline config paths, and the plain-prose rules on user-facing strings).
   # These were previously enforced only by reviewer attention, so a violation

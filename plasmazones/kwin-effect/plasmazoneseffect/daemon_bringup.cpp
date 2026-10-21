@@ -137,6 +137,11 @@ void PlasmaZonesEffect::slotDaemonReady()
                 qCInfo(lcEffect) << "Bridge registered: daemon apiVersion=" << result.apiVersion
                                  << "session=" << result.sessionId;
                 m_daemonGate.serviceRegistered = true;
+                // A strip batch the restarted daemon pushed before this reply
+                // landed offered columns whose answers the report had to defer;
+                // a client that has settled sends no further commit to read
+                // them on (F138).
+                scheduleColumnAnswerCatchUp();
                 continueDaemonReadySetup();
             });
 }

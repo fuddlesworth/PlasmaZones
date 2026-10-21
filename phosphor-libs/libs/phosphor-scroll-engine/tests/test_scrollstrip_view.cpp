@@ -6,8 +6,8 @@
 // centering policy, and the three verbs that rewrite several column widths
 // at once (equalize, minimize, reset). Placed in its own file rather than
 // grown into test_scrollstrip_ops, which owns the per-operation surface over
-// one shared strip fixture and already carries a file-size exception; every
-// slot here builds its own strip against the shared screen constants.
+// one shared strip fixture; every slot here builds its own strip against the
+// shared screen constants.
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 

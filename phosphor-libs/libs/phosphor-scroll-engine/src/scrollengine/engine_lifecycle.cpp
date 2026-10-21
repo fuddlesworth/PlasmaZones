@@ -62,9 +62,16 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // on to that claim. A window parked floating re-enters floating where it
     // stands, as the in-view re-adopt seats it: no column, and as a migration
     // no move onto a remembered spot, ahead of the float verdicts and the
-    // record.
+    // record. The committed extents the park carried for the window come back
+    // with the grant (read before the take, which lets the park forget them
+    // once no other grant or parked context waits for the window).
+    const CommittedExtent parkedCommitted =
+        m_evacueePark ? m_evacueePark->committed.value(windowId) : CommittedExtent{};
     const std::optional<bool> grant =
         m_evacueePark ? m_evacueePark->takeGrant(currentKeyForScreen(screenId), windowId) : std::nullopt;
+    if (grant && !parkedCommitted.isEmpty() && !m_committedExtents.contains(windowId)) {
+        m_committedExtents.insert(windowId, parkedCommitted);
+    }
     if (grant && *grant) {
         finishFloatedOpen(state, windowId, screenId, minWidth, minHeight, /*migration=*/true, /*oversized=*/false,
                           placedBefore, nullptr);
@@ -657,6 +664,12 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         m_scrollFloatedWindows.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
         m_lastAppliedMaximizedToEdges.remove(windowId);
+        // What the client's commits taught answered the OLD context's tiles,
+        // on its output and under its gaps; the window starts the new context
+        // unfloored and its client's next answer there teaches afresh. Gone
+        // before the insert below so the new strip's first layout cannot read
+        // it.
+        forgetCommittedExtents(windowId);
         if (wasFloating) {
             // Announce the dropped float bit: signal-driven subscribers
             // (the effect's FloatingCache) would otherwise keep believing
@@ -1015,7 +1028,8 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // live frame is still the strip rect at that moment — without the
     // memory, the column rect becomes the reopen float-back geometry (the
     // float-back tile-rect poison, autotile's twin retains for the same
-    // reason). pruneStaleWindows reclaims the entry independently.
+    // reason). forgetClosedFullscreenHold reclaims the entry once that capture
+    // has run, and pruneStaleWindows is the aliveness backstop.
     // A close mid-hold keeps answering the hold for the same reason: that capture
     // runs after this drop and must read the frame as a suspension, never free geometry.
     if (m_floatRestore.value(windowId).fullscreenHold) {
@@ -1032,6 +1046,9 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     m_parkedScrollEdge.remove(windowId);
     m_lastAppliedWindowedFs.remove(windowId);
     m_lastAppliedMaximizedToEdges.remove(windowId);
+    // The committed extents die with the window too. Unlike the rect above no
+    // capture reads them, so nothing argues for keeping them past the close.
+    forgetCommittedExtents(windowId);
 
     if (inStrip && key == currentKeyForScreen(key.screenId)) {
         // Background-context guard: applyLayout resolves the screen's

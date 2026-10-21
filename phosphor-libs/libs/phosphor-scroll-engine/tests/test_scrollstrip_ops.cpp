@@ -1,14 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file exceeds the 1150-line ceiling
-// because it owns the whole PURE STRIP-MODEL operation surface in one
-// narrative — consume/expel, column and tile moves, the width and height
-// intent families, tabbed columns, reconcile, viewport queries and the
-// anchoring/centering policies. Each slot is a short self-contained scenario
-// over the same threeColumns fixture; splitting by operation family would
-// duplicate the fixture and the declaration-order table of contents below is
-// what keeps the length navigable. The view-ownership slots (the pan's detach
+// The whole PURE STRIP-MODEL operation surface in one narrative — consume/
+// expel, column and tile moves, the width and height intent families, tabbed
+// columns, reconcile, viewport queries and the anchoring/centering policies.
+// Each slot is a short self-contained scenario over the same threeColumns
+// fixture, and the declaration-order table of contents below is what keeps it
+// navigable. The view-ownership slots (the pan's detach
 // latch) and the group-width verbs were placed in test_scrollstrip_view.cpp
 // from the start rather than grown into this file; only the pan's own
 // delta-clamp slot below predates that file. The view suite shares the

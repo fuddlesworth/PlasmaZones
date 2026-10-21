@@ -1958,7 +1958,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // step while its size does not, and it is the size that
                     // decides whether the client has answered for this column.
                     const bool columnUnchanged =
-                        offeredIt != m_effect->m_scrollOfferedColumn.constEnd() && offeredIt->size() == columnSize;
+                        offeredIt != m_effect->m_scrollOfferedColumn.constEnd() && offeredIt->rect.size() == columnSize;
                     // The whole rect is captured: the commit-time correction
                     // below needs the column's position to centre within it.
                     //
@@ -2104,9 +2104,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // decided by the size comparison above, which a genuine column
                 // change fails on its own; membership loss is handled by the
                 // teardown removers.
+                //
+                // A batch that sends the client a SIZE is a new offer, whose
+                // answer the frame hook and the commit watch then read
+                // (recordStripOffer). The test is the size-preserving split
+                // both arms of applyWindowGeometry take below, against the
+                // same commanded rect, read before the apply: a size equal to
+                // the commanded one goes out as a pure move, or not at all,
+                // and asks the client nothing.
                 if (!stripOfferedColumn.isNull() && !skipMoveResize && !snap.window->isUserMove()
                     && !snap.window->isUserResize() && !fullscreenBailSkippedCommit) {
-                    m_effect->m_scrollOfferedColumn.insert(snap.windowId, stripOfferedColumn);
+                    const KWin::Window* const kwOffer = snap.window->window();
+                    const bool sendsSize =
+                        kwOffer && QRectF(kwOffer->moveResizeGeometry()).toRect().size() != geo.size();
+                    m_effect->recordStripOffer(snap.window, snap.windowId, stripOfferedColumn, sendsSize);
                 }
 
                 if (!skipMoveResize) {

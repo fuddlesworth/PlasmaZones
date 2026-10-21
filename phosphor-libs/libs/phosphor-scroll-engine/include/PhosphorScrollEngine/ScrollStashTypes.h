@@ -18,10 +18,10 @@
 namespace PhosphorScrollEngine {
 
 /// The mode-round-trip strip stash value types (ScrollEngine::m_stripStash).
-/// Namespace-level rather than nested so the engine header stays within the
-/// file-size ceiling; semantics and lifetime are documented on the engine's
-/// m_stripStash member, and StashedTile::stagedFromPersistence below carries
-/// the cross-session lease contract.
+/// Namespace-level rather than nested in ScrollEngine; semantics and lifetime
+/// are documented on the engine's m_stripStash member, and
+/// StashedTile::stagedFromPersistence below carries the cross-session lease
+/// contract.
 struct StashedTile
 {
     QString windowId;
@@ -228,10 +228,11 @@ struct StashedStrip
 
 /// What a floated/minimized window's column held, so unfloat restores the
 /// slot AND the user's width/display intent (a Proportion/Preset column must
-/// not come back as the default width). Namespace-level rather than nested in
-/// ScrollEngine for the same file-size-ceiling reason as the stash types
+/// not come back as the default width). Namespace-level like the stash types
 /// above; lifetime and ownership are documented on the engine's
-/// m_floatRestore member.
+/// m_floatRestore member. It deliberately carries no committed floor: that
+/// lives per window in ScrollEngine::m_committedExtents, which a float round
+/// trip leaves standing (see CommittedExtent below).
 struct FloatRestore
 {
     int column = -1;
@@ -269,7 +270,7 @@ struct FloatRestore
     /// columns close while the window floats, and a stale index would
     /// splice the window into a stranger's stack.
     QString stackAnchor;
-    /// Client-reported minimum size at float time — the tile that held
+    /// Minimum frame size (Tile::minWidth) at float time — the tile that held
     /// it dies with takeWindow, and dropping it would strip the
     /// relayout clamps until the compositor happens to re-report.
     /// Kept CURRENT while the window floats: windowMinSizeUpdated has no
@@ -395,6 +396,55 @@ struct DragInsertPreview
     /// float/tiling focus-switch verbs — the window keeps compositor focus
     /// across begin/cancel, so no focus report ever re-learns the pair.
     bool priorFloatHadFocus = false;
+};
+
+/// What a client's own commits have taught the engine about one window's
+/// extent ALONG a strip that runs one way (ScrollEngine::reportCommittedSize).
+/// Runtime state only: nothing here is serialized, stashed or persisted, and
+/// none of it is a width intent.
+struct CommittedMainExtent
+{
+    /// The extent along the strip the client committed past the tile it was
+    /// offered, which the column is then held to exactly like a declared
+    /// minimum (0: none). The strip reads it through
+    /// ScrollLayoutParams::committedFloor.
+    int floorPx = 0;
+    /// The last extent along the strip the client committed to its WHOLE tile
+    /// when that was not the offer (0: none). Read only by the screen-edge
+    /// peek floor, which must keep protecting a column the client answers at
+    /// full width after the floor itself has been satisfied and dropped. A
+    /// wider answer sets it with the floor, and a narrower one replaces it.
+    int peekPx = 0;
+    /// A narrower answer has given part or all of floorPx back since it was
+    /// learned.
+    bool gaveBack = false;
+    /// A wider answer re-taught the floor after a give-back. The client is not
+    /// answering the same offer the same way twice, and following it down
+    /// again would offer it the size that taught the floor and start the cycle
+    /// over, so a narrower answer no longer gives the floor back. The drops
+    /// that end a floor outright end this with it.
+    bool pinned = false;
+
+    bool isEmpty() const
+    {
+        return floorPx == 0 && peekPx == 0 && !gaveBack;
+    }
+};
+
+/// One window's CommittedMainExtent per strip orientation, the value type of
+/// ScrollEngine::m_committedExtents. Kept per orientation because a window on
+/// several desktops can sit in a horizontal strip on one and a vertical strip
+/// on another, and what its client said about its width says nothing about
+/// its height.
+struct CommittedExtent
+{
+    CommittedMainExtent horizontal;
+    CommittedMainExtent vertical;
+
+    bool isEmpty() const
+    {
+        return horizontal.isEmpty() && vertical.isEmpty();
+    }
 };
 
 } // namespace PhosphorScrollEngine

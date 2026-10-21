@@ -45,5 +45,5 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 
 ## Project conventions that apply here
 - These libs are LGPL-2.1-or-later (including their `tests/`); SPDX + `#pragma once` on every header; `PHOSPHORWAYLAND_EXPORT` / `PHOSPHORLAYER_EXPORT` on public API. Each phosphor library defines its own `PHOSPHOR<LIB>_EXPORT`; `PLASMAZONES_EXPORT` appears in zero files outside `plasmazones/src/**`, so writing it into one of these headers names an undefined macro and breaks the build.
-- Qt6 string rules, emit-only-on-change, parent-based ownership, and the file-size ceiling apply as everywhere; wrapper classes exposing state to QML do so via `Q_PROPERTY` with NOTIFY.
+- Qt6 string rules, emit-only-on-change, and parent-based ownership apply as everywhere; wrapper classes exposing state to QML do so via `Q_PROPERTY` with NOTIFY.
 - Input validation at the boundary: data arriving from the compositor (strings, geometry, serials) is untrusted input — validate before it reaches core state.

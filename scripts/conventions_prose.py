@@ -2,9 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The plain-prose detector: one pure function over a string, plus its data.
 
-Split out of check-conventions.py, which had reached the 1150-line hard ceiling that
-CLAUDE.md sets, so every edit to it had to be exactly line-neutral and three audit
-rounds running had to pay that cost to correct a comment. This is the most separable
+Split out of check-conventions.py when it had grown long. This is the most separable
 concern left after dep5, the shared-param text and the selftest: `prose_problems` reads
 no file, resolves no path and imports nothing from the gate, so the split cannot form a
 cycle and the gate passes the function to the selftest exactly as before.

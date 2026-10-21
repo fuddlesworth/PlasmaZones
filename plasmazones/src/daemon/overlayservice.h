@@ -1,17 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION: this header is well past the 1150 hard ceiling and grows
-// with each overlay surface. No line count here, because it goes stale within a
-// release; scripts/oversize-baseline.json holds the authoritative figure.
-//
-// The case for it: OverlayService is the single façade every overlay surface goes
-// through (zone overlay, selector, snap assist, OSD, cheatsheet, scrolling drop
-// indicator), so its members are the per-screen state and per-role wiring those
-// surfaces share. The implementation is already split by surface across
-// daemon/overlayservice/*.cpp; splitting the class DECLARATION would scatter the
-// per-screen ownership and teardown-order contract the member ordering encodes,
-// exactly as documented on daemon.h.
+// OverlayService is the single façade every overlay surface goes through (zone
+// overlay, selector, snap assist, OSD, cheatsheet, scrolling drop indicator), so
+// its members are the per-screen state and per-role wiring those surfaces share.
+// The implementation is split by surface across daemon/overlayservice/*.cpp, and
+// the member ordering here encodes the per-screen ownership and teardown-order
+// contract, exactly as documented on daemon.h.
 
 #pragma once
 
@@ -1270,7 +1265,7 @@ private:
 
     // NOTE on ordering: method declarations (here and below) interleave with
     // the data-member runs, and that is harmless to the teardown-order
-    // contract the file-size exception cites — C++ destruction order is
+    // contract the file header cites — C++ destruction order is
     // defined by NON-STATIC DATA MEMBER order alone, which interspersed
     // function declarations do not participate in. Only the relative order
     // of the data members themselves is load-bearing.

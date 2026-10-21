@@ -58,8 +58,14 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     m_declinedOpenFocus.remove(windowId);
     // m_lastAppliedRect deliberately retained (same rationale as
     // windowClosed: a close/capture racing the handoff still needs the
-    // poison-guard memory; pruneStaleWindows reclaims it).
+    // poison-guard memory). A re-adoption reclaims it, so does the
+    // post-capture forgetClosedFullscreenHold of the window's eventual close,
+    // and pruneStaleWindows is the aliveness backstop.
     m_floatRestore.remove(windowId);
+    // The window leaves the engine on every desktop, so what its client's
+    // commits taught goes too. releaseWindowOffScreen reaches here through the
+    // base release, which is how a move to another monitor drops it.
+    forgetCommittedExtents(windowId);
     // The mode-transition float marker must not outlive this engine's
     // tracking: the receiving engine owns the float bit from here, and a
     // stale entry would keep isModeSpecificFloated answering true.

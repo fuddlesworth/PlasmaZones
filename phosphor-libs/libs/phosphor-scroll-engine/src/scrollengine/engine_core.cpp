@@ -1231,7 +1231,19 @@ void ScrollEngine::refreshConfigFromSettings()
                               && sticky <= static_cast<int>(PhosphorEngine::StickyWindowHandling::IgnoreAll))
         ? static_cast<PhosphorEngine::StickyWindowHandling>(sticky)
         : PhosphorEngine::StickyWindowHandling::TreatAsNormal;
+    // Minimum sizes coming back on is the one moment a client's answer to its
+    // tile can be learned that nothing else would re-offer: nothing is learned
+    // while they are off (reportCommittedSize), the compositor reports an
+    // answer once per offer, and a strip whose rects did not move would emit
+    // no batch and so make no offer. Forcing every screen's next batch makes
+    // that offer, and the client's answer to it is learned.
+    const bool respectTurnedOn = !m_respectMinimumSize && settings->scrollingRespectMinimumSize();
     m_respectMinimumSize = settings->scrollingRespectMinimumSize();
+    if (respectTurnedOn) {
+        for (const QString& screenId : std::as_const(m_scrollingScreens)) {
+            m_forceEmitScreens.insert(screenId);
+        }
+    }
     m_centerShortColumns = settings->scrollingCenterShortColumns();
     m_smartGaps = settings->scrollingSmartGaps();
 
@@ -1287,6 +1299,12 @@ void ScrollEngine::applyPerScreenConfig(const QString& screenId, const QVariantM
         return;
     }
     m_perScreenOverrides.insert(key, overrides);
+    // A rule turning minimum sizes back on for this context forces the next
+    // batch, for refreshConfigFromSettings' reason: the offer it makes is how
+    // a client's answer gets learned after a stretch of nothing being learned.
+    if (!effectiveRespectMinimumSize(previous) && effectiveRespectMinimumSize(overrides)) {
+        m_forceEmitScreens.insert(screenId);
+    }
     // Deliberately no cursor reset here. A blueprint SWAP is noticed at the
     // consumption site by comparing ScrollState::blueprintIdentity against
     // the blueprint actually in force, which is the only place that can tell

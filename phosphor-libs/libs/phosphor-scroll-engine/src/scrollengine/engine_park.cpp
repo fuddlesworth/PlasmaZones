@@ -175,7 +175,9 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
             axis.mainLow(rect) < axis.mainLow(in.screenRect) && axis.mainHigh(rect) >= axis.mainLow(in.screenRect);
         if (straddleHigh || straddleLow) {
             // Under respectMinimumSize the peek floor rises to the client's
-            // declared minimum: committing a clamped extent the client refuses
+            // minimum along the strip (tileMin: the declared minimum, raised to
+            // the width the client last committed to its whole tile):
+            // committing a clamped extent the client refuses
             // makes KWin regrow the frame from its origin, pushing it straight
             // back across the boundary (X11 clients have no Wayland-side repair
             // for this). Such a column parks instead of peeking. The floor is
@@ -184,7 +186,7 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
             // instead of parking forever. For exactly that oversized-minimum
             // case the regrow hazard the floor exists to avoid is knowingly
             // re-accepted — a straddle beats a permanently invisible window.
-            // The client minimum is decoded by ROLE here: a straddle along the
+            // The frame minimum is decoded by ROLE here: a straddle along the
             // strip is bounded by however much of the window has to stay
             // visible ALONG that axis, which is the client's width only while
             // the strip runs horizontally.

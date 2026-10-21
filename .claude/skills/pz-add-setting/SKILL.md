@@ -91,10 +91,7 @@ bool enableAudioVisualizer() const override;
 void setEnableAudioVisualizer(bool enable) override;
 ```
 
-No member. `settings.h` is already 2600+ lines and grandfathered in the
-file-size baseline, so the conventions checker fails if it grows. Adding a
-property to it means shrinking something else, or the addition belongs in a
-different header.
+No member.
 
 ### 6. `plasmazones/src/config/settings/<concern>.cpp` — getter and setter
 

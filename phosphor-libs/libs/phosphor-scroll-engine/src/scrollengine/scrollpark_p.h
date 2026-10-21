@@ -23,7 +23,7 @@ constexpr int kParkMargin = 16;
 
 /// Minimum visible sliver a straddling tile keeps on screen, on BOTH axes:
 /// the main-axis edge clamps and the cross-axis stack-overflow clamp share
-/// this floor (each raises it to the client's declared minimum under
+/// this floor (each raises it to ParkInputs::tileMin under
 /// respectMinimumSize).
 constexpr int kMinVisiblePeekPx = 48;
 
@@ -40,9 +40,13 @@ struct ParkInputs
     QRect columnRect;
     QRect workArea;
     QRect screenRect;
-    /// The client's declared minimum, or a null size when minimum sizes are
-    /// not being respected. NEVER transposed: it is a fact about the window
-    /// in screen coordinates, not a strip-axis quantity.
+    /// The window's declared minimum frame size, raised along the strip to the last
+    /// extent the client committed to its whole tile (the engine's peek
+    /// memory, ScrollEngine::committedPeekPx), or a null size when minimum
+    /// sizes are not being respected. NEVER transposed: it is a fact about the
+    /// window in screen coordinates, not a strip-axis quantity, so the raise
+    /// lands on the width for a horizontal strip and the height for a vertical
+    /// one.
     QSize tileMin;
     StripAxis axis;
     /// Where a park lands: below the union of every output.

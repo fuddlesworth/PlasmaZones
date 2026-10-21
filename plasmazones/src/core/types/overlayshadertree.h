@@ -200,8 +200,8 @@ private:
 /// type, for the reason they do: the flatten is a property of the profile, not of
 /// whichever service happens to resolve one. OverlayService had it open-coded at
 /// two call sites, which made the service carry preset-resolution knowledge for
-/// three of four families — growing a class its own file-size exception note
-/// concedes is already under god-object pressure — and meant the rule route and
+/// three of four families — growing a class already under god-object
+/// pressure — and meant the rule route and
 /// the tree route each had their own copy of the same three lines.
 ///
 /// A profile naming no preset, and a @p presets that resolves it to nothing, both

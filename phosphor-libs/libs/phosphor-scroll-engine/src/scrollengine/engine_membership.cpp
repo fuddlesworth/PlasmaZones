@@ -219,8 +219,8 @@ bool ScrollEngine::adoptIntoContext(const QString& windowId, const PlacementStat
         return true;
     }
     // Carry the window's state across from a strip that already holds it.
-    // The compositor reports the min size once at open, and this window is
-    // not opening; and a window the user FLOATED (or minimized, which the
+    // The compositor reports the min size at open and again only when it
+    // changes, and this window is not opening; and a window the user FLOATED (or minimized, which the
     // daemon models as a float) on the desktop it came from is floating
     // here too: tiling it on the new desktop would give a hidden or
     // deliberately floated window a live column, with the daemon's per-window
@@ -324,6 +324,13 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
     }
     m_states.removeMembership(windowId, key);
     forgetContextMemo(key, windowId);
+    // The committed extents are the window's, read by every strip it holds a
+    // column in, so releasing one desktop must leave them for the others. Only
+    // the LAST membership going takes them: the window then holds no place in
+    // any strip here, and where it turns up next is a move, not a return.
+    if (!m_states.hasWindow(windowId)) {
+        forgetCommittedExtents(windowId);
+    }
     if (!state) {
         // A membership whose state is gone (torn down earlier in the same
         // sweep) owes no relayout and no dirty mark: there is no strip on
