@@ -52,6 +52,13 @@ bool ActivityManager::init()
                 m_activitiesAvailable = (status == KActivities::Controller::Running);
 
                 if (m_activitiesAvailable && !wasAvailable) {
+                    // A start() that ran while the service was still down
+                    // returned without connecting the activity signals. Connect
+                    // them now, or no later activity switch is ever seen.
+                    if (m_startRequested && !m_running) {
+                        m_running = true;
+                        connectSignals();
+                    }
                     m_currentActivity = controller->currentActivity();
                     Q_EMIT activitiesChanged();
                     if (!m_currentActivity.isEmpty()) {
@@ -79,6 +86,9 @@ bool ActivityManager::init()
 
 void ActivityManager::start()
 {
+    // Remembered so a service that comes up after this call still gets its
+    // signals connected (see the serviceStatusChanged handler in init()).
+    m_startRequested = true;
     if (m_running || !m_activitiesAvailable) {
         return;
     }
@@ -91,6 +101,7 @@ void ActivityManager::start()
 
 void ActivityManager::stop()
 {
+    m_startRequested = false;
     if (!m_running) {
         return;
     }
@@ -194,9 +205,17 @@ void ActivityManager::connectSignals()
 void ActivityManager::disconnectSignals()
 {
 #ifdef KACTIVITIES_AVAILABLE
-    if (m_controller) {
-        disconnect(m_controller, nullptr, this, nullptr);
+    // Only the signals connectSignals() made. A blanket disconnect would also
+    // drop init()'s serviceStatusChanged handler, and a service restart after
+    // stop() and start() would then go unnoticed.
+    auto* controller = qobject_cast<KActivities::Controller*>(m_controller);
+    if (!controller) {
+        return;
     }
+    disconnect(controller, &KActivities::Controller::currentActivityChanged, this,
+               &ActivityManager::onCurrentActivityChanged);
+    disconnect(controller, &KActivities::Controller::activityAdded, this, &ActivityManager::onActivityAdded);
+    disconnect(controller, &KActivities::Controller::activityRemoved, this, &ActivityManager::onActivityRemoved);
 #endif
 }
 
