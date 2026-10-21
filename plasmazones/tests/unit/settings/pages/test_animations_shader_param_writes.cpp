@@ -6,11 +6,10 @@
  * @brief AnimationsPageController params-only shader writer and the group
  *        readers that answer questions about what a path owns.
  *
- * Split out of test_animations_shader_overrides.cpp rather than added to it:
- * that file was already at 1110 lines against the project's 1150 hard ceiling,
- * and this coverage is a coherent slice on its own — everything here concerns
- * the PACK-versus-PARAMETERS distinction rather than shader overrides in
- * general.
+ * Split out of test_animations_shader_overrides.cpp rather than added to it,
+ * because this coverage is a coherent slice on its own: everything here
+ * concerns the PACK-versus-PARAMETERS distinction rather than shader overrides
+ * in general.
  *
  * Pinned behaviour:
  *   - setShaderParametersOnPaths leaves `effectId` exactly as stored: engaged

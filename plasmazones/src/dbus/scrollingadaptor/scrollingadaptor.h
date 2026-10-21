@@ -26,31 +26,31 @@ namespace PlasmaZones {
  *
  * Provides D-Bus interface: org.plasmazones.Scrolling
  *
- * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin
- * effect uses as its Mode-stamp discriminator, the strip-preview snapshot
- * (with the preset vocabulary beside it), the wheel-driven focusColumn and
- * scrollView verbs, their placement-map twins focusColumnAt, moveColumnTo and
+ * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin effect
+ * uses as its Mode-stamp discriminator, the strip-preview snapshot (with the
+ * preset vocabulary beside it), the wheel-driven focusColumn and scrollView
+ * verbs, their placement-map twins focusColumnAt, moveColumnTo and
  * scrollViewByPx beside the stripModelJson whole-strip read, the four absolute
  * width/height setters for external scripting, the toggleMaximizeColumn width
- * verb, the toggleMaximizeToEdges
- * verb that answers a window's own maximize request (and reports back whether
- * the strip changed, so the effect can put KWin's maximize bit back to the
- * engine's state when it did not), the
- * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
- * when a client leaves fullscreen on its own), the reapplyWindowGeometry
- * repair call (inbound too, for a fullscreen exit whose strip rects never
- * moved), the reportCommittedSize call (inbound, the size a client settled
- * on instead of its column), the blueprintProgressJson template-seed report, the
- * stripChanged wake-up that tells a preview its strip is worth re-reading,
- * the stripContextChanged announcement of which strip a screen is
- * currently showing, the compositor-owned behaviour map and the
- * focus-follows-mouse blocked-window list with their change signals, and the
+ * verb, the toggleMaximizeToEdges verb that answers a window's own maximize
+ * request (and reports back whether the strip changed, so the effect can put
+ * KWin's maximize bit back to the engine's state when it did not), the
+ * clearWindowedFullscreen reconciliation call (inbound, effect to daemon, when
+ * a client leaves fullscreen on its own), the reapplyWindowGeometry repair
+ * call (inbound too, for a fullscreen exit whose strip rects never moved), the
+ * reportCommittedSize call (inbound, the size a client settled on instead of
+ * its column), the blueprintProgressJson template-seed report, the
+ * stripChanged wake-up that tells a preview its strip is worth re-reading, the
+ * stripContextChanged announcement of which strip a screen is currently
+ * showing, the compositor-owned behaviour map and the focus-follows-mouse
+ * blocked-window list with their change signals, and the
  * setWindowFullscreenFloat hold the effect sends when a strip tile enters or
  * leaves its own fullscreen.
- * Window lifecycle and tile-request traffic for
- * scrolling screens deliberately stays on org.plasmazones.Tiling — the
- * effect keeps ONE engine-managed screen set and one geometry pipeline
- * for both tiling-family engines, and TilingAdaptor routes per screen.
+ *
+ * Window lifecycle and tile-request traffic for scrolling screens
+ * deliberately stays on org.plasmazones.Tiling — the effect keeps ONE
+ * engine-managed screen set and one geometry pipeline for both tiling-family
+ * engines, and TilingAdaptor routes per screen.
  */
 class PLASMAZONES_EXPORT ScrollingAdaptor : public QDBusAbstractAdaptor
 {
@@ -88,19 +88,19 @@ public:
     /// both on one property made a strip that merely scrolled re-publish,
     /// re-parse and re-compare three screen lists that had not moved.
     ///
-    /// The first two are per-context rule slots
-    /// (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) with a consumer
-    /// in the KWin effect. focusFollowsMouse has no other, so it cannot ride
-    /// the engine's per-screen override map; cropStraddlers rides that map as
-    /// well, because the engine's straddler clamp reads it, and both consumers
-    /// resolve it from the same slot. The
-    /// third is the strip axis as membership (see @ref verticalAxisKey). The
-    /// daemon resolves `rule ?? config` per scrolling screen and publishes the
-    /// RESOLVED membership, which keeps the effect free of any config
-    /// knowledge: it answers each question with a set lookup and needs no
-    /// fallback of its own. A screen absent from a list has that behaviour
-    /// OFF (for verticalAxis, a horizontal strip); a screen absent from the
-    /// daemon's scrolling set appears in none of the three screen lists.
+    /// The first two are per-context rule slots (SetScrollFocusFollowsMouse /
+    /// SetScrollCropStraddlers) with a consumer in the KWin effect.
+    /// focusFollowsMouse has no other, so it cannot ride the engine's
+    /// per-screen override map; cropStraddlers rides that map as well, because
+    /// the engine's straddler clamp reads it, and both consumers resolve it
+    /// from the same slot. The third is the strip axis as membership (see @ref
+    /// verticalAxisKey). The daemon resolves `rule ?? config` per scrolling
+    /// screen and publishes the RESOLVED membership, which keeps the effect
+    /// free of any config knowledge: it answers each question with a set lookup
+    /// and needs no fallback of its own. A screen absent from a list has that
+    /// behaviour OFF (for verticalAxis, a horizontal strip); a screen absent
+    /// from the daemon's scrolling set appears in none of the three screen
+    /// lists.
     ///
     /// One map rather than three list properties so the compositor pays a
     /// single bring-up query and a single change subscription for what is
@@ -191,12 +191,12 @@ public:
     /// this gate in the daemon (Daemon::isFocusedContextGatedForMode); the
     /// wheel, the placement map and the absolute setters arrive on the bus
     /// instead and would otherwise pan and resize a context the user turned
-    /// off. A provider rather than the
-    /// resolver type so this library never names the daemon's context
-    /// machinery. FAIL-CLOSED: with no provider installed every gated verb
-    /// refuses, the same way the daemon's gate refuses with no resolver, so
-    /// a daemon that forgot the install cannot ship an ungated wheel. The
-    /// daemon installs it in the same pass that creates the adaptor.
+    /// off. A provider rather than the resolver type so this library never
+    /// names the daemon's context machinery. FAIL-CLOSED: with no provider
+    /// installed every gated verb refuses, the same way the daemon's gate
+    /// refuses with no resolver, so a daemon that forgot the install cannot
+    /// ship an ungated wheel. The daemon installs it in the same pass that
+    /// creates the adaptor.
     void setContextGateProvider(std::function<bool(const QString& screenId)> provider);
     /// Whether a screen runs autotile right now, read when a screen leaves the
     /// scrolling set. The daemon installs it beside the context gate.
@@ -645,8 +645,7 @@ public Q_SLOTS:
      *
      * Reports the CURRENT (desktop, activity) context, matching
      * visibleStripJson. Same ownership gate as focusColumn (reads are not
-     * context-gated): an empty
-     * object when the screen is not scrolling.
+     * context-gated): an empty object when the screen is not scrolling.
      *
      * @param screenId Screen whose progress to describe
      * @return JSON object string

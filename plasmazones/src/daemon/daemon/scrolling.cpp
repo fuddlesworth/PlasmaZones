@@ -6,9 +6,9 @@
 //
 // The scrolling counterpart of updateEngineScreens' engine push: order
 // seeding across mode transitions, per-context rule-param resolution, and
-// the setActiveScreens handoff. Driven
-// from updateEngineScreens (one cascade walk derives both engines' sets) so
-// the two sets always flip in the same recompute.
+// the setActiveScreens handoff. Driven from updateEngineScreens (one
+// cascade walk derives both engines' sets) so the two sets always flip in
+// the same recompute.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
@@ -596,11 +596,11 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // and the adaptor's emit-on-change compare — an order-sensitive list
     // compare — would report a change that isn't one.
     // ScrollingAdaptor::setScrollEffectBehaviour sorts and de-duplicates on
-    // entry. That is the published-contract
-    // boundary and it covers every producer, not just this one, so sorting a
-    // second time here would be dead work claiming the same ownership. Screens
-    // that LEFT scrolling are absent by construction (the walk only visits the
-    // current set), so the departing-screen cleanup below has nothing to undo.
+    // entry. That is the published-contract boundary and it covers every
+    // producer, not just this one, so sorting a second time here would be dead
+    // work claiming the same ownership. Screens that LEFT scrolling are absent
+    // by construction (the walk only visits the current set), so the
+    // departing-screen cleanup below has nothing to undo.
     if (m_scrollingAdaptor) {
         m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens, verticalAxisScreens);
         // Pushed alongside, not folded in: the block list rides its own

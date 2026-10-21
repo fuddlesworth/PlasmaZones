@@ -435,7 +435,11 @@ public:
     /// After the caller has placed @p w following dropKWinTile: answer the
     /// tile's configure if the client can still ack it at the tile's size
     /// (ScrollDecisions::droppedTileAckOutstanding), so the tile's frame
-    /// neither lands nor reads as the client's answer to its column.
+    /// neither lands nor reads as the client's answer to its column. Armed too
+    /// for a tile configure KWin had only scheduled, which goes out carrying
+    /// the column; that answer waits on the window's command until a newer
+    /// command, the user's gesture, an output move or a KWin request for
+    /// another size voids it (ScrollDecisions::requestVoidsStaleAck).
     void answerDroppedTileAck(KWin::EffectWindow* w, const KWinTileDrop& drop);
 
     /// The two halves of slotScreensChanged's removed-screens pass, split out

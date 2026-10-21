@@ -456,12 +456,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // committed to its whole tile (committedPeekPx), which outlives the column
     // floor: once the column satisfies that floor it is dropped, but the
     // client still answers at that width, and a clamped peek would hand it a
-    // sliver it answers at full width. The memory itself ends once the column
-    // offers less than it with no floor held (settleCommittedFloors, earlier
-    // in this pass). At the TRAILING screen edge that answer
+    // sliver it answers at full width. At the TRAILING screen edge that answer
     // grows across the boundary onto the neighbouring output; at the LEADING
     // edge, where the answer is anchored at the offer's origin, it grows over
     // the on-screen neighbour instead. Either way the column parks.
+    //
+    // The memory itself ends here, just ahead of the read, once the column
+    // offers less than it with no floor held and this pass offers the tile
+    // its whole rect without it (endStalePeeks). Judged on the resolve
+    // above, after the re-anchor, because whether the tile straddles the
+    // screen edge is a fact about the view this batch commits. Deferred while
+    // a drag preview steers the view, with the floor sweep it follows; the
+    // next pass after the drop or cancel runs it.
+    if (!dragPreviewSteersView) {
+        endStalePeeks(state->strip(), resolved, params, screenRect, parkTop);
+    }
     QHash<QString, QSize> tileMinSizes;
     if (params.respectMinimumSize) {
         const bool horizontal = params.axis.isHorizontal();

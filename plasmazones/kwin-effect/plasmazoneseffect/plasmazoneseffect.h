@@ -1568,7 +1568,8 @@ private:
     // The client's answer to its strip column (window_connections.cpp). The strip batch records each column it
     // delivers through recordStripOffer; readColumnAnswer reads the answer (the report to the engine, then the
     // offered-column centring) from the frame hook, from the commit watch while an answer is owed, and from the
-    // catch-up walk; noteForeignStripRequest marks a resize nobody on the strip asked for.
+    // catch-up walk; noteForeignStripRequest puts back a resize KWin made on its own account, or marks one nobody on
+    // the strip asked for.
     /// Record @p column as the column the batch delivered to @p w. @p sendsSize: the batch is sending the client a
     /// new size, which makes its answer owed and arms the commit watch.
     void recordStripOffer(KWin::EffectWindow* w, const QString& windowId, const QRect& column, bool sendsSize);
@@ -1576,7 +1577,9 @@ private:
     void readColumnAnswer(KWin::EffectWindow* w, const QString& windowId);
     /// Read the client's commits while @p entry's answer is owed.
     void armColumnAnswerWatch(KWin::EffectWindow* w, const QString& windowId, ScrollOfferedColumn& entry);
-    /// KWin (or the user) is about to change @p w's geometry outside any effect apply.
+    /// KWin (or the user) is about to change @p w's geometry outside any effect apply. A resize on KWin's account is
+    /// put back to the strip's rect from inside the request (ScrollDecisions::putsBackKWinResize, under a budget);
+    /// one that is not, and the user's resize, make the answer Foreign.
     void noteForeignStripRequest(KWin::EffectWindow* w);
     /// Read every owed answer once more on the next event-loop turn, after a gate that refused one has cleared.
     void scheduleColumnAnswerCatchUp();
@@ -2931,14 +2934,14 @@ private:
     /// this column, so recording one for a placement that never went out would
     /// make the next batch read it as answered.
     ///
-    /// Wayland only. Every write goes through recordStripOffer, from four
-    /// callers: the strip batch, behind isWaylandClient(); the gesture-end
-    /// replay of a batch apply the gesture deferred, carrying the column that
-    /// batch offered (stripOfferOnDeferredReplay); and the two cancels that put
-    /// a strip tile back after KWin resized it on its own account
-    /// (TilingHandler::cancelStripQuickTile, cancelAxisOnlyMaximize), which
-    /// re-record an entry already there and create none. So the map is empty
-    /// for X11 and every consumer of it is inert there.
+    /// Wayland only. Every write goes through recordStripOffer: the strip
+    /// batch, behind isWaylandClient(); the gesture-end replay of a batch apply
+    /// the gesture deferred, carrying the column that batch offered
+    /// (stripOfferOnDeferredReplay); and the cancels that put a strip tile back
+    /// after KWin's quick tile or axis-only maximize
+    /// (TilingHandler::cancelStripQuickTile, TilingHandler::cancelAxisOnlyMaximize),
+    /// which re-record an entry already there and create none. So the map is
+    /// empty for X11 and every consumer of it is inert there.
     ///
     /// The discriminator for size continuity (see the strip apply). A genuine
     /// column change is "this size differs from the one recorded here" — our
@@ -2962,8 +2965,11 @@ private:
     /// it Read. A commit watch reads the client's commits while the answer is
     /// owed, because a settle that leaves the frame unchanged emits no frame
     /// change. A geometry request KWin or the user makes outside an effect apply
-    /// that resizes the window makes it Foreign until the next delivery, decided
-    /// when the request is made (noteForeignStripRequest).
+    /// that resizes the window is decided when the request is made
+    /// (noteForeignStripRequest): KWin's is put back to the strip's rect, under
+    /// a budget each delivery re-arms, and leaves the answer as it was; the
+    /// user's, and KWin's when it is not put back, make it Foreign until the
+    /// next delivery.
     QHash<QString, ScrollOfferedColumn> m_scrollOfferedColumn;
     /// Hands out ScrollOfferedColumn::answerWatch ids. Never restarted.
     quint64 m_columnAnswerWatchSeq = 0;

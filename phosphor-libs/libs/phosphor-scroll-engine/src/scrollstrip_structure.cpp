@@ -1067,10 +1067,9 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
     // lands a wide-floored or maximized window in a narrow slot really does
     // change pixel widths, and the total strip width with them. Re-clamp so
     // the view cannot be stranded past the end of a strip that just SHRANK —
-    // and only then:
-    // centerActiveColumn deliberately stores out-of-range anchors
-    // (restoreViewAnchor / updateViewForFocus document not clamping them),
-    // so an unconditional clamp here would silently undo an explicit
+    // and only then: centerActiveColumn deliberately stores out-of-range
+    // anchors (restoreViewAnchor / updateViewForFocus document not clamping
+    // them), so an unconditional clamp here would silently undo an explicit
     // centerColumn on a first/last column on the next rotate.
     if (params.workArea.isValid() && stripExtentPx(params) < extentBefore) {
         m_viewAnchor = clampedAnchor(m_viewAnchor, params);

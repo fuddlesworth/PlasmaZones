@@ -9,8 +9,11 @@
 // guards, how it puts a window back and where it re-seats one, the
 // compositor-claim release table (which claim answers to which exit scope;
 // the release order is static-asserted where releaseAllClaims uses it), the
-// size-continuity carry-forward table, when a strip entry is a new offer, the
-// engine-flip screen set, the
+// size-continuity carry-forward table, when a strip entry is a new offer,
+// when a request resizes on KWin's account (resizesOnKWinsAccount), whether
+// and where such a resize is put back and its budget, when a dropped quick
+// tile's configure is still outstanding (droppedTileAckOutstanding), when a
+// request voids a stale-ack answer, the engine-flip screen set, the
 // wire screen-list filter, the maximize-membership and claimed-press answers,
 // the view-carried origin, the passive float scope, the user Monocle
 // unmaximize read, the restore-rect output check, the KWin move off a
@@ -669,9 +672,12 @@ private Q_SLOTS:
 
     // The quick-tile corrector's stale ack (F123). KWin's tile sends a
     // configure for the tile's size; dropping the tile and putting the column
-    // back at the size the client still holds sends none, so the tile's
-    // configure is still the newest the client has and its ack would land the
-    // tile's frame, read as the answer to the column.
+    // back at the size the client still holds sends none, so a tile configure
+    // already sent is still the newest the client has and its ack would land
+    // the tile's frame, read as the answer to the column. One KWin had only
+    // scheduled goes out carrying the column instead; the predicate cannot tell
+    // the two apart, and the answer it arms then waits until something voids
+    // it (requestVoidsStaleAck below).
     void droppedTileAckOutstanding_onlyWhenNothingSupersedesTheTile()
     {
         const QSize column(788, 884);
@@ -688,6 +694,109 @@ private Q_SLOTS:
         QVERIFY(!droppedTileAckOutstanding(tile, QSize(700, 884), column, QSize(700, 884)));
         // Nothing in flight at the drop and nothing to change.
         QVERIFY(!droppedTileAckOutstanding(column, column, column, column));
+    }
+
+    // A request outside the effect's applies for another size makes KWin
+    // send a configure of its own, which supersedes a stale one, so the answer
+    // armed for that stale one is void (CR2-22). The live shape: an answer the
+    // quick-tile corrector armed at the 788 px column outlived the tile's
+    // configure, and KWin's Expand Window to 1592 later read as the tile's ack
+    // and was re-issued back to the column.
+    void requestVoidsStaleAck_onlyForAnotherSize()
+    {
+        const QSize target(788, 884);
+        QVERIFY(requestVoidsStaleAck(QSizeF(1592, 884), target));
+        QVERIFY(requestVoidsStaleAck(QSizeF(600, 884), target));
+        // The other axis alone (a script setting a shorter frame).
+        QVERIFY(requestVoidsStaleAck(QSizeF(788, 700), target));
+        // A request that keeps the size (a move, the keep-visible clamp) sends
+        // no configure, so the stale one is still outstanding.
+        QVERIFY(!requestVoidsStaleAck(QSizeF(788, 884), target));
+        // Fractional-scale residue is not a new size; two pixels are.
+        QVERIFY(!requestVoidsStaleAck(QSizeF(788.6, 884), target));
+        QVERIFY(!requestVoidsStaleAck(QSizeF(789, 883), target));
+        QVERIFY(requestVoidsStaleAck(QSizeF(790, 884), target));
+        QVERIFY(requestVoidsStaleAck(QSizeF(788, 882), target));
+    }
+
+    // Whether a resize KWin requested for a strip window on its own account is
+    // put back (CR2-kwin-resize). Each refusing row clears exactly one gate
+    // from the all-open baseline, so a gate dropped from the predicate fails
+    // its own row.
+    void kwinResizePutBackTable_data()
+    {
+        QTest::addColumn<bool>("managed");
+        QTest::addColumn<bool>("coordinatesHold");
+        QTest::addColumn<bool>("kwinStateAtRest");
+        QTest::addColumn<bool>("userGesture");
+        QTest::addColumn<bool>("putsBack");
+
+        // KWin's Expand or Shrink Window, or a script setting the frame.
+        QTest::newRow("every gate open") << true << true << true << false << true;
+        // Floating, untracked, or under a user move or resize.
+        QTest::newRow("not scroll-managed") << false << true << true << false << false;
+        // The rect to put back is in coordinates the output has left (F815).
+        QTest::newRow("coordinates stale") << true << false << true << false << false;
+        // KWin's maximize, fullscreen or quick tile, which have correctors of
+        // their own.
+        QTest::newRow("KWin state requested") << true << true << false << false << false;
+        // A drag the tracker still owns, or the resize hold.
+        QTest::newRow("user gesture") << true << true << true << true << false;
+    }
+
+    void kwinResizePutBackTable()
+    {
+        QFETCH(bool, managed);
+        QFETCH(bool, coordinatesHold);
+        QFETCH(bool, kwinStateAtRest);
+        QFETCH(bool, userGesture);
+        QFETCH(bool, putsBack);
+        KWinResizePutBackGates gates;
+        gates.managed = managed;
+        gates.coordinatesHold = coordinatesHold;
+        gates.kwinStateAtRest = kwinStateAtRest;
+        gates.userGesture = userGesture;
+        QCOMPARE(putsBackKWinResize(gates), putsBack);
+    }
+
+    // Where the put-back lands. The strip's commanded rect wins where the
+    // counter-assert keeps one; else the column while its answer is owed, and
+    // the settled frame once it was read.
+    void kwinResizePutBackRect_followsTheStripsRect()
+    {
+        const QRect column(8, 8, 1908, 2052);
+        const QRect carried(108, 8, 1708, 2052);
+        const QRect park(8, 5000, 1908, 2052);
+        // A column placed outside its output: the rect the strip committed.
+        QCOMPARE(kwinResizePutBackRect(park, ColumnAnswer::Read, column, carried), park);
+        QCOMPARE(kwinResizePutBackRect(park, ColumnAnswer::Owed, column, carried), park);
+        // Owed: the frame is the one the strip's resize is replacing.
+        QCOMPARE(kwinResizePutBackRect(QRect(), ColumnAnswer::Owed, column, QRect(8, 8, 1000, 2052)), column);
+        // Read: the size the client settled on, which the strip carries
+        // centred in the column.
+        QCOMPARE(kwinResizePutBackRect(QRect(), ColumnAnswer::Read, column, carried), carried);
+        QCOMPARE(kwinResizePutBackRect(QRect(), ColumnAnswer::Read, column, column), column);
+        // Nothing to put back: a Foreign answer, or an empty frame.
+        QVERIFY(kwinResizePutBackRect(QRect(), ColumnAnswer::Foreign, column, column).isEmpty());
+        QVERIFY(kwinResizePutBackRect(QRect(), ColumnAnswer::Read, column, QRect(100, 8, 0, 2052)).isEmpty());
+    }
+
+    // The put-back budget is the counter-assert's: three per rolling second,
+    // and a delivery of the column re-arms it by resetting the pair, as
+    // recordStripOffer does. A script writing the frame every 16 ms is put
+    // back three times, then its size stands until the next delivery.
+    void kwinResizePutBack_budgetedLikeTheCounterAssert()
+    {
+        qint64 start = 0;
+        int count = 0;
+        QVERIFY(shouldCounterAssert(start, count, 10000, true));
+        QVERIFY(shouldCounterAssert(start, count, 10016, true));
+        QVERIFY(shouldCounterAssert(start, count, 10032, true));
+        QVERIFY(!shouldCounterAssert(start, count, 10048, true));
+        // The next delivery.
+        start = 0;
+        count = 0;
+        QVERIFY(shouldCounterAssert(start, count, 10064, true));
     }
 
     // The engine forces a batch with every rect unchanged when minimum sizes
@@ -1002,12 +1111,19 @@ private Q_SLOTS:
         // The offer is in coordinates the output has since left (F815).
         QTest::newRow("coordinates stale") << true << false << true << false << true << owed << wider << false;
         // A frame that left the column was moved elsewhere (KWin's Move to
-        // Screen). An empty one is a mid-unmap commit, refused by the same
-        // intersects test: this row pins that QRect::intersects is false for
-        // an empty rect, which is why the predicate needs no emptiness term.
+        // Screen).
         QTest::newRow("left the column") << true << true << true << false << true << owed << QRect(3000, 8, 1908, 2052)
                                          << false;
-        QTest::newRow("empty frame") << true << true << true << false << true << owed << QRect(8, 8, 0, 2052) << false;
+        // An empty frame is a mid-unmap commit. The interior rows are the ones
+        // that need the predicate's emptiness term: QRect::intersects is true
+        // for an empty rect strictly inside the column, and false for the one
+        // on its left edge.
+        QTest::newRow("empty frame on the column's edge")
+            << true << true << true << false << true << owed << QRect(8, 8, 0, 2052) << false;
+        QTest::newRow("zero-width frame inside the column")
+            << true << true << true << false << true << owed << QRect(100, 8, 0, 2052) << false;
+        QTest::newRow("zero-height frame inside the column")
+            << true << true << true << false << true << owed << QRect(100, 100, 500, 0) << false;
     }
 
     void columnAnswerReadabilityTable()

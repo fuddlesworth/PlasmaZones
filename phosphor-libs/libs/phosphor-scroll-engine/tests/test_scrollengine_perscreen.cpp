@@ -2,18 +2,18 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // The template channel's blueprint and cursor cases live in
-// test_scrollengine_template.cpp. The case for keeping the rest together:
-// this file's concern is a single resolution cascade —
-// rule > per-screen settings trio > cached global, plus the template channel
-// that replaces the preset LISTS those kinds index into. The channels are not
-// independent of each other; every test here is a PRECEDENCE claim between two
-// or more of them, and each is written as a paired two-screen fixture because
-// a one-screen assertion passes just as happily when the engine reads the
-// global everywhere. Splitting by channel would put the two halves of a
-// precedence pair in different files and leave neither able to state the
-// ordering it exists to pin. Splitting by default (width here, height there)
-// would duplicate the whole fixture layer and split the trio's per-slot
-// fall-back rule, which is one rule applying identically to both.
+// test_scrollengine_template.cpp. The case for keeping the rest together: this
+// file's concern is a single resolution cascade — rule > per-screen settings
+// trio > cached global, plus the template channel that replaces the preset
+// LISTS those kinds index into. The channels are not independent of each other;
+// every test here is a PRECEDENCE claim between two or more of them, and each
+// is written as a paired two-screen fixture because a one-screen assertion
+// passes just as happily when the engine reads the global everywhere. Splitting
+// by channel would put the two halves of a precedence pair in different files
+// and leave neither able to state the ordering it exists to pin. Splitting by
+// default (width here, height there) would duplicate the whole fixture layer
+// and split the trio's per-slot fall-back rule, which is one rule applying
+// identically to both.
 //
 // If a channel is ever added that resolves INDEPENDENTLY of these three, it
 // takes a sibling rather than growing this file.
@@ -1025,9 +1025,9 @@ void TestScrollEnginePerScreen::tabIndicatorOverridesArePerProperty()
 
     // The two BOOL overrides applied positively — both are wired at
     // engine_overrides but had no leg driving them, so either could be
-    // deleted with the suite still green: 965 above only asserts
-    // placeWithinColumn UNMOVED, and the round-trip case only flips
-    // hideWhenSingleTab.
+    // deleted with the suite still green: the ruled.placeWithinColumn
+    // QCOMPARE above only asserts it UNMOVED, and the round-trip case only
+    // flips hideWhenSingleTab.
     QVariantMap bools;
     bools.insert(ScrollPerScreenKeys::tabIndicatorEnabled(), false);
     bools.insert(ScrollPerScreenKeys::tabIndicatorPlaceWithinColumn(), true);

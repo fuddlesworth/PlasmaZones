@@ -254,11 +254,15 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                     // has already scheduled for it must still land.
                     const quint64 latestCommand = m_effect->m_daemonGate.commandStamps.current(w);
                     m_effect->applyWindowGeometry(w, commanded, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
-                    // A stale-ack answer the re-seat armed carries the apply's
-                    // stamp, which the reinstate takes back; it follows the
-                    // reinstated one, or the frame hook would find it
+                    // A stale-ack answer this re-apply armed carries the
+                    // apply's stamp, which the reinstate takes back; it follows
+                    // the reinstated one, or the frame hook would find it
                     // superseded and drop it unanswered (cancelStripQuickTile
-                    // does the same).
+                    // does the same). The reinstated stamp is the batch's,
+                    // which lives until the next command, so an answer whose
+                    // configure is never acked at another size waits that long;
+                    // a geometry request KWin makes for another size voids it
+                    // (ScrollDecisions::requestVoidsStaleAck).
                     const quint64 applyStamp = m_effect->m_daemonGate.commandStamps.current(w);
                     m_effect->m_daemonGate.commandStamps.reinstate(w, latestCommand);
                     m_effect->m_daemonGate.commandStamps.carryStaleAck(w, applyStamp);
@@ -757,7 +761,10 @@ void TilingHandler::cancelStripQuickTile(KWin::EffectWindow* w)
     const auto geomGuard = m_effect->geometryApplyScope();
     const KWinTileDrop drop = dropKWinTile(w);
     // On every way out below, once the window has been placed: the tile's
-    // configure may still be acked at the tile's size.
+    // configure may still be acked at the tile's size, when it was sent before
+    // the drop. One KWin had only scheduled goes out carrying the column
+    // instead, and the answer armed for it then waits until something voids
+    // it (ScrollDecisions::droppedTileAckOutstanding).
     const auto answerAck = qScopeGuard([this, w, drop] {
         answerDroppedTileAck(w, drop);
     });
@@ -811,7 +818,9 @@ void TilingHandler::cancelStripQuickTile(KWin::EffectWindow* w)
     // sizes differ, as a batch that sends a size is (recordStripOffer). That
     // also supersedes the Foreign mark KWin's tile request may have left. A
     // tile's configure the client has yet to ack is answered on the way out
-    // (answerDroppedTileAck), so its ack reads unsettled, not as this answer.
+    // (answerDroppedTileAck), so its ack reads unsettled, not as this answer;
+    // where that configure was only scheduled it carries the column, and the
+    // client's ack of it is this answer.
     if (hasOffer) {
         m_effect->recordStripOffer(
             w, windowId, offeredColumn,
@@ -871,7 +880,11 @@ void TilingHandler::answerDroppedTileAck(KWin::EffectWindow* w, const KWinTileDr
     // the rect the window was placed at is re-issued once, which leaves the
     // frame unsettled until the client acks it, so it is neither centred nor
     // read as an answer. On the window's current command: the batch's apply,
-    // or the stamp a cancel reinstated.
+    // or the stamp a cancel reinstated. Armed also when KWin's configure was
+    // only scheduled, which nothing here can tell apart: that one goes out
+    // carrying the column, its ack moves nothing, and the answer waits on the
+    // command until a newer one, the user's gesture, an output move or a KWin
+    // request for another size voids it (ScrollDecisions::requestVoidsStaleAck).
     m_effect->m_daemonGate.commandStamps.staleAcks.insert(
         w, {commanded.toRect(), m_effect->m_daemonGate.commandStamps.current(w)});
 }

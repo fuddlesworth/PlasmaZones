@@ -54,7 +54,9 @@ class Workspaces;
  * (`kind` "layout", "algorithm" or "template") followed by `{kind:
  * "verb", id}` entries (snapping: editLayout, snapAll; tiling: retile,
  * promoteToMaster; scrolling: toggleMaximizeColumn). `applyMenuChoice`
- * assigns the choice for this screen and desktop, or runs the verb.
+ * assigns the choice for this screen and desktop, or runs the verb. The
+ * two window verbs act on the screen's own daemon-reported focus, and do
+ * nothing without one or on a pinned screen.
  *
  * `workArea` and `cellRect(id)` are in this screen's own pixels, origin
  * at the screen's top-left, so a full-screen surface on the screen can
@@ -241,6 +243,7 @@ private:
     void fetchScrollingMenu();
     void setMenu(const QVariantList& menu);
     void runVerb(const QString& id);
+    [[nodiscard]] QString verbTargetWindowId() const;
     // placementmap_desktop.cpp
     void fetchPinnedMode();
     void fetchPinnedSnappingLayout();

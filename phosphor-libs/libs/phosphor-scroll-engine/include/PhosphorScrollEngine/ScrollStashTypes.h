@@ -418,8 +418,9 @@ struct CommittedMainExtent
     /// full width after the floor itself has been satisfied and dropped. A
     /// wider answer sets it with the floor, and a narrower one replaces it.
     /// With no floor held it ends once the column offers the tile less than
-    /// this (ScrollEngine::settleCommittedFloors): a client that took the
-    /// narrower offer reports nothing, so nothing else would ever revise it.
+    /// this, on a pass that offers the tile its whole rect
+    /// (ScrollEngine::endStalePeeks): a client that took the narrower offer
+    /// reports nothing, so nothing else would ever revise it.
     int peekPx = 0;
     /// A narrower answer has given part or all of floorPx back since it was
     /// learned.

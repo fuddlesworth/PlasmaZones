@@ -5,9 +5,9 @@
 
 **Status.** The claim vocabulary, the release table and its tests have landed,
 and so has `releaseAllClaims` plus the exit paths in rows 1, 3, 4, 11 and 14
-of the matrix below. The other rows still hold their scattered calls. Everything from "Evidence"
-down describes the tree as it stood before the funnel unless a section says
-otherwise.
+of the matrix below. The other rows still hold their scattered calls.
+Everything from "Evidence" down describes the tree as it stood before the
+funnel unless a section says otherwise.
 
 The KWin effect imposes compositor state on windows that only it can hand
 back: KWin maximize for a monocle tile, KWin fullscreen plus a keep-flag

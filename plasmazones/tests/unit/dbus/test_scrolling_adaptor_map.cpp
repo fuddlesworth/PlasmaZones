@@ -319,8 +319,9 @@ private Q_SLOTS:
         QSignalSpy feedback(m_engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
         QSignalSpy activateSpy(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
 
-        // Zero is refused at the boundary: no feedback, unlike the engine's
-        // own no_movement answer to a zero-pixel percent.
+        // Zero is refused at the boundary. On this populated strip the engine
+        // would stay quiet either way, so the empty-strip leg at the end is
+        // the one that tells the boundary refusal apart.
         m_adaptor->scrollViewByPx(QStringLiteral("DP-1"), 0);
         m_adaptor->scrollViewByPx(QStringLiteral("HDMI-2"), -100); // not ours
         m_adaptor->scrollViewByPx(QString(), -100); // no screen at all
@@ -365,8 +366,11 @@ private Q_SLOTS:
 
         // The one refusal that still answers, and the proof the spy above
         // can see this verb's feedback at all: an owned screen whose strip
-        // holds no windows answers no_windows.
+        // holds no windows answers no_windows. A zero goes first and must
+        // stay silent, because handed down it would get that same answer.
         m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        m_adaptor->scrollViewByPx(QStringLiteral("DP-2"), 0);
+        QCOMPARE(feedback.count(), 0);
         m_adaptor->scrollViewByPx(QStringLiteral("DP-2"), -100);
         QCOMPARE(feedback.count(), 1);
         QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_windows"));

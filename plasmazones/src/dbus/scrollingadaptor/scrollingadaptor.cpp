@@ -27,8 +27,8 @@ namespace {
 /// The presetVocabularyJson payload keys, in one place so the two writes
 /// cannot drift apart (the sibling payloads in this file key on
 /// ZoneJsonKeys::, StripPreviewKey:: and StripModelKey:: the same way). The
-/// XML DocString spells them by hand,
-/// per the same kept-in-sync-BY-HAND rule the bounds literals follow.
+/// XML DocString spells them by hand, per the same kept-in-sync-BY-HAND
+/// rule the bounds literals follow.
 inline QLatin1String presetColumnWidthsKey()
 {
     return QLatin1String("columnWidths");
@@ -301,7 +301,9 @@ void ScrollingAdaptor::scrollViewByPx(const QString& screenId, int px)
 {
     // Same guard as focusColumnAt. A zero distance is refused at this
     // boundary rather than handed down: a drag that has not moved yet is not
-    // a pan, and the engine would do nothing with it either.
+    // a pan. On a populated strip the engine would stay silent anyway, but an
+    // owned empty strip answers no_windows, so passing a zero down would put
+    // up the navigation card for a pan nobody made.
     if (px == 0 || refusesScreenVerb(screenId)) {
         return;
     }

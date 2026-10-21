@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The zone-overlay shader half of the settings schema: the single
-// Overlays group and its OverlayShaderTree blob. Split out of
-// settingsschema.cpp for file-size the way the scrolling and tiling TUs were;
-// the entry point (appendOverlayShadersSchema) is declared alongside every
-// other appendXxxSchema in settingsschema.h. sanitizeOverlayShaderTree stays
+// The zone-overlay shader half of the settings schema: the single Overlays
+// group and its OverlayShaderTree blob. Split out of settingsschema.cpp by
+// domain, the way the scrolling and tiling TUs were. The entry point
+// (appendOverlayShadersSchema) is declared alongside every other
+// appendXxxSchema in settingsschema.h. sanitizeOverlayShaderTree stays
 // file-local: the overlay tree is the one key that round-trips through
 // OverlayShaderTree, so this is its only consumer.
 

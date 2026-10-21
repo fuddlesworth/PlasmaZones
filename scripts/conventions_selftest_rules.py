@@ -13,9 +13,10 @@ concern boundary rather than a line count:
     round.
   * this module holds the arms that reach INTO the gate's own namespace. Each takes
     `partition_readable.__globals__` and redirects a global there — REPO, CODE_SUFFIXES,
-    read_error — before calling the rule. That is the real criterion. Two arms here (`_precondition_failures`, `_dead_stanza_failures`) pass
-    `repo=` as an argument instead and redirect nothing; they sit here because they belong
-    with the fake-tree work, not because they meet that test.
+    read_error — before calling the rule. That is the real criterion. Two arms here
+    (`_precondition_failures`, `_dead_stanza_failures`) pass `repo=` as an argument
+    instead and redirect nothing; they sit here because they belong with the fake-tree
+    work, not because they meet that test.
 
 That is also where the gate's own blind spots have all been: a detector nobody handed the
 text to, a rule whose arm could be deleted with a green suite, a helper pinned while its

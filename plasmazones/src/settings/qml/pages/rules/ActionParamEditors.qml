@@ -1022,12 +1022,11 @@ QtObject {
     property Component _shaderEffectEditor: Component {
         // Cascading category menu (the same widget ActionRow.qml uses for its
         // action-type picker, and the animations page for its shader picker)
-        // instead of a flat combo, so
-        // shaders group by category. The list is path-aware: it is pre-filtered
-        // to the shaders that can drive this action's target event, so a
-        // geometry-only shader (window-morph) is omitted on a show/hide event,
-        // matching the animations page and the WHEN/THEN pickers in this same
-        // editor.
+        // instead of a flat combo, so shaders group by category. The list is
+        // path-aware: it is pre-filtered to the shaders that can drive this
+        // action's target event, so a geometry-only shader (window-morph) is
+        // omitted on a show/hide event, matching the animations page and the
+        // WHEN/THEN pickers in this same editor.
         PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
             // Reading `row.action.event` re-filters the list when the user

@@ -6,14 +6,16 @@
 // from them (m_committedExtents), and the two things that keep a learned floor
 // honest afterwards: the sweep applyLayout runs (settleCommittedFloors) and the
 // oversized verdict a floor shares with a declared minimum
-// (outgrowsWorkArea). The strip never holds any of this; it reads the floors
-// through ScrollLayoutParams::committedFloor, which layoutParamsForKey points
-// at committedFloorFor.
+// (outgrowsWorkArea). applyLayout's second sweep (endStalePeeks) ends a peek
+// memory the column no longer offers. The strip never holds any of this; it
+// reads the floors through ScrollLayoutParams::committedFloor, which
+// layoutParamsForKey points at committedFloorFor.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
+#include "scrollpark_p.h"
 
 namespace PhosphorScrollEngine {
 
@@ -46,8 +48,8 @@ int tileMainOfferPx(const ScrollStrip& strip, const QString& windowId, const Scr
 /// End one orientation's floor outright, with the give-back history that
 /// belonged to it. The peek memory stays here: what the client last answered
 /// is still true after its column stops being held to it, for as long as the
-/// column still offers at least that much (settleCommittedFloors ends it once
-/// the column offers less).
+/// column still offers at least that much (endStalePeeks ends it once the
+/// column offers less on a pass that offers the tile whole).
 void dropFloor(CommittedMainExtent& extent)
 {
     extent.floorPx = 0;
@@ -281,27 +283,82 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
                 // Layout-neutral by construction.
                 dropFloor(extent);
             }
-            // With no floor held (none learned, or one just dropped above),
-            // the peek memory lasts only while the column still offers the
-            // tile at least that much. Once it offers less, the client is
-            // being offered a narrower tile than the one the memory records,
-            // and a client that takes it says so by reporting nothing (an
-            // answer equal to its offer is silent). Kept, the memory would
-            // park the column on every straddle for good, on the strength of
-            // an answer the client has since stopped giving. Ended here, a
-            // client that still draws wider answers the narrower offer and
-            // teaches the floor and the memory again. The floor is 0 here,
-            // so params already reads the column without it.
-            if (extent.floorPx == 0 && extent.peekPx > 0
-                && tileMainOfferPx(strip, tile.windowId, params) < extent.peekPx) {
-                extent.peekPx = 0;
-            }
             if (it->isEmpty()) {
                 m_committedExtents.erase(it);
             }
         }
     }
     return layoutChanged;
+}
+
+void ScrollEngine::endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& resolved,
+                                 const ScrollLayoutParams& params, const QRect& screenRect, int parkTop)
+{
+    // Off, nothing reads the memory, and ending it would discard what the
+    // client said before the setting comes back.
+    if (m_committedExtents.isEmpty() || !params.respectMinimumSize) {
+        return;
+    }
+    for (const ResolvedColumn& column : resolved.columns) {
+        // A declared extent: the client's answer is as true once the column
+        // is un-maximized as it was before.
+        if (column.maximizedToEdges) {
+            continue;
+        }
+        for (const ResolvedTile& tile : column.tiles) {
+            // Under an interactive move the window is committed nothing this
+            // pass, so it is offered nothing either.
+            if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
+                continue;
+            }
+            const auto it = m_committedExtents.find(tile.windowId);
+            if (it == m_committedExtents.end()) {
+                continue;
+            }
+            // With no floor held (none learned, or one settleCommittedFloors
+            // dropped this pass), the memory lasts only while the column
+            // still offers the tile at least that much. Once it offers less,
+            // a client that takes the narrower tile says so by reporting
+            // nothing (an answer equal to its offer is silent), and a memory
+            // kept past that point would park the column on every straddle
+            // for good, on the strength of an answer the client has since
+            // stopped giving. The floor is 0 here, so params already reads
+            // the column without it.
+            CommittedMainExtent& extent = extentFor(*it, params.axis);
+            if (extent.floorPx > 0 || extent.peekPx == 0
+                || tileMainOfferPx(strip, tile.windowId, params) >= extent.peekPx) {
+                continue;
+            }
+            // Ended only on a pass that offers the tile its WHOLE rect once
+            // the memory is gone: on screen, parked, or kept whole by crop
+            // mode. Ending it on a pass that clamps the tile at the screen
+            // edge would hand the client a sliver, and a client that still
+            // draws wider answers that sliver across the edge with nothing
+            // to re-teach it, since reportCommittedSize refuses an answer to
+            // anything but the whole tile. Kept, the straddler parks on the
+            // memory, its park is the whole tile, and the memory ends on the
+            // first pass that offers the tile whole without it. The tile's
+            // minimum without the memory is its declared one, the same input
+            // the emit loop's park reads once the memory is gone.
+            Detail::ParkInputs parkIn;
+            parkIn.tileRect = tile.rect;
+            parkIn.columnRect = column.rect;
+            parkIn.workArea = params.workArea;
+            parkIn.screenRect = screenRect;
+            parkIn.tileMin = strip.windowMinimumSize(tile.windowId);
+            parkIn.axis = params.axis;
+            parkIn.parkTop = parkTop;
+            parkIn.hidden = tile.hidden;
+            parkIn.cropStraddlers = params.cropStraddlers;
+            if (Detail::resolveTilePlacement(parkIn, QString()).rect.size() != tile.rect.size()) {
+                continue;
+            }
+            extent.peekPx = 0;
+            if (it->isEmpty()) {
+                m_committedExtents.erase(it);
+            }
+        }
+    }
 }
 
 void ScrollEngine::reportCommittedSize(const QString& rawWindowId, const QSize& offered, const QSize& committed)

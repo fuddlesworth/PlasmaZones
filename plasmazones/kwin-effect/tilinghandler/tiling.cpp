@@ -1908,10 +1908,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // corrector, nor for a window going fullscreen, whose apply bails.
                 // A column maximized to the edges has none by now: KWin's maximize
                 // exits quick tile mode.
+                //
+                // KWin's untile moves the window to its restore rect at once where
+                // that needs no configure (an X11 window, or a Wayland restore
+                // rect at the client's own size), a rect never painted. The
+                // frame the tile held is where the window was last seen, so the
+                // leg below departs from it (tileDropOrigin) instead.
                 KWinTileDrop kwinTileDrop;
+                QRectF tileDropOrigin;
                 if (isScrollingScreen(snap.screenId) && !snap.isWindowedFullscreen && !fullscreenBailSkippedCommit
                     && !snap.window->isUserMove() && !snap.window->isUserResize()) {
+                    const QRectF frameAtTile = snap.window->frameGeometry();
                     kwinTileDrop = dropKWinTile(snap.window);
+                    if (kwinTileDrop.dropped && QRectF(snap.window->frameGeometry()) != frameAtTile) {
+                        tileDropOrigin = frameAtTile;
+                    }
                 }
                 QRect geo = snap.geometry;
 
@@ -2181,6 +2192,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     QRectF originOverride;
                     QRectF visualTargetOverride;
                     bool skipScrollAnimation = false;
+                    // Where the window was last seen: the frame KWin's tile held
+                    // where the drop above moved it, else the live frame.
+                    const QRectF seenFrame =
+                        tileDropOrigin.isValid() ? tileDropOrigin : QRectF(snap.window->frameGeometry());
                     // The rect applyWindowGeometry will actually COMMIT for
                     // this request. For an X11 client with size hints that is
                     // the constrained frame centred in the column, NOT the
@@ -2324,7 +2339,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                 // at-park-now treatment of the sibling arms.
                                 skipScrollAnimation = true;
                             } else {
-                                const KWin::RectF cur = snap.window->frameGeometry();
+                                const QRectF& cur = seenFrame;
                                 const QRect liveRect =
                                     QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
                                 visualTargetOverride = QRectF(anchorPastEdge(liveRect, screenRect, snap.scrollEdge));
@@ -2406,9 +2421,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                 const bool vertical =
                                     scrollAxisForScreen(snap.screenId) == PhosphorProtocol::ScrollAxis::Vertical;
                                 originOverride = QRectF(ScrollDecisions::viewCarriedOrigin(
-                                    claimedDeparture.isValid() ? claimedDeparture
-                                                               : QRectF(snap.window->frameGeometry()),
-                                    snap.viewDelta, vertical));
+                                    claimedDeparture.isValid() ? claimedDeparture : seenFrame, snap.viewDelta,
+                                    vertical));
                             }
                         }
                     } else if (!snap.scrollEdge.isEmpty()) {
@@ -2424,7 +2438,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // rather than jumping to the park's row first.
                             QRect atEdge = committedGeo;
                             if (!arriving) {
-                                const KWin::RectF cur = snap.window->frameGeometry();
+                                const QRectF& cur = seenFrame;
                                 atEdge =
                                     QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
                             }
@@ -2529,6 +2543,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     }
                     if (!originOverride.isValid() && preMaximize.isValid() && !preMaximize.isEmpty()) {
                         originOverride = preMaximize;
+                    }
+                    // A leg no arm above anchored departs from the live frame,
+                    // which the tile drop moved to a rect never painted.
+                    if (!originOverride.isValid() && tileDropOrigin.isValid()) {
+                        originOverride = tileDropOrigin;
                     }
                     // Terminal backstop for every arm above, and for arms that
                     // do not exist yet: a commit whose target lies off the

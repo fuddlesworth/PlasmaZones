@@ -301,13 +301,13 @@ public:
     /// Entry follows niri's rule (cyclePresetIndexByExtent): a forward press
     /// takes the narrowest preset WIDER than what the column renders at and
     /// wraps to the narrowest of all when nothing is wider; a backward press
-    /// takes the widest preset narrower and wraps to the widest of all,
-    /// so every entry is reachable in both directions even when the
-    /// vocabulary was typed out of size order. Measured from the
-    /// RENDERED extent, so a column held at its floor (a frame minimum or a
-    /// committed floor, columnMinExtentPx) enters where it looks like it
-    /// should, and a press whose entry would still render at that same extent
-    /// refuses rather than writing an intent the floor hides.
+    /// takes the widest preset narrower and wraps to the widest of all, so
+    /// every entry is reachable in both directions even when the vocabulary was
+    /// typed out of size order. Measured from the RENDERED extent, so a column
+    /// held at its floor (a frame minimum or a committed floor,
+    /// columnMinExtentPx) enters where it looks like it should, and a press
+    /// whose entry would still render at that same extent refuses rather than
+    /// writing an intent the floor hides.
     bool cycleActiveColumnPresetWidth(int delta, const ScrollLayoutParams& params);
     /// Adjust the active column's width by @p deltaPercent of the work area's
     /// MAIN extent (niri set-column-width "+10%"/"-10%"). Measured from the
@@ -318,8 +318,9 @@ public:
     /// height verb), so a repeated shrink stops at the floor instead of
     /// burying an ever smaller intent under it. Refuses when the target lands
     /// on the current extent, so a column already rendering below the floor
-    /// refuses a shrink rather than growing. A non-finite @p deltaPercent refuses, and a finite one is
-    /// bounded to ±100 (a larger step clamps to the same extent).
+    /// refuses a shrink rather than growing. A non-finite @p deltaPercent
+    /// refuses, and a finite one is bounded to ±100 (a larger step clamps to
+    /// the same extent).
     bool adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Full work-area MAIN extent, still tiled (niri maximize-column). Toggles
     /// back to the pre-maximize intent when already maximized.
@@ -965,22 +966,22 @@ private:
     /// @p params' axis, or 0 when there is none, no lookup is set, or minimum
     /// sizes are not respected.
     static int committedMainFloorPx(const QString& windowId, const ScrollLayoutParams& params);
-    /// Pixel CROSS extent of TABBED column @p c: the height intent of the
-    /// tab that OWNS the extent (Column::heightOwnerId), not the tab on show,
-    /// resolved exactly the way the stack branch resolves a single
-    /// tile's Fixed/Preset height, so an entry of the preset vocabulary lands
-    /// on the same pixels whichever display the column is in. Auto means the
-    /// whole work area, which is what a tabbed column used to be pinned at.
+    /// Pixel CROSS extent of TABBED column @p c: the height intent of the tab
+    /// that OWNS the extent (Column::heightOwnerId), not the tab on show,
+    /// resolved exactly the way the stack branch resolves a single tile's
+    /// Fixed/Preset height, so an entry of the preset vocabulary lands on the
+    /// same pixels whichever display the column is in. Auto means the whole
+    /// work area, which is what a tabbed column used to be pinned at.
     /// Raised to the tallest visible tab's own cross minimum plus
     /// @c tabbedCrossReservationPx while minimum sizes are respected: every
     /// tab is committed at this column's content rect, including the hidden
     /// ones, so the floor is the whole set's and not just the shown tab's.
     static int tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params);
     /// Pixels the tab indicator takes out of column @p c ACROSS the strip, the
-    /// cross-axis twin of tabbedMainReservationPx.
-    /// 0 for a column that is not tabbed, and whenever the indicator's
-    /// thickness eats the MAIN axis instead (which of the two it eats depends
-    /// on the strip's axis, see TabIndicatorParams::reservedThickness).
+    /// cross-axis twin of tabbedMainReservationPx. 0 for a column that is not
+    /// tabbed, and whenever the indicator's thickness eats the MAIN axis
+    /// instead (which of the two it eats depends on the strip's axis, see
+    /// TabIndicatorParams::reservedThickness).
     static int tabbedCrossReservationPx(const Column& c, const ScrollLayoutParams& params);
     /// Strip-coordinate LEADING edge of @p columnIndex under @p params.
     int columnStripPos(int columnIndex, const ScrollLayoutParams& params) const;

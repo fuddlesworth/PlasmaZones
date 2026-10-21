@@ -2262,10 +2262,8 @@ target_compile_definitions(test_animations_shader_overrides PRIVATE "P_SOURCE_DI
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
 
 # Params-only shader writer + the group readers that answer what a path owns.
-# Split from test_animations_shader_overrides rather than added to it: that
-# file had reached 1110 lines against the 1150 hard ceiling, and this is a
-# coherent slice (pack-versus-parameters) on its own. Both sit well under the
-# target now.
+# Its own suite rather than part of test_animations_shader_overrides, because
+# this is a coherent slice (pack-versus-parameters) on its own.
 add_executable(test_animations_shader_param_writes
     settings/pages/test_animations_shader_param_writes.cpp
     ${_animations_ctrl_SRCS}
@@ -2829,14 +2827,14 @@ add_test(NAME test_desktop_move_stash COMMAND test_desktop_move_stash)
 
 # The pure half of the screen-level passes' helpers (transitionpasspure.h):
 # the on-screen format to alpha-capable capture format table the strip pass
-# allocates with. Header-only GL enums,
-# same include-from-the-effect-tree shape as the sampler above. The header
-# pulls <epoxy/gl.h> for its GL enums, so the epoxy include path is taken
-# from pkg-config rather than assumed to be a system default (the effect's
-# own Epoxy target is directory-scoped and invisible here). Gated exactly
-# like the effect tree itself (top-level CMakeLists.txt): a portable build
-# without the effect must neither require libepoxy nor test a component it
-# did not build. test_strip_pack_contract (ui/shaders) shares the gate.
+# allocates with. Header-only GL enums, same include-from-the-effect-tree
+# shape as the sampler above. The header pulls <epoxy/gl.h> for its GL
+# enums, so the epoxy include path is taken from pkg-config rather than
+# assumed to be a system default (the effect's own Epoxy target is
+# directory-scoped and invisible here). Gated exactly like the effect tree
+# itself (top-level CMakeLists.txt): a portable build without the effect
+# must neither require libepoxy nor test a component it did not build.
+# test_strip_pack_contract (ui/shaders) shares the gate.
 if(USE_KDE_FRAMEWORKS AND BUILD_KWIN_EFFECT)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(TestEpoxy REQUIRED IMPORTED_TARGET epoxy)

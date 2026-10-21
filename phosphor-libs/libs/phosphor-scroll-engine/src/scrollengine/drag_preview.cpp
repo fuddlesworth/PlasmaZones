@@ -629,15 +629,16 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
         // activity reconfigure). Re-home the detached window into the
         // TARGET strip rather than orphaning it, and sync bookkeeping.
         ScrollState* targetState = stateForKey(p.targetKey, /*createIfMissing=*/true);
-        // Re-homed onto ANOTHER output, the window has migrated as surely as a
-        // cross-output drop does, so what its client taught goes the same way,
-        // and ahead of the insert for the same reason: params reads the floors
-        // live. Dropped from the engine instead (the else arm below) it goes
-        // too, with the last membership.
-        if (p.priorKey.screenId != p.targetScreenId) {
-            forgetCommittedExtents(p.windowId);
-        }
         if (targetState) {
+            // Re-homed onto ANOTHER output, the window has migrated as surely
+            // as a cross-output drop does, so what its client taught goes the
+            // same way, and ahead of the insert for the same reason: params
+            // reads the floors live. Refused by the target too (the else arm
+            // below), the window migrates nowhere and its floor goes only
+            // with its last membership.
+            if (p.priorKey.screenId != p.targetScreenId) {
+                forgetCommittedExtents(p.windowId);
+            }
             const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
             targetState->strip().insertWindow(p.windowId, p.carried.width, p.carried.display, params,
                                               p.carried.minWidth, p.carried.minHeight, ScrollInsertPosition::Last);

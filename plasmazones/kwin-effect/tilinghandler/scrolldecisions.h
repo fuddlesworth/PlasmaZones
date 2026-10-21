@@ -357,8 +357,9 @@ inline bool stripEntrySendsSize(const QSize& commanded, const QSize& delivered)
 
 /// Whether a geometry request made outside every effect apply resizes a strip
 /// window on KWin's account (its Expand and Shrink Window verbs, a script
-/// setting the frame), so the frame the client acks for it must not read as
-/// the client's answer to its column (F141). @p requested is KWin's
+/// setting the frame), so the strip puts it back (putsBackKWinResize) or, where
+/// it cannot, the frame the client acks for it must not read as the client's
+/// answer to its column (F141). @p requested is KWin's
 /// move-resize geometry at the request: Window::moveResize, move and resize
 /// store it before the frameGeometryAboutToChange signal that carries the
 /// request. A request that keeps the frame's size, or asks for exactly the
@@ -389,12 +390,17 @@ inline bool resizesOnKWinsAccount(const QRectF& requested, const QRectF& frame, 
 /// @p committedAfter   the client's frame size then.
 ///
 /// Outstanding when a size other than the frame's was requested at the drop
-/// (the tile's configure may be on its way to the client or already sent) and
-/// the column put back asks for the size the client already has, which KWin
+/// (the tile's configure may already be sent, or only scheduled) and the
+/// column put back asks for the size the client already has, which KWin
 /// applies with no configure of its own (XdgSurfaceWindow::moveResizeInternal),
-/// so nothing supersedes the tile's. A tile the client had already acked is
-/// left with the frame at the tile's size, and the column then goes out in a
-/// configure of its own.
+/// so nothing supersedes a tile configure already sent. One only scheduled
+/// goes out carrying the column instead, because KWin builds it from the
+/// move-resize geometry it holds when it sends it, and its ack moves nothing:
+/// the answer then waits, armed, until a newer command, the user's gesture, an
+/// output move or a KWin request for another size voids it
+/// (requestVoidsStaleAck). A tile the client had already acked is left with
+/// the frame at the tile's size, and the column then goes out in a configure
+/// of its own.
 inline bool droppedTileAckOutstanding(const QSize& requestedAtDrop, const QSize& committedAtDrop,
                                       const QSize& commandedAfter, const QSize& committedAfter)
 {
@@ -416,12 +422,15 @@ enum class ColumnAnswer : quint8 {
     Read, ///< the settled answer was read: reported to the engine, or nothing to report
     /// The frame answers a resize nobody on the strip asked for: KWin's own
     /// (its Expand and Shrink Window verbs, a script setting the frame, an
-    /// axis-only maximize) or the user's. Marked when the request is made,
-    /// from the size KWin requests then (resizesOnKWinsAccount). A
-    /// re-decoration is not one: KWin makes no geometry request for it and
-    /// configures the client to keep its frame size. Nothing the client
-    /// commits answers the strip's column until the column is delivered
-    /// again: the next batch, or a cancel that puts it back.
+    /// axis-only maximize, a quick tile) or the user's. Decided when the
+    /// request is made, from the size KWin requests then
+    /// (resizesOnKWinsAccount). A KWin resize the strip puts back at once
+    /// (putsBackKWinResize) never reaches the client and leaves the answer as
+    /// it was; this marks the rest. A re-decoration is not one: KWin makes no
+    /// geometry request for it and configures the client to keep its frame
+    /// size. Nothing the client commits answers the strip's column until the
+    /// column is delivered again: the next batch, or a cancel that puts it
+    /// back.
     Foreign,
 };
 
@@ -466,13 +475,15 @@ struct ColumnAnswerGates
 ///
 /// @p offered is the column rect, @p live the frame. A frame that left the
 /// column entirely was moved elsewhere (KWin's Move to Screen, F973, F738).
-/// An empty one, a mid-unmap commit, is refused by the same test, because
-/// QRect::intersects is false for an empty rect.
+/// An empty one, a mid-unmap commit, is refused on its own term: the
+/// intersects test cannot refuse it, because QRect::intersects is true for an
+/// empty rect lying strictly inside the other (a zero-width frame at an
+/// interior x).
 inline bool readsAsColumnAnswer(const ColumnAnswerGates& gates, ColumnAnswer answer, const QRect& offered,
                                 const QRect& live)
 {
     return gates.managed && gates.coordinatesHold && gates.kwinStateAtRest && !gates.resizeHeld && gates.settled
-        && answer != ColumnAnswer::Foreign && live.intersects(offered);
+        && answer != ColumnAnswer::Foreign && !live.isEmpty() && live.intersects(offered);
 }
 
 /// Whether a readable answer is one the engine has not heard yet: always while
@@ -482,6 +493,83 @@ inline bool readsAsColumnAnswer(const ColumnAnswerGates& gates, ColumnAnswer ans
 inline bool isNewColumnAnswer(ColumnAnswer answer, const QSize& lastRead, const QSize& live)
 {
     return answer == ColumnAnswer::Owed || (answer == ColumnAnswer::Read && live != lastRead);
+}
+
+/// The facts putsBackKWinResize weighs, gathered by the effect when KWin makes
+/// the request (PlasmaZonesEffect::noteForeignStripRequest).
+struct KWinResizePutBackGates
+{
+    /// scroll-managed: tracked on a strip, not floating, not deleted, not
+    /// under a user move or resize (PlasmaZonesEffect::scrollManagedOutputFor)
+    bool managed = false;
+    /// no output change is in progress and the strip's output has not moved
+    /// since its batch, so the rect put back is in the coordinates the window
+    /// is (F815)
+    bool coordinatesHold = false;
+    /// KWin requests no maximize, fullscreen or tile for the window and it is
+    /// not fullscreen. KWin stores each of those requests before the
+    /// moveResize that carries it, and each has its own corrector
+    /// (cancelAxisOnlyMaximize, cancelStripQuickTile, the fullscreen arms).
+    bool kwinStateAtRest = false;
+    /// the user's gesture still holds the window: a drag the tracker owns past
+    /// KWin's own move, or the resize hold waiting for the client's answer to
+    /// the user's resize (PlasmaZonesEffect::m_resizeHold)
+    bool userGesture = false;
+};
+
+/// Whether a resize KWin requested for a strip window on its own account
+/// (resizesOnKWinsAccount) is put back (CR2-kwin-resize): the strip owns the
+/// column's rect, as it does against KWin's quick tile and axis-only
+/// maximize, and an X11 window gets the same answer from the counter-assert.
+/// The caller then asks the put-back budget (shouldCounterAssert, re-armed by
+/// every delivery of a column) and only for a request these gates pass, so a
+/// refused one costs nothing. A request it does not put back leaves the
+/// client's answer Foreign until the column is delivered again.
+inline bool putsBackKWinResize(const KWinResizePutBackGates& gates)
+{
+    return gates.managed && gates.coordinatesHold && gates.kwinStateAtRest && !gates.userGesture;
+}
+
+/// Where putsBackKWinResize puts a strip window back. @p commanded is the
+/// rect the strip apply that is still the window's latest command delivered,
+/// where the counter-assert keeps one (a column placed outside its output),
+/// and empty otherwise: the strip's own rect, carried size included. Without
+/// one, the column while the client's answer to it is owed, because the frame
+/// is then the one the strip's resize is replacing, and otherwise @p frame,
+/// the frame the client settled on before the request: the answer the strip
+/// already holds, the column or a size it carried centred in the column. A
+/// Foreign answer, or an empty frame (a mid-unmap commit), puts back nothing.
+inline QRect kwinResizePutBackRect(const QRect& commanded, ColumnAnswer answer, const QRect& offered,
+                                   const QRect& frame)
+{
+    if (!commanded.isEmpty()) {
+        return commanded;
+    }
+    switch (answer) {
+    case ColumnAnswer::Owed:
+        return offered;
+    case ColumnAnswer::Read:
+        return frame.isEmpty() ? QRect() : frame;
+    case ColumnAnswer::Foreign:
+        return QRect();
+    }
+    return QRect();
+}
+
+/// Whether a geometry request made outside every effect apply voids the answer
+/// an armed stale ack owes (WindowCommandStamps::StaleAck), from KWin's
+/// move-resize size at the request (@p requested) and the rect the answer
+/// would re-issue (@p staleTarget). A request for another size makes KWin send
+/// a configure of its own, built from whatever it then holds, which supersedes
+/// the stale one: the window answers that request now, and re-issuing the old
+/// command over it would undo a resize KWin made, or one the strip has just
+/// put back (CR2-22). A request that keeps the size (a move, the keep-visible
+/// clamp) sends no configure and leaves the stale one outstanding. More than a
+/// pixel either way, so fractional-scale residue in the request is not read as
+/// a new size.
+inline bool requestVoidsStaleAck(const QSizeF& requested, const QSize& staleTarget)
+{
+    return qAbs(requested.width() - staleTarget.width()) > 1.0 || qAbs(requested.height() - staleTarget.height()) > 1.0;
 }
 
 /// The largest difference between a committed and an offered extent that is

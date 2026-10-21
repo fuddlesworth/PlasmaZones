@@ -5,10 +5,10 @@ readability precondition.
 
 Split out of the gate itself, which grew long when two branches each landed a new rule.
 This is the most separable concern in it: test DATA plus one function, depending on
-nothing it is not handed: the two detectors
-(`prose_problems`, `iter_json_prose`) and the readability precondition
-(`partition_readable`), through whose `__globals__` the arms that need the gate's own
-namespace reach `rule_spdx`, `CODE_SUFFIXES`, `SPDX_HEAD_LINES` and `REPO`.
+nothing it is not handed: the two detectors (`prose_problems`, `iter_json_prose`) and
+the readability precondition (`partition_readable`), through whose `__globals__` the
+arms that need the gate's own namespace reach `rule_spdx`, `CODE_SUFFIXES`,
+`SPDX_HEAD_LINES` and `REPO`.
 
 Imported lazily by the gate's `--selftest` arm rather than importing it at module
 scope, so the two files cannot form a cycle. The gate keeps the flag, because
@@ -819,13 +819,14 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     guarding on it, so a caller that forgot it lost that coverage in silence rather
     than failing."""
     failures = []
-    # Captured for the post-condition at the tail. FIVE arms now redirect the gate's REPO
-    # (and CODE_SUFFIXES or read_error with it) at a temp tree and restore them in a
-    # finally, and several of them no longer run last. The post-condition is what catches a dropped restore in any of them: a later arm would otherwise run against a
-    # deleted directory and raise, which reads like a broken gate rather than a finding.
-    # frozenset(), not the set itself: CODE_SUFFIXES is mutable, so binding a reference
-    # would compare equal to itself after an arm mutated it IN PLACE, and the comparison
-    # could never fire for the one shape nobody would notice.
+    # Captured for the post-condition at the tail. FIVE arms now redirect the gate's
+    # REPO (and CODE_SUFFIXES or read_error with it) at a temp tree and restore them in
+    # a finally, and several of them no longer run last. The post-condition is what
+    # catches a dropped restore in any of them: a later arm would otherwise run against
+    # a deleted directory and raise, which reads like a broken gate rather than a
+    # finding. frozenset(), not the set itself: CODE_SUFFIXES is mutable, so binding a
+    # reference would compare equal to itself after an arm mutated it IN PLACE, and the
+    # comparison could never fire for the one shape nobody would notice.
     #
     # FOUR gate globals, plus a table AND a function in two sibling modules. Each was added
     # after a mutation proved the suite green — or worse, red for the wrong reason — without

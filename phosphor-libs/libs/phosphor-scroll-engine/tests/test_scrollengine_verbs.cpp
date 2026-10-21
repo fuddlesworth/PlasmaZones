@@ -465,6 +465,7 @@ void TestScrollEngineVerbs::scrollViewByPxPansQuietly()
     engine->scrollViewByPx(0, QStringLiteral("S1"));
     QCOMPARE(feedback.count(), 0);
     QCOMPARE(state->strip().viewAnchor(), anchorBefore + 200);
+    QCOMPARE(placement.count(), placementBeforeRefusals);
     // An extreme px is exported API's to receive: bounded at the entry, it
     // pans to the strip's end like any over-long pan.
     engine->scrollViewByPx(std::numeric_limits<int>::max(), QStringLiteral("S1"));

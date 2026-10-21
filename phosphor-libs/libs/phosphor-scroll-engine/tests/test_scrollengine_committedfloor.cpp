@@ -196,12 +196,12 @@ void adopt(ScrollEngine* engine, const PhosphorEngine::DesktopSpanQuery& span)
 /// Half-width (600px) columns under Always centering: centring b leaves a
 /// peeking 300px of its column past the lead screen edge, which is what the
 /// peek-floor cases need.
-ScrollEngine* makeStraddleEngine(QObject* owner)
+ScrollEngine* makeStraddleEngine(QObject* owner, GeometryFn screenGeometry = {}, GeometryFn availableGeometry = {})
 {
     auto* settings = makeFloorSettings(owner);
     settings->widthValue = 0.5;
     settings->centerFocused = static_cast<int>(CenterFocusedColumn::Always);
-    ScrollEngine* engine = engineWith(owner, settings, {kS1});
+    ScrollEngine* engine = engineWith(owner, settings, {kS1}, screenGeometry, availableGeometry);
     engine->windowOpened(kA, kS1, 0, 0);
     engine->windowOpened(kB, kS1, 0, 0);
     engine->windowOpened(kC, kS1, 0, 0);
@@ -449,6 +449,14 @@ private Q_SLOTS:
             engine->setColumnWidth(ColumnWidth::makeFixed(200), kS1);
             QCoreApplication::processEvents();
             QCOMPARE(extentOf(engine, kA), 200);
+
+            // Nor does it leave give-back history behind: the next floor
+            // taught is an ordinary one, so a narrower answer gives it back
+            // rather than meeting a pin.
+            answer(engine, kA, 450); // offered 200
+            QCOMPARE(extentOf(engine, kA), 450);
+            answer(engine, kA, 200); // offered 450
+            QCOMPARE(extentOf(engine, kA), 200);
         }
     }
 
@@ -684,6 +692,80 @@ private Q_SLOTS:
             QCoreApplication::processEvents();
             QVERIFY2(isParked(engine, kA), "the re-taught memory parks the straddler again");
         }
+        {
+            // A column offering EXACTLY the memory still offers it: the
+            // floor taught at 700 is satisfied by a 700 column and goes, and
+            // the memory stays.
+            QObject owner;
+            ScrollEngine* engine = makeStraddleEngine(&owner);
+            answer(engine, kA, 700);
+            engine->setColumnWidth(ColumnWidth::makeFixed(700), kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(extentOf(engine, kA), 700);
+            engine->windowFocused(kB, kS1);
+            QCoreApplication::processEvents();
+            QVERIFY2(isParked(engine, kA), "a column offering exactly the memory keeps it");
+        }
+    }
+
+    // The memory ends only on a pass that offers the tile its whole rect. A
+    // column that narrows below it while straddling the screen edge would
+    // otherwise be clamped to a sliver, which a client still drawing wider
+    // answers across the edge, and an answer to a sliver teaches nothing.
+    // Here the column narrows with no verb behind it: a proportional width
+    // under a work area that shrinks while the column straddles.
+    void aStraddlerKeepsThePeekUntilItIsOfferedWhole()
+    {
+        // 700 learned and satisfied at 0.75 of the 1200 area, then the area
+        // shrinks to 900 with b centred: the column is 675, less than the 700
+        // remembered, and 225 of it straddles the leading screen edge.
+        const auto straddleAtNarrowedColumn = [](QObject* owner, const std::shared_ptr<QRect>& available) {
+            ScrollEngine* engine = makeStraddleEngine(
+                owner,
+                [](const QString&) {
+                    return defaultScreenRect();
+                },
+                [available](const QString&) {
+                    return *available;
+                });
+            answer(engine, kA, 700);
+            engine->setColumnWidth(ColumnWidth::makeProportion(0.75), kS1); // satisfied: the floor goes
+            QCoreApplication::processEvents();
+            engine->windowFocused(kB, kS1);
+            QCoreApplication::processEvents();
+            *available = Ax::t(QRect(0, 0, 900, 800));
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            return engine;
+        };
+        {
+            QObject owner;
+            auto available = std::make_shared<QRect>(defaultScreenRect());
+            ScrollEngine* engine = straddleAtNarrowedColumn(&owner, available);
+            QCOMPARE(extentOf(engine, kA), 675);
+            QVERIFY2(isParked(engine, kA), "a straddler is not offered its whole tile, so the memory stays");
+
+            // Shown whole, the column is offered less than the memory, and
+            // the client says nothing: the memory ends there, and the next
+            // straddle peeks.
+            engine->windowFocused(kA, kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(Ax::mainLen(engine->lastManagedRect(kA)), 675);
+            engine->windowFocused(kB, kS1);
+            QCoreApplication::processEvents();
+            QVERIFY2(!isParked(engine, kA), "the memory ends on the pass that offers the tile whole");
+            QVERIFY(Ax::mainLen(engine->lastManagedRect(kA)) < 675);
+        }
+        {
+            // The park is the whole tile, so a client that still draws 700
+            // answers it and teaches the floor again.
+            QObject owner;
+            auto available = std::make_shared<QRect>(defaultScreenRect());
+            ScrollEngine* engine = straddleAtNarrowedColumn(&owner, available);
+            QVERIFY(isParked(engine, kA));
+            answer(engine, kA, 700); // offered the parked 675
+            QCOMPARE(extentOf(engine, kA), 700);
+        }
     }
 
     // A narrower whole-tile answer REPLACES the memory rather than ending it,
@@ -705,14 +787,14 @@ private Q_SLOTS:
             QVERIFY2(isParked(engine, kA), "a 650px memory still protects a 300px remainder");
         }
         {
+            // The column stays at 800 here too, so the memory is still
+            // offered and nothing but the replacement can stop the park.
             QObject owner;
             ScrollEngine* engine = makeStraddleEngine(&owner);
             answer(engine, kA, 700);
             engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1);
             QCoreApplication::processEvents();
             answer(engine, kA, 250); // offered 800: the memory follows it down
-            engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1);
-            QCoreApplication::processEvents();
             engine->windowFocused(kB, kS1);
             QCoreApplication::processEvents();
             QVERIFY2(!isParked(engine, kA), "a 250px memory does not outgrow a 300px remainder");
@@ -1459,9 +1541,6 @@ private Q_SLOTS:
             // taught at 450 survives a narrower answer to the maximized
             // offer: read as an answer, it would give the floor back
             // entirely (the column offers the whole work area without it).
-            // A wider answer would not do here: one past the work area is
-            // dropped again by the sweep once the column is un-maximized, so
-            // the refusal and the drop would read the same.
             QObject owner;
             ScrollEngine* engine = makeFloorEngine(&owner);
             answer(engine, kA, 450);

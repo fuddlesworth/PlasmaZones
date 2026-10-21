@@ -169,6 +169,12 @@ struct ScrollOfferedColumn
     /// exists: a watch that finds no entry, or an entry naming another id,
     /// disconnects itself on the next commit.
     quint64 answerWatch = 0;
+    /// The budget for putting back a resize KWin requested on its own account
+    /// (PlasmaZonesEffect::noteForeignStripRequest), spent through
+    /// ScrollDecisions::shouldCounterAssert like ScrollCommandedRect's and
+    /// re-armed by every delivery of a column (recordStripOffer).
+    qint64 putBackBurstStartMs = 0;
+    int putBackBurstCount = 0;
 };
 
 /// Minimize-shader stamp: the time and generation of the transition a minimize

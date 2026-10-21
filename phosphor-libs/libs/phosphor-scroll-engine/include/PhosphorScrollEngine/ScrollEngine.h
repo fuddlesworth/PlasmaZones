@@ -259,7 +259,8 @@ public:
     /// (CommittedExtent):
     ///  - an extent ALONG the strip past the offer becomes a floor the column is held to like a declared
     ///    minimum, and the screen-edge peek floor rises with it. That peek memory outlives a dropped floor
-    ///    while the column still offers at least as much, and ends once it offers less;
+    ///    while the column still offers at least as much, and ends once it offers less on a pass that offers
+    ///    the tile its whole rect;
     ///  - a narrower answer gives a floor back: down to the answer while that still overshoots what the column
     ///    resolves to without the floor, entirely once it does not. A narrower answer never creates a floor.
     ///    A floor re-taught after a give-back is pinned against further give-backs, so a client that does not
@@ -1394,7 +1395,9 @@ private:
     /// A same-key re-announce of a held window is the compositor's return (its record is gone).
     /// @p fullscreenHold on floatWindowInternal stamps the hold on the slot BEFORE the announce.
     /// @p applyAfter false on floatWindowInternal leaves the relayout and placementChanged to a caller that
-    /// batches them, the shape of unfloatWindowInternal's parameter of that name.
+    /// batches them, the shape of unfloatWindowInternal's parameter of that name. That is the main arm's
+    /// tail: the residue heal (a window tracked in neither the strip nor the floating set) moves no column
+    /// and emits its own placementChanged whatever @p applyAfter says.
     void settleReannouncedFullscreenHold(const QString& windowId);
     /// The relayout and placementChanged a fullscreen-hold return seated with applyAfter false owes once
     /// the oversized verdict kept the window tiled (context-guarded like unfloatWindowInternal's own).
@@ -2072,7 +2075,8 @@ private:
     /// @p windowId's peek-only memory along @p axis (CommittedMainExtent::peekPx), or 0. Read by
     /// applyLayout's peek floor under respectMinimumSize, never by the strip.
     int committedPeekPx(const QString& windowId, const StripAxis& axis) const;
-    /// Forget everything the window's commits taught: it left the engine or its output.
+    /// Forget everything the window's commits taught: it left the engine or its output, or migrated to
+    /// another desktop.
     void forgetCommittedExtents(const QString& windowId);
     /// The user's own interactive resize along @p axis settled the window's extent there: drop that
     /// orientation's floor and peek memory. True when a floor went, which changes the layout.
@@ -2084,11 +2088,18 @@ private:
     /// applyLayout's sweep over @p state's strip under @p params (the context at @p key): drop a floor its
     /// column can never offer (floor plus tab reservation past the work area's main extent), and a floor its
     /// column satisfies without it in EVERY context the window holds a column in (a maximized-to-edges column
-    /// there is not measured, and keeps it). The peek memory survives a dropped floor while the column still
-    /// offers the tile at least that much, and ends once it offers less with no floor held. True when a
-    /// dropped floor changed the layout (the first kind; the second is layout-neutral).
+    /// there is not measured, and keeps it). The peek memory survives a dropped floor (endStalePeeks ends
+    /// it). True when a dropped floor changed the layout (the first kind; the second is layout-neutral).
     bool settleCommittedFloors(ScrollState& state, const PhosphorEngine::PlacementStateKey& key,
                                const ScrollLayoutParams& params);
+    /// applyLayout's second sweep, over @p resolved (@p strip relaid out under @p params after the re-anchor),
+    /// ahead of the peek floor that reads the memory: with no floor held, end a tile's peek memory once its
+    /// column offers it less, but only on a pass that offers the tile its whole rect without the memory (on
+    /// screen, parked, or kept whole by crop mode). A tile the screen edge would clamp keeps the memory and
+    /// parks on it, since a clamped sliver is an offer reportCommittedSize refuses to learn from.
+    /// @p screenRect and @p parkTop are the emit loop's park bounds.
+    void endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& resolved, const ScrollLayoutParams& params,
+                       const QRect& screenRect, int parkTop);
     /// @p params with @p windowId's own committed floor masked out, so a strip resolves that window's column
     /// the way it would without it. Every other window's floor still reads, since a sibling's floor holds
     /// the column too.

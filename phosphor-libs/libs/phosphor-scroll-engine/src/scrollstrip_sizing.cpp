@@ -768,12 +768,12 @@ bool ScrollStrip::minimizeActiveColumnWidth(const ScrollLayoutParams& params)
     // or above the smallest preset would move nothing on screen if the intent
     // were rewritten, and the verb would report success for a no-op (then
     // refuse the second press). Comparing the floored target against the
-    // floored current width makes the first press refuse too. Capped at the work area's main extent
-    // the way columnExtentPx caps what it measures: a floor PAST the work
-    // area (a frame minimum or committed floor wider than the output, or a
-    // work area that shrank under one) renders the column at the cap, and an
-    // uncapped target would never equal it, so every press would report a
-    // resize with nothing moving.
+    // floored current width makes the first press refuse too. Capped at the
+    // work area's main extent the way columnExtentPx caps what it measures: a
+    // floor PAST the work area (a frame minimum or committed floor wider than
+    // the output, or a work area that shrank under one) renders the column at
+    // the cap, and an uncapped target would never equal it, so every press
+    // would report a resize with nothing moving.
     const int floorPx = columnMinExtentPx(*col, params);
     const int targetPx =
         qMin(qMax(resolveColumnWidthPx(target, params), floorPx), params.axis.mainSize(params.workArea));
