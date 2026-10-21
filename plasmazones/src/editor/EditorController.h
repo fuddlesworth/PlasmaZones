@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// This header stays a single Q_OBJECT declaration on purpose: moc needs the whole class
-// in one header, and the bulk here is the Q_PROPERTY / Q_INVOKABLE surface QML
-// binds to, which cannot move without rewriting every binding in
+// This header stays a single Q_OBJECT declaration on purpose: moc needs the
+// whole class in one header, and the bulk here is the Q_PROPERTY / Q_INVOKABLE
+// surface QML binds to, which cannot move without rewriting every binding in
 // src/editor/qml. The implementation is already split by concern under
 // src/editor/controller/ (settings.cpp, scrollingtemplate.cpp, and siblings),
 // which is where the real per-concern boundary is. Long rationale belongs on

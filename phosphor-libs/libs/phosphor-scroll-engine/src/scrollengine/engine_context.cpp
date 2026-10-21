@@ -24,11 +24,12 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
     // m_lastAppliedRect entries are retained through windowClosed and
-    // handoffRelease (poison-guard memory). A re-adoption and the post-capture
-    // forgetClosedFullscreenHold reclaim them in the ordinary run; this sweep
-    // is the backstop for a window that died without either reaching it —
-    // keyed on aliveness, independent of tracking (a window whose key was
-    // dropped long ago must still age out here).
+    // handoffRelease (poison-guard memory). A re-adoption and
+    // forgetClosedFullscreenHold (after a close's capture, or after a live
+    // release routed through windowClosed) reclaim them in the ordinary run;
+    // this sweep is the backstop for a window that died without either
+    // reaching it — keyed on aliveness, independent of tracking (a window
+    // whose key was dropped long ago must still age out here).
     for (auto it = m_lastAppliedRect.begin(); it != m_lastAppliedRect.end();) {
         if (!aliveWindowIds.contains(it.key())) {
             it = m_lastAppliedRect.erase(it);

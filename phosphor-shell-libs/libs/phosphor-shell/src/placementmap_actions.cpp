@@ -549,9 +549,12 @@ void PlacementMapScreen::runVerb(const QString& id)
         // fallback is the window the daemon last asked the compositor to
         // focus, which can sit on another screen, and the engine acts on a
         // named window's own context, so the click would toggle a column on
-        // a screen the user was not looking at. With no per-screen focus the
-        // click does nothing, and the map's own redraw is its only feedback.
-        if (m_focusFromDaemon && !m_focusedWindowId.isEmpty()) {
+        // a screen the user was not looking at. A pinned screen is refused for
+        // the same reason: the relayed focus is the current desktop's, not the
+        // pinned desktop the map shows (rebuildFromSource draws no focus there
+        // either). With no per-screen focus the click does nothing, and a
+        // successful toggle's only feedback is the map's redraw.
+        if (!isPinned() && m_focusFromDaemon && !m_focusedWindowId.isEmpty()) {
             m_map->m_bus->call(Iface::Scrolling, QStringLiteral("toggleMaximizeColumn"),
                                {m_screenId, m_focusedWindowId});
         }

@@ -20,6 +20,9 @@
  */
 
 #include <QCoreApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QObject>
 #include <QSignalSpy>
 #include <QTest>
@@ -213,6 +216,21 @@ bool isParked(ScrollEngine* engine, const QString& windowId)
     return engine->lastManagedRect(windowId).y() > defaultScreenRect().bottom();
 }
 
+/// Whether any windowsTiled batch @p tiled caught carries an entry for
+/// @p windowId.
+bool anyBatchCarries(const QSignalSpy& tiled, const QString& windowId)
+{
+    for (const QList<QVariant>& emission : tiled) {
+        const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+        for (const QJsonValue& entry : batch) {
+            if (entry.toObject().value(QLatin1String("windowId")).toString() == windowId) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 class TestScrollEngineCommittedFloor : public QObject
@@ -283,16 +301,37 @@ private Q_SLOTS:
 
     // Fractional scaling rounds a logical size to device pixels and back, so a
     // client that took its tile can commit a pixel past it. That is the offer,
-    // not an answer, and plants no floor.
+    // not an answer, and plants no floor. The slack is exactly one pixel on
+    // each side: two past the offer is an answer, and a pixel short of a
+    // floored offer gives nothing back.
     void anAnswerWithinTheSlackIsTheOffer()
     {
-        QObject owner;
-        ScrollEngine* engine = makeFloorEngine(&owner);
-        answer(engine, kA, 301);
-        QCOMPARE(extentOf(engine, kA), 300);
-        engine->setColumnWidth(ColumnWidth::makeFixed(200), kS1);
-        QCoreApplication::processEvents();
-        QCOMPARE(extentOf(engine, kA), 200);
+        {
+            QObject owner;
+            ScrollEngine* engine = makeFloorEngine(&owner);
+            answer(engine, kA, 301);
+            QCOMPARE(extentOf(engine, kA), 300);
+            engine->setColumnWidth(ColumnWidth::makeFixed(200), kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(extentOf(engine, kA), 200);
+        }
+        {
+            QObject owner;
+            ScrollEngine* engine = makeFloorEngine(&owner);
+            answer(engine, kA, 302);
+            QCOMPARE(extentOf(engine, kA), 302);
+        }
+        {
+            // Offered the 450 its floor holds the column at, the client
+            // commits 449: rounding, not a narrower answer, so the floor
+            // stays where it is rather than following it down a pixel.
+            QObject owner;
+            ScrollEngine* engine = makeFloorEngine(&owner);
+            answer(engine, kA, 450);
+            QCOMPARE(Ax::mainLen(engine->lastManagedRect(kA)), 450);
+            answer(engine, kA, 449);
+            QCOMPARE(extentOf(engine, kA), 450);
+        }
     }
 
     // The minimum sizes setting gates the floor twice, and each gate is
@@ -335,14 +374,29 @@ private Q_SLOTS:
     // did not move would otherwise emit nothing.
     void turningRespectMinimumSizeOnForcesAFreshOffer()
     {
-        QObject owner;
-        StubScrollSettings* settings = nullptr;
-        ScrollEngine* engine = makeFloorEngine(&owner, &settings, /*respectMinimumSize=*/false);
-        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
-        settings->respectMinimumSize = true;
-        engine->refreshConfigFromSettings();
-        QCoreApplication::processEvents();
-        QVERIFY2(tiled.count() > 0, "the batch must be sent although no rect moved");
+        {
+            // The global setting.
+            QObject owner;
+            StubScrollSettings* settings = nullptr;
+            ScrollEngine* engine = makeFloorEngine(&owner, &settings, /*respectMinimumSize=*/false);
+            QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+            settings->respectMinimumSize = true;
+            engine->refreshConfigFromSettings();
+            QCoreApplication::processEvents();
+            QVERIFY2(tiled.count() > 0, "the batch must be sent although no rect moved");
+        }
+        {
+            // A per-screen rule turning it on over a global that is off
+            // (applyPerScreenConfig's arm).
+            QObject owner;
+            ScrollEngine* engine = makeFloorEngine(&owner, nullptr, /*respectMinimumSize=*/false);
+            QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+            QVariantMap rule;
+            rule.insert(ScrollPerScreenKeys::respectMinimumSize(), true);
+            engine->applyPerScreenConfig(kS1, rule);
+            QCoreApplication::processEvents();
+            QVERIFY2(tiled.count() > 0, "the rule's batch must be sent although no rect moved");
+        }
     }
 
     // ── Giving a floor back ─────────────────────────────────────────────
@@ -369,12 +423,33 @@ private Q_SLOTS:
     // That is not a floor, so the column still narrows when asked.
     void aNarrowerAnswerNeverSetsAFloor()
     {
-        QObject owner;
-        ScrollEngine* engine = makeFloorEngine(&owner);
-        answer(engine, kA, 290);
-        engine->setColumnWidth(ColumnWidth::makeFixed(200), kS1);
-        QCoreApplication::processEvents();
-        QCOMPARE(extentOf(engine, kA), 200);
+        {
+            // From a window nothing has been learned about, the answer is
+            // refused at the axis-free early return, before anything is
+            // resolved: the cheap path every rounding client takes.
+            QObject owner;
+            ScrollEngine* engine = makeFloorEngine(&owner);
+            answer(engine, kA, 290);
+            engine->setColumnWidth(ColumnWidth::makeFixed(200), kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(extentOf(engine, kA), 200);
+        }
+        {
+            // With a peek memory held and no floor (a floor taught at 450,
+            // then satisfied by a 600 column), the narrower answer gets past
+            // every early return to the narrower branch, which replaces the
+            // memory and still plants no floor.
+            QObject owner;
+            ScrollEngine* engine = makeFloorEngine(&owner);
+            answer(engine, kA, 450);
+            engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(Ax::mainLen(engine->lastManagedRect(kA)), 600);
+            answer(engine, kA, 500); // offered 600
+            engine->setColumnWidth(ColumnWidth::makeFixed(200), kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(extentOf(engine, kA), 200);
+        }
     }
 
     // A client that does not answer one offer the same way twice: the floor
@@ -393,6 +468,23 @@ private Q_SLOTS:
         QCOMPARE(extentOf(engine, kA), 450);
         answer(engine, kA, 300); // offered 450: the pin holds
         QCOMPARE(extentOf(engine, kA), 450);
+
+        // A pinned floor still drops on satisfaction: the pin stops narrower
+        // ANSWERS from giving it back, not the column outgrowing it.
+        engine->setColumnWidth(ColumnWidth::makeFixed(450), kS1);
+        QCoreApplication::processEvents();
+        engine->setColumnWidth(ColumnWidth::makeFixed(300), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 300);
+
+        // And the drop ended the pin and the give-back history with it. A
+        // floor taught afresh is an ordinary one again: a wider answer that
+        // follows no give-back does not pin, so the next narrower answer
+        // gives it back.
+        answer(engine, kA, 450); // offered 300: taught afresh
+        QCOMPARE(extentOf(engine, kA), 450);
+        answer(engine, kA, 300); // offered 450: given back
+        QCOMPARE(extentOf(engine, kA), 300);
     }
 
     // ── Satisfaction ────────────────────────────────────────────────────
@@ -459,6 +551,32 @@ private Q_SLOTS:
         QCOMPARE(extentOf(engine, kSticky), 300);
     }
 
+    // A column maximized to the edges on another desktop is not measured
+    // there: its extent is declared, the in-view sweep skips such a column
+    // for the same reason, and the floor waits for the column it will hold
+    // once that one is un-maximized. Measured, its whole-work-area extent
+    // would read as satisfying any floor.
+    void aMaximizedColumnElsewhereDoesNotSatisfyTheFloor()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeDesktopFloorEngine(&owner);
+        answer(engine, kSticky, 450);
+        switchTo(engine, 2);
+        adopt(engine, stickyOnly());
+        QVERIFY2(engine->heldKeyForWindow(kSticky).has_value(), "precondition: adopted onto desktop 2");
+        engine->windowFocused(kSticky, kS1);
+        QVERIFY(engine->toggleMaximizeToEdges(kS1, kSticky));
+        QCoreApplication::processEvents();
+
+        switchTo(engine, 1);
+        engine->windowFocused(kSticky, kS1);
+        engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1); // satisfied here only
+        QCoreApplication::processEvents();
+        engine->setColumnWidth(ColumnWidth::makeFixed(300), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kSticky), 450);
+    }
+
     // Retile writes intents, and a floor is not one: a floored column stays
     // at its floor.
     void retileKeepsTheFloor()
@@ -491,7 +609,10 @@ private Q_SLOTS:
     }
 
     // Without any committed extent the same remainder peeks, clamped. A
-    // narrower answer teaches neither a floor nor a peek memory.
+    // narrower answer from a window nothing has been learned about teaches
+    // neither a floor nor a peek memory: it is refused at the axis-free early
+    // return, before anything resolves (the narrower branch's own handling of
+    // the memory is aNarrowerAnswerReplacesThePeekMemory's).
     void aNarrowerAnswerLeavesThePeekAlone()
     {
         QObject owner;
@@ -505,7 +626,8 @@ private Q_SLOTS:
 
     // The peek memory outlives the floor: once the column satisfies the floor
     // it is dropped, but the client still answers at that width, and a clamp
-    // would still hand it a sliver.
+    // would still hand it a sliver. The column here stays at the 800 that
+    // satisfied the floor, so it still offers more than the 700 remembered.
     void aSatisfiedFloorStillProtectsThePeek()
     {
         QObject owner;
@@ -513,13 +635,55 @@ private Q_SLOTS:
         answer(engine, kA, 700);
         engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1); // satisfied: the floor goes
         QCoreApplication::processEvents();
-        engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1);
-        QCoreApplication::processEvents();
-        QCOMPARE(extentOf(engine, kA), 600);
+        QCOMPARE(extentOf(engine, kA), 800);
 
         engine->windowFocused(kB, kS1);
         QCoreApplication::processEvents();
         QVERIFY2(isParked(engine, kA), "the peek memory must survive the floor's satisfaction");
+    }
+
+    // With no floor held, the memory ends once the column offers the tile
+    // less than it. A client that takes the narrower offer reports nothing
+    // (an answer equal to its offer is silent), so a memory kept past that
+    // point would park the column on every straddle for good. A client that
+    // still draws wider answers the narrower offer and teaches the floor and
+    // the memory again.
+    void aStalePeekEndsOnceTheColumnOffersLess()
+    {
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStraddleEngine(&owner);
+            answer(engine, kA, 700);
+            engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1); // satisfied: the floor goes
+            QCoreApplication::processEvents();
+            engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1); // offers less than the 700 remembered
+            QCoreApplication::processEvents();
+            QCOMPARE(extentOf(engine, kA), 600);
+
+            // The client took 600 and said nothing.
+            engine->windowFocused(kB, kS1);
+            QCoreApplication::processEvents();
+            QVERIFY2(!isParked(engine, kA), "a memory the column no longer offers must not park it");
+            QVERIFY(Ax::mainLen(engine->lastManagedRect(kA)) < 600);
+        }
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStraddleEngine(&owner);
+            answer(engine, kA, 700);
+            engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1);
+            QCoreApplication::processEvents();
+            engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(Ax::mainLen(engine->lastManagedRect(kA)), 600);
+
+            // The client still draws 700: the narrower offer is answered, and
+            // both the floor and the memory come back.
+            answer(engine, kA, 700); // offered 600
+            QCOMPARE(extentOf(engine, kA), 700);
+            engine->windowFocused(kB, kS1);
+            QCoreApplication::processEvents();
+            QVERIFY2(isParked(engine, kA), "the re-taught memory parks the straddler again");
+        }
     }
 
     // A narrower whole-tile answer REPLACES the memory rather than ending it,
@@ -528,14 +692,14 @@ private Q_SLOTS:
     void aNarrowerAnswerReplacesThePeekMemory()
     {
         {
+            // The column stays at 800, which still offers more than the 650
+            // the memory now holds.
             QObject owner;
             ScrollEngine* engine = makeStraddleEngine(&owner);
             answer(engine, kA, 700);
             engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1);
             QCoreApplication::processEvents();
             answer(engine, kA, 650); // offered 800
-            engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1);
-            QCoreApplication::processEvents();
             engine->windowFocused(kB, kS1);
             QCoreApplication::processEvents();
             QVERIFY2(isParked(engine, kA), "a 650px memory still protects a 300px remainder");
@@ -568,8 +732,13 @@ private Q_SLOTS:
         QCOMPARE(extentOf(engine, kB), 300);
     }
 
-    // The client bound: an absurd extent is cut down before any sum can
-    // overflow, and still floats the window.
+    // An absurd extent still floats the window. What this pins is the
+    // outcome, not the client bound itself (kMaxClientExtentPx): on this
+    // untabbed column nothing is added to the floor, so an extent left uncut
+    // would float the window the same way. The bound is what keeps the sums
+    // that do add to it (the tab reservation, the relayout's floors) inside
+    // int, and an overflow there is undefined behaviour no assertion here can
+    // be trusted to observe.
     void anAbsurdCommitIsBoundedAndFloats()
     {
         QObject owner;
@@ -664,10 +833,15 @@ private Q_SLOTS:
         answer(engine, kA, 450);
         QCOMPARE(extentOf(engine, kA), 450);
 
+        // The drop moves the column with no verb behind it, so the strip is
+        // republished.
+        QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         *available = Ax::t(QRect(0, 0, 400, 300));
         engine->retile(kS1);
         QCoreApplication::processEvents();
         QCOMPARE(extentOf(engine, kA), 100);
+        QVERIFY(placement.count() > 0);
+        QCOMPARE(placement.last().at(0).toString(), kS1);
 
         *available = defaultScreenRect();
         engine->retile(kS1);
@@ -696,6 +870,29 @@ private Q_SLOTS:
         engine->setColumnWidth(ColumnWidth::makeFixed(200), kS1);
         QCoreApplication::processEvents();
         QCOMPARE(extentOf(engine, kA), 200);
+    }
+
+    // The drop is a layout change of its own, announced even when the resize
+    // writes no intent: here the column already asks for the 350 the user
+    // settles on, and only the floor held it at 450.
+    void aUserResizeFloorDropAnnouncesThePlacement()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        answer(engine, kA, 450);
+        engine->setColumnWidth(ColumnWidth::makeFixed(350), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 450);
+        const QRect applied = engine->lastManagedRect(kA);
+        QRect settled = Ax::t(applied);
+        settled.setWidth(350);
+        settled = Ax::t(settled);
+        QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+        engine->onWindowResized(kA, applied, settled, kS1);
+        QCOMPARE(placement.count(), 1);
+        QCOMPARE(placement.first().at(0).toString(), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 350);
     }
 
     // The resize's axes are read off the gesture's own start frame. A client
@@ -734,13 +931,43 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         answer(engine, kA, 450);
 
+        QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         const QSize min150 = roleSize(150, 0);
         engine->windowMinSizeUpdated(kA, min150.width(), min150.height());
+        QCOMPARE(placement.count(), 0); // raised: nothing dropped, nothing to announce
         QCoreApplication::processEvents();
         QCOMPARE(extentOf(engine, kA), 450);
 
         const QSize min50 = roleSize(50, 0);
         engine->windowMinSizeUpdated(kA, min50.width(), min50.height());
+        // The drop moves the column with no verb behind it: announced by the
+        // report itself, ahead of the retile it schedules.
+        QCOMPARE(placement.count(), 1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 300);
+    }
+
+    // A lowered minimum still drops a floating window's floor, but the drop
+    // moves no column while it floats, so nothing is announced. The floor is
+    // gone when the window comes back.
+    void aLoweredMinimumOnAFloatingWindowAnnouncesNothing()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        const QSize min100 = roleSize(100, 0);
+        engine->windowMinSizeUpdated(kA, min100.width(), min100.height());
+        QCoreApplication::processEvents();
+        answer(engine, kA, 450);
+        engine->setWindowFloat(kA, true, kS1);
+        QCoreApplication::processEvents();
+
+        QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+        const QSize min50 = roleSize(50, 0);
+        engine->windowMinSizeUpdated(kA, min50.width(), min50.height());
+        QCoreApplication::processEvents();
+        QCOMPARE(placement.count(), 0);
+
+        engine->setWindowFloat(kA, false, kS1);
         QCoreApplication::processEvents();
         QCOMPARE(extentOf(engine, kA), 300);
     }
@@ -802,6 +1029,83 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         QCOMPARE(extentOf(engine, kS2, kA), 300);
         engine->setCrossSurfaceResolver(nullptr);
+    }
+
+    // A boundary SWAP migrates both windows, so the partner traded back onto
+    // the source output leaves its floor behind as well.
+    void aBoundarySwapDropsThePartnersFloor()
+    {
+        ScrollTestUtils::TrailNeighbourResolver resolver;
+        QObject owner;
+        ScrollEngine* engine = engineWith(&owner, makeFloorSettings(&owner), {kS1, kS2});
+        engine->setCrossSurfaceResolver(&resolver);
+        engine->windowOpened(kA, kS1, 0, 0);
+        engine->windowOpened(kB, kS2, 0, 0);
+        engine->retile(kS1);
+        engine->retile(kS2);
+        QCoreApplication::processEvents();
+        answer(engine, kB, 450);
+        QCOMPARE(extentOf(engine, kS2, kB), 450);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.screenId = kS1;
+        engine->swapFocusedInDirection(Ax::navTrail(), ctx);
+        QCoreApplication::processEvents();
+        QCOMPARE(engine->screenForTrackedWindow(kB), kS1);
+        QCOMPARE(extentOf(engine, kS1, kB), 300);
+        engine->setCrossSurfaceResolver(nullptr);
+    }
+
+    // A drag dropped on another output migrates the window the same way. The
+    // drop indicator promises the unfloored slot, which is where the drop
+    // lands: the floor goes before the insert, so neither the slot nor the
+    // view the drop anchors is shaped by it.
+    void aCrossOutputDragDropsTheFloorAndTheIndicatorShowsIt()
+    {
+        QObject owner;
+        ScrollEngine* engine = engineWith(&owner, makeFloorSettings(&owner), {kS1, kS2});
+        engine->windowOpened(kA, kS1, 0, 0);
+        engine->windowOpened(kC, kS1, 0, 0);
+        engine->windowOpened(kB, kS2, 0, 0);
+        engine->windowFocused(kA, kS1);
+        engine->retile(kS1);
+        engine->retile(kS2);
+        QCoreApplication::processEvents();
+        answer(engine, kA, 450);
+        QCOMPARE(extentOf(engine, kS1, kA), 450);
+
+        QVERIFY(engine->beginDragInsertPreview(kA, kS2));
+        const auto target = engine->computeDragInsertTargetAtPoint(kS2, Ax::point(1150, 400));
+        QVERIFY(target.isValid());
+        engine->updateDragInsertPreview(target);
+        QCOMPARE(Ax::mainLen(engine->dragInsertIndicatorRect(kS2)), 300);
+        engine->commitDragInsertPreview();
+        QCoreApplication::processEvents();
+        QCOMPARE(engine->screenForTrackedWindow(kA), kS2);
+        QCOMPARE(extentOf(engine, kS2, kA), 300);
+    }
+
+    // The receive's defence-in-depth migration (a window still tracked in
+    // another context when a handoff hands it over) is a migration like the
+    // rest, and leaves the floor behind.
+    void aHandoffReceiveMigrationDropsTheFloor()
+    {
+        QObject owner;
+        ScrollEngine* engine = engineWith(&owner, makeFloorSettings(&owner), {kS1, kS2});
+        engine->windowOpened(kA, kS1, 0, 0);
+        engine->windowOpened(kB, kS1, 0, 0);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        answer(engine, kA, 450);
+        QCOMPARE(extentOf(engine, kS1, kA), 450);
+
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = kA;
+        ctx.toScreenId = kS2;
+        engine->handoffReceive(ctx);
+        QCoreApplication::processEvents();
+        QCOMPARE(engine->screenForTrackedWindow(kA), kS2);
+        QCOMPARE(extentOf(engine, kS2, kA), 300);
     }
 
     // A window that moved desktop re-enters as a migration, which starts the
@@ -872,6 +1176,9 @@ private Q_SLOTS:
     // The compositor's return re-runs the oversized verdict: a client that
     // pinned a minimum past the work area during the hold floats again rather
     // than sitting tiled at a size no column can honour.
+    // The verdict runs before the strip is laid out, the open path's order,
+    // so no batch ever configures the column of a window about to float
+    // again.
     void theHoldReturnReRunsTheOversizedVerdict()
     {
         QObject owner;
@@ -879,9 +1186,58 @@ private Q_SLOTS:
         QVERIFY(engine->setWindowFullscreenFloat(kA, true, kS1));
         const QSize oversized = roleSize(1300, 0);
         engine->windowMinSizeUpdated(kA, oversized.width(), oversized.height());
+        QCoreApplication::processEvents();
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
         QVERIFY(engine->setWindowFullscreenFloat(kA, false, kS1));
         QCoreApplication::processEvents();
         QVERIFY(engine->isWindowFloatingInScroll(kA));
+        QVERIFY2(!anyBatchCarries(tiled, kA), "the returning window's column must never be configured");
+    }
+
+    // A same-key re-announce of a held window is the compositor's return too
+    // (an effect that lost its record of the hold), and re-runs the verdict
+    // the same way, outside an arrival burst...
+    void aReannouncedHoldReturnReRunsTheOversizedVerdict()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        QVERIFY(engine->setWindowFullscreenFloat(kA, true, kS1));
+        const QSize oversized = roleSize(1300, 0);
+        engine->windowMinSizeUpdated(kA, oversized.width(), oversized.height());
+        QCoreApplication::processEvents();
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        engine->windowOpened(kA, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY(engine->isWindowFloatingInScroll(kA));
+        QVERIFY(!engine->isFullscreenFloated(kA));
+        QVERIFY2(!anyBatchCarries(tiled, kA), "the returning window's column must never be configured");
+    }
+
+    // ...and inside one, where the verdict floats the window without a
+    // relayout of its own: the burst's deferred apply lays the strip out
+    // once, at the burst's end, and never with the returning window in it.
+    // Another arrival in the same burst is what a synchronous relayout
+    // mid-burst would have laid out early.
+    void aReannouncedHoldReturnInABurstFloatsWithoutAnEarlyApply()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        QVERIFY(engine->setWindowFullscreenFloat(kA, true, kS1));
+        const QSize oversized = roleSize(1300, 0);
+        engine->windowMinSizeUpdated(kA, oversized.width(), oversized.height());
+        QCoreApplication::processEvents();
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        engine->beginArrivalBurst();
+        engine->windowOpened(kC, kS1, 0, 0);
+        engine->windowOpened(kA, kS1, 0, 0);
+        QCOMPARE(tiled.count(), 0);
+        engine->endArrivalBurst();
+        QCoreApplication::processEvents();
+        QVERIFY(engine->isWindowFloatingInScroll(kA));
+        QVERIFY(!engine->isFullscreenFloated(kA));
+        QVERIFY(engine->isWindowTiled(kC));
+        QVERIFY(tiled.count() > 0);
+        QVERIFY2(!anyBatchCarries(tiled, kA), "the returning window's column must never be configured");
     }
 
     // A user's own unfloat stays manual: the window comes back tiled whatever
@@ -1083,7 +1439,10 @@ private Q_SLOTS:
             QCOMPARE(extentOf(engine, kA), 300);
         }
         {
-            // A float has no column to answer.
+            // A float has no column to answer. This pins the outcome rather
+            // than the isFloating test itself: a floating window holds no
+            // column either, so the column lookup refuses it as well, and
+            // either check alone would pass this leg.
             QObject owner;
             ScrollEngine* engine = makeFloorEngine(&owner);
             const QRect offered = engine->lastManagedRect(kA);
@@ -1095,16 +1454,25 @@ private Q_SLOTS:
         }
         {
             // A maximized-to-edges column's extent is declared and reads no
-            // floor, so nothing its client says about it is learned.
+            // floor, so nothing its client says about it is learned, and
+            // nothing it says gives back what was learned before. A floor
+            // taught at 450 survives a narrower answer to the maximized
+            // offer: read as an answer, it would give the floor back
+            // entirely (the column offers the whole work area without it).
+            // A wider answer would not do here: one past the work area is
+            // dropped again by the sweep once the column is un-maximized, so
+            // the refusal and the drop would read the same.
             QObject owner;
             ScrollEngine* engine = makeFloorEngine(&owner);
+            answer(engine, kA, 450);
+            QCOMPARE(extentOf(engine, kA), 450);
             QVERIFY(engine->toggleMaximizeToEdges(kS1, kA));
             QCoreApplication::processEvents();
-            answer(engine, kA, Ax::mainLen(engine->lastManagedRect(kA)) + 150);
+            answer(engine, kA, Ax::mainLen(engine->lastManagedRect(kA)) - 200);
             QVERIFY(!engine->isWindowFloatingInScroll(kA));
             QVERIFY(engine->toggleMaximizeToEdges(kS1, kA));
             QCoreApplication::processEvents();
-            QCOMPARE(extentOf(engine, kA), 300);
+            QCOMPARE(extentOf(engine, kA), 450);
         }
     }
 

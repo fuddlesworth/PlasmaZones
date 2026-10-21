@@ -233,16 +233,19 @@ public:
     /// tile this call held. False for an empty or untracked window, a window that floats under
     /// another owner, and a return of a window this call did not hold. The return puts the window
     /// back in its slot at its width, held to any committed floor it had (the hold does not end
-    /// one), and then re-runs the oversized verdict: a window whose minimum or committed floor no
-    /// longer fits the work area floats again, as it would at open.
+    /// one), and re-runs the oversized verdict before the strip is laid out: a window whose minimum
+    /// or committed floor no longer fits the work area floats again, as it would at open, and no
+    /// batch configures its column first.
     bool setWindowFullscreenFloat(const QString& windowId, bool floating, const QString& screenId);
     /// True while the slot carries the compositor's hold, and for a window that CLOSED mid-hold
     /// until WindowTracking.windowClosed has taken its capture (forgetClosedFullscreenHold).
     bool isFullscreenFloated(const QString& windowId) const;
     /// Drop the closed-mid-hold memory once the daemon's close capture has read it, or a live
     /// release left no capture to read it. The same moment ends the last-applied rect a close
-    /// retained for that capture (lastManagedRect), when the window no longer holds a place in any
-    /// strip here: the capture was its only reader, and nothing else reclaims it while the daemon runs.
+    /// retained (lastManagedRect), when the window no longer holds a place in any strip here, since
+    /// nothing else reclaims it while the daemon runs. After a live release that also takes it from
+    /// the float-back refusal, which then rests on the daemon's record of the frame the window
+    /// settled at under management.
     void forgetClosedFullscreenHold(const QString& windowId);
     /// Compositor-driven reconciliation: the client left fullscreen on its own.
     void clearWindowedFullscreen(const QString& windowId);
@@ -255,7 +258,8 @@ public:
     /// was never offered its column. What the engine learns, per window and per strip orientation
     /// (CommittedExtent):
     ///  - an extent ALONG the strip past the offer becomes a floor the column is held to like a declared
-    ///    minimum, and the screen-edge peek floor rises with it;
+    ///    minimum, and the screen-edge peek floor rises with it. That peek memory outlives a dropped floor
+    ///    while the column still offers at least as much, and ends once it offers less;
     ///  - a narrower answer gives a floor back: down to the answer while that still overshoots what the column
     ///    resolves to without the floor, entirely once it does not. A narrower answer never creates a floor.
     ///    A floor re-taught after a give-back is pinned against further give-backs, so a client that does not
@@ -267,8 +271,9 @@ public:
     /// past the work area already gets. A floor drops when its column satisfies it in every desktop the window
     /// holds a column on, on the user's own interactive resize along the strip (onWindowResized), when the
     /// client lowers its declared minimum on that axis, when a work-area shrink leaves it past the work area,
-    /// and when the window leaves the engine or its output; it survives float round trips (a user float,
-    /// minimize, the fullscreen hold, a cancelled drag), drag reorders, Retile, and the evacuee park.
+    /// and when the window leaves the engine, leaves its output or moves to another desktop; it survives float
+    /// round trips (a user float, minimize, the fullscreen hold, a cancelled drag), drag reorders, Retile, and
+    /// the evacuee park.
     void reportCommittedSize(const QString& windowId, const QSize& offered, const QSize& committed);
     /// delta -1/+1 through the preset width list.
     void cycleColumnPresetWidth(int delta, const QString& screenId);
@@ -344,12 +349,13 @@ public:
     void scrollViewByPercent(qreal percent, const QString& screenId);
     /// The pixel twin of scrollViewByPercent, for a caller that already holds
     /// a distance along the strip (the placement map's drag pan, over
-    /// org.plasmazones.Scrolling.scrollViewByPx). Same detachment, clamping
-    /// and refusals: a zero @p px reports no_movement, a pan pinned at the
-    /// end it is asked to move toward reports no_target, and an empty strip
-    /// no_windows. A successful pan reports nothing, because the map pans once
-    /// per frame of a drag and the navigation OSD would keep returning for the
-    /// whole of it. @p px is bounded to a million pixels either way, the band
+    /// org.plasmazones.Scrolling.scrollViewByPx). Same detachment and
+    /// clamping, but the only answer it reports is no_windows, for an empty
+    /// strip. A successful pan, a zero @p px and a pan pinned at the end it is
+    /// asked to move toward all report nothing, because the map pans once per
+    /// frame of a drag and the navigation OSD would keep returning for the
+    /// whole of it, a drag held against the strip's end or held still
+    /// included. @p px is bounded to a million pixels either way, the band
     /// the percent verb and the D-Bus adaptor use; that only trims a pan the
     /// strip would clamp at its end anyway.
     void scrollViewByPx(int px, const QString& screenId);
@@ -1387,10 +1393,15 @@ private:
     void announceReleasedFullscreenHolds();
     /// A same-key re-announce of a held window is the compositor's return (its record is gone).
     /// @p fullscreenHold on floatWindowInternal stamps the hold on the slot BEFORE the announce.
+    /// @p applyAfter false on floatWindowInternal leaves the relayout and placementChanged to a caller that
+    /// batches them, the shape of unfloatWindowInternal's parameter of that name.
     void settleReannouncedFullscreenHold(const QString& windowId);
+    /// The relayout and placementChanged a fullscreen-hold return seated with applyAfter false owes once
+    /// the oversized verdict kept the window tiled (context-guarded like unfloatWindowInternal's own).
+    void applyReturnedTile(const PhosphorEngine::PlacementStateKey& key);
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
                              const QString& screenId, FloatAnnounce announce = FloatAnnounce::Active,
-                             bool fullscreenHold = false);
+                             bool fullscreenHold = false, bool applyAfter = true);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
                                bool applyAfter = true, FloatAnnounce announce = FloatAnnounce::Active);
     // engine_navigation.cpp
@@ -1435,11 +1446,11 @@ private:
     /// resolve and the empty-strip bail: pan @p state's strip by @p deltaPx,
     /// re-apply on a change, and report through navigationFeedback under the
     /// "scroll" action. The two public verbs differ in how they arrive at the
-    /// pixel count and in @p announceSuccess (false skips the success
-    /// feedback, the pixel pan's per-frame shape), and this is what keeps
+    /// pixel count and in @p announce (false reports nothing, success or
+    /// refusal, the pixel pan's per-frame shape), and this is what keeps
     /// their refusal tokens and detachment behaviour one definition.
     void scrollViewResolved(int deltaPx, const QString& screen, ScrollState* state, const ScrollLayoutParams& params,
-                            bool announceSuccess);
+                            bool announce);
 
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
@@ -1672,7 +1683,8 @@ private:
     /// rect it displaced). Also the float-back poison guard's comparand; see
     /// PlacementEngineBase::lastManagedRect. A close keeps the entry for the
     /// daemon's close capture, and forgetClosedFullscreenHold ends it once
-    /// that capture has run.
+    /// that capture has run, or once a live release routed through
+    /// windowClosed is done with it.
     QHash<QString, QRect> m_lastAppliedRect;
     /// Windows whose last EMITTED batch entry carried windowedFullscreen —
     /// the flag's own leg of applyLayout's emit-on-change gate (a toggle
@@ -2066,30 +2078,39 @@ private:
     /// orientation's floor and peek memory. True when a floor went, which changes the layout.
     bool dropCommittedForUserResize(const QString& windowId, const StripAxis& axis);
     /// The client lowered its declared minimum from @p oldMin to @p newMin: drop each orientation's floor
-    /// and peek memory whose main-axis minimum went down. True when a floor went.
-    bool dropCommittedForLoweredMinimum(const QString& windowId, const QSize& oldMin, const QSize& newMin);
+    /// and peek memory whose main-axis minimum went down. Whether that moved a column is the caller's to
+    /// measure (windowMinSizeUpdated compares the column's extent across the call).
+    void dropCommittedForLoweredMinimum(const QString& windowId, const QSize& oldMin, const QSize& newMin);
     /// applyLayout's sweep over @p state's strip under @p params (the context at @p key): drop a floor its
     /// column can never offer (floor plus tab reservation past the work area's main extent), and a floor its
-    /// column satisfies without it in EVERY context the window holds a column in, keeping the peek memory.
-    /// True when a dropped floor changed the layout (the first kind; the second is layout-neutral).
+    /// column satisfies without it in EVERY context the window holds a column in (a maximized-to-edges column
+    /// there is not measured, and keeps it). The peek memory survives a dropped floor while the column still
+    /// offers the tile at least that much, and ends once it offers less with no floor held. True when a
+    /// dropped floor changed the layout (the first kind; the second is layout-neutral).
     bool settleCommittedFloors(ScrollState& state, const PhosphorEngine::PlacementStateKey& key,
                                const ScrollLayoutParams& params);
+    /// @p params with @p windowId's own committed floor masked out, so a strip resolves that window's column
+    /// the way it would without it. Every other window's floor still reads, since a sibling's floor holds
+    /// the column too.
+    static ScrollLayoutParams withoutCommittedFloorOf(const ScrollLayoutParams& params, const QString& windowId);
     /// Whether @p windowId's column in @p state can never offer the window what it holds it to: a declared
     /// minimum past the work area on either axis (whatever respectMinimumSize says, the open-time policy), or
     /// a committed floor that with its column's tab reservation passes the work area's main extent.
     bool outgrowsWorkArea(const ScrollState& state, const QString& windowId, const ScrollLayoutParams& params) const;
     /// Float @p windowId out of @p state when outgrowsWorkArea says so (floatWindowInternal, the open-time
-    /// oversized policy). True when it floated. @p reason labels the log line.
+    /// oversized policy). True when it floated. @p reason labels the log line. @p applyAfter is
+    /// floatWindowInternal's: false leaves the relayout and placementChanged to a caller that batches them.
     bool floatIfOutgrowsWorkArea(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
-                                 const QString& windowId, const char* reason);
+                                 const QString& windowId, const char* reason, bool applyAfter = true);
 
     /// Per window: what its client's own commits taught about its extent along the strip, per strip
     /// orientation (CommittedExtent; reportCommittedSize documents the learning, the drops and what survives).
     /// Engine-level rather than per strip because a window holds a column in every desktop it spans and the
     /// client's answer is about the window, not about one desktop's column; the strip reads it through
     /// ScrollLayoutParams::committedFloor, which layoutParamsForKey points here. No per-window eviction
-    /// funnel exists, so every path on which a window leaves the engine or its output forgets its entry
-    /// itself (forgetCommittedExtents), with pruneStaleWindows sweeping it on aliveness as the backstop.
+    /// funnel exists, so every path on which a window leaves the engine, leaves its output, or migrates to
+    /// another desktop forgets its entry itself (forgetCommittedExtents), ahead of seating it anywhere new so
+    /// no re-anchor reads the old floor, with pruneStaleWindows sweeping it on aliveness as the backstop.
     /// Appended after m_evacueePark (installed header).
     QHash<QString, CommittedExtent> m_committedExtents;
 };

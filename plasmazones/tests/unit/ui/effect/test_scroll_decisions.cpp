@@ -636,6 +636,60 @@ private Q_SLOTS:
         QVERIFY(!stripEntrySendsSize(QSize(1908, 2052), QSize(1908, 2052)));
     }
 
+    // A request outside the effect's applies resizes on KWin's account only
+    // when its size is neither the frame's nor the offered column's (F141).
+    // The live shape: KWin's Expand Window takes a 788 px tile to 1592.
+    void resizesOnKWinsAccount_onlyANewSize()
+    {
+        const QSize column(788, 884);
+        const auto at = [](qreal x, const QSizeF& size) {
+            return QRectF(QPointF(x, 8), size);
+        };
+        const QRectF frame = at(8, column);
+        QVERIFY(resizesOnKWinsAccount(at(8, QSizeF(1592, 884)), frame, /*offered=*/column));
+        // Shrink Window, and a script setting a smaller frame.
+        QVERIFY(resizesOnKWinsAccount(at(8, QSizeF(600, 884)), frame, column));
+        // A size-keeping request: the keep-visible clamp or a script's move.
+        QVERIFY(!resizesOnKWinsAccount(at(400, column), frame, column));
+        // A move while the strip's own resize to the column is still in flight:
+        // KWin's move keeps the requested size, which is the column, not the
+        // frame the client has not answered yet.
+        QVERIFY(!resizesOnKWinsAccount(at(400, column), at(8, QSizeF(1000, 884)), column));
+        // A move after the client answered wider: at rest KWin's move-resize
+        // size is the committed frame, so the move keeps the frame's size.
+        QVERIFY(!resizesOnKWinsAccount(at(400, QSizeF(1000, 884)), at(8, QSizeF(1000, 884)), column));
+        // A move that keeps a fractional size, at a fractional scale. Rounded
+        // through QRectF::toRect the two rects come out 788 and 789 wide,
+        // because that rounding depends on where the rect sits, and the move
+        // read as a resize. The offer is unrelated, so only the frame
+        // comparison can refuse it.
+        const QSizeF fractional(788.6, 884);
+        QVERIFY(!resizesOnKWinsAccount(at(0.6, fractional), at(0.4, fractional), QSize(700, 884)));
+    }
+
+    // The quick-tile corrector's stale ack (F123). KWin's tile sends a
+    // configure for the tile's size; dropping the tile and putting the column
+    // back at the size the client still holds sends none, so the tile's
+    // configure is still the newest the client has and its ack would land the
+    // tile's frame, read as the answer to the column.
+    void droppedTileAckOutstanding_onlyWhenNothingSupersedesTheTile()
+    {
+        const QSize column(788, 884);
+        const QSize tile(960, 1080);
+        // The tile was requested and the client has not acked it: the column
+        // goes back at the client's own size, with no configure.
+        QVERIFY(droppedTileAckOutstanding(/*requestedAtDrop=*/tile, /*committedAtDrop=*/column,
+                                          /*commandedAfter=*/column, /*committedAfter=*/column));
+        // The client acked the tile long ago and sits at its size: the column
+        // goes out in a configure of its own, which nothing stale precedes.
+        QVERIFY(!droppedTileAckOutstanding(tile, tile, column, tile));
+        // The column differs from what the client holds, so KWin configures
+        // it and that configure supersedes the tile's.
+        QVERIFY(!droppedTileAckOutstanding(tile, QSize(700, 884), column, QSize(700, 884)));
+        // Nothing in flight at the drop and nothing to change.
+        QVERIFY(!droppedTileAckOutstanding(column, column, column, column));
+    }
+
     // The engine forces a batch with every rect unchanged when minimum sizes
     // are turned on (F50), so an answer it refused to learn while they were off
     // can be heard. Walked over the effect's pure pieces for the three shapes a
@@ -948,7 +1002,9 @@ private Q_SLOTS:
         // The offer is in coordinates the output has since left (F815).
         QTest::newRow("coordinates stale") << true << false << true << false << true << owed << wider << false;
         // A frame that left the column was moved elsewhere (KWin's Move to
-        // Screen); an empty one is a mid-unmap commit.
+        // Screen). An empty one is a mid-unmap commit, refused by the same
+        // intersects test: this row pins that QRect::intersects is false for
+        // an empty rect, which is why the predicate needs no emptiness term.
         QTest::newRow("left the column") << true << true << true << false << true << owed << QRect(3000, 8, 1908, 2052)
                                          << false;
         QTest::newRow("empty frame") << true << true << true << false << true << owed << QRect(8, 8, 0, 2052) << false;

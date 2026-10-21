@@ -404,11 +404,39 @@ public:
     /// Take KWin's quick tile back off a strip tile and put its column back,
     /// with no dispatch to the engine: the quick-tile twin of
     /// cancelAxisOnlyMaximize (framecentering.cpp). Run off KWin's
-    /// requestedTileChanged and at the end of every gesture; a no-op for a
-    /// window with no requested tile, one off the strip, and one under a
-    /// gesture. Without it the requested tile keeps the window out of the
-    /// committed-size report and the offered-column centring for good (F123).
+    /// requestedTileChanged, at the end of every gesture and when a strip tile
+    /// leaves fullscreen. A no-op for a window with no requested tile, one off
+    /// the strip, one under a gesture, and one that has requested fullscreen.
+    /// The tile is dropped but the column is not put back while a maximize is
+    /// in flight against the mode the window rests in (the interception's
+    /// batch places it), while the outputs change or the strip's output has
+    /// moved since its batch (the next batch re-places it), or when there is
+    /// no column to put back. A batch placing a window that already carries a
+    /// tile drops it itself (dropKWinTile). Without it the requested tile
+    /// keeps the window out of the committed-size report and the
+    /// offered-column centring for good (F123).
     void cancelStripQuickTile(KWin::EffectWindow* w);
+
+    /// What dropKWinTile found when it took a tile off: KWin's move-resize
+    /// size and the client's frame size just before.
+    struct KWinTileDrop
+    {
+        bool dropped = false;
+        QSize requested;
+        QSize committed;
+    };
+    /// Take KWin's tile off @p w through KWin's own untile, which also takes
+    /// the window out of the tile's member list, so neither the tile's
+    /// geometry changes nor a desktop switch back can put it on the tile
+    /// again. Bracketed as an effect apply. KWin moves the window to its
+    /// restore rect; the caller places it after, then calls
+    /// answerDroppedTileAck.
+    KWinTileDrop dropKWinTile(KWin::EffectWindow* w);
+    /// After the caller has placed @p w following dropKWinTile: answer the
+    /// tile's configure if the client can still ack it at the tile's size
+    /// (ScrollDecisions::droppedTileAckOutstanding), so the tile's frame
+    /// neither lands nor reads as the client's answer to its column.
+    void answerDroppedTileAck(KWin::EffectWindow* w, const KWinTileDrop& drop);
 
     /// The two halves of slotScreensChanged's removed-screens pass, split out
     /// because they reach opposite conclusions about the same event. A screen

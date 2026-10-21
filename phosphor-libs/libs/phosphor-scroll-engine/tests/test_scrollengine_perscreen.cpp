@@ -3,8 +3,7 @@
 
 // The template channel's blueprint and cursor cases live in
 // test_scrollengine_template.cpp. The case for keeping the rest together:
-// this file's concern is a single
-// resolution cascade —
+// this file's concern is a single resolution cascade —
 // rule > per-screen settings trio > cached global, plus the template channel
 // that replaces the preset LISTS those kinds index into. The channels are not
 // independent of each other; every test here is a PRECEDENCE claim between two

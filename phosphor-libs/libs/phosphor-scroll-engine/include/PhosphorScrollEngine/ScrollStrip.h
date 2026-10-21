@@ -66,10 +66,10 @@ namespace PhosphorScrollEngine {
 /// when a compositor report names the window the strip already calls active
 /// (it is refused here, or moves a tile inside the active column, so it
 /// reaches no re-anchor). The next layout pass then lets the policy answer.
-/// Detachment travels with the anchor through the
-/// mode-round-trip stash and the persisted blob for the
-/// same reason the anchor does: restoring the position while dropping the
-/// detachment hands the view straight back to the policy that would move it.
+/// Detachment travels with the anchor through the mode-round-trip stash and
+/// the persisted blob for the same reason the anchor does: restoring the
+/// position while dropping the detachment hands the view straight back to the
+/// policy that would move it.
 ///
 /// ## Naming exemption
 ///
@@ -315,11 +315,10 @@ public:
     /// of MinColumnWidthFraction and the column's own floor (columnMinExtentPx:
     /// its frame minimum and any committed floor, which drop out while
     /// @c respectMinimumSize is off, the same way the client half does for the
-    /// height verb), so a repeated shrink stops at the floor
-    /// instead of burying an ever smaller
-    /// intent under it. Refuses when the target lands on the current extent,
-    /// so a column already rendering below the floor refuses a shrink rather
-    /// than growing. A non-finite @p deltaPercent refuses, and a finite one is
+    /// height verb), so a repeated shrink stops at the floor instead of
+    /// burying an ever smaller intent under it. Refuses when the target lands
+    /// on the current extent, so a column already rendering below the floor
+    /// refuses a shrink rather than growing. A non-finite @p deltaPercent refuses, and a finite one is
     /// bounded to ±100 (a larger step clamps to the same extent).
     bool adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Full work-area MAIN extent, still tiled (niri maximize-column). Toggles
@@ -404,8 +403,9 @@ public:
     /// viewport edge is what the split must not be dragged by. Written as
     /// Fixed pixels like adjustActiveColumnWidth, and the remainder of the
     /// division goes to the LAST column so the group still tiles the
-    /// viewport edge to edge. A column whose minimum size (columnMinExtentPx)
-    /// exceeds its share keeps that minimum and the rest share what is left.
+    /// viewport edge to edge. A column whose floor (columnMinExtentPx: its
+    /// minimum size or a committed floor) exceeds its share keeps that floor
+    /// and the rest share what is left.
     /// The group's lead column lands AT the viewport's lead edge: the anchor
     /// is re-derived after the rewrite so a column ahead of the active one
     /// growing does not slide the group under the active column, and a
@@ -414,7 +414,7 @@ public:
     /// does not undo the edge-to-edge position on the next pass and a second
     /// press finds nothing to change. Refuses when fewer than two columns
     /// are fully visible, when the active column is not one of them, when
-    /// the minimums alone fill the viewport, or when every extent is already
+    /// the floors alone fill the viewport, or when every extent is already
     /// what it would become.
     bool equalizeVisibleColumnWidths(const ScrollLayoutParams& params);
     /// The active column at its narrowest: the smallest preset, or
@@ -422,7 +422,8 @@ public:
     /// minimize-width; the empty-list arm is reachable only from a test or an
     /// embedder, since the engine never hands down an empty vocabulary).
     /// Refuses when already there, measured in RENDERED pixels so a column
-    /// whose minimum size already pins it at or above the target refuses too.
+    /// whose floor (a minimum size or a committed floor) already pins it at
+    /// or above the target refuses too.
     bool minimizeActiveColumnWidth(const ScrollLayoutParams& params);
     /// Every column back to @p defaultWidth and @p defaultDisplay, and every
     /// tile back to @p defaultHeight: the scrolling half of the Retile
@@ -727,10 +728,10 @@ public:
     /// too, or the view stays pinned wherever the focus restore left it.
     ///
     /// Clearing it standalone is how the engine re-attaches on behalf of the
-    /// tile-focus ops (the class doc lists the sites): it hands the view to the policy
-    /// while leaving the anchor for the next updateViewForFocus to derive,
-    /// which is the one thing a re-anchor here could not do without a focus
-    /// change to derive from.
+    /// tile-focus ops (the class doc lists the sites): it hands the view to
+    /// the policy while leaving the anchor for the next updateViewForFocus to
+    /// derive, which is the one thing a re-anchor here could not do without a
+    /// focus change to derive from.
     void setViewDetached(bool detached)
     {
         m_viewDetached = detached;
@@ -843,8 +844,9 @@ public:
     ///
     /// Exists so a per-frame caller can ask the question without paying for a
     /// full relayout: relayout() allocates a ResolvedColumn (with a nested
-    /// tile vector) per column, and the edge auto-scroll's disarm gate needs
-    /// only a predicate.
+    /// tile vector) per column, and a predicate needs none of that. The edge
+    /// auto-scroll's disarm gate asks stripSettledInViewport, which is built
+    /// on this one.
     bool stripFitsViewport(const ScrollLayoutParams& params) const;
 
     /// stripFitsViewport AND the derived view offset is settled inside
@@ -975,7 +977,7 @@ private:
     /// ones, so the floor is the whole set's and not just the shown tab's.
     static int tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params);
     /// Pixels the tab indicator takes out of column @p c ACROSS the strip, the
-    /// cross-axis twin of the main-axis reservation columnMinExtentPx applies.
+    /// cross-axis twin of tabbedMainReservationPx.
     /// 0 for a column that is not tabbed, and whenever the indicator's
     /// thickness eats the MAIN axis instead (which of the two it eats depends
     /// on the strip's axis, see TabIndicatorParams::reservedThickness).

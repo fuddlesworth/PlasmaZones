@@ -293,14 +293,18 @@ QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& scr
         // tab-strip payload starts too (engine_apply.cpp): that one rect folds
         // in the master switch, the single-tab skip and "not tabbed".
         //
-        // The emitter's gate is a SUPERSET, not a match. It additionally drops
-        // a column that is out of view and one whose tiles are all parked.
-        // This walk runs its own relayout and never consults park state at
-        // all, so a fully-parked tabbed column is emitted here with its tab
-        // fields while the screen draws no bar for it. Deliberate: the
-        // preview draws that tile, so drawing the tile's indicator is the
-        // self-consistent answer, and importing park state into a read-only
-        // query would couple it to the apply pipeline's ordering.
+        // The emitter's gate is not a match, and it differs both ways. It
+        // drops a column still in view whose tiles are all parked: this walk
+        // runs its own relayout and never consults park state at all, so such
+        // a column is emitted here with its tab fields while the screen draws
+        // no bar for it. Deliberate: the preview draws that tile, so drawing
+        // the tile's indicator is the self-consistent answer, and importing
+        // park state into a read-only query would couple it to the apply
+        // pipeline's ordering. And it KEEPS a departing column, one this
+        // batch's view slide took out of view, for the outgoing leg of the
+        // slide (tabStripsChanged), which this walk never lists: it reads only
+        // what is on screen now, and a column out of view has no tile here to
+        // carry an indicator.
         //
         // Derived per COLUMN, not per tile: a tabbed column resolves exactly
         // one non-hidden tile, so the walk below stamps the data onto that one

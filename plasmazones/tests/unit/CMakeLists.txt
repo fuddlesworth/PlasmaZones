@@ -3,8 +3,8 @@
 #
 # PlasmaZones Unit Tests
 #
-# This file is one flat list of test target declarations, and the isolation block at the bottom makes the
-# length structural rather than incidental. That block walks
+# This file is one flat list of test target declarations because of the
+# isolation block at the bottom. That block walks
 # `get_property(DIRECTORY . PROPERTY TESTS)`, which is DIRECTORY-scoped, so
 # every target it covers has to be declared in THIS file. Moving a group out
 # into an add_subdirectory would silently strip those targets of the
@@ -53,8 +53,8 @@ p_add_test(test_window_placement_store_collapse core/windowtracking/test_window_
 # predicates. Its own suite, beside the store suite.
 p_add_test(test_window_placement_store_desktops core/windowtracking/test_window_placement_store_desktops.cpp)
 # The live-sibling contract of take() / peekLiveSibling and the open-claim
-# release and re-key rules (#1106); its own suite for the same reason as the
-# desktops suite above.
+# release and re-key rules (#1106), in its own suite like the desktops suite
+# above.
 p_add_test(test_window_placement_store_siblings core/windowtracking/test_window_placement_store_siblings.cpp)
 target_link_libraries(test_window_placement_store_siblings PRIVATE PhosphorEngine PhosphorIdentity::PhosphorIdentity)
 

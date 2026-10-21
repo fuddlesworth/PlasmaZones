@@ -300,14 +300,15 @@ void ScrollingAdaptor::moveColumnTo(const QString& screenId, int from, int to)
 void ScrollingAdaptor::scrollViewByPx(const QString& screenId, int px)
 {
     // Same guard as focusColumnAt. A zero distance is refused at this
-    // boundary rather than handed down: the engine would answer it with a
-    // no_movement OSD, and a drag that has not moved yet is not a pan.
+    // boundary rather than handed down: a drag that has not moved yet is not
+    // a pan, and the engine would do nothing with it either.
     if (px == 0 || refusesScreenVerb(screenId)) {
         return;
     }
-    // Bounded to the band scrollViewByPercent bounds its own pixels to (a
-    // hundred viewports and more), so a wire value near INT_MAX cannot
-    // overflow the strip's view arithmetic when it is added to the offset.
+    // The wire contract's own published range, the same band the engine
+    // bounds this verb and the percent twin's pixels to (kMaxScrollViewPx).
+    // The engine clamps again and the strip sums wide, so this is the stated
+    // bound of the interface rather than an overflow guard.
     constexpr int kMaxPanPx = 1000000;
     m_engine->scrollViewByPx(qBound(-kMaxPanPx, px, kMaxPanPx), screenId);
 }

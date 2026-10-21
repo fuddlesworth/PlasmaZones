@@ -8,11 +8,11 @@
 // transitions that discard the strip's single pre-maximize slot.
 //
 // Its own file rather than more of test_scrollengine_smoke, because a new
-// concern takes a sibling suite. The strip-level toggle arms live in test_scrollstrip_sizing (the width toggle)
-// and test_scrollstrip_maximize (to-edges); what this file owns is the
-// ENGINE's half — the wire flag, the verb's targeting (including the
-// window-addressed tab expel), and the compositions no single-step test
-// covers.
+// concern takes a sibling suite. The strip-level toggle arms live in
+// test_scrollstrip_sizing (the width toggle) and test_scrollstrip_maximize
+// (to-edges); what this file owns is the ENGINE's half — the wire flag, the
+// verb's targeting (including the window-addressed tab expel), and the
+// compositions no single-step test covers.
 //
 // Three neighbours ride along: the stash-latch slots at the tail (shown tab
 // and extent owner across a mode round trip) share this file's tabbed-column

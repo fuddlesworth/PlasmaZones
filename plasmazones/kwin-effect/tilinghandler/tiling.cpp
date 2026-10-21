@@ -1895,6 +1895,24 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     && !kw->isRequestedFullScreen() && !snap.window->isUserMove() && !snap.window->isUserResize()) {
                     applyMaximizeSuppressed(kw, KWin::MaximizeRestore);
                 }
+                // KWin's tile on a window the strip is placing, the batch's half of
+                // the quick-tile corrector (F123). A window that carried a tile
+                // before it became a strip tile (a quick-tiled floater unfloated
+                // back, a tile requested while it was fullscreen, a rule that tiles
+                // it as it maps) raises no requestedTileChanged the corrector would
+                // hear, and left standing the tile keeps its frame from ever
+                // reading as its answer while KWin puts it back on the tile at
+                // every re-check. Dropped ahead of the apply below, which lands
+                // last and places the column, so KWin's own restore rect goes out
+                // in no configure. Not under a gesture, whose end runs the
+                // corrector, nor for a window going fullscreen, whose apply bails.
+                // A column maximized to the edges has none by now: KWin's maximize
+                // exits quick tile mode.
+                KWinTileDrop kwinTileDrop;
+                if (isScrollingScreen(snap.screenId) && !snap.isWindowedFullscreen && !fullscreenBailSkippedCommit
+                    && !snap.window->isUserMove() && !snap.window->isUserResize()) {
+                    kwinTileDrop = dropKWinTile(snap.window);
+                }
                 QRect geo = snap.geometry;
 
                 // Size continuity for a strip client that will not take its
@@ -2081,8 +2099,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // commit mid-gesture (applyWindowGeometry hands those to
                 // windowFinishUserMovedResized), and the non-member fullscreen
                 // bail, which commits nothing at all. In each case the client
-                // has not been offered THIS column, so nothing is written — a
-                // recorded offer that never went out would be read as answered.
+                // has not been offered THIS column yet, so nothing is written
+                // now — a recorded offer that never went out would be read as
+                // answered. The deferred commit records it when it goes out.
                 //
                 // Not written, and equally NOT removed. Any entry already there
                 // describes a column an earlier batch genuinely delivered and
@@ -2102,13 +2121,26 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // both arms of applyWindowGeometry take below, against the
                 // same commanded rect, read before the apply: a size equal to
                 // the commanded one goes out as a pure move, or not at all,
-                // and asks the client nothing.
-                if (!stripOfferedColumn.isNull() && !skipMoveResize && !snap.window->isUserMove()
-                    && !snap.window->isUserResize() && !fullscreenBailSkippedCommit) {
+                // and asks the client nothing. Where KWin's tile was dropped
+                // above, the size the client was last asked for is the tile's,
+                // read before KWin's untile replaced it with its restore rect.
+                //
+                // Mid-gesture the apply below defers to the gesture's end, and
+                // the column rides along with it: the replay records it once it
+                // has sent the rect (stripOfferOnDeferredReplay).
+                std::optional<QRect> deferredStripOffer;
+                const bool deliversStripOffer =
+                    !stripOfferedColumn.isNull() && !skipMoveResize && !fullscreenBailSkippedCommit;
+                if (deliversStripOffer && (snap.window->isUserMove() || snap.window->isUserResize())) {
+                    deferredStripOffer = stripOfferedColumn;
+                } else if (deliversStripOffer) {
                     const KWin::Window* const kwOffer = snap.window->window();
-                    const bool sendsSize = kwOffer
-                        && ScrollDecisions::stripEntrySendsSize(QRectF(kwOffer->moveResizeGeometry()).toRect().size(),
-                                                                geo.size());
+                    const bool sendsSize =
+                        kwOffer
+                        && ScrollDecisions::stripEntrySendsSize(
+                            kwinTileDrop.dropped ? kwinTileDrop.requested
+                                                 : QRectF(kwOffer->moveResizeGeometry()).toRect().size(),
+                            geo.size());
                     m_effect->recordStripOffer(snap.window, snap.windowId, stripOfferedColumn, sendsSize);
                 }
 
@@ -2557,9 +2589,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   releasingMaximize ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
                                                                     : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
-                                                  originOverride, visualTargetOverride);
+                                                  originOverride, visualTargetOverride, std::nullopt,
+                                                  deferredStripOffer);
                     m_effect->m_daemonGate.claimedPressLegOwed = prevLegOwed;
                 }
+                // The tile dropped above may have a configure the client can
+                // still ack at the tile's size, now the column is placed.
+                answerDroppedTileAck(snap.window, kwinTileDrop);
             }
 
             // Tab swap: cross-fade the outgoing tab into this one.

@@ -328,8 +328,24 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
     if (kw->maximizeMode() == restored) {
         return;
     }
+    const QSize sentBefore = QRectF(kw->moveResizeGeometry()).toRect().size();
     const auto geomGuard = m_effect->geometryApplyScope();
     applyMaximizeSuppressed(kw, restored);
+    // KWin's axis maximize was a resize on KWin's account, which left the
+    // client's answer to its column Foreign (noteForeignStripRequest), and the
+    // restore above is the strip's own write, inside the bracket. Re-armed the
+    // way cancelStripQuickTile re-arms it: the client was sent the maximized
+    // size and is now sent the restored one, so what it commits next answers
+    // the column again, a new offer when the two sizes differ
+    // (recordStripOffer). Without this the answer stayed Foreign until the next
+    // batch, and the engine emits on change, so none need come.
+    if (const auto offer = m_effect->m_scrollOfferedColumn.constFind(windowId);
+        offer != m_effect->m_scrollOfferedColumn.constEnd()) {
+        const QRect offeredColumn = offer->rect;
+        m_effect->recordStripOffer(
+            w, windowId, offeredColumn,
+            ScrollDecisions::stripEntrySendsSize(sentBefore, QRectF(kw->moveResizeGeometry()).toRect().size()));
+    }
 }
 
 bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)

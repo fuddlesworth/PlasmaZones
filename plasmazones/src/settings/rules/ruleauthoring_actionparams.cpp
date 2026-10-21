@@ -6,10 +6,9 @@
 // editor's per-param Loader dispatches on, and the default-seeded payload a
 // freshly-added or type-switched action starts from.
 //
-// Own translation unit rather than ruleauthoring_actions.cpp: that file owns
-// the picker side (category dispatch, type labels, the assembled type list) and
-// the two ladders together push it past the size ceiling. The seam is the same
-// one the action-description ladder was split along.
+// Own translation unit rather than ruleauthoring_actions.cpp, which owns the
+// picker side (category dispatch, type labels, the assembled type list). The
+// seam is the same one the action-description ladder was split along.
 
 #include "ruleauthoring.h"
 #include "ruleauthoring_p.h"

@@ -683,9 +683,8 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Re-applies the tiling algorithm to every window on the screen.")},
     };
 
-    // Shortcuts.Scrolling is declared by the scrolling TU (split out for
-    // file-size) but still assembled from here, so the whole Shortcuts.*
-    // family has one entry point.
+    // Shortcuts.Scrolling is declared by the scrolling TU but still assembled
+    // from here, so the whole Shortcuts.* family has one entry point.
     appendScrollingShortcutsSchema(schema);
 }
 
@@ -887,8 +886,8 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
     };
 }
 
-// Overlays lives in settingsschema_overlayshaders.cpp, split
-// out for file size the way the scrolling and tiling domains were.
+// Overlays lives in settingsschema_overlayshaders.cpp, split out by domain
+// the way the scrolling and tiling domains were.
 
 // ─── PhosphorZones::Zone Selector ──────────────────────────────────────────────────────────
 // Pops up at the edge of the screen during drag to let users pick which zone

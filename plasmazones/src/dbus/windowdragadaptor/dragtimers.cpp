@@ -14,10 +14,10 @@
  * hold-mode release-grace expiry, and the scroll drop indicator those two
  * push.
  *
- * Split out of windowdragadaptor.cpp. The two timer families belong together: both are lazily created,
- * both are stopped from teardown paths rather than by their own callers, and
- * both self-terminate from inside their own handler rather than trusting a
- * caller to have stopped them.
+ * Split out of windowdragadaptor.cpp. The two timer families belong together:
+ * both are lazily created, both are stopped from teardown paths rather than by
+ * their own callers, and both self-terminate from inside their own handler
+ * rather than trusting a caller to have stopped them.
  */
 
 namespace PlasmaZones {

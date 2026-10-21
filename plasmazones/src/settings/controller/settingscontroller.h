@@ -555,8 +555,6 @@ public:
     {
         return m_rulesPage;
     }
-    // Defined out of line: this header is past the size ceiling, and four
-    // one-line getters are not worth pushing it further over.
     ShaderPresetBridge* animationPresets() const;
     ShaderPresetBridge* surfacePresets() const;
     ShaderPresetBridge* pointerPresets() const;

@@ -109,9 +109,9 @@ struct ScrollVisibleTile
     /// ways: it drops a column still in view whose every tile parked, so such
     /// a column can carry an indicator here the screen does not draw, and it
     /// keeps a DEPARTING column's pills for the outgoing leg of a view slide,
-    /// while no visible tile is left to carry them here. Counts the column's tiles including the
-    /// hidden ones — those ARE the tabs; only minimized tiles are absent, and
-    /// they have no pill on screen either.
+    /// while no visible tile is left to carry them here. Counts the column's
+    /// tiles including the hidden ones — those ARE the tabs; only minimized
+    /// tiles are absent, and they have no pill on screen either.
     int tabCount = 0;
     /// Which tab of @c tabCount this tile is, 0-based, and -1 when the column
     /// draws no indicator. A resolved tabbed column has exactly one non-hidden

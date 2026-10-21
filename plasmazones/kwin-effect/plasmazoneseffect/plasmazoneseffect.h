@@ -1171,11 +1171,16 @@ private:
     //
     // statementOnDeferredReplay: preparePlacement writes nothing under a live gesture, which is when
     // this DEFERS; the replay prepares again with this purpose before its moveResize (deferral only).
+    //
+    // stripOfferOnDeferredReplay: the column a strip batch offers with this apply, which the batch does not
+    // record while the gesture defers it; the replay records it once it has delivered the rect
+    // (recordStripOffer), so the client's answer is read against the column it was sent (deferral only).
     void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
                              bool skipAnimation = false,
                              const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF(),
-                             std::optional<PlacementStatement::Purpose> statementOnDeferredReplay = std::nullopt);
+                             std::optional<PlacementStatement::Purpose> statementOnDeferredReplay = std::nullopt,
+                             std::optional<QRect> stripOfferOnDeferredReplay = std::nullopt);
     bool fullscreenBailsApply(KWin::EffectWindow* window) const; ///< applyWindowGeometry's (fullscreenBails)
     quint64 beginGeometryCommand(KWin::EffectWindow* window); ///< bump its command stamp, drop a pending replay
     void notifyActiveWindowRawFirst(); ///< KWin's raw active window, else the stacking walk's (F523)
@@ -2926,8 +2931,14 @@ private:
     /// this column, so recording one for a placement that never went out would
     /// make the next batch read it as answered.
     ///
-    /// Wayland only: the single writer sits behind isWaylandClient(), so the
-    /// map is empty for X11 and every consumer of it is inert there.
+    /// Wayland only. Every write goes through recordStripOffer, from four
+    /// callers: the strip batch, behind isWaylandClient(); the gesture-end
+    /// replay of a batch apply the gesture deferred, carrying the column that
+    /// batch offered (stripOfferOnDeferredReplay); and the two cancels that put
+    /// a strip tile back after KWin resized it on its own account
+    /// (TilingHandler::cancelStripQuickTile, cancelAxisOnlyMaximize), which
+    /// re-record an entry already there and create none. So the map is empty
+    /// for X11 and every consumer of it is inert there.
     ///
     /// The discriminator for size continuity (see the strip apply). A genuine
     /// column change is "this size differs from the one recorded here" — our
@@ -2951,7 +2962,8 @@ private:
     /// it Read. A commit watch reads the client's commits while the answer is
     /// owed, because a settle that leaves the frame unchanged emits no frame
     /// change. A geometry request KWin or the user makes outside an effect apply
-    /// that resizes the window makes it Foreign until the next delivery.
+    /// that resizes the window makes it Foreign until the next delivery, decided
+    /// when the request is made (noteForeignStripRequest).
     QHash<QString, ScrollOfferedColumn> m_scrollOfferedColumn;
     /// Hands out ScrollOfferedColumn::answerWatch ids. Never restarted.
     quint64 m_columnAnswerWatchSeq = 0;

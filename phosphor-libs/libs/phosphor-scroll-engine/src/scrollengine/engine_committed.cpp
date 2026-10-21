@@ -30,18 +30,6 @@ const CommittedMainExtent& extentFor(const CommittedExtent& extent, const StripA
     return axis.isHorizontal() ? extent.horizontal : extent.vertical;
 }
 
-/// @p params with @p windowId's own floor masked out, so the strip resolves
-/// that window's column the way it would without it. Every other window's
-/// floor still reads, since a sibling's floor holds the column too.
-ScrollLayoutParams withoutFloorOf(const ScrollLayoutParams& params, const QString& windowId)
-{
-    ScrollLayoutParams masked = params;
-    masked.committedFloor = [inner = params.committedFloor, windowId](const QString& id) {
-        return (id == windowId || !inner) ? QSize(0, 0) : inner(id);
-    };
-    return masked;
-}
-
 /// The extent along the strip the column holding @p windowId offers that
 /// window's tile under @p params (the column's extent less the tab
 /// indicator's main-axis reservation), or -1 when @p strip does not hold it.
@@ -56,8 +44,10 @@ int tileMainOfferPx(const ScrollStrip& strip, const QString& windowId, const Scr
 }
 
 /// End one orientation's floor outright, with the give-back history that
-/// belonged to it. The peek memory stays: what the client last answered is
-/// still true after its column stops being held to it.
+/// belonged to it. The peek memory stays here: what the client last answered
+/// is still true after its column stops being held to it, for as long as the
+/// column still offers at least that much (settleCommittedFloors ends it once
+/// the column offers less).
 void dropFloor(CommittedMainExtent& extent)
 {
     extent.floorPx = 0;
@@ -66,6 +56,15 @@ void dropFloor(CommittedMainExtent& extent)
 }
 
 } // namespace
+
+ScrollLayoutParams ScrollEngine::withoutCommittedFloorOf(const ScrollLayoutParams& params, const QString& windowId)
+{
+    ScrollLayoutParams masked = params;
+    masked.committedFloor = [inner = params.committedFloor, windowId](const QString& id) {
+        return (id == windowId || !inner) ? QSize(0, 0) : inner(id);
+    };
+    return masked;
+}
 
 QSize ScrollEngine::committedFloorFor(const QString& windowId) const
 {
@@ -113,30 +112,29 @@ bool ScrollEngine::dropCommittedForUserResize(const QString& windowId, const Str
     return hadFloor;
 }
 
-bool ScrollEngine::dropCommittedForLoweredMinimum(const QString& windowId, const QSize& oldMin, const QSize& newMin)
+void ScrollEngine::dropCommittedForLoweredMinimum(const QString& windowId, const QSize& oldMin, const QSize& newMin)
 {
     const auto it = m_committedExtents.find(windowId);
     if (it == m_committedExtents.end()) {
-        return false;
+        return;
     }
     // Per orientation, by the axis that is its MAIN one: a horizontal strip's
     // floor is a width, so it answers to the width minimum. A raised minimum
     // takes nothing: the floor it may now sit under still describes the
     // client, and the declared minimum simply outranks it while it does. An
     // unknown old minimum (an invalid size) compares as -1 and lowers nothing.
-    bool droppedFloor = false;
+    // Whether a drop moved anything is the caller's to measure: a floor in
+    // the orientation the window's strip does not run, a floating window's
+    // floor, or one its column already outgrows changes no layout.
     if (newMin.width() < oldMin.width()) {
-        droppedFloor = droppedFloor || it->horizontal.floorPx > 0;
         it->horizontal = CommittedMainExtent{};
     }
     if (newMin.height() < oldMin.height()) {
-        droppedFloor = droppedFloor || it->vertical.floorPx > 0;
         it->vertical = CommittedMainExtent{};
     }
     if (it->isEmpty()) {
         m_committedExtents.erase(it);
     }
-    return droppedFloor;
 }
 
 bool ScrollEngine::outgrowsWorkArea(const ScrollState& state, const QString& windowId,
@@ -167,7 +165,7 @@ bool ScrollEngine::outgrowsWorkArea(const ScrollState& state, const QString& win
 }
 
 bool ScrollEngine::floatIfOutgrowsWorkArea(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
-                                           const QString& windowId, const char* reason)
+                                           const QString& windowId, const char* reason, bool applyAfter)
 {
     if (!state) {
         return false;
@@ -180,7 +178,8 @@ bool ScrollEngine::floatIfOutgrowsWorkArea(ScrollState* state, const PhosphorEng
                            << "committed floor" << committedFloorFor(windowId) << "outgrew work area"
                            << params.workArea.size() << "on" << key.screenId
                            << "— floating (open-time oversized policy)";
-    return floatWindowInternal(state, key, windowId, key.screenId);
+    return floatWindowInternal(state, key, windowId, key.screenId, FloatAnnounce::Active, /*fullscreenHold=*/false,
+                               applyAfter);
 }
 
 bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngine::PlacementStateKey& key,
@@ -211,7 +210,9 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
             // A float there, or a membership whose strip does not hold a
             // tile, has no column to measure, and the floor is waiting for
             // the column it will hold the window to when it comes back.
-            if (!otherState->strip().containsWindow(windowId)) {
+            const ScrollStrip& otherStrip = otherState->strip();
+            const int otherColIdx = otherStrip.columnOfWindow(windowId);
+            if (otherColIdx < 0) {
                 return false;
             }
             const ScrollLayoutParams otherParams = layoutParamsForKey(other);
@@ -220,7 +221,14 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
             if (otherParams.axis != params.axis) {
                 continue;
             }
-            if (tileMainOfferPx(otherState->strip(), windowId, withoutFloorOf(otherParams, windowId)) < floorPx) {
+            // A maximized-to-edges column there is the in-view skip below,
+            // seen from here: its extent is declared, so measuring it says
+            // nothing about the column the floor holds the window to once it
+            // is un-maximized, and the floor waits for that column.
+            if (otherStrip.columns().at(otherColIdx).maximizedToEdges) {
+                return false;
+            }
+            if (tileMainOfferPx(otherStrip, windowId, withoutCommittedFloorOf(otherParams, windowId)) < floorPx) {
                 return false;
             }
         }
@@ -245,10 +253,7 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
                 continue;
             }
             CommittedMainExtent& extent = extentFor(*it, params.axis);
-            if (extent.floorPx <= 0) {
-                continue;
-            }
-            if (extent.floorPx + reservation > workMain) {
+            if (extent.floorPx > 0 && extent.floorPx + reservation > workMain) {
                 // A floor its column can never offer. reportCommittedSize
                 // floats the window over one when the client teaches it, so
                 // this is a work area that shrank under a held floor: dropped,
@@ -262,7 +267,9 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
                                        << "— dropped";
                 dropFloor(extent);
                 layoutChanged = true;
-            } else if (tileMainOfferPx(strip, tile.windowId, withoutFloorOf(params, tile.windowId)) >= extent.floorPx
+            } else if (extent.floorPx > 0
+                       && tileMainOfferPx(strip, tile.windowId, withoutCommittedFloorOf(params, tile.windowId))
+                           >= extent.floorPx
                        && satisfiedElsewhere(tile.windowId, extent.floorPx)) {
                 // Satisfied: the column offers the tile at least the floor
                 // without it, because the user widened it or a sibling's floor
@@ -273,6 +280,21 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
                 // client that still will not take it answers with a new floor.
                 // Layout-neutral by construction.
                 dropFloor(extent);
+            }
+            // With no floor held (none learned, or one just dropped above),
+            // the peek memory lasts only while the column still offers the
+            // tile at least that much. Once it offers less, the client is
+            // being offered a narrower tile than the one the memory records,
+            // and a client that takes it says so by reporting nothing (an
+            // answer equal to its offer is silent). Kept, the memory would
+            // park the column on every straddle for good, on the strength of
+            // an answer the client has since stopped giving. Ended here, a
+            // client that still draws wider answers the narrower offer and
+            // teaches the floor and the memory again. The floor is 0 here,
+            // so params already reads the column without it.
+            if (extent.floorPx == 0 && extent.peekPx > 0
+                && tileMainOfferPx(strip, tile.windowId, params) < extent.peekPx) {
+                extent.peekPx = 0;
             }
             if (it->isEmpty()) {
                 m_committedExtents.erase(it);
@@ -416,7 +438,7 @@ void ScrollEngine::reportCommittedSize(const QString& rawWindowId, const QSize& 
         // offers without the floor, entirely once it does not. A pinned floor
         // stays.
         if (extent.floorPx > 0 && !extent.pinned) {
-            const int offerWithout = tileMainOfferPx(strip, windowId, withoutFloorOf(params, windowId));
+            const int offerWithout = tileMainOfferPx(strip, windowId, withoutCommittedFloorOf(params, windowId));
             extent.floorPx = committedMain > offerWithout ? committedMain : 0;
             extent.gaveBack = true;
         }

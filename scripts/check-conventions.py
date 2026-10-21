@@ -66,9 +66,8 @@ SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
 # .js is here so rule_spdx and rule_license cover the 17 QML .js libraries. .sh/.cmake/.spec/
 # .desktop joined once every tracked one carried a head header, and .c once the two QPA protocol
 # stubs were found to be the only comment-bearing C sources no rule read. TWO rules read this
-# set, spdx and license. MOST tracked suffix
-# VALUES are still outside it, not just the .in/.xml/.txt and data JSON an earlier version of this
-# comment named, .md and .yml among them.
+# set, spdx and license. MOST tracked suffix VALUES are still outside it, not just the
+# .in/.xml/.txt and data JSON an earlier version of this comment named, .md and .yml among them.
 #
 # No file COUNT here on purpose. Two earlier versions carried one and both went stale: "32 tracked
 # suffixes" was wrong when written, and "737 of 3830 files" was off by one the day it landed and by
@@ -92,8 +91,9 @@ def tracked_files() -> list[str]:
     out = subprocess.run(
         ["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True
     ).stdout.split("\n")
-    # is_file() because `git ls-files` still lists a file deleted without `git rm`, and
-    # read() raises on it, taking six of the nine rules down with a traceback.
+    # is_file() because `git ls-files` still lists a file deleted without `git rm`. That
+    # path is not in the tree to police, and handing it on would earn it an [unreadable]
+    # finding from partition_readable.
     return [f for f in out if f and not f.startswith(EXCLUDED_PREFIXES) and (REPO / f).is_file()]
 
 
@@ -105,9 +105,9 @@ def read(path: str) -> str:
     # "" is a fallback, not a diagnosis. main() drops unreadable paths before any rule
     # sees them and reports the real cause, because "" makes every rule downstream of it
     # lie: prose calls well-formed JSON malformed, and spdx and license call a file that
-    # has a header headerless. Returning "" still matters for
-    # a path a rule opens on its own, such as a companion header it names, where the
-    # cost of an empty string is a missed check rather than a false one.
+    # has a header headerless. Returning "" still matters for a path a rule opens on its
+    # own, such as a companion header it names, where the cost of an empty string is a
+    # missed check rather than a false one.
     try:
         return (REPO / path).read_text(encoding="utf-8", errors="replace")
     except OSError:

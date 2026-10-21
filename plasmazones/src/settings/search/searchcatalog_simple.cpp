@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The condensed simple-mode pages' search anchors, split out of
-// searchcatalog.cpp by concern (the single catalog TU had crossed the
-// file-size ceiling; same split as searchcatalog_animations.cpp). Their
-// rows duplicate settings the advanced pages also expose, deliberately:
+// searchcatalog.cpp by concern (the same split as
+// searchcatalog_animations.cpp). Their rows duplicate settings the advanced pages also expose, deliberately:
 // a search in simple mode must land on a page that mode can actually
 // show, and the advanced twins are filtered out of the rail there.
 // Anchors match the ids the simple pages register. Called only by

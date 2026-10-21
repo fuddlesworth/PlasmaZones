@@ -11,9 +11,9 @@
 // list is built (buildActionTypeEntries, ruleauthoring_actions.cpp) and are NOT
 // covered by the canary. No descriptor in the tree sets it false today.
 //
-// Own translation unit rather than ruleauthoring_actions.cpp: the ladder
-// carries one entry per registered action type, and that file already sits at
-// the size guideline.
+// Own translation unit rather than ruleauthoring_actions.cpp: the ladder is
+// hover help, one entry per registered action type, and that file owns the
+// picker side.
 
 #include "ruleauthoring.h"
 

@@ -1006,8 +1006,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("focusFollowsMouse"),
                PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("pointer")});
     // Condensed simple-mode page anchors, split into their own TU by
-    // concern -- this catalog TU had crossed the file-size ceiling (the
-    // same split the animation-event anchors took).
+    // concern (the same split the animation-event anchors took).
     seedSimplePageAnchors(search);
 
     // Animations › General
@@ -1134,8 +1133,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Saved sets"));
 
     // The per-event animation anchors live in their own TU
-    // (searchcatalog_animations.cpp) — the single catalog file had crossed
-    // the size ceiling.
+    // (searchcatalog_animations.cpp), split out by concern.
     seedAnimationEventAnchors(search);
 
     addSection(search, QStringLiteral("profiles"), QStringLiteral("saveCurrent"),

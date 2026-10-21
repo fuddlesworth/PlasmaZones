@@ -6,14 +6,14 @@
 // columns, reconcile, viewport queries and the anchoring/centering policies.
 // Each slot is a short self-contained scenario over the same threeColumns
 // fixture, and the declaration-order table of contents below is what keeps it
-// navigable. The view-ownership slots (the pan's detach
-// latch) and the group-width verbs were placed in test_scrollstrip_view.cpp
-// from the start rather than grown into this file; only the pan's own
-// delta-clamp slot below predates that file. The view suite shares the
-// screen fixture's constants but no strip fixture: every slot there builds
-// its own strip. The ENGINE-level behaviour is already split across
-// the sibling test_scrollengine_* files (deliberately uncounted here: the
-// split grows, and a stale number reads as a claim about coverage).
+// navigable. The view-ownership slots (the pan's detach latch) and the
+// group-width verbs were placed in test_scrollstrip_view.cpp from the start
+// rather than grown into this file; only the pan's own delta-clamp slot below
+// predates that file. The view suite shares the screen fixture's constants
+// but no strip fixture: every slot there builds its own strip. The
+// ENGINE-level behaviour is already split across the sibling
+// test_scrollengine_* files (deliberately uncounted here: the split grows,
+// and a stale number reads as a claim about coverage).
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
@@ -623,7 +623,8 @@ void TestScrollStripOps::focusTileByOrdinalSkipsUndrawnTiles()
     // FLOAT toggle, which takes the window out of the column entirely. So
     // this arm pins the embedder-facing contract. The production analogue,
     // where floating a middle tab renumbers the rest, is covered at the
-    // engine level in test_scrollengine_smoke.
+    // engine level by floatingATabRenumbersTheOrdinals in
+    // test_scrollengine_tabfocus.
     QVERIFY(strip.setWindowMinimized(QStringLiteral("b"), true, params));
     QVERIFY(strip.focusTileByOrdinal(1));
     QCOMPARE(strip.activeWindowId(), QStringLiteral("a"));
@@ -823,6 +824,32 @@ void TestScrollStripOps::rotateReconcilesTheTabbedOwnerWithTheSlotsDisplay()
     QCOMPARE(strip.rotateVisibleColumns(false, params), 3);
     QCOMPARE(strip.columns().at(0).heightOwnerId, QStringLiteral("y"));
     QVERIFY(strip.columns().at(1).heightOwnerId.isEmpty());
+
+    // A Tabbed slot receiving a TABBED column's tabs keeps the owner they
+    // brought, even when that owner is not the tab on show: the tab on show
+    // is only the rule for a column ENTERING tabbed. Each column's owner here
+    // is the tab that was on show when it was tabbed, and focus has since
+    // moved to its other tab, so the carried owner and the tab on show
+    // differ in both columns.
+    ScrollStrip tabs;
+    QVERIFY(tabs.insertWindow(QStringLiteral("p"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(tabs.insertWindowIntoActiveColumn(QStringLiteral("q"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(tabs.toggleActiveColumnTabbed());
+    QVERIFY(tabs.focusTileByOrdinal(1));
+    QVERIFY(tabs.insertWindow(QStringLiteral("r"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(tabs.insertWindowIntoActiveColumn(QStringLiteral("s"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(tabs.toggleActiveColumnTabbed());
+    QVERIFY(tabs.focusTileByOrdinal(1));
+    QCOMPARE(tabs.columns().at(0).heightOwnerId, QStringLiteral("q"));
+    QCOMPARE(tabs.activeWindowId(), QStringLiteral("r"));
+    QCOMPARE(tabs.columns().at(1).heightOwnerId, QStringLiteral("s"));
+    QCOMPARE(tabs.visibleColumnIndices(params), QVector<int>({0, 1}));
+
+    QCOMPARE(tabs.rotateVisibleColumns(true, params), 4);
+    QCOMPARE(tabs.columns().at(0).tiles.at(0).windowId, QStringLiteral("r"));
+    QCOMPARE(tabs.columns().at(0).heightOwnerId, QStringLiteral("s"));
+    QCOMPARE(tabs.columns().at(1).tiles.at(0).windowId, QStringLiteral("p"));
+    QCOMPARE(tabs.columns().at(1).heightOwnerId, QStringLiteral("q"));
 }
 
 void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()

@@ -427,9 +427,12 @@ void TestScrollEngineVerbs::scrollViewByPxPansQuietly()
 {
     // The placement map pans through the pixel verb once per frame while its
     // lens is dragged, so a success OSD per call kept the navigation card
-    // coming back for the whole drag. A successful pixel pan therefore
-    // reports nothing, while still detaching the view and marking the anchor
-    // for persistence; its refusals report exactly as the percent verb's do.
+    // coming back for the whole drag. A pixel pan on a strip therefore reports
+    // nothing, while a successful one still detaches the view and marks the
+    // anchor for persistence. That holds for its refusals too: a drag held
+    // against the strip's end, or held still, would bring the card back on
+    // every frame just the same. Only the empty strip answers
+    // (everyVerbAnswersNoWindowsOnAnEmptyScreen).
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     for (const char* id : {"app|a", "app|b", "app|c"}) {
@@ -455,30 +458,41 @@ void TestScrollEngineVerbs::scrollViewByPxPansQuietly()
     QCOMPARE(state->strip().viewAnchor(), anchorBefore + 200);
     QCOMPARE(feedback.count(), 0);
 
-    // Refusals still answer: zero pixels, and a pan pinned at the end it is
-    // asked to move toward.
+    // The refusals are as quiet: a zero pan, and a pan pinned at the end it is
+    // asked to move toward. Neither moves anything, so neither marks the
+    // anchor for persistence either.
+    const int placementBeforeRefusals = placement.count();
     engine->scrollViewByPx(0, QStringLiteral("S1"));
-    QCOMPARE(feedback.count(), 1);
-    QCOMPARE(feedback.last().at(0).toBool(), false);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_movement"));
+    QCOMPARE(feedback.count(), 0);
+    QCOMPARE(state->strip().viewAnchor(), anchorBefore + 200);
     // An extreme px is exported API's to receive: bounded at the entry, it
     // pans to the strip's end like any over-long pan.
     engine->scrollViewByPx(std::numeric_limits<int>::max(), QStringLiteral("S1"));
     QCOMPARE(state->strip().viewAnchor(), anchorBefore);
+    const int placementAtEnd = placement.count();
+    QVERIFY(placementAtEnd > placementBeforeRefusals);
     engine->scrollViewByPx(1, QStringLiteral("S1"));
-    QCOMPARE(feedback.last().at(0).toBool(), false);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+    QCOMPARE(state->strip().viewAnchor(), anchorBefore);
+    QCOMPARE(placement.count(), placementAtEnd);
     engine->scrollViewByPx(std::numeric_limits<int>::min(), QStringLiteral("S1"));
-    QVERIFY(state->strip().viewAnchor() > anchorBefore);
+    const int anchorAtStart = state->strip().viewAnchor();
+    QVERIFY(anchorAtStart > anchorBefore);
+    const int placementAtStart = placement.count();
     engine->scrollViewByPx(-1, QStringLiteral("S1"));
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+    QCOMPARE(state->strip().viewAnchor(), anchorAtStart);
+    QCOMPARE(placement.count(), placementAtStart);
+    QCOMPARE(feedback.count(), 0);
 
-    // The percent verb behind the keyboard keeps its success OSD. Forward,
-    // since the INT_MIN pan above left the view pinned at the strip's start.
-    const int feedbackBefore = feedback.count();
+    // The percent verb behind the keyboard keeps its success OSD and its
+    // refusals. Forward, since the INT_MIN pan above left the view pinned at
+    // the strip's start; then a step too small to reach a pixel.
     engine->scrollViewByPercent(25, QStringLiteral("S1"));
-    QCOMPARE(feedback.count(), feedbackBefore + 1);
+    QCOMPARE(feedback.count(), 1);
     QCOMPARE(feedback.last().at(0).toBool(), true);
+    engine->scrollViewByPercent(-0.01, QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 2);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_movement"));
 }
 
 void TestScrollEngineVerbs::scrollViewSurvivesALateStashClaim()
@@ -742,12 +756,15 @@ void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()
     engine->moveFocusedToTiling(QStringLiteral("S1"));
     engine->switchFocusBetweenFloatingAndTiling(QStringLiteral("S1"));
     engine->scrollViewByPercent(25, QStringLiteral("S1"));
+    // The pixel pan's one report: with no strip there is nothing on screen
+    // to show the drag doing nothing.
+    engine->scrollViewByPx(25, QStringLiteral("S1"));
     engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
     engine->minimizeColumnWidth(QStringLiteral("S1"));
     engine->resetStripToDefaults(QStringLiteral("S1"));
     engine->toggleWindowedFullscreen(QStringLiteral("S1"));
 
-    QCOMPARE(feedback.count(), 15);
+    QCOMPARE(feedback.count(), 16);
     for (int i = 0; i < feedback.count(); ++i) {
         QCOMPARE(feedback.at(i).at(0).toBool(), false);
         QCOMPARE(feedback.at(i).at(2).toString(), QStringLiteral("no_windows"));

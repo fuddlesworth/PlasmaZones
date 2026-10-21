@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The scrolling half of the settings schema: the Scrolling knobs and
-// the Shortcuts.Scrolling chords. Split out of settingsschema.cpp for
-// file-size; the shared validator helpers live in settingsschema_p.h and the
-// three entry points (appendScrollingSchema, appendScrollingZoneSelectorSchema,
+// the Shortcuts.Scrolling chords. Split out of settingsschema.cpp by domain.
+// The shared validator helpers live in settingsschema_p.h and the three entry
+// points (appendScrollingSchema, appendScrollingZoneSelectorSchema,
 // appendScrollingShortcutsSchema) are declared alongside every other
 // appendXxxSchema in settingsschema.h.
 

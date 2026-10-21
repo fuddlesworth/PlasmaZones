@@ -5,8 +5,8 @@
 // dispatch, the per-type display labels, and the assembled type list the
 // editor's action picker renders. The per-PARAMETER half (labels, hints,
 // schema, default payloads) lives in ruleauthoring_actionparams.cpp and the
-// per-type hover help in ruleauthoring_actiondescriptions.cpp, so no one of
-// the three ladders pushes its file past the size ceiling.
+// per-type hover help in ruleauthoring_actiondescriptions.cpp, one ladder per
+// file.
 
 #include "ruleauthoring.h"
 #include "ruleauthoring_p.h"

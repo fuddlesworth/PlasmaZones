@@ -426,6 +426,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         pushWindowMetadata(window);
         if (window->isFullScreen()) {
             pushRestoreRect(window);
+        } else {
+            // A tile KWin took for a strip tile while it was fullscreen: the
+            // quick-tile corrector declined it then, and KWin's
+            // requestedTileChanged will not repeat (F123). After the tiling
+            // handler's slot above, which re-marks a strip tile returning
+            // from its own fullscreen.
+            m_tilingHandler->cancelStripQuickTile(window);
         }
     });
 
@@ -481,11 +488,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             &TilingHandler::slotWindowFrameGeometryChanged);
 
     // A geometry request for the window outside every effect apply: KWin's
-    // own (its Expand and Shrink Window verbs, a script setting the frame,
-    // a re-decoration, its keep-visible clamp) or the user's resize. KWin
+    // own (its Expand and Shrink Window verbs, a script setting the frame, an
+    // axis-only maximize, its keep-visible clamp) or the user's resize. KWin
     // emits this at the top of each request and never for a client's commit,
     // so a request that resizes a strip window marks its frame as no longer
-    // answering the column the strip offered (noteForeignStripRequest). The
+    // answering the column the strip offered, decided there and then from the
+    // size KWin has just stored for it (noteForeignStripRequest). The
     // offered-column probe goes first, so a session with no strip pays one
     // empty-map test; the user-move test first of all, because KWin issues
     // a request per pointer step of an interactive move.
@@ -1243,32 +1251,20 @@ void PlasmaZonesEffect::noteForeignStripRequest(KWin::EffectWindow* w)
     if (!kw) {
         return;
     }
-    // KWin's own request. The new rect is not known yet, so whether it
-    // resizes is read on the next turn, before the client can answer it: KWin
-    // sends the configure from a zero timer of its own, and the client's reply
-    // needs another turn of the event loop to arrive. A request that keeps the
-    // size (KWin 6.8's keep-visible clamp, a script's move) leaves the answer
-    // as it was. One that resizes, KWin's Expand and Shrink Window verbs or a
-    // script setting the frame, is a settled non-interactive resize whose
-    // frame would otherwise read as the client's answer and become a floor no
-    // width verb or drag could clear (F141). Void if the effect commands the
-    // window in between, since that command owns what it is offered then.
-    const QSize before = QRectF(kw->moveResizeGeometry()).toRect().size();
-    const quint64 stampAtRequest = m_daemonGate.commandStamps.current(w);
-    QTimer::singleShot(0, this, [this, safeW = QPointer<KWin::EffectWindow>(w), windowId, before, stampAtRequest]() {
-        if (!safeW || safeW->isDeleted() || m_daemonGate.commandStamps.current(safeW.data()) != stampAtRequest) {
-            return;
-        }
-        const KWin::Window* const kwNow = safeW->window();
-        const auto entry = m_scrollOfferedColumn.find(windowId);
-        if (!kwNow || entry == m_scrollOfferedColumn.end()
-            || QRectF(kwNow->moveResizeGeometry()).toRect().size() == before) {
-            return;
-        }
-        qCDebug(lcEffect) << "Column answer for" << windowId << "superseded by a resize KWin requested:" << before
-                          << "->" << QRectF(kwNow->moveResizeGeometry()).toRect().size();
-        entry->answer = ColumnAnswer::Foreign;
-    });
+    // KWin's own request, readable here because Window::moveResize, move and
+    // resize store it before moveResizeInternal emits this signal. One that
+    // resizes on KWin's account would otherwise read as the client's answer
+    // once the client acks it, and become a floor no width verb or drag could
+    // clear, or float the window outright when it passes the work area
+    // (ScrollDecisions::resizesOnKWinsAccount, F141).
+    const QRectF requested(kw->moveResizeGeometry());
+    if (!ScrollDecisions::resizesOnKWinsAccount(requested, QRectF(w->frameGeometry()), it->rect.size())) {
+        return;
+    }
+    qCDebug(lcEffect) << "Column answer for" << windowId
+                      << "superseded by a resize KWin requested:" << w->frameGeometry().size() << "->"
+                      << requested.size();
+    it->answer = ColumnAnswer::Foreign;
 }
 
 void PlasmaZonesEffect::scheduleColumnAnswerCatchUp()

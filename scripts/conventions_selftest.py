@@ -3,9 +3,9 @@
 """Self-test for check-conventions.py's two pure detectors, its two split rules and its
 readability precondition.
 
-Split out of the gate itself, which grew long when two branches each landed a
-new rule. This is the most separable concern in it: test
-DATA plus one function, depending on nothing it is not handed: the two detectors
+Split out of the gate itself, which grew long when two branches each landed a new rule.
+This is the most separable concern in it: test DATA plus one function, depending on
+nothing it is not handed: the two detectors
 (`prose_problems`, `iter_json_prose`) and the readability precondition
 (`partition_readable`), through whose `__globals__` the arms that need the gate's own
 namespace reach `rule_spdx`, `CODE_SUFFIXES`, `SPDX_HEAD_LINES` and `REPO`.
@@ -820,9 +820,8 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     than failing."""
     failures = []
     # Captured for the post-condition at the tail. FIVE arms now redirect the gate's REPO
-    # (and CODE_SUFFIXES or read_error with it) at a temp tree and
-    # restore them in a finally, and several of them no longer run last. The post-condition is
-    # what catches a dropped restore in any of them: a later arm would otherwise run against a
+    # (and CODE_SUFFIXES or read_error with it) at a temp tree and restore them in a
+    # finally, and several of them no longer run last. The post-condition is what catches a dropped restore in any of them: a later arm would otherwise run against a
     # deleted directory and raise, which reads like a broken gate rather than a finding.
     # frozenset(), not the set itself: CODE_SUFFIXES is mutable, so binding a reference
     # would compare equal to itself after an arm mutated it IN PLACE, and the comparison
@@ -839,9 +838,9 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     # leaked read_error is read by every later rule, which is what turns a well-formed file
     # into a "malformed JSON" finding.
     # conventions_shared_text.SHARED_PARAM_TEXT is redirected by two arms in this file and is
-    # the same shape. All of them are compared here
-    # rather than left to the arm that set them, because the arm that leaks is not the arm
-    # that fails — which is also why none of these messages names a culprit.
+    # the same shape. All of them are compared here rather than left to the arm that set
+    # them, because the arm that leaks is not the arm that fails — which is also why none
+    # of these messages names a culprit.
     entry_globals = partition_readable.__globals__
     entry_repo, entry_suffixes = entry_globals["REPO"], frozenset(entry_globals["CODE_SUFFIXES"])
     entry_read_error = entry_globals["read_error"]

@@ -55,10 +55,9 @@ pre-commit:
     conventions:
       # The CLAUDE.md rules that are decidable by inspection: SPDX headers,
       # the GPL-3 app / LGPL-2.1 libs/phosphor-* split (any tier's libs/
-      # directory), i18n() in C++,
-      # inline config paths that should be ConfigDefaults:: accessors, `.pragma
-      # library` in QML .js libraries, the DEP-5 copyright file, the plain-prose
-      # rules on user-facing strings, and the shared description a chain-resolved
+      # directory), i18n() in C++, inline config paths that should be
+      # ConfigDefaults:: accessors, `.pragma library` in QML .js libraries, the
+      # DEP-5 copyright file, the plain-prose rules on user-facing strings, and the shared description a chain-resolved
       # shader param carries on every pack. Only the staged files are checked so
       # the hook stays instant, with TWO exceptions. shared-param-text is a
       # whole-set rule and compares all twenty packs whenever this hook runs at

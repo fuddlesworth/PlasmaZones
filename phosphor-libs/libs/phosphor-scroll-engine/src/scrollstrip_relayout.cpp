@@ -89,9 +89,9 @@ int ScrollStrip::tabbedCrossReservationPx(const Column& c, const ScrollLayoutPar
     if (c.display != ColumnDisplay::Tabbed) {
         return 0;
     }
-    // The inverse of columnMinExtentPx's indicatorEatsMainAxis gate, and the
-    // same reasoning: a Left/Right indicator is thick along x, which is the
-    // CROSS axis exactly while the strip runs vertically.
+    // The inverse of tabbedMainReservationPx's gate, and the same reasoning:
+    // a Left/Right indicator is thick along x, which is the CROSS axis
+    // exactly while the strip runs vertically.
     if (isVerticalTabIndicator(params.tabIndicator.position) == params.axis.isHorizontal()) {
         return 0;
     }
@@ -305,11 +305,16 @@ int ScrollStrip::columnMinExtentPx(const Column& c, const ScrollLayoutParams& pa
         // in tabbedMainReservationPx, the one place it is spelled.
         const int reservationFloor = tabbedMainReservationPx(c, params);
         for (const Tile& tile : c.tiles) {
+            // A minimized tile is out of the layout, and skipped before its
+            // committed floor is looked up.
+            if (tile.minimized) {
+                continue;
+            }
             // minMain, not minWidth: the floor ALONG the strip (a vertical
             // one's is the minimum height), raised to any extent the client's
             // own commits hold it to, which is read the same way.
             const int tileMinMain = qMax(tile.minMain(params.axis), committedMainFloorPx(tile.windowId, params));
-            if (!tile.minimized && tileMinMain + reservationFloor > floor) {
+            if (tileMinMain + reservationFloor > floor) {
                 floor = tileMinMain + reservationFloor;
             }
         }
@@ -885,18 +890,14 @@ bool ScrollStrip::stripFitsViewport(const ScrollLayoutParams& params) const
 
 bool ScrollStrip::stripSettledInViewport(const ScrollLayoutParams& params) const
 {
-    // stripFitsViewport's test inlined, so the edge auto-scroll's per-tick
-    // disarm gate walks the strip's extent once rather than twice.
-    const int viewMain = mainExtent(params);
-    if (viewMain <= 0) {
-        return true; // degenerate area: nothing a scroll could reveal
-    }
-    if (stripExtentPx(params) > viewMain) {
+    // The one walk of the strip's extent this per-tick disarm gate pays for
+    // is stripFitsViewport's; nothing below measures the extent again.
+    if (!stripFitsViewport(params)) {
         return false;
     }
-    // Empty strip: nothing to reveal, and viewOffsetFor needs a live active
-    // column to derive from.
-    if (m_activeColumnIdx < 0) {
+    // Degenerate area or empty strip: nothing a scroll could reveal, and
+    // viewOffsetFor needs a live active column to derive from.
+    if (mainExtent(params) <= 0 || m_activeColumnIdx < 0) {
         return true;
     }
     // A strip that fits the viewport has exactly one in-range view offset,

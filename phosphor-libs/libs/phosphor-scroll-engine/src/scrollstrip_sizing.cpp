@@ -265,10 +265,10 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
     const bool clearedEdges = col->maximizedToEdges;
     col->maximizedToEdges = false;
     // Measure from what is ON SCREEN, not from the bare intent: a column
-    // sitting at its floor (columnMinExtentPx) resolves to a narrower intent than it
-    // renders, and stepping from the intent would let a shrink write ever
-    // smaller values while nothing moved, so the matching grow presses then
-    // did nothing visible until they climbed back out of that hole.
+    // sitting at its floor (columnMinExtentPx) resolves to a narrower intent
+    // than it renders, and stepping from the intent would let a shrink write
+    // ever smaller values while nothing moved, so the matching grow presses
+    // then did nothing visible until they climbed back out of that hole.
     const int current = columnExtentPx(*col, params);
     if (current <= 0) {
         return clearedEdges; // empty or fully minimized column: nothing to size
@@ -339,12 +339,12 @@ bool ScrollStrip::toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutPara
         return false;
     }
     // A column PINNED BY ITS FLOOR (a frame minimum or a committed floor,
-    // columnMinExtentPx) cannot be made narrower, so neither arm
-    // below can move it. Refusing is the honest answer and the same shape the
-    // sibling width verbs take at their own floors: without it the press
-    // rewrites persisted intent, renders identical pixels, and still returns
-    // true — which costs a relayout and raises a "resize" success OSD for a
-    // press that did nothing, forever, on every press.
+    // columnMinExtentPx) cannot be made narrower, so neither arm below can
+    // move it. Refusing is the honest answer and the same shape the sibling
+    // width verbs take at their own floors: without it the press rewrites
+    // persisted intent, renders identical pixels, and still returns true —
+    // which costs a relayout and raises a "resize" success OSD for a press
+    // that did nothing, forever, on every press.
     //
     // Purely this verb's own honesty rule now: nothing on the wire depends on
     // it. The published maximizedToEdges flag is DECLARED state on its own
@@ -356,11 +356,16 @@ bool ScrollStrip::toggleMaximizeColumnAt(int columnIndex, const ScrollLayoutPara
     // m_preMaximizeWidth stays armed for it indefinitely. Letting the press
     // through would not help — the relayout floors the column there, so it
     // would render full width regardless, and the user would get the same
-    // pixels plus a spent slot. The window has outgrown the strip, and the
-    // way out is the engine's oversized float, not this verb: a client
-    // minimum past the work area floats its window when it is reported
-    // (ScrollEngine::windowMinSizeUpdated), and so does a committed extent
-    // past it (ScrollEngine::reportCommittedSize).
+    // pixels plus a spent slot. Where the window has outgrown the strip, the
+    // way out is the engine's oversized float, not this verb, and that float
+    // fires only PAST the work area: on a declared minimum wider than it when
+    // the minimum is reported (ScrollEngine::windowMinSizeUpdated), and on a
+    // committed floor that with the tab reservation is wider than it when the
+    // client teaches it (ScrollEngine::reportCommittedSize). This refusal
+    // starts AT the work area, so a floor that lands exactly on it, or a
+    // declared minimum that reaches it only with the tab reservation added,
+    // floats nothing and stays here until the floor drops (a lowered minimum,
+    // the user's own resize, a narrower answer from the client).
     if (columnMinExtentPx(*col, params) >= params.axis.mainSize(params.workArea)) {
         return false;
     }
@@ -506,10 +511,9 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
     // matching the `taken` walk below, which sums columnExtentPx. Stepping
     // from the bare intent would mismatch the two: a column held at its
     // floor (a frame minimum or a committed floor) resolves to a narrower
-    // intent than it renders, so target
-    // could land BELOW the rendered extent, leaving the screen unchanged
-    // while the verb reported success and buried the proportional anchor
-    // under a smaller Fixed value.
+    // intent than it renders, so target could land BELOW the rendered
+    // extent, leaving the screen unchanged while the verb reported success
+    // and buried the proportional anchor under a smaller Fixed value.
     const int current = columnExtentPx(*col, params);
     if (current <= 0) {
         return clearedEdges; // empty or fully minimized column: nothing to expand
@@ -638,12 +642,12 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
     if (usable < n) {
         return restoreEdges(); // gaps alone outrun the viewport: no share is a pixel
     }
-    // A column whose tiles' minimum exceeds its share cannot take it: what
-    // renders is columnExtentPx, which floors at that minimum, so writing the
-    // share would push the group past the trailing edge and then read back
-    // as "already there" on the next press. Such a column keeps its floor
-    // and the others split what is left, repeated until every share clears
-    // the floors it was measured against.
+    // A column whose floor (its tiles' minimum, or a committed floor) exceeds
+    // its share cannot take it: what renders is columnExtentPx, which floors
+    // the column there, so writing the share would push the group past the
+    // trailing edge and then read back as "already there" on the next press.
+    // Such a column keeps its floor and the others split what is left,
+    // repeated until every share clears the floors it was measured against.
     QVector<int> extents(n);
     QVector<bool> floorBound(n, false);
     for (int k = 0; k < n; ++k) {
@@ -759,12 +763,12 @@ bool ScrollStrip::minimizeActiveColumnWidth(const ScrollLayoutParams& params)
         ? ColumnWidth::makeProportion(MinColumnWidthFraction)
         : ColumnWidth::makePreset(*std::min_element(presets.cbegin(), presets.cend()));
     // RENDERED-pixel compare, equalizeVisibleColumnWidths' reason: what the
-    // user sees is columnExtentPx, the intent raised to the column's minimum
-    // size floor. A column whose floor already sits at or above the smallest
-    // preset would move nothing on screen if the intent were rewritten, and
-    // the verb would report success for a no-op (then refuse the second
-    // press). Comparing the floored target against the floored current width
-    // makes the first press refuse too. Capped at the work area's main extent
+    // user sees is columnExtentPx, the intent raised to the column's floor (a
+    // minimum size or a committed floor). A column whose floor already sits at
+    // or above the smallest preset would move nothing on screen if the intent
+    // were rewritten, and the verb would report success for a no-op (then
+    // refuse the second press). Comparing the floored target against the
+    // floored current width makes the first press refuse too. Capped at the work area's main extent
     // the way columnExtentPx caps what it measures: a floor PAST the work
     // area (a frame minimum or committed floor wider than the output, or a
     // work area that shrank under one) renders the column at the cap, and an

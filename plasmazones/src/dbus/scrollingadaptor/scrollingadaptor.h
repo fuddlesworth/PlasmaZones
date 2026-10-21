@@ -304,13 +304,13 @@ public Q_SLOTS:
      * The pixel twin of scrollView for a caller that already holds a distance
      * along the strip (the map's drag pan). Same detached-view contract and
      * the same gates as scrollView minus the step provider, which a pixel
-     * count does not need. A pan that moves the view raises no OSD, since the
-     * map pans once per drag frame; a pan pinned at the end it moves toward
-     * still answers no-target. A zero distance is a silent no-op HERE, before
-     * the engine: the engine would answer it with a no_movement OSD, and a
-     * drag that has not moved yet is not a pan the user should be told about.
-     * A distance past the band the percent twin bounds its pixels to is
-     * clamped to it here, so the strip's view arithmetic cannot overflow.
+     * count does not need. The pan is quiet, since the map calls it once per
+     * drag frame: a pan that moves the view raises no OSD, and neither does a
+     * pan pinned at the strip end it moves toward. Only an owned screen whose
+     * strip holds no windows answers, with no_windows. A zero distance is a
+     * silent no-op HERE, before the engine, because a drag that has not moved
+     * yet is not a pan. A distance past a million pixels either way is
+     * clamped to that bound here, the same band the engine bounds the verb to.
      *
      * @param screenId Screen whose strip should move; an empty string is
      *                 ignored
@@ -326,11 +326,13 @@ public Q_SLOTS:
      * set-window-height: a global shortcut carries no value argument, so the
      * absolute setters live only on this surface. All four share focusColumn's
      * silent ownership and per-context gates, and each refuses out-of-range
-     * values silently —
-     * proportions outside the settings UI's proportion range, pixels outside
-     * its fixed range (the width and height fixed ranges happen to agree
-     * today; each is validated against its own accessor). A value equal to
-     * the current intent answers with a no-target OSD, like the step verbs.
+     * values silently — proportions outside the settings UI's proportion
+     * range, pixels outside its fixed range (the width and height fixed
+     * ranges happen to agree today; each is validated against its own
+     * accessor). A value equal to the current intent answers with a no-target
+     * OSD, like the step verbs, except on a column maximized to its edges,
+     * where the write takes the column out of that state and counts as a
+     * change.
      *
      * Width proportions are exact (ColumnWidth has a Proportion kind).
      * Height proportions are NOT: the strip model stores them as a fraction
@@ -359,7 +361,9 @@ public Q_SLOTS:
      *
      * The one in-tree wire caller is the Phosphor shell's placement map,
      * whose column menu sends the NAMED spelling for the focused window and
-     * discards the answer (so its click raises no OSD). The Scrolling
+     * discards the answer (so its click raises no OSD). It sends nothing when
+     * the daemon reports no focused window for that screen, or when the map
+     * shows a pinned desktop rather than the current one. The Scrolling
      * maximize column shortcut reaches the engine IN-PROCESS and never
      * crosses this boundary, and the empty spelling exists for external
      * scripting. It is deliberately routed to the SAME ScrollEngine entry
@@ -381,9 +385,8 @@ public Q_SLOTS:
      *         boundary, or accepted and acted on by nothing. Nothing in the
      *         tree steers on this verb's answer, which is toggleMaximizeToEdges'
      *         job, and the placement map discards it; it is reported so the
-     *         twins keep one wire shape. No
-     *         [[nodiscard]]: a caller that only wants the toggle legitimately
-     *         discards it.
+     *         twins keep one wire shape. No [[nodiscard]]: a caller that only
+     *         wants the toggle legitimately discards it.
      */
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId);
 

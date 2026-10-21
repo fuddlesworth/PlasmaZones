@@ -76,8 +76,20 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     // is stale: it may have answered at the old minimum. Dropped, the column
     // is offered as asked, and a client that still will not take it teaches
     // the floor again. A raised minimum takes nothing.
+    //
+    // Whether the drop changed the layout is MEASURED, on the column the
+    // window holds in the strip this report acts on, before and after: a
+    // floor in the orientation that strip does not run, a floating window's
+    // floor, a floor its column already outgrows, or one read while minimum
+    // sizes are off moves nothing, and announcing it would republish and
+    // retile a strip that did not change. Measured ahead of the minimum write
+    // below, so only the floor's part of the change is counted here.
+    const bool mayHoldFloor = state && m_committedExtents.contains(windowId) && state->strip().containsWindow(windowId);
+    const ScrollLayoutParams floorParams = mayHoldFloor ? layoutParamsForKey(key) : ScrollLayoutParams{};
+    const int extentBeforeDrop = mayHoldFloor ? state->strip().windowColumnMainExtentPx(windowId, floorParams) : -1;
+    dropCommittedForLoweredMinimum(windowId, previousMin, QSize(clampedMinWidth, clampedMinHeight));
     const bool floorDropped =
-        dropCommittedForLoweredMinimum(windowId, previousMin, QSize(clampedMinWidth, clampedMinHeight));
+        mayHoldFloor && state->strip().windowColumnMainExtentPx(windowId, floorParams) != extentBeforeDrop;
     if (!state) {
         return;
     }

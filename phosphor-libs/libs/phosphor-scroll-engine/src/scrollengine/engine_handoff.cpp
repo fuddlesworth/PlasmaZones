@@ -146,6 +146,11 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
+        // A migration out of the stale context, onto another output or
+        // another desktop, so what the client's commits taught there goes too
+        // (windowOpened's migration and handoffRelease drop it the same way),
+        // ahead of the insert below.
+        forgetCommittedExtents(windowId);
         if (staleWasFloating) {
             // Same announcement as windowOpened's migration: a silently
             // dropped float bit leaves signal-driven subscribers believing

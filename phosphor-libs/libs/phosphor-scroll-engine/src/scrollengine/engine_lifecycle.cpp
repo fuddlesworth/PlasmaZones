@@ -1029,7 +1029,9 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // memory, the column rect becomes the reopen float-back geometry (the
     // float-back tile-rect poison, autotile's twin retains for the same
     // reason). forgetClosedFullscreenHold reclaims the entry once that capture
-    // has run, and pruneStaleWindows is the aliveness backstop.
+    // has run (or straight after a live release the daemon routes through
+    // here, which takes no capture), and pruneStaleWindows is the aliveness
+    // backstop.
     // A close mid-hold keeps answering the hold for the same reason: that capture
     // runs after this drop and must read the frame as a suspension, never free geometry.
     if (m_floatRestore.value(windowId).fullscreenHold) {

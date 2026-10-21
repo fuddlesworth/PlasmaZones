@@ -7,7 +7,8 @@
 // reportMinSizeIfChanged, the min-size reporter it shares with the batch, and
 // reportStripCommit, which reports a strip window's answer to its offered
 // column (read by PlasmaZonesEffect::readColumnAnswer), and
-// cancelStripQuickTile, which takes KWin's quick tile back off a strip tile.
+// cancelStripQuickTile, which takes KWin's quick tile back off a strip tile
+// through dropKWinTile and answerDroppedTileAck, which the batch shares.
 // Split out of tiling.cpp, which keeps the tile batch pipeline.
 
 #include "tilinghandler.h"
@@ -253,7 +254,14 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                     // has already scheduled for it must still land.
                     const quint64 latestCommand = m_effect->m_daemonGate.commandStamps.current(w);
                     m_effect->applyWindowGeometry(w, commanded, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+                    // A stale-ack answer the re-seat armed carries the apply's
+                    // stamp, which the reinstate takes back; it follows the
+                    // reinstated one, or the frame hook would find it
+                    // superseded and drop it unanswered (cancelStripQuickTile
+                    // does the same).
+                    const quint64 applyStamp = m_effect->m_daemonGate.commandStamps.current(w);
                     m_effect->m_daemonGate.commandStamps.reinstate(w, latestCommand);
+                    m_effect->m_daemonGate.commandStamps.carryStaleAck(w, applyStamp);
                     return;
                 }
             }
@@ -720,8 +728,7 @@ void TilingHandler::cancelStripQuickTile(KWin::EffectWindow* w)
         return;
     }
     KWin::Window* const kw = w->window();
-    // Our own requestTile(nullptr) below lands here too, with nothing left to
-    // cancel.
+    // Our own untile below lands here too, with nothing left to cancel.
     if (!kw || !kw->requestedTile()) {
         return;
     }
@@ -748,7 +755,12 @@ void TilingHandler::cancelStripQuickTile(KWin::EffectWindow* w)
     const QSize tileSize = QRectF(kw->moveResizeGeometry()).toRect().size();
     qCInfo(lcEffect) << "Cancelling KWin's quick tile of strip tile" << windowId << "at" << tileSize;
     const auto geomGuard = m_effect->geometryApplyScope();
-    kw->requestTile(nullptr);
+    const KWinTileDrop drop = dropKWinTile(w);
+    // On every way out below, once the window has been placed: the tile's
+    // configure may still be acked at the tile's size.
+    const auto answerAck = qScopeGuard([this, w, drop] {
+        answerDroppedTileAck(w, drop);
+    });
     // KWin's untile moves the window to a restore rect of its own, not
     // necessarily where the strip has put the column since. The column goes
     // back the way the counter-assert puts a commanded rect back. Not while a
@@ -788,16 +800,80 @@ void TilingHandler::cancelStripQuickTile(KWin::EffectWindow* w)
     // still land.
     const quint64 latestCommand = m_effect->m_daemonGate.commandStamps.current(w);
     m_effect->applyWindowGeometry(w, column, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+    // A stale-ack answer the apply armed carries its stamp, which the
+    // reinstate below takes back; it follows the reinstated one, or the frame
+    // hook would find it superseded and drop it unanswered.
+    const quint64 applyStamp = m_effect->m_daemonGate.commandStamps.current(w);
     m_effect->m_daemonGate.commandStamps.reinstate(w, latestCommand);
+    m_effect->m_daemonGate.commandStamps.carryStaleAck(w, applyStamp);
     // The client was sent the tile's size and is now sent the column's, so
     // whatever it commits next answers the column: a new offer when the two
     // sizes differ, as a batch that sends a size is (recordStripOffer). That
-    // also supersedes the Foreign mark KWin's tile request may have left.
+    // also supersedes the Foreign mark KWin's tile request may have left. A
+    // tile's configure the client has yet to ack is answered on the way out
+    // (answerDroppedTileAck), so its ack reads unsettled, not as this answer.
     if (hasOffer) {
         m_effect->recordStripOffer(
             w, windowId, offeredColumn,
             ScrollDecisions::stripEntrySendsSize(tileSize, QRectF(kw->moveResizeGeometry()).toRect().size()));
     }
+}
+
+TilingHandler::KWinTileDrop TilingHandler::dropKWinTile(KWin::EffectWindow* w)
+{
+    KWinTileDrop drop;
+    KWin::Window* const kw = w && !w->isDeleted() ? w->window() : nullptr;
+    if (!kw || !kw->requestedTile()) {
+        return drop;
+    }
+    drop.dropped = true;
+    // Sizes on their own, not through QRectF::toRect: the tile and the frame
+    // sit in different places, and that rounding depends on where.
+    drop.requested = QRectF(kw->moveResizeGeometry()).size().toSize();
+    drop.committed = QRectF(w->frameGeometry()).size().toSize();
+    const auto geomGuard = m_effect->geometryApplyScope();
+    // KWin's own untile, as its shortcuts reach it: Window::setQuickTileMode
+    // with no flag resolves to no tile and unmanages the requested one, quick
+    // or custom alike (Tile::unmanage), which takes the window out of the
+    // tile's member list as well as clearing the request. A bare
+    // requestTile(nullptr) only clears the request: the tile keeps the window
+    // as a member, moveResizes it onto itself whenever its geometry or padding
+    // changes, and a switch back to its desktop requests it again
+    // (Workspace::updateWindowVisibilityAndActivateOnDesktopChange).
+    kw->setQuickTileModeAtCurrentPosition(KWin::QuickTileMode(KWin::QuickTileFlag::None));
+    // setQuickTileMode unmanages only a tile whose desktop its output shows.
+    // Any other is let go as a request, and KWin's re-request of it later
+    // raises requestedTileChanged, which cancels it again.
+    if (kw->requestedTile()) {
+        kw->requestTile(nullptr);
+    }
+    return drop;
+}
+
+void TilingHandler::answerDroppedTileAck(KWin::EffectWindow* w, const KWinTileDrop& drop)
+{
+    // Wayland only: an X11 configure is answered synchronously, so nothing of
+    // the tile's is left in flight to land later.
+    if (!drop.dropped || !w || w->isDeleted() || !w->isWaylandClient()) {
+        return;
+    }
+    KWin::Window* const kw = w->window();
+    if (!kw) {
+        return;
+    }
+    const QRectF commanded(kw->moveResizeGeometry());
+    if (!ScrollDecisions::droppedTileAckOutstanding(drop.requested, drop.committed, commanded.size().toSize(),
+                                                    QRectF(w->frameGeometry()).size().toSize())) {
+        return;
+    }
+    // The answer the frame hook already gives a superseded configure's ack
+    // (WindowCommandStamps::StaleAck, Body -1.5): when the tile's size lands,
+    // the rect the window was placed at is re-issued once, which leaves the
+    // frame unsettled until the client acks it, so it is neither centred nor
+    // read as an answer. On the window's current command: the batch's apply,
+    // or the stamp a cancel reinstated.
+    m_effect->m_daemonGate.commandStamps.staleAcks.insert(
+        w, {commanded.toRect(), m_effect->m_daemonGate.commandStamps.current(w)});
 }
 
 bool TilingHandler::stripOutputMovedSinceBatch(const QString& screenId) const

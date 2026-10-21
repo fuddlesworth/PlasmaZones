@@ -607,7 +607,7 @@ void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
         ? qBound(-kMaxScrollPx, percent / 100.0 * params.axis.mainSize(params.workArea), kMaxScrollPx)
         : 0.0;
     const int deltaPx = qRound(rawPx);
-    scrollViewResolved(deltaPx, screen, state, params, /*announceSuccess=*/true);
+    scrollViewResolved(deltaPx, screen, state, params, /*announce=*/true);
 }
 
 void ScrollEngine::scrollViewByPx(int px, const QString& screenId)
@@ -622,22 +622,25 @@ void ScrollEngine::scrollViewByPx(int px, const QString& screenId)
                                   screen);
         return;
     }
-    // A successful pan raises no OSD. The placement map calls this once per
-    // frame while the user drags its lens, and the navigation card would
-    // keep coming back for the whole drag; the user is already watching the
-    // strip move. The refusals still report, as the percent verb's do.
+    // Past the empty-strip answer above, the pan reports nothing at all. The
+    // placement map calls this once per frame while the user drags its lens,
+    // and the navigation card would keep coming back for the whole drag: on
+    // every frame of a successful pan, and on every frame of a drag held
+    // against the strip's end (no_target) or held still (a zero pan,
+    // no_movement). The user is already watching the strip, which shows all
+    // three answers. The empty strip still reports, since there is no strip
+    // to watch.
     //
     // Bounded here as well as at the D-Bus adaptor, to the band the percent
     // verb uses: this is exported API, so the entry states its own range
     // rather than leaning on one caller's. ScrollStrip::scrollViewBy sums wide
     // and would take any int, so the bound only ever trims a pan the strip
     // would clamp at its end anyway.
-    scrollViewResolved(qBound(-kMaxScrollViewPx, px, kMaxScrollViewPx), screen, state, params,
-                       /*announceSuccess=*/false);
+    scrollViewResolved(qBound(-kMaxScrollViewPx, px, kMaxScrollViewPx), screen, state, params, /*announce=*/false);
 }
 
 void ScrollEngine::scrollViewResolved(int deltaPx, const QString& screen, ScrollState* state,
-                                      const ScrollLayoutParams& params, bool announceSuccess)
+                                      const ScrollLayoutParams& params, bool announce)
 {
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = deltaPx != 0 && state->strip().scrollViewBy(deltaPx, params);
@@ -648,9 +651,9 @@ void ScrollEngine::scrollViewResolved(int deltaPx, const QString& screen, Scroll
         // floating window.
         applyLayout(screen, false);
         Q_EMIT placementChanged(screen);
-        if (!announceSuccess) {
-            return;
-        }
+    }
+    if (!announce) {
+        return;
     }
     // The active window is unchanged either way — that is the verb's whole
     // point — so the target slot carries it back unchanged on success too.

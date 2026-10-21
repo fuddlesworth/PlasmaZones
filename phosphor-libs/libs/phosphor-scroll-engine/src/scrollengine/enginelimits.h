@@ -103,6 +103,14 @@ inline constexpr int kMaxScrollViewPx = 1'000'000;
 /// logical size to whole device pixels and back, so a client that took its
 /// tile can commit one pixel either side of it; reading that as an answer
 /// would plant or give back a one-pixel floor and relayout the strip for it.
+///
+/// KEEP EQUAL to the compositor's CommittedSizeTolerancePx
+/// (plasmazones/kwin-effect/tilinghandler/scrolldecisions.h), hand-mirrored
+/// because the effect does not link this library. That one decides which
+/// answers are reported at all and this one which reported answers teach
+/// anything: a smaller value here would only judge answers the effect never
+/// sends, and a larger one would leave the effect reporting answers this
+/// engine always reads as the offer.
 inline constexpr int kCommittedExtentSlackPx = 1;
 
 /// Sanity bounds for tab-indicator geometry. Deliberately NOT the rules

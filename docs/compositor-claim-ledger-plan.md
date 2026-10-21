@@ -4,8 +4,8 @@
 # One funnel for the effect's compositor-state claims
 
 **Status.** The claim vocabulary, the release table and its tests have landed,
-and so has `releaseAllClaims` plus three of the sixteen exit paths. The rest of
-the matrix below still holds its scattered calls. Everything from "Evidence"
+and so has `releaseAllClaims` plus the exit paths in rows 1, 3, 4, 11 and 14
+of the matrix below. The other rows still hold their scattered calls. Everything from "Evidence"
 down describes the tree as it stood before the funnel unless a section says
 otherwise.
 
@@ -189,9 +189,11 @@ migration this branch carries. See below.
 A first attempt wrote the funnel and the site migration, ran into two problems,
 and was reverted. The second attempt landed the vocabulary, the funnel, and the
 three sites whose ordering could be settled by reading them:
-`applyFloatCleanup`, `applyPassiveFloatShed` and `cleanupAutotileTracking`. The
-remaining thirteen rows of the matrix still hold their scattered calls, for the
-reasons below.
+`applyFloatCleanup`, `applyPassiveFloatShed` and `cleanupAutotileTracking`
+(rows 3, 4 and 1). The `onComplete` untile diff (row 11, now in
+`untilediff.cpp`) and the fullscreen-exit-while-floating repair (row 14) have
+since moved onto the funnel as well. The other rows of the matrix still hold
+their scattered calls, for the reasons below.
 
 **The table and the tree disagree, and the table is the honest one.** Under a
 scope-driven funnel, `cleanupAutotileTracking` releases every claim that
@@ -310,7 +312,7 @@ Met by what has landed:
   funnel fills it (`UntrackFunnel`'s monocle blank was ruled an accident for
   live windows and kept only for `Close`)
 
-Still open for the remaining thirteen rows:
+Still open for the rows not yet migrated (every row but 1, 3, 4, 11 and 14):
 
 - a linkable kwin-effect test target exists, so the migration is checkable
 - every migrated exit path releases through `releaseAllClaims`, and the

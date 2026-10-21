@@ -456,7 +456,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // committed to its whole tile (committedPeekPx), which outlives the column
     // floor: once the column satisfies that floor it is dropped, but the
     // client still answers at that width, and a clamped peek would hand it a
-    // sliver it answers at full width. At the TRAILING screen edge that answer
+    // sliver it answers at full width. The memory itself ends once the column
+    // offers less than it with no floor held (settleCommittedFloors, earlier
+    // in this pass). At the TRAILING screen edge that answer
     // grows across the boundary onto the neighbouring output; at the LEADING
     // edge, where the answer is anchored at the offer's origin, it grows over
     // the on-screen neighbour instead. Either way the column parks.

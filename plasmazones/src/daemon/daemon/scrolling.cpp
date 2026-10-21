@@ -226,12 +226,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // ScrollPerScreenKeys settings channel), so the seed is a plain copy;
     // rules write their own channel keys (bare-fraction width/height plus the
     // shared int keys), which the engine reads first.
-    // The two EFFECT-owned behaviours are collected as this loop walks the
-    // scrolling screens, then published in one push below. They cannot ride
-    // the engine's override map like their four siblings: focus-follows-mouse
-    // and the straddler PAINT clip both live in the compositor, so the daemon
-    // resolves `rule ?? config` here and hands the compositor the resolved
-    // membership.
+    // The EFFECT-owned behaviours are collected as this loop walks the
+    // scrolling screens, then published in one push below. The engine's
+    // override map does not reach the compositor, where focus-follows-mouse
+    // and the straddler PAINT clip both live, so the daemon resolves
+    // `rule ?? config` here and hands the compositor the resolved membership.
+    // cropStraddlers rides the override map as well, for the engine's own
+    // straddler clamp (see the effect-owned note inside the loop).
     QStringList ffmScreens;
     QStringList cropScreens;
     // Rebuilt from scratch by this walk rather than updated in place: a screen

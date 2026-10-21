@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Rule-COVERAGE arms of the gate self-test: each one drives a real rule over a fake tree.
 
-Split from conventions_selftest.py, which grew too long once the wiring call sites
-and the remaining prose-extraction arms got the coverage
-they had been missing. The cut is a real concern boundary rather than a line count:
+Split from conventions_selftest.py, which grew too long once the wiring call sites and the
+remaining prose-extraction arms got the coverage they had been missing. The cut is a real
+concern boundary rather than a line count:
 
   * conventions_selftest.py holds the arms that test a DETECTOR or a constant against
     data: the prose probes, `iter_json_prose`, the shared-text and dep5 detectors, and the
@@ -13,8 +13,7 @@ they had been missing. The cut is a real concern boundary rather than a line cou
     round.
   * this module holds the arms that reach INTO the gate's own namespace. Each takes
     `partition_readable.__globals__` and redirects a global there — REPO, CODE_SUFFIXES,
-    read_error — before calling the rule. That is the real
-    criterion. Two arms here (`_precondition_failures`, `_dead_stanza_failures`) pass
+    read_error — before calling the rule. That is the real criterion. Two arms here (`_precondition_failures`, `_dead_stanza_failures`) pass
     `repo=` as an argument instead and redirect nothing; they sit here because they belong
     with the fake-tree work, not because they meet that test.
 
@@ -23,7 +22,7 @@ text to, a rule whose arm could be deleted with a green suite, a helper pinned w
 only call site was not, and a constant whose probes were sized relative to itself.
 
 Everything here reaches the gate through `partition_readable.__globals__`, which IS the
-gate's namespace, so the gate grows no line and no export for any of it. Nothing here
+gate's namespace, so the gate needs no export for any of it. Nothing here
 imports the gate, so no cycle is possible.
 """
 from __future__ import annotations
@@ -71,7 +70,7 @@ def _precondition_failures(partition_readable) -> list[str]:
 def _spdx_suffix_failures(partition_readable) -> list[str]:
     """rule_spdx's CODE_SUFFIXES reach, against a fake tree.
 
-    Reached WITHOUT the gate growing a line, which an audit round wrongly recorded as
+    Reached WITHOUT any change to the gate, which an audit round wrongly recorded as
     impossible. partition_readable is already a module-level function of the gate, so
     its __globals__ IS the gate's namespace: the rule, the suffix set and the REPO the
     rule resolves against are all reachable from here. That matters because the set is
@@ -475,7 +474,7 @@ def _license_tree_failures(partition_readable) -> list[str]:
     the machine check for it could be deleted invisibly.
 
     Reaches the rule the same way _spdx_suffix_failures does, by redirecting the gate's
-    REPO, so it adds no line to the gate."""
+    REPO."""
     g = partition_readable.__globals__
     rule_license = g["rule_license"]
     bad: list[str] = []

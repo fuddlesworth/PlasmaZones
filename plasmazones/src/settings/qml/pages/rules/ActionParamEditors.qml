@@ -1129,10 +1129,9 @@ QtObject {
     }
 
     // Inline shader-uniform editor shared by both shader-override actions
-    // (OverrideAnimationShader and OverrideOverlayShader). Its body lives in
-    // ActionShaderParamsEditor.qml rather than here, because this file is past the
-    // size ceiling and the preset merge it needs could not be added in place — the
-    // same move ActionPresetEditor.qml made.
+    // (OverrideAnimationShader and OverrideOverlayShader). Its body, preset merge
+    // included, lives in ActionShaderParamsEditor.qml, as the preset combo's
+    // lives in ActionPresetEditor.qml.
     property Component _shaderParamsEditor: Component {
         ActionShaderParamsEditor {
             row: editors.row

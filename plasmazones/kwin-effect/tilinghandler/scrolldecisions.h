@@ -355,6 +355,52 @@ inline bool stripEntrySendsSize(const QSize& commanded, const QSize& delivered)
     return commanded != delivered;
 }
 
+/// Whether a geometry request made outside every effect apply resizes a strip
+/// window on KWin's account (its Expand and Shrink Window verbs, a script
+/// setting the frame), so the frame the client acks for it must not read as
+/// the client's answer to its column (F141). @p requested is KWin's
+/// move-resize geometry at the request: Window::moveResize, move and resize
+/// store it before the frameGeometryAboutToChange signal that carries the
+/// request. A request that keeps the frame's size, or asks for exactly the
+/// column the strip offered, resizes nothing of KWin's own: the keep-visible
+/// clamp, a script's move, or a move while the strip's own resize is in
+/// flight.
+///
+/// The sizes are rounded on their own (QSizeF::toSize), never through
+/// QRectF::toRect, whose rounded size depends on where the rect sits: a move
+/// that keeps a fractional size would round the two rects a pixel apart and
+/// read as a resize.
+inline bool resizesOnKWinsAccount(const QRectF& requested, const QRectF& frame, const QSize& offered)
+{
+    const QSize requestedSize = requested.size().toSize();
+    return requestedSize != frame.size().toSize() && requestedSize != offered;
+}
+
+/// Whether the configure KWin sent for a quick tile it has just been made to
+/// drop can still be acked at the tile's size after the strip put the column
+/// back, so the effect must answer that ack (WindowCommandStamps::StaleAck)
+/// rather than let the tile's frame land and read as the client's answer to
+/// its column (F123).
+///
+/// @p requestedAtDrop  KWin's move-resize size just before the drop: the
+///                     tile's size, which a configure may already carry.
+/// @p committedAtDrop  the client's frame size then.
+/// @p commandedAfter   KWin's move-resize size once the column is back.
+/// @p committedAfter   the client's frame size then.
+///
+/// Outstanding when a size other than the frame's was requested at the drop
+/// (the tile's configure may be on its way to the client or already sent) and
+/// the column put back asks for the size the client already has, which KWin
+/// applies with no configure of its own (XdgSurfaceWindow::moveResizeInternal),
+/// so nothing supersedes the tile's. A tile the client had already acked is
+/// left with the frame at the tile's size, and the column then goes out in a
+/// configure of its own.
+inline bool droppedTileAckOutstanding(const QSize& requestedAtDrop, const QSize& committedAtDrop,
+                                      const QSize& commandedAfter, const QSize& committedAfter)
+{
+    return requestedAtDrop != committedAtDrop && commandedAfter == committedAfter;
+}
+
 /// Where a Wayland strip window's answer to the column it was offered stands
 /// (ScrollOfferedColumn::answer in the effect).
 ///
@@ -369,9 +415,13 @@ enum class ColumnAnswer : quint8 {
     Owed, ///< a batch sent the client this column's size; no settled answer has been read since
     Read, ///< the settled answer was read: reported to the engine, or nothing to report
     /// The frame answers a resize nobody on the strip asked for: KWin's own
-    /// (its Expand and Shrink Window verbs, a script setting the frame, a
-    /// re-decoration) or the user's. Nothing the client commits answers the
-    /// strip's column until the next batch delivers one.
+    /// (its Expand and Shrink Window verbs, a script setting the frame, an
+    /// axis-only maximize) or the user's. Marked when the request is made,
+    /// from the size KWin requests then (resizesOnKWinsAccount). A
+    /// re-decoration is not one: KWin makes no geometry request for it and
+    /// configures the client to keep its frame size. Nothing the client
+    /// commits answers the strip's column until the column is delivered
+    /// again: the next batch, or a cancel that puts it back.
     Foreign,
 };
 
@@ -415,13 +465,14 @@ struct ColumnAnswerGates
 /// issued over queued resizes as the one producer of that ordering.
 ///
 /// @p offered is the column rect, @p live the frame. A frame that left the
-/// column entirely was moved elsewhere (KWin's Move to Screen, F973, F738),
-/// and an empty one is a mid-unmap commit.
+/// column entirely was moved elsewhere (KWin's Move to Screen, F973, F738).
+/// An empty one, a mid-unmap commit, is refused by the same test, because
+/// QRect::intersects is false for an empty rect.
 inline bool readsAsColumnAnswer(const ColumnAnswerGates& gates, ColumnAnswer answer, const QRect& offered,
                                 const QRect& live)
 {
     return gates.managed && gates.coordinatesHold && gates.kwinStateAtRest && !gates.resizeHeld && gates.settled
-        && answer != ColumnAnswer::Foreign && !live.size().isEmpty() && live.intersects(offered);
+        && answer != ColumnAnswer::Foreign && live.intersects(offered);
 }
 
 /// Whether a readable answer is one the engine has not heard yet: always while
@@ -438,6 +489,13 @@ inline bool isNewColumnAnswer(ColumnAnswer answer, const QSize& lastRead, const 
 /// fractional scale rounds the frame of a client that took its column exactly
 /// a pixel either way, depending on where the frame sits, and reporting that
 /// pixel would leave the engine a floor the client never asked for.
+///
+/// MUST equal the engine's kCommittedExtentSlackPx (phosphor-scroll-engine,
+/// enginelimits.h), which reads an answer within that slack of the offer as
+/// the offer. The two sides cannot share the constant, because the engine's
+/// is private to its library. A tolerance wider here would withhold answers
+/// the engine would act on, and a narrower one would send it answers it
+/// discards as the offer.
 inline constexpr int CommittedSizeTolerancePx = 1;
 
 /// Whether a readable answer goes to the engine (Scrolling.reportCommittedSize).
