@@ -11,6 +11,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QVector>
+#include <functional>
 
 namespace PhosphorContext {
 class IContextResolver;
@@ -96,6 +97,16 @@ public:
     void setContextResolver(PhosphorContext::IContextResolver* resolver)
     {
         m_contextResolver = resolver;
+    }
+
+    /// Runs the work it is handed (the bus emission of one of the engine's
+    /// own resnap batches) behind any screens announce still queued, so the
+    /// effect judges the batch against the managed set it was computed for
+    /// (TilingAdaptor::runBehindScreensAnnounce, #1151). Unset: emitted at once.
+    using AnnounceSequencer = std::function<void(std::function<void()>)>;
+    void setAnnounceSequencer(AnnounceSequencer sequencer)
+    {
+        m_announceSequencer = std::move(sequencer);
     }
 
 public Q_SLOTS:
@@ -458,6 +469,8 @@ private:
     /// Late-bound by Daemon via setContextResolver — replaces the inline
     /// `(modeFor → isContextDisabled)` cascade in snaprestore.cpp.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
+    /// See setAnnounceSequencer.
+    AnnounceSequencer m_announceSequencer;
 
     // Stored handles for the signal relays wired in the constructor so
     // clearEngine() can disconnect exactly the connections this class

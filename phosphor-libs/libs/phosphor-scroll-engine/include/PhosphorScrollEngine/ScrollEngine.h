@@ -1157,7 +1157,15 @@ private:
     /// it dies; the removed-output prune and the displaced release drop them right after the handler.
     /// AutotileEngine has the same. The committed extents (m_committedExtents) do go here: a released
     /// window has left the engine, and an evacuee's were copied into the park first (parkOutput).
-    void releaseScreenState(ScrollState* state, QStringList& releasedWindows);
+    /// @p key is @p state's own key: the placement snapshot records the context being torn down.
+    void releaseScreenState(const PhosphorEngine::PlacementStateKey& key, ScrollState* state,
+                            QStringList& releasedWindows);
+    /// capturePlacement's body against an explicit @p state and its @p key. capturePlacement takes
+    /// the window's primary membership; a teardown passes the state it is releasing, which for a
+    /// window on several desktops need not be that one.
+    std::optional<PhosphorEngine::WindowPlacement>
+    capturePlacementIn(const QString& windowId, const ScrollState* state,
+                       const PhosphorEngine::PlacementStateKey& key) const;
     /// Shared per-window side-map sweep for the SILENT prune paths (desktop and activity teardown),
     /// which emit no windowsReleased. A fullscreen hold found here is queued for
     /// announceReleasedFullscreenHolds, which the prune runs after its reverse-map sweep; nothing else

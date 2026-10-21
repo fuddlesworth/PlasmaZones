@@ -185,6 +185,10 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         if (wasTracked) {
             m_notifiedWindowScreens.remove(windowId);
         }
+        // The tiled fact too, before the clear below: tracked-ness is only the
+        // announce trail, and the daemon fallback needs proof the window was
+        // really placed here (resolvePreTileRestore).
+        const bool wasTiled = isTiledWindow(windowId);
         // Drop autotile tiled tracking on every screen (title-bar
         // restores flow through the rule path).
         clearWindowTiledAllScreens(windowId);
@@ -225,8 +229,8 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // un-tiling it exists for.
         const QRectF savedGeo = preTileRestoreRectFor(windowId, screenId, w->frameGeometry());
         using PlasmaZones::PreTileDecisions::PreTileRestore;
-        const PreTileRestore restore =
-            PlasmaZones::PreTileDecisions::resolvePreTileRestore(savedGeo.isValid(), wasTracked, wasWindowedFs);
+        const PreTileRestore restore = PlasmaZones::PreTileDecisions::resolvePreTileRestore(
+            savedGeo.isValid(), wasTracked, wasWindowedFs, wasTiled);
         if (restore == PreTileRestore::QueueForWindowedFullscreen) {
             // The apply below would bail inside applyWindowGeometry on
             // the still-requested fullscreen state (membership is

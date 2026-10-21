@@ -1067,11 +1067,13 @@ private:
                                const PhosphorEngine::PlacementStateKey& currentKey,
                                const PhosphorEngine::DesktopSpan& span, QList<PendingMembership>& pending) const;
     /// @p onlyWindow scopes the re-apply and the activity-carry flush to that
-    /// window (a per-window reconcile); empty is a screen-wide pass.
+    /// window (a per-window reconcile); empty is a screen-wide pass. @p spanOf
+    /// tells the re-apply which windows are also shown on other desktops.
     PhosphorEngine::MembershipReconcileResult applyMembershipWork(const QString& screenId,
                                                                   const PhosphorEngine::PlacementStateKey& currentKey,
                                                                   const QList<PendingMembership>& pending,
-                                                                  const QString& onlyWindow);
+                                                                  const QString& onlyWindow,
+                                                                  const PhosphorEngine::DesktopSpanQuery& spanOf);
 
     /// migrateWindowToScreen onto an explicit key: a pinned commit or a
     /// cross-desktop handoff lands in exactly the context it names.

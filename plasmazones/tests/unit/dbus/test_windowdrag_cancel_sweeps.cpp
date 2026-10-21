@@ -240,6 +240,50 @@ private Q_SLOTS:
         QCOMPARE(stamps.value(QStringLiteral("DP-1")).toInt(), 2);
         QCOMPARE(stamps.value(QStringLiteral("DP-2")).toInt(), 2);
     }
+
+    // #1151: work handed to runBehindScreensAnnounce while an announce is
+    // queued runs right behind that announce, never ahead of it; with nothing
+    // queued it runs at once; clearEngine drops what the voided announce held.
+    void workHeldBehindTheAnnounceRunsAfterIt()
+    {
+        IsolatedConfigGuard guard;
+        QObject parent;
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("DP-1")});
+        TilingAdaptor adaptor(&screenMgr, &parent);
+        adaptor.setLifecycleEngines({&engine});
+        QSignalSpy spy(&adaptor, &TilingAdaptor::managedScreensChanged);
+
+        int ranAfterAnnounces = -1;
+        adaptor.notifyEngineScreensChanged(/*isDesktopSwitch=*/true);
+        adaptor.runBehindScreensAnnounce([&] {
+            ranAfterAnnounces = spy.count();
+        });
+        QCOMPARE(ranAfterAnnounces, -1);
+        QCoreApplication::processEvents();
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(ranAfterAnnounces, 1);
+
+        bool ranAtOnce = false;
+        adaptor.runBehindScreensAnnounce([&] {
+            ranAtOnce = true;
+        });
+        QVERIFY2(ranAtOnce, "with no announce queued the work runs at once");
+
+        bool ranAfterClear = false;
+        adaptor.notifyEngineScreensChanged(/*isDesktopSwitch=*/false);
+        adaptor.runBehindScreensAnnounce([&] {
+            ranAfterClear = true;
+        });
+        adaptor.clearEngine();
+        QCoreApplication::processEvents();
+        QVERIFY2(!ranAfterClear, "clearEngine drops the work held behind the announce it voided");
+    }
 };
 
 QTEST_MAIN(TestWindowDragCancelSweeps)

@@ -981,6 +981,15 @@ void Daemon::initEnginesAndWiring()
     // (org.plasmazones.Autotile / org.plasmazones.Scrolling), and its
     // engine-typed connections are made HERE, at the composition root.
     m_tilingAdaptor = new TilingAdaptor(m_screenManager.get(), this);
+    // The snap engine's own batches trail a queued screens announce (#1151).
+    m_snapAdaptor->setAnnounceSequencer(
+        [tiling = QPointer<TilingAdaptor>(m_tilingAdaptor)](std::function<void()> work) {
+            if (tiling) {
+                tiling->runBehindScreensAnnounce(std::move(work));
+            } else {
+                work();
+            }
+        });
     // Wire the WTA so the tiling open path can resolve RouteToScreen /
     // RouteToDesktop rules (the rule store + evaluator live on the WTA).
     m_tilingAdaptor->setWindowTrackingAdaptor(m_windowTrackingAdaptor);

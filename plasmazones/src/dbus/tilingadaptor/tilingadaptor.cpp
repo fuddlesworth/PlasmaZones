@@ -1109,6 +1109,7 @@ void TilingAdaptor::clearEngine()
     // Held behind the announce just voided, and naming the dead session's
     // windows and rects — a restart's first announce must not flush them.
     m_tileBatchesHeldForAnnounce.clear();
+    m_workHeldForAnnounce.clear();
     m_unclaimedOpens.clear();
     m_pendingOpens.clear();
     m_lastFloatBroadcast.clear();

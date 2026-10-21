@@ -249,7 +249,8 @@ void SnapEngine::collectMembershipWork(const QString& windowId, const QString& s
 
 MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenId, const PlacementStateKey& currentKey,
                                                           const QList<PendingMembership>& pending,
-                                                          const QString& onlyWindow)
+                                                          const QString& onlyWindow,
+                                                          const PhosphorEngine::DesktopSpanQuery& spanOf)
 {
     MembershipReconcileResult result;
     // A window that is snapped on the desktop it is being moved OFF is MOVING,
@@ -850,10 +851,24 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                        return !zones.isEmpty() && m_windowTracker->resolveZoneGeometry(zones, screenId) == frame;
                    });
         };
+        // Shown on a desktop besides this one. A desktop of the span that runs
+        // tiling or scrolling holds no snap membership, so the membership count
+        // alone misses a window another engine placed there (#1151: back from
+        // a scrolling desktop, the window still stood at its strip rect).
+        const auto shownElsewhere = [&spanOf](const QString& windowId) {
+            if (!spanOf) {
+                return false;
+            }
+            const DesktopSpan span = spanOf(windowId);
+            return span.known && (span.sticky || span.desktops.size() > 1);
+        };
         const QStringList candidates = onlyWindow.isEmpty() ? m_states.trackedWindowIds() : QStringList{onlyWindow};
         for (const QString& windowId : candidates) {
-            if (statedThisPass.contains(windowId) || !m_states.hasMembership(windowId, currentKey)
-                || m_states.membershipsForWindow(windowId).size() < 2) {
+            if (statedThisPass.contains(windowId) || !m_states.hasMembership(windowId, currentKey)) {
+                continue;
+            }
+            const bool otherSnapMemberships = m_states.membershipsForWindow(windowId).size() >= 2;
+            if (!otherSnapMemberships && !shownElsewhere(windowId)) {
                 continue;
             }
             const QStringList zones = currentState->zonesForWindow(windowId);
@@ -864,7 +879,9 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                 }
                 continue;
             }
-            if (!onlyWindow.isEmpty()) {
+            // The float and unsnap statements below speak for the window's
+            // other snap stores, so they need one.
+            if (!onlyWindow.isEmpty() || !otherSnapMemberships) {
                 continue;
             }
             // Entering a context where the window floats, or holds nothing,
@@ -971,7 +988,7 @@ MembershipReconcileResult SnapEngine::reconcileDesktopMemberships(const QString&
             }
         }
     }
-    return applyMembershipWork(screenId, currentKey, pending, QString());
+    return applyMembershipWork(screenId, currentKey, pending, QString(), spanOf);
 }
 
 MembershipReconcileResult SnapEngine::reconcileWindowMemberships(const QString& windowId,
@@ -1001,7 +1018,7 @@ MembershipReconcileResult SnapEngine::reconcileWindowMemberships(const QString& 
                 if (const DesktopSpan span = spanOf(canonical); span.known) {
                     it->toActivity = span.activity;
                     const QString carryScreen = it->screenId;
-                    return applyMembershipWork(carryScreen, currentKeyForScreen(carryScreen), {}, canonical);
+                    return applyMembershipWork(carryScreen, currentKeyForScreen(carryScreen), {}, canonical, spanOf);
                 }
             }
         }
@@ -1016,7 +1033,7 @@ MembershipReconcileResult SnapEngine::reconcileWindowMemberships(const QString& 
             pending.removeLast();
         }
     }
-    return applyMembershipWork(screenId, currentKey, pending, canonical);
+    return applyMembershipWork(screenId, currentKey, pending, canonical, spanOf);
 }
 
 void SnapEngine::rekeyMembershipsToRecordedScreens(const QString& physicalScreenId)

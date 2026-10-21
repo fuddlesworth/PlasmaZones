@@ -9,6 +9,7 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <QPointer>
 
 namespace PlasmaZones {
 
@@ -136,10 +137,12 @@ void SnapAdaptor::cycleWindowsInZone(bool forward)
 // Batch helper used by methods that operate on pre-built
 // ZoneAssignmentEntry vectors (resnapForVirtualScreenReconfigure,
 // handleBatchedResnap). Thin wrapper over
-// SnapEngine::applyBatchAssignments.
+// SnapEngine::applyBatchAssignments. The engine commits at once; only the
+// bus emission goes through @p sequencer when one is given.
 // ═══════════════════════════════════════════════════════════════════════════════
 static bool processBatchEntries(WindowTrackingAdaptor* wta, PhosphorSnapEngine::SnapEngine* engine,
-                                const QVector<ZoneAssignmentEntry>& entries, const QString& action)
+                                const QVector<ZoneAssignmentEntry>& entries, const QString& action,
+                                const SnapAdaptor::AnnounceSequencer& sequencer = {})
 {
     if (!engine || !wta) {
         return false;
@@ -154,19 +157,29 @@ static bool processBatchEntries(WindowTrackingAdaptor* wta, PhosphorSnapEngine::
     if (geometries.isEmpty()) {
         return false;
     }
-    Q_EMIT wta->applyGeometriesBatch(geometries, action);
+    if (!sequencer) {
+        Q_EMIT wta->applyGeometriesBatch(geometries, action);
+        return true;
+    }
+    sequencer([guard = QPointer<WindowTrackingAdaptor>(wta), geometries = std::move(geometries), action]() {
+        if (guard) {
+            Q_EMIT guard->applyGeometriesBatch(geometries, action);
+        }
+    });
     return true;
 }
 
 /// A batch whose every entry re-states a placement (the desktop carry, the
 /// re-apply on a switch) is relayed as "restate": no Snap Assist (F461).
 static void processResnapEntries(WindowTrackingAdaptor* wta, PhosphorSnapEngine::SnapEngine* engine,
-                                 const QVector<ZoneAssignmentEntry>& entries)
+                                 const QVector<ZoneAssignmentEntry>& entries,
+                                 const SnapAdaptor::AnnounceSequencer& sequencer = {})
 {
     const bool restatement = !entries.isEmpty() && std::all_of(entries.cbegin(), entries.cend(), [](const auto& e) {
         return e.restatement;
     });
-    processBatchEntries(wta, engine, entries, restatement ? QStringLiteral("restate") : QStringLiteral("resnap"));
+    processBatchEntries(wta, engine, entries, restatement ? QStringLiteral("restate") : QStringLiteral("resnap"),
+                        sequencer);
 }
 
 QStringList SnapAdaptor::resolveSnapModeScreensForResnap(const QString& screenFilter) const
@@ -323,7 +336,10 @@ void SnapAdaptor::applyEngineResnap(const QString& resnapData)
         qCWarning(lcDbusWindow) << "applyEngineResnap: invalid JSON:" << parseError;
         return;
     }
-    processResnapEntries(m_adaptor, m_engine, entries);
+    // The engine's batches come out of passes that can also change the
+    // managed screen set (a desktop switch off a scrolling desktop), so the
+    // emission waits for that pass's announce.
+    processResnapEntries(m_adaptor, m_engine, entries, m_announceSequencer);
 }
 
 void SnapAdaptor::handleBatchedResnap(const QString& resnapData)

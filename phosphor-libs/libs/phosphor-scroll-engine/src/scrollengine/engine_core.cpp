@@ -250,7 +250,7 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 // tabbed flags) instead of a default one-window-per-column
                 // strip. Captured BEFORE the release strips the state.
                 stashStripStructure(key, state, fallbackAxis);
-                releaseScreenState(state, releasedWindows);
+                releaseScreenState(key, state, releasedWindows);
                 // Inside the callback so the payload names only screens that
                 // had a MATCHING STATE — the daemon's release handler uses
                 // it as a skip filter, and a leaving screen that never built

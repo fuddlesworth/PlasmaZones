@@ -307,7 +307,18 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
 std::optional<PhosphorEngine::WindowPlacement> ScrollEngine::capturePlacement(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    PhosphorEngine::PlacementStateKey key;
+    const ScrollState* state = stateForWindow(windowId, &key);
+    if (!state) {
+        return std::nullopt;
+    }
+    return capturePlacementIn(windowId, state, key);
+}
 
+std::optional<PhosphorEngine::WindowPlacement>
+ScrollEngine::capturePlacementIn(const QString& windowId, const ScrollState* state,
+                                 const PhosphorEngine::PlacementStateKey& key) const
+{
     // A window mid-drag-insert has NO capturable placement, and answering
     // anyway silently destroys the one it had. Under DETACH-ONCE, begin drops
     // the window from the floating set and out of the strip while KEEPING it
@@ -327,12 +338,6 @@ std::optional<PhosphorEngine::WindowPlacement> ScrollEngine::capturePlacement(co
     // record intact, which is the same answer the adaptor already
     // documents for an unmanaged window.
     if (m_dragInsertPreview && m_dragInsertPreview->windowId == windowId) {
-        return std::nullopt;
-    }
-
-    PhosphorEngine::PlacementStateKey key;
-    const ScrollState* state = stateForWindow(windowId, &key);
-    if (!state) {
         return std::nullopt;
     }
     // A window held out for its OWN fullscreen has no placement to capture:
