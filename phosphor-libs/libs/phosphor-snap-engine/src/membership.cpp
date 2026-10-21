@@ -854,9 +854,13 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         // Shown on a desktop besides this one. A desktop of the span that runs
         // tiling or scrolling holds no snap membership, so the membership count
         // alone misses a window another engine placed there (#1151: back from
-        // a scrolling desktop, the window still stood at its strip rect).
-        const auto shownElsewhere = [&spanOf](const QString& windowId) {
-            if (!spanOf) {
+        // a scrolling desktop, the window still stood at its strip rect). Only
+        // on the screen-wide pass a desktop switch runs, the one that follows a
+        // stay on another desktop. A per-window pass answers an edit of the
+        // window's own desktop set, which leaves it standing where the desktop
+        // in view put it (F477).
+        const auto shownElsewhere = [&spanOf, &onlyWindow](const QString& windowId) {
+            if (!spanOf || !onlyWindow.isEmpty()) {
                 return false;
             }
             const DesktopSpan span = spanOf(windowId);
