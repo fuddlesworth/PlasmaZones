@@ -483,13 +483,19 @@ public Q_SLOTS:
      * The KWin effect calls this for a Wayland strip window whose settled
      * frame differs from the rect it was offered (its own tile), once per
      * batch that sent the client a new size and once per size the client then
-     * settles on by itself, only with no geometry configure in flight. A
-     * commit longer than the tile along the strip gives the column a floor
-     * at that extent, so the neighbours are laid out beside the window instead
-     * of under it; a floor past the work area, or an answer longer than the
-     * work area across the strip, floats the window instead. A later shorter
-     * answer gives the floor back, and the floor is learned only while
-     * minimum sizes are respected. ScrollEngine::reportCommittedSize carries
+     * settles on by itself, only with no geometry configure in flight. For a
+     * tile parked off screen it also reports a settled frame that equals the
+     * offer along the strip. A commit longer than the tile along the strip
+     * gives the column a floor at that extent, so the neighbours are laid out
+     * beside the window instead of under it; one longer across the strip,
+     * inside the work area, holds the tile at that share of its stacked
+     * column, so the tiles beside it shrink instead of lying under it. A
+     * floor past the work area, a share the stack cannot hold beside its
+     * other tiles, or an answer longer than the work area across the strip,
+     * floats the window instead. A later shorter answer gives the floor along
+     * the strip back, a parked tile's matched answer ends the peek memory a
+     * wider answer left, and nothing is learned unless minimum sizes are
+     * respected. ScrollEngine::reportCommittedSize carries
      * the whole contract, the XML DocString its wire summary. Same
      * wire-boundary policy as clearWindowedFullscreen: neither ownership- nor
      * context-gated, since it reports what the client has already done.

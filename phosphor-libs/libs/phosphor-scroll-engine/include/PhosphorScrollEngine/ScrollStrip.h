@@ -516,8 +516,9 @@ public:
     /// maximized. A client resizing itself — a terminal quantising to its
     /// character cell — never reaches reconcile and cannot erase the
     /// maximize. Its answer to an offered tile does reach the engine, through
-    /// ScrollEngine::reportCommittedSize, which learns only a floor along the
-    /// strip from it and never writes an intent.
+    /// ScrollEngine::reportCommittedSize, which learns only floors from it
+    /// (along the strip for the column, across it for the tile) and never
+    /// writes an intent.
     ///
     /// Do not "fix" this by refusing the ack in reconcile. That makes
     /// onWindowResized's refused-ack branch schedule a retile which re-applies
@@ -611,6 +612,23 @@ public:
     /// whose ScrollLayoutParams::committedFloor it has masked when it needs
     /// the extent a column resolves to without one window's floor.
     int windowColumnMainExtentPx(const QString& windowId, const ScrollLayoutParams& params) const;
+    /// The extent ACROSS the strip of @p windowId's tile under @p params,
+    /// exactly as the relayout resolves it (the stack's split with its floors,
+    /// or a tabbed column's content rect), or -1 when this strip lays no tile
+    /// out for the window (it does not hold it, or the tile is minimized). The
+    /// cross twin of windowColumnMainExtentPx, which the engine's cross-floor
+    /// bookkeeping measures with the same way.
+    int windowTileCrossExtentPx(const QString& windowId, const ScrollLayoutParams& params) const;
+    /// The most @p windowId's column can ever give its tile ACROSS the strip
+    /// under @p params while its siblings keep their own floors: for a stack,
+    /// the column's cross budget (the work area less the gaps between its
+    /// visible tiles) less every other visible tile's floor across
+    /// (tileMinCrossPx, a pixel at least); for a tabbed column, its cross
+    /// extent less the indicator's cross reservation, since every tab shares
+    /// one rect. -1 when this strip does not hold the window as a visible
+    /// tile or the work area is degenerate. A committed cross floor past this
+    /// is one the column can never hold (ScrollEngine::outgrowsWorkArea).
+    int tileCrossCapacityPx(const QString& windowId, const ScrollLayoutParams& params) const;
     /// Pixels the tab indicator takes out of column @p c ALONG the strip: the
     /// difference between the column's main extent and the one its tiles are
     /// offered. 0 for a column that is not tabbed, and whenever the
@@ -901,8 +919,9 @@ private:
     /// The shortest the active tile may be written, in the space the height
     /// verbs WRITE in (the column's, so a tabbed indicator's cross reservation
     /// is already added). MinWindowHeightFraction of the work area's cross
-    /// extent, raised to the frame minimum while @c respectMinimumSize is on
-    /// — and while tabbed, to the tallest minimum in the whole tab set, since
+    /// extent, raised to the tile's floor across (tileMinCrossPx: the frame
+    /// minimum and any committed cross floor) while @c respectMinimumSize is on
+    /// — and while tabbed, to the tallest such floor in the whole tab set, since
     /// every visible tab is committed at that one rect. Capped at the work
     /// area's cross extent so a frame minimum larger than the screen cannot
     /// invert a qBound. Answers -1 when there is no active tile or the work
@@ -966,14 +985,22 @@ private:
     /// @p params' axis, or 0 when there is none, no lookup is set, or minimum
     /// sizes are not respected.
     static int committedMainFloorPx(const QString& windowId, const ScrollLayoutParams& params);
+    /// The floor ACROSS the strip tile @p t of column @p c is laid out with:
+    /// its declared minimum across, raised to the share its client's own
+    /// commits hold it to (@p params.committedCrossFloor). Only the declared
+    /// minimum when minimum sizes are not respected, no lookup is set, or the
+    /// column is maximized to edges (a declared extent reads no committed
+    /// floor). Callers gate the declared minimum on respectMinimumSize
+    /// themselves, as they always have.
+    static int tileMinCrossPx(const Tile& t, const Column& c, const ScrollLayoutParams& params);
     /// Pixel CROSS extent of TABBED column @p c: the height intent of the tab
     /// that OWNS the extent (Column::heightOwnerId), not the tab on show,
     /// resolved exactly the way the stack branch resolves a single tile's
     /// Fixed/Preset height, so an entry of the preset vocabulary lands on the
     /// same pixels whichever display the column is in. Auto means the whole
     /// work area, which is what a tabbed column used to be pinned at.
-    /// Raised to the tallest visible tab's own cross minimum plus
-    /// @c tabbedCrossReservationPx while minimum sizes are respected: every
+    /// Raised to the tallest visible tab's own cross floor (tileMinCrossPx)
+    /// plus @c tabbedCrossReservationPx while minimum sizes are respected: every
     /// tab is committed at this column's content rect, including the hidden
     /// ones, so the floor is the whole set's and not just the shown tab's.
     static int tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params);

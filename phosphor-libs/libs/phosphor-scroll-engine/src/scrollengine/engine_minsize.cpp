@@ -75,21 +75,25 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     // now be narrower there, so what its earlier commits taught on that axis
     // is stale: it may have answered at the old minimum. Dropped, the column
     // is offered as asked, and a client that still will not take it teaches
-    // the floor again. A raised minimum takes nothing.
+    // the floor again. A raised minimum takes nothing. The cross floors
+    // answer to the minimum across their strip the same way.
     //
     // Whether the drop changed the layout is MEASURED, on the column the
-    // window holds in the strip this report acts on, before and after: a
-    // floor in the orientation that strip does not run, a floating window's
-    // floor, a floor its column already outgrows, or one read while minimum
-    // sizes are off moves nothing, and announcing it would republish and
-    // retile a strip that did not change. Measured ahead of the minimum write
-    // below, so only the floor's part of the change is counted here.
+    // window holds in the strip this report acts on and on its tile's share
+    // of that column, before and after: a floor in the orientation that strip
+    // does not run, a floating window's floor, a floor its column already
+    // outgrows, or one read while minimum sizes are off moves nothing, and
+    // announcing it would republish and retile a strip that did not change.
+    // Measured ahead of the minimum write below, so only the floor's part of
+    // the change is counted here.
     const bool mayHoldFloor = state && m_committedExtents.contains(windowId) && state->strip().containsWindow(windowId);
     const ScrollLayoutParams floorParams = mayHoldFloor ? layoutParamsForKey(key) : ScrollLayoutParams{};
     const int extentBeforeDrop = mayHoldFloor ? state->strip().windowColumnMainExtentPx(windowId, floorParams) : -1;
+    const int crossBeforeDrop = mayHoldFloor ? state->strip().windowTileCrossExtentPx(windowId, floorParams) : -1;
     dropCommittedForLoweredMinimum(windowId, previousMin, QSize(clampedMinWidth, clampedMinHeight));
-    const bool floorDropped =
-        mayHoldFloor && state->strip().windowColumnMainExtentPx(windowId, floorParams) != extentBeforeDrop;
+    const bool floorDropped = mayHoldFloor
+        && (state->strip().windowColumnMainExtentPx(windowId, floorParams) != extentBeforeDrop
+            || state->strip().windowTileCrossExtentPx(windowId, floorParams) != crossBeforeDrop);
     if (!state) {
         return;
     }
@@ -214,8 +218,13 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // reached from nowhere else — and the keyboard and D-Bus width verbs
     // deliberately do not: they write intents a floor can still outrank.
     const bool floorDropped = mainChanged && dropCommittedForUserResize(windowId, resizeAxis);
+    // Its resize ACROSS the strip settles the tile's share the same way, and
+    // drops the cross floor on its own: a drag of both edges drops both, and
+    // neither drop short-circuits the other. The height verbs, like the width
+    // verbs, write intents a floor can still outrank and drop nothing.
+    const bool crossFloorDropped = crossChanged && dropCommittedCrossForUserResize(windowId, resizeAxis);
     if (state->strip().reconcileWindowSize(windowId, newFrame.size(), mainChanged, crossChanged, resizeParams)
-        || floorDropped) {
+        || floorDropped || crossFloorDropped) {
         // The reconcile WROTE persisted intent (the column's Fixed width, the
         // tile's Fixed height — both serialized by serializeStripState), and
         // placementChanged is this engine's only way to mark DirtyScrollStrips

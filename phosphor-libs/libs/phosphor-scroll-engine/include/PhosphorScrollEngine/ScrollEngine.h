@@ -267,16 +267,27 @@ public:
     ///    resolves to without the floor, entirely once it does not. A narrower answer never creates a floor.
     ///    A floor re-taught after a give-back is pinned against further give-backs, so a client that does not
     ///    answer one offer the same way twice settles instead of resizing its column on every round trip;
-    ///  - an answer within kCommittedExtentSlackPx of the offer along the strip counts as the offer;
-    ///  - an answer ACROSS the strip teaches nothing by itself.
-    /// A floor its column can never offer (the floor plus the tab reservation past the work area's main extent)
+    ///  - an answer within kCommittedExtentSlackPx of the offer along the strip counts as the offer, and one
+    ///    that is the offer from a tile holding a peek memory longer than it and no floor ends that memory
+    ///    (and the extent with it) once every other column the window holds offers less too: the client took
+    ///    a whole offer narrower than the memory, a park included, and the compositor reports a parked tile's
+    ///    matched answer for exactly this;
+    ///  - an extent ACROSS the strip past the offer, inside the work area, becomes a floor on the tile's share
+    ///    of its column (CommittedCrossExtent), held like a declared minimum across the strip, so the stack's
+    ///    split gives the tile at least that and shrinks its siblings. Its premise is the tile's offer along
+    ///    the strip when it was learned.
+    /// A floor its column can never offer (the floor plus the tab reservation past the work area's main extent),
+    /// a cross floor its stack can never hold beside its siblings' own floors (ScrollStrip::tileCrossCapacityPx),
     /// or an answer longer than the work area across the strip floats the window, the policy a declared minimum
     /// past the work area already gets. A floor drops when its column satisfies it in every desktop the window
     /// holds a column on, on the user's own interactive resize along the strip (onWindowResized), when the
     /// client lowers its declared minimum on that axis, when a work-area shrink leaves it past the work area,
     /// and when the window leaves the engine, leaves its output or moves to another desktop; it survives float
     /// round trips (a user float, minimize, the fullscreen hold, a cancelled drag), drag reorders, Retile, and
-    /// the evacuee park.
+    /// the evacuee park. A cross floor follows the same rules across the strip (satisfied in every desktop, a
+    /// user resize across the strip, a lowered minimum across it, the same leaves and survivals), and also
+    /// drops when its stack can no longer hold it and when the tile's offer along the strip moves off its
+    /// premise, since the compositor never reports a shorter cross answer that could give it back.
     void reportCommittedSize(const QString& windowId, const QSize& offered, const QSize& committed);
     /// delta -1/+1 through the preset width list.
     void cycleColumnPresetWidth(int delta, const QString& screenId);
@@ -2082,6 +2093,9 @@ private:
     // engine_committed.cpp: the extents clients' own commits taught (reportCommittedSize).
     /// The ScrollLayoutParams::committedFloor answer for @p windowId: each orientation's floor.
     QSize committedFloorFor(const QString& windowId) const;
+    /// The ScrollLayoutParams::committedCrossFloor answer for @p windowId on a strip running along @p axis:
+    /// that orientation's floor across the strip (CommittedCrossExtent::floorPx), or 0.
+    int committedCrossFloorFor(const QString& windowId, const StripAxis& axis) const;
     /// @p windowId's peek-only memory along @p axis (CommittedMainExtent::peekPx), or 0. Read by
     /// applyLayout's peek floor under respectMinimumSize, never by the strip.
     int committedPeekPx(const QString& windowId, const StripAxis& axis) const;
@@ -2091,17 +2105,30 @@ private:
     /// The user's own interactive resize along @p axis settled the window's extent there: drop that
     /// orientation's floor and peek memory. True when a floor went, which changes the layout.
     bool dropCommittedForUserResize(const QString& windowId, const StripAxis& axis);
+    /// The user's own interactive resize ACROSS a strip running along @p axis settled the window's extent
+    /// there: drop that orientation's cross floor. True when one went, which changes the layout.
+    bool dropCommittedCrossForUserResize(const QString& windowId, const StripAxis& axis);
     /// The client lowered its declared minimum from @p oldMin to @p newMin: drop each orientation's floor
-    /// and peek memory whose main-axis minimum went down. Whether that moved a column is the caller's to
-    /// measure (windowMinSizeUpdated compares the column's extent across the call).
+    /// and peek memory whose main-axis minimum went down, and each orientation's cross floor whose
+    /// cross-axis minimum went down. Whether that moved anything is the caller's to measure
+    /// (windowMinSizeUpdated compares the column's extent and the tile's cross extent across the call).
     void dropCommittedForLoweredMinimum(const QString& windowId, const QSize& oldMin, const QSize& newMin);
     /// applyLayout's sweep over @p state's strip under @p params (the context at @p key): drop a floor its
     /// column can never offer (floor plus tab reservation past the work area's main extent), and a floor its
     /// column satisfies without it in EVERY context the window holds a column in (a maximized-to-edges column
     /// there is not measured, and keeps it). The peek memory survives a dropped floor (endStalePeeks ends
-    /// it). True when a dropped floor changed the layout (the first kind; the second is layout-neutral).
+    /// it). Across the strip it drops a cross floor the column can no longer hold (tileCrossCapacityPx: a
+    /// sibling joined or raised its own floor, or the work area shrank), one whose premise moved (the tile's
+    /// offer along the strip is no longer the one it was learned at), and one the column satisfies without it
+    /// in every context, as above. True when a dropped floor changed the layout (the first kind of each and
+    /// the premise drop; satisfaction is layout-neutral along the strip, and reported when it is not across).
     bool settleCommittedFloors(ScrollState& state, const PhosphorEngine::PlacementStateKey& key,
                                const ScrollLayoutParams& params);
+    /// settleCommittedFloors' cross-axis arm for @p windowId's tile in @p strip (the context at @p key, under
+    /// @p params), whose cross floor is @p cross. True when a drop changed the layout.
+    bool settleCommittedCrossFloor(const ScrollStrip& strip, const PhosphorEngine::PlacementStateKey& key,
+                                   const ScrollLayoutParams& params, const QString& windowId,
+                                   CommittedCrossExtent& cross) const;
     /// applyLayout's second sweep, over @p resolved (@p strip, the context at @p key, relaid out under @p params
     /// after the re-anchor), ahead of the peek floor that reads the memory: with no floor held, end a tile's
     /// whole extent (peek memory and give-back history) once its column offers it less than the memory, but
@@ -2110,28 +2137,41 @@ private:
     /// maximized-to-edges column there keeps it, as it keeps a floor). A clamped tile keeps the memory, since
     /// a clamped offer is one reportCommittedSize refuses to learn from: one the screen edge would clamp parks
     /// on it, and one the cross-axis stack clamp shortens is clamped across as before, the memory reading only
-    /// along the strip. The cost: a column that only ever straddles parks rather than peeks until it is shown
-    /// whole or leaves the viewport. Its park is a whole offer, but a client that takes an offer reports
-    /// nothing, so the engine cannot tell one that took the park from one whose wider answer to it has not
-    /// arrived, and ending the memory a pass after the park would hand a pixel pan's next frame a sliver the
-    /// client answers instead. Likewise a tile the stack clamp shortens keeps the memory for as long as the
-    /// overflow clamps it. @p screenRect and @p parkTop are the emit loop's park bounds.
+    /// along the strip. A pass never ends the memory on the evidence of a park alone: its park is a whole
+    /// offer, but silence after one cannot tell a client that took the park from one whose wider answer to it
+    /// has not arrived, and ending the memory a pass after the park would hand a pixel pan's next frame a
+    /// sliver the client answers instead. The memory also ends when the client takes a whole offer narrower
+    /// than it, a park included, and says so (reportCommittedSize hears a settled answer equal to the offer
+    /// along the strip): that is an answer to the park itself rather than silence, and one that crossed a
+    /// newer batch is refused at the whole-tile gate like any other. A tile the stack clamp shortens keeps the
+    /// memory for as long as the overflow clamps it. @p screenRect and @p parkTop are the emit loop's park
+    /// bounds.
     void endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& resolved,
                        const PhosphorEngine::PlacementStateKey& key, const ScrollLayoutParams& params,
                        const QRect& screenRect, int parkTop);
+    /// Which extent of a tile everyOtherColumnOffers measures: its offer along the strip, or its share of its
+    /// column across it.
+    enum class OfferAxis : quint8 {
+        Main,
+        Cross
+    };
     /// Whether @p accepts holds for what every column @p windowId holds outside the context at @p key offers its
-    /// tile along @p axis without the window's own floor. A torn-down context and a strip running the other way
-    /// are passed over; a membership with no column (a float there) or a maximized-to-edges one fails, since
-    /// what the client said waits for the column the window comes back to. The elsewhere half of both sweeps.
+    /// tile on @p offerAxis of a strip running along @p axis without the window's own floors. A torn-down
+    /// context and a strip running the other way are passed over; a membership with no column (a float there)
+    /// or a maximized-to-edges one fails, since what the client said waits for the column the window comes
+    /// back to. The elsewhere half of both sweeps.
     bool everyOtherColumnOffers(const QString& windowId, const PhosphorEngine::PlacementStateKey& key,
-                                const StripAxis& axis, const std::function<bool(int)>& accepts) const;
-    /// @p params with @p windowId's own committed floor masked out, so a strip resolves that window's column
-    /// the way it would without it. Every other window's floor still reads, since a sibling's floor holds
-    /// the column too.
+                                const StripAxis& axis, const std::function<bool(int)>& accepts,
+                                OfferAxis offerAxis = OfferAxis::Main) const;
+    /// @p params with @p windowId's own committed floors (along the strip and across it) masked out, so a strip
+    /// resolves that window's column and tile the way it would without them. Every other window's floors still
+    /// read, since a sibling's floor holds the column too.
     static ScrollLayoutParams withoutCommittedFloorOf(const ScrollLayoutParams& params, const QString& windowId);
     /// Whether @p windowId's column in @p state can never offer the window what it holds it to: a declared
-    /// minimum past the work area on either axis (whatever respectMinimumSize says, the open-time policy), or
-    /// a committed floor that with its column's tab reservation passes the work area's main extent.
+    /// minimum past the work area on either axis (whatever respectMinimumSize says, the open-time policy), a
+    /// committed floor that with its column's tab reservation passes the work area's main extent, or a
+    /// committed cross floor past what the column can give the tile across while its siblings keep their own
+    /// floors (ScrollStrip::tileCrossCapacityPx).
     bool outgrowsWorkArea(const ScrollState& state, const QString& windowId, const ScrollLayoutParams& params) const;
     /// Float @p windowId out of @p state when outgrowsWorkArea says so (floatWindowInternal, the open-time
     /// oversized policy). True when it floated. @p reason labels the log line. @p applyAfter is
@@ -2139,11 +2179,12 @@ private:
     bool floatIfOutgrowsWorkArea(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
                                  const QString& windowId, const char* reason, bool applyAfter = true);
 
-    /// Per window: what its client's own commits taught about its extent along the strip, per strip
-    /// orientation (CommittedExtent; reportCommittedSize documents the learning, the drops and what survives).
-    /// Engine-level rather than per strip because a window holds a column in every desktop it spans and the
-    /// client's answer is about the window, not about one desktop's column; the strip reads it through
-    /// ScrollLayoutParams::committedFloor, which layoutParamsForKey points here. No per-window eviction
+    /// Per window: what its client's own commits taught about its extent along the strip and across it, per
+    /// strip orientation (CommittedExtent; reportCommittedSize documents the learning, the drops and what
+    /// survives). Engine-level rather than per strip because a window holds a column in every desktop it
+    /// spans and the client's answer is about the window, not about one desktop's column; the strip reads it
+    /// through ScrollLayoutParams::committedFloor and committedCrossFloor, which layoutParamsForKey points
+    /// here. No per-window eviction
     /// funnel exists, so every path on which a window leaves the engine, leaves its output, or migrates to
     /// another desktop forgets its entry itself (forgetCommittedExtents), ahead of seating it anywhere new so
     /// no re-anchor reads the old floor, with pruneStaleWindows sweeping it on aliveness as the backstop.
