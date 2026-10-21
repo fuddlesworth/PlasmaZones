@@ -3,16 +3,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # f1153-cropped-straddler-move: KWin's Move to Screen of a scrolling column cropped at its output's
-# right edge, the centre of its column rect on the neighbouring output, hands it to that output's
-# strip (#1153). Runner: 2 outputs, flags S.
+# right edge hands it to the neighbour's strip under the tracked-output test (#1153). Regression
+# rows: the old centre test hands this shape over too. The shape #1153 names, a frame centred on
+# its own output beside a column centred on the neighbour, does not hold long enough to stage: the
+# counter-assert re-seats a cropped straddler centred in its column, which puts the frame's centre
+# where the column's is, and KWin then counts the window on that output already. The unit table
+# (kwinMoveOffStrip) pins that shape. Runner: 2 outputs, flags S.
 # Staging: Virtual-0 and Virtual-1 both scrolling, crop mode on. Virtual-0 holds s1 and s2; s2 is set
-#   1500 px wide, s1 1000 px and focused, so s2 reaches past Virtual-0's right edge with its centre
-#   on Virtual-1.
+#   900 px wide, s1 1100 px and focused, so s2 reaches past Virtual-0's right edge with its centre
+#   still on Virtual-0.
 #   Step: workspace.sendClientToScreen(s2, Virtual-1).
 # Asserts: one daemon "windowCrossedScreens ... from Virtual-0 to Virtual-1" for s2, no "Countering
 #   external move" line, s2 on Virtual-1 and a column of Virtual-1's strip, not of Virtual-0's.
-# A FAIL means: the output-change arm measured the strip's output at the centre of s2's column rect,
-#   found it on Virtual-1 already, and never handed the window over.
+# A FAIL means: measured against its tracked output, a cropped straddler's Move to Screen is no
+#   longer handed over.
 set -u
 NEST="$1"
 LOG="$2"
@@ -30,11 +34,11 @@ for c in s1 s2; do
 done
 activate s2
 sleep 1
-PZ org.plasmazones.Scrolling.setColumnWidthPixels Virtual-0 1500 >/dev/null
+PZ org.plasmazones.Scrolling.setColumnWidthPixels Virtual-0 900 >/dev/null
 sleep 1.5
 activate s1
 sleep 1
-PZ org.plasmazones.Scrolling.setColumnWidthPixels Virtual-0 1000 >/dev/null
+PZ org.plasmazones.Scrolling.setColumnWidthPixels Virtual-0 1100 >/dev/null
 sleep 2
 ids
 read -r V0X _ V0W _ <<< "$(scr Virtual-0)"
@@ -42,8 +46,9 @@ read -r x _ w _ <<< "$(geo s2)"
 x=${x%.*}
 w=${w%.*}
 echo "Virtual-0 strip: $(striporder Virtual-0); s1 $(geo s1); s2 $(geo s2)"
-[ "$x" -lt $((V0X + V0W)) ] && [ $((x + w / 2)) -gt $((V0X + V0W)) ] \
-    || stage_fail "s2 does not straddle Virtual-0's right edge with its centre past it ($(geo s2))"
+[ "$x" -lt $((V0X + V0W)) ] && [ $((x + w)) -gt $((V0X + V0W)) ] \
+    || stage_fail "s2 does not straddle Virtual-0's right edge ($(geo s2))"
+[ "$(outof "$(geo s2)")" = Virtual-0 ] || stage_fail "KWin counts s2 on another output already ($(geo s2))"
 S2=$(uuid s2)
 [ -n "$S2" ] || stage_fail "s2 has no id"
 

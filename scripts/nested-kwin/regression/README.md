@@ -168,7 +168,7 @@ one whose daemon died or was replaced.
 | f1149-overlapping-settle-reports | 4 | with two settle reports in flight, the second one's park drop waits for its own verdict |
 | f1151-touch-forgets-claim | 2 | a touch after a Readopt that left a granted place forgets the Monocle claim, and the next batch does not take it back |
 | f1151-scroll-visit-back-to-zone | 1 | a window on every desktop, snapped on a snapping desktop, goes back into its zone after a visit to a scrolling desktop |
-| f1153-cropped-straddler-move | 2, S | KWin's Move to Screen of a scrolling column cropped at its output's edge, centred on the neighbour, hands it to the neighbour's strip |
+| f1153-cropped-straddler-move | 2, S | regression rows: KWin's Move to Screen of a scrolling column cropped at its output's edge still hands it to the neighbour's strip under the tracked-output test |
 | f1155-compositor-only-gate | 1 | the compositor-only D-Bus methods admit the KWin effect across a daemon restart and refuse another caller with AccessDenied |
 
 ## Follow-up probes (pr1125-followups)
