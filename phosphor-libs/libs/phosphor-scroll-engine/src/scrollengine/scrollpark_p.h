@@ -57,7 +57,7 @@ struct ParkInputs
     bool cropStraddlers = false;
 };
 
-/// The ParkInputs of @p tile in @p column under @p params, parked below
+/// The ParkInputs of @p tile in @p column under @p params, parked at
 /// @p parkTop and clamped to @p screenRect, with @p tileMin as its minimum
 /// (ParkInputs::tileMin says what that holds). The one builder for both
 /// readers of the decision: applyLayout's emit loop, which commits it, and

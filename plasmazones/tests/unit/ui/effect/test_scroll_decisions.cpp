@@ -11,19 +11,18 @@
 // the release order is static-asserted where releaseAllClaims uses it), the
 // size-continuity carry-forward table, when a strip entry is a new offer,
 // when a request resizes on KWin's account (resizesOnKWinsAccount), whether
-// and where such a resize is put back and which requests leave the output,
-// when a dropped quick tile's configure is still outstanding
-// (droppedTileAckOutstanding), when a request voids a stale-ack answer, the
-// engine-flip screen set, the wire screen-list filter, the
+// and where such a resize is put back and which requests leave the output
+// (requestLeavesStripOutput), when a dropped quick tile's configure is still
+// outstanding (droppedTileAckOutstanding), when a request voids a stale-ack
+// answer, the engine-flip screen set, the wire screen-list filter, the
 // maximize-membership and claimed-press answers, when an apply at its target
-// still owes a leg (departureOwesLeg), the view-carried origin, the passive float scope, the user Monocle
-// unmaximize read, the restore-rect output check, the KWin move off a
-// strip, when a strip window's frame reads as its client's answer to its
-// column, whether that answer is new, and which answers are reported to the
-// engine. Same header-only reach as
-// test_anchor_uniforms:
-// kwin-effect has no linkable test target, so the pure halves are extracted
-// into a header this test includes directly.
+// still owes a leg (departureOwesLeg), the view-carried origin, the passive
+// float scope, the user Monocle unmaximize read, the restore-rect output
+// check, the KWin move off a strip, when a strip window's frame reads as its
+// client's answer to its column, whether that answer is new, and which
+// answers are reported to the engine. Same header-only reach as
+// test_anchor_uniforms: kwin-effect has no linkable test target, so the pure
+// halves are extracted into a header this test includes directly.
 
 #include <tilinghandler/scrolldecisions.h>
 
@@ -745,7 +744,8 @@ private Q_SLOTS:
         // A drag the tracker still owns, or the resize hold.
         QTest::newRow("user gesture") << true << true << true << true << false << false;
         // KWin's Move to Screen onto a work area smaller than the column, which
-        // resizes on the way: put back, it would never reach the other output.
+        // resizes on the way. Not put back: put back on the old output, it
+        // would never reach the other one.
         QTest::newRow("moves to another output") << true << true << true << false << true << false;
     }
 
@@ -766,23 +766,32 @@ private Q_SLOTS:
         QCOMPARE(putsBackKWinResize(gates), putsBack);
     }
 
-    // Which requests leave the output, read through the output-change arm's
-    // own test (isKWinMoveOffStrip) with the requested rect as the frame. The
-    // live shape: a 1908 px column on a 3840 px output sent to a 1280 px one,
-    // where Window::sendToOutput's keepInArea shrinks it to the new area.
-    void kwinResizePutBack_leavesOutputOnlyForAMoveOff()
+    // Which resizes KWin requested leave the strip's output
+    // (requestLeavesStripOutput): the output-change arm's answer for the
+    // requested rect, held to the output of the window's tracked strip screen.
+    // The arm's own shapes are pinned on isKWinMoveOffStrip; its wiring to the
+    // request is the nested-KWin probe's to cover. The live shape: a 1908 px
+    // column on a 3840 px output sent to a 1280 px one to its right, where
+    // Window::sendToOutput's keepInArea shrinks it to the new area.
+    void kwinResizePutBack_leavesOnlyTheTrackedOutput()
     {
-        const QRectF stripOutput(0, 0, 3840, 2160);
-        // Move to Screen onto the smaller output to the right: handed over.
-        QVERIFY(isKWinMoveOffStrip(QRectF(3848, 8, 1264, 1004), stripOutput, /*markerArmed=*/false,
-                                   /*parked=*/false, /*userMove=*/false));
-        // Expand Window of a column straddling the output's right edge: its
-        // centre crosses onto the neighbour, but it still overlaps the strip's
-        // output, so it is put back.
-        QVERIFY(!isKWinMoveOffStrip(QRectF(3000, 8, 1592, 2052), stripOutput, false, false, false));
-        // Expand Window of a parked column: off every output by design, and
-        // its nearest output says nothing about a move, so it is put back.
-        QVERIFY(!isKWinMoveOffStrip(QRectF(8, 2200, 2400, 2052), stripOutput, false, /*parked=*/true, false));
+        const QRectF tracked(0, 0, 3840, 2160);
+        // Move to Screen onto the smaller output: the arm hands it over and it
+        // misses the tracked output, so it leaves.
+        QVERIFY(requestLeavesStripOutput(/*movesOffStrip=*/true, QRectF(3848, 8, 1264, 1004), tracked));
+        // A straddler cropped at the right edge, whose strip rect's centre sits
+        // on the neighbour: the arm, measuring against the neighbour, reads a
+        // resize back wholly onto the tracked output as a move off it. It
+        // stays, and is put back.
+        QVERIFY(!requestLeavesStripOutput(/*movesOffStrip=*/true, QRectF(2000, 8, 1592, 2052), tracked));
+        // Nor does one that still overlaps the tracked output.
+        QVERIFY(!requestLeavesStripOutput(/*movesOffStrip=*/true, QRectF(3000, 8, 1592, 2052), tracked));
+        // What the arm does not hand over never leaves, wherever it lands, so
+        // nothing is let go that the arm would not take.
+        QVERIFY(!requestLeavesStripOutput(/*movesOffStrip=*/false, QRectF(3848, 8, 1264, 1004), tracked));
+        // No tracked output to hold it to: the arm's answer stands.
+        QVERIFY(requestLeavesStripOutput(/*movesOffStrip=*/true, QRectF(2000, 8, 1592, 2052), QRectF()));
+        QVERIFY(!requestLeavesStripOutput(/*movesOffStrip=*/false, QRectF(2000, 8, 1592, 2052), QRectF()));
     }
 
     // Where the put-back lands. The strip's commanded rect wins where the

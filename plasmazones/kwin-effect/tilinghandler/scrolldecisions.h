@@ -527,7 +527,9 @@ struct KWinResizePutBackGates
     /// TilingHandler::isKWinMoveOfStripTile), so a move that arm would take is
     /// never put back onto the old output, where its output change never
     /// comes. A request at a park, or one still overlapping the strip's
-    /// output (a straddler growing past its edge), is no such move.
+    /// output (a straddler growing past its edge), is no such move, and nor is
+    /// one still on the output of the window's tracked strip screen
+    /// (requestLeavesStripOutput).
     bool leavesOutput = false;
 };
 
@@ -819,6 +821,22 @@ inline bool isKWinMoveOffStrip(const QRectF& frame, const QRectF& commandedOutpu
 {
     return !markerArmed && !parked && !userMove && commandedOutput.isValid() && frame.isValid()
         && !frame.intersects(commandedOutput);
+}
+
+/// Whether a resize KWin requested for a strip window moves it off the strip's
+/// output (KWinResizePutBackGates::leavesOutput). @p movesOffStrip is the
+/// output-change arm's own answer for the requested rect (isKWinMoveOffStrip,
+/// through TilingHandler::isKWinMoveOfStripTile), which finds the strip's
+/// output at the centre of the rect the strip last gave the window. For a
+/// straddler cropped at its output's edge that centre can sit on the
+/// neighbour, and a request that keeps the window wholly on its own strip
+/// output would read as a move off it, so the request must also miss
+/// @p trackedOutput, the output of the window's tracked strip screen. Both
+/// together keep the answer to moves that arm hands over. An invalid
+/// @p trackedOutput leaves the arm's answer as it is.
+inline bool requestLeavesStripOutput(bool movesOffStrip, const QRectF& requested, const QRectF& trackedOutput)
+{
+    return movesOffStrip && (!trackedOutput.isValid() || !requested.intersects(trackedOutput));
 }
 
 /// The scope the passive float channel releases under (F723). On a scrolling

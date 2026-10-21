@@ -259,8 +259,10 @@ public:
     /// (CommittedExtent):
     ///  - an extent ALONG the strip past the offer becomes a floor the column is held to like a declared
     ///    minimum, and the screen-edge peek floor rises with it. That peek memory outlives a dropped floor
-    ///    while the column still offers at least as much, and ends once it offers less on a pass that offers
-    ///    the tile its whole rect;
+    ///    while a column still offers at least as much. It ends once this column offers less on a pass that
+    ///    offers the tile its whole rect and every other column the window holds offers less too (a float or a
+    ///    maximized-to-edges membership elsewhere keeps it), and ending it ends that orientation's whole
+    ///    extent, give-back history included;
     ///  - a narrower answer gives a floor back: down to the answer while that still overshoots what the column
     ///    resolves to without the floor, entirely once it does not. A narrower answer never creates a floor.
     ///    A floor re-taught after a give-back is pinned against further give-backs, so a client that does not
@@ -2104,7 +2106,8 @@ private:
     /// whole or leaves the viewport. Its park is a whole offer, but a client that takes an offer reports
     /// nothing, so the engine cannot tell one that took the park from one whose wider answer to it has not
     /// arrived, and ending the memory a pass after the park would hand a pixel pan's next frame a sliver the
-    /// client answers instead. @p screenRect and @p parkTop are the emit loop's park bounds.
+    /// client answers instead. Likewise a tile the stack clamp shortens keeps the memory for as long as the
+    /// overflow clamps it. @p screenRect and @p parkTop are the emit loop's park bounds.
     void endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& resolved,
                        const PhosphorEngine::PlacementStateKey& key, const ScrollLayoutParams& params,
                        const QRect& screenRect, int parkTop);

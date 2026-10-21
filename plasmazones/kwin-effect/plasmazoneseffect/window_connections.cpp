@@ -1336,11 +1336,15 @@ void PlasmaZonesEffect::noteForeignStripRequest(KWin::EffectWindow* w)
     gates.userGesture =
         m_resizeHold.window == w || (m_dragTracker->isDragging() && windowId == m_dragTracker->draggedWindowId());
     if (gates.kwinStateAtRest && !gates.userGesture) {
-        gates.managed = scrollManagedOutputFor(w) != nullptr;
+        // The output of the window's tracked strip screen.
+        const KWin::LogicalOutput* const managedOutput = scrollManagedOutputFor(w);
+        gates.managed = managedOutput != nullptr;
         if (gates.managed) {
             gates.coordinatesHold = !m_screenChangeHandler->isScreenChangeInProgress()
                 && !m_tilingHandler->stripOutputMovedSinceBatch(m_tilingHandler->scrollTrackedScreenFor(windowId));
-            gates.leavesOutput = m_tilingHandler->isKWinMoveOfStripTile(w, windowId, requested);
+            gates.leavesOutput = ScrollDecisions::requestLeavesStripOutput(
+                m_tilingHandler->isKWinMoveOfStripTile(w, windowId, requested), requested,
+                QRectF(QRect(managedOutput->geometry())));
         }
     }
     // The commanded rect only while the strip apply that recorded it is still

@@ -907,6 +907,23 @@ private Q_SLOTS:
         QCOMPARE(extentOf(engine, kSticky), 800);
         QVERIFY2(isParked(engine, kSticky), "a column that still offers the memory keeps it");
 
+        // A column offering exactly the memory still offers it: desktop 2
+        // narrows to 700, desktop 1 is laid out again at 600 with the tile
+        // whole, and the memory stands for desktop 2's next straddle.
+        engine->windowFocused(kSticky, kS1);
+        engine->setColumnWidth(ColumnWidth::makeFixed(700), kS1);
+        QCoreApplication::processEvents();
+        switchTo(engine, 1);
+        engine->windowFocused(kSticky, kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kSticky), 600);
+        QVERIFY2(!isParked(engine, kSticky), "precondition: desktop 1 offers the tile whole");
+        switchTo(engine, 2);
+        engine->windowFocused(kD2, kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kSticky), 700);
+        QVERIFY2(isParked(engine, kSticky), "a column offering exactly the memory keeps it");
+
         // Once it offers less too, the memory ends and the next straddle
         // peeks.
         engine->windowFocused(kSticky, kS1);

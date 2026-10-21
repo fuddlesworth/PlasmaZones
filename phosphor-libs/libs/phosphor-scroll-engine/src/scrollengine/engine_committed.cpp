@@ -362,7 +362,9 @@ void ScrollEngine::endStalePeeks(const ScrollStrip& strip, const ResolvedStrip& 
             // offer a sliver one frame later on a pixel pan, the client would
             // then answer the sliver instead of the park, and nothing would
             // re-teach it. A column that only ever straddles therefore parks
-            // until it is shown whole or leaves the viewport.
+            // until it is shown whole or leaves the viewport, and a tile the
+            // stack clamp shortens keeps the memory for as long as the
+            // overflow clamps it.
             const Detail::ParkInputs whatIf = Detail::parkInputsFor(tile, column, params, screenRect, parkTop,
                                                                     strip.windowMinimumSize(tile.windowId));
             if (Detail::resolveTilePlacement(whatIf, QString()).rect.size() != tile.rect.size()) {

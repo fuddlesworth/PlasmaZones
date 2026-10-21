@@ -2603,9 +2603,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     const bool releasingMaximize = maximizeBitReleasedThisBatch || monocleBitReleased;
                     // KWin's flip usually commanded this rect already, and the apply's no-op skip would drop the
                     // claimed press's only leg (F989). So does an untile that moved the window at once to a restore
-                    // rect that is the column itself, which would drop the leg from the tile (departureOwesLeg).
-                    const bool prevLegOwed = std::exchange(m_effect->m_daemonGate.departureLegOwed,
-                                                           claimedDeparture.isValid() || tileDropOrigin.isValid());
+                    // rect that is the column itself, which would drop the leg from the tile (departureOwesLeg). An
+                    // apply that skips its animation owes no leg, and the no-op skip stands for it.
+                    const bool prevLegOwed =
+                        std::exchange(m_effect->m_daemonGate.departureLegOwed,
+                                      !skipScrollAnimation && (claimedDeparture.isValid() || tileDropOrigin.isValid()));
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   releasingMaximize ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
                                                                     : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
