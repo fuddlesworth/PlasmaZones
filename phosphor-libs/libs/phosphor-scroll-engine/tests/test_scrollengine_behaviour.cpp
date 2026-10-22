@@ -106,6 +106,9 @@ private Q_SLOTS:
     void focusScrollLimitNamesEveryTileOfABlockedColumn();
     void focusScrollLimitFailsOpen();
     void floatAtOpenGetsSiblingFreeSizeWhereItStands();
+    void floatDragDropKeepsTheLiveClientSize();
+    void dragDropOnlyResizesAnArrivingWindow();
+    void floatedAtOpenDragDropTakesTheConfiguredWidth();
 
 private:
     /// An engine on S1 and S2 with @p settings installed and its cached
@@ -139,6 +142,40 @@ private:
     {
         auto* state = static_cast<ScrollState*>(engine->stateForScreen(screenId));
         return state && state->strip().containsWindow(windowId);
+    }
+
+    /// @p windowId's visible tile rect on @p screenId, null when it has none.
+    static QRect tileRectOn(ScrollEngine* engine, const QString& screenId, const QString& windowId)
+    {
+        const auto tiles = engine->visibleTiles(screenId);
+        for (const auto& tile : tiles) {
+            if (tile.windowId == windowId) {
+                return tile.rect;
+            }
+        }
+        return {};
+    }
+
+    /// Drag @p windowId into a NEW column at the front of @p screenId's strip,
+    /// with @p clientSize handed over the way the daemon hands it after begin
+    /// (none when invalid). Returns the indicator rect the preview promised
+    /// just before the drop.
+    static QRect dragIntoNewColumn(ScrollEngine* engine, const QString& screenId, const QString& windowId,
+                                   const QSize& clientSize)
+    {
+        if (!engine->beginDragInsertPreview(windowId, screenId)) {
+            return {};
+        }
+        if (clientSize.isValid()) {
+            engine->setDragInsertClientSize(clientSize);
+        }
+        PhosphorEngine::IPlacementEngine::DragInsertTarget target;
+        target.primary = 0;
+        target.newSlot = true;
+        engine->updateDragInsertPreview(target);
+        const QRect promised = engine->dragInsertIndicatorRect(screenId);
+        engine->commitDragInsertPreview();
+        return promised;
     }
 };
 
@@ -1032,6 +1069,116 @@ void TestScrollEngineBehaviour::floatAtOpenGetsSiblingFreeSizeWhereItStands()
     engine->windowOpened(QStringLiteral("app|third"), kS1, 0, 0);
     QVERIFY(s1->isFloating(QStringLiteral("app|third")));
     QCOMPARE(sizeSpy.count(), 0);
+}
+
+void TestScrollEngineBehaviour::floatDragDropKeepsTheLiveClientSize()
+{
+    // A floating window dragged into the strip of a screen where the client
+    // decides keeps the size the user is holding, on both axes. S2 carries no
+    // ClientDecides and takes the configured width and height.
+    //
+    // The RECORD disagrees with the live size on purpose: a float's size need
+    // not be on record (a float re-seated at a frame the record refuses has
+    // none), so a drop that read the record instead fails here. And the
+    // floater was a tile before it floated, so its remembered tile shape is a
+    // third answer the live size must outrank.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
+    settings->widthValue = 0.25;
+    settings->heightKind = static_cast<int>(DefaultHeightKind::Fixed);
+    settings->heightValue = 250.0;
+    auto* tracker = new StubWindowTracking(&owner);
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 300, 200));
+    ScrollEngine* engine = makeEngine(&owner, settings, tracker);
+    QVariantMap clientDecides;
+    clientDecides.insert(ScrollPerScreenKeys::defaultColumnWidthKind(),
+                         static_cast<int>(DefaultWidthKind::ClientDecides));
+    clientDecides.insert(ScrollPerScreenKeys::defaultWindowHeightKind(),
+                         static_cast<int>(DefaultHeightKind::ClientDecides));
+    engine->applyPerScreenConfig(kS1, clientDecides);
+
+    const QSize held = Ax::t(QSize(700, 450));
+    QHash<QString, QRect> promisedOn;
+    for (const QString& screen : {kS1, kS2}) {
+        const QString floater = QStringLiteral("app|float-") + screen;
+        engine->windowOpened(QStringLiteral("app|anchor-") + screen, screen, 0, 0);
+        engine->windowOpened(floater, screen, 0, 0);
+        engine->setWindowFloat(floater, true, screen);
+        auto* state = static_cast<ScrollState*>(engine->stateForScreen(screen));
+        QVERIFY(state && state->isFloating(floater));
+        promisedOn.insert(screen, dragIntoNewColumn(engine, screen, floater, held));
+        QVERIFY(tiled(engine, screen, floater));
+    }
+
+    const QRect clientSized = tileRectOn(engine, kS1, QStringLiteral("app|float-S1"));
+    QCOMPARE(Ax::mainLen(clientSized), 700);
+    QCOMPARE(Ax::crossLen(clientSized), 450);
+    // The indicator simulates the drop, so it has to have seen the size too.
+    QCOMPARE(promisedOn.value(kS1).size(), clientSized.size());
+
+    const QRect configured = tileRectOn(engine, kS2, QStringLiteral("app|float-S2"));
+    QCOMPARE(Ax::mainLen(configured), kMainExtent / 4);
+    QCOMPARE(Ax::crossLen(configured), 250);
+    QCOMPARE(promisedOn.value(kS2).size(), configured.size());
+}
+
+void TestScrollEngineBehaviour::dragDropOnlyResizesAnArrivingWindow()
+{
+    // The live size belongs to a window that was floating HERE. A tile being
+    // reordered keeps its column, and a window arriving from outside the
+    // engine reads the free-geometry record as the open path does, because
+    // the frame in the user's hand may be a zone or a tile from elsewhere.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::ClientDecides);
+    settings->heightKind = static_cast<int>(DefaultHeightKind::ClientDecides);
+    auto* tracker = new StubWindowTracking(&owner);
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
+    ScrollEngine* engine = makeEngine(&owner, settings, tracker);
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QCOMPARE(Ax::mainLen(tileRectOn(engine, kS1, QStringLiteral("app|b"))), 640);
+
+    // REORDER: neither the handed size nor a changed record reaches it.
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 500, 300));
+    dragIntoNewColumn(engine, kS1, QStringLiteral("app|b"), Ax::t(QSize(900, 500)));
+    QCOMPARE(orderOn(engine, kS1).first(), QStringLiteral("app|b"));
+    const QRect reordered = tileRectOn(engine, kS1, QStringLiteral("app|b"));
+    QCOMPARE(Ax::mainLen(reordered), 640);
+    QCOMPARE(Ax::crossLen(reordered), 400);
+
+    // ADOPTION: the record, not the size handed over.
+    dragIntoNewColumn(engine, kS2, QStringLiteral("app|fresh"), Ax::t(QSize(900, 500)));
+    QVERIFY(tiled(engine, kS2, QStringLiteral("app|fresh")));
+    const QRect adopted = tileRectOn(engine, kS2, QStringLiteral("app|fresh"));
+    QCOMPARE(Ax::mainLen(adopted), 500);
+    QCOMPARE(Ax::crossLen(adopted), 300);
+}
+
+void TestScrollEngineBehaviour::floatedAtOpenDragDropTakesTheConfiguredWidth()
+{
+    // A window floated AT OPEN holds a seeded float entry with no tile in it,
+    // whose width is FloatRestore's default-constructed 50%. Dragged into the
+    // strip it must take the configured width, as its unfloat does, and not
+    // that placeholder.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
+    settings->widthValue = 0.25;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+    engine->setFloatPredicate([](const QString& windowId, const QString&) {
+        return windowId == QStringLiteral("app|floater");
+    });
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|floater"), kS1, 0, 0);
+    auto* s1 = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(s1 && s1->isFloating(QStringLiteral("app|floater")));
+    engine->setFloatPredicate({});
+
+    dragIntoNewColumn(engine, kS1, QStringLiteral("app|floater"), QSize());
+    QVERIFY(tiled(engine, kS1, QStringLiteral("app|floater")));
+    QCOMPARE(Ax::mainLen(tileRectOn(engine, kS1, QStringLiteral("app|floater"))), kMainExtent / 4);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineBehaviour)

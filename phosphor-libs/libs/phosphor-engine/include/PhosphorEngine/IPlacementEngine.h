@@ -1303,6 +1303,21 @@ public:
     /// first, and only logs an insert or a reorder, which it cannot apply. Defined in PlacementEngineBase.cpp.
     /// Appended last for ABI.
     virtual void remapDesktops(const DesktopRemap& remap);
+
+    /// OPTIONAL: the size the window under the live drag-insert preview had
+    /// when the user picked it up, handed over right after a successful
+    /// beginDragInsertPreview so the drop indicator and the commit both see
+    /// it. A move never resizes, so this is the size the user is holding. An engine that sizes an arriving window
+    /// from its client (the scroll engine's "the client decides" width and
+    /// height) reads it for a window that was FREE at begin, where no record
+    /// of the window's own size need be current. An empty size means the
+    /// caller has none to offer, for instance because the frame filled its
+    /// output. No-op with no preview live, and every begin starts without
+    /// one. Appended last for ABI.
+    virtual void setDragInsertClientSize(const QSize& size)
+    {
+        Q_UNUSED(size)
+    }
 };
 
 } // namespace PhosphorEngine

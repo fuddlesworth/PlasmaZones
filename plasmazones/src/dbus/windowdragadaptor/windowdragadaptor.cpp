@@ -262,6 +262,20 @@ QSize WindowDragAdaptor::dragInsertAdoptedMinSize(const QString& windowId) const
     return {};
 }
 
+QSize WindowDragAdaptor::dragInsertClientSize() const
+{
+    // A pending snap-path drag has not promoted its frame yet, and the begin
+    // that wants this can run on such a drag the moment it crosses onto an
+    // engine screen.
+    const bool pending = !m_originalGeometry.isValid();
+    const QRect frame = pending ? m_pendingSnapDragGeometry : m_originalGeometry;
+    const bool fillsOutput = pending ? m_pendingSnapDragFillsOutput : m_originalFrameFillsOutput;
+    if (fillsOutput || !frame.isValid()) {
+        return {};
+    }
+    return frame.size();
+}
+
 bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) const
 {
     if (screenId.isEmpty()) {
@@ -516,6 +530,7 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
             // the source engine's tracking as a commit side effect, and the
             // minimum has to be read while the source still remembers it.
             const QSize adoptedMin = dragInsertAdoptedMinSize(windowId);
+            m_scrollEngine->setDragInsertClientSize(dragInsertClientSize());
             m_scrollEngine->updateDragInsertPreview(popupTarget);
             m_scrollEngine->commitDragInsertPreview();
             if (adoptedMin.width() > 0 || adoptedMin.height() > 0) {

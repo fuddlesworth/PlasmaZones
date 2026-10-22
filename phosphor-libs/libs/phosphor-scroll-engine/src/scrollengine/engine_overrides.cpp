@@ -453,6 +453,24 @@ std::optional<ColumnWidth> ScrollEngine::resetDefaultColumnWidthFor(const QVaria
     return params.defaultColumnWidth;
 }
 
+ColumnWidth ScrollEngine::clientDecidedColumnWidth(const QSize& clientSize, const ScrollLayoutParams& params)
+{
+    // The client's size is a PHYSICAL rect from the compositor, so it has to
+    // be decoded by role. Reading .width() unconditionally would, on a
+    // vertical strip, feed the client's cross extent into the column's MAIN
+    // intent and open every client-sized window at the wrong length along the
+    // strip.
+    //
+    // Bounded like every other Fixed intent this engine mints (the settings
+    // and override arms both qBound before the round). The size comes from
+    // IWindowTrackingService or from the daemon's drag report, both of which
+    // an embedder implements, and neither validates the extents — a
+    // degenerate or absurd one would become the column's standing width
+    // intent.
+    const int clientMain = params.axis.mainSize(clientSize);
+    return ColumnWidth::makeFixed(qBound(1, clientMain, static_cast<int>(kMaxFixedExtentPx)));
+}
+
 bool ScrollEngine::effectiveWidthClientDecides(const QVariantMap& overrides) const
 {
     // Kind VALIDATION, not just a read: effectiveDefaultColumnWidth falls
@@ -578,32 +596,39 @@ bool ScrollEngine::effectiveHeightClientDecides(const QVariantMap& overrides) co
 }
 
 bool ScrollEngine::commitClientDecidedHeight(ScrollStrip& strip, const QString& windowId, const QString& screenId,
-                                             const QVariantMap& overrides, const ScrollLayoutParams& params)
+                                             const QVariantMap& overrides, const ScrollLayoutParams& params,
+                                             std::optional<QSize> clientSize) const
 {
-    if (!m_windowTracker || !effectiveHeightClientDecides(overrides)
-        || ruleWindowHeightFraction(overrides).has_value()) {
+    if (!effectiveHeightClientDecides(overrides) || ruleWindowHeightFraction(overrides).has_value()) {
         return false;
     }
-    // A tile height is a PER-WINDOW contract, and the resolver is per-window by
-    // construction — there is no sharing mode to opt out of. That matters here
-    // specifically: minting one window's sizing intent out of another
-    // instance's remembered rect would give it a height it never asked for.
-    const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
-    if (!geo) {
-        // Not the common case for a genuine spawn — the effect records the
-        // pre-tile geometry before it announces the open — but a window the
-        // capture skipped falls back to the context default with nothing to
-        // tell it apart from the setting being off.
-        qCDebug(lcScrollEngine) << "client-decided height unavailable for" << windowId << "on" << screenId
-                                << "— no free-geometry record; using the context default";
-        return false;
+    if (!clientSize) {
+        if (!m_windowTracker) {
+            return false;
+        }
+        // A tile height is a PER-WINDOW contract, and the resolver is
+        // per-window by construction — there is no sharing mode to opt out
+        // of. That matters here specifically: minting one window's sizing
+        // intent out of another instance's remembered rect would give it a
+        // height it never asked for.
+        const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
+        if (!geo) {
+            // Not the common case for a genuine spawn — the effect records the
+            // pre-tile geometry before it announces the open — but a window the
+            // capture skipped falls back to the context default with nothing to
+            // tell it apart from the setting being off.
+            qCDebug(lcScrollEngine) << "client-decided height unavailable for" << windowId << "on" << screenId
+                                    << "— no free-geometry record; using the context default";
+            return false;
+        }
+        clientSize = geo->size();
     }
     // CROSS extent, decoded by role like everything else that reads this rect:
     // a window height divides the within-column stack, which runs across the
     // strip whichever way the strip runs. Reading .height() unconditionally
     // would feed the client's MAIN extent into the tile's cross intent on a
     // vertical strip.
-    const int clientCross = params.axis.crossSize(geo->size());
+    const int clientCross = params.axis.crossSize(*clientSize);
     const int crossExtent = params.axis.crossSize(params.workArea);
     if (clientCross < 1 || crossExtent <= 0) {
         // A degenerate report must not become a standing 1px intent.

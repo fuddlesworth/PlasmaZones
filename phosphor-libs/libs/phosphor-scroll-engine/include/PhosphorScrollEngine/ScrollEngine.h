@@ -735,6 +735,9 @@ public:
     }
     bool beginDragInsertPreview(const QString& rawWindowId, const QString& screenId) override;
     void commitDragInsertPreview() override;
+    /// Stores @p size on the live preview for commit's "the client decides"
+    /// sizing of a window dragged in off a float. No-op with no preview live.
+    void setDragInsertClientSize(const QSize& size) override;
     /// @p dragStillActive carries the base-interface contract and is
     /// deliberately unused here (see the definition): the DETACH-ONCE model
     /// plus the interactive-drag mark already keep the dragged window's rect
@@ -1786,6 +1789,19 @@ private:
     /// by begin (same-screen floating entry) and cancel.
     bool dragPreviewRestoreSlot(ScrollState* state, const QString& windowId, const FloatRestore& slot,
                                 const ScrollLayoutParams& params, const QString& screenId);
+    /// The client's own size for a drop of @p preview, when the dropped
+    /// window ARRIVES rather than being reordered (it did not leave a strip
+    /// tile at begin): the daemon's live size for a window that was floating
+    /// here, otherwise the free-geometry record the open path reads. nullopt
+    /// for a reorder, or when neither source has an answer.
+    std::optional<QSize> dragDropClientSize(const DragInsertPreview& preview) const;
+    /// @p preview's carried intents with the width "the client decides"
+    /// mints from @p clientSize in place of the carried one, when that is the
+    /// effective verdict for the target screen and no rule pinned a width.
+    /// What commit inserts with and what the indicator probe simulates, so
+    /// the two cannot disagree on the column the drop opens.
+    FloatRestore dragDropIntents(const DragInsertPreview& preview, const std::optional<QSize>& clientSize,
+                                 const ScrollLayoutParams& params) const;
     /// Preview hygiene for a closing window: drops the preview without
     /// restoration when the DRAGGED window closes, and discards the stale
     /// hit-tested target when a NEIGHBOUR in the target strip closes (the
@@ -2030,8 +2046,19 @@ private:
     /// the intent to @p params' work-area cross extent, because the answer is
     /// PERSISTED pixels and an intent no column can hold is one the relayout
     /// re-clamps on every pass. Returns whether an intent was written.
+    ///
+    /// @p clientSize, when given, is the window's own size from a source the
+    /// caller vouches for (a drag drop's live size) and is read in place of
+    /// the free-geometry record.
     bool commitClientDecidedHeight(ScrollStrip& strip, const QString& windowId, const QString& screenId,
-                                   const QVariantMap& overrides, const ScrollLayoutParams& params);
+                                   const QVariantMap& overrides, const ScrollLayoutParams& params,
+                                   std::optional<QSize> clientSize = std::nullopt) const;
+    /// The Fixed column width "the client decides" mints from a client of
+    /// @p clientSize: its extent ALONG the strip, decoded by @p params' axis
+    /// and bounded like every other Fixed intent this engine mints. The
+    /// single definition of that conversion, shared by the open path and the
+    /// drag drop.
+    static ColumnWidth clientDecidedColumnWidth(const QSize& clientSize, const ScrollLayoutParams& params);
     /// The height resetStripToDefaults hands the strip: the even split, or
     /// std::nullopt when the effective verdict is "the client decides" and no
     /// rule pins a height, in which case the tiles keep the heights they have.

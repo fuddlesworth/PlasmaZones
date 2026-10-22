@@ -566,6 +566,13 @@ private:
     /// respect-minimum-size clamp is inert for it.
     QSize dragInsertAdoptedMinSize(const QString& windowId) const;
 
+    /// The dragged window's size as the user holds it, for
+    /// IPlacementEngine::setDragInsertClientSize: the frame the drag began
+    /// with, since a move never resizes. Empty when that frame filled its
+    /// output (a maximized or fullscreen window's frame is the output, not a
+    /// size the client chose) or no frame is known yet.
+    QSize dragInsertClientSize() const;
+
     /// Reorder-mode resolve for whichever engine owns @p screenId: autotile
     /// keeps the SetDragBehavior-rule/global-setting cascade; scrolling has
     /// no DragBehavior enum, so "always re-insert" IS the AlwaysActive

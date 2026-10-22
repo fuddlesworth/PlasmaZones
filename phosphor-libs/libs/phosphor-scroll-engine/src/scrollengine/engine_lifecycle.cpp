@@ -168,22 +168,10 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // That matters here specifically: minting one window's sizing intent
         // out of another instance's remembered rect would open the column at a
         // size this window never asked for.
+        // validatedUnmanagedGeometry validates only that a geometry EXISTS for
+        // the window on that screen; the helper decodes and bounds its extents.
         if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
-            // The tracked geometry is a PHYSICAL rect from the compositor, so
-            // it has to be decoded by role. Reading .width() unconditionally
-            // would, on a vertical strip, feed the client's cross extent into
-            // the column's MAIN intent and open every client-sized window at
-            // the wrong length along the strip.
-            //
-            // Bounded like every other Fixed intent this engine mints (the
-            // settings and override arms both qBound before the round). The
-            // rect comes from IWindowTrackingService, which an embedder
-            // implements, and validatedUnmanagedGeometry validates only that a
-            // geometry EXISTS for the window on that screen — its extents are
-            // whatever the compositor reported, so a degenerate or absurd one
-            // would become the column's standing width intent.
-            const int clientMain = params.axis.mainSize(geo->size());
-            width = ColumnWidth::makeFixed(qBound(1, clientMain, static_cast<int>(kMaxFixedExtentPx)));
+            width = clientDecidedColumnWidth(geo->size(), params);
         }
     }
 

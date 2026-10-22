@@ -23,6 +23,7 @@
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
+#include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 #include "scrollenginelogging.h"
@@ -195,10 +196,16 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
             preview.priorFloatHadFocus = priorState->floatingHasFocus() && priorState->lastFloatingFocus() == windowId;
             priorState->removeFloating(windowId);
             preview.carried = preview.floatRestoreEntry;
-            if (!preview.hadFloatRestoreEntry) {
-                // A floating window with no restore entry carries no intents
-                // of its own — seed the screen's configured defaults, not
-                // FloatRestore's default-constructed 50% proportion.
+            // A floating window with no restore entry carries no intents of
+            // its own, and neither does one whose entry is a SEED
+            // (seedFloatRestoreForOpen: column and tile both -1, written for a
+            // window floated at open, which never held a tile). Seed the
+            // screen's configured defaults, not FloatRestore's
+            // default-constructed 50% proportion. The seed's minimum size is
+            // real and stays. unfloatWindowInternal draws the same line.
+            const bool entryHeldTile =
+                preview.floatRestoreEntry.column >= 0 || preview.floatRestoreEntry.tileIndex >= 0;
+            if (!preview.hadFloatRestoreEntry || !entryHeldTile) {
                 preview.carried.width = params.defaultColumnWidth;
                 preview.carried.display = effectiveDefaultColumnDisplay(screenId);
             }
@@ -284,6 +291,60 @@ void ScrollEngine::updateDragInsertPreview(const DragInsertTarget& target)
     m_dragInsertPreview->lastTarget = target;
 }
 
+void ScrollEngine::setDragInsertClientSize(const QSize& size)
+{
+    if (!m_dragInsertPreview) {
+        return;
+    }
+    m_dragInsertPreview->clientSize = size;
+}
+
+std::optional<QSize> ScrollEngine::dragDropClientSize(const DragInsertPreview& preview) const
+{
+    // A window that left a strip tile at begin is being REORDERED: its column
+    // shape is its own, the client never chose that frame freely, and the user
+    // is moving a column rather than resizing one. Everything else ARRIVES the
+    // way an opened window does (off a float here, from another engine, or
+    // untracked) and is sized the way the open path would size it.
+    if (preview.priorSlot.column >= 0 || preview.priorSlot.tileIndex >= 0) {
+        return std::nullopt;
+    }
+    // A float here: the size the user is holding. The free-geometry record is
+    // NOT a stand-in for it. A float's size reaches the record on a user
+    // resize, but a window that became floating at a frame the record refuses
+    // (a fullscreen hold re-seated as a float when its output came back, at
+    // what the record calls a managed frame) has no record of the size on
+    // screen at all, and the drop then fell back to the configured default.
+    if (preview.priorFloating && preview.clientSize.isValid() && !preview.clientSize.isEmpty()) {
+        return preview.clientSize;
+    }
+    // An adoption: the frame in hand may be a zone or a tile from the engine
+    // it came from, which is not the client's choice, so read what the open
+    // path reads.
+    if (m_windowTracker) {
+        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(preview.windowId, preview.targetScreenId)) {
+            return geo->size();
+        }
+    }
+    return std::nullopt;
+}
+
+FloatRestore ScrollEngine::dragDropIntents(const DragInsertPreview& preview, const std::optional<QSize>& clientSize,
+                                           const ScrollLayoutParams& params) const
+{
+    FloatRestore intents = preview.carried;
+    if (!clientSize) {
+        return intents;
+    }
+    // The open path's width gate, asked of the drop's target screen: the
+    // per-screen kind answers by value and a rule width outranks the kind.
+    const QVariantMap overrides = overridesForScreen(preview.targetScreenId);
+    if (effectiveWidthClientDecides(overrides) && !ruleColumnWidthFraction(overrides).has_value()) {
+        intents.width = clientDecidedColumnWidth(*clientSize, params);
+    }
+    return intents;
+}
+
 void ScrollEngine::commitDragInsertPreview()
 {
     if (!m_dragInsertPreview) {
@@ -355,6 +416,13 @@ void ScrollEngine::commitDragInsertPreview()
     if (crossOutput) {
         forgetCommittedExtents(p.windowId);
     }
+    // An ARRIVING window under "the client decides" keeps its own size, the
+    // way it would opening on this screen (dragDropClientSize says which drops
+    // arrive and where the size comes from). The degrade arm below keeps
+    // p.carried, the window's own float intents, for a later unfloat.
+    const std::optional<QSize> clientSize = dragDropClientSize(p);
+    const FloatRestore dropIntents = dragDropIntents(p, clientSize, params);
+    const int columnsBeforeDrop = strip.columnCount();
     bool inserted = false;
     // Whether the drop CREATED a column. The maximize-to-edges flag below
     // rides only those arms: a join makes the window a tile of a host column
@@ -365,26 +433,33 @@ void ScrollEngine::commitDragInsertPreview()
     if (p.lastTarget.isValid()) {
         if (p.lastTarget.newSlot || strip.isEmpty()) {
             inserted = strip.insertWindowAt(std::clamp(p.lastTarget.primary, 0, strip.columnCount()), p.windowId,
-                                            p.carried.width, p.carried.display, params);
+                                            dropIntents.width, dropIntents.display, params);
             createdColumn = inserted;
         } else {
             const int joinColumn = std::clamp(p.lastTarget.primary, 0, strip.columnCount() - 1);
             const int tileIndex = p.lastTarget.secondary >= 0
                 ? p.lastTarget.secondary
                 : static_cast<int>(strip.columns().at(joinColumn).tiles.size());
-            inserted = strip.insertWindowIntoColumnAt(joinColumn, tileIndex, p.windowId, params, p.carried.minWidth,
-                                                      p.carried.minHeight);
+            inserted = strip.insertWindowIntoColumnAt(joinColumn, tileIndex, p.windowId, params, dropIntents.minWidth,
+                                                      dropIntents.minHeight);
         }
     }
     if (!inserted && p.hadPriorState && p.priorSameKey) {
         // No target was ever resolved (zero-motion drop): back to the
         // captured slot rather than an arbitrary append.
-        inserted = dragPreviewRestoreSlot(targetState, p.windowId, p.priorSlot.column >= 0 ? p.priorSlot : p.carried,
-                                          params, p.targetScreenId);
+        const FloatRestore& slot = p.priorSlot.column >= 0 ? p.priorSlot : dropIntents;
+        if (slot.column >= 0 || slot.tileIndex >= 0) {
+            inserted = dragPreviewRestoreSlot(targetState, p.windowId, slot, params, p.targetScreenId);
+        } else {
+            // No slot to go back to (a float that never held a tile): the
+            // fresh column dragPreviewRestoreSlot's own fallback would open,
+            // at the width the drop decided rather than the configured one.
+            inserted = strip.insertWindow(p.windowId, slot.width, slot.display, params, slot.minWidth, slot.minHeight);
+        }
     }
     if (!inserted) {
-        inserted = strip.insertWindow(p.windowId, p.carried.width, p.carried.display, params, p.carried.minWidth,
-                                      p.carried.minHeight, ScrollInsertPosition::Last);
+        inserted = strip.insertWindow(p.windowId, dropIntents.width, dropIntents.display, params, dropIntents.minWidth,
+                                      dropIntents.minHeight, ScrollInsertPosition::Last);
         createdColumn = inserted;
     }
     if (!inserted) {
@@ -458,6 +533,17 @@ void ScrollEngine::commitDragInsertPreview()
         if (createdColumn && p.carried.maximizedToEdges) {
             strip.setMaximizedToEdgesForWindow(p.windowId, true);
         }
+    }
+    // The height twin of dropIntents' width, AFTER the carried height so an
+    // arriving float's own size outranks the tile it was floated out of. Only
+    // when the drop opened a column, for the open path's reason: a joining
+    // window shares its host column's shape, and a Fixed intent there would
+    // resize every tab of a tabbed host or squeeze a Normal host's siblings.
+    // Counted rather than read off createdColumn, which the zero-motion
+    // restore arm does not set.
+    if (clientSize && strip.columnCount() > columnsBeforeDrop) {
+        commitClientDecidedHeight(strip, p.windowId, p.targetScreenId, overridesForScreen(p.targetScreenId), params,
+                                  clientSize);
     }
     // The dropped window is the one the user is looking at.
     strip.focusWindow(p.windowId, params);
@@ -936,16 +1022,18 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // Mirror of commit's insert selection, deliberately kept line-for-line
     // comparable with it: if the two ever diverge, the indicator lies.
     const int preInsertColumns = probe.columnCount();
+    const std::optional<QSize> clientSize = dragDropClientSize(p);
+    const FloatRestore dropIntents = dragDropIntents(p, clientSize, params);
     bool inserted = false;
     if (target.newSlot || probe.isEmpty()) {
-        inserted = probe.insertWindowAt(std::clamp(target.primary, 0, probe.columnCount()), p.windowId, p.carried.width,
-                                        p.carried.display, params);
+        inserted = probe.insertWindowAt(std::clamp(target.primary, 0, probe.columnCount()), p.windowId,
+                                        dropIntents.width, dropIntents.display, params);
     } else {
         const int joinColumn = std::clamp(target.primary, 0, probe.columnCount() - 1);
         const int tileIndex =
             target.secondary >= 0 ? target.secondary : static_cast<int>(probe.columns().at(joinColumn).tiles.size());
-        inserted = probe.insertWindowIntoColumnAt(joinColumn, tileIndex, p.windowId, params, p.carried.minWidth,
-                                                  p.carried.minHeight);
+        inserted = probe.insertWindowIntoColumnAt(joinColumn, tileIndex, p.windowId, params, dropIntents.minWidth,
+                                                  dropIntents.minHeight);
     }
     if (!inserted) {
         return {};
@@ -961,6 +1049,12 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     }
     if (p.carried.column >= 0 || p.carried.tileIndex >= 0) {
         probe.setWindowHeightIntent(p.windowId, p.carried.height);
+    }
+    // And commit's client-decided height, under its gate: a column-opening
+    // drop of an arriving window.
+    if (clientSize && probe.columnCount() > preInsertColumns) {
+        commitClientDecidedHeight(probe, p.windowId, p.targetScreenId, overridesForScreen(p.targetScreenId), params,
+                                  clientSize);
     }
 
     // The probe does NOT mirror commit's focusWindow re-anchor. It once did

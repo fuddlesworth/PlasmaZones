@@ -668,14 +668,20 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     // would stay painted for the rest of the drag.
                     clearScrollDropIndicator();
                     stopDragScrollTimer();
-                } else if (insertEngine->providesDragInsertSelector() && m_overlayService) {
-                    // The begin detached the drag window. The popup's
-                    // exclusion emulated that detach, so the column set
-                    // normally matches — but the begin boundary is the ONE
-                    // mid-drag moment the frozen strip is ALLOWED to change
-                    // shape (DETACH-ONCE), so re-snapshot here rather than
-                    // relying on the emulation staying faithful forever.
-                    m_overlayService->refreshStripSelector(insertScreenId);
+                } else {
+                    // Before the first target lands, so the indicator the
+                    // update below paints already shows the slot at the size
+                    // the drop will give it.
+                    insertEngine->setDragInsertClientSize(dragInsertClientSize());
+                    if (insertEngine->providesDragInsertSelector() && m_overlayService) {
+                        // The begin detached the drag window. The popup's
+                        // exclusion emulated that detach, so the column set
+                        // normally matches — but the begin boundary is the ONE
+                        // mid-drag moment the frozen strip is ALLOWED to change
+                        // shape (DETACH-ONCE), so re-snapshot here rather than
+                        // relying on the emulation staying faithful forever.
+                        m_overlayService->refreshStripSelector(insertScreenId);
+                    }
                 }
             }
             if (insertEngine->hasDragInsertPreview()

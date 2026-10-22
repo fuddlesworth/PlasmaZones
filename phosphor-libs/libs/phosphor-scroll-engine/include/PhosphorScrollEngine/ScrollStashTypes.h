@@ -396,6 +396,11 @@ struct DragInsertPreview
     /// float/tiling focus-switch verbs — the window keeps compositor focus
     /// across begin/cancel, so no focus report ever re-learns the pair.
     bool priorFloatHadFocus = false;
+    /// The size the daemon reported for the dragged window
+    /// (setDragInsertClientSize), or empty when it reported none. Read only
+    /// for a window that was floating at begin, the one case where that size
+    /// is known to be the client's own choice rather than a tile or zone rect.
+    QSize clientSize;
 };
 
 /// What a client's own commits have taught the engine about one window's
