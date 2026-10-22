@@ -171,7 +171,7 @@ one whose daemon died or was replaced.
 | f1153-cropped-straddler-move | 2, S | regression rows: KWin's Move to Screen of a scrolling column cropped at its output's edge still hands it to the neighbour's strip under the tracked-output test |
 | f1155-compositor-only-gate | 1 | the compositor-only D-Bus methods admit the KWin effect across a daemon restart and refuse another caller with AccessDenied |
 | fdrag-float-keeps-size | 1, FS | with column width and window height on "Window decides", a resized floating window drag-inserted into the strip keeps its size on both axes |
-| fresize-centred-edge | 1, FS | under Center focused column Always, a Meta+right drag of a lone column's left edge lands that edge at the release and grows the column by twice the drag |
+| fresize-centred-edge | 1, FS | under Center focused column Always, a Meta+right drag of a lone column's left edge lands that edge at the release and grows the column by twice the drag; with Center short columns on, a drag of its bottom edge does the same across the strip |
 | fsplash-sibling-size-scroll / -snap | 1, S | a splash under the minimum window size that closes before its app's main window opens does not hand the main window its frame: on scrolling it tiles, on snapping it opens at its own size |
 
 ## Follow-up probes (pr1125-followups)
