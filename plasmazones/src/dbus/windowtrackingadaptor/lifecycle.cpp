@@ -19,6 +19,7 @@
 
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/WindowRegistry.h>
 // Complete type required for the m_ruleEvaluator->evictCached calls below.
 #include <PhosphorRules/RuleEvaluator.h>
@@ -322,6 +323,20 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // No m_service re-check: the entry guard at the top of this function
     // already established it.
     if (!authoritativeScreen.isEmpty() && !m_service->isWindowEngineTiled(windowId)) {
+        // A window excluded from placement (under the minimum size, or matched
+        // by an exclude rule) was never placed by any engine, which is why it
+        // reaches this branch at all. Its frame is no float-back worth keeping:
+        // it would be refused as excluded if it reopened, so the one window the
+        // record can reach is ANOTHER instance of the app, through the reopen's
+        // same-app FIFO. An app's splash screen closing just before its main
+        // window opens handed the main window the splash's size and spot,
+        // floating, and on a small enough splash out of tiling for good.
+        // Asked against the live frame, which is still in the shadow here.
+        if (m_cachedSnapEngine && m_cachedSnapEngine->isWindowExcluded(windowId, authoritativeScreen)) {
+            qCDebug(lcDbusWindow) << "captureWindowPlacement: no float-back for" << windowId
+                                  << "— excluded from placement";
+            return;
+        }
         const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
         // The managed-frame refusal, as in the primary capture path: a window tiled
         // by autotile, handed off, and closed

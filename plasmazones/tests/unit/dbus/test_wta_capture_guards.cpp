@@ -705,6 +705,72 @@ private Q_SLOTS:
         snap.reset();
     }
 
+    // The engine-miss CLOSE fallback leaves nothing behind for a window that
+    // was excluded from placement. An app's splash screen under the minimum
+    // size is never placed by any engine, so it closes untracked; recorded,
+    // its frame became a floating record in the app's bucket, and the app's
+    // main window opening next consumed it as a reopen and came up floating
+    // at the splash's size and spot. An untracked window of another app,
+    // above the minimum size, closing the same way still records, so the
+    // refusal is shown to be the exclusion and not the fallback going quiet.
+    void testCloseOfExcludedWindowLeavesNoRecordForItsApp()
+    {
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1600, 900), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        m_settings->setMinimumWindowWidth(500);
+        m_settings->setMinimumWindowHeight(500);
+        // The exclusion is asked through the full rule query, which needs the
+        // window's registry metadata. Production removes a closing window from
+        // the registry only after this capture, so both windows are in it.
+        PhosphorEngine::WindowRegistry registry;
+        for (const QString& app : {QStringLiteral("splashapp"), QStringLiteral("bigapp")}) {
+            PhosphorEngine::WindowMetadata metadata;
+            metadata.appId = app;
+            metadata.isMinimized = false;
+            registry.upsert(app == QStringLiteral("splashapp") ? QStringLiteral("splash") : QStringLiteral("big"),
+                            metadata);
+        }
+        // Engine before parent — see testMinimizedCapturePreservesPreMinimizePlacement.
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap->setEngineSettings(m_settings);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr, nullptr);
+        const auto teardown = qScopeGuard([wta, &snap] {
+            wta->setEngines(nullptr, nullptr, nullptr);
+            wta->service()->setSnapState(nullptr);
+            wta->service()->setSnapEngine(nullptr);
+            snap.reset();
+            wta->setWindowRegistry(nullptr);
+        });
+
+        const QString screenId = QStringLiteral("DP-1");
+        const QString splash = QStringLiteral("splashapp|splash");
+        const QString splashApp = wta->service()->currentAppIdFor(splash);
+        wta->setFrameGeometry(splash, 650, 261, 300, 378);
+        wta->captureWindowPlacement(splash, screenId);
+        QVERIFY2(!wta->service()->placementStore().peek(QStringLiteral("splashapp|main"), splashApp),
+                 "a closing window under the minimum size must leave no record its app's next window can take");
+
+        const QString big = QStringLiteral("bigapp|big");
+        const QString bigApp = wta->service()->currentAppIdFor(big);
+        const QRect bigFrame(330, 86, 940, 728);
+        wta->setFrameGeometry(big, bigFrame.x(), bigFrame.y(), bigFrame.width(), bigFrame.height());
+        wta->captureWindowPlacement(big, screenId);
+        const auto rec = wta->service()->placementStore().peek(big, bigApp);
+        QVERIFY2(rec, "an untracked window above the minimum size still records its float-back at close");
+        QCOMPARE(rec->freeGeometryFor(screenId), bigFrame);
+    }
+
     // Close DURING a fullscreen hold: the window's frame is the output rect.
     // Tiling.windowClosed drops the engine slot before WindowTracking's
     // capture runs, so without the engine's closed-hold memory the orphan
