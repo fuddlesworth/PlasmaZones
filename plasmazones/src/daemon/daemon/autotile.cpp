@@ -1372,7 +1372,8 @@ void Daemon::processPendingGeometryUpdates()
         if (!layout) {
             return;
         }
-        if (m_layoutComputeService->requestRecalculate(layout, screenId, geom)) {
+        if (m_layoutComputeService->requestRecalculate(
+                layout, screenId, geom, PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), screenId))) {
             pending->insert(screenId, m_layoutComputeService->currentGeneration(screenId));
         }
     };

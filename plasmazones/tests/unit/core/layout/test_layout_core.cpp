@@ -596,6 +596,108 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Fixed geometry in device pixels (issue #1160)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // The issue's layout: three fixed zones that fill a 7680x2160 panel in its
+    // own pixels, 1024 + 3840 + 2816.
+    static PhosphorZones::Layout* makeUltrawideLayout(bool devicePixels)
+    {
+        auto* layout = new PhosphorZones::Layout(QStringLiteral("Ultrawide"));
+        layout->setFixedGeometryInDevicePixels(devicePixels);
+        const QList<QRectF> rects{QRectF(0, 0, 1024, 2160), QRectF(1024, 0, 3840, 2160), QRectF(4864, 0, 2816, 2160)};
+        for (const QRectF& rect : rects) {
+            auto* z = new PhosphorZones::Zone();
+            z->setGeometryMode(PhosphorZones::ZoneGeometryMode::Fixed);
+            z->setFixedGeometry(rect);
+            layout->addZone(z);
+        }
+        return layout;
+    }
+
+    // At 125% the logical screen is 6144x1728. Counted in device pixels, the
+    // zones are divided by the scale and fill it exactly: 819.2 + 3072 +
+    // 2252.8. Counted in logical pixels (the default, and every older layout)
+    // the same numbers are used as they are and overflow it.
+    void testLayout_fixedDevicePixels_divideByTheScale()
+    {
+        const QRectF logicalScreen(0, 0, 6144, 1728);
+        std::unique_ptr<PhosphorZones::Layout> device(makeUltrawideLayout(true));
+        device->recalculateZoneGeometries(logicalScreen, 1.25);
+        QCOMPARE(device->zones().at(0)->geometry(), QRectF(0, 0, 819.2, 1728));
+        QCOMPARE(device->zones().at(1)->geometry(), QRectF(819.2, 0, 3072, 1728));
+        QCOMPARE(device->zones().at(2)->geometry(), QRectF(3891.2, 0, 2252.8, 1728));
+        // Measured in logical units, the zones fit the screen they fill, so
+        // the screen stays the reference rather than the bounding box.
+        QCOMPARE(device->fixedZoneBoundingBox(), QRectF(0, 0, 6144, 1728));
+        QCOMPARE(device->fixedZoneReferenceGeometry(), logicalScreen);
+        QCOMPARE(device->zones().at(2)->normalizedGeometry(logicalScreen, 1.25).right(), 1.0);
+
+        std::unique_ptr<PhosphorZones::Layout> logical(makeUltrawideLayout(false));
+        logical->recalculateZoneGeometries(logicalScreen, 1.25);
+        QCOMPARE(logical->zones().at(2)->geometry(), QRectF(4864, 0, 2816, 2160));
+        QCOMPARE(logical->fixedZoneReferenceGeometry(), QRectF(0, 0, 7680, 2160));
+    }
+
+    // The scale is a recalculation input for a device-pixel layout only, and
+    // the unit flag itself invalidates the zones at an unchanged screen.
+    void testLayout_fixedDevicePixels_scaleIsARecalcInput()
+    {
+        const QRectF screen(0, 0, 6144, 1728);
+        std::unique_ptr<PhosphorZones::Layout> device(makeUltrawideLayout(true));
+        device->recalculateZoneGeometries(screen, 1.25);
+        QVERIFY(!device->needsRecalc(screen, 1.25));
+        QVERIFY(device->needsRecalc(screen, 1.5));
+        // Zero means "no scale known": the rect and zone set decide alone.
+        QVERIFY(!device->needsRecalc(screen));
+        device->recalculateZoneGeometries(screen, 1.5);
+        QCOMPARE(device->zones().at(0)->geometry().width(), 1024 / 1.5);
+
+        std::unique_ptr<PhosphorZones::Layout> logical(makeUltrawideLayout(false));
+        logical->recalculateZoneGeometries(screen, 1.25);
+        QVERIFY(!logical->needsRecalc(screen, 2.0));
+
+        logical->setFixedGeometryInDevicePixels(true);
+        QVERIFY(logical->needsRecalc(screen, 1.25));
+        logical->recalculateZoneGeometries(screen, 1.25);
+        QCOMPARE(logical->zones().at(0)->geometry().width(), 819.2);
+    }
+
+    // The flag survives the JSON round trip and clone(), is written only when
+    // set, and an absent key reads as logical pixels.
+    void testLayout_fixedDevicePixels_serializesAndClones()
+    {
+        std::unique_ptr<PhosphorZones::Layout> device(makeUltrawideLayout(true));
+        const QJsonObject json = device->toJson();
+        QVERIFY(json.value(QLatin1String("fixedGeometryInDevicePixels")).toBool());
+        std::unique_ptr<PhosphorZones::Layout> loaded(PhosphorZones::Layout::fromJson(json));
+        QVERIFY(loaded && loaded->fixedGeometryInDevicePixels());
+        std::unique_ptr<PhosphorZones::Layout> copy(device->clone());
+        QVERIFY(copy->fixedGeometryInDevicePixels());
+
+        std::unique_ptr<PhosphorZones::Layout> logical(makeUltrawideLayout(false));
+        const QJsonObject logicalJson = logical->toJson();
+        QVERIFY(!logicalJson.contains(QLatin1String("fixedGeometryInDevicePixels")));
+        std::unique_ptr<PhosphorZones::Layout> loadedLogical(PhosphorZones::Layout::fromJson(logicalJson));
+        QVERIFY(loadedLogical && !loadedLogical->fixedGeometryInDevicePixels());
+    }
+
+    // The off-thread path takes the divisor in its snapshot and lands on the
+    // same rect as the in-place recalculation.
+    void testLayout_fixedDevicePixels_workerHelperDivides()
+    {
+        const QRectF rect = PhosphorZones::Zone::computeAbsoluteGeometry(PhosphorZones::ZoneGeometryMode::Fixed,
+                                                                         QRectF(), QRectF(1024, 0, 3840, 2160),
+                                                                         QRectF(100, 50, 6144, 1728), 1.25);
+        QCOMPARE(rect, QRectF(100 + 819.2, 50, 3072, 1728));
+        // A non-positive divisor reads as logical.
+        const QRectF plain =
+            PhosphorZones::Zone::computeAbsoluteGeometry(PhosphorZones::ZoneGeometryMode::Fixed, QRectF(),
+                                                         QRectF(1024, 0, 3840, 2160), QRectF(0, 0, 6144, 1728), 0.0);
+        QCOMPARE(plain, QRectF(1024, 0, 3840, 2160));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // LayoutSettingsStore: per-layout settings split out of the layout file
     // ═══════════════════════════════════════════════════════════════════════════
 

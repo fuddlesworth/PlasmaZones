@@ -418,7 +418,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
             // Using different geometries causes mismatches when available
             // geometry differs from full geometry.
             QRectF effGeomF(effGeom);
-            QRectF normGeom = zone->normalizedGeometry(effGeomF);
+            QRectF normGeom = zone->normalizedGeometry(effGeomF, PhosphorZones::GeometryUtils::screenScale(mgr, sid));
             QPoint zoneCenter(effGeom.x() + qRound(normGeom.center().x() * effGeom.width()),
                               effGeom.y() + qRound(normGeom.center().y() * effGeom.height()));
             if (effGeom.contains(zoneCenter)) {

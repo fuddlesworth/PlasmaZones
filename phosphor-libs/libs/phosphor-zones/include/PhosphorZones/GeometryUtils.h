@@ -56,6 +56,14 @@ PHOSPHORZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenMan
                                                       PhosphorZones::Layout* layout, int zonePadding,
                                                       const ::PhosphorLayout::EdgeGaps& outerGaps);
 
+/// The logical scale of the output @p screenId lives on (a virtual screen
+/// answers for its physical output), falling back to @p screen when the id does
+/// not resolve. Zero when there is no manager, which every geometry entry point
+/// reads as "the layout's last recalculation scale". This is the scale a layout
+/// whose fixed geometry counts device pixels divides by.
+PHOSPHORZONES_EXPORT qreal screenScale(PhosphorScreens::ScreenManager* mgr, const QString& screenId,
+                                       QScreen* screen = nullptr);
+
 PHOSPHORZONES_EXPORT QRectF effectiveScreenGeometry(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* layout,
                                                     QScreen* screen);
 

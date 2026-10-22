@@ -9,6 +9,7 @@
 #pragma once
 
 #include <QHash>
+#include <QJsonObject>
 #include <QObject>
 #include <QVariantList>
 #include <QFont>
@@ -138,6 +139,10 @@ class EditorController : public QObject
     // Full screen geometry mode
     Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY
                    useFullScreenGeometryChanged)
+
+    // Unit of fixed-size zones: the target output's device pixels, or logical pixels
+    Q_PROPERTY(bool fixedGeometryInDevicePixels READ fixedGeometryInDevicePixels WRITE setFixedGeometryInDevicePixels
+                   NOTIFY fixedGeometryInDevicePixelsChanged)
 
     // Aspect ratio classification (0=Any, 1=Standard, 2=Ultrawide, 3=SuperUltrawide, 4=Portrait)
     Q_PROPERTY(int aspectRatioClass READ aspectRatioClass WRITE setAspectRatioClass NOTIFY aspectRatioClassChanged)
@@ -269,7 +274,11 @@ public:
     bool hasOverlayDisplayModeOverride() const;
     int globalOverlayDisplayMode() const;
     bool useFullScreenGeometry() const;
+    bool fixedGeometryInDevicePixels() const;
     int aspectRatioClass() const;
+    /// The reference size fixed-zone numbers are drawn against: the target
+    /// screen's logical size, scaled to its device pixels when the layout
+    /// counts fixed geometry in device pixels.
     QSize targetScreenSize() const;
     QRect virtualScreenRect() const
     {
@@ -453,11 +462,13 @@ public:
     void refreshGlobalGapOverlaySettings();
     void setOverlayDisplayMode(int mode);
     void setUseFullScreenGeometry(bool enabled);
+    void setFixedGeometryInDevicePixels(bool enabled);
     void setAspectRatioClass(int cls);
 
     // Gap override setters - Direct (for undo/redo, bypass command creation)
     void setOverlayDisplayModeDirect(int mode);
     void setUseFullScreenGeometryDirect(bool enabled);
+    void setFixedGeometryInDevicePixelsDirect(bool enabled);
 
     // Visibility setters - Direct (for undo/redo, bypass command creation)
     void setAllowedScreensDirect(const QStringList& screens);
@@ -744,6 +755,7 @@ Q_SIGNALS:
     void overlayDisplayModeChanged();
     void globalOverlayDisplayModeChanged();
     void useFullScreenGeometryChanged();
+    void fixedGeometryInDevicePixelsChanged();
     void aspectRatioClassChanged();
     void targetScreenSizeChanged();
 
@@ -793,6 +805,21 @@ Q_SIGNALS:
 private:
     void markUnsaved();
     void cacheVirtualScreenGeometry(const QString& screenName);
+    /// Ask the daemon for @p screenName's logical scale (the per-output
+    /// fractional one) into m_targetScreenScale; 1.0 when it cannot answer.
+    void cacheTargetScreenScale(const QString& screenName);
+    /// targetScreenSize() before the device-pixel scaling: the fixed-zone
+    /// bounds override, else the virtual screen, else the physical screen.
+    QSize targetLogicalScreenSize() const;
+    /// Re-derive m_layoutBoundsOverride for @p layoutObj against the target
+    /// screen (see the load path's note), in logical units.
+    void refreshFixedBoundsOverride(const QJsonObject& layoutObj);
+    /// The layout as saveLayout() sends it, built from the editor's state.
+    QJsonObject currentLayoutJson() const;
+    /// Publish targetScreenSize() after anything it depends on changed:
+    /// the change signal when it moved, and the zone manager's reference with
+    /// the fixed zones' relative copies re-derived against it.
+    void republishTargetScreenSize(const QSize& previous);
     /// Carry out the gated screen switch (caller cleared the replace
     /// decision). forceLayoutMode = the plain-screen launch shape: flips out
     /// of template/preview mode at apply time and loads even same-screen.
@@ -1025,6 +1052,7 @@ private:
     std::optional<QString> m_pendingTargetScreen;
     bool m_pendingTargetEditsLayout = false;
     QSize m_virtualScreenSize; ///< Cached VS geometry size (valid when m_targetScreen is virtual)
+    qreal m_targetScreenScale = 1.0; ///< Target output's logical scale, from the daemon
     QRect m_virtualScreenRect; ///< Cached VS absolute geometry (position within physical monitor)
     /// Layout-derived reference-size override. When valid, takes precedence
     /// over m_virtualScreenSize in targetScreenSize() — used for fixed-
@@ -1047,6 +1075,7 @@ private:
     // gaps property); overlay display mode stays here.
     int m_overlayDisplayMode = -1; // -1 = use global setting
     bool m_useFullScreenGeometry = false;
+    bool m_fixedGeometryInDevicePixels = false;
     int m_aspectRatioClass = 0; // 0 = Any (AspectRatioClass::Any)
     int m_cachedGlobalOverlayDisplayMode = 0; // Cached global overlay display mode
 

@@ -229,23 +229,38 @@ public:
      *
      * For Relative mode: returns relativeGeometry() directly.
      * For Fixed mode: converts fixedGeometry pixel coords to 0-1 relative to referenceGeometry dimensions.
+     *
+     * @p screenScale is the logical scale of the output @p referenceGeometry
+     * belongs to. A zone whose layout counts fixed geometry in device pixels
+     * divides by it first (Layout::fixedGeometryDivisor). Zero, the default,
+     * takes the scale the layout was last recalculated at.
      */
-    Q_INVOKABLE QRectF normalizedGeometry(const QRectF& referenceGeometry) const;
+    Q_INVOKABLE QRectF normalizedGeometry(const QRectF& referenceGeometry, qreal screenScale = 0.0) const;
 
     // Geometry calculations
     Q_INVOKABLE bool containsPoint(const QPointF& point) const;
     Q_INVOKABLE qreal distanceToPoint(const QPointF& point) const;
-    Q_INVOKABLE QRectF calculateAbsoluteGeometry(const QRectF& screenGeometry) const;
+    /// @p screenScale as normalizedGeometry() takes it.
+    Q_INVOKABLE QRectF calculateAbsoluteGeometry(const QRectF& screenGeometry, qreal screenScale = 0.0) const;
+
+    /// What this zone's fixed geometry is divided by on an output of logical
+    /// scale @p screenScale: its layout's Layout::fixedGeometryDivisor, with a
+    /// zero scale read as the layout's last recalculation scale, and 1.0 for a
+    /// zone with no layout.
+    qreal fixedGeometryDivisor(qreal screenScale) const;
 
     /**
      * @brief Pure helper shared between Zone::calculateAbsoluteGeometry and
      *        LayoutWorker (which runs off-thread and cannot touch QObjects).
      *
-     * Fixed mode: pixel coords relative to screen origin.
+     * Fixed mode: pixel coords relative to screen origin, divided by
+     * @p fixedDivisor (the output's scale for a layout that counts device
+     * pixels, else 1.0).
      * Relative mode: 0..1 coords multiplied by screen dimensions.
      */
     static QRectF computeAbsoluteGeometry(ZoneGeometryMode mode, const QRectF& relativeGeometry,
-                                          const QRectF& fixedGeometry, const QRectF& screenGeometry);
+                                          const QRectF& fixedGeometry, const QRectF& screenGeometry,
+                                          qreal fixedDivisor = 1.0);
 
     // Serialization
     QJsonObject toJson(const QRectF& referenceGeometry = QRectF()) const;

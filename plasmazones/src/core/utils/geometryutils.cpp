@@ -305,9 +305,11 @@ PhosphorProtocol::EmptyZoneList buildEmptyZoneList(PhosphorScreens::ScreenManage
     }
 
     bool useAvail = !layout->useFullScreenGeometry();
-    PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveScreenGeometry(mgr, layout, screen));
-
     QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
+    PhosphorZones::LayoutComputeService::recalculateSync(
+        layout, effectiveScreenGeometry(mgr, layout, screen),
+        PhosphorZones::GeometryUtils::screenScale(mgr, screenId, screen));
+
     const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, settings, screenId);
     int zonePadding = getEffectiveInnerGap(layout, settings, ruleGaps);
     ::PhosphorLayout::EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, ruleGaps);
@@ -330,7 +332,8 @@ PhosphorProtocol::EmptyZoneList buildEmptyZoneList(PhosphorScreens::ScreenManage
     if (vsGeom.isValid()) {
         bool useAvail = !layout->useFullScreenGeometry();
         QRectF effectiveGeom = useAvail && vsAvailGeom.isValid() ? QRectF(vsAvailGeom) : QRectF(vsGeom);
-        PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveGeom);
+        PhosphorZones::LayoutComputeService::recalculateSync(
+            layout, effectiveGeom, PhosphorZones::GeometryUtils::screenScale(mgr, screenId, physScreen));
 
         const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, settings, screenId);
         int zonePadding = getEffectiveInnerGap(layout, settings, ruleGaps);

@@ -70,7 +70,8 @@ void LayoutComputeService::setLayoutManager(LayoutRegistry* manager)
     });
 }
 
-bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry)
+bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry,
+                                              qreal screenScale)
 {
     if (!layout || !screenGeometry.isValid()) {
         return false;
@@ -79,7 +80,7 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
     // needsRecalc, not a bare rect comparison: a zone edit at unchanged
     // screen geometry (m_zoneGeometryDirty) must take the worker path or the
     // edited zones keep stale/absent absolute geometry.
-    if (!layout->needsRecalc(screenGeometry)) {
+    if (!layout->needsRecalc(screenGeometry, screenScale)) {
         // NO generation bump for a no-op: bumping here would supersede an
         // in-flight worker compute carrying a REAL geometry change — its
         // result would be discarded as stale while this cached callback
@@ -110,7 +111,7 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
     const uint64_t gen = ++m_screenGeneration[screenId];
     m_trackedLayouts[layout->id()] = layout;
 
-    LayoutSnapshot snapshot = buildSnapshot(layout, screenId, screenGeometry);
+    LayoutSnapshot snapshot = buildSnapshot(layout, screenId, screenGeometry, screenScale);
     Q_EMIT requestCompute(snapshot, gen);
     return true;
 }
@@ -120,21 +121,24 @@ uint64_t LayoutComputeService::currentGeneration(const QString& screenId) const
     return m_screenGeneration.value(screenId);
 }
 
-void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenGeometry)
+void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenGeometry, qreal screenScale)
 {
     if (!layout) {
         return;
     }
-    layout->recalculateZoneGeometries(screenGeometry);
+    layout->recalculateZoneGeometries(screenGeometry, screenScale);
 }
 
 LayoutSnapshot LayoutComputeService::buildSnapshot(Layout* layout, const QString& screenId,
-                                                   const QRectF& screenGeometry)
+                                                   const QRectF& screenGeometry, qreal screenScale)
 {
     LayoutSnapshot snapshot;
     snapshot.layoutId = layout->id();
     snapshot.screenId = screenId;
     snapshot.screenGeometry = screenGeometry;
+    // Zero keeps the layout's last scale, as recalculateZoneGeometries reads it.
+    snapshot.screenScale = screenScale > 0.0 ? screenScale : layout->lastRecalcScale();
+    snapshot.fixedDivisor = layout->fixedGeometryDivisor(snapshot.screenScale);
     snapshot.zones.reserve(layout->zoneCount());
 
     for (const auto* zone : layout->zones()) {
@@ -181,7 +185,7 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     // are exactly what the edited zones are missing — discarding them here
     // would publish a non-null layout whose new zones have no absolute
     // geometry.
-    if (!layout->needsRecalc(result.screenGeometry)) {
+    if (!layout->needsRecalc(result.screenGeometry, result.screenScale)) {
         qCDebug(lcLayoutLib) << "LayoutComputeService: sync path already applied for" << result.screenId;
         publishResult(result.screenId, result.layoutId, layout, result.generation);
         return;
@@ -209,9 +213,9 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
         }
     }
     if (coversCurrentZones) {
-        layout->markRecalculated(result.screenGeometry);
+        layout->markRecalculated(result.screenGeometry, result.screenScale);
     } else {
-        layout->setLastRecalcGeometry(result.screenGeometry);
+        layout->setLastRecalcGeometry(result.screenGeometry, result.screenScale);
     }
     layout->endBatchModify();
 

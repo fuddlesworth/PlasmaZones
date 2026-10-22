@@ -120,6 +120,11 @@ private Q_SLOTS:
     void offContractFormsRejected_data();
     void offContractFormsRejected();
 
+    /// The fixed-geometry unit flag (#1160): saveLayout writes it as `true`
+    /// only when set, and the gate has to let that through, and only that
+    /// type, or a typo'd hand edit would be read as logical without a word.
+    void fixedGeometryUnitFlagValidates();
+
     /// A fixed-geometry zone authored against the full screen, then recalculated
     /// against the smaller available area the daemon uses by default. This is
     /// the shape that reaches disk and the shape the editor re-emits, so
@@ -199,6 +204,15 @@ void TestLayoutSchemaEditorShape::omittedKeyValidates()
     const QJsonObject layout = makeEditorLayout();
     QVERIFY(!layout.contains(Keys::AspectRatioClassKey));
     QVERIFY(PhosphorZones::LayoutRegistry::isLayoutJsonValid(layout, QStringLiteral("aspectRatioClass omitted")));
+}
+
+void TestLayoutSchemaEditorShape::fixedGeometryUnitFlagValidates()
+{
+    QJsonObject layout = makeEditorLayout();
+    layout[Keys::FixedGeometryInDevicePixels] = true;
+    QVERIFY(PhosphorZones::LayoutRegistry::isLayoutJsonValid(layout, QStringLiteral("device-pixel flag")));
+    layout[Keys::FixedGeometryInDevicePixels] = QStringLiteral("true");
+    QVERIFY(!PhosphorZones::LayoutRegistry::isLayoutJsonValid(layout, QStringLiteral("device-pixel flag as text")));
 }
 
 void TestLayoutSchemaEditorShape::offContractFormsRejected_data()

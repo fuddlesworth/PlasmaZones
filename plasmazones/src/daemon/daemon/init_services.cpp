@@ -278,9 +278,11 @@ void Daemon::initLayoutAndSettingsWiring()
     // Recalculate zone geometries for ALL layouts so that fixed-mode zones
     // have correct normalized coordinates for preview rendering (KCM, OSD, selector).
     if (QScreen* primary = Utils::primaryScreen()) {
+        const qreal primaryScale = PhosphorZones::GeometryUtils::screenScale(
+            m_screenManager.get(), PhosphorScreens::ScreenIdentity::identifierFor(primary), primary);
         for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
             PhosphorZones::LayoutComputeService::recalculateSync(
-                layout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
+                layout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary), primaryScale);
         }
     }
 
@@ -315,7 +317,8 @@ void Daemon::initLayoutAndSettingsWiring()
                             QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(primary);
                             m_layoutComputeService->requestRecalculate(
                                 layout, screenId,
-                                GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
+                                GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary),
+                                PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), screenId, primary));
                         }
                     }
                     m_zoneDetector->setLayout(layout);
@@ -325,34 +328,35 @@ void Daemon::initLayoutAndSettingsWiring()
     // Connect per-screen layout assignments
     // Only update if this is a DIFFERENT layout than the active one
     // (to avoid double-processing when both signals fire for the same layout)
-    m_layoutSettingsWiringConnections.append(
-        connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
-                [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
-                    if (!layout) {
-                        return;
-                    }
-                    // Skip if this layout is already the active layout
-                    // (activeLayoutChanged handler already processed it for all screens)
-                    if (layout == m_layoutManager->activeLayout()) {
-                        return;
-                    }
-                    // This is a screen-specific layout different from the active one
-                    // Only recalculate for the specific screen.
-                    //
-                    // Through the screenId overload, like every other
-                    // recalculate site. screenByName matches the CONNECTOR name,
-                    // while an assignment key is the screen IDENTIFIER — an
-                    // EDID-derived string on any monitor that exposes one, or a
-                    // "physId/vs:N" child. The lookup therefore missed and this
-                    // whole block was dead on those setups. The overload resolves
-                    // virtual sub-screens too, which screenByName never could.
-                    const QRectF geom = GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screenId);
-                    if (geom.isValid()) {
-                        m_layoutComputeService->requestRecalculate(layout, screenId, geom);
-                    }
-                    // Note: We don't change zone detector or overlay here since
-                    // they work with the active layout, not per-screen layouts
-                }));
+    m_layoutSettingsWiringConnections.append(connect(
+        m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
+        [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
+            if (!layout) {
+                return;
+            }
+            // Skip if this layout is already the active layout
+            // (activeLayoutChanged handler already processed it for all screens)
+            if (layout == m_layoutManager->activeLayout()) {
+                return;
+            }
+            // This is a screen-specific layout different from the active one
+            // Only recalculate for the specific screen.
+            //
+            // Through the screenId overload, like every other
+            // recalculate site. screenByName matches the CONNECTOR name,
+            // while an assignment key is the screen IDENTIFIER — an
+            // EDID-derived string on any monitor that exposes one, or a
+            // "physId/vs:N" child. The lookup therefore missed and this
+            // whole block was dead on those setups. The overload resolves
+            // virtual sub-screens too, which screenByName never could.
+            const QRectF geom = GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screenId);
+            if (geom.isValid()) {
+                m_layoutComputeService->requestRecalculate(
+                    layout, screenId, geom, PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), screenId));
+            }
+            // Note: We don't change zone detector or overlay here since
+            // they work with the active layout, not per-screen layouts
+        }));
 
     // Connect settings changes to overlay service and autotile engine.
     // This is the SINGLE comprehensive handler for batch config reloads (Settings::load()).

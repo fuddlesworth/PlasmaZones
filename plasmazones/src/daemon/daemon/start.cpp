@@ -141,7 +141,8 @@ void Daemon::connectScreenSignals()
                     if (screenLayout) {
                         PhosphorZones::LayoutComputeService::recalculateSync(
                             screenLayout,
-                            GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
+                            GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid),
+                            PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), sid));
                     }
                 }
                 // Re-admit the output to the tiling engines now (F765): its
@@ -287,6 +288,19 @@ void Daemon::connectScreenSignals()
     // This is reactive - the sensor windows automatically track panel changes
     // Uses debouncing to coalesce rapid changes into a single update
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::availableGeometryChanged, this, [this] {
+        m_geometryUpdatePending = true;
+        m_geometryUpdateTimer.start();
+    });
+
+    // A scale change moves every zone of a layout whose fixed geometry counts
+    // device pixels, at an unchanged logical rect, so it takes the same
+    // debounced pass: the recalculation it requests carries the new scale, and
+    // the overlays and snapped windows follow from there. It also fires once
+    // per output at startup, when the output's sensor maps and the coarse
+    // integer scale gives way to the real fractional one. A layout whose fixed
+    // geometry is logical, or that has none, is left as it is by the recalc's
+    // own staleness check.
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::logicalScaleChanged, this, [this] {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     });
@@ -823,7 +837,8 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             PhosphorZones::LayoutComputeService::recalculateSync(
-                screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
+                screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid),
+                PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), sid));
         }
     }
 
@@ -919,7 +934,8 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             PhosphorZones::LayoutComputeService::recalculateSync(
-                screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
+                screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid),
+                PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), sid));
         }
     }
 

@@ -156,7 +156,8 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
                 : m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 PhosphorZones::LayoutComputeService::recalculateSync(
-                    layout, GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, screenId));
+                    layout, GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, screenId),
+                    PhosphorZones::GeometryUtils::screenScale(m_screenManager, screenId, screen));
 
                 for (auto* zone : layout->zones()) {
                     QRect zoneRect = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId,
@@ -310,7 +311,8 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
     if (!effectiveGeom.isValid()) {
         effectiveGeom = GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, outScreen);
     }
-    PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveGeom);
+    PhosphorZones::LayoutComputeService::recalculateSync(
+        layout, effectiveGeom, PhosphorZones::GeometryUtils::screenScale(mgr, outScreenId, outScreen));
     return layout;
 }
 

@@ -92,7 +92,8 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     }
 
     // Recalculate zone geometries so detectZone operates on absolute coords
-    PhosphorZones::LayoutComputeService::recalculateSync(layout, refGeom);
+    PhosphorZones::LayoutComputeService::recalculateSync(
+        layout, refGeom, PhosphorZones::GeometryUtils::screenScale(m_screenManager, screenId));
     m_zoneDetector->setLayout(layout);
 
     // Use PhosphorZones::ZoneDetector::detectZone which resolves overlapping zones via
@@ -209,7 +210,8 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
         return zoneIds;
     }
 
-    PhosphorZones::LayoutComputeService::recalculateSync(layout, refGeom);
+    PhosphorZones::LayoutComputeService::recalculateSync(
+        layout, refGeom, PhosphorZones::GeometryUtils::screenScale(m_screenManager, effectiveId));
     m_zoneDetector->setLayout(layout);
 
     // Convert cursor position to QPointF for detection
@@ -266,13 +268,17 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
         return QString();
     }
 
-    const QRectF currentGeom = currentZone->normalizedGeometry(refGeom);
+    // The screen's scale too: a device-pixel layout's fixed zones normalize
+    // against the logical reference only once divided by it, and adjacency
+    // compares them with relative zones in the same 0-1 space.
+    const qreal scale = PhosphorZones::GeometryUtils::screenScale(m_screenManager, resolvedId);
+    const QRectF currentGeom = currentZone->normalizedGeometry(refGeom, scale);
 
     const auto zones = layout->zones();
     QList<QRectF> candidateGeoms;
     candidateGeoms.reserve(zones.size());
     for (auto* zone : zones) {
-        candidateGeoms.append(zone->normalizedGeometry(refGeom));
+        candidateGeoms.append(zone->normalizedGeometry(refGeom, scale));
     }
 
     const int bestIndex = SpatialAdjacency::findAdjacentRect(currentGeom, candidateGeoms, direction);
@@ -310,17 +316,18 @@ QString ZoneDetectionAdaptor::getAdjacentZoneOutside(const QStringList& zoneIds,
         return QString();
     }
     // Measure from the span's union, against the layout's other zones.
+    const qreal scale = PhosphorZones::GeometryUtils::screenScale(m_screenManager, resolvedId);
     QRectF spanGeom;
     for (const PhosphorZones::Zone* member : std::as_const(members)) {
-        spanGeom = spanGeom.isNull() ? member->normalizedGeometry(refGeom)
-                                     : spanGeom.united(member->normalizedGeometry(refGeom));
+        spanGeom = spanGeom.isNull() ? member->normalizedGeometry(refGeom, scale)
+                                     : spanGeom.united(member->normalizedGeometry(refGeom, scale));
     }
     QList<PhosphorZones::Zone*> candidates;
     QList<QRectF> candidateGeoms;
     for (auto* zone : layout->zones()) {
         if (!members.contains(zone)) {
             candidates.append(zone);
-            candidateGeoms.append(zone->normalizedGeometry(refGeom));
+            candidateGeoms.append(zone->normalizedGeometry(refGeom, scale));
         }
     }
     const int bestIndex = SpatialAdjacency::findAdjacentRect(spanGeom, candidateGeoms, direction);
@@ -375,11 +382,12 @@ QString ZoneDetectionAdaptor::firstZoneOfLayout(PhosphorZones::Layout* layout, c
         return QString();
     }
 
+    const qreal scale = PhosphorZones::GeometryUtils::screenScale(m_screenManager, resolvedId);
     const auto zones = layout->zones();
     QList<QRectF> candidateGeoms;
     candidateGeoms.reserve(zones.size());
     for (auto* zone : zones) {
-        candidateGeoms.append(zone->normalizedGeometry(refGeom));
+        candidateGeoms.append(zone->normalizedGeometry(refGeom, scale));
     }
 
     const int best = PhosphorGeometry::edgeMostRect(candidateGeoms, *edge);

@@ -279,6 +279,10 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Update full screen geometry mode
     layout->setUseFullScreenGeometry(obj[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false));
 
+    // Update the unit of fixed-geometry zones
+    layout->setFixedGeometryInDevicePixels(
+        obj[::PhosphorZones::ZoneJsonKeys::FixedGeometryInDevicePixels].toBool(false));
+
     // Update aspect ratio classification. fromJsonValue accepts both serialized
     // forms and maps a missing key to Any, which is the reset this branch wants.
     layout->setAspectRatioClassInt(static_cast<int>(

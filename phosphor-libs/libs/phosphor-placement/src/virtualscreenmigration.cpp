@@ -141,7 +141,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             return virtualScreenIds.first();
         }
 
-        QRectF absGeo = zone->calculateAbsoluteGeometry(QRectF(physScreen.geometry));
+        QRectF absGeo = zone->calculateAbsoluteGeometry(QRectF(physScreen.geometry), mgr->logicalScale(physScreen));
         QPoint center = absGeo.center().toPoint();
         QString vsId = mgr->virtualScreenAt(center, physicalScreenId);
         if (!vsId.isEmpty()) {

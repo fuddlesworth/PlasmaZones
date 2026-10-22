@@ -23,6 +23,10 @@
             "description": "Layout-type enum (Grid, Columns, Rows, BSP, ...)."
         },
         "isSystem": { "type": "boolean" },
+        "fixedGeometryInDevicePixels": {
+            "type": "boolean",
+            "description": "When true, the fixedGeometry of every fixed-mode zone counts the output's device pixels and is divided by the output's scale when resolved. Omitting the key means logical pixels."
+        },
         "showZoneNumbers": { "type": "boolean" },
         "defaultOrder": { "type": "integer" },
         "aspectRatioClass": {

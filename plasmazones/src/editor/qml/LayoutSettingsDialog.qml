@@ -51,6 +51,7 @@ Kirigami.Dialog {
         perSideLeftSpin.value = root.editorController.gaps.outerGapLeft >= 0 ? root.editorController.gaps.outerGapLeft : root.editorController.gaps.globalOuterGapLeft;
         perSideRightSpin.value = root.editorController.gaps.outerGapRight >= 0 ? root.editorController.gaps.outerGapRight : root.editorController.gaps.globalOuterGapRight;
         fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
+        physicalPixelsCheck.checked = root.editorController.fixedGeometryInDevicePixels;
         // aspectRatioCombo's declarative `currentIndex` binding dies the first
         // time the user activates the combo (QQC2), so this imperative re-sync
         // is load-bearing: without it the persistent dialog shows a stale class
@@ -121,6 +122,10 @@ Kirigami.Dialog {
 
         function onUseFullScreenGeometryChanged() {
             fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
+        }
+
+        function onFixedGeometryInDevicePixelsChanged() {
+            physicalPixelsCheck.checked = root.editorController.fixedGeometryInDevicePixels;
         }
 
         target: root.editorController
@@ -527,6 +532,30 @@ Kirigami.Dialog {
                     if (root.editorController)
                         root.editorController.useFullScreenGeometry = checked;
                 }
+            }
+
+            CheckBox {
+                id: physicalPixelsCheck
+
+                text: i18nc("@option:check", "Fixed sizes count physical pixels")
+                checked: root.editorController ? root.editorController.fixedGeometryInDevicePixels : false
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Accessible.description: physicalPixelsHint.text
+                onToggled: {
+                    if (root.editorController)
+                        root.editorController.fixedGeometryInDevicePixels = checked;
+                }
+            }
+
+            Label {
+                id: physicalPixelsHint
+
+                text: i18nc("@info", "Fixed-size zones keep the exact pixel size you enter when display scaling is not 100%, instead of growing with it.")
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing * 3
+                Layout.maximumWidth: root.preferredWidth - root.padding * 2 - Kirigami.Units.largeSpacing * 3
             }
         }
     }

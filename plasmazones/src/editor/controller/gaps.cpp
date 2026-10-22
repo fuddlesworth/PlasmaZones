@@ -7,6 +7,7 @@
 #include "../undo/UndoController.h"
 #include "../undo/commands/UpdateGapOverrideCommand.h"
 #include "../undo/commands/UpdateFullScreenGeometryCommand.h"
+#include "../undo/commands/UpdateFixedGeometryUnitCommand.h"
 #include "../undo/commands/ToggleGeometryModeCommand.h"
 #include "../undo/commands/UpdateFixedGeometryCommand.h"
 #include "../helpers/SettingsDbusQueries.h"
@@ -97,6 +98,37 @@ void EditorController::setUseFullScreenGeometryDirect(bool enabled)
     }
 }
 
+bool EditorController::fixedGeometryInDevicePixels() const
+{
+    return m_fixedGeometryInDevicePixels;
+}
+
+void EditorController::setFixedGeometryInDevicePixels(bool enabled)
+{
+    if (m_fixedGeometryInDevicePixels != enabled) {
+        auto* cmd = new UpdateFixedGeometryUnitCommand(this, m_fixedGeometryInDevicePixels, enabled);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setFixedGeometryInDevicePixelsDirect(bool enabled)
+{
+    if (m_fixedGeometryInDevicePixels == enabled) {
+        return;
+    }
+    const QSize previous = targetScreenSize();
+    m_fixedGeometryInDevicePixels = enabled;
+    // The fixed zones keep their numbers and change unit, so the reference
+    // they are drawn against moves: the device-pixel scaling below, and the
+    // bounds override, which was measured in the old unit and can come or go
+    // (a device-pixel layout that fills a scaled screen overflows it read as
+    // logical pixels).
+    refreshFixedBoundsOverride(currentLayoutJson());
+    markUnsaved();
+    Q_EMIT fixedGeometryInDevicePixelsChanged();
+    republishTargetScreenSize(previous);
+}
+
 int EditorController::aspectRatioClass() const
 {
     return m_aspectRatioClass;
@@ -129,6 +161,16 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 }
 
 QSize EditorController::targetScreenSize() const
+{
+    const QSize logical = targetLogicalScreenSize();
+    if (!m_fixedGeometryInDevicePixels || m_targetScreenScale <= 0.0) {
+        return logical;
+    }
+    // The device pixels the logical size covers on the target output.
+    return QSize(qRound(logical.width() * m_targetScreenScale), qRound(logical.height() * m_targetScreenScale));
+}
+
+QSize EditorController::targetLogicalScreenSize() const
 {
     // Fixed-geometry layouts pin the reference to their own zone bounding
     // box so previews/canvas render against the size the layout was authored

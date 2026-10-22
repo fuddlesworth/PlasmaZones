@@ -132,6 +132,7 @@ Layout* Layout::clone(QObject* parent) const
     copy->m_defaultOrder = m_defaultOrder;
     copy->m_autoAssign = m_autoAssign;
     copy->m_useFullScreenGeometry = m_useFullScreenGeometry;
+    copy->m_fixedGeometryInDevicePixels = m_fixedGeometryInDevicePixels;
     copy->m_aspectRatioClass = m_aspectRatioClass;
     copy->m_minAspectRatio = m_minAspectRatio;
     copy->m_maxAspectRatio = m_maxAspectRatio;
@@ -159,6 +160,21 @@ LAYOUT_SETTER_MIN_NEGATIVE_ONE(OverlayDisplayMode, m_overlayDisplayMode, overlay
 LAYOUT_SETTER(bool, HiddenFromSelector, m_hiddenFromSelector, hiddenFromSelectorChanged)
 LAYOUT_SETTER(bool, AutoAssign, m_autoAssign, autoAssignChanged)
 LAYOUT_SETTER(bool, UseFullScreenGeometry, m_useFullScreenGeometry, useFullScreenGeometryChanged)
+
+void Layout::setFixedGeometryInDevicePixels(bool enabled)
+{
+    if (m_fixedGeometryInDevicePixels == enabled) {
+        return;
+    }
+    m_fixedGeometryInDevicePixels = enabled;
+    // The unit moved under every fixed zone, so the absolute geometries the
+    // last pass computed are stale at an unchanged screen rect, exactly as
+    // after a zone-set edit. Without the bit the next recalculation against
+    // the same screen would early-out and keep the old resolution.
+    m_zoneGeometryDirty = true;
+    Q_EMIT fixedGeometryInDevicePixelsChanged();
+    emitModifiedIfNotBatched();
+}
 
 void Layout::setAllowedScreens(const QStringList& screens)
 {
@@ -235,7 +251,13 @@ QRectF Layout::fixedZoneBoundingBox() const
     // origin, which is what this returns. A negative fixed offset therefore
     // falls OUTSIDE this box; keeping the emitted relativeGeometry inside 0–1
     // is Zone::toJson's clamp, not this box's job.
-    return hasAny ? QRectF(0, 0, maxX, maxY) : QRectF();
+    //
+    // In the LOGICAL units of the last recalculation, so it compares with
+    // m_lastRecalcGeometry: a device-pixel layout's raw extents are the
+    // output's own pixels, which on a scaled output overflow the logical
+    // screen they exactly fill.
+    const qreal divisor = fixedGeometryDivisor(m_lastRecalcScale);
+    return hasAny ? QRectF(0, 0, maxX / divisor, maxY / divisor) : QRectF();
 }
 
 QRectF Layout::fixedZoneReferenceGeometry() const
@@ -564,24 +586,23 @@ QVector<Zone*> Layout::adjacentZones(const QPointF& point, qreal threshold) cons
     return result;
 }
 
-void Layout::recalculateZoneGeometries(const QRectF& screenGeometry)
+void Layout::recalculateZoneGeometries(const QRectF& screenGeometry, qreal screenScale)
 {
-    // Skip if neither input changed (prevents redundant recalculations). The
+    // Skip if no input changed (prevents redundant recalculations). The
     // zone-set check is what the cleared cache used to stand in for: a layout
     // whose zones were swapped since the last pass still carries the same
     // screen rect, so comparing the rect alone would early-out and leave the
-    // new zones with no absolute geometry at all.
-    if (screenGeometry == m_lastRecalcGeometry && !m_zoneGeometryDirty) {
+    // new zones with no absolute geometry at all. The scale is the third
+    // input, for a device-pixel layout only (see needsRecalc).
+    if (!needsRecalc(screenGeometry, screenScale)) {
         return;
     }
-    m_lastRecalcGeometry = screenGeometry;
-    m_zoneGeometryDirty = false;
+    markRecalculated(screenGeometry, screenScale);
 
     qCDebug(PhosphorZones::lcLayoutLib) << "recalculateZoneGeometries layout=" << m_name
-                                        << "screenGeometry=" << screenGeometry;
+                                        << "screenGeometry=" << screenGeometry << "scale=" << m_lastRecalcScale;
     for (auto* zone : m_zones) {
-        QRectF absGeometry = zone->calculateAbsoluteGeometry(screenGeometry);
-        zone->setGeometry(absGeometry);
+        zone->setGeometry(zone->calculateAbsoluteGeometry(screenGeometry, m_lastRecalcScale));
     }
 }
 

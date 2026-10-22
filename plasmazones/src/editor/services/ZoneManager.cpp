@@ -126,6 +126,22 @@ void ZoneManager::syncRelativeFromFixed(QVariantMap& zone) const
         zone[::PhosphorZones::ZoneJsonKeys::FixedHeight].toDouble() / ss.height();
 }
 
+void ZoneManager::resyncFixedZones()
+{
+    beginBatchUpdate();
+    for (QVariant& zoneVar : m_zones) {
+        QVariantMap zone = zoneVar.toMap();
+        if (!isFixedMode(zone) || !zone.contains(::PhosphorZones::ZoneJsonKeys::FixedX)) {
+            continue;
+        }
+        syncRelativeFromFixed(zone);
+        const QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+        zoneVar = zone;
+        emitZoneSignal(SignalType::GeometryChanged, zoneId);
+    }
+    endBatchUpdate();
+}
+
 bool ZoneManager::applyGeometryToZoneMap(QVariantMap& zone, qreal x, qreal y, qreal width, qreal height) const
 {
     if (isFixedMode(zone)) {

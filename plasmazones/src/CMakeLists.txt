@@ -842,6 +842,8 @@ set(plasmazones_editor_SRCS
     editor/undo/commands/UpdateGapOverrideCommand.h
     editor/undo/commands/UpdateFullScreenGeometryCommand.cpp
     editor/undo/commands/UpdateFullScreenGeometryCommand.h
+    editor/undo/commands/UpdateFixedGeometryUnitCommand.cpp
+    editor/undo/commands/UpdateFixedGeometryUnitCommand.h
     editor/undo/commands/ToggleGeometryModeCommand.cpp
     editor/undo/commands/ToggleGeometryModeCommand.h
     editor/undo/commands/UpdateFixedGeometryCommand.cpp

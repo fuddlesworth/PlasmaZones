@@ -70,6 +70,11 @@ QJsonObject Layout::toJson() const
         json[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry] = true;
     }
 
+    // Device-pixel fixed geometry - only serialize if true
+    if (m_fixedGeometryInDevicePixels) {
+        json[::PhosphorZones::ZoneJsonKeys::FixedGeometryInDevicePixels] = true;
+    }
+
     // Aspect ratio classification - only serialize non-default values
     if (m_aspectRatioClass != ::PhosphorLayout::AspectRatioClass::Any) {
         json[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey] =
@@ -254,6 +259,9 @@ void Layout::initFromJson(const QJsonObject& json)
 
     // Full screen geometry mode
     m_useFullScreenGeometry = json[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false);
+
+    // Device-pixel fixed geometry
+    m_fixedGeometryInDevicePixels = json[::PhosphorZones::ZoneJsonKeys::FixedGeometryInDevicePixels].toBool(false);
 
     // Aspect ratio classification. Two serialized forms are live and
     // fromJsonValue accepts both, clamping an out-of-range int to Any the same

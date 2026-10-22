@@ -170,6 +170,15 @@ public:
     void syncFixedFromRelative(QVariantMap& zone) const;
 
     /**
+     * @brief Re-derive every fixed zone's relative copy from its pixel
+     *        geometry against the current reference size
+     *
+     * For a reference that moved under unchanged fixed numbers (the layout's
+     * unit of fixed geometry changed), emitting a geometry change per zone.
+     */
+    void resyncFixedZones();
+
+    /**
      * @brief Sync relative fallback from fixed pixel coords using m_referenceScreenSize
      * @param zone PhosphorZones::Zone QVariantMap to update (modified in place)
      */

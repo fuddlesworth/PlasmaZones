@@ -27,10 +27,13 @@ public:
 
     void setLayoutManager(LayoutRegistry* manager);
 
-    bool requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
+    /// @p screenScale is the output's logical scale, an input for a layout whose
+    /// fixed geometry counts device pixels; zero keeps the layout's last one.
+    bool requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry,
+                            qreal screenScale = 0.0);
     uint64_t currentGeneration(const QString& screenId) const;
 
-    static void recalculateSync(Layout* layout, const QRectF& screenGeometry);
+    static void recalculateSync(Layout* layout, const QRectF& screenGeometry, qreal screenScale = 0.0);
 
 Q_SIGNALS:
     void requestCompute(const PhosphorZones::LayoutSnapshot& snapshot, uint64_t generation);
@@ -38,7 +41,8 @@ Q_SIGNALS:
                                          uint64_t generation);
 
 private:
-    static LayoutSnapshot buildSnapshot(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
+    static LayoutSnapshot buildSnapshot(Layout* layout, const QString& screenId, const QRectF& screenGeometry,
+                                        qreal screenScale);
     void applyResult(const LayoutComputeResult& result);
     void onLayoutRemoved(const QUuid& layoutId);
     void publishResult(const QString& screenId, const QUuid& layoutId, Layout* layout, uint64_t generation);

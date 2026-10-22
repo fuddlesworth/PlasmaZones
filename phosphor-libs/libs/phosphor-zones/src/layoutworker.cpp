@@ -18,13 +18,15 @@ void LayoutWorker::computeGeometries(const LayoutSnapshot& snapshot, uint64_t ge
     result.screenId = snapshot.screenId;
     result.screenGeometry = snapshot.screenGeometry;
     result.generation = generation;
+    result.screenScale = snapshot.screenScale;
     result.zones.reserve(snapshot.zones.size());
 
     for (const auto& zone : snapshot.zones) {
         ComputedZoneGeometry computed;
         computed.zoneId = zone.id;
-        computed.absoluteGeometry = Zone::computeAbsoluteGeometry(zone.geometryMode, zone.relativeGeometry,
-                                                                  zone.fixedGeometry, snapshot.screenGeometry);
+        computed.absoluteGeometry =
+            Zone::computeAbsoluteGeometry(zone.geometryMode, zone.relativeGeometry, zone.fixedGeometry,
+                                          snapshot.screenGeometry, snapshot.fixedDivisor);
         result.zones.append(computed);
     }
 

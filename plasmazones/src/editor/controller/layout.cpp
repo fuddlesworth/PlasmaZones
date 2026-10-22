@@ -59,6 +59,29 @@ void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
     }
 }
 
+void EditorController::cacheTargetScreenScale(const QString& screenName)
+{
+    // The daemon's answer, which is the per-output fractional scale its
+    // geometry sensor sees: QScreen::devicePixelRatio here is the wl_output
+    // integer buffer scale on Wayland, 2 for a 1.25 output, and the editor's
+    // own window may not be mapped on that output yet. A virtual screen is
+    // answered for its physical output.
+    m_targetScreenScale = 1.0;
+    if (screenName.isEmpty()) {
+        return;
+    }
+    const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Screen,
+                                                                         QStringLiteral("getScreenInfo"), {screenName});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(reply.arguments().constFirst().toString().toUtf8());
+    const qreal scale = doc.object().value(QLatin1String("devicePixelRatio")).toDouble(1.0);
+    if (scale > 0.0) {
+        m_targetScreenScale = scale;
+    }
+}
+
 QVariantList EditorController::screenModel() const
 {
     QVariantList model;
@@ -152,6 +175,7 @@ void EditorController::applyTargetScreen(const QString& screenName, bool forceLa
     m_targetScreen = screenName;
 
     cacheVirtualScreenGeometry(screenName);
+    cacheTargetScreenScale(screenName);
     // Clear the per-layout override — the previous layout's bbox doesn't
     // apply to the new screen. loadLayout / createNewLayout below set it
     // again if the incoming layout uses fixed geometry.
@@ -524,6 +548,7 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
         m_targetScreen = screenName;
 
         cacheVirtualScreenGeometry(screenName);
+        cacheTargetScreenScale(screenName);
         m_layoutBoundsOverride = QSize();
 
         Q_EMIT targetScreenChanged();
@@ -580,6 +605,7 @@ void EditorController::createNewLayout()
     m_gaps->resetOverrides();
     m_overlayDisplayMode = -1;
     m_useFullScreenGeometry = false;
+    m_fixedGeometryInDevicePixels = false;
     m_aspectRatioClass = 0;
 
     // Publish the screen-derived reference size if the previous layout had
@@ -615,6 +641,7 @@ void EditorController::createNewLayout()
     m_gaps->emitOverrideSignals();
     Q_EMIT overlayDisplayModeChanged();
     Q_EMIT useFullScreenGeometryChanged();
+    Q_EMIT fixedGeometryInDevicePixelsChanged();
     Q_EMIT aspectRatioClassChanged();
     Q_EMIT allowedScreensChanged();
     Q_EMIT allowedDesktopsChanged();
@@ -691,18 +718,12 @@ bool EditorController::loadLayout(const QString& layoutId)
     // same helper the preview path uses — seed it by recalculating the
     // throwaway Layout against the live screen first.
     const QSize prevSize = targetScreenSize();
-    {
-        m_layoutBoundsOverride = QSize();
-        const QSize screenSize = targetScreenSize();
-        std::unique_ptr<PhosphorZones::Layout> tmp(PhosphorZones::Layout::fromJson(layoutObj));
-        if (tmp && screenSize.isValid()) {
-            tmp->recalculateZoneGeometries(QRectF(QPointF(), screenSize));
-            const QRectF refGeo = tmp->fixedZoneReferenceGeometry();
-            if (!refGeo.isEmpty() && refGeo.size().toSize() != screenSize) {
-                m_layoutBoundsOverride = refGeo.size().toSize();
-            }
-        }
-    }
+    // The unit of the fixed numbers first, since the reference is measured in
+    // it. Its change signal goes out with the other per-layout flags below.
+    const bool oldFixedUnit = m_fixedGeometryInDevicePixels;
+    m_fixedGeometryInDevicePixels =
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedGeometryInDevicePixels)].toBool(false);
+    refreshFixedBoundsOverride(layoutObj);
     const QSize newSize = targetScreenSize();
     if (newSize != prevSize) {
         // Publish the new reference size *before* setZones below so the
@@ -890,6 +911,9 @@ bool EditorController::loadLayout(const QString& layoutId)
     if (m_useFullScreenGeometry != oldUseFullScreen) {
         Q_EMIT useFullScreenGeometryChanged();
     }
+    if (m_fixedGeometryInDevicePixels != oldFixedUnit) {
+        Q_EMIT fixedGeometryInDevicePixelsChanged();
+    }
     if (m_aspectRatioClass != oldAspectRatioClass) {
         Q_EMIT aspectRatioClassChanged();
     }
@@ -921,21 +945,8 @@ bool EditorController::loadLayout(const QString& layoutId)
  * layout-replacing action onto a save can gate it on this and leave the user's
  * work in place when the daemon refuses the payload.
  */
-bool EditorController::saveLayout()
+QJsonObject EditorController::currentLayoutJson() const
 {
-    // Single save verb for both editing modes: every QML save path (Save
-    // button, Ctrl+S, the three unsaved-changes prompts) calls this, so the
-    // dispatch lives here rather than in each of them.
-    if (m_editorMode == ModeScrollingTemplate) {
-        return saveScrollingTemplateNow();
-    }
-
-    if (!m_layoutService || !m_zoneManager) {
-        Q_EMIT layoutSaveFailed(PhosphorI18n::tr("Services not initialized"));
-        return false;
-    }
-
-    // Build JSON from current state
     QJsonObject layoutObj;
     layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = m_layoutId;
     layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = m_layoutName;
@@ -1029,6 +1040,11 @@ bool EditorController::saveLayout()
         layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry)] = true;
     }
 
+    // Include the unit of fixed-size zones (only if device pixels)
+    if (m_fixedGeometryInDevicePixels) {
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedGeometryInDevicePixels)] = true;
+    }
+
     // Include aspect ratio class (only if not Any) — serialize as int for updateLayout D-Bus,
     // which converts to the canonical string format via PhosphorZones::Layout::setAspectRatioClassInt()
     if (m_aspectRatioClass != 0) {
@@ -1038,6 +1054,56 @@ bool EditorController::saveLayout()
     // Include visibility filtering allow-lists (only if non-empty)
     PhosphorZones::LayoutUtils::serializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt,
                                                     m_allowedActivities);
+    return layoutObj;
+}
+
+void EditorController::refreshFixedBoundsOverride(const QJsonObject& layoutObj)
+{
+    // Clear the override first so the size below is the live screen's (or the
+    // virtual screen's), then re-pin only when the layout's fixed zones
+    // genuinely exceed it — see the load path's note. Logical units
+    // throughout: the throwaway layout is recalculated at the target output's
+    // scale, so a layout counting device pixels has its zones divided by it
+    // before they are measured against the logical screen.
+    m_layoutBoundsOverride = QSize();
+    const QSize screenSize = targetLogicalScreenSize();
+    std::unique_ptr<PhosphorZones::Layout> tmp(PhosphorZones::Layout::fromJson(layoutObj));
+    if (tmp && screenSize.isValid()) {
+        tmp->recalculateZoneGeometries(QRectF(QPointF(), screenSize), m_targetScreenScale);
+        const QRectF refGeo = tmp->fixedZoneReferenceGeometry();
+        if (!refGeo.isEmpty() && refGeo.size().toSize() != screenSize) {
+            m_layoutBoundsOverride = refGeo.size().toSize();
+        }
+    }
+}
+
+void EditorController::republishTargetScreenSize(const QSize& previous)
+{
+    const QSize current = targetScreenSize();
+    if (current != previous) {
+        Q_EMIT targetScreenSizeChanged();
+    }
+    if (m_zoneManager) {
+        m_zoneManager->setReferenceScreenSize(current);
+        m_zoneManager->resyncFixedZones();
+    }
+}
+
+bool EditorController::saveLayout()
+{
+    // Single save verb for both editing modes: every QML save path (Save
+    // button, Ctrl+S, the three unsaved-changes prompts) calls this, so the
+    // dispatch lives here rather than in each of them.
+    if (m_editorMode == ModeScrollingTemplate) {
+        return saveScrollingTemplateNow();
+    }
+
+    if (!m_layoutService || !m_zoneManager) {
+        Q_EMIT layoutSaveFailed(PhosphorI18n::tr("Services not initialized"));
+        return false;
+    }
+
+    const QJsonObject layoutObj = currentLayoutJson();
 
     QJsonDocument doc(layoutObj);
     QString jsonStr = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));

@@ -165,12 +165,14 @@ public:
      * 1.0 when there is no QScreen either. The fallback is the OLD, coarse
      * answer rather than a wrong-by-construction guess.
      *
-     * DIAGNOSTIC USE ONLY today (the support report and the getScreenInfo
-     * reply). Nothing in placement reads a scale: PlasmaZones works in
-     * logical coordinates throughout, and the compositor owns the conversion.
-     * Do not introduce a device-pixel calculation on the strength of this
-     * accessor without checking that the surface in question is actually
-     * scaled the same way.
+     * Placement works in logical coordinates throughout, and the compositor
+     * owns the conversion. The one placement reader is a layout that declares
+     * its fixed zone geometry in the OUTPUT's device pixels
+     * (PhosphorZones::Layout::fixedGeometryInDevicePixels), which divides by
+     * this to land in those logical coordinates. Otherwise it serves the
+     * support report and the getScreenInfo reply. Do not introduce another
+     * device-pixel calculation on the strength of this accessor without
+     * checking that the surface in question is actually scaled the same way.
      */
     qreal logicalScale(const PhysicalScreen& screen) const;
 
