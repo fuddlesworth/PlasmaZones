@@ -561,6 +561,67 @@ private Q_SLOTS:
         QCOMPARE(Ax::crossEnd(corrected), Ax::crossEnd(inset));
         QCOMPARE(corrected, applied);
     }
+
+    // A user resize of ONE edge along the strip, on a column the relayout
+    // centres, lands the dragged edge where it was released: the column takes
+    // twice the drag and the far edge moves by the same amount. Taken
+    // one-sided, the re-centre moved each edge by half the drag and the
+    // dragged edge sprang back from the cursor. Under Never nothing re-centres,
+    // so the column takes the frame as the user left it.
+    void oneEdgeResizeOfACentredColumnLandsTheDraggedEdgeAtTheRelease()
+    {
+        // Resizes the lone window's column, returning its committed rect. @p
+        // lowDrag and @p highDrag move the low and high edges along the strip.
+        const auto resized = [](int centerFocused, int lowDrag, int highDrag) {
+            QObject owner;
+            auto* settings = makeBoundarySettings(&owner);
+            settings->centerFocused = centerFocused;
+            ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+            engine->setEngineSettings(settings);
+            engine->refreshConfigFromSettings();
+            QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+            engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            const QRect applied = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
+            // Role space, transposed with the arm.
+            QRect settled = Ax::t(applied);
+            settled.setLeft(settled.left() + lowDrag);
+            settled.setRight(settled.right() + highDrag);
+            engine->onWindowResized(QStringLiteral("app|a"), applied, Ax::t(settled), kS1);
+            QCoreApplication::processEvents();
+            return std::pair{applied, rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")))};
+        };
+        const int always = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always);
+        const int never = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never);
+
+        // Precondition the arithmetic below leans on: a centred 600px column
+        // on the 1200px screen.
+        const auto [start, grown] = resized(always, -200, 0);
+        QCOMPARE(Ax::mainPos(start), 300);
+        QCOMPARE(Ax::mainLen(start), 600);
+
+        // The low edge dragged out from 300 to 100: the column takes 1000 and,
+        // centred, starts at the release point.
+        QCOMPARE(Ax::mainLen(grown), 1000);
+        QCOMPARE(Ax::mainPos(grown), 100);
+
+        // The high edge dragged in by 100: the column gives up 200 and its
+        // high edge ends where the drag did.
+        const auto [startShrunk, shrunk] = resized(always, 0, -100);
+        QCOMPARE(Ax::mainLen(shrunk), 400);
+        QCOMPARE(Ax::mainEnd(shrunk), Ax::mainEnd(startShrunk) - 100);
+
+        // A drag past what the screen can hold stops at the work area.
+        const auto [startWide, wide] = resized(always, -400, 0);
+        Q_UNUSED(startWide)
+        QCOMPARE(Ax::mainLen(wide), 1200);
+
+        // Under Never the frame is the answer.
+        const auto [startNever, never200] = resized(never, -200, 0);
+        Q_UNUSED(startNever)
+        QCOMPARE(Ax::mainLen(never200), 800);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestScrollEngineBoundary)

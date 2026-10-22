@@ -223,7 +223,34 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // neither drop short-circuits the other. The height verbs, like the width
     // verbs, write intents a floor can still outrank and drop nothing.
     const bool crossFloorDropped = crossChanged && dropCommittedCrossForUserResize(windowId, resizeAxis);
-    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), mainChanged, crossChanged, resizeParams)
+    // The extent the user settled on along the strip. When the relayout this
+    // resize triggers will centre the window's column, a drag of ONE edge is
+    // read as a drag from the column's centre: the column grows, or shrinks,
+    // by twice the drag. Once it is centred again the edge the user dragged
+    // lands where they let go, and the far edge has moved out (or in) by the
+    // same amount. Taken one-sided, the re-centre moved each edge by half the
+    // drag, so the dragged edge sprang back from the cursor at release and a
+    // drag to the screen edge took several tries to fill the screen. Only
+    // during the relayout, not live: KWin owns the frame for the whole
+    // interactive resize and recomputes it from the cursor on every motion,
+    // so a live mirror of the far edge would fight it. A drag of both edges
+    // (or none along the strip) is taken as it is.
+    QSize settledSize = newFrame.size();
+    if (mainChanged && state->strip().isCenteringActiveColumn(resizeParams)
+        && state->strip().columnOfWindow(windowId) == state->strip().activeColumnIndex()) {
+        const bool lowMoved = resizeAxis.mainLow(gestureStart) != resizeAxis.mainLow(newFrame);
+        const bool highMoved = resizeAxis.mainHigh(gestureStart) != resizeAxis.mainHigh(newFrame);
+        if (lowMoved != highMoved) {
+            const int startMain = resizeAxis.mainSize(gestureStart);
+            const int drag = resizeAxis.mainSize(newFrame) - startMain;
+            // Bounded to the work area: the relayout clamps a wider column to
+            // it anyway, and the intent is persisted.
+            const int symmetricMain =
+                qBound(1, startMain + 2 * drag, qMax(1, resizeAxis.mainSize(resizeParams.workArea)));
+            settledSize = resizeAxis.makeRect(0, 0, symmetricMain, resizeAxis.crossSize(newFrame.size())).size();
+        }
+    }
+    if (state->strip().reconcileWindowSize(windowId, settledSize, mainChanged, crossChanged, resizeParams)
         || floorDropped || crossFloorDropped) {
         // The reconcile WROTE persisted intent (the column's Fixed width, the
         // tile's Fixed height — both serialized by serializeStripState), and
