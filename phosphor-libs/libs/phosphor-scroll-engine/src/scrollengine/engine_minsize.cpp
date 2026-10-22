@@ -223,33 +223,55 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // neither drop short-circuits the other. The height verbs, like the width
     // verbs, write intents a floor can still outrank and drop nothing.
     const bool crossFloorDropped = crossChanged && dropCommittedCrossForUserResize(windowId, resizeAxis);
-    // The extent the user settled on along the strip. When the relayout this
-    // resize triggers will centre the window's column, a drag of ONE edge is
-    // read as a drag from the column's centre: the column grows, or shrinks,
-    // by twice the drag. Once it is centred again the edge the user dragged
-    // lands where they let go, and the far edge has moved out (or in) by the
-    // same amount. Taken one-sided, the re-centre moved each edge by half the
-    // drag, so the dragged edge sprang back from the cursor at release and a
-    // drag to the screen edge took several tries to fill the screen. Only
-    // during the relayout, not live: KWin owns the frame for the whole
-    // interactive resize and recomputes it from the cursor on every motion,
-    // so a live mirror of the far edge would fight it. A drag of both edges
-    // (or none along the strip) is taken as it is.
-    QSize settledSize = newFrame.size();
-    if (mainChanged && state->strip().isCenteringActiveColumn(resizeParams)
-        && state->strip().columnOfWindow(windowId) == state->strip().activeColumnIndex()) {
-        const bool lowMoved = resizeAxis.mainLow(gestureStart) != resizeAxis.mainLow(newFrame);
-        const bool highMoved = resizeAxis.mainHigh(gestureStart) != resizeAxis.mainHigh(newFrame);
-        if (lowMoved != highMoved) {
-            const int startMain = resizeAxis.mainSize(gestureStart);
-            const int drag = resizeAxis.mainSize(newFrame) - startMain;
-            // Bounded to the work area: the relayout clamps a wider column to
-            // it anyway, and the intent is persisted.
-            const int symmetricMain =
-                qBound(1, startMain + 2 * drag, qMax(1, resizeAxis.mainSize(resizeParams.workArea)));
-            settledSize = resizeAxis.makeRect(0, 0, symmetricMain, resizeAxis.crossSize(newFrame.size())).size();
+    // The extents the user settled on. When the relayout this resize triggers
+    // will centre the window on an axis, a drag of ONE edge on that axis is
+    // read as a drag from the centre: the extent grows, or shrinks, by twice
+    // the drag. Once it is centred again the edge the user dragged lands where
+    // they let go, and the far edge has moved out (or in) by the same amount.
+    // Taken one-sided, the re-centre moved each edge by half the drag, so the
+    // dragged edge sprang back from the cursor at release and a drag to the
+    // screen edge took several tries to fill the screen. Only during the
+    // relayout, not live: KWin owns the frame for the whole interactive resize
+    // and recomputes it from the cursor on every motion, so a live mirror of
+    // the far edge would fight it. A drag of both edges on an axis, or of
+    // none, is taken as it is.
+    //
+    // Bounded to the work area: the relayout clamps a larger extent to it
+    // anyway, and the intent is persisted.
+    const auto centredExtent = [&](int startLow, int startHigh, int startExtent, int newLow, int newHigh, int newExtent,
+                                   int areaExtent) {
+        if ((startLow != newLow) == (startHigh != newHigh)) {
+            return newExtent;
+        }
+        return qBound(1, startExtent + 2 * (newExtent - startExtent), qMax(1, areaExtent));
+    };
+    const ScrollStrip& strip = state->strip();
+    int settledMain = resizeAxis.mainSize(newFrame);
+    int settledCross = resizeAxis.crossSize(newFrame);
+    // Along the strip, the focused column is what centres, and only it.
+    if (mainChanged && strip.isCenteringActiveColumn(resizeParams)
+        && strip.columnOfWindow(windowId) == strip.activeColumnIndex()) {
+        settledMain =
+            centredExtent(resizeAxis.mainLow(gestureStart), resizeAxis.mainHigh(gestureStart),
+                          resizeAxis.mainSize(gestureStart), resizeAxis.mainLow(newFrame),
+                          resizeAxis.mainHigh(newFrame), settledMain, resizeAxis.mainSize(resizeParams.workArea));
+    }
+    // Across it, centerShortColumns centres any column whose content comes out
+    // short, as one stack. Only a column that shows one rect is read this way:
+    // a lone tile, or a tabbed column whose tabs share it. In a stack of
+    // several the drag also moves the neighbouring tiles' shares, so no single
+    // doubling lands the edge, and the drag is taken as it is.
+    if (crossChanged && resizeParams.centerShortColumns) {
+        const int colIdx = strip.columnOfWindow(windowId);
+        const Column* col = colIdx >= 0 ? &strip.columns().at(colIdx) : nullptr;
+        if (col && (col->display == ColumnDisplay::Tabbed || col->visibleTileCount() == 1)) {
+            settledCross = centredExtent(resizeAxis.crossLow(gestureStart), resizeAxis.crossHigh(gestureStart),
+                                         resizeAxis.crossSize(gestureStart), resizeAxis.crossLow(newFrame),
+                                         resizeAxis.crossHigh(newFrame), settledCross,
+                                         resizeAxis.crossSize(resizeParams.workArea));
         }
     }
+    const QSize settledSize = resizeAxis.makeRect(0, 0, settledMain, settledCross).size();
     if (state->strip().reconcileWindowSize(windowId, settledSize, mainChanged, crossChanged, resizeParams)
         || floorDropped || crossFloorDropped) {
         // The reconcile WROTE persisted intent (the column's Fixed width, the

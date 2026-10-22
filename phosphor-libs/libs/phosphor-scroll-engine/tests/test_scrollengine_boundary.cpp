@@ -88,6 +88,21 @@ QJsonObject lastEntryFor(QSignalSpy& tiled, const QString& windowId)
     return {};
 }
 
+/// @p windowId's resolved tile rect on @p screenId, null when it has none.
+/// Read after a user resize instead of the last batch: a relayout that lands
+/// the window exactly on the frame it already sits at sends no batch, by the
+/// emit-on-change gate, so the last batch would still show the old rect.
+QRect tileRectOn(ScrollEngine* engine, const QString& screenId, const QString& windowId)
+{
+    const auto tiles = engine->visibleTiles(screenId);
+    for (const auto& tile : tiles) {
+        if (tile.windowId == windowId) {
+            return tile.rect;
+        }
+    }
+    return {};
+}
+
 /// The committed rect a windowsTiled batch entry describes.
 QRect rectOfEntry(const QJsonObject& o)
 {
@@ -590,7 +605,7 @@ private Q_SLOTS:
             settled.setRight(settled.right() + highDrag);
             engine->onWindowResized(QStringLiteral("app|a"), applied, Ax::t(settled), kS1);
             QCoreApplication::processEvents();
-            return std::pair{applied, rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")))};
+            return std::pair{applied, tileRectOn(engine, kS1, QStringLiteral("app|a"))};
         };
         const int always = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always);
         const int never = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never);
@@ -621,6 +636,57 @@ private Q_SLOTS:
         const auto [startNever, never200] = resized(never, -200, 0);
         Q_UNUSED(startNever)
         QCOMPARE(Ax::mainLen(never200), 800);
+    }
+
+    // The twin across the strip: with centerShortColumns on, a column that
+    // shows one rect and comes out short is centred across, so a drag of one
+    // of its edges lands that edge at the release the same way. A stack of
+    // several tiles takes the drag as it is, since the drag also moves the
+    // other tiles' shares and no single doubling lands the edge.
+    void oneEdgeResizeOfAShortColumnLandsTheDraggedEdgeAtTheRelease()
+    {
+        // Opens @p tiles windows into one column and drags the bottom (cross
+        // high) edge of the first by @p highDrag, returning its rect before
+        // and after.
+        const auto resized = [](bool centerShort, int tiles, int highDrag) {
+            QObject owner;
+            auto* settings = makeBoundarySettings(&owner);
+            settings->centerShortColumns = centerShort;
+            settings->insertPosition = static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::IntoActiveColumn);
+            ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+            engine->setEngineSettings(settings);
+            engine->refreshConfigFromSettings();
+            QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+            for (int i = 0; i < tiles; ++i) {
+                engine->windowOpened(QStringLiteral("app|t%1").arg(i), kS1, 0, 0);
+            }
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            const QString first = QStringLiteral("app|t0");
+            const QRect applied = rectOfEntry(lastEntryFor(tiled, first));
+            QRect settled = Ax::t(applied);
+            settled.setBottom(settled.bottom() + highDrag);
+            engine->onWindowResized(first, applied, Ax::t(settled), kS1);
+            QCoreApplication::processEvents();
+            return std::pair{applied, tileRectOn(engine, kS1, first)};
+        };
+
+        // A lone tile filling the 800px cross extent, its bottom edge dragged
+        // up 100px: it takes 600, and centred its bottom edge is at the
+        // release.
+        const auto [start, shrunk] = resized(true, 1, -100);
+        QCOMPARE(Ax::crossLen(start), 800);
+        QCOMPARE(Ax::crossLen(shrunk), 600);
+        QCOMPARE(Ax::crossEnd(shrunk), Ax::crossEnd(start) - 100);
+
+        // Not centred, the frame is the answer.
+        const auto [startPlain, plain] = resized(false, 1, -100);
+        Q_UNUSED(startPlain)
+        QCOMPARE(Ax::crossLen(plain), 700);
+
+        // A stack of two takes the drag as it is.
+        const auto [startStack, stacked] = resized(true, 2, -100);
+        QCOMPARE(Ax::crossLen(stacked), Ax::crossLen(startStack) - 100);
     }
 };
 
