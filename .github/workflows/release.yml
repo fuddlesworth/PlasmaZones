@@ -761,6 +761,19 @@ jobs:
           # Create VERSION file for version detection
           echo "$VERSION" > "$DIRNAME/VERSION"
 
+          # The Qt and KWin this build links against. install.sh compares
+          # them with the host's before copying anything: an older Qt fails
+          # at load time on Qt's per-minor version tag, and KWin only loads
+          # the effect at its exact build version. Epoch and pkgrel are
+          # stripped, as in the KWin baseline step of build-arch.
+          {
+            echo "QT_VERSION=$(pacman -Q qt6-base | awk '{print $2}' | sed -E 's/^[0-9]+://; s/-.*$//')"
+            echo "KWIN_VERSION=$(pacman -Q kwin | awk '{print $2}' | sed -E 's/^[0-9]+://; s/-.*$//')"
+          } > "$DIRNAME/BUILD_ENV"
+          cat "$DIRNAME/BUILD_ENV"
+          grep -qE '^QT_VERSION=[0-9]+\.[0-9]+\.[0-9]+$' "$DIRNAME/BUILD_ENV"
+          grep -qE '^KWIN_VERSION=[0-9]+\.[0-9]+\.[0-9]+$' "$DIRNAME/BUILD_ENV"
+
           # Copy uninstall.sh to the installed location so it's available after install
           mkdir -p "$DIRNAME/usr/share/plasmazones"
           cp packaging/local-install/uninstall.sh "$DIRNAME/usr/share/plasmazones/"
@@ -1101,8 +1114,16 @@ jobs:
             echo "sudo zypper install plasmazones"
             echo '```'
             echo ""
-            echo "**Universal Linux (AppDir):**"
-            echo "For Fedora Atomic, Steam Deck, or non-root user installation:"
+            echo "**Fedora Atomic (Kinoite):**"
+            echo "Layer the COPR package. Replace 44 with your Fedora release."
+            echo '```bash'
+            echo "sudo curl -fsSL -o /etc/yum.repos.d/plasmazones.repo https://copr.fedorainfracloud.org/coprs/fuddlesworth/PlasmaZones/repo/fedora-44/fuddlesworth-PlasmaZones-fedora-44.repo"
+            echo "rpm-ostree install plasmazones"
+            echo "systemctl reboot"
+            echo '```'
+            echo ""
+            echo "**Arch-based tarball (no root):**"
+            echo "Built on Arch Linux, so it only runs where KWin is exactly the version Arch shipped at release time and Qt is the same or newer. It does not work on Fedora, Debian or SteamOS. The installer checks both versions and stops before copying anything if they do not match."
             echo '```bash'
             echo "tar xzf plasmazones-${VERSION}-linux-x86_64.tar.gz"
             echo "cd plasmazones-linux-x86_64"

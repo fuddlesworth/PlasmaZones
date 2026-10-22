@@ -8,6 +8,7 @@ set -e
 
 # Default install prefix
 PREFIX="$HOME/.local"
+FORCE=false
 SOURCE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Check for 'usr' directory in the distributed tarball structure
@@ -54,9 +55,14 @@ while [[ $# -gt 0 ]]; do
         PREFIX="$2"
         shift 2
         ;;
+        --force)
+        FORCE=true
+        shift
+        ;;
         --help)
-        echo "Usage: ./install.sh [--prefix PATH]"
+        echo "Usage: ./install.sh [--prefix PATH] [--force]"
         echo "Default prefix: $HOME/.local"
+        echo "--force installs even when this system's Qt or KWin does not match the build."
         exit 0
         ;;
         *)
@@ -65,6 +71,95 @@ while [[ $# -gt 0 ]]; do
         ;;
     esac
 done
+
+# Compatibility check, before anything is copied. The tarball is built on
+# Arch and links against whatever Qt and KWin Arch carried at build time, so
+# two things decide whether it can run here:
+#  - Qt: every Qt binary references qt_version_tag at the Qt minor it was
+#    compiled against (qversiontagging.h), so an older host Qt fails at load
+#    time with "version `Qt_6.N' not found".
+#  - KWin: the effect's plugin IID embeds KWin's exact x.y.z version and KWin
+#    refuses an effect whose IID differs. The effect is what moves and
+#    resizes windows, so without it nothing gets placed in any mode.
+# BUILD_ENV is written by release.yml's build-generic job. A tarball without
+# it was assembled by hand, and there is nothing to compare against.
+host_qt_version() {
+    local lib candidates=()
+    if command -v ldconfig >/dev/null 2>&1; then
+        lib=$(ldconfig -p 2>/dev/null | awk '/libQt6Core\.so\.6 .*x86-64/ { print $NF; exit }')
+        [ -n "$lib" ] && candidates+=("$lib")
+    fi
+    candidates+=(/usr/lib64/libQt6Core.so.6 /usr/lib/libQt6Core.so.6 /usr/lib/x86_64-linux-gnu/libQt6Core.so.6)
+    for lib in "${candidates[@]}"; do
+        [ -e "$lib" ] || continue
+        if [[ "$(readlink -f "$lib")" =~ libQt6Core\.so\.([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "${BASH_REMATCH[1]}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+host_kwin_version() {
+    command -v kwin_wayland >/dev/null 2>&1 || return 1
+    # Prints "kwin 6.8.1".
+    local out
+    out=$(kwin_wayland --version 2>/dev/null) || return 1
+    [[ "$out" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]] || return 1
+    echo "${BASH_REMATCH[1]}"
+}
+
+BUILD_ENV_FILE="$SOURCE_DIR/BUILD_ENV"
+if [ -f "$BUILD_ENV_FILE" ]; then
+    BUILT_QT=$(sed -n 's/^QT_VERSION=//p' "$BUILD_ENV_FILE")
+    BUILT_KWIN=$(sed -n 's/^KWIN_VERSION=//p' "$BUILD_ENV_FILE")
+    HOST_QT=$(host_qt_version || true)
+    HOST_KWIN=$(host_kwin_version || true)
+    PROBLEMS=()
+
+    if [ -z "$HOST_QT" ]; then
+        PROBLEMS+=("Could not find Qt 6 on this system. This build needs Qt ${BUILT_QT%.*} or newer.")
+    else
+        # Only major.minor matters: the version tag is per minor release.
+        NEED_QT="${BUILT_QT%.*}"
+        HAVE_QT="${HOST_QT%.*}"
+        if [ "$(printf '%s\n%s\n' "$NEED_QT" "$HAVE_QT" | sort -V | head -n 1)" != "$NEED_QT" ]; then
+            PROBLEMS+=("This build needs Qt $NEED_QT or newer, and this system has Qt $HOST_QT.")
+        fi
+    fi
+
+    if [ -z "$HOST_KWIN" ]; then
+        PROBLEMS+=("Could not find KWin on this system. This build only works with KWin $BUILT_KWIN.")
+    elif [ "$HOST_KWIN" != "$BUILT_KWIN" ]; then
+        PROBLEMS+=("This build only works with KWin $BUILT_KWIN, and this system has KWin $HOST_KWIN. KWin refuses to load the PlasmaZones effect unless the versions match exactly.")
+    fi
+
+    if [ "${#PROBLEMS[@]}" -gt 0 ]; then
+        {
+            echo "PlasmaZones v$VERSION cannot run on this system:"
+            for p in "${PROBLEMS[@]}"; do
+                echo "  * $p"
+            done
+            echo ""
+            echo "This tarball is built on Arch Linux against the Qt and KWin Arch shipped"
+            echo "at release time, so it only runs on a system with the same KWin and the"
+            echo "same or a newer Qt. Use your distribution's package instead:"
+            echo "  Fedora:                 sudo dnf copr enable fuddlesworth/PlasmaZones && sudo dnf install plasmazones"
+            echo "  Fedora Atomic/Kinoite:  add the COPR .repo file, then rpm-ostree install plasmazones"
+            echo "  Debian, openSUSE:       the OBS repository"
+            echo "  Arch:                   yay -S plasmazones"
+            echo "Instructions for each: https://github.com/fuddlesworth/PlasmaZones#install"
+            echo "Building from source also works, because it uses the Qt and KWin you have."
+            echo ""
+        } >&2
+        if [ "$FORCE" = true ]; then
+            echo "--force given, installing anyway." >&2
+        else
+            echo "Nothing was installed. Pass --force to install anyway." >&2
+            exit 1
+        fi
+    fi
+fi
 
 MANIFEST_FILE="$PREFIX/share/plasmazones/install_manifest.txt"
 NEED_RESTART=false
