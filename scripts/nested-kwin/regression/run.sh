@@ -160,6 +160,8 @@ f1151-scroll-visit-back-to-zone f1151-scroll-visit-back-to-zone.sh 1 -
 f1153-cropped-straddler-move f1153-cropped-straddler-move.sh 2 S
 f1155-compositor-only-gate f1155-compositor-only-gate.sh 1 -
 fdrag-float-keeps-size fdrag-float-keeps-size.sh 1 FS
+fsplash-sibling-size-scroll fsplash-sibling-size.sh 1 S PZ_FSPLASH_MODE=scroll
+fsplash-sibling-size-snap fsplash-sibling-size.sh 1 S PZ_FSPLASH_MODE=snap
 fu-optout-inview-evacuee fu-optout-inview-evacuee.sh 2 -
 fu-optout-hidden-evacuee fu-optout-hidden-evacuee.sh 2 -
 fu-optout-cross-screen-move fu-optout-cross-screen-move.sh 2 -
