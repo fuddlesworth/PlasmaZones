@@ -500,9 +500,14 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // at all where the user's resize had left the answer
                 // Foreign.
                 if (stripOfferOnDeferredReplay && safeWindow && !safeWindow->isDeleted()) {
+                    // Compared against the size the apply actually sends,
+                    // the constrained rect, as the batch does: an X11
+                    // client's size hints answer a smaller frame than the
+                    // raw column.
                     recordStripOffer(safeWindow.data(), getWindowId(safeWindow.data()), *stripOfferOnDeferredReplay,
-                                     ScrollDecisions::stripEntrySendsSize(sentBeforeReplay, replayRect.size(),
-                                                                          !safeWindow->isWaylandClient()));
+                                     ScrollDecisions::stripEntrySendsSize(
+                                         sentBeforeReplay, constrainTileGeometry(safeWindow.data(), replayRect).size(),
+                                         !safeWindow->isWaylandClient()));
                 }
                 // The bracket hid this move's own output change from the
                 // crossing arm, which also skips the stamp; a stamp written

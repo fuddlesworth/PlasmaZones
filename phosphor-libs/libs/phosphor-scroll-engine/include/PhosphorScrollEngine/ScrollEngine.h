@@ -275,7 +275,9 @@ public:
     ///  - an extent ACROSS the strip past the offer, inside the work area, becomes a floor on the tile's share
     ///    of its column (CommittedCrossExtent), held like a declared minimum across the strip, so the stack's
     ///    split gives the tile at least that and shrinks its siblings. Its premise is the tile's offer along
-    ///    the strip when it was learned, re-stamped when the same answer moves that offer. A shorter answer
+    ///    the strip when it was learned, re-stamped when the same answer leaves a changed, nonzero floor along
+    ///    the strip (one taught, or one partly given back). An answer that gives the floor along the strip back
+    ///    entirely moves the offer without re-stamping, so the premise sweep reads it. A shorter answer
     ///    gives a cross floor back the way a narrower one gives back a floor along the strip, pinning included.
     /// Every comparison against an offer, a work area or a capacity allows kCommittedExtentSlackPx, so a
     /// rounding pixel is never read as an answer, an overflow or a floor kept a pixel past what a column offers.
@@ -2082,7 +2084,7 @@ private:
     /// decides" and no rule height pinned one. The single definition of that
     /// commit: the open path runs it for a fresh column, the drag drop for an
     /// arrival that opens a column (and its indicator probe), the floating
-    /// adoption in setWindowFloat for the fresh column it opens, and the
+    /// adoption in setWindowFloatAnnounced for the fresh column it opens, and the
     /// unfloat path for a window that was floated at open (which never held a tile, so it
     /// has no remembered height to restore and the fresh insert seeds only
     /// the concrete Auto fallback the kind leaves behind).

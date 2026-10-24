@@ -6,7 +6,9 @@
  * @brief The overlap restack of a tile batch (tilinghandler/stackdecisions.h):
  *        each group takes its declared order at its lowest member's slot,
  *        against the stacking order as it is when the batch completes, and
- *        every other window keeps its place (F329, F497).
+ *        every other window keeps its place (F329, F497). Also when a saved
+ *        stacking order is replayed and spent: only by a batch of the context
+ *        it was saved for, told apart by its windows that live in one context.
  */
 
 #include "tilinghandler/stackdecisions.h"

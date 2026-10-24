@@ -998,11 +998,15 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             if (currentKey.activity.isEmpty()) {
                 return false;
             }
+            // Every candidate, a named list's as well as an every-activity
+            // window's, is measured against the activities this engine has
+            // been in: one never entered cannot have had another engine
+            // place the window there.
             const QStringList otherActivities = span.activities.size() > 1
                 ? span.activities
                 : (span.activity.isEmpty() ? m_enteredActivities.values() : QStringList{});
             return std::any_of(otherActivities.cbegin(), otherActivities.cend(), [&](const QString& activity) {
-                return activity != currentKey.activity
+                return activity != currentKey.activity && m_enteredActivities.contains(activity)
                     && std::any_of(span.desktops.cbegin(), span.desktops.cend(), [&](int desktop) {
                            return runsAnotherMode(desktop, activity);
                        });

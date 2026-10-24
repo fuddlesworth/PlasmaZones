@@ -1107,8 +1107,8 @@ private:
     bool m_pendingTargetEditsLayout = false;
     QSize m_virtualScreenSize; ///< Cached VS geometry size (valid when m_targetScreen is virtual)
     /// Target output's logical scale, from the daemon. Zero while unknown:
-    /// it is fetched only while the layout counts device pixels, and
-    /// forgotten whenever the target or its geometry changes.
+    /// it is fetched on demand by ensureTargetScreenScale (see there for who
+    /// asks), and forgotten whenever the target or its geometry changes.
     qreal m_targetScreenScale = 0.0;
     /// The target's size in device pixels from the same getScreenInfo reply
     /// as m_targetScreenScale, fetched and forgotten with it. Invalid when the

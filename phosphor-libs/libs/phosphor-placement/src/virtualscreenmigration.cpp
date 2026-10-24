@@ -401,11 +401,13 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
                 }
             }
             const bool zoneless = ptZoneIds.isEmpty();
-            // A live window's zones are looked up in its own store's context,
-            // a record's slot zones in the record's own desktop and activity.
-            // A window with no membership resolves to the global holder, which
-            // has no key, so its context would be that holder's last-used
-            // desktop, a desktop the record need not have been captured on.
+            // A window holding live zones has them looked up in its own store's
+            // context. One with no live zone (closed, or floating) takes its
+            // zones from the record's slot, so they are looked up in the
+            // context that slot was captured in, the record's own desktop and
+            // activity. Its store would not do: a window with no membership
+            // resolves to the global holder, which has no key, and a floating
+            // one's store need not be the desktop the slot was captured on.
             const PhosphorSnapEngine::SnapState* owner = live ? snapForWindow(p.windowId) : nullptr;
             const RecordContext record =
                 live ? RecordContext() : RecordContext(std::make_pair(p.virtualDesktop, p.activity));

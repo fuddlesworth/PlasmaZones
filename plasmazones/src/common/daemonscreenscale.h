@@ -25,8 +25,9 @@ namespace PlasmaZones {
 inline constexpr qreal MinPlausibleScreenScale = 0.25;
 inline constexpr qreal MaxPlausibleScreenScale = 8.0;
 
-/// The daemon's logical scale for @p screenId, or 0 when it cannot answer or
-/// answers with something no real output has.
+/// The daemon's logical scale for @p screenId read out of its getScreenInfo
+/// @p reply, or 0 when the call failed or answered with something no real
+/// output has.
 ///
 /// This is the per-output fractional scale the daemon's geometry sensor sees,
 /// which no QScreen in the editor or the settings app can give: on Wayland
@@ -38,18 +39,14 @@ inline constexpr qreal MaxPlausibleScreenScale = 8.0;
 /// region's share), or an invalid size when the reply carries none, as a
 /// daemon older than the key answers.
 ///
-/// A synchronous D-Bus round trip, shared by the layout editor and the
-/// settings app so both read the same reply with the same bounds.
-inline qreal queryDaemonScreenScale(const QString& screenId, QSize* pixelSize = nullptr)
+/// The one parser for both the blocking queryDaemonScreenScale and an
+/// asynchronous getScreenInfo reply, so the layout editor and the settings
+/// app read the same reply with the same bounds.
+inline qreal parseDaemonScreenScale(const QDBusMessage& reply, const QString& screenId, QSize* pixelSize = nullptr)
 {
     if (pixelSize) {
         *pixelSize = QSize();
     }
-    if (screenId.isEmpty()) {
-        return 0.0;
-    }
-    const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Screen,
-                                                                         QStringLiteral("getScreenInfo"), {screenId});
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
         return 0.0;
     }
@@ -68,6 +65,24 @@ inline qreal queryDaemonScreenScale(const QString& screenId, QSize* pixelSize = 
         }
     }
     return scale;
+}
+
+/// parseDaemonScreenScale over a synchronous getScreenInfo round trip. It
+/// blocks the calling thread for up to the daemon call timeout, so a caller on
+/// a path that repeats (every reload, every tick) fetches asynchronously
+/// instead and parses the reply with parseDaemonScreenScale.
+inline qreal queryDaemonScreenScale(const QString& screenId, QSize* pixelSize = nullptr)
+{
+    if (screenId.isEmpty()) {
+        if (pixelSize) {
+            *pixelSize = QSize();
+        }
+        return 0.0;
+    }
+    return parseDaemonScreenScale(
+        PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Screen,
+                                                  QStringLiteral("getScreenInfo"), {screenId}),
+        screenId, pixelSize);
 }
 
 } // namespace PlasmaZones

@@ -75,6 +75,11 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
     // re-registration) held the registration for as long as it stayed
     // connected, and the gate below then refused the compositor itself. The
     // names logged here are bus names, never the caller's compositorName.
+    // The check fails closed: a GetConnectionUnixProcessID lookup that errors
+    // or times out (OverlayAdaptor::isCompositorPeer) answers false for the
+    // real compositor too, and that refusal costs what the occupied refusal
+    // below describes, an effect left idle until the next daemonReady or its
+    // own reload, because it does not retry a REJECTED reply.
     if (served && !(m_compositorIdentityCheck && m_compositorIdentityCheck(caller))) {
         if (!m_identityRefusalLogged) {
             m_identityRefusalLogged = true;

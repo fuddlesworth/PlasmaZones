@@ -19,7 +19,7 @@
 #   With the default gaps (8), at scale 1 the 0.5 column is about 788 and the 0.75 one about
 #   1184, so W is about 1108; at 1.25 the 0.75 column is about 944 and a shows about 636.
 # Asserts: a is back on the output, its frame starts at the output's left edge and is narrower
-#   than its column (the peek), and the effect reported a's answer to the park.
+#   than its column (the peek), and the effect reported an answer for a after the scale change.
 # The old build (main before #1154): an answer equal to its offer is never reported, a park's
 #   included, and the engine has no arm that ends the memory on one, so the memory stands for as
 #   long as the column straddles. a stays parked below the output at its whole column: the
@@ -138,5 +138,5 @@ rd a
 check "a is back on the output (y $RY)" "$RY" -lt $((OY + OH))
 check "a's frame starts at the output's left edge $OX" "$(within "$RX" "$OX" 2)" = yes
 check "a peeks narrower than its column $E3 (width $RW)" "$RW" -lt $((E3 - 2))
-check "the effect reported a's answer to the park" "$REPORTS" -ge 1
+check "the effect reported an answer for a after the scale change" "$REPORTS" -ge 1
 finish

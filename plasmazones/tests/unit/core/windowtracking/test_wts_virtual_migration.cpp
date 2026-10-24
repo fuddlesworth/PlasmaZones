@@ -792,7 +792,7 @@ private Q_SLOTS:
     // home. It goes to the half that home sits in, the right one for zone 3,
     // and its screen and its pre-float screen agree. Resolved from no zone at
     // all it was filed on the left half, and the next activation on the right
-    // one read as a move and dropped the home (F405).
+    // one read as a move and dropped the home.
     void migrateToVirtual_snapFloatedWindowFollowsItsPreFloatZone()
     {
         SplitFixture split;
@@ -810,8 +810,7 @@ private Q_SLOTS:
 
     // A floating record with no zone to go by moves to the half its float-back
     // rect sits in, the managed screen and the rect's key alike. Left on the
-    // monitor's bare id, the reopen never matched it on the split monitor
-    // (F343).
+    // monitor's bare id, the reopen never matched it on the split monitor.
     void migrateToVirtual_zonelessFloatingRecordFollowsItsRect()
     {
         SplitFixture split;
@@ -839,8 +838,8 @@ private Q_SLOTS:
 
     // Removing the split folds every key of the monitor into its one physical
     // key. The rect kept for the virtual screen the record names, where the
-    // window floated last, wins over an older one left under the physical id
-    // from before the split and over the other half's (F455).
+    // window was last managed, wins over an older one left under the physical
+    // id from before the split and over the other half's.
     void migrateFromVirtual_foldKeepsTheRecordsOwnRect()
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");

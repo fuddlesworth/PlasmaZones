@@ -20,7 +20,7 @@
 // visible because its own output switched while the global current is
 // elsewhere. Either way a placement gate acts on the wrong windows.
 //
-// The three per-output helpers fall back to the global reading when the window
+// The per-output helpers above fall back to the global reading when the window
 // has no output. When Plasma is not running per-output desktops every output's
 // current desktop IS the global one, so these degrade exactly to what they
 // replaced — there is no capability to branch on and none is needed.

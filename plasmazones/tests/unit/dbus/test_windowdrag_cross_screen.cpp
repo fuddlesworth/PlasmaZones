@@ -10,12 +10,14 @@
  *        WindowTrackingAdaptor::dragEndedOnScreen, an activated drop through
  *        its cross-screen block. Two snapping outputs side by side. The same
  *        fixture covers what a crossing changes mid-drag: Escape on a pending
- *        drag, the drag-out size preview, the drop-indicator overrides, and,
- *        with the second output turned into an autotile screen, the drag
- *        re-insert's activation, minimum-size refusal, Escape dismissal and
- *        indifference to a stale toggle setting. With the second output
- *        turned into a scrolling screen instead, it covers the same refusal
- *        for the strip and the client size an arriving window hands it.
+ *        drag, the drag-out size preview, the drop-indicator overrides, the
+ *        selector edge hover's minimum-size floor, and, with the second
+ *        output turned into an autotile screen, the drag re-insert's
+ *        activation (its always-on entry included), minimum-size refusal,
+ *        Escape dismissal and indifference to a stale toggle setting. With
+ *        the second output turned into a scrolling screen instead, it covers
+ *        the same refusal for the strip and the client size an arriving
+ *        window hands it.
  */
 
 #include <QScopeGuard>
@@ -332,7 +334,7 @@ private Q_SLOTS:
     // compositor move goes on, and the drop on the other monitor is still the
     // drag-out it was. The window leaves its zone and the monitor it came
     // from. Clearing the pending drag on Escape sent its endDrag down the
-    // mismatch branch, which left both (F267).
+    // mismatch branch, which left both.
     void pendingDrag_escapeThenDropOnTheOtherMonitorStillLeavesTheZone()
     {
         Fixture f;
@@ -350,7 +352,7 @@ private Q_SLOTS:
     // The drop-indicator colours a window's rules give it reach the overlay
     // for the drag. beginDrag's own reset clears the overrides, so the push
     // has to come after it: pushed ahead, the drag held an empty map from its
-    // first tick on (F550).
+    // first tick on.
     void beginDrag_leavesTheWindowsDropIndicatorColoursOnTheOverlay()
     {
         Fixture f;
@@ -391,7 +393,7 @@ private Q_SLOTS:
     // crossing from one snapping monitor to another re-reads it there, the
     // size the drop commits on the new monitor. The latch that keeps one
     // preview per stay was re-armed only for a crossing onto a tiling screen,
-    // so the new monitor's size was never previewed (F296).
+    // so the new monitor's size was never previewed.
     void activeDrag_crossingToAnotherSnappingMonitorPreviewsItsSize()
     {
         Fixture f;
@@ -417,8 +419,7 @@ private Q_SLOTS:
     // A drag that has not activated snapping, crossing onto a tiling screen
     // with that screen's re-insert trigger held, activates through it: the
     // trigger lists can differ, and a pending drag never reaches the
-    // re-insert block. The window then previews its place in the stack
-    // (F400).
+    // re-insert block. The window then previews its place in the stack.
     void pendingDrag_insertTriggerOnATilingScreenActivatesTheReInsert()
     {
         Fixture f;
@@ -435,36 +436,116 @@ private Q_SLOTS:
         QVERIFY(f.tiling->hasDragInsertPreview());
     }
 
+    // Under "always re-insert" the always-on entry reads as held on every
+    // tick, so a drag that never activated snapping promotes on a plain
+    // crossing onto the tiling screen, with nothing held, and its drop
+    // re-inserts the window there rather than floating it. That is what the
+    // same setting does to a drag that starts on that screen.
+    void pendingDrag_alwaysOnReInsertPromotesAPlainCrossing()
+    {
+        Fixture f;
+        f.tileTheOtherScreen();
+        f.settings.setAutotileDragInsertTriggers(
+            {QVariantMap{{ConfigDefaults::triggerModifierField(), static_cast<int>(DragModifier::AlwaysActive)},
+                         {ConfigDefaults::triggerMouseButtonField(), 0}}});
+        const QString w = QStringLiteral("app|always-plain");
+        f.snapOn(w, QStringLiteral("DP-1"));
+        f.adaptor->beginDrag(w, 100, 100, 400, 300, QStringLiteral("DP-1"), 0);
+        QVERIFY(!f.adaptor->isDragInFlight());
+
+        f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), 0, 0);
+
+        QVERIFY2(f.adaptor->isDragInFlight(), "the always-on entry must promote a plain crossing");
+        QVERIFY(f.tiling->hasDragInsertPreview());
+        const PhosphorProtocol::DragOutcome outcome =
+            f.adaptor->endDrag(w, f.inOther().x(), f.inOther().y(), 0, 0, false);
+        QCOMPARE(outcome.action, PhosphorProtocol::DragOutcome::NoOp);
+    }
+
+    // The selector's minimum-size floor reads the size the window holds as
+    // its own, as the re-insert's adoption gate does. A snapped window in a
+    // short zone is not refused the selector for the frame its zone gave it,
+    // so an edge hover still promotes its pending drag. The snap exclusion
+    // probe judges the floor on that live frame, and the drag latched its
+    // answer, so the popup was refused to a window the adoption gate let
+    // into a strip. A free window that short is still refused.
+    void pendingDrag_edgeHoverJudgesTheMinimumSizeOnTheWindowsOwnSize_data()
+    {
+        QTest::addColumn<bool>("snapped");
+        QTest::addColumn<bool>("promoted");
+        QTest::newRow("snapped in a short zone") << true << true;
+        QTest::newRow("free and short") << false << false;
+    }
+    void pendingDrag_edgeHoverJudgesTheMinimumSizeOnTheWindowsOwnSize()
+    {
+        QFETCH(bool, snapped);
+        QFETCH(bool, promoted);
+        Fixture f;
+        f.settings.setZoneSelectorEnabled(true);
+        f.settings.setZoneSelectorPosition(ZoneSelectorPosition::Top);
+        f.settings.setMinimumWindowWidth(0);
+        f.settings.setMinimumWindowHeight(150);
+        // Registry metadata gives the snap exclusion probe its full query,
+        // the one carrying the live frame the floor is checked against.
+        auto* registry = new PhosphorEngine::WindowRegistry(&f.parent);
+        f.wta->setWindowRegistry(registry);
+        const auto teardown = qScopeGuard([&f] {
+            f.wta->setWindowRegistry(nullptr);
+        });
+        f.wta->setWindowMetadata(QStringLiteral("inst-edge"), QStringLiteral("edgeapp"), QString(), QString(),
+                                 QString(), 0, 1, QString(), 0, QVariantMap());
+        const QString w = QStringLiteral("edgeapp|inst-edge");
+        if (snapped) {
+            f.snapOn(w, QStringLiteral("DP-1"));
+        }
+        f.wta->setFrameGeometry(w, 100, 100, 400, 100);
+        QVERIFY2(f.snap->isWindowExcluded(w), "precondition: the live frame is under the minimum height");
+        f.adaptor->beginDrag(w, 100, 100, 400, 100, QStringLiteral("DP-1"), 0);
+        QVERIFY(!f.adaptor->isDragInFlight());
+
+        // Inside the top edge band of DP-1, where the selector sits.
+        f.adaptor->updateDragCursor(w, f.inFirst().x(), 10, 0, 0);
+
+        QCOMPARE(f.adaptor->isDragInFlight(), promoted);
+    }
+
     // A window under the minimum window size stays out of tiling at open, and
     // a drag must not adopt one into the stack or the strip either. The test
-    // is the size the window holds as its own against the global minimum
-    // (F375). A free window's own size is the frame the drag began with. A
-    // snapped window began on a frame its zone decided, which says nothing
-    // about the window: a short zone used to refuse it. It is tested
-    // only once a restore during the drag hands its own size back.
+    // is the size the window holds as its own against the global minimum. A
+    // free window's own size is the frame the drag began with. A snapped
+    // window began on a frame its zone decided, which says nothing about the
+    // window: a short zone used to refuse it. It is tested only once a
+    // restore during the drag hands its own size back, the daemon's drag-out
+    // size or the effect's drag-to-float restore, which the daemon sees only
+    // as a live frame whose size moved off the one the drag began with.
     void activeDrag_insertAdoptionHonoursTheMinimumWindowSize_data()
     {
         QTest::addColumn<bool>("scrollingScreen");
         QTest::addColumn<bool>("snapped");
         QTest::addColumn<QSize>("beginSize");
         QTest::addColumn<QSize>("restoredSize");
+        QTest::addColumn<QSize>("liveSize");
         QTest::addColumn<QSize>("minimumSize");
         QTest::addColumn<bool>("adopted");
         const QSize none;
         QTest::newRow("stack: free frame narrower than the minimum")
-            << false << false << QSize(400, 300) << none << QSize(500, 0) << false;
+            << false << false << QSize(400, 300) << none << none << QSize(500, 0) << false;
         QTest::newRow("stack: free frame at least the minimum")
-            << false << false << QSize(400, 300) << none << QSize(300, 0) << true;
+            << false << false << QSize(400, 300) << none << none << QSize(300, 0) << true;
         QTest::newRow("strip: free frame shorter than the minimum")
-            << true << false << QSize(400, 128) << none << QSize(0, 150) << false;
+            << true << false << QSize(400, 128) << none << none << QSize(0, 150) << false;
         QTest::newRow("strip: short zone frame below the minimum height")
-            << true << true << QSize(400, 128) << none << QSize(0, 150) << true;
+            << true << true << QSize(400, 128) << none << none << QSize(0, 150) << true;
         QTest::newRow("stack: short zone frame below the minimum height")
-            << false << true << QSize(400, 128) << none << QSize(0, 150) << true;
+            << false << true << QSize(400, 128) << none << none << QSize(0, 150) << true;
         QTest::newRow("strip: restored own size narrower than the minimum")
-            << true << true << QSize(400, 300) << QSize(640, 480) << QSize(700, 0) << false;
+            << true << true << QSize(400, 300) << QSize(640, 480) << none << QSize(700, 0) << false;
         QTest::newRow("strip: restored own size at least the minimum")
-            << true << true << QSize(300, 128) << QSize(640, 480) << QSize(500, 150) << true;
+            << true << true << QSize(300, 128) << QSize(640, 480) << none << QSize(500, 150) << true;
+        QTest::newRow("strip: effect-restored live frame narrower than the minimum")
+            << true << true << QSize(400, 300) << none << QSize(640, 480) << QSize(700, 0) << false;
+        QTest::newRow("strip: effect-restored live frame at least the minimum")
+            << true << true << QSize(400, 300) << none << QSize(640, 480) << QSize(600, 0) << true;
     }
     void activeDrag_insertAdoptionHonoursTheMinimumWindowSize()
     {
@@ -472,6 +553,7 @@ private Q_SLOTS:
         QFETCH(bool, snapped);
         QFETCH(QSize, beginSize);
         QFETCH(QSize, restoredSize);
+        QFETCH(QSize, liveSize);
         QFETCH(QSize, minimumSize);
         QFETCH(bool, adopted);
         Fixture f;
@@ -494,13 +576,18 @@ private Q_SLOTS:
             f.snapOn(w, QStringLiteral("DP-1"));
         }
         // The live frame is the one the drag begins on, so no restore is
-        // read off it.
+        // read off it until a row moves it.
         f.wta->setFrameGeometry(w, 100, 100, beginSize.width(), beginSize.height());
         QSignalSpy restores(f.adaptor, &WindowDragAdaptor::restoreSizeDuringDragChanged);
         f.adaptor->beginDrag(w, 100, 100, beginSize.width(), beginSize.height(), QStringLiteral("DP-1"), 0);
         f.adaptor->updateDragCursor(w, f.inFirst().x(), f.inFirst().y(), static_cast<int>(Qt::ControlModifier), 0);
         QVERIFY(f.adaptor->isDragInFlight());
         QCOMPARE(restores.count(), restoredSize.isValid() ? 1 : 0);
+        if (liveSize.isValid()) {
+            // The effect's own drag-to-float restore, which tells the daemon
+            // nothing but the frame it reports afterwards.
+            f.wta->setFrameGeometry(w, 100, 100, liveSize.width(), liveSize.height());
+        }
 
         f.adaptor->updateDragCursor(w, f.inOther().x(), f.inOther().y(), static_cast<int>(Qt::AltModifier), 0);
 
@@ -511,7 +598,7 @@ private Q_SLOTS:
     // the drag. Nothing brings it back but a real trigger press: not the
     // always-on entry, which reads as held on every tick, and not a crossing
     // off the tiling screen and back. A preview that comes back is one the
-    // drop commits (F477, F437).
+    // drop commits.
     void activeDrag_escapeHoldsAnAlwaysOnReInsertOffAcrossACrossing()
     {
         Fixture f;
@@ -541,8 +628,8 @@ private Q_SLOTS:
     // A snapped window arrives at a frame its zone decided, so with no
     // restore during the drag and the live frame still the one the drag began
     // with, every size handed over is empty: the column is not given the
-    // zone's width. That frame used to go out as the client's own size
-    // (F111). A free window hands the frame the drag began with, and a
+    // zone's width. That frame used to go out as the client's own size. A
+    // free window hands the frame the drag began with, and a
     // snapped window whose drag-out restored its own size hands that size.
     void activeDrag_handsAScrollingScreenOnlyTheClientsOwnSize_data()
     {
@@ -594,7 +681,7 @@ private Q_SLOTS:
     // A toggle setting left on from before the switch to "always re-insert"
     // has nothing to toggle: the always-on entry never makes the rising edge
     // a toggle waits for, so the re-insert stayed off for every window the
-    // reorder latch does not cover (F479).
+    // reorder latch does not cover.
     void activeDrag_alwaysOnReInsertIgnoresAStaleToggleSetting()
     {
         Fixture f;

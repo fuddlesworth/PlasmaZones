@@ -156,7 +156,7 @@ private Q_SLOTS:
 
     // The re-assert re-applies a zone only where snapping runs the screen it
     // is stored for. Snap keeps frozen memory on a screen a tiling engine took
-    // over, and its zone rect would fight the tile there (F399). Mutation:
+    // over, and its zone rect would fight the tile there. Mutation:
     // drop the isActiveOnScreen gate in reassertEvacuee and the zone rect on B
     // is applied again.
     void aZoneOnAScreenSnappingNoLongerRunsIsNotReapplied()

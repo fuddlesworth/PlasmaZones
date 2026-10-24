@@ -191,7 +191,8 @@ pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp scrollstu
 # A client that commits a frame other than its tile (reportCommittedSize): the
 # committed floor, its peek memory, its oversized verdict and every path that
 # keeps or drops it.
-pse_add_test(test_scrollengine_committedfloor test_scrollengine_committedfloor.cpp scrollstubsettings.h)
+pse_add_test(test_scrollengine_committedfloor test_scrollengine_committedfloor.cpp scrollstubsettings.h
+             scrollstubtracking.h)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)
 # The compositor focus-report protocol: which self-activation echoes the
 # filter swallows and which it adopts. Its own file rather than more of the

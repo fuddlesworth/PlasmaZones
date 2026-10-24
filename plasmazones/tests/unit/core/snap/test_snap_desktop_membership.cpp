@@ -868,7 +868,7 @@ private Q_SLOTS:
         }
     }
 
-    // #1149 on the activity axis (F220): a window on one desktop shown in two
+    // #1149 on the activity axis: a window on one desktop shown in two
     // activities, snapped to a different zone in each, goes back to the
     // entered activity's zone on every switch, in both directions. One entry
     // per switch, a re-statement, and the bystander snapped in one activity
@@ -1202,10 +1202,10 @@ private Q_SLOTS:
 
     // #1151: a layout-switch resnap puts a window back in the layout its span
     // was made in with the span, not its primary zone. A layout edited
-    // meanwhile keeps the zones of the span it still holds (F39), and a switch
-    // to another layout collapses the span to the zone at its primary
-    // position (F34). The buffer is populated before the edit and the switch,
-    // the order the daemon runs them in.
+    // meanwhile keeps the zones of the span it still holds, and a switch to
+    // another layout collapses the span to the zone at its primary position.
+    // The buffer is populated before the edit and the switch, the order the
+    // daemon runs them in.
     void aResnapKeepsTheSpanOnlyInTheLayoutItWasMadeIn()
     {
         m_engine->setCurrentDesktopForScreen(kScreen, 1);
@@ -1246,7 +1246,7 @@ private Q_SLOTS:
         QVERIFY(entries.first().targetZoneIds.isEmpty());
     }
 
-    // #1151 on the activity axis (F151): a window on ONE desktop shown in two
+    // #1151 on the activity axis: a window on ONE desktop shown in two
     // activities, snapped in A while B runs a tiling mode, holds one snap
     // membership, since a tiling context grants none. Back in A it stands
     // where the tiling engine put it, so its zone is re-applied as for a
@@ -1308,7 +1308,7 @@ private Q_SLOTS:
 
     // ...and only then. A session that runs no activities shows a window on
     // one desktop nowhere else, and a desktop switch re-commits nothing: the
-    // churn the shown-elsewhere gate keeps out (F151).
+    // churn the shown-elsewhere gate keeps out.
     void aSingleDesktopWindowWithoutActivitiesIsNotReapplied()
     {
         snapOn(1, kWindow, m_zoneIds[0]);
@@ -1359,7 +1359,96 @@ private Q_SLOTS:
         QCOMPARE(floats.count(), 0);
     }
 
-    // #1151 without the churn (F36): back on desktop 1 from the tiling
+    // ...nor for a window on a named list of activities when the one that
+    // runs another mode is an activity this engine has never been in.
+    // Nothing can have placed the window in a context the session never
+    // showed, so a plain desktop switch in the activity in view re-commits no
+    // zone and re-states no float.
+    void aNeverEnteredActivityInTheWindowsListIsNotReapplied_data()
+    {
+        QTest::addColumn<bool>("floating");
+        QTest::newRow("snapped") << false;
+        QTest::newRow("floating") << true;
+    }
+    void aNeverEnteredActivityInTheWindowsListIsNotReapplied()
+    {
+        QFETCH(bool, floating);
+        const QString a = QStringLiteral("act-a");
+        const QString c = QStringLiteral("act-c");
+        const PhosphorEngine::DesktopSpanQuery span = [a, c](const QString& windowId) {
+            PhosphorEngine::DesktopSpan s;
+            s.known = true;
+            s.desktops = {1};
+            s.activity = a;
+            if (windowId == kWindow) {
+                s.activities = QStringList{a, c};
+            }
+            return s;
+        };
+        m_engine->setContextModeResolver([c](const QString&, int, const QString& activity) {
+            return activity == c ? PhosphorZones::AssignmentEntry::Mode::Autotile
+                                 : PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
+        showActivity(a);
+        if (floating) {
+            m_engine->setCurrentDesktopForScreen(kScreen, 1);
+            m_engine->stateForWindowOnScreen(kWindow, kScreen, 1)->setFloatingOnScreen(kWindow, kScreen, 1);
+        } else {
+            snapOn(1, kWindow, m_zoneIds[0]);
+        }
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        QSignalSpy floats(m_engine, &SnapEngine::windowFloatingChanged);
+
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, span);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        m_engine->reconcileDesktopMemberships(kScreen, span);
+
+        QCOMPARE(resnapSpy.count(), 0);
+        QCOMPARE(floats.count(), 0);
+    }
+
+    // An activity the activity service removed stops counting as one this
+    // engine has been in. A window on every activity is re-applied on a
+    // desktop switch while B, entered and running a tiling mode, stands.
+    // Once B is removed nothing can show the window there, and the same
+    // switch re-commits nothing.
+    void aRemovedActivityNoLongerCountsAsShownElsewhere()
+    {
+        const QString a = QStringLiteral("act-a");
+        const QString b = QStringLiteral("act-b");
+        const PhosphorEngine::DesktopSpanQuery span = [a](const QString& windowId) {
+            PhosphorEngine::DesktopSpan s;
+            s.known = true;
+            s.desktops = {1};
+            s.activity = windowId == kWindow ? QString() : a;
+            return s;
+        };
+        m_engine->setContextModeResolver([b](const QString&, int, const QString& activity) {
+            return activity == b ? PhosphorZones::AssignmentEntry::Mode::Autotile
+                                 : PhosphorZones::AssignmentEntry::Mode::Snapping;
+        });
+        showActivity(b);
+        showActivity(a);
+        snapOn(1, kWindow, m_zoneIds[0]);
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        const auto switchAwayAndBack = [this, &span] {
+            m_engine->setCurrentDesktopForScreen(kScreen, 2);
+            m_engine->reconcileDesktopMemberships(kScreen, span);
+            m_engine->setCurrentDesktopForScreen(kScreen, 1);
+            m_engine->reconcileDesktopMemberships(kScreen, span);
+        };
+
+        switchAwayAndBack();
+        QVERIFY2(resnapSpy.count() == 1, "precondition: an entered activity running a tiling mode is shown elsewhere");
+
+        m_engine->pruneStatesForActivities(QStringList{a});
+        resnapSpy.clear();
+        switchAwayAndBack();
+        QCOMPARE(resnapSpy.count(), 0);
+    }
+
+    // #1151 without the churn: back on desktop 1 from the tiling
     // desktop, a sticky window whose frame still stands on its zone was not
     // moved there, and is not re-committed. One standing at the strip rect
     // is put back.
@@ -1406,10 +1495,10 @@ private Q_SLOTS:
 
     // A sticky window floating on desktop 1 while desktop 2 runs a tiling
     // mode holds one snap membership. Back on desktop 1 the pass states the
-    // float, since the tiling desktop told the effect the window was tiled
-    // (F35), and puts the window back on its float-back when its frame is
-    // the one the tile left it at, which is no snap zone (F470). A frame the
-    // user moved is left where it is.
+    // float, since the tiling desktop told the effect the window was tiled,
+    // and puts the window back on its float-back when its frame is the one
+    // the tile left it at, which is no snap zone. A frame the user moved is
+    // left where it is.
     void aReturnFromATilingDesktopRestatesAFloatShownOnBoth()
     {
         const QRect floatBack(100, 100, 500, 400);
@@ -1451,7 +1540,7 @@ private Q_SLOTS:
     // restoreWindowsToZonesOnLogin off: a reopen does not put the window back
     // in the zone it remembers on the desktop it opens on, and the first
     // visit to its other desktop does not either, through the adoption's
-    // remembered-zone restore. The record forgets both (F395).
+    // remembered-zone restore. The record forgets both.
     void aDeclinedRestoreForgetsEveryRememberedDesktop()
     {
         installRegistryFor({1, 2});
@@ -1514,7 +1603,7 @@ private Q_SLOTS:
     // A split rewrites each store's screen value to the virtual screen in
     // place. A membership adopted on another desktop holds nothing of its own
     // to go by, and is re-filed with the window's other memberships rather
-    // than left under the monitor's old id (F432).
+    // than left under the monitor's old id.
     void aRekeyCarriesAnAdoptedMembershipThatRecordsNoScreen()
     {
         const QString split = QStringLiteral("DP-1/vs:0");
@@ -1543,7 +1632,7 @@ private Q_SLOTS:
 
     // A zone left in a store the window is no member of is a leftover, not a
     // second home: a resnap of the current assignments reads the member store
-    // alone and sends one entry for the window (F152).
+    // alone and sends one entry for the window.
     void aResnapIgnoresALeftoverInAStoreTheWindowIsNoMemberOf()
     {
         snapOn(1, kWindow, m_zoneIds[0]);
@@ -1567,7 +1656,7 @@ private Q_SLOTS:
     // Rotation turns a window held on two desktops from the zone of the
     // desktop in view only. Each store records desktop 0 for it (sticky or
     // unknown), which passes the recorded-desktop filter in both, so only the
-    // store's own key tells them apart (F484).
+    // store's own key tells them apart.
     void aRotationTurnsAMultiDesktopWindowFromTheDesktopInViewOnly()
     {
         snapOn(1, kWindow, m_zoneIds[0]);

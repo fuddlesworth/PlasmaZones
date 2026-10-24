@@ -328,7 +328,8 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
             // tab came on show when this one floated out. Only while the
             // column is still sized the way this window's leave left it
             // (restoreTabbedHeightOwner): a resize since then is the user's
-            // newer word on the column, and reclaiming would revert it.
+            // newer word on the column, and reclaiming would revert it. That
+            // helper documents the one such resize it cannot see.
             restoreTabbedHeightOwner(state->strip(), windowId, restore);
             // The maximize-to-edges flag the lone-tile capture carried:
             // declared column state nothing else re-derives, so a
@@ -570,7 +571,11 @@ void ScrollEngine::restoreTabbedHeightOwner(ScrollStrip& strip, const QString& w
         // which is not a resize, so the column counts as untouched. A claim
         // made by another tab before the heir left looks the same from here
         // and is reclaimed too: nothing records which of the two moved the
-        // ownership once the heir is gone.
+        // ownership once the heir is gone. A resize made AFTER the heir left,
+        // against the tab that took the column over from it, is reverted the
+        // same way. This is the accepted cost of keying the test on the heir
+        // alone, since telling those cases apart would need a record of every
+        // ownership move made while this window was away.
         if (col.indexOfWindow(slot.tabbedHeightHeirId) >= 0
             && (col.heightOwnerId != slot.tabbedHeightHeirId
                 || !(strip.windowHeightIntent(slot.tabbedHeightHeirId) == slot.tabbedHeightHeirIntent))) {

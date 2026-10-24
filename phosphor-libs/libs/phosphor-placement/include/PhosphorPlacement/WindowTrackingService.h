@@ -523,9 +523,11 @@ public:
     /// True while the resolver's globals store resolves: wired, and (for the engine
     /// resolver, whose arms hold a QPointer) while the snap engine is alive. The
     /// read-only queries (zoneForWindow, zonesForWindow, isWindowSnapped,
-    /// windowsInZone, snappedWindows, isAutoSnapped, userSnappedClasses) need
-    /// no check first: with no store they answer empty or false. The writers
-    /// still assert it.
+    /// windowsInZone, snappedWindows, isAutoSnapped, userSnappedClasses), the
+    /// walk behind the empty-zone queries, the stale prune and recordSnapIntent
+    /// need no check first: with no store they answer empty or false, or do
+    /// nothing. The other writers still assert it, because each is reached only
+    /// after a commit or a zone answer that already needs a store.
     bool hasSnapState() const;
 
     /**

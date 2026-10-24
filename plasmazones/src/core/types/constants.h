@@ -222,11 +222,10 @@ namespace JsonKeys {
 // What remains below is the part of the screen-info D-Bus reply that this
 // namespace owns: fields `fetchScreens()` (src/settings/utils/screenprovider.cpp)
 // parses out of getScreenInfo, and the screen's scale and size in device
-// pixels, which the shared queryDaemonScreenScale
+// pixels, which the shared parseDaemonScreenScale
 // (plasmazones/src/common/daemonscreenscale.h) reads for both the layout
-// editor and the settings app.  It does
-// not cover the whole reply — the connector name and the geometry sub-keys
-// come from ZoneJsonKeys.
+// editor and the settings app.  It does not cover the whole reply — the
+// connector name and the geometry sub-keys come from ZoneJsonKeys.
 //
 // Only the fields with a caller are kept. Dropping the unread ones is safe
 // because the producer does not consume these: PhosphorScreens deliberately

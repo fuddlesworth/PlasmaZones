@@ -240,7 +240,7 @@ public Q_SLOTS:
     /**
      * @brief Ask the effect to snap every window on a screen: a screen the
      *        daemon knows, which snapping runs, switched on and not disabled
-     *        in the context in view (F381)
+     *        in the context in view
      */
     void snapAllWindows(const QString& screenId);
 
@@ -248,7 +248,7 @@ public Q_SLOTS:
      * @brief Commit an external batch of resnap entries, each checked as a bus
      *        snap is (admitBusSnap) and dropped when it fails. A restore entry
      *        (unsnap and put back at a caller's rect) is taken only from the
-     *        registered compositor bridge or a direct call (F312)
+     *        registered compositor bridge or a direct call
      */
     void handleBatchedResnap(const QString& resnapData);
 
@@ -362,7 +362,7 @@ public Q_SLOTS:
      *        zone as the pre-float home. It does not float the window, so
      *        setWindowFloat(true) follows it. Compositor-only: from another
      *        caller the gated second half could refuse and leave the window
-     *        in neither state (F313).
+     *        in neither state.
      * @param windowId Window identifier
      */
     void windowUnsnappedForFloat(const QString& windowId);
@@ -484,7 +484,7 @@ private:
     /// emit the resulting applyGeometriesBatch through emitPlacementBatch.
     /// True when anything was committed.
     bool commitBatch(const QVector<ZoneAssignmentEntry>& entries, const QString& action);
-    /// commitBatch, relayed as "restate" (no Snap Assist, F461) when every
+    /// commitBatch, relayed as "restate" (no Snap Assist) when every
     /// entry re-states a placement, else as "resnap".
     void commitResnapBatch(const QVector<ZoneAssignmentEntry>& entries);
     /// Emit @p geometries as applyGeometriesBatch through the announce

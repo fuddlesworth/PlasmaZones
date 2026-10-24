@@ -583,31 +583,22 @@ void Daemon::finalizeStartup()
             // the level-1 fallback (e.g. autotile-bsp) on a system
             // configured for snapping. Two arms:
             //
-            //   (a) signal — currentActivityChanged fires non-empty;
+            //   (a) the activity handler (connectDesktopActivity) shows it
+            //       for the first non-empty activity reported, in place of
+            //       its own switch OSD;
             //   (b) fallback timer — KActivities never reports.
             //
-            // `fired` is the canonical "already shown" flag.
-            // QMetaObject::Connection's `operator bool()` reports
-            // "the connection was successfully made," NOT "still
-            // active," so checking `*conn` after `disconnect(*conn)`
-            // cannot tell "still queued" from "already fired and
-            // disconnected." A shared_ptr<bool> captured by both arms
-            // lets each compare-and-set first. The 5000ms timeout is
-            // sized for KActivities cold-boot autostart at 2-3s on
-            // slower systems, where 2s produced false fallbacks.
-            auto conn = std::make_shared<QMetaObject::Connection>();
-            auto fired = std::make_shared<bool>(false);
-            *conn = connect(m_activityManager.get(), &PhosphorWorkspaces::ActivityManager::currentActivityChanged, this,
-                            [this, conn, fired](const QString& a) {
-                                if (a.isEmpty() || *fired) {
-                                    return;
-                                }
-                                *fired = true;
-                                QObject::disconnect(*conn);
-                                showOsdForAllScreens(a);
-                            });
-            QTimer::singleShot(5000, this, [this, conn, fired]() {
-                if (*fired) {
+            // m_welcomeOsdAwaitsActivity is the shared "not shown yet" flag,
+            // which each arm tests and clears before it shows. The handler
+            // owns arm (a) rather than a second connection to the same
+            // signal, so whether the change is the welcome or a switch is
+            // decided in one place, with no dependence on which of two
+            // connections Qt runs first. The 5000ms timeout is sized for
+            // KActivities cold-boot autostart at 2-3s on slower systems,
+            // where 2s produced false fallbacks.
+            m_welcomeOsdAwaitsActivity = true;
+            QTimer::singleShot(5000, this, [this]() {
+                if (!m_welcomeOsdAwaitsActivity) {
                     return;
                 }
                 // Only fall back to firing the OSD if the activity has now
@@ -616,17 +607,14 @@ void Daemon::finalizeStartup()
                 // available, firing would replay the very wrong-cascade
                 // OSD (autotile-bsp on a snapping-mode user) the deferral
                 // was added to avoid, just delayed by 5 s instead of
-                // immediate. The signal arm stays connected instead, so a
-                // KActivities slower than the timeout still gets its welcome
-                // when the activity arrives. It has to: the activity handler
-                // (connectDesktopActivity) stands its own switch OSD down for
-                // the first activity known, leaving this the only OSD for it.
+                // immediate. The flag stays set instead, so a KActivities
+                // slower than the timeout still gets its welcome from the
+                // activity handler when the activity arrives.
                 const QString activity = currentActivity();
                 if (activity.isEmpty() && PhosphorWorkspaces::ActivityManager::isAvailable()) {
                     return;
                 }
-                *fired = true;
-                QObject::disconnect(*conn);
+                m_welcomeOsdAwaitsActivity = false;
                 showOsdForAllScreens(activity);
             });
         }

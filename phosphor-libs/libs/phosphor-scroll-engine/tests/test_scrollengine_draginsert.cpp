@@ -2241,8 +2241,7 @@ void TestScrollEngineDragInsert::cancelOfTheActiveColumnsWindowRestoresFocusAndV
     // the active one, and the view anchor is stored relative to the active
     // column. An Escape that put the window back without making it active
     // again left the strip's focus disagreeing with the compositor's, and the
-    // anchor replayed onto the wrong column shifted the view by that column
-    // (F421).
+    // anchor replayed onto the wrong column shifted the view by that column.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
@@ -2273,7 +2272,7 @@ void TestScrollEngineDragInsert::cancelOfAShownNonOwnerTabKeepsTheColumnsHeight(
     // A tabbed column takes its extent across the strip from ONE tab, its
     // height owner, not the tab on show. An Escape of a drag of the shown tab
     // that does not own it gives the tab back its own Fixed intent, and wrote
-    // it as a bid, which took the column from its owner (F493).
+    // it as a bid, which took the column from its owner.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
@@ -2419,7 +2418,7 @@ void TestScrollEngineDragInsert::zeroMotionCommitOfADefensivelyDetachedWindowRet
     // cancelRestoresADefensivelyDetachedWindow's commit twin. A drop that
     // resolved no target puts a window back where it was, and for begin's
     // defensive take that is the slot captured before the take, not the end
-    // of the strip (F326).
+    // of the strip.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a")});
@@ -2442,7 +2441,7 @@ void TestScrollEngineDragInsert::aMinimumChangedMidHoldIsAppliedAtTheDrop()
     // A window a live preview holds detached sits in no strip and in no float
     // slot, so a minimum the compositor reports mid-hold had nowhere to land,
     // and the commit or the cancel put the window back with the minimum it had
-    // at begin (F370). Both endings are pinned.
+    // at begin. Both endings are pinned.
     const QSize min = Ax::t(QSize(250, 0));
     for (const bool commit : {true, false}) {
         QObject owner;

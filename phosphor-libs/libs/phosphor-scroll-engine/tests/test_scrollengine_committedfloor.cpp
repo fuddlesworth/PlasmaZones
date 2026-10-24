@@ -13,9 +13,10 @@
  * area triggers, every path that drops the floor (satisfaction in every
  * desktop, a user resize, a lowered minimum, a work-area shrink, close,
  * handoff, a cross-output or cross-desktop move, the last membership going,
- * the aliveness prune) and every one that keeps it (float round trips, the
- * fullscreen hold, a cancelled drag, a drag reorder, consume, Retile, the
- * evacuee park). Plus the strip-level verbs whose honesty the floor tests:
+ * a renumber displacing the window, the aliveness prune) and every one that
+ * keeps it (float round trips, the fullscreen hold, a cancelled drag, a drag
+ * reorder, consume, Retile, the evacuee park). Plus the strip-level verbs
+ * whose honesty the floor tests:
  * the preset cycles and minimize-width.
  *
  * Across the strip: the floor a taller answer holds its stacked tile's share
@@ -45,6 +46,7 @@
 
 #include "scrollstriptestutils.h"
 #include "scrollstubsettings.h"
+#include "scrollstubtracking.h"
 
 #include <memory>
 
@@ -488,7 +490,7 @@ private Q_SLOTS:
     // A narrower answer a pixel past what the column offers without the floor
     // is that offer, within the rounding slack: the widening goes entirely.
     // Kept a pixel wide, the floor is one no sweep could ever find satisfied,
-    // and it would hold the column a pixel wide for good (F367).
+    // and it would hold the column a pixel wide for good.
     void aGiveBackWithinTheSlackDropsTheFloor()
     {
         QObject owner;
@@ -501,7 +503,7 @@ private Q_SLOTS:
 
     // A narrower answer to a park lowers the peek memory without touching the
     // column, and the straddler parked on the old memory is laid out again on
-    // the new one, which no longer protects its remainder (F187).
+    // the new one, which no longer protects its remainder.
     void aNarrowerAnswerToAParkLaysTheStraddlerOutAgain()
     {
         QObject owner;
@@ -1236,7 +1238,7 @@ private Q_SLOTS:
 
     // A lone tile offered the whole cross extent answers a pixel over it on a
     // fractional scale. That is the offer, within the rounding slack, and not
-    // an answer that cannot fit the work area: the window stays tiled (F321).
+    // an answer that cannot fit the work area: the window stays tiled.
     void aCrossAnswerAPixelPastTheWorkAreaStaysTiled()
     {
         QObject owner;
@@ -1381,7 +1383,7 @@ private Q_SLOTS:
     // Every tab of a column shares its extent along the strip, which is held
     // to the largest floor among them, so a user resize of the shown tab
     // settles the hidden tab's floor too. Left standing it held the column,
-    // and the release reverted the drag (F254).
+    // and the release reverted the drag.
     void aShownTabsResizeDropsAHiddenTabsFloor()
     {
         QObject owner;
@@ -1669,7 +1671,7 @@ private Q_SLOTS:
     // starts the new context unfloored too: the window gives up every context
     // it held, so what its client taught answered strips it has left. It used
     // to keep the floor this way and lose it on a move into a background
-    // desktop, on nothing but which desktop it went to (F463).
+    // desktop, on nothing but which desktop it went to.
     void aMembershipMoveIntoTheDesktopInViewDropsTheFloor()
     {
         QObject owner;
@@ -1712,6 +1714,57 @@ private Q_SLOTS:
 
         adopt(engine, stickyMovedTo(3)); // desktop 2's column goes too, the last one
         QVERIFY(!engine->isWindowTracked(kSticky));
+        engine->windowOpened(kSticky, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kSticky), 300);
+    }
+
+    // A desktop renumber that lands a strip on a key still holding a live one
+    // displaces every window of the strip there, and a window that strip
+    // shares with a surviving desktop leaves the engine too. The renumber here
+    // skips the prune the daemon runs ahead of it, which is what leaves the
+    // removed desktop's strip standing at the key desktop 3 moves to. The
+    // displaced release skipped the window, whose primary is the surviving
+    // desktop in view, so the strip it really leaves records its placement,
+    // and what its client taught goes with it.
+    void aWindowADisplacementTakesFromASurvivingStripIsRecordedAndLosesItsFloor()
+    {
+        QObject owner;
+        auto* tracker = new ScrollTestUtils::StubWindowTracking(&owner);
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1}, {}, {}, tracker);
+        engine->setEngineSettings(makeFloorSettings(&owner));
+        engine->refreshConfigFromSettings();
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        engine->windowOpened(kD1, kS1, 0, 0);
+        engine->windowOpened(kSticky, kS1, 0, 0);
+        engine->windowFocused(kSticky, kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        answer(engine, kSticky, 450);
+        switchTo(engine, 2);
+        engine->windowOpened(kD2, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        adopt(engine, stickyBesideD2());
+        switchTo(engine, 3);
+        engine->windowOpened(kC, kS1, 0, 0);
+        QCoreApplication::processEvents();
+        switchTo(engine, 1);
+        QCOMPARE(extentOf(engine, kSticky), 450);
+        QVERIFY2(!tracker->placementStore().peekExact(kSticky).has_value(), "precondition: nothing recorded yet");
+        QSignalSpy released(engine, &ScrollEngine::windowsReleased);
+
+        engine->renumberDesktopsAfterRemoval(2);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(released.count(), 1);
+        QVERIFY(released.first().at(0).toStringList().contains(kSticky));
+        QVERIFY(!engine->isWindowTracked(kSticky));
+        QCOMPARE(engine->managedWindowOrder(kS1), QStringList{kD1});
+        const auto record = tracker->placementStore().peekExact(kSticky);
+        QVERIFY2(record.has_value(), "the surviving strip records the window it lets go");
+        QCOMPARE(record->virtualDesktop, 1);
+        QCOMPARE(record->slotFor(engine->engineId()).state, QString(PhosphorEngine::WindowPlacement::stateTiled()));
+
         engine->windowOpened(kSticky, kS1, 0, 0);
         QCoreApplication::processEvents();
         QCOMPARE(extentOf(engine, kSticky), 300);
@@ -2297,7 +2350,7 @@ private Q_SLOTS:
     // without the floor, entirely once it does not. A taller answer after a
     // give-back is a client that does not answer one offer the same way
     // twice, so the re-taught floor is pinned, and a shorter answer then
-    // keeps it (F266).
+    // keeps it.
     void aShorterAnswerGivesTheCrossFloorBack()
     {
         QObject owner;
@@ -2324,7 +2377,7 @@ private Q_SLOTS:
     // extent in the same commit was given at that width, so a held cross
     // floor takes the new offer as its premise. Read against the old one, the
     // next pass dropped it and waited a round trip for the client to teach it
-    // again (F251).
+    // again.
     void aWiderAnswerKeepsTheHeldCrossFloor()
     {
         QObject owner;
@@ -2344,7 +2397,7 @@ private Q_SLOTS:
     // capacity of nothing, which reads as 0 and not as the "no tile here"
     // sentinel, so the held floor is dropped like any the stack can no longer
     // hold. A negative capacity kept it, and the share came back the moment
-    // the siblings let go (F186).
+    // the siblings let go.
     void aCrossFloorDropsWhenItsSiblingsFillTheColumn()
     {
         QObject owner;

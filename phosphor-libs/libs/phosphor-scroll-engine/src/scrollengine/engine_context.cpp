@@ -152,8 +152,8 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         // map than for the one above: the marker's other per-window sweeps
         // (windowClosed, handoffRelease) hang off a signal about that window,
         // and a window that dies WITHOUT one — the case this whole function
-        // exists to catch — reaches neither. It
-        // also has no size cap of its own, so nothing else bounds its growth.
+        // exists to catch — reaches neither. It also has no size cap of its
+        // own, so nothing else bounds its growth.
         m_declinedOpenFocus.remove(windowId);
         ++pruned;
     }
@@ -393,7 +393,14 @@ void ScrollEngine::finishDisplacedRelease(QStringList& displacedWindows, const Q
         // drop below breaks that promise, so the snapshot is taken here, after
         // every migration in the pass has settled the keys. A window whose
         // displaced state was its only one has no survivor and keeps the
-        // record releaseScreenState took.
+        // record releaseScreenState took. It runs for every displaced window,
+        // though, so one whose displaced state WAS its primary but which a
+        // surviving context also held is recorded twice, and the survivor's
+        // slot replaces the one releaseScreenState took. That is deliberate:
+        // once the migrations have rekeyed the memberships, which context was
+        // primary at release time cannot be read back (the displaced key may
+        // hold another strip by now), and the survivor is a strip the window
+        // is really leaving, still standing with its neighbours.
         for (const QString& wid : std::as_const(displacedWindows)) {
             recordSurvivingPlacement(wid);
             dropFromOtherContexts(wid, PhosphorEngine::PlacementStateKey{});

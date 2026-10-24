@@ -1222,37 +1222,37 @@
         <translation>Przenieś na wierzch</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="767"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="784"/>
         <source>Cancel Zone Overlay</source>
         <translation>Anuluj nakładkę stref</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="826"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="843"/>
         <source>Layout Picker: Move Left</source>
         <translation>Wybór układu: przesuń w lewo</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="830"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="847"/>
         <source>Layout Picker: Move Right</source>
         <translation>Wybór układu: przesuń w prawo</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="834"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="851"/>
         <source>Layout Picker: Move Up</source>
         <translation>Wybór układu: przesuń w górę</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="838"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="855"/>
         <source>Layout Picker: Move Down</source>
         <translation>Wybór układu: przesuń w dół</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="842"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="859"/>
         <source>Layout Picker: Confirm</source>
         <translation>Wybór układu: potwierdź</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="843"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="860"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
         <translation>Wybór układu: potwierdź (Enter na klawiaturze numerycznej)</translation>
     </message>
@@ -1382,61 +1382,61 @@
         <translation>Wypełnij strefę</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="836"/>
+        <location filename="../src/editor/controller/layout.cpp" line="835"/>
         <source>Invalid layout data format</source>
         <translation>Nieprawidłowy format danych układu</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1353"/>
-        <location filename="../src/editor/controller/layout.cpp" line="1412"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1352"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1411"/>
         <source>File path cannot be empty</source>
         <translation>Ścieżka pliku nie może być pusta</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1377"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="667"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1376"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="710"/>
         <source>Failed to import layout: %1</source>
         <translation>Nie udało się zaimportować układu: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1388"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="674"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1387"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="717"/>
         <source>That file is not a layout this app can read.</source>
         <translation>Ten plik nie jest układem, który ta aplikacja potrafi odczytać.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1422"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1421"/>
         <source>Save the layout before exporting it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1443"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="480"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="486"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="719"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1442"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="523"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="529"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="762"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="185"/>
         <source>Could not write the export. Check that the folder is writable.</source>
         <translation>Nie udało się zapisać eksportu. Sprawdź, czy w folderze można zapisywać.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1417"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1416"/>
         <source>No layout loaded to export</source>
         <translation>Nie wczytano żadnego układu do wyeksportowania</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="160"/>
+        <location filename="../src/editor/controller/layout.cpp" line="159"/>
         <source>VS%1</source>
         <comment>@item fallback name for an unnamed virtual screen</comment>
         <translation>WE%1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1429"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="710"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1428"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="753"/>
         <source>Failed to export layout: %1</source>
         <translation>Nie udało się wyeksportować układu: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="801"/>
+        <location filename="../src/editor/controller/layout.cpp" line="800"/>
         <location filename="../src/editor/services/DBusLayoutService.cpp" line="46"/>
         <source>Layout ID cannot be empty</source>
         <translation>Identyfikator układu nie może być pusty</translation>
@@ -1514,7 +1514,7 @@
         <translation>Żaden tryb rozmieszczania nie jest włączony</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="806"/>
+        <location filename="../src/editor/controller/layout.cpp" line="805"/>
         <source>Layout service not initialized</source>
         <translation>Usługa układów nie została zainicjowana</translation>
     </message>
@@ -1525,7 +1525,7 @@
     </message>
     <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="107"/>
-        <location filename="../src/editor/controller/multiselect.cpp" line="425"/>
+        <location filename="../src/editor/controller/multiselect.cpp" line="427"/>
         <source>Move %1 Zones</source>
         <comment>@action</comment>
         <translation>Przenieś strefy (%1)</translation>
@@ -1537,9 +1537,9 @@
         <translation>Przenieś strefę</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="739"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="286"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="294"/>
+        <location filename="../src/editor/controller/layout.cpp" line="738"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="329"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="337"/>
         <location filename=".qml-stubs/plasmazones/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
         <source>New Layout</source>
         <translation>Nowy układ</translation>
@@ -1620,7 +1620,7 @@
         <translation>Przenieś na spód</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1270"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1269"/>
         <source>Services not initialized</source>
         <translation>Usługi nie zostały zainicjowane</translation>
     </message>
@@ -1672,7 +1672,7 @@
         <translation>Przełącz użycie pełnego obszaru ekranu</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/multiselect.cpp" line="510"/>
+        <location filename="../src/editor/controller/multiselect.cpp" line="512"/>
         <location filename="../src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp" line="21"/>
         <source>Update Appearance for %1 Zones</source>
         <comment>@action</comment>
@@ -10151,6 +10151,7 @@
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="155"/>
         <location filename="../src/editor/services/zonemanager/zorder.cpp" line="162"/>
         <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="149"/>
+        <location filename="../src/settings/utils/kzonesimporter.cpp" line="188"/>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
         <location filename=".qml-stubs/plasmazones/src/ui/NavigationOsdContent.qml.cpp" line="502"/>
         <source>Zone %1</source>
@@ -10162,50 +10163,50 @@
         <translation>%1 — %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="318"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="361"/>
         <source>Layout created, but aspect-ratio class could not be applied: %1</source>
         <translation>Utworzono układ, ale nie udało się zastosować klasy proporcji: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="332"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="375"/>
         <source>Could not create the layout. The daemon returned an empty layout ID.</source>
         <translation>Nie udało się utworzyć układu. Usługa zwróciła pusty identyfikator układu.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="340"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="383"/>
         <source>Could not create the layout. The daemon may not be running.</source>
         <translation>Nie udało się utworzyć układu. Usługa może nie być uruchomiona.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="360"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="403"/>
         <source>Could not delete layout: %1</source>
         <translation>Nie udało się usunąć układu: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="381"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="424"/>
         <source>Could not duplicate layout: %1</source>
         <translation>Nie udało się powielić układu: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="419"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="462"/>
         <source>Could not read the template file.</source>
         <translation>Nie udało się odczytać pliku szablonu.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="414"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="428"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="434"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="457"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="471"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="477"/>
         <source>That file is not a scrolling template this app can read.</source>
         <translation>Ten plik nie jest szablonem przewijania, który ten program potrafi odczytać.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="472"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="515"/>
         <source>That template no longer exists.</source>
         <translation>Ten szablon już nie istnieje.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="211"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="530"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="573"/>
         <source>The daemon refused the template. Check that it has a name.</source>
         <translation>Usługa odrzuciła szablon. Sprawdź, czy ma nazwę.</translation>
     </message>
@@ -10220,76 +10221,76 @@
         <translation>Nie udało się zapisać szablonu. Sprawdź, czy ma nazwę.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="532"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="575"/>
         <source>Could not save the template: %1</source>
         <translation>Nie udało się zapisać szablonu: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="552"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="595"/>
         <source>Could not delete the template: %1</source>
         <translation>Nie udało się usunąć szablonu: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="559"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="602"/>
         <source>Could not delete the template.</source>
         <translation>Nie udało się usunąć szablonu.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="571"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="614"/>
         <source>Could not duplicate the template: %1</source>
         <translation>Nie udało się powielić szablonu: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="895"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="938"/>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="360"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="126"/>
         <source>Scrolling (no template)</source>
         <translation>Przewijanie (brak szablonu)</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="406"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="656"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="805"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="449"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="699"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="848"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="205"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="610"/>
         <source>That file path is not allowed.</source>
         <translation>Ta ścieżka pliku jest niedozwolona.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="467"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="688"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="863"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="510"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="731"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="906"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="153"/>
         <source>That export path is not allowed.</source>
         <translation>Ta ścieżka eksportu jest niedozwolona.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="581"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="624"/>
         <source>Could not duplicate the template.</source>
         <translation>Nie udało się powielić szablonu.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="613"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="656"/>
         <source>Could not open the editor. The daemon may not be running.</source>
         <translation>Nie udało się otworzyć edytora. Usługa może nie działać.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="619"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="662"/>
         <source>Could not open the editor.</source>
         <translation>Nie udało się otworzyć edytora.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="733"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="776"/>
         <source>Failed to update layout visibility: %1</source>
         <translation>Nie udało się zaktualizować widoczności układu: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="746"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="789"/>
         <source>Failed to update auto-assign: %1</source>
         <translation>Nie udało się zaktualizować automatycznego przypisania: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="760"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="803"/>
         <source>Failed to update aspect ratio: %1</source>
         <translation>Nie udało się zaktualizować proporcji: %1</translation>
     </message>
@@ -11695,13 +11696,13 @@
         <translation>Wyeksportowano układ</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1051"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1052"/>
         <source>Failed to load layout: %1</source>
         <comment>@info</comment>
         <translation>Nie udało się wczytać układu: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1055"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/EditorWindow.qml.cpp" line="1056"/>
         <source>Failed to save layout: %1</source>
         <comment>@info</comment>
         <translation>Nie udało się zapisać układu: %1</translation>
@@ -12240,14 +12241,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="422"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="860"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="866"/>
         <source>Full zone highlight</source>
         <comment>@item:inlistbox</comment>
         <translation>Pełne podświetlenie strefy</translation>
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="422"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="860"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="866"/>
         <source>Compact preview</source>
         <comment>@item:inlistbox</comment>
         <translation>Zwarty podgląd</translation>
@@ -12403,7 +12404,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="292"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="708"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="714"/>
         <source>Custom colors:</source>
         <comment>@label</comment>
         <translation>Własne barwy:</translation>
@@ -12422,7 +12423,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="312"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="722"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="728"/>
         <source>Highlight:</source>
         <comment>@label</comment>
         <translation>Podświetlenie:</translation>
@@ -12441,7 +12442,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="326"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="740"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="746"/>
         <source>Inactive:</source>
         <comment>@label</comment>
         <translation>Nieaktywna:</translation>
@@ -12460,7 +12461,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="340"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="758"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="764"/>
         <source>Border:</source>
         <comment>@label</comment>
         <translation>Obramowanie:</translation>
@@ -12479,7 +12480,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="356"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="778"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="784"/>
         <source>Active opacity:</source>
         <comment>@label</comment>
         <translation>Nieprzezroczystość aktywnej:</translation>
@@ -12498,7 +12499,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="372"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="794"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="800"/>
         <source>Inactive opacity:</source>
         <comment>@label</comment>
         <translation>Nieprzezroczystość nieaktywnej:</translation>
@@ -12517,7 +12518,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="387"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="811"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="817"/>
         <source>Border width:</source>
         <comment>@label</comment>
         <translation>Szerokość obramowania:</translation>
@@ -12530,7 +12531,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="403"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="829"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="835"/>
         <source>Corner radius:</source>
         <oldsource>Border radius:</oldsource>
         <comment>@label</comment>
@@ -12557,7 +12558,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="424"/>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="928"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="934"/>
         <source>Actions</source>
         <comment>@title</comment>
         <translation>Działania</translation>
@@ -12645,224 +12646,224 @@
         <translation>X:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="626"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="632"/>
         <source>X position in pixels</source>
         <comment>@label</comment>
         <translation>Pozycja X w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="634"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="640"/>
         <source>Y:</source>
         <comment>@label</comment>
         <translation>Y:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="641"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="647"/>
         <source>Y position in pixels</source>
         <comment>@label</comment>
         <translation>Pozycja Y w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="649"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="655"/>
         <source>Width:</source>
         <comment>@label</comment>
         <translation>Szerokość:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="656"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="662"/>
         <source>Width in pixels</source>
         <comment>@label</comment>
         <translation>Szerokość w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="664"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="670"/>
         <source>Height:</source>
         <comment>@label</comment>
         <translation>Wysokość:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="671"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="677"/>
         <source>Height in pixels</source>
         <comment>@label</comment>
         <translation>Wysokość w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="701"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="707"/>
         <source>Appearance</source>
         <comment>@title</comment>
         <translation>Wygląd</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="709"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="715"/>
         <source>Use custom colors</source>
         <comment>@option:check</comment>
         <translation>Użyj własnych barw</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="713"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="719"/>
         <source>Enable custom colors for this zone</source>
         <comment>@info:accessibility</comment>
         <translation>Włącz własne barwy dla tej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="727"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="733"/>
         <source>Highlight color picker</source>
         <comment>@label</comment>
         <translation>Wybór barwy podświetlenia</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="728"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="734"/>
         <source>Choose color for highlighted/active zones</source>
         <comment>@info:tooltip</comment>
         <translation>Wybierz barwę dla podświetlonych/aktywnych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="745"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="751"/>
         <source>Inactive color picker</source>
         <comment>@label</comment>
         <translation>Wybór barwy nieaktywnej</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="746"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="752"/>
         <source>Choose color for non-selected zones</source>
         <comment>@info:tooltip</comment>
         <translation>Wybierz barwę dla niezaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="762"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="768"/>
         <source>Border color picker</source>
         <comment>@label</comment>
         <translation>Wybór barwy obramowania</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="763"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="769"/>
         <source>Choose color for zone borders</source>
         <comment>@info:tooltip</comment>
         <translation>Wybierz barwę obramowań stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="783"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="789"/>
         <source>Zone active opacity</source>
         <comment>@label</comment>
         <translation>Nieprzezroczystość aktywnej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="784"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="790"/>
         <source>Adjust zone opacity when highlighted (0-100%)</source>
         <comment>@info:tooltip</comment>
         <translation>Dostosuj nieprzezroczystość strefy, gdy jest podświetlona (0-100%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="799"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="805"/>
         <source>Zone inactive opacity</source>
         <comment>@label</comment>
         <translation>Nieprzezroczystość nieaktywnej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="800"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="806"/>
         <source>Adjust zone opacity when not highlighted (0-100%)</source>
         <comment>@info:tooltip</comment>
         <translation>Dostosuj nieprzezroczystość strefy, gdy nie jest podświetlona (0-100%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="818"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="824"/>
         <source>Border width in pixels</source>
         <comment>@label</comment>
         <translation>Szerokość obramowania w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="819"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="825"/>
         <source>Set zone border width in pixels (0-%1)</source>
         <comment>@info:tooltip</comment>
         <translation>Ustaw szerokość obramowania strefy w pikselach (0-%1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="837"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="843"/>
         <source>Set zone corner radius in pixels (0-%1)</source>
         <comment>@info:tooltip</comment>
         <translation>Ustaw promień narożnika strefy w pikselach (0-%1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="836"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="842"/>
         <source>Corner radius in pixels</source>
         <oldsource>Border radius in pixels</oldsource>
         <comment>@label</comment>
         <translation>Promień narożnika w pikselach</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="850"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="856"/>
         <source>Overlay</source>
         <comment>@title</comment>
         <translation>Nakładka</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="858"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="864"/>
         <source>Style:</source>
         <comment>@label</comment>
         <translation>Styl:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="860"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="866"/>
         <source>Use layout default</source>
         <comment>@item:inlistbox overlay mode</comment>
         <translation>Użyj domyślnych ustawień układu</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="869"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="875"/>
         <source>Zone overlay display mode</source>
         <comment>@label</comment>
         <translation>Tryb wyświetlania nakładki strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="870"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="876"/>
         <source>Override the overlay style for this zone only</source>
         <comment>@info:accessibility</comment>
         <translation>Zastąp styl nakładki tylko dla tej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="934"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="940"/>
         <source>Delete Zone</source>
         <comment>@action:button</comment>
         <translation>Usuń strefę</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="938"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="944"/>
         <source>Delete the selected zone</source>
         <comment>@info</comment>
         <translation>Usuń zaznaczoną strefę</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1014"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1021"/>
         <source>Zone Highlight Color</source>
         <comment>@title:window</comment>
         <translation>Barwa podświetlenia strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1028"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1035"/>
         <source>Zone Inactive Color</source>
         <comment>@title:window</comment>
         <translation>Barwa nieaktywnej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1042"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1049"/>
         <source>Zone Border Color</source>
         <comment>@title:window</comment>
         <translation>Barwa obramowania strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1059"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1066"/>
         <source>Highlight Color for All Selected Zones</source>
         <comment>@title:window</comment>
         <translation>Barwa podświetlenia dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1073"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1080"/>
         <source>Inactive Color for All Selected Zones</source>
         <comment>@title:window</comment>
         <translation>Barwa nieaktywna dla wszystkich zaznaczonych stref</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1087"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/PropertyPanel.qml.cpp" line="1094"/>
         <source>Border Color for All Selected Zones</source>
         <comment>@title:window</comment>
         <translation>Barwa obramowania dla wszystkich zaznaczonych stref</translation>
@@ -13186,85 +13187,91 @@
         <translation>Zaimportuj układ z pliku JSON</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="448"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="452"/>
+        <source>Save the layout before exporting it</source>
+        <comment>@info:tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="457"/>
         <source>Export layout to file</source>
         <comment>@tooltip</comment>
         <translation>Eksportuj układ do pliku</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="450"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="467"/>
         <source>Export Layout</source>
         <comment>@action</comment>
         <translation>Eksportuj układ</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="451"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="468"/>
         <source>Export the current layout to a JSON file</source>
         <comment>@info</comment>
         <translation>Wyeksportuj bieżący układ do pliku JSON</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="465"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="487"/>
         <source>Exit fullscreen mode (F11)</source>
         <comment>@tooltip</comment>
         <translation>Wyjdź z trybu pełnego ekranu (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="465"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="487"/>
         <source>Enter fullscreen mode (F11)</source>
         <comment>@tooltip</comment>
         <translation>Przejdź do trybu pełnego ekranu (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="468"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="490"/>
         <source>Exit Fullscreen</source>
         <comment>@action</comment>
         <translation>Wyjdź z pełnego ekranu</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="468"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="490"/>
         <source>Fullscreen</source>
         <comment>@action</comment>
         <translation>Pełny ekran</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="469"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="491"/>
         <source>Toggle fullscreen editing mode</source>
         <comment>@info</comment>
         <translation>Przełącz tryb edycji pełnoekranowej</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="476"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="498"/>
         <source>Quick reference guide (F1)</source>
         <comment>@tooltip</comment>
         <translation>Szybki przewodnik (F1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="478"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="500"/>
         <source>Help</source>
         <comment>@action</comment>
         <translation>Pomoc</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="479"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="501"/>
         <source>Open quick reference guide</source>
         <comment>@info</comment>
         <translation>Otwórz szybki przewodnik</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="491"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="513"/>
         <source>Close editor</source>
         <comment>@tooltip</comment>
         <translation>Zamknij edytor</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="493"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="515"/>
         <source>Close</source>
         <comment>@action</comment>
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="494"/>
+        <location filename=".qml-stubs/plasmazones/src/editor/qml/TopBar.qml.cpp" line="516"/>
         <source>Close the layout editor</source>
         <comment>@info</comment>
         <translation>Zamknij edytor układów</translation>

@@ -986,6 +986,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // this window's saved z-position.
                 KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
                 if (!w || w->isDeleted()) {
+                    // Handed on as closed rather than dropped, so the helper
+                    // sees the whole saved order and decides an all-closed one.
+                    read.append({/*alive=*/false, /*inView=*/false, /*spansContexts=*/false});
                     continue;
                 }
                 const bool here = m_effect->getWindowScreenId(w) == screenId && isOnOwnOutputCurrentDesktop(w)

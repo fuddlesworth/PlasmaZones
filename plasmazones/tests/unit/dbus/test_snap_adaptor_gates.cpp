@@ -11,7 +11,7 @@
  *        window being dragged (F773), and the effect's confirmations commit
  *        only real zones on real screens (F459). A restore asked for a screen
  *        the daemon does not know runs nothing, and a bus batch takes a
- *        restore entry only from the compositor bridge (F312).
+ *        restore entry only from the compositor bridge.
  */
 
 #include "wta_float_back_fixture.h"
@@ -816,7 +816,7 @@ private Q_SLOTS:
     // A restore entry unsnaps the window, floats it and moves it, none of
     // which the snap gate checks, so a bus batch takes one only from the
     // registered compositor bridge. A stranger's restore leaves the window
-    // snapped. A direct call, the daemon's own, commits it (F312).
+    // snapped. A direct call, the daemon's own, commits it.
     void busBatchRestoreIsTakenOnlyFromTheBridge()
     {
         GateFixture f;

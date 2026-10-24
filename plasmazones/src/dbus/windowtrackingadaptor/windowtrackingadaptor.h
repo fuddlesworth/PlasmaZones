@@ -745,7 +745,7 @@ public:
      * (m_lastManagedFrame), never a drag frame. The snap membership pass
      * reads it to tell where management left a window (a size-increment
      * client short of its zone, a strip or tile rect from another mode) from
-     * a spot the user moved it to (F293, F470). The settled frame only, not
+     * a spot the user moved it to. The settled frame only, not
      * WindowTrackingService::isManagedFrame, which also answers for every
      * member store's zone rect that the pass already compares for itself.
      */

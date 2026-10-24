@@ -755,11 +755,11 @@ private Q_SLOTS:
     // The doubling's edges. A shrink the doubling would take past the centre,
     // or below the window's own declared minimum, is taken one-sided: the
     // frame the drag ended at already honours both, and a doubled answer
-    // under them would persist an intent the window can never take (F104).
-    // An edge the user did not touch may read a pixel off on a fractional
-    // scale, and still counts as untouched (F281). A view the user panned
-    // away (detached) is left where it is by the relayout, so nothing
-    // re-centres and the drag is taken as it is (F105).
+    // under them would persist an intent the window can never take. An edge
+    // the user did not touch may read a pixel off on a fractional scale, and
+    // still counts as untouched. A view the user panned away (detached) is
+    // left where it is by the relayout, so nothing re-centres and the drag is
+    // taken as it is.
     void theCentredResizeDoublingHasItsLimits()
     {
         const QString lone = QStringLiteral("app|a");
@@ -813,10 +813,9 @@ private Q_SLOTS:
     // A user resize the strip refuses, with a frame within a pixel of the
     // rect it was offered, is explained by rounding: the memory of the
     // applied rect is dropped and no retile is scheduled, since one would
-    // offer the size the client already refused (F324). The next resize still
+    // offer the size the client already refused. The next resize still
     // reconciles with the memory gone, measured from the gesture's own start
-    // frame, instead of being discarded until a retile laid a new baseline
-    // (F323).
+    // frame, instead of being discarded until a retile laid a new baseline.
     void aRefusedResizeWithinARoundingPixelSkipsTheRetileAndTheNextOneStillLands()
     {
         QObject owner;

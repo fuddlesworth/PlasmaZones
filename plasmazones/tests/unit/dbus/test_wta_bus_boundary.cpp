@@ -82,7 +82,7 @@ private Q_SLOTS:
     // screen goes with its id: an activation with no screen leaves none, and
     // one on a screen the daemon does not know yet leaves none until the held
     // report lands. Window shortcuts then use the cursor's screen, never the
-    // last window's (F298, F438). Mutation: restore the guarded assignment and
+    // last window's. Mutation: restore the guarded assignment and
     // both reads answer DP-1.
     void activationReplacesThePreviousWindowsScreen()
     {
@@ -107,7 +107,7 @@ private Q_SLOTS:
     // A crossing report for the focused window whose activation is still held
     // runs that activation on the newer screen rather than discarding it: the
     // activation's own work (here the snap float's re-home) happens, on the
-    // screen the window is on (F439). Mutation: restore the shared hold key
+    // screen the window is on. Mutation: restore the shared hold key
     // and the float stays on DP-1.
     void crossingReportRunsAHeldActivation()
     {
@@ -206,7 +206,7 @@ private Q_SLOTS:
     // at while a zone held it in view, short of the zone for a size-increment
     // client, answers yes. A frame reported while the user drags it is a spot
     // the user chose and never counts, nor does any frame of a window never
-    // reported managed (F293, F470). Mutation: answer false in the override
+    // reported managed. Mutation: answer false in the override
     // and the settled frame reads as the user's.
     void settledManagedFrameIsTheOneReportedUnderManagement()
     {

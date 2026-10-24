@@ -1329,7 +1329,7 @@ void TestScrollEngineBehaviour::aMaximizedFloatDroppedUnderClientDecidesOpensUnm
     // maximize-to-edges flag. Dropped where the client decides, it arrives
     // the way an open does, and an open is never maximized: the flag would
     // hand the new column the raw work area on both axes in place of the size
-    // the user is holding (F365).
+    // the user is holding.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     auto* tracker = new StubWindowTracking(&owner);
@@ -1367,7 +1367,7 @@ void TestScrollEngineBehaviour::aFloatDroppedUnderClientDecidesLeavesItsFloorsBe
     // round trip on purpose, but a float dropped where the client decides
     // arrives the way an open does, and an open holds no floor. Kept, the
     // floor held the new column at the old extent and hid the size the user
-    // made the float (F366).
+    // made the float.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->respectMinimumSize = true;
@@ -1398,7 +1398,7 @@ void TestScrollEngineBehaviour::clientDecidedWidthReachesAnUnfloatOfASeededFloat
     // unfloat leg. A window floated AT OPEN never held a tile, so its unfloat
     // opens a fresh column, and that column opens the way the open path would
     // have opened it: at the client's own width where the client decides,
-    // not the configured default (F191).
+    // not the configured default.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->widthKind = static_cast<int>(DefaultWidthKind::ClientDecides);
@@ -1425,10 +1425,9 @@ void TestScrollEngineBehaviour::clientDecidedSizesAreLiftedIntoATabbedColumnAndC
     // A tabbed column whose tab indicator sits inside it offers its tab the
     // column less the indicator's thickness. A client-decided width or
     // height opening such a column is lifted by that reservation, so the
-    // client gets the size it asked for (F190). And a client-decided width is
-    // capped at the work area, as the height already was: the intent is
-    // persisted pixels, and one past the work area goes stale on a wider
-    // output (F368).
+    // client gets the size it asked for. And a client-decided width is capped
+    // at the work area, as the height already was: the intent is persisted
+    // pixels, and one past the work area goes stale on a wider output.
     const auto tabbedSettings = [](QObject* owner, bool eatsMain) {
         auto* settings = new StubScrollSettings(owner);
         settings->defaultColumnDisplay = static_cast<int>(ColumnDisplay::Tabbed);
@@ -1484,8 +1483,7 @@ void TestScrollEngineBehaviour::smartGapsJudgeAnOversizedOpenOnTheAreaItWillOccu
     // it measures is gone the moment a window opens a second column. The
     // oversized verdict is judged on the area the arrival will occupy: a
     // minimum that fits only the ungapped area floats instead of tiling at a
-    // size no column can honour, and one that fits the gapped area tiles
-    // (F495).
+    // size no column can honour, and one that fits the gapped area tiles.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->smartGaps = true;

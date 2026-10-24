@@ -413,7 +413,7 @@ private Q_SLOTS:
     }
 
     // A re-statement of one window is judged against the managed set like a
-    // batch, so it waits too (F166).
+    // batch, so it waits too.
     void restatementWaitsForTheAnnounce()
     {
         HeldSnapFixture h;
@@ -433,7 +433,7 @@ private Q_SLOTS:
 
     // A placement of the window that goes out while the batch is held (a user
     // verb in the same turn) is the newer one: the held batch must not follow
-    // it and put the window back (F552). The other window in the batch still
+    // it and put the window back. The other window in the batch still
     // goes.
     void heldPlacementSupersededByANewerOneIsDropped()
     {

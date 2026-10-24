@@ -29,7 +29,6 @@
 #include <QScreen>
 #include <QTimer>
 #include <QUuid>
-#include <QtMath>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {

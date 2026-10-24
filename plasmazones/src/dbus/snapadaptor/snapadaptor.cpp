@@ -104,7 +104,7 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
 
     // Any placement of a window that reaches the wire supersedes the one held
     // for it behind the announce: sent after it, the held one would put the
-    // window back where the newer command moved it from (F552). Both of the
+    // window back where the newer command moved it from. Both of the
     // WindowTracking placement signals, whoever emits them.
     m_connections.append(
         connect(adaptor, &WindowTrackingAdaptor::applyGeometryRequested, this, [this](const QString& windowId) {

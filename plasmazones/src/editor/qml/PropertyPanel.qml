@@ -618,7 +618,13 @@ Rectangle {
                     // offset past the screen, or a negative one the format
                     // allows), so showing it never clamps it. Writable because
                     // syncGeometryControls sets it from a fresher zone than
-                    // selectedZone before it writes the value.
+                    // selectedZone before it writes the value. With a negative
+                    // offset stored, the first step lands on 0 rather than one
+                    // past the stored value, because updateZoneFixedGeometry
+                    // clamps an edited offset to zero or more. That is by
+                    // design: the widened bound only displays the stored
+                    // offset, and an edit brings the zone back on screen. The
+                    // Y box behaves the same way.
                     from: Math.min(0, Math.floor(stored))
                     to: Math.max(editorController ? editorController.targetScreenSize.width : 99999, Math.ceil(stored))
                     value: stored
@@ -957,9 +963,10 @@ Rectangle {
 
                         // Re-sync every editable control imperatively: their
                         // declarative bindings die on the first imperative sync
-                        // (a user edit alone does not sever them), after which a selection change
-                        // would keep showing the previous zone's values and any
-                        // edit would stamp those stale values onto the new zone.
+                        // (a user edit alone does not sever them), after which
+                        // a selection change would keep showing the previous
+                        // zone's values and any edit would stamp those stale
+                        // values onto the new zone.
                         // If the lookup comes back empty the zone is gone or
                         // not yet published; syncing anyway would fall back to
                         // the panel's stale selectedZone and stamp the previous

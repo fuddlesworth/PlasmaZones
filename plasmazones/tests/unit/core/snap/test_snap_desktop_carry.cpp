@@ -630,7 +630,7 @@ private Q_SLOTS:
     // A window on desktops 1 and 2 with its own zone on each, moved to an
     // activity not in view and back before it arrived there, comes home in
     // each desktop's own zone, not only the one shown first: the waiting
-    // carry holds both (F431).
+    // carry holds both.
     void anActivityRoundTripKeepsEachDesktopsZone()
     {
         showActivity(kActY);
@@ -651,7 +651,7 @@ private Q_SLOTS:
     // The same window moved into the activity in view: each desktop is given
     // the slot of its own zone, not the first source's. Desktop 2 runs the
     // same layout in both activities and keeps its zone. Desktop 1 runs
-    // another there and takes the slot of its zone in that layout (F431).
+    // another there and takes the slot of its zone in that layout.
     void anActivityMoveIntoViewCarriesEachDesktopsZone()
     {
         const QStringList other = activityLayout();

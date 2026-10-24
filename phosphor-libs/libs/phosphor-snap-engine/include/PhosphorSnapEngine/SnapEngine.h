@@ -993,6 +993,11 @@ public:
     /// the screen the navigation verbs act on, the open path's landing screen,
     /// or the drag selector's source screen.
     bool isWindowExcluded(const QString& windowId, const QString& screenHint = QString()) const;
+    /// isWindowExcluded without the minimum-window-size floor: the Exclude rule
+    /// set alone, against the same full query. For a caller that judges the
+    /// floor on a size of its own, as the drag selector does on the size the
+    /// window holds as its own rather than the frame a zone or tile gave it.
+    bool isWindowExcludedByRule(const QString& windowId, const QString& screenHint = QString()) const;
 
 Q_SIGNALS:
     // ── Signals (relayed to the effect by SnapAdaptor and the WTA) ──
@@ -1227,6 +1232,10 @@ private:
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
     /// isWindowExcluded with the query's desktop set to @p desktop (>= 1), for a move not landed yet.
     bool isWindowExcludedAt(const QString& windowId, const QString& screenHint, int desktop) const;
+    /// The query both exclusion paths judge: the provider's full attributes
+    /// when wired, else the appId-only query, with the desktop set to
+    /// @p desktop when it is >= 1.
+    PhosphorRules::WindowQuery exclusionQueryFor(const QString& windowId, const QString& screenHint, int desktop) const;
     /// The windows snapped in @p zoneId on @p screenId in the context it shows, sorted, once each, without
     /// @p excludeWindowId (canonical compare) and without a float that still holds a zone (F182).
     QStringList windowsInZoneInView(const QString& zoneId, const QString& screenId,

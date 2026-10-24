@@ -209,10 +209,13 @@ int main(int argc, char* argv[])
         PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
     });
 
-    // Create the editor controller. This is cheap: wires up services and
-    // loads the local JSON config but does not make any blocking D-Bus calls to
-    // the daemon — those happen only when applyLaunchArgs() invokes
-    // loadLayout/createNewLayout.
+    // Create the editor controller. It wires up services and loads the local
+    // JSON config and layouts, and makes only a fixed number of bounded
+    // blocking D-Bus round trips to the daemon: the batched gap and overlay
+    // settings read, and the primary screen's scale for the local layout
+    // recalc. Each is capped by the daemon call timeout and fails fast when
+    // the daemon is not on the bus. The heavy daemon work (loadLayout,
+    // createNewLayout) happens only when applyLaunchArgs() runs.
     EditorController controller;
 
     // The launch controller owns the D-Bus single-instance registration and

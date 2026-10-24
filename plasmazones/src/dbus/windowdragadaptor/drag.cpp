@@ -124,7 +124,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // comment).
     {
         auto* snapEngine = m_windowTracking ? m_windowTracking->snapEngine() : nullptr;
-        m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
+        m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcludedByRule(windowId);
     }
 
     // Check if window started inside a zone (for restoreOriginalSizeOnUnsnap feature)
@@ -697,15 +697,19 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // tested only once a restore during the drag hands its own
                 // size back, and the gate is re-asked every tick until a
                 // preview begins, so a restore landing later is seen.
-                const int minW = m_settings->minimumWindowWidth();
-                const int minH = m_settings->minimumWindowHeight();
-                const QSize clientSize = dragInsertClientSize();
-                const bool belowMinimum = clientSize.isValid()
-                    && ((minW > 0 && clientSize.width() < minW) || (minH > 0 && clientSize.height() < minH));
-                const bool adoptionRefused = belowMinimum && !insertEngine->isWindowTiled(windowId);
+                const bool adoptionRefused = dragClientSizeBelowMinimum() && !insertEngine->isWindowTiled(windowId);
+                if (adoptionRefused != m_lastLoggedAdoptionRefused) {
+                    m_lastLoggedAdoptionRefused = adoptionRefused;
+                    if (adoptionRefused) {
+                        qCDebug(lcDbusWindow) << "drag-insert adoption refused:" << windowId << "on" << insertScreenId
+                                              << "is under the minimum window size at" << dragInsertClientSize();
+                    }
+                }
                 const bool began = !adoptionRefused && insertEngine->beginDragInsertPreview(windowId, insertScreenId);
-                qCDebug(lcDbusWindow) << "drag-insert preview begin:" << windowId << "on" << insertScreenId
-                                      << "engine=" << insertEngine->engineId() << "=>" << began;
+                if (!adoptionRefused) {
+                    qCDebug(lcDbusWindow) << "drag-insert preview begin:" << windowId << "on" << insertScreenId
+                                          << "engine=" << insertEngine->engineId() << "=>" << began;
+                }
                 if (!began) {
                     // Correct on tick 1, wrong on tick 2 without this. A failed
                     // begin (or an engine that dropped its own preview between

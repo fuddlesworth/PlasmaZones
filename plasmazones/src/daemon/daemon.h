@@ -1396,6 +1396,13 @@ private:
     bool m_shuttingDown = false;
     bool m_aboutToQuitConnected = false;
 
+    /// The startup welcome OSD is waiting for the first activity KActivities
+    /// reports (finalizeStartup). The activity handler (connectDesktopActivity)
+    /// shows it for the first non-empty one in place of its switch OSD, and
+    /// the fallback timer shows it when KActivities never reports. Whichever
+    /// runs first clears it.
+    bool m_welcomeOsdAwaitsActivity = false;
+
     /// Deadline bumped by `screenRemoved` (start.cpp). ~1 s cooldown prevents
     /// OSD shows during output teardown cascades and monitor hot-unplug.
     std::chrono::steady_clock::time_point m_screensSettlingUntil;

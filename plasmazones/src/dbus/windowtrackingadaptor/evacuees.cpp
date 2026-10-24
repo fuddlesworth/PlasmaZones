@@ -430,7 +430,7 @@ QString WindowTrackingAdaptor::reassertEvacuee(const OutputSettleRow& row, QSet<
     // tiling engine took over, and re-applying that zone rect there would
     // fight the tile the arms below re-assert. A geometry re-apply is a
     // placement, so none with snapping off or in a disabled context either,
-    // as getUpdatedWindowGeometries holds (F445).
+    // as getUpdatedWindowGeometries holds.
     if (m_cachedSnapEngine && !m_cachedSnapEngine->zoneForWindow(windowId).isEmpty() && m_service) {
         const QString screen = m_service->screenForWindow(windowId);
         const QStringList zones = m_service->zonesForWindow(windowId);

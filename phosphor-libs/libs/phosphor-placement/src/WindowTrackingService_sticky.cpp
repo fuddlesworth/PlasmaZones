@@ -240,7 +240,8 @@ void WindowTrackingService::forEachZoneAssignedWindow(
     const std::function<void(const QString&, const QStringList&, const QString&, int, const QString&,
                              PhosphorSnapEngine::SnapState*)>& fn) const
 {
-    Q_ASSERT(hasSnapState());
+    // Read paths (the empty-zone queries, the drop's snap assist) reach this
+    // with no snap store resolving, which walks nothing.
     if (!hasSnapState()) {
         return;
     }

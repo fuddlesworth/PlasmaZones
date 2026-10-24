@@ -779,10 +779,10 @@ private Q_SLOTS:
 
     // The exclusion gate's other half, and its limit. A window an Exclude rule
     // matches closes untracked like the small splash above and leaves no record
-    // either (F78). A window under the minimum size that already HAS a record
+    // either. A window under the minimum size that already HAS a record
     // of its own keeps it current: the gate may only stop a record from being
     // created, since every free window on a snapping screen closes through
-    // this branch (F62, F511). Mutation: drop the own-record test from the gate
+    // this branch. Mutation: drop the own-record test from the gate
     // and the kept window's float-back stays at its older rect.
     void testCloseOfExcludedWindowRefusesOnlyANewRecord()
     {
@@ -989,7 +989,7 @@ private Q_SLOTS:
         QVERIFY(recordSnapped(QStringLiteral("app|half"), QStringLiteral("DP-1/vs:1")));
         wta->setFrameGeometry(QStringLiteral("app|half"), 100, 100, 800, 600);
         // Hanging past DP-2's top edge, its centre on no output: it left
-        // nothing, and the primary screen's fallback must not say it did (F376).
+        // nothing, and the primary screen's fallback must not say it did.
         QVERIFY(recordSnapped(QStringLiteral("app|edge"), QStringLiteral("DP-2")));
         wta->setFrameGeometry(QStringLiteral("app|edge"), 3500, -700, 800, 600);
 

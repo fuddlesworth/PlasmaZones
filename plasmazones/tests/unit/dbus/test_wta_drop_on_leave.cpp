@@ -294,7 +294,7 @@ private Q_SLOTS:
     // A plain drag of a snapped window dropped on another snapping monitor
     // restores the size the window has free on the RELEASE monitor and
     // consumes that record, the rule the activated drop follows, so one drag
-    // lands one size whichever path ends it (F297, F491). The monitor it left
+    // lands one size whichever path ends it. The monitor it left
     // keeps its own record. Mutation: read the source monitor's record and the
     // restore is 640x480.
     void plainDropOnAnotherSnappingMonitorRestoresTheReleaseMonitorsSize()
@@ -694,7 +694,7 @@ private Q_SLOTS:
 
     // A snapped window KWin moved to another snapping monitor leaves every
     // engine's slot on the monitor it left, not only snap's, and the daemon
-    // hears of it, as a crossing between tiling screens does (F478). A tiling
+    // hears of it, as a crossing between tiling screens does. A tiling
     // slot surviving there would be seeded by a later mode switch on the new
     // monitor. Mutation: drop the release in windowScreenChanged's unsnap arm
     // and the autotile slot stays tiled with no hook call.
@@ -719,7 +719,7 @@ private Q_SLOTS:
     }
 
     // A free window carries a tiling float verdict on the monitor it left: the
-    // move between snapping monitors drops it too (F478). Mutation: restore
+    // move between snapping monitors drops it too. Mutation: restore
     // the snap-only release in the free arm and the verdict stays floating.
     void screenChanged_freeMoveReleasesAStaleTilingFloat()
     {

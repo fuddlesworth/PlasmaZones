@@ -288,7 +288,7 @@ void SnapAdaptor::resnapForVirtualScreenReconfigure(const QString& physicalScree
     // following their VS's new geometry after a swap/rotate/split edit.
     // Sequenced like the zone restores the same reconfigure flushes first
     // (Daemon::flushPendingSnapZoneRestores), so this newer batch lands after
-    // them and not ahead (F272).
+    // them and not ahead.
     commitBatch(entries, QStringLiteral("vs_reconfigure"));
 }
 
@@ -297,7 +297,7 @@ PhosphorProtocol::SnapAllResultList SnapAdaptor::calculateSnapAllWindows(const Q
 {
     qCDebug(lcDbusWindow) << "calculateSnapAllWindows: count=" << windowIds.size() << "screen=" << screenId;
     // Compositor-only: it records each candidate's free frame, which a
-    // foreign caller could otherwise overwrite for any window (F167).
+    // foreign caller could otherwise overwrite for any window.
     if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
         return {};
     }
@@ -322,7 +322,7 @@ void SnapAdaptor::snapAllWindows(const QString& screenId)
     }
     // The effect zone-snaps every window on the screen it is asked for, so
     // only a known screen snapping runs, switched on and not disabled in the
-    // context in view, as its sibling bus verbs gate it (F381).
+    // context in view, as its sibling bus verbs gate it.
     const QString screen = m_adaptor->resolveBusScreen(screenId);
     if (screen.isEmpty() || !m_engine->isActiveOnScreen(screen) || !snapPermittedForContext(QString(), screen, 0)) {
         qCInfo(lcDbusWindow) << "Bus snap-all refused on" << screenId;
@@ -366,7 +366,7 @@ void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
     // A restore entry unsnaps the window, floats it on the named screen and
     // moves it to the entry's rect, none of which a snap gate checks, so it is
     // taken only from the registered compositor bridge (or a direct call),
-    // and only on a screen snapping runs (F312).
+    // and only on a screen snapping runs.
     const std::optional<QString> caller = DbusHelpers::busCallerOf(this, QLatin1StringView(__func__));
     const bool restoresAdmitted = !caller || DbusHelpers::isBridgeCaller(this, *caller);
     const int desktops = m_adaptor->desktopCount();

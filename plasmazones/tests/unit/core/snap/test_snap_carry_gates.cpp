@@ -15,7 +15,7 @@
  *        parked before the window had a store ends with the unfloat (F331).
  *        A window snapping leaves alone gets no remembered zone back on an
  *        adoption, no re-apply or statement on a switch, and no owed
- *        float-back (F340).
+ *        float-back.
  */
 
 #include <QHash>
@@ -424,7 +424,7 @@ private Q_SLOTS:
     }
 
     // A window snapping leaves alone gets no remembered zone back when it is
-    // adopted into a desktop, as the carry refuses it one (F340).
+    // adopted into a desktop, as the carry refuses it one.
     void adoptionRestoresNoRememberedZoneForAnExcludedWindow()
     {
         const QString remembered = m_destination->zones().at(1)->id().toString();
@@ -476,7 +476,7 @@ private Q_SLOTS:
     }
 
     // ...nor the float-back a carry left owed for a hidden desktop's first
-    // showing, when snapping has come to leave it alone since (F340).
+    // showing, when snapping has come to leave it alone since.
     void anExcludedWindowIsOwedNoFloatBack()
     {
         snapOn(1, m_zoneIds[0]);

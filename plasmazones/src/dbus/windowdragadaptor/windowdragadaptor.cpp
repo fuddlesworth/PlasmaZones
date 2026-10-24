@@ -267,9 +267,11 @@ QSize WindowDragAdaptor::dragInsertAdoptedMinSize(const QString& windowId) const
 
 QSize WindowDragAdaptor::dragInsertClientSize() const
 {
-    // Every reader runs on an active drag (dragMoved, and the drop's settle),
-    // whose frame dragStarted or beginDrag's bypass arm recorded. A pending
-    // drag never begins a preview: its ticks stop at the promotion check.
+    // The engine readers run on an active drag (dragMoved, and the drop's
+    // settle), whose frame dragStarted or beginDrag's bypass arm recorded. The
+    // selector's size floor also asks on a pending drag's ticks, before
+    // promotion has copied its begin frame and fills-output answer over, so a
+    // pending drag reads them from where beginDrag put them.
     //
     // An engine sizes an arriving window by whatever this hands it (the
     // scroll engine's "the client decides" width and height), so only a size
@@ -281,20 +283,35 @@ QSize WindowDragAdaptor::dragInsertClientSize() const
     // seen as a live frame whose size differs from the one the drag began
     // with. Until then it hands none, and the engine reads the window's
     // float-back record instead.
+    const bool pending = m_draggedWindowId.isEmpty();
+    const QString& windowId = pending ? m_pendingSnapDragWindowId : m_draggedWindowId;
+    const QRect& beginFrame = pending ? m_pendingSnapDragGeometry : m_originalGeometry;
+    const bool beginFillsOutput = pending ? m_pendingSnapDragFillsOutput : m_originalFrameFillsOutput;
     if (m_dragStartManaged) {
         if (m_dragRestoredSize.isValid() && !m_dragRestoredSize.isEmpty()) {
             return m_dragRestoredSize;
         }
-        const QRect live = m_windowTracking ? m_windowTracking->frameGeometry(m_draggedWindowId) : QRect();
-        if (live.isValid() && m_originalGeometry.isValid() && live.size() != m_originalGeometry.size()) {
+        const QRect live = m_windowTracking ? m_windowTracking->frameGeometry(windowId) : QRect();
+        if (live.isValid() && beginFrame.isValid() && live.size() != beginFrame.size()) {
             return live.size();
         }
         return {};
     }
-    if (m_originalFrameFillsOutput || !m_originalGeometry.isValid()) {
+    if (beginFillsOutput || !beginFrame.isValid()) {
         return {};
     }
-    return m_originalGeometry.size();
+    return beginFrame.size();
+}
+
+bool WindowDragAdaptor::dragClientSizeBelowMinimum() const
+{
+    const QSize clientSize = dragInsertClientSize();
+    if (!m_settings || !clientSize.isValid()) {
+        return false;
+    }
+    const int minW = m_settings->minimumWindowWidth();
+    const int minH = m_settings->minimumWindowHeight();
+    return (minW > 0 && clientSize.width() < minW) || (minH > 0 && clientSize.height() < minH);
 }
 
 bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) const
@@ -1071,6 +1088,7 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_dragInsertCancelled = false;
     m_dragInsertReleasedAfterCancel = false;
     m_dragWindowExcludedFromSelector = false;
+    m_lastLoggedAdoptionRefused = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     // m_overlayIdled is intentionally NOT cleared here. Each drag-end

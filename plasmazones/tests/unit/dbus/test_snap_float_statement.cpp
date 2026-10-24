@@ -11,7 +11,7 @@
  *        several desktops has there, the per-window reconcile touching no
  *        other window (F742, F777, F778). The float-back goes back on for a
  *        frame management left the window at, a size-increment client's
- *        settled frame short of its zone included (F293), and never for one
+ *        settled frame short of its zone included, and never for one
  *        the user dragged it to. A float re-stated on a return from a tiling
  *        desktop is heard after that desktop's own float edge.
  */
@@ -337,8 +337,8 @@ private Q_SLOTS:
 
     // A size-increment client settles short of its zone, so its frame is not
     // the zone rect, yet management put it there. Entering the desktop where
-    // it floats puts it back on its float-back as for an exact zone frame
-    // (F293). The exact zone-rect compare alone missed it.
+    // it floats puts it back on its float-back as for an exact zone frame.
+    // The exact zone-rect compare alone missed it.
     void aFloatSettledShortOfItsZoneIsPutBack()
     {
         StatementFixture f;
@@ -434,12 +434,13 @@ private Q_SLOTS:
         QCOMPARE(unsnapped, 1);
     }
 
-    // A sticky window floating on desktop 1, shown on desktop 2 while a
-    // tiling mode runs there. The float edge the tiling engine sends from
-    // there goes through the same relay as snapping's, so the relay's
-    // last-broadcast memory reads "not floating" by the return, and the float
-    // re-stated on desktop 1 is heard rather than taken for a repeat. With no
-    // edge from there, the memory and the effect both still read "floating".
+    // A sticky window floating on desktop 1, shown on desktop 2 while
+    // scrolling runs there. The scrolling engine's handoff sends a "not
+    // floating" edge from there, which the autotile engine does not, and it
+    // goes through the same relay as snapping's, so the relay's last-broadcast
+    // memory reads "not floating" by the return, and the float re-stated on
+    // desktop 1 is heard rather than taken for a repeat. With no edge from
+    // there, the memory and the effect both still read "floating".
     void aFloatReStatedOnAReturnFromTilingIsHeard()
     {
         StatementFixture f;
@@ -466,10 +467,10 @@ private Q_SLOTS:
         };
         QSignalSpy relayed(f.wta, &WindowTrackingAdaptor::windowFloatingChanged);
 
-        runs(PhosphorZones::AssignmentEntry::Mode::Autotile);
+        runs(PhosphorZones::AssignmentEntry::Mode::Scrolling);
         f.showDesktop(kLeft, 2);
         f.snap->reconcileDesktopMemberships(kLeft, sticky);
-        // The tiling engine's edge, routed as the daemon's passive sync routes it.
+        // The scrolling engine's edge, routed as the daemon's passive sync routes it.
         f.wta->relayWindowFloatingChanged(w, false, kLeft);
         QCOMPARE(relayed.count(), 1);
         runs(PhosphorZones::AssignmentEntry::Mode::Snapping);

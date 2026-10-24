@@ -472,9 +472,14 @@ yesno() { if eval "$1"; then echo yes; else echo no; fi; }
 # "no (GOT vs WANT)"; assert it with check DESC "$(within ...)" = yes
 within() {
     # A failed read hands an empty or non-numeric value, which arithmetic
-    # would take for 0 and so answer yes beside a want of 0.
-    case "$1" in '' | *[!0-9-]*) echo "no ($1 vs $2)"; return ;; esac
-    local d=$(($1 - $2)) t="${3:-2}"
+    # would take for 0 and so answer yes beside a want of 0. Each argument
+    # must be a whole integer, as check's numeric compares require.
+    local t="${3:-2}"
+    if ! [[ "$1" =~ ^-?[0-9]+$ && "$2" =~ ^-?[0-9]+$ && "$t" =~ ^[0-9]+$ ]]; then
+        echo "no ($1 vs $2)"
+        return
+    fi
+    local d=$(($1 - $2))
     if [ "$d" -ge "-$t" ] && [ "$d" -le "$t" ]; then echo yes; else echo "no ($1 vs $2)"; fi
 }
 # zoneid LAYOUT N -> the id of zone number N in layout LAYOUT

@@ -353,7 +353,7 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // updateLayout, the editor's save path (F222, F566).
+    // updateLayout, the editor's save path.
     // ─────────────────────────────────────────────────────────────────
 
     // The unit of a layout's fixed zones is saved with it, and a save that

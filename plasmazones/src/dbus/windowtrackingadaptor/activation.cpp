@@ -182,8 +182,8 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     // for it (F81, F302). The previous window's screen goes either way: it
     // was that window's, and paired with this window's id it sends shortcuts
     // to a screen this window may not be on. With none known, window
-    // shortcuts fall back to the cursor's screen (as after windowClosed,
-    // F291) until the report or the held replay names this window's.
+    // shortcuts fall back to the cursor's screen (as after windowClosed)
+    // until the report or the held replay names this window's.
     const QString resolvedScreen = resolveFocusedWindowScreen(windowId, screenId);
     m_lastActiveScreenId = resolvedScreen;
     if (resolvedScreen.isEmpty() && !screenId.isEmpty()) {

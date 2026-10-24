@@ -22,9 +22,9 @@
 // (x11ForeignSizeVerdict) and which X11 sizes are read as an answer
 // (x11SizeAnswersColumn), when a strip window's frame reads as its
 // client's answer to its column, whether that answer is new, which answers
-// are reported to the engine, and the size it is told. Same header-only reach as
-// test_anchor_uniforms: kwin-effect has no linkable test target, so the pure
-// halves are extracted into a header this test includes directly.
+// are reported to the engine, and the size it is told. Same header-only
+// reach as test_anchor_uniforms: kwin-effect has no linkable test target, so
+// the pure halves are extracted into a header this test includes directly.
 
 #include <tilinghandler/scrolldecisions.h>
 
@@ -1403,6 +1403,7 @@ private Q_SLOTS:
         // Rounding of the expected extent is taken too.
         QCOMPARE(reportedCommittedSize(offered, expected, QSize(1259, 998)), offered);
     }
+
     // An answer beyond the tolerance goes as it is, per axis.
     void reportedCommittedSize_answerBeyondTheHintsIsKept()
     {
@@ -1412,6 +1413,7 @@ private Q_SLOTS:
         QCOMPARE(reportedCommittedSize(offered, expected, QSize(1258, 900)), QSize(1264, 900));
         QCOMPARE(reportedCommittedSize(offered, expected, QSize(1000, 1200)), QSize(1000, 1200));
     }
+
     // A Wayland client's expected size is the offer itself: within the
     // tolerance it is reported as the offer, which the engine reads the same
     // way, and beyond it unchanged.

@@ -12,7 +12,7 @@
 #   scripts/nested-kwin/run-nested.sh [output-count] [width height] [scale]
 #
 # width/height apply to EVERY output (kwin_wayland's flags are global).
-# scale reaches only the visible window (PZ_NESTED_VISIBLE). The headless
+# scale is passed only to the visible window (PZ_NESTED_VISIBLE). The headless
 # --virtual backend does not take --scale as an output scale: it multiplies
 # the mode by it and keeps scale 1 (1600x900 at 1.25 comes up 2000x1125 at
 # scale 1), so the script does not pass it there and warns instead. To scale

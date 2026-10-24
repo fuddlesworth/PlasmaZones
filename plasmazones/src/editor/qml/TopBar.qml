@@ -440,15 +440,37 @@ ToolBar {
             // Export button. The daemon exports its saved copy, so the button
             // waits for a save. A new layout counts as unsaved until its first
             // save, so this covers it too.
-            ToolButton {
+            //
+            // The tooltip lives on a wrapper because a disabled control gets
+            // no hover, and the disabled state is the one that needs
+            // explaining. The wrapper stays enabled, so its HoverHandler
+            // reports the pointer over the button in both states.
+            Item {
+                id: exportButtonWrapper
+
+                readonly property bool controllerReady: topBar.editorController !== null && topBar.editorController !== undefined
+                readonly property string reasonText: controllerReady && !exportButton.enabled ? i18nc("@info:tooltip", "Save the layout before exporting it") : ""
+
                 visible: !topBar.previewMode && !topBar.templateMode
-                icon.name: "document-export"
-                enabled: topBar.editorController !== null && topBar.editorController !== undefined && topBar.editorController.layoutId !== "" && !topBar.editorController.hasUnsavedChanges
-                onClicked: topBar.exportDialog.open()
-                ToolTip.text: i18nc("@tooltip", "Export layout to file")
-                ToolTip.visible: hovered
-                Accessible.name: i18nc("@action", "Export Layout")
-                Accessible.description: i18nc("@info", "Export the current layout to a JSON file")
+                implicitWidth: exportButton.implicitWidth
+                implicitHeight: exportButton.implicitHeight
+                ToolTip.text: reasonText !== "" ? reasonText : i18nc("@tooltip", "Export layout to file")
+                ToolTip.visible: exportButtonHover.hovered
+
+                ToolButton {
+                    id: exportButton
+
+                    anchors.fill: parent
+                    icon.name: "document-export"
+                    enabled: exportButtonWrapper.controllerReady && topBar.editorController.layoutId !== "" && !topBar.editorController.hasUnsavedChanges
+                    onClicked: topBar.exportDialog.open()
+                    Accessible.name: i18nc("@action", "Export Layout")
+                    Accessible.description: exportButtonWrapper.reasonText !== "" ? exportButtonWrapper.reasonText : i18nc("@info", "Export the current layout to a JSON file")
+                }
+
+                HoverHandler {
+                    id: exportButtonHover
+                }
             }
 
             // Visual separator (hide when import/export are hidden to avoid orphan)

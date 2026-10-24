@@ -315,7 +315,12 @@ struct FloatRestore
     /// (ScrollEngine::restoreTabbedHeightOwner). A resize of the column while
     /// this window was away (an interactive drag, a height verb, another tab
     /// claiming it) is the user's newer word on the column's extent, and
-    /// reclaiming would revert it. Empty when no tab inherited (the column
+    /// reclaiming would revert it, so a resize made while the heir is still
+    /// in the column blocks the reclaim. One made after the heir left does
+    /// not: the test keys on the heir alone, so once the heir is gone a
+    /// resize or claim by any other tab is reverted on this window's return.
+    /// That is the accepted cost of not recording every ownership move made
+    /// while this window was away. Empty when no tab inherited (the column
     /// closed with the window) or for an entry the drag paths captured, whose
     /// hold leaves no room for such a resize and which hand the ownership
     /// back unconditionally.
@@ -514,9 +519,12 @@ struct CommittedCrossExtent
     /// one (a whole-number scale picked from the column's width) answers a
     /// different width differently, so a column whose offer along the strip
     /// has moved past this drops the floor rather than holding the tile to a
-    /// stale one. Re-stamped when the client's own answer moves that offer (a
-    /// wider answer teaching a floor along the strip), since the cross answer
-    /// in the same commit was given at that very width.
+    /// stale one. Re-stamped when the client's own answer leaves a changed,
+    /// nonzero floor along the strip (a wider answer teaching one, or a
+    /// narrower one giving part of one back), since the cross answer in the
+    /// same commit was given at that very width. An answer that gives the
+    /// floor along the strip back entirely is not re-stamped, and the premise
+    /// check reads the offer it moved like any other.
     int mainPx = 0;
     /// A shorter answer has given part or all of floorPx back since it was
     /// learned, CommittedMainExtent::gaveBack's rule across the strip: it

@@ -342,7 +342,7 @@ private Q_SLOTS:
 
     // First come used to be enough: a peer registered before the compositor
     // held the registration while it stayed on the bus, and the compositor's
-    // own registration was refused as the second one (F48).
+    // own registration was refused as the second one.
     void aPeerThatIsNotTheCompositorCannotRegisterFirst()
     {
         Fixture f;

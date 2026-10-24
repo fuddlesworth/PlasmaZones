@@ -387,7 +387,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         // Bypass twin of dragStarted's excluded-window selector suppression.
         {
             auto* snapEngine = m_windowTracking ? m_windowTracking->snapEngine() : nullptr;
-            m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
+            m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcludedByRule(windowId);
         }
         m_originalGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
         m_originalFrameFillsOutput = windowFillsOutput(windowId);
@@ -496,7 +496,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // tick would refuse.
     {
         auto* snapEngine = m_windowTracking ? m_windowTracking->snapEngine() : nullptr;
-        m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
+        m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcludedByRule(windowId);
     }
     m_pendingSnapDragGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
     m_pendingSnapDragFillsOutput = windowFillsOutput(windowId);
@@ -539,9 +539,11 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
     // tick rather than once per arm.
     const ScreenResolution resolved =
         (!triggerHeld && !toggleMode) ? resolveScreenAt(QPointF(cursorX, cursorY)) : ScreenResolution{};
-    // The exclusion gate mirrors checkZoneSelectorTrigger's: an edge hover
-    // must not promote a drag whose popup the very next tick refuses.
-    if (!triggerHeld && !toggleMode && !m_dragWindowExcludedFromSelector && m_settings) {
+    // The exclusion gate mirrors checkZoneSelectorTrigger's, the size floor
+    // included: an edge hover must not promote a drag whose popup the very
+    // next tick refuses.
+    if (!triggerHeld && !toggleMode && !m_dragWindowExcludedFromSelector && !dragClientSizeBelowMinimum()
+        && m_settings) {
         // Live-mode disable check — `handleFor` not `handleForMode(Snapping)`.
         // The user may have flipped the screen's mode between beginDrag
         // and this cursor tick; consult the destination's actual mode

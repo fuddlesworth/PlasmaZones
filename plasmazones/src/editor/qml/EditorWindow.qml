@@ -1039,7 +1039,8 @@ Window {
             notifications.showSuccess(i18nc("@info", "Layout exported"));
         }
 
-        // Export failures arrive as self-contained sentences, so no prefix.
+        // Every export failure message already says that the export failed
+        // and why, so it shows verbatim with no prefix.
         function onLayoutExportFailed(error) {
             notifications.showError(error);
         }

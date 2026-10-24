@@ -402,12 +402,14 @@ void EditorController::endMultiZoneDrag(bool commit)
         return;
     }
 
-    // Cancel puts every zone back, and so does a commit that moved nothing.
-    // That commit creates no command, but the preview may have shifted a zone
-    // anyway: multiDragTarget clamps a fixed zone into the reference, so one
-    // parked at a negative offset or past an edge moved on the first preview
-    // tick and would otherwise stay moved with no undo and no unsaved mark.
-    bool restoreStarts = !commit;
+    // Every zone goes back unless a commit records the move. Cancel restores,
+    // and so does a commit that moved nothing or whose primary zone is gone
+    // (no delta to commit by). Neither creates a command, but the preview may
+    // have shifted a zone anyway: multiDragTarget clamps a fixed zone into the
+    // reference, so one parked at a negative offset or past an edge moved on
+    // the first preview tick and would otherwise stay moved with no undo and
+    // no unsaved mark.
+    bool restoreStarts = true;
     if (commit && !m_dragInitialPositions.isEmpty()) {
         // Calculate final delta from primary zone
         QVariantMap primaryZone = m_zoneManager->getZoneById(m_dragPrimaryZoneId);

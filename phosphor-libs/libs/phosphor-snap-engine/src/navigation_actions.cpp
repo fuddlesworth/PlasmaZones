@@ -176,7 +176,13 @@ bool SnapEngine::isWindowExcluded(const QString& windowId, const QString& screen
     return isWindowExcludedAt(windowId, screenHint, 0);
 }
 
-bool SnapEngine::isWindowExcludedAt(const QString& windowId, const QString& screenHint, int desktop) const
+bool SnapEngine::isWindowExcludedByRule(const QString& windowId, const QString& screenHint) const
+{
+    return evaluateExcludeRules(exclusionQueryFor(windowId, screenHint, 0));
+}
+
+PhosphorRules::WindowQuery SnapEngine::exclusionQueryFor(const QString& windowId, const QString& screenHint,
+                                                         int desktop) const
 {
     // Build the richest query available: the daemon-supplied full attributes
     // (window class / title / frame size / flags) when the provider is wired,
@@ -194,6 +200,12 @@ bool SnapEngine::isWindowExcludedAt(const QString& windowId, const QString& scre
     if (desktop >= 1) {
         query->virtualDesktop = desktop;
     }
+    return *query;
+}
+
+bool SnapEngine::isWindowExcludedAt(const QString& windowId, const QString& screenHint, int desktop) const
+{
+    const PhosphorRules::WindowQuery query = exclusionQueryFor(windowId, screenHint, desktop);
 
     // Minimum-window-size exclusion — only meaningful when the query carries the
     // frame size (full-query path). Mirrors the tiling eligibility filter, so a
@@ -201,14 +213,13 @@ bool SnapEngine::isWindowExcludedAt(const QString& windowId, const QString& scre
     if (auto* s = snapSettings()) {
         const int minW = s->minimumWindowWidth();
         const int minH = s->minimumWindowHeight();
-        if ((minW > 0 && query->width && *query->width < minW)
-            || (minH > 0 && query->height && *query->height < minH)) {
+        if ((minW > 0 && query.width && *query.width < minW) || (minH > 0 && query.height && *query.height < minH)) {
             return true;
         }
     }
 
     // Rule-based exclusion against the full query (no rules → nothing to match).
-    return evaluateExcludeRules(*query);
+    return evaluateExcludeRules(query);
 }
 
 bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)

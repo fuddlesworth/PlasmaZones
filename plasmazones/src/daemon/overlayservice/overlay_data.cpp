@@ -327,7 +327,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // The stored relative rect is exact for a relative zone. A fixed zone's is
     // only the hint written when the layout was saved, so it is normalized
     // against the rect it is laid out in on this screen, at this output's
-    // scale: a layout counting device pixels moves with the scale (F420). The
+    // scale: a layout counting device pixels moves with the scale. The
     // caller resolves both once for the screen (fixedReference, fixedScale).
     QRectF relGeo = zone->relativeGeometry();
     if (zone->isFixedGeometry() && fixedReference.isValid()) {

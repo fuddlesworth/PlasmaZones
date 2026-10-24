@@ -32,7 +32,9 @@ namespace PhosphorPlacement {
 
 void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
 {
-    Q_ASSERT(hasSnapState());
+    // Reached with no snap store too: the compositor's recordSnapIntent slot
+    // and the drop's commit arms call it whether or not an engine is wired.
+    // Nothing is recorded then.
     PhosphorSnapEngine::SnapState* globals = snapGlobals();
     if (!globals) {
         return;

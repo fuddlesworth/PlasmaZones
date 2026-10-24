@@ -142,7 +142,7 @@ echo "  unsettled column-answer reads for x1 in the whole run: $UNSETTLED, by ro
 unsettled | tail -3 | sed 's/^/    /'
 if [ "$GROWN" = no ]; then
     if [ "$ROUNDING" -gt 0 ]; then
-        check "F337 at scale $SCALE: x1's frame never read settled, moveResizeGeometry and the frame differ by rounding alone ($ROUNDING reads), so the learn and the report never ran" \
+        check "F337 suspected at scale $SCALE: $ROUNDING reads of x1 unsettled by rounding alone (moveResizeGeometry and the frame differ under a pixel)" \
             "$ROUNDING" -eq 0
     else
         note "the column did not grow and no read was unsettled by rounding alone, so F337 is not the cause here"

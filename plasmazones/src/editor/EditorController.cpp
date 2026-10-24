@@ -86,15 +86,11 @@ EditorController::EditorController(QObject* parent)
     // explicit loadLayouts() call is the only thing that rescans disk. This
     // one covers startup, and the D-Bus subscriptions wired below cover every
     // later change. Do not drop either as redundant.
+    // It emits layoutsChanged unconditionally at the end of every pass, an
+    // empty layouts directory included, so the connect above has already
+    // recomputed fixed-geometry zones when this returns. The settings app
+    // relies on the same emission and makes no second call either.
     m_localLayoutManager->loadLayouts();
-    // Recompute zone geometry for fixed-geometry layouts so a loaded layout
-    // carries real zone rects — see the matching
-    // comment in SettingsController. The connect above also fires
-    // recalcLocalLayouts on the first loadLayouts() emission, but the
-    // explicit call here covers the single-shot path where loadLayouts()
-    // returns no-op (e.g. empty layouts dir, recalc still has work to do
-    // against any pre-existing in-memory state).
-    recalcLocalLayouts();
 
     // Subscribe to the daemon's layout-change D-Bus signals and force
     // a local-source reload when any fire. Nothing watches the layout

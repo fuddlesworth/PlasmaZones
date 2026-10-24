@@ -126,8 +126,9 @@ public:
     [[nodiscard]] bool isUrgent() const;
     [[nodiscard]] QVariantList menuModel() const;
 
-    /// The cell's rect in screen pixels (work-area fractions scaled onto
-    /// `workArea`), or a null rect for an unknown id.
+    /// The cell's rect in this screen's logical coordinates, origin at its
+    /// top-left (work-area fractions scaled onto `workArea`), or a null rect
+    /// for an unknown id.
     Q_INVOKABLE QRect cellRect(const QString& id) const;
     /// The id of the cell holding the focused window, or empty.
     Q_INVOKABLE QString focusedCellId() const;
@@ -155,7 +156,8 @@ public:
     /// Register the miniature as a drop proxy for the compositor's own
     /// window drag (`WindowDrag.registerDropProxy`). `miniatureScreenRect`
     /// is the miniature's rect and `cellScreenRects` one `{id, x, y, w, h}`
-    /// map per cell, both in this screen's pixels. Snapping only; a no-op
+    /// map per cell, both in this screen's logical coordinates with its
+    /// top-left as origin, as the daemon reads them. Snapping only; a no-op
     /// otherwise and on a daemon without it. Change-gated: re-sent only
     /// when the payload differs.
     Q_INVOKABLE void registerDropProxy(const QRect& miniatureScreenRect, const QVariantList& cellScreenRects);

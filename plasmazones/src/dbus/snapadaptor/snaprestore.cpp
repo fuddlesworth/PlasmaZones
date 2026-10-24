@@ -191,7 +191,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     Q_UNUSED(minWidth)
     Q_UNUSED(minHeight)
     // It also claims the window's placement record and can adopt a pending
-    // evacuee float, both the compositor's to trigger (F167).
+    // evacuee float, both the compositor's to trigger.
     if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
         return;
     }

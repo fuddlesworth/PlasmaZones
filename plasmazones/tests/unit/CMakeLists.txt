@@ -219,8 +219,7 @@ add_test(NAME test_wts_activity_scope COMMAND test_wts_activity_scope)
 # window shown in both (#1151). Also the span a layout-switch resnap keeps,
 # the declined managed restore's forget, the re-file of an adopted membership
 # on a split, and the member-only reads of the resnap and the rotation. Same
-# fixture shape as test_snap_per_monitor (QTEST_MAIN so zone geometry
-# resolves).
+# fixture shape as test_snap_per_monitor (QTEST_MAIN so zone geometry resolves).
 add_executable(test_snap_desktop_membership core/snap/test_snap_desktop_membership.cpp)
 target_link_libraries(test_snap_desktop_membership PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_desktop_membership COMMAND test_snap_desktop_membership)
@@ -926,8 +925,9 @@ p_add_test(test_layout_registry_cache core/layout/test_layout_registry_cache.cpp
 # The editor's save payload is schema-gated at the D-Bus boundary, so the shape
 # EditorController::saveLayout emits has to satisfy the layout schema. Pins both
 # serialized forms of aspectRatioClass (editor int, canonical string from
-# Layout::toJson) against the schema that gates createLayoutFromJson/updateLayout,
-# the type of the device-pixel unit flag (#1160), and the Layout::toJson round
+# Layout::toJson) against the schema that gates
+# createLayoutFromJson/updateLayout, the type of the device-pixel unit flag
+# (#1160), and the Layout::toJson round
 # trip of fixed zones, in logical and in device pixels, back through that gate.
 p_add_test(test_layout_schema_editor_shape core/layout/test_layout_schema_editor_shape.cpp)
 
@@ -1919,8 +1919,9 @@ add_test(NAME test_drag_policy COMMAND test_drag_policy)
 # follow-up mechanisms): the live sweep's dragStillActive derivation, the
 # dead-session sweep's mark-first ordering, TilingAdaptor's emit-time
 # desktop stamping under a per-output report burst, and the placements held
-# behind a queued screens announce (#1151): TilingAdaptor::runBehindScreensAnnounce
-# and SnapAdaptor's sequenced batches and re-statements.
+# behind a queued screens announce (#1151):
+# TilingAdaptor::runBehindScreensAnnounce and SnapAdaptor's sequenced batches
+# and re-statements.
 add_executable(test_windowdrag_cancel_sweeps dbus/test_windowdrag_cancel_sweeps.cpp
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_windowdrag_cancel_sweeps PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
@@ -2995,9 +2996,10 @@ unset(_pack_validator_arms)
 # switching custom colours on sets only that property, the geometry snapshot
 # the fill and divider undo replay (pixels back verbatim, the relative copy
 # re-derived against the current reference, and a cancel's restore left
-# unclamped and unmarked), and the clipboard's round trip of a fixed zone. ZoneManager, the two commands and the clipboard
-# helper live in the editor executable rather than a library, so their TUs are
-# compiled into the test directly.
+# unclamped and unmarked), and the clipboard's round trip of a fixed zone.
+# ZoneManager, the undo commands and the clipboard helper live in the editor
+# executable rather than a library, so their TUs are compiled into the test
+# directly.
 add_executable(test_zone_zorder editor/test_zone_zorder.cpp
                ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/helpers/ZoneSerialization.cpp
                ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/ZoneManager.cpp

@@ -12,6 +12,11 @@
 # Usage:
 #   scripts/nested-shell/run-shell.sh [output-count] [width height] [scale]
 #
+# The arguments go to scripts/nested-kwin/run-nested.sh, which passes scale
+# only to a visible window (PZ_NESTED_VISIBLE). A headless output stays at
+# scale 1; set it once the session is up with
+#   kscreen-doctor output.Virtual-0.scale.1.25
+#
 # Headless by default (kwin --virtual; drive it with ctl.sh and read it
 # with capture.sh). Set PZ_NESTED_VISIBLE=1 to get the nested compositor
 # as a window on the host desktop instead, same session semantics, with

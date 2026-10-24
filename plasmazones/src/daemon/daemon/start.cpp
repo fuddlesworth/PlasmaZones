@@ -590,9 +590,12 @@ void Daemon::connectDesktopActivity()
                 [this](const QString& activityId) {
                     // The first activity known after a late start is no
                     // switch: the startup welcome OSD waits for exactly this
-                    // change and shows it (finalizeStartup), so the switch OSD
-                    // below would be a second one.
-                    const bool initial = m_layoutManager->currentActivity().isEmpty();
+                    // change (finalizeStartup) and is shown for it below, in
+                    // place of the switch OSD. Keyed on the welcome's own
+                    // pending flag, not on the registry holding no activity:
+                    // an empty report later on leaves the registry empty too,
+                    // and the next real switch would then lose its OSD.
+                    const bool welcome = m_welcomeOsdAwaitsActivity && !activityId.isEmpty();
                     // Registry before overlay — see the initial-activity note
                     // above (the overlay's refresh resolves via the registry).
                     m_layoutManager->setCurrentActivity(activityId);
@@ -644,7 +647,10 @@ void Daemon::connectDesktopActivity()
                         m_overlayService->updateGeometries();
                     }
 
-                    if (!initial) {
+                    if (welcome) {
+                        m_welcomeOsdAwaitsActivity = false;
+                        showOsdForAllScreens(activityId);
+                    } else {
                         showDesktopSwitchOsd(activityId);
                     }
                     // Refresh the active-assignment snapshot for the new activity
