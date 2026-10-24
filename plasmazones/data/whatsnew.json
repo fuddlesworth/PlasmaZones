@@ -1,6 +1,16 @@
 {
     "releases": [
         {
+            "version": "3.5.2",
+            "date": "2026-10-22",
+            "highlights": [
+                "Fixed: Window decorations, animations and pointer effects work again on Plasma 6.8 with the Mesa drivers most AMD and Intel graphics use (#1143)",
+                "Fixed: A shader compile error names the line in the pack's own file, in the validator, the editor preview and the compositor log (#1143)",
+                "Fixed: On a scrolling screen, a window wider than its column widens the column instead of sitting on top of the next one, and gives the width back when it shrinks (#1129)",
+                "Fixed: On Plasma 6.8, hidden scrolling tabs and columns scrolled out of view no longer leave a strip showing along the edge of the screen (#1141)"
+            ]
+        },
+        {
             "version": "3.5.1",
             "date": "2026-10-16",
             "highlights": [

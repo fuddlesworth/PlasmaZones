@@ -101,6 +101,13 @@ Fedora (COPR):
 sudo dnf copr enable fuddlesworth/PlasmaZones && sudo dnf install plasmazones
 ```
 
+Fedora Atomic (Kinoite), layering the same COPR package (replace 44 with your Fedora release):
+
+```bash
+sudo curl -fsSL -o /etc/yum.repos.d/plasmazones.repo https://copr.fedorainfracloud.org/coprs/fuddlesworth/PlasmaZones/repo/fedora-44/fuddlesworth-PlasmaZones-fedora-44.repo
+rpm-ostree install plasmazones && systemctl reboot
+```
+
 Debian testing/unstable (apt):
 
 ```bash
@@ -113,7 +120,7 @@ sudo apt update && sudo apt install plasmazones
 
 On Debian testing, swap `Debian_Unstable` for `Debian_Testing` in both lines. Packages are built for x86_64 only. The same repository works on Debian-derived rolling distributions such as PikaOS.
 
-openSUSE Tumbleweed, a portable tarball for Fedora Atomic / no-root setups, and source-build instructions (including the `-DUSE_KDE_FRAMEWORKS=OFF` portable build): **[Install page →](https://phosphor-works.github.io/plasmazones/#install)**.
+The release tarball is built on Arch and only runs where KWin matches Arch's at release time and Qt is the same or newer, so it is not a route for Fedora, Debian or SteamOS. openSUSE Tumbleweed, the tarball, and source-build instructions (including the `-DUSE_KDE_FRAMEWORKS=OFF` portable build): **[Install page →](https://phosphor-works.github.io/plasmazones/#install)**.
 
 After install, enable the daemon:
 
