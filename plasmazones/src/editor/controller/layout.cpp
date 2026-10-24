@@ -6,6 +6,7 @@
 #include "../services/ILayoutService.h"
 #include "../services/ZoneManager.h"
 #include "../undo/UndoController.h"
+#include "../../common/daemonscreenscale.h"
 #include "core/types/constants.h"
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -28,6 +29,7 @@
 #include <QScreen>
 #include <QTimer>
 #include <QUuid>
+#include <QtMath>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -57,74 +59,100 @@ void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
                               << "relative rect:" << m_virtualScreenRect;
         }
     }
+    if (!m_virtualScreenSize.isValid()) {
+        // Without the daemon's answer the reference falls back to the whole
+        // physical monitor (targetLogicalScreenSizeF), which is the closest
+        // size the editor can know but not the virtual screen's own.
+        qCWarning(lcEditor) << "Virtual screen" << screenName
+                            << "geometry unavailable from the daemon; using its physical monitor's size";
+    }
 }
 
-void EditorController::cacheTargetScreenScale(const QString& screenName)
+void EditorController::ensureTargetScreenScale()
 {
-    // The daemon's answer, which is the per-output fractional scale its
-    // geometry sensor sees: QScreen::devicePixelRatio here is the wl_output
-    // integer buffer scale on Wayland, 2 for a 1.25 output, and the editor's
-    // own window may not be mapped on that output yet. A virtual screen is
-    // answered for its physical output.
-    m_targetScreenScale = 1.0;
-    if (screenName.isEmpty()) {
+    if (m_targetScreenScale > 0.0) {
         return;
     }
-    const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Screen,
-                                                                         QStringLiteral("getScreenInfo"), {screenName});
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        return;
+    // No target means the primary screen, the same fallback
+    // targetLogicalScreenSizeF() measures.
+    QString screenId = m_targetScreen;
+    if (screenId.isEmpty()) {
+        if (QScreen* primary = QGuiApplication::primaryScreen()) {
+            screenId = PhosphorScreens::ScreenIdentity::identifierFor(primary);
+        }
     }
-    const QJsonDocument doc = QJsonDocument::fromJson(reply.arguments().constFirst().toString().toUtf8());
-    const qreal scale = doc.object().value(QLatin1String("devicePixelRatio")).toDouble(1.0);
-    if (scale > 0.0) {
-        m_targetScreenScale = scale;
+    m_targetScreenScale = queryDaemonScreenScale(screenId, &m_targetScreenPixelSize);
+    if (m_targetScreenScale <= 0.0) {
+        // Left unknown, so the next trigger (a screen or geometry change, or
+        // the daemon registering on the bus) asks again. Until then the
+        // device-pixel numbers are drawn as logical ones.
+        qCWarning(lcEditor) << "Could not read the scale of" << screenId
+                            << "from the daemon; fixed sizes in device pixels are drawn unscaled until it answers";
     }
 }
 
 QVariantList EditorController::screenModel() const
 {
-    QVariantList model;
-
-    if (m_availableScreenIds.isEmpty()) {
-        // Fallback: use Qt's physical screens (editor opened before daemon responded)
-        for (QScreen* screen : QGuiApplication::screens()) {
-            QVariantMap entry;
-            entry[QStringLiteral("name")] = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-            entry[QStringLiteral("displayName")] = screen->name();
-            model.append(entry);
-        }
-        return model;
+    if (!m_availableScreenIds.isEmpty()) {
+        return m_screenModel;
     }
 
-    // Cache VS display names per physical screen to avoid repeated D-Bus calls
-    QHash<QString, QJsonArray> vsConfigCache;
+    // Fallback: use Qt's physical screens (editor opened before daemon responded)
+    QVariantList model;
+    for (QScreen* screen : QGuiApplication::screens()) {
+        QVariantMap entry;
+        entry[QStringLiteral("name")] = PhosphorScreens::ScreenIdentity::identifierFor(screen);
+        entry[QStringLiteral("displayName")] = screen->name();
+        model.append(entry);
+    }
+    return model;
+}
 
-    // Build from daemon's effective screen IDs (includes virtual screens)
-    for (const QString& screenId : m_availableScreenIds) {
+void EditorController::refreshAvailableScreens()
+{
+    QStringList screenIds;
+    // Screen IDs (stable EDID-based identifiers). getAllScreenAssignments
+    // only emits screens with stored entries — use the dedicated
+    // enumeration method so freshly-configured systems with no per-screen
+    // assignments still populate the editor's screen list.
+    const QDBusMessage idsReply = PhosphorProtocol::ClientHelpers::syncCall(
+        PhosphorProtocol::Service::Interface::LayoutRegistry, QStringLiteral("getAvailableScreenIds"), {});
+    if (idsReply.type() == QDBusMessage::ReplyMessage && !idsReply.arguments().isEmpty()) {
+        screenIds = idsReply.arguments().constFirst().toStringList();
+    }
+
+    // One getVirtualScreenConfig round-trip per physical parent, however many
+    // of its virtual screens are listed.
+    QHash<QString, QJsonArray> vsConfigCache;
+    QVariantList model;
+    for (const QString& screenId : std::as_const(screenIds)) {
         QVariantMap entry;
         entry[QStringLiteral("name")] = screenId;
         if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
             // Use user-configured display name from VS config, fall back to generic label
             QString vsDisplayName;
-            QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-            int vsIndex = PhosphorIdentity::VirtualScreenId::extractIndex(screenId);
-            if (vsIndex >= 0) {
-                if (!vsConfigCache.contains(physId)) {
-                    const QDBusMessage reply =
-                        PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Screen,
-                                                                  QStringLiteral("getVirtualScreenConfig"), {physId});
-                    if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
-                        QJsonObject root =
-                            QJsonDocument::fromJson(reply.arguments().at(0).toString().toUtf8()).object();
-                        vsConfigCache[physId] = root.value(QStringLiteral("screens")).toArray();
-                    } else {
-                        vsConfigCache[physId] = QJsonArray();
-                    }
+            const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+            const int vsIndex = PhosphorIdentity::VirtualScreenId::extractIndex(screenId);
+            if (!vsConfigCache.contains(physId)) {
+                const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(
+                    PhosphorProtocol::Service::Interface::Screen, QStringLiteral("getVirtualScreenConfig"), {physId});
+                if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
+                    const QJsonObject root =
+                        QJsonDocument::fromJson(reply.arguments().at(0).toString().toUtf8()).object();
+                    vsConfigCache[physId] = root.value(QLatin1String("screens")).toArray();
+                } else {
+                    vsConfigCache[physId] = QJsonArray();
                 }
-                const QJsonArray& screens = vsConfigCache[physId];
-                if (vsIndex < screens.size()) {
-                    vsDisplayName = screens[vsIndex].toObject().value(QStringLiteral("displayName")).toString();
+            }
+            // Matched by id: the config's array order is not the index order
+            // (a reorder or an external write can permute it), and a sparse
+            // configuration has no entry at a given position at all.
+            const QJsonArray& screens = vsConfigCache[physId];
+            for (const QJsonValue& value : screens) {
+                const QJsonObject vs = value.toObject();
+                if (vs.value(QLatin1String("id")).toString() == screenId) {
+                    vsDisplayName = vs.value(QLatin1String("displayName")).toString();
+                    break;
                 }
             }
             if (vsDisplayName.isEmpty()) {
@@ -140,13 +168,19 @@ QVariantList EditorController::screenModel() const
         model.append(entry);
     }
 
-    return model;
+    if (screenIds == m_availableScreenIds && model == m_screenModel) {
+        return;
+    }
+    m_availableScreenIds = screenIds;
+    m_screenModel = model;
+    Q_EMIT availableScreenIdsChanged();
 }
 
 // Carry out a screen switch: swap the target, then load whatever layout that
 // screen is assigned. All entry points (setTargetScreen when nothing is
 // unsaved, confirmPendingTargetScreen once the user has answered the prompt,
-// the forced plain-screen launch shape) land here so the switch itself is
+// the forced plain-screen launch shape, and a launch whose named template
+// failed to load on a fresh editor) land here so the switch itself is
 // written once.
 void EditorController::applyTargetScreen(const QString& screenName, bool forceLayoutMode)
 {
@@ -175,11 +209,14 @@ void EditorController::applyTargetScreen(const QString& screenName, bool forceLa
     m_targetScreen = screenName;
 
     cacheVirtualScreenGeometry(screenName);
-    cacheTargetScreenScale(screenName);
+    // The scale belongs to the previous output. loadLayout fetches the new
+    // one if the incoming layout counts device pixels.
+    m_targetScreenScale = 0.0;
+    m_targetScreenPixelSize = QSize();
     // Clear the per-layout override — the previous layout's bbox doesn't
-    // apply to the new screen. loadLayout / createNewLayout below set it
-    // again if the incoming layout uses fixed geometry.
-    m_layoutBoundsOverride = QSize();
+    // apply to the new screen. loadLayout below pins it again if the incoming
+    // layout's fixed zones overflow this screen; createNewLayout never does.
+    m_layoutBoundsOverride = QSizeF();
 
     Q_EMIT targetScreenChanged();
     refreshUsableAreaInsets();
@@ -209,9 +246,12 @@ void EditorController::applyTargetScreen(const QString& screenName, bool forceLa
             createNewLayout();
         }
     } else {
-        // No layout will be loaded — publish the new size now.
-        Q_EMIT targetScreenSizeChanged();
-        m_zoneManager->setReferenceScreenSize(targetScreenSize());
+        // No layout will be loaded, so the loaded one stays: fetch its scale
+        // for the new output if it needs one, then publish the new size.
+        if (m_fixedGeometryInDevicePixels) {
+            ensureTargetScreenScale();
+        }
+        republishTargetScreenSize(sizeBeforeSwitch);
         return;
     }
 
@@ -274,11 +314,29 @@ void EditorController::cancelPendingTargetScreen()
     m_pendingTargetEditsLayout = false;
 }
 
+void EditorController::dropPendingTargetScreen()
+{
+    const bool wasParked = m_pendingTargetScreen.has_value();
+    m_pendingTargetScreen.reset();
+    m_pendingTargetEditsLayout = false;
+    if (wasParked) {
+        Q_EMIT pendingTargetScreenDropped();
+    }
+}
+
 void EditorController::applyLaunch(const PendingLaunch& launch)
 {
-    // The screen is applied with setTargetScreenDirect on the two paths that
-    // name a layout themselves: setTargetScreen would load the SCREEN's
-    // assigned layout, and the caller is about to load its own over the top.
+    // A parked import is not a launch shape; it only borrows the launch
+    // prompt, so once answered it runs the import and nothing else.
+    if (!launch.importPath.isEmpty()) {
+        importLayoutNow(launch.importPath);
+        return;
+    }
+
+    // The screen is applied with setTargetScreenDirect on every path that
+    // loads or creates its own object (both template shapes, --new and
+    // --layout): setTargetScreen would load the SCREEN's assigned layout,
+    // and the caller is about to put its own over the top.
     // Preview mode is set unconditionally so state from a previous forwarded
     // launch cannot leak into a later non-preview launch on the same instance.
     auto switchScreen = [this](const QString& id, bool loadAssignedLayout) {
@@ -296,15 +354,15 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
     // before the load (the load needs the target screen for per-screen
     // geometry), so on failure the still-loaded previous session gets its
     // screen, bounds override and reference size back.
-    const auto restoreScreenOnFailure = [this](const QString& prevScreen, const QSize& prevBounds) {
+    const auto restoreScreenOnFailure = [this](const QString& prevScreen, const QSizeF& prevBounds) {
         if (m_targetScreen == prevScreen) {
             return;
         }
         setTargetScreenDirect(prevScreen);
         if (prevBounds.isValid() && prevBounds != m_layoutBoundsOverride) {
+            const QSize previous = targetScreenSize();
             m_layoutBoundsOverride = prevBounds;
-            Q_EMIT targetScreenSizeChanged();
-            m_zoneManager->setReferenceScreenSize(targetScreenSize());
+            republishTargetScreenSize(previous);
         }
     };
 
@@ -318,7 +376,7 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
         // Preview drops only once the template actually loaded, matching
         // the layoutId branch's failed-load-leaves-the-session contract.
         const QString prevScreen = m_targetScreen;
-        const QSize prevBounds = m_layoutBoundsOverride;
+        const QSizeF prevBounds = m_layoutBoundsOverride;
         switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
         if (loadScrollingTemplate(launch.templateId)) {
             setPreviewMode(false);
@@ -352,7 +410,7 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
         // deleted or malformed layout leaves the current session's mode,
         // preview and — via the restore — screen context untouched.
         const QString prevScreen = m_targetScreen;
-        const QSize prevBounds = m_layoutBoundsOverride;
+        const QSizeF prevBounds = m_layoutBoundsOverride;
         switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
         if (loadLayout(launch.layoutId)) {
             setPreviewMode(launch.preview || PhosphorLayout::LayoutId::isAutotile(launch.layoutId));
@@ -369,10 +427,25 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
         // requestLaunch deliberately does NOT park this shape as well (see
         // the note there).
         const QString target = launch.screenId.isEmpty() ? m_targetScreen : launch.screenId;
-        const bool leavesSpecialMode = m_editorMode == ModeScrollingTemplate || m_previewMode;
-        if (target.isEmpty() || (target == m_targetScreen && !leavesSpecialMode)) {
-            // Already editing this screen's layout; nothing to change.
+        if (target.isEmpty()) {
             return;
+        }
+        const bool leavesSpecialMode = m_editorMode == ModeScrollingTemplate || m_previewMode;
+        if (target == m_targetScreen && !leavesSpecialMode) {
+            // Same screen in layout mode is a no-op only when the loaded
+            // layout IS the screen's assigned one. A layout opened by id, or
+            // a new one, can sit on this screen too, and this shape asks for
+            // the assigned layout. A screen with nothing assigned is already
+            // answered by a new layout, which is what a load would create.
+            const QString assigned = m_layoutService ? m_layoutService->getLayoutIdForScreen(target) : QString();
+            const bool editingAssigned = assigned.isEmpty()
+                ? m_isNewLayout
+                : (assigned == m_layoutId
+                   || (!QUuid::fromString(assigned).isNull()
+                       && QUuid::fromString(assigned) == QUuid::fromString(m_layoutId)));
+            if (editingAssigned) {
+                return;
+            }
         }
         if (m_hasUnsavedChanges) {
             m_pendingTargetScreen = target;
@@ -387,7 +460,7 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
 void EditorController::requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
                                      const QString& templateId, bool newTemplate)
 {
-    const PendingLaunch launch{screenId, layoutId, createNew, preview, templateId, newTemplate};
+    const PendingLaunch launch{screenId, layoutId, createNew, preview, templateId, newTemplate, /*importPath*/ {}};
 
     // createNewLayout() and loadLayout() replace what is loaded outright, with
     // no confirmation of their own, so with edits in flight they silently
@@ -469,6 +542,14 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
         return;
     }
 
+    // Every call supersedes a remap an earlier call deferred: two target
+    // changes in one event-loop pass (a launch switch and its restore after
+    // a failed load) would otherwise run both remaps in order and leave the
+    // window on the first target. The stamp also lets the same-state early
+    // return below trust window->screen(), which a still-queued remap would
+    // be about to change.
+    const quint64 generation = ++m_windowPlanGeneration;
+
     // No target screen → plain fullscreen on whatever output Qt picks.
     if (m_targetScreen.isEmpty()) {
         window->showFullScreen();
@@ -490,16 +571,14 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
         }
     }
     if (!plan.isValid()) {
-        // Physical-screen path: match by identifier, take full geometry.
-        for (QScreen* screen : QGuiApplication::screens()) {
-            if (PhosphorScreens::ScreenIdentity::identifierFor(screen) == m_targetScreen
-                || screen->name() == m_targetScreen) {
-                plan.screen = screen;
-                plan.geometry = screen->geometry();
-                plan.fullScreen = true;
-                plan.frameless = false;
-                break;
-            }
+        // Physical-screen path, full geometry. A virtual screen whose
+        // geometry the daemon could not give resolves to its physical
+        // monitor here too, so the window at least lands on the right output.
+        if (QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(m_targetScreen)) {
+            plan.screen = screen;
+            plan.geometry = screen->geometry();
+            plan.fullScreen = true;
+            plan.frameless = false;
         }
     }
     if (!plan.isValid()) {
@@ -512,10 +591,17 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
     qCDebug(lcEditor) << "Editor window plan — screen:" << plan.screen->name() << "geometry:" << plan.geometry
                       << "fullScreen:" << plan.fullScreen << "frameless:" << plan.frameless;
 
-    // Same screen and visible → nothing to do. No Wayland workaround reliably
-    // brings an already-mapped fullscreen xdg_toplevel to the front from a
-    // programmatic caller, so we don't even try.
-    if (window->screen() == plan.screen && window->isVisible() && window->isExposed()) {
+    // Already shown the way the plan asks → nothing to do. No Wayland
+    // workaround reliably brings an already-mapped fullscreen xdg_toplevel to
+    // the front from a programmatic caller, so we don't even try. Same
+    // screen alone is not enough: two virtual screens of one monitor, or a
+    // virtual screen and its whole monitor, share the QScreen and differ in
+    // geometry and in the fullscreen and frameless state.
+    const bool shownAsPlanned = plan.fullScreen
+        ? window->visibility() == QWindow::FullScreen
+        : (window->visibility() != QWindow::FullScreen && window->geometry() == plan.geometry
+           && window->flags().testFlag(Qt::FramelessWindowHint) == plan.frameless);
+    if (window->screen() == plan.screen && shownAsPlanned && window->isVisible() && window->isExposed()) {
         return;
     }
 
@@ -526,8 +612,9 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
     // a paint or D-Bus dispatch.
     if (window->isVisible()) {
         QPointer<QQuickWindow> safeWindow(window);
-        QTimer::singleShot(0, window, [safeWindow, plan]() {
-            if (!safeWindow || !plan.screen) {
+        QPointer<EditorController> self(this);
+        QTimer::singleShot(0, window, [safeWindow, self, plan, generation]() {
+            if (!safeWindow || !self || !plan.screen || generation != self->m_windowPlanGeneration) {
                 return;
             }
             safeWindow->destroy();
@@ -542,19 +629,73 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
 
 void EditorController::setTargetScreenDirect(const QString& screenName)
 {
-    // Sets the target screen without loading a layout - used during initialization
-    // when a layout is explicitly specified via command line
-    if (m_targetScreen != screenName) {
-        m_targetScreen = screenName;
+    // Swaps the target without loading that screen's layout. The callers are
+    // a launch that loads its own layout or template over the top, the
+    // restore of a stranded session's screen after a failed load, and a
+    // screen switch in template mode (templates are screen-portable).
+    if (m_targetScreen == screenName) {
+        return;
+    }
+    const QSize previous = targetScreenSize();
+    m_targetScreen = screenName;
 
-        cacheVirtualScreenGeometry(screenName);
-        cacheTargetScreenScale(screenName);
-        m_layoutBoundsOverride = QSize();
+    cacheVirtualScreenGeometry(screenName);
+    m_targetScreenScale = 0.0;
+    m_targetScreenPixelSize = QSize();
+    if (m_fixedGeometryInDevicePixels) {
+        ensureTargetScreenScale();
+    }
+    m_layoutBoundsOverride = QSizeF();
 
-        Q_EMIT targetScreenChanged();
-        Q_EMIT targetScreenSizeChanged();
+    Q_EMIT targetScreenChanged();
+    refreshUsableAreaInsets();
+    republishTargetScreenSize(previous);
+}
+
+void EditorController::refreshTargetScreenGeometry()
+{
+    const QSize previous = targetScreenSize();
+    cacheVirtualScreenGeometry(m_targetScreen);
+    m_targetScreenScale = 0.0;
+    m_targetScreenPixelSize = QSize();
+    if (m_fixedGeometryInDevicePixels) {
+        ensureTargetScreenScale();
+    }
+    // The override was measured against the old geometry. Template mode
+    // holds none (beginTemplateSession dropped it) and must not grow one
+    // from the layout session it keeps loaded underneath.
+    if (m_editorMode == ModeLayout) {
+        refreshFixedBoundsOverride(currentLayoutJson());
+    }
+    // Async: setInsets republishes again when the replies land.
+    refreshUsableAreaInsets();
+    republishTargetScreenSize(previous);
+}
+
+void EditorController::onDaemonScreenGeometryChanged(const QString& screenId)
+{
+    if (!m_targetScreen.isEmpty() && screenId == m_targetScreen) {
+        refreshTargetScreenGeometry();
+    }
+}
+
+void EditorController::onDaemonAvailableGeometryChanged(const QString& screenId)
+{
+    if (!m_targetScreen.isEmpty() && screenId == m_targetScreen) {
+        // Async; the replies reach setInsets, which republishes the
+        // reference and re-derives the bounds override only when the insets
+        // really moved.
         refreshUsableAreaInsets();
-        m_zoneManager->setReferenceScreenSize(targetScreenSize());
+    }
+}
+
+void EditorController::onDaemonVirtualScreensChanged(const QString& physicalScreenId)
+{
+    // The screen list's virtual screens and their names moved with it.
+    refreshAvailableScreens();
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(m_targetScreen)
+        && PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_targetScreen) == physicalScreenId) {
+        refreshTargetScreenGeometry();
     }
 }
 
@@ -572,6 +713,10 @@ void EditorController::createNewLayout()
 {
     // Editing a layout, whatever mode the editor was in before.
     setEditorModeInternal(ModeLayout);
+    // The mode setter drops a parked screen switch only on a genuine mode
+    // change, and this call commonly runs in layout mode already, so a park
+    // answering for the layout being replaced would otherwise outlive it.
+    dropPendingTargetScreen();
 
     // Drop any commands from the previous session: this call commonly runs
     // with the mode ALREADY ModeLayout (the new-layout button, the
@@ -588,7 +733,7 @@ void EditorController::createNewLayout()
     // screen geometry that setTargetScreen already cached — no D-Bus
     // round-trip needed.
     const QSize prevSize = targetScreenSize();
-    m_layoutBoundsOverride = QSize();
+    m_layoutBoundsOverride = QSizeF();
 
     m_layoutId = QUuid::createUuid().toString();
     m_layoutName = PhosphorI18n::tr("New Layout");
@@ -605,19 +750,19 @@ void EditorController::createNewLayout()
     m_gaps->resetOverrides();
     m_overlayDisplayMode = -1;
     m_useFullScreenGeometry = false;
-    m_fixedGeometryInDevicePixels = false;
+    const bool oldFixedUnit = std::exchange(m_fixedGeometryInDevicePixels, false);
     m_aspectRatioClass = 0;
 
-    // Publish the screen-derived reference size if the previous layout had
-    // overridden it to a fixed-zone bounding box, or if setTargetScreen
-    // deferred the emission to us.
+    // Publish the screen-derived reference size if it moved: the previous
+    // layout had overridden it to a fixed-zone bounding box, or counted its
+    // fixed sizes in device pixels (or covered the full screen), each of
+    // which the reset above undoes, or setTargetScreen deferred the
+    // emission to us.
     const QSize newSize = targetScreenSize();
     if (newSize != prevSize) {
         Q_EMIT targetScreenSizeChanged();
     }
-    if (m_zoneManager) {
-        m_zoneManager->setReferenceScreenSize(newSize);
-    }
+    m_zoneManager->setReferenceScreenSize(newSize);
 
     // The visibility allow-lists are per-layout state like everything else
     // reset above, and saveLayout serializes them unconditionally. Left alone,
@@ -641,7 +786,9 @@ void EditorController::createNewLayout()
     m_gaps->emitOverrideSignals();
     Q_EMIT overlayDisplayModeChanged();
     Q_EMIT useFullScreenGeometryChanged();
-    Q_EMIT fixedGeometryInDevicePixelsChanged();
+    if (oldFixedUnit) {
+        Q_EMIT fixedGeometryInDevicePixelsChanged();
+    }
     Q_EMIT aspectRatioClassChanged();
     Q_EMIT allowedScreensChanged();
     Q_EMIT allowedDesktopsChanged();
@@ -696,33 +843,43 @@ bool EditorController::loadLayout(const QString& layoutId)
     // launch switched before calling in is the caller's to restore; see
     // applyLaunch's restoreScreenOnFailure.
     setEditorModeInternal(ModeLayout);
+    // Same-mode replacement: see createNewLayout.
+    dropPendingTargetScreen();
 
     QJsonObject layoutObj = doc.object();
     m_layoutId = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)].toString();
     m_layoutName = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)].toString();
 
     // Resolve the final reference size before building zones. The editor
-    // canvas fills the live screen, and EditorZone scales each fixed zone by
-    // targetScreenSize (fixedPixels / targetScreenSize.width * canvasWidth),
-    // so the reference MUST share the live screen's aspect ratio or fixed
-    // zones stretch. The raw fixed-zone bounding box is the wrong reference
-    // whenever the zones don't span the full screen — a 16:9 layout whose
-    // fixed zones only reach 2560px wide yields a 2560x2160 bbox and renders
-    // 1.5x too wide (discussion #593).
+    // canvas fills the area zones occupy on the live screen, and EditorZone
+    // scales each fixed zone by targetScreenSize (fixedPixels /
+    // targetScreenSize.width * canvasWidth), so the reference MUST share that
+    // area's aspect ratio or fixed zones stretch. The raw fixed-zone bounding
+    // box is the wrong reference whenever the zones don't span the full
+    // screen — a 16:9 layout whose fixed zones only reach 2560px wide yields
+    // a 2560x2160 bbox and renders 1.5x too wide (discussion #593).
     //
-    // Clear the override first so targetScreenSize() reports the live
-    // screen/VS size, then re-pin only when the layout's fixed zones
-    // genuinely exceed that size (e.g. a 3840x2160 layout on a 3840x2126
-    // panel-reduced screen). fixedZoneReferenceGeometry() encodes exactly
-    // this "use the recalc geometry unless the bbox overflows it" rule, the
-    // same helper the preview path uses — seed it by recalculating the
-    // throwaway Layout against the live screen first.
+    // refreshFixedBoundsOverride clears the override first so
+    // targetLogicalScreenSize() reports the live screen/VS area, then re-pins
+    // only when the layout's fixed zones genuinely exceed it (e.g. a
+    // 3840x2160 layout on a 3840x2126 panel-reduced screen).
+    // fixedZoneReferenceGeometry() encodes exactly this "use the recalc
+    // geometry unless the bbox overflows it" rule, the same helper the
+    // preview path uses, seeded by recalculating a throwaway Layout against
+    // the live area first.
     const QSize prevSize = targetScreenSize();
-    // The unit of the fixed numbers first, since the reference is measured in
-    // it. Its change signal goes out with the other per-layout flags below.
+    // The unit of the fixed numbers and the area they are laid out in go
+    // first, since the reference is measured in them. Their change signals
+    // go out with the other per-layout flags below.
     const bool oldFixedUnit = m_fixedGeometryInDevicePixels;
     m_fixedGeometryInDevicePixels =
         layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedGeometryInDevicePixels)].toBool(false);
+    if (m_fixedGeometryInDevicePixels) {
+        ensureTargetScreenScale();
+    }
+    const bool oldUseFullScreen = m_useFullScreenGeometry;
+    m_useFullScreenGeometry =
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry)].toBool(false);
     refreshFixedBoundsOverride(layoutObj);
     const QSize newSize = targetScreenSize();
     if (newSize != prevSize) {
@@ -731,9 +888,7 @@ bool EditorController::loadLayout(const QString& layoutId)
         // first sync (otherwise zones jump to recomputed positions).
         Q_EMIT targetScreenSizeChanged();
     }
-    if (m_zoneManager) {
-        m_zoneManager->setReferenceScreenSize(newSize);
-    }
+    m_zoneManager->setReferenceScreenSize(newSize);
 
     // Parse zones
     QVariantList zones;
@@ -773,6 +928,13 @@ bool EditorController::loadLayout(const QString& layoutId)
                 fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)].toDouble();
             zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] =
                 fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)].toDouble();
+            // The relative copy the file carries was normalized against
+            // whatever reference its writer had (the daemon's last screen,
+            // clamped to 0–1). Derive it from the pixels against the reference
+            // published above instead, as the unit toggle and every fixed
+            // edit do, so the snapping, fill and divider math that reads the
+            // relative copy sees where the zone is actually drawn.
+            m_zoneManager->syncRelativeFromFixed(zone);
         }
 
         // Appearance
@@ -814,17 +976,15 @@ bool EditorController::loadLayout(const QString& layoutId)
         zones.append(zone);
     }
 
-    if (m_zoneManager) {
-        m_zoneManager->setZones(zones);
-    }
+    m_zoneManager->setZones(zones);
 
     // Load visibility filtering allow-lists
     PhosphorZones::LayoutUtils::deserializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt,
                                                       m_allowedActivities);
 
     // Query available context info from daemon via D-Bus
-    // Clear first so stale data is not shown if daemon is unavailable
-    m_availableScreenIds.clear();
+    // Clear first so stale data is not shown if daemon is unavailable. The
+    // screen list is refreshed at the end, where its change signal goes out.
     m_virtualDesktopCount = 1;
     m_virtualDesktopNames.clear();
     m_activitiesAvailable = false;
@@ -839,14 +999,6 @@ bool EditorController::loadLayout(const QString& layoutId)
                 ? reply.arguments().constFirst()
                 : QVariant{};
         };
-
-        // Screen IDs (stable EDID-based identifiers). getAllScreenAssignments
-        // only emits screens with stored entries — use the dedicated
-        // enumeration method so freshly-configured systems with no per-screen
-        // assignments still populate the editor's screen list.
-        if (auto v = firstArg(callLayoutRegistry(QStringLiteral("getAvailableScreenIds"))); v.isValid()) {
-            m_availableScreenIds = v.toStringList();
-        }
 
         // Virtual desktops
         if (auto v = firstArg(callLayoutRegistry(QStringLiteral("getVirtualDesktopCount"))); v.isValid()) {
@@ -875,10 +1027,7 @@ bool EditorController::loadLayout(const QString& layoutId)
 
     // Load per-layout gap overrides (-1 = use global setting). The gap
     // sub-model reads the keys and emits its own change signals.
-    bool oldUseFullScreen = m_useFullScreenGeometry;
     m_gaps->loadFromJson(layoutObj);
-    m_useFullScreenGeometry =
-        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry)].toBool(false);
     int oldAspectRatioClass = m_aspectRatioClass;
     // fromJsonValue accepts the canonical string from Layout::toJson and the int
     // from an editor save round-trip, and maps a missing key to Any.
@@ -925,7 +1074,7 @@ bool EditorController::loadLayout(const QString& layoutId)
     Q_EMIT allowedScreensChanged();
     Q_EMIT allowedDesktopsChanged();
     Q_EMIT allowedActivitiesChanged();
-    Q_EMIT availableScreenIdsChanged();
+    refreshAvailableScreens();
     Q_EMIT virtualDesktopCountChanged();
     Q_EMIT virtualDesktopNamesChanged();
     Q_EMIT activitiesAvailableChanged();
@@ -933,18 +1082,6 @@ bool EditorController::loadLayout(const QString& layoutId)
     return true;
 }
 
-/**
- * @brief Saves the current layout to the daemon
- *
- * Serializes the layout to JSON and sends it to the daemon via D-Bus.
- * Creates a new layout if isNewLayout is true, otherwise updates existing layout.
- * Emits layoutSaveFailed signal on error, layoutSaved on success.
- *
- * Returns whether the save landed. Every false return has already emitted
- * layoutSaveFailed and left m_hasUnsavedChanges set, so a caller that chains a
- * layout-replacing action onto a save can gate it on this and leave the user's
- * work in place when the daemon refuses the payload.
- */
 QJsonObject EditorController::currentLayoutJson() const
 {
     QJsonObject layoutObj;
@@ -963,13 +1100,22 @@ QJsonObject EditorController::currentLayoutJson() const
         zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] =
             zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
 
+        // Clamped to 0–1, the range the key is defined over, as Zone::toJson
+        // does. A relative zone is already inside it, but a fixed zone's
+        // relative copy is derived from its pixels and runs past 1 when the
+        // zone overflows the reference (a duplicate offset past the edge),
+        // and the daemon's schema gate rejects the whole save for that. The
+        // fixed rect below round-trips untouched, so the clamp only bounds
+        // the derived hint.
         QJsonObject relGeo;
-        relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
-        relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+        relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] =
+            qBound(0.0, zone[::PhosphorZones::ZoneJsonKeys::X].toDouble(), 1.0);
+        relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] =
+            qBound(0.0, zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble(), 1.0);
         relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] =
-            zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+            qBound(0.0, zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble(), 1.0);
         relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] =
-            zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
+            qBound(0.0, zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble(), 1.0);
         zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::RelativeGeometry)] = relGeo;
 
         // Write geometry mode and fixed geometry when Fixed
@@ -1065,14 +1211,21 @@ void EditorController::refreshFixedBoundsOverride(const QJsonObject& layoutObj)
     // throughout: the throwaway layout is recalculated at the target output's
     // scale, so a layout counting device pixels has its zones divided by it
     // before they are measured against the logical screen.
-    m_layoutBoundsOverride = QSize();
-    const QSize screenSize = targetLogicalScreenSize();
+    m_layoutBoundsOverride = QSizeF();
+    const QSizeF screenSize = targetLogicalScreenSizeF();
     std::unique_ptr<PhosphorZones::Layout> tmp(PhosphorZones::Layout::fromJson(layoutObj));
-    if (tmp && screenSize.isValid()) {
+    if (tmp && !screenSize.isEmpty()) {
         tmp->recalculateZoneGeometries(QRectF(QPointF(), screenSize), m_targetScreenScale);
         const QRectF refGeo = tmp->fixedZoneReferenceGeometry();
-        if (!refGeo.isEmpty() && refGeo.size().toSize() != screenSize) {
-            m_layoutBoundsOverride = refGeo.size().toSize();
+        // Pinned on overflow only, and only on the overflowing axis: a
+        // layout wider than the screen but no taller keeps the screen's
+        // height, or the canvas (which fills the screen's area) would
+        // stretch its zones vertically by the bbox's shortfall. Compared in
+        // whole pixels so a sub-pixel overflow (a device-pixel extent divided
+        // by a fractional scale) does not pin anything.
+        const QSizeF bounds = refGeo.size().expandedTo(screenSize);
+        if (!refGeo.isEmpty() && bounds.toSize() != screenSize.toSize()) {
+            m_layoutBoundsOverride = bounds;
         }
     }
 }
@@ -1083,12 +1236,27 @@ void EditorController::republishTargetScreenSize(const QSize& previous)
     if (current != previous) {
         Q_EMIT targetScreenSizeChanged();
     }
-    if (m_zoneManager) {
+    // The zone manager may already hold this reference (the loaders publish
+    // it themselves before parsing), and re-deriving every fixed zone's
+    // relative copy against an unchanged reference only churns signals.
+    if (m_zoneManager->referenceScreenSize() != current) {
         m_zoneManager->setReferenceScreenSize(current);
         m_zoneManager->resyncFixedZones();
     }
 }
 
+/**
+ * @brief Saves the current layout to the daemon
+ *
+ * Serializes the layout to JSON and sends it to the daemon via D-Bus.
+ * Creates a new layout if isNewLayout is true, otherwise updates existing layout.
+ * Emits layoutSaveFailed signal on error, layoutSaved on success.
+ *
+ * Returns whether the save landed. Every false return has already emitted
+ * layoutSaveFailed and left m_hasUnsavedChanges set, so a caller that chains a
+ * layout-replacing action onto a save can gate it on this and leave the user's
+ * work in place when the daemon refuses the payload.
+ */
 bool EditorController::saveLayout()
 {
     // Single save verb for both editing modes: every QML save path (Save
@@ -1129,6 +1297,15 @@ bool EditorController::saveLayout()
     }
 
     m_hasUnsavedChanges = false;
+
+    // Bring the in-process registry up to what was just saved, now rather
+    // than behind m_layoutReloadTimer. The daemon writes the file before it
+    // replies, but its change signals reach us only after this call returns,
+    // and a prompt's Save is followed in the same call stack by the load it
+    // was guarding. A load of this very layout would otherwise open the
+    // pre-save snapshot through the fast path, show it clean, and the next
+    // save would overwrite the edits just saved.
+    reloadLocalLayouts();
 
     // Mark undo stack as clean after successful save
     if (m_undoController) {
@@ -1177,6 +1354,23 @@ void EditorController::importLayout(const QString& filePath)
         return;
     }
 
+    // The import loads the imported layout over the current one, so unsaved
+    // edits get the same prompt a forwarded launch does, and nothing reaches
+    // the daemon until the user answers: a cancelled import must not leave a
+    // new layout behind in the registry.
+    if (m_hasUnsavedChanges) {
+        PendingLaunch launch;
+        launch.importPath = filePath;
+        m_pendingLaunch = launch;
+        Q_EMIT launchRequestRequiresConfirmation();
+        return;
+    }
+
+    importLayoutNow(filePath);
+}
+
+void EditorController::importLayoutNow(const QString& filePath)
+{
     const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(
         PhosphorProtocol::Service::Interface::LayoutRegistry, QStringLiteral("importLayout"), {filePath});
     if (reply.type() != QDBusMessage::ReplyMessage) {
@@ -1206,17 +1400,26 @@ void EditorController::importLayout(const QString& filePath)
  * @param filePath Path where the JSON file should be saved
  *
  * Calls the D-Bus exportLayout method to save the current layout to a file.
- * Emits layoutExported on success and layoutSaveFailed if the export fails.
+ * The daemon exports its saved copy, so a layout with unsaved edits (a new
+ * one included) is refused rather than exported without them. The Export
+ * button is disabled in that state, so the refusal is the backstop for a
+ * caller that bypasses it.
+ * Emits layoutExported on success and layoutExportFailed if the export fails.
  */
 void EditorController::exportLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutSaveFailed(PhosphorI18n::tr("File path cannot be empty"));
+        Q_EMIT layoutExportFailed(PhosphorI18n::tr("File path cannot be empty"));
         return;
     }
 
     if (m_layoutId.isEmpty()) {
-        Q_EMIT layoutSaveFailed(PhosphorI18n::tr("No layout loaded to export"));
+        Q_EMIT layoutExportFailed(PhosphorI18n::tr("No layout loaded to export"));
+        return;
+    }
+
+    if (m_isNewLayout || m_hasUnsavedChanges) {
+        Q_EMIT layoutExportFailed(PhosphorI18n::tr("Save the layout before exporting it."));
         return;
     }
 
@@ -1225,18 +1428,21 @@ void EditorController::exportLayout(const QString& filePath)
     if (reply.type() != QDBusMessage::ReplyMessage) {
         QString error = PhosphorI18n::tr("Failed to export layout: %1").arg(reply.errorMessage());
         qCWarning(lcEditor) << error;
-        Q_EMIT layoutSaveFailed(error);
+        Q_EMIT layoutExportFailed(error);
         return;
     }
 
     // A reply arrived, which only says the daemon was reachable. It answers
     // false for a destination it could not open, write or commit, and that is a
     // ReplyMessage like any other, so reporting saved on the strength of the
-    // message type alone would call a failed export a success.
+    // message type alone would call a failed export a success. It also answers
+    // false for a path it refuses as unsafe and for a layout id it does not
+    // hold (deleted in another process since this one loaded it). The message
+    // names the write, the only cause the user can act on from here.
     if (reply.arguments().isEmpty() || !reply.arguments().first().toBool()) {
         const QString error = PhosphorI18n::tr("Could not write the export. Check that the folder is writable.");
         qCWarning(lcEditor) << "exportLayout: daemon could not write" << filePath;
-        Q_EMIT layoutSaveFailed(error);
+        Q_EMIT layoutExportFailed(error);
         return;
     }
 

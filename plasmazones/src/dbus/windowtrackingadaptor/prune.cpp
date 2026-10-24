@@ -63,10 +63,13 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
         m_lastActiveWindowId.clear();
         m_lastActiveScreenId.clear(); // as windowClosed does (F291)
     }
-    // A screen report held for a dead window has nothing to replay into.
+    // A screen report held for a dead window has nothing to replay into. Only
+    // the per-window keys carry a colon: the cursor and focus keys have none,
+    // and a held focus report of a dead window is inert anyway, since its
+    // replay checks the window is still the focused one.
     m_heldScreenReports.removeIf([&aliveInstances](const auto& entry) {
         const qsizetype colon = entry.key().indexOf(QLatin1Char(':'));
-        return colon > 0 && entry.key() != QLatin1String("active") && entry.key() != QLatin1String("cursor")
+        return colon > 0
             && !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(entry.key().mid(colon + 1)));
     });
     // Capture each dead window's final engine slot BEFORE ANY prune drops
@@ -110,7 +113,12 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
                 || !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
                 continue;
             }
-            const QString frameScreen = Utils::effectiveScreenIdAt(screens, it.value().center());
+            // A centre on no output (a window hanging past an edge) says
+            // nothing about which screen the window is on, so it left none.
+            const QString frameScreen = WindowTrackingInternal::screenContaining(screens, it.value().center());
+            if (frameScreen.isEmpty()) {
+                continue;
+            }
             const auto own = m_service->placementStore().peekExact(it.key());
             if (!own || !PhosphorEngine::ownRecordLeftScreen(*own, frameScreen)) {
                 continue;

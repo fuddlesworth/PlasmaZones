@@ -214,7 +214,20 @@ void ScrollEngine::consumeOrExpelWindow(int delta, const QString& screenId)
 
 void ScrollEngine::centerColumn(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().centerActiveColumn(params), "center", false, QString());
+    // The strip answers whether the ANCHOR moved, and re-attaches a panned
+    // view even when it did not (centerActiveColumn). That re-attach is
+    // persisted state the macro's no-change arm never announces, so it is
+    // republished here; the press still reports no_target, since nothing on
+    // screen moved.
+    P_SCROLL_VERB(screenId, ([&]() {
+                      const bool wasDetached = state->strip().viewDetached();
+                      const bool moved = state->strip().centerActiveColumn(params);
+                      if (!moved && wasDetached && !state->strip().viewDetached()) {
+                          Q_EMIT placementChanged(screen);
+                      }
+                      return moved;
+                  }()),
+                  "center", false, QString());
 }
 
 void ScrollEngine::toggleColumnTabbed(const QString& screenId)
@@ -572,8 +585,18 @@ void ScrollEngine::equalizeWindowHeights(const QString& screenId)
 void ScrollEngine::centerVisibleColumns(const QString& screenId)
 {
     // "span" distinguishes the whole-group centering from centerColumn's
-    // single-column copy in the OSD (both ride the "center" action).
-    P_SCROLL_VERB(screenId, state->strip().centerVisibleColumns(params), "center", false, QStringLiteral("span"));
+    // single-column copy in the OSD (both ride the "center" action). The
+    // re-attach of a panned view that moved no anchor is republished for
+    // centerColumn's reason.
+    P_SCROLL_VERB(screenId, ([&]() {
+                      const bool wasDetached = state->strip().viewDetached();
+                      const bool moved = state->strip().centerVisibleColumns(params);
+                      if (!moved && wasDetached && !state->strip().viewDetached()) {
+                          Q_EMIT placementChanged(screen);
+                      }
+                      return moved;
+                  }()),
+                  "center", false, QStringLiteral("span"));
 }
 
 void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)

@@ -204,8 +204,9 @@ pse_add_test(test_scrollengine_maximize test_scrollengine_maximize.cpp)
 # The compositor's fullscreen hold: a strip tile held out for its own
 # fullscreen with a passive announcement, and what returns it.
 pse_add_test(test_scrollengine_fullscreenfloat test_scrollengine_fullscreenfloat.cpp)
-# Which float transitions announce active and which passive (F557, F578).
-pse_add_test(test_scrollengine_floatannounce test_scrollengine_floatannounce.cpp)
+# Which float transitions announce active and which passive (F557, F578), the
+# oversized verdict included.
+pse_add_test(test_scrollengine_floatannounce test_scrollengine_floatannounce.cpp scrollstubsettings.h)
 # The tile-focus family: cycleTab and focusTab, plus the float refusal and the
 # panned-view hand-back they share with focusWindowTop/Bottom. Its own file
 # rather than more of the smoke suite.

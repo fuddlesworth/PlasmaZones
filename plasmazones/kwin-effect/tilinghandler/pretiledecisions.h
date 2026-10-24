@@ -117,10 +117,14 @@ enum class PreTileRestore {
 /// The 4-way pre-tile restore decision.
 ///
 /// @p haveLocalRect   TilingHandler::preTileRestoreRectFor answered a usable rect
-/// @p wasTracked      the window was autotile-tracked on the desktop being left
+/// @p wasTracked      the window was autotile-tracked when its context stopped
+///                    tiling: tracked on the desktop switched onto (the switch
+///                    pass for the arrived desktop), or parked for the desktop's
+///                    return when an earlier switch left it, since the daemon
+///                    still holds a parked window in that desktop's state
 /// @p wasWindowedFs   the window held windowed fullscreen (its release is deferred)
-/// @p wasTiled        the window was tiled on the desktop being left, read before
-///                    the demote clears the fact
+/// @p wasTiled        the window was tiled, read in the same pass before the
+///                    demote clears the fact
 ///
 /// The cross-OUTPUT question is deliberately NOT decided here. Bucket rects are
 /// absolute compositor coordinates, so one measured on another monitor would
@@ -135,8 +139,9 @@ enum class PreTileRestore {
 /// daemon refused (no engine claimed the screen while an announce was in
 /// flight) leaves a tracked window that was never tiled. The daemon's record
 /// is mode-shared and session-persisted, so asking for it there moved a window
-/// that was never placed to a float-back from another mode (#1151). A floating
-/// window is not tiled either, and it already stands at its own free rect.
+/// that was never placed to a float-back from another mode (#1151). (A
+/// floating window never reaches this decision: the demote pass skips it
+/// first, since it stands at its own free rect.)
 inline PreTileRestore resolvePreTileRestore(bool haveLocalRect, bool wasTracked, bool wasWindowedFs, bool wasTiled)
 {
     if (!wasTracked) {

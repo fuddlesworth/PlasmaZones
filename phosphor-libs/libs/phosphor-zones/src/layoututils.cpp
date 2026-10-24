@@ -22,7 +22,8 @@ namespace LayoutUtils {
 // ═══════════════════════════════════════════════════════════════════════════
 
 namespace {
-QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields, const QRectF& referenceGeometry = QRectF())
+QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields, const QRectF& referenceGeometry = QRectF(),
+                             qreal screenScale = 0.0)
 {
     using namespace ::PhosphorZones::ZoneJsonKeys;
     QVariantMap map;
@@ -37,7 +38,7 @@ QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields, const QRectF& refere
 
     // Relative geometry (0.0-1.0) for resolution-independent rendering
     // Use normalizedGeometry() to compute correct 0-1 coords for any geometry mode
-    QRectF relGeo = zone->normalizedGeometry(referenceGeometry);
+    QRectF relGeo = zone->normalizedGeometry(referenceGeometry, screenScale);
     QVariantMap relGeoMap;
     relGeoMap[X] = relGeo.x();
     relGeoMap[Y] = relGeo.y();
@@ -82,7 +83,7 @@ QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields, const QRectF& refere
 }
 } // namespace
 
-QVariantList zonesToVariantList(Layout* layout, ZoneFields fields, const QRectF& referenceGeometry)
+QVariantList zonesToVariantList(Layout* layout, ZoneFields fields, const QRectF& referenceGeometry, qreal screenScale)
 {
     QVariantList list;
 
@@ -90,18 +91,24 @@ QVariantList zonesToVariantList(Layout* layout, ZoneFields fields, const QRectF&
         return list;
     }
 
-    // Use layout's cached screen geometry to normalize fixed-mode zones to 0-1 coords.
-    // The daemon recalculates ALL layouts on startup and screen changes, so this is always valid.
-    const QRectF& refGeo = (referenceGeometry.width() > 0 && referenceGeometry.height() > 0)
-        ? referenceGeometry
-        : layout->lastRecalcGeometry();
+    // A caller's reference geometry and scale are one frame: the output it is
+    // about to render on. Without a reference, use the layout's cached frame
+    // instead, rect and scale together. The daemon recalculates ALL layouts on
+    // startup and screen changes, so lastRecalcGeometry() is the rect of the last
+    // pass, and a zero scale makes normalizedGeometry() divide a device-pixel
+    // layout's fixed geometry by lastRecalcScale(), the newest scale a pass was
+    // asked for. A caller scale is never paired with the cached rect, because
+    // that rect belongs to whichever output was recalculated last.
+    const bool callerFrame = referenceGeometry.width() > 0 && referenceGeometry.height() > 0;
+    const QRectF& refGeo = callerFrame ? referenceGeometry : layout->lastRecalcGeometry();
+    const qreal refScale = callerFrame ? screenScale : 0.0;
 
     const auto zones = layout->zones();
     for (Zone* zone : zones) {
         if (!zone) {
             continue;
         }
-        list.append(zoneToVariantMap(zone, fields, refGeo));
+        list.append(zoneToVariantMap(zone, fields, refGeo, refScale));
     }
 
     return list;

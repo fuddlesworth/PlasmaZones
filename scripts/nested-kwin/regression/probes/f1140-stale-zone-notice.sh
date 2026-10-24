@@ -7,12 +7,15 @@
 #   PZ_F1140_RUN=a (row f1140-stale-zone-notice-clear, F1140) or d (row
 #   f1140-stale-zone-notice-write, F1152).
 # Staging: Snap Assist off, Virtual-0 COLS3. l and s open (both org.pz.plain) and l is snapped into
-#   zone 1 under its own id. The stale id is s's: the nested daemon is frozen (dstop), calls naming s
-#   are queued behind it (dsend), s's client is killed so the effect's windowClosed(s) queues after
-#   them, and the daemon is let run. The notices for s reach the effect after s is gone and take the
-#   app-id fallback to l.
+#   zone 1 under its own id. The stale id is s's: s is focused, the nested daemon is frozen (dstop),
+#   calls naming s are queued behind it (dsend), s's client is killed so the effect's
+#   windowClosed(s) queues after them, and the daemon is let run. The notices for s reach the effect
+#   after s is gone and take the app-id fallback to l.
 #   a: a rule on the window titled l, IsSnapped true -> hide the title bar (KWin's noBorder). Queued:
-#     moveWindowToZone(s, zone 2), windowUnsnapped(s).
+#     moveWindowToZone(s, zone 2), then Snap.restoreWindowSize(), the restore verb, which acts on
+#     the focused window s. Snap.windowUnsnapped is the compositor's own report and refuses this
+#     shell, so the restore is the unsnap: it takes s out of zone 2 (an unsnapped notice), floats
+#     it (a floated notice) and moves it to its float-back.
 #   d: one rule per zone on l, keyed on the Zone field: zone 1 -> keep above, zone 2 -> hide the title
 #     bar. Queued: moveWindowToZone(s, zone 2) alone.
 # Asserts: a: l keeps noBorder true (s's clear reaches no window) and the daemon still holds l in zone
@@ -73,12 +76,14 @@ mmark "$MON"
 emark
 dmark
 SPID=$(cpid s) || stage_fail "no test client pid for s"
-echo "== daemon frozen; calls queued; s closed"
+activate s
+[ "$(activecap)" = s ] || stage_fail "s did not take focus ($(activecap))"
+echo "== s focused; daemon frozen; calls queued; s closed"
 dstop || stage_fail "the daemon could not be frozen"
 dsend org.plasmazones.Snap.moveWindowToZone "string:$S" "string:$Z2"
 sleep 0.5
 if [ "$RUN" = a ]; then
-    dsend org.plasmazones.Snap.windowUnsnapped "string:$S"
+    dsend org.plasmazones.Snap.restoreWindowSize
     sleep 0.5
 fi
 kill "$SPID"

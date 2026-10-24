@@ -942,7 +942,11 @@ void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
     QVERIFY(state);
     QCOMPARE(state->strip().columnCount(), 2);
 
-    QSignalSpy floatSpy(engine, &ScrollEngine::windowFloatingChanged);
+    // An engine-decided float announces PASSIVE (windowFloatingStateSynced):
+    // the daemon mirrors it with no float OSD and no restore to a free
+    // geometry the client already refused. The active channel stays silent.
+    QSignalSpy floatSpy(engine, &ScrollEngine::windowFloatingStateSynced);
+    QSignalSpy activeSpy(engine, &ScrollEngine::windowFloatingChanged);
     // In-bounds growth keeps the window tiled; the column widens instead.
     // Minimums ALONG the strip, so they transpose with the fixture: 900
     // widens the column, 1300 outgrows the work area entirely.
@@ -969,6 +973,7 @@ void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
     QCOMPARE(floatSpy.count(), 1);
     QCOMPARE(floatSpy.last().at(0).toString(), QStringLiteral("app|a"));
     QCOMPARE(floatSpy.last().at(1).toBool(), true);
+    QCOMPARE(activeSpy.count(), 0);
     // Engine-decided float, so it carries the mode marker (the daemon's
     // mode-transition capture keys off it) and the restore entry holds the
     // clamp that forced the float.

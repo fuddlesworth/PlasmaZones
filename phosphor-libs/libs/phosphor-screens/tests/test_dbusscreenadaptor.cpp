@@ -334,6 +334,51 @@ private Q_SLOTS:
         DBusScreenAdaptor adaptor2(nullptr, nullptr, &host2);
         QCOMPARE(adaptor2.setVirtualScreenConfig(physId, buildStripeJson(2)), QStringLiteral("no_config_store"));
     }
+
+    void testUnresolvedIdsAnswerNoOtherScreen()
+    {
+        // Only an empty id stands for the primary. A named screen that does
+        // not resolve, and a virtual screen the manager does not know, answer
+        // nothing rather than the primary's rect or the virtual screen's
+        // whole monitor.
+        const QString physId = physIdForPrimary();
+        if (physId.isEmpty()) {
+            QSKIP("no primary screen available under offscreen QPA");
+        }
+        InMemoryConfigStore store;
+        NoOpPanelSource panelSrc;
+        ScreenManager mgr(ScreenManagerConfig{.panelSource = &panelSrc,
+                                              .configStore = &store,
+                                              .useGeometrySensors = false,
+                                              .maxVirtualScreensPerPhysical = 8});
+        mgr.start();
+        AdaptorHost host;
+        DBusScreenAdaptor adaptor(&mgr, &store, &host);
+
+        QVERIFY(adaptor.getScreenGeometry(QString()).isValid());
+        QVERIFY(adaptor.getAvailableGeometry(QString()).isValid());
+        QVERIFY(adaptor.getScreenGeometry(physId).isValid());
+        QVERIFY(adaptor.getAvailableGeometry(physId).isValid());
+
+        const QString unknown = QStringLiteral("NoSuchConnector-9");
+        QVERIFY(!adaptor.getScreenGeometry(unknown).isValid());
+        QVERIFY(!adaptor.getAvailableGeometry(unknown).isValid());
+        QVERIFY(adaptor.getScreenInfo(unknown).isEmpty());
+
+        // No virtual-screen config exists, so this id names nothing, though
+        // its physical parent is the live primary.
+        const QString unknownVirtual = PhosphorIdentity::VirtualScreenId::make(physId, 5);
+        QVERIFY(!adaptor.getScreenGeometry(unknownVirtual).isValid());
+        QVERIFY(!adaptor.getAvailableGeometry(unknownVirtual).isValid());
+        QVERIFY(adaptor.getScreenInfo(unknownVirtual).isEmpty());
+
+        // Without a manager no virtual screen resolves at all.
+        AdaptorHost bareHost;
+        DBusScreenAdaptor bare(nullptr, nullptr, &bareHost);
+        QVERIFY(!bare.getScreenGeometry(unknownVirtual).isValid());
+        QVERIFY(!bare.getAvailableGeometry(unknownVirtual).isValid());
+        QVERIFY(bare.getScreenInfo(unknownVirtual).isEmpty());
+    }
 };
 
 QTEST_MAIN(TestDBusScreenAdaptor)

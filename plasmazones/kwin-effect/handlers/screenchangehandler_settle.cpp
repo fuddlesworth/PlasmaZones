@@ -336,7 +336,11 @@ bool ScreenChangeHandler::arrivalOn(KWin::EffectWindow* w, const QString& physic
 void ScreenChangeHandler::slotParkReseated(const QString& windowId, const QString& outputUuid)
 {
     m_reseatedPark.reset();
-    KWin::EffectWindow* const w = m_effect->findWindowByIdExact(windowId);
+    // By instance, not exactly: the daemon can name the window by its
+    // first-seen canonical id (its evacuee ledger is keyed by it, and a drop
+    // of a ledger key emits that key), which a class-mutating app's live id no
+    // longer matches. Never a same-app sibling (F398).
+    KWin::EffectWindow* const w = m_effect->findWindowByInstanceId(windowId);
     if (!w) {
         return;
     }
@@ -382,8 +386,9 @@ void ScreenChangeHandler::slotParkReseated(const QString& windowId, const QStrin
 void ScreenChangeHandler::slotParkDropped(const QString& windowId, const QString& outputUuid)
 {
     // Consumed on every path. A seat whose entry stayed parked sends no drop,
-    // so its mark is also held to the announce it came in (F1147).
-    KWin::EffectWindow* const w = m_effect->findWindowByIdExact(windowId);
+    // so its mark is also held to the announce it came in (F1147). Resolved by
+    // instance, as the re-seat is (F398).
+    KWin::EffectWindow* const w = m_effect->findWindowByInstanceId(windowId);
     const bool reseated = w && m_reseatedPark && m_reseatedPark->windowId == windowId
         && m_reseatedPark->outputUuid == outputUuid
         && m_reseatedPark->announce == m_effect->m_tilingHandler->announceGeneration(m_effect->getWindowId(w));

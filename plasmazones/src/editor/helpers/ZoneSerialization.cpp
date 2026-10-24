@@ -3,6 +3,7 @@
 
 #include "ZoneSerialization.h"
 #include "core/types/constants.h"
+#include <PhosphorZones/Zone.h>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -13,12 +14,13 @@
 namespace PlasmaZones {
 namespace ZoneSerialization {
 
-QString serializeZonesToClipboard(const QVariantList& zones)
+QString serializeZonesToClipboard(const QVariantList& zones, bool fixedGeometryInDevicePixels)
 {
     QJsonObject clipboardData;
     clipboardData[QLatin1String("version")] = QLatin1String("1.0");
     clipboardData[QLatin1String("application")] = QLatin1String("PlasmaZones");
     clipboardData[QLatin1String("dataType")] = QLatin1String("zones");
+    clipboardData[::PhosphorZones::ZoneJsonKeys::FixedGeometryInDevicePixels] = fixedGeometryInDevicePixels;
 
     QJsonArray zonesArray;
     for (const QVariant& zoneVar : zones) {
@@ -33,6 +35,22 @@ QString serializeZonesToClipboard(const QVariantList& zones)
         zoneObj[::PhosphorZones::ZoneJsonKeys::Y] = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
         zoneObj[::PhosphorZones::ZoneJsonKeys::Width] = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
         zoneObj[::PhosphorZones::ZoneJsonKeys::Height] = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
+
+        // A fixed zone travels as one: without its mode and pixel rect the
+        // paste rebuilt it from the relative copy as a relative zone.
+        const bool isFixed = zone.value(::PhosphorZones::ZoneJsonKeys::GeometryMode, 0).toInt()
+            == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
+        if (isFixed && zone.contains(::PhosphorZones::ZoneJsonKeys::FixedX)) {
+            zoneObj[::PhosphorZones::ZoneJsonKeys::GeometryMode] =
+                static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
+            QJsonObject fixedGeo;
+            fixedGeo[::PhosphorZones::ZoneJsonKeys::X] = zone[::PhosphorZones::ZoneJsonKeys::FixedX].toDouble();
+            fixedGeo[::PhosphorZones::ZoneJsonKeys::Y] = zone[::PhosphorZones::ZoneJsonKeys::FixedY].toDouble();
+            fixedGeo[::PhosphorZones::ZoneJsonKeys::Width] = zone[::PhosphorZones::ZoneJsonKeys::FixedWidth].toDouble();
+            fixedGeo[::PhosphorZones::ZoneJsonKeys::Height] =
+                zone[::PhosphorZones::ZoneJsonKeys::FixedHeight].toDouble();
+            zoneObj[::PhosphorZones::ZoneJsonKeys::FixedGeometry] = fixedGeo;
+        }
 
         // Appearance properties
         zoneObj[QLatin1String("highlightColor")] = zone[::PhosphorZones::ZoneJsonKeys::HighlightColor].toString();
@@ -63,8 +81,11 @@ QString serializeZonesToClipboard(const QVariantList& zones)
     return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
 }
 
-QVariantList deserializeZonesFromClipboard(const QString& clipboardText)
+QVariantList deserializeZonesFromClipboard(const QString& clipboardText, bool* fixedGeometryInDevicePixels)
 {
+    if (fixedGeometryInDevicePixels) {
+        *fixedGeometryInDevicePixels = false;
+    }
     QJsonDocument doc = QJsonDocument::fromJson(clipboardText.toUtf8());
     if (doc.isNull() || !doc.isObject()) {
         return QVariantList();
@@ -76,6 +97,10 @@ QVariantList deserializeZonesFromClipboard(const QString& clipboardText)
     if (clipboardData[QLatin1String("application")].toString() != QLatin1String("PlasmaZones")
         || clipboardData[QLatin1String("dataType")].toString() != QLatin1String("zones")) {
         return QVariantList();
+    }
+    if (fixedGeometryInDevicePixels) {
+        *fixedGeometryInDevicePixels =
+            clipboardData[::PhosphorZones::ZoneJsonKeys::FixedGeometryInDevicePixels].toBool(false);
     }
 
     QJsonArray zonesArray = clipboardData[QLatin1String("zones")].toArray();
@@ -93,6 +118,25 @@ QVariantList deserializeZonesFromClipboard(const QString& clipboardText)
         zone[::PhosphorZones::ZoneJsonKeys::Y] = zoneObj[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
         zone[::PhosphorZones::ZoneJsonKeys::Width] = zoneObj[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
         zone[::PhosphorZones::ZoneJsonKeys::Height] = zoneObj[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
+
+        // Geometry mode, and the pixel rect of a fixed zone. A fixed mode
+        // with no rect is read as relative, the same downgrade Zone::fromJson
+        // applies, rather than a fixed zone with no size.
+        const QJsonObject fixedGeo = zoneObj[::PhosphorZones::ZoneJsonKeys::FixedGeometry].toObject();
+        if (zoneObj[::PhosphorZones::ZoneJsonKeys::GeometryMode].toInt(0)
+                == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed)
+            && !fixedGeo.isEmpty()) {
+            zone[::PhosphorZones::ZoneJsonKeys::GeometryMode] =
+                static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
+            zone[::PhosphorZones::ZoneJsonKeys::FixedX] = fixedGeo[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedY] = fixedGeo[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = fixedGeo[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] =
+                fixedGeo[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
+        } else {
+            zone[::PhosphorZones::ZoneJsonKeys::GeometryMode] =
+                static_cast<int>(PhosphorZones::ZoneGeometryMode::Relative);
+        }
 
         // Appearance properties
         zone[::PhosphorZones::ZoneJsonKeys::HighlightColor] = zoneObj[QLatin1String("highlightColor")].toString();

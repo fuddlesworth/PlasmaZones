@@ -197,9 +197,9 @@ StripAxis ScrollEngine::effectiveStripAxis(const QVariantMap& overrides, const Q
 }
 
 // ── behaviour toggles ──
-// One shape for all nine callers (the six behaviour toggles plus the three
-// tab-indicator bools): a rule-written per-screen key wins, an absent key
-// falls back to the member the global config seeded. The value is taken only
+// One shape for every caller (the behaviour toggles below and the
+// tab-indicator bools in effectiveTabIndicator): a rule-written per-screen
+// key wins, an absent key falls back to the member the global config seeded. The value is taken only
 // when it is a real bool — a hand-edited string would otherwise coerce to
 // false and silently disable a behaviour, the same reject-and-fall-through
 // stance the context resolver takes on the way in.
@@ -255,7 +255,7 @@ PhosphorEngine::StickyWindowHandling ScrollEngine::effectiveStickyWindowHandling
 PhosphorEngine::StickyWindowHandling ScrollEngine::effectiveStickyWindowHandling(const QVariantMap& overrides) const
 {
     int mode = 0;
-    // Same guarded cast as the config read in loadSettings: an out-of-range
+    // Same guarded cast as the config read in refreshConfigFromSettings: an out-of-range
     // int must not become an undefined enumerator.
     if (overrideInt(overrides, ScrollPerScreenKeys::stickyWindowHandling(), mode)
         && mode >= static_cast<int>(PhosphorEngine::StickyWindowHandling::TreatAsNormal)
@@ -453,22 +453,79 @@ std::optional<ColumnWidth> ScrollEngine::resetDefaultColumnWidthFor(const QVaria
     return params.defaultColumnWidth;
 }
 
-ColumnWidth ScrollEngine::clientDecidedColumnWidth(const QSize& clientSize, const ScrollLayoutParams& params)
+ColumnWidth ScrollEngine::clientDecidedColumnWidth(const QSize& clientSize, const ScrollLayoutParams& params,
+                                                   ColumnDisplay display)
 {
     // The client's size is a PHYSICAL rect from the compositor, so it has to
     // be decoded by role. Reading .width() unconditionally would, on a
     // vertical strip, feed the client's cross extent into the column's MAIN
     // intent and open every client-sized window at the wrong length along the
     // strip.
-    //
+    const int clientMain = params.axis.mainSize(clientSize);
+    // Lifted into COLUMN space, reconcileWindowSize's conversion: a tabbed
+    // column whose indicator eats the main axis offers its tab the column
+    // less tabbedMainReservationPx, so a width written bare would hand the
+    // client one reservation less than it asked for. Measured on a column of
+    // one tab, which is the column every caller is about to open.
+    Column opening;
+    opening.display = display;
+    opening.tiles.append(Tile{});
+    int columnMain = clientMain + ScrollStrip::tabbedMainReservationPx(opening, params);
+    // Capped at the work area along the strip, the height twin's bound
+    // (commitClientDecidedHeight): the answer is PERSISTED pixels, the
+    // relayout clamps a wider column to the work area on every pass, and an
+    // intent past it goes stale on a wider output, where it would render at
+    // a width this client never had.
+    const int workMain = params.axis.mainSize(params.workArea);
+    if (workMain > 0) {
+        columnMain = qMin(columnMain, workMain);
+    }
     // Bounded like every other Fixed intent this engine mints (the settings
     // and override arms both qBound before the round). The size comes from
     // IWindowTrackingService or from the daemon's drag report, both of which
     // an embedder implements, and neither validates the extents — a
     // degenerate or absurd one would become the column's standing width
     // intent.
-    const int clientMain = params.axis.mainSize(clientSize);
-    return ColumnWidth::makeFixed(qBound(1, clientMain, static_cast<int>(kMaxFixedExtentPx)));
+    return ColumnWidth::makeFixed(qBound(1, columnMain, static_cast<int>(kMaxFixedExtentPx)));
+}
+
+std::optional<QSize> ScrollEngine::clientSizeForDecidedWidth(const QString& windowId, const QString& screenId,
+                                                             const QVariantMap& overrides) const
+{
+    // "Client decides" is the CONFIG default, so a per-screen rule override
+    // outranks it — the header documents these overrides as layering over the
+    // config defaults. Overwriting unconditionally meant a
+    // SetScrollDefaultColumnWidth rule pinned to a screen never took effect
+    // while the global kind was ClientDecides, with no diagnostic. (A
+    // per-WINDOW open rule is applied by the caller after this and wins over
+    // both, which is the intended precedence.)
+    // The rule channel's bare fraction pins a width outright. The settings
+    // channel's kind trio answers BY VALUE through
+    // effectiveWidthClientDecides: a per-screen kind of Fixed/Preset/
+    // Proportion pins a width (params.defaultColumnWidth already carries it
+    // resolved), while a per-screen kind of ClientDecides means exactly that —
+    // testing the kind key's mere PRESENCE here inverted the setting, gating
+    // the client-size branch off on precisely the monitors scoped to it.
+    // The rule gate asks the RESOLVER's question, not "is the key there":
+    // effectiveDefaultColumnWidth validates the fraction and falls through on
+    // an out-of-range one, so a presence test let a rule that contributed no
+    // width suppress the client-sized open anyway — the column then took the
+    // configured default, which is neither what the rule asked for nor what
+    // the ClientDecides setting asked for.
+    if (!m_windowTracker || !effectiveWidthClientDecides(overrides) || ruleColumnWidthFraction(overrides).has_value()) {
+        return std::nullopt;
+    }
+    // A column width is a PER-WINDOW contract, and the resolver is per-window
+    // by construction — there is no sharing mode to opt out of. That matters
+    // here specifically: minting one window's sizing intent out of another
+    // instance's remembered rect would open the column at a size this window
+    // never asked for. validatedUnmanagedGeometry validates only that a
+    // geometry EXISTS for the window on that screen; clientDecidedColumnWidth
+    // decodes and bounds its extents.
+    if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
+        return geo->size();
+    }
+    return std::nullopt;
 }
 
 bool ScrollEngine::effectiveWidthClientDecides(const QVariantMap& overrides) const
@@ -637,7 +694,14 @@ bool ScrollEngine::commitClientDecidedHeight(ScrollStrip& strip, const QString& 
                                 << crossExtent;
         return false;
     }
-    return strip.setWindowHeightIntent(windowId, WindowHeight::makeFixed(qMin(clientCross, crossExtent)));
+    // Lifted into COLUMN space, reconcileWindowSize's conversion: on a tabbed
+    // column the height intent sizes the column (tabbedColumnCrossPx) and the
+    // tab is committed at the column less the indicator's cross reservation,
+    // so an intent written bare would hand the client one reservation less
+    // than it asked for. Zero on every other column.
+    const int colIdx = strip.columnOfWindow(windowId);
+    const int reservation = colIdx >= 0 ? ScrollStrip::tabbedCrossReservationPx(strip.columns().at(colIdx), params) : 0;
+    return strip.setWindowHeightIntent(windowId, WindowHeight::makeFixed(qMin(clientCross + reservation, crossExtent)));
 }
 
 std::optional<WindowHeight> ScrollEngine::resetDefaultWindowHeightFor(const QVariantMap& overrides) const
@@ -715,14 +779,14 @@ TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QVariantMap& overri
         return params;
     }
     namespace K = ScrollPerScreenKeys;
-    // Per-property: an override map carrying only one key must leave the other
-    // six on their configured values, the same contract the width trio has.
+    // Per-property: an override map carrying only one key must leave every
+    // other field on its configured value, the same contract the width trio has.
     // Each read is guarded rather than taken through value(), because a
     // default-constructed QVariant would otherwise read as false / 0 and
     // silently override the configured value with a zero.
     //
-    // The three bools go through effectiveBoolOverride, the same reader the
-    // six behaviour toggles use: it takes the value only when it IS a bool,
+    // The bools go through effectiveBoolOverride, the same reader the
+    // behaviour toggles use: it takes the value only when it IS a bool,
     // so a hand-edited string cannot coerce to false and turn the indicator
     // off while every setting still reports it on. Two resolvers over one map
     // disagreeing about reject-vs-coerce is a bug in itself.

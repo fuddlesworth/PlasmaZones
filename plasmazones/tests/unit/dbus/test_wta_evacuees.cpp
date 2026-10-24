@@ -154,6 +154,36 @@ private Q_SLOTS:
         QCOMPARE(m_wta->service()->zoneForWindow(w), m_zoneIds[1]);
     }
 
+    // The re-assert re-applies a zone only where snapping runs the screen it
+    // is stored for. Snap keeps frozen memory on a screen a tiling engine took
+    // over, and its zone rect would fight the tile there (F399). Mutation:
+    // drop the isActiveOnScreen gate in reassertEvacuee and the zone rect on B
+    // is applied again.
+    void aZoneOnAScreenSnappingNoLongerRunsIsNotReapplied()
+    {
+        const QString w = QStringLiteral("app|frozen-zone");
+        QVERIFY(snapOnA(w));
+        QVERIFY(unplugA());
+        m_wta->reportOutputSettle({unplugRow(w)});
+        m_snapEngine->commitSnap(w, m_zoneIds[1], kB);
+        m_snapEngine->setLiveModeResolver([](const QString& screenId) {
+            return screenId == kB ? PhosphorZones::AssignmentEntry::Scrolling
+                                  : PhosphorZones::AssignmentEntry::Snapping;
+        });
+        const auto restore = qScopeGuard([this] {
+            m_snapEngine->setLiveModeResolver({});
+        });
+        QCOMPARE(m_snapEngine->zoneForWindow(w), m_zoneIds[1]);
+
+        QSignalSpy applySpy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        m_snapEngine->setCurrentDesktopForScreen(kA, 1);
+        m_wta->reportOutputSettle({redockRow(w)});
+
+        for (const QList<QVariant>& args : std::as_const(applySpy)) {
+            QVERIFY2(args.at(5).toString().isEmpty(), "no zone may be re-applied on a screen snapping does not run");
+        }
+    }
+
     // A window that closes while A is away has nothing left to return.
     void closeDropsThePark()
     {

@@ -152,10 +152,17 @@ struct ScrollCommandedRect
     quint64 commandStamp = 0; ///< the stamp of the strip apply that recorded this rect (WindowCommandStamps)
     bool outOfView = false; ///< @c rect leaves the strip's output (a park or a cropped straddler)
     bool parked = false; ///< @c rect lies off every output (TilingHandler::rectAtScrollPark)
-    /// The foreign size an X11 window was last put back from under this command
-    /// (ScrollDecisions::x11ForeignSizeVerdict); empty for none. A batch writes
-    /// a fresh entry, so a new command starts with none.
+    /// The foreign size the counter-assert last put an X11 window back from
+    /// under this command (ScrollDecisions::x11ForeignSizeVerdict); empty for
+    /// none. Written only where the put-back is made, and never for a size
+    /// within rounding of @c rect. A batch writes a fresh entry, so a new
+    /// command starts with none.
     QSize putBackSize{};
+    /// The size the counter-assert learned under this command: an X11 client
+    /// that insisted on it from a frame that read as its answer. Empty for
+    /// none. Only this size, or one within rounding of @c rect, is read as the
+    /// client's answer (ScrollDecisions::x11SizeAnswersColumn).
+    QSize learnedSize{};
 };
 
 /// The column a strip batch last delivered to a window, and where the
@@ -179,6 +186,15 @@ struct ScrollOfferedColumn
     /// re-armed by every delivery of a column (recordStripOffer).
     qint64 putBackBurstStartMs = 0;
     int putBackBurstCount = 0;
+    /// The window's command stamp when the column was delivered
+    /// (WindowCommandStamps): still current while no newer command has
+    /// replaced the delivery, which tells a scroll handoff's echo whether the
+    /// entry is the destination batch's own.
+    quint64 commandStamp = 0;
+    /// The connection of the commit watch named by @c answerWatch. Reads false
+    /// once it is disconnected, by the watch retiring itself or by its surface
+    /// going away, so a watch that can no longer serve the entry is replaced.
+    QMetaObject::Connection answerWatchConnection;
 };
 
 /// Minimize-shader stamp: the time and generation of the transition a minimize
@@ -190,9 +206,6 @@ struct MinimizeShaderStamp
     quint64 generation = 0;
 };
 
-/// Per-drag activation / float tracking. Grouped from PlasmaZonesEffect's
-/// trailing member block; see PlasmaZonesEffect::m_dragActivation. Set/read from
-/// the drag-tracker and async begin/endDrag reply lambdas.
 /// A window KWin is still moving after the effect stopped tracking the drag
 /// (the left button came up with another held), or a move the tracker never
 /// took. Its crossings wait for the drain, which runs once KWin's move has
@@ -206,6 +219,9 @@ struct MoveTailHold
     quint64 generation = 0; ///< the drag generation of the drop it waits on (0 for a move the tracker never took)
 };
 
+/// Per-drag activation / float tracking. Grouped from PlasmaZonesEffect's
+/// trailing member block; see PlasmaZonesEffect::m_dragActivation. Set/read from
+/// the drag-tracker and async begin/endDrag reply lambdas.
 struct DragActivationState
 {
     // Per-drag activation tracking: set once any activation trigger is detected
@@ -432,11 +448,11 @@ struct ContextHoldState
 
 /// Daemon readiness / virtual-screen fetch gate state. Grouped from
 /// PlasmaZonesEffect's trailing member block; see PlasmaZonesEffect::m_daemonGate.
-/// Cached daemon D-Bus service registration state, updated via QDBusServiceWatcher
-/// signals to avoid synchronous isServiceRegistered() calls that block the
-/// compositor thread.
 struct DaemonGateState
 {
+    /// Cached daemon D-Bus service registration state, updated via
+    /// QDBusServiceWatcher signals to avoid synchronous isServiceRegistered()
+    /// calls that block the compositor thread.
     bool serviceRegistered = false;
     /// True between sending registerBridge and receiving its reply. Prevents
     /// the Introspect probe + daemonReady signal racing into two concurrent

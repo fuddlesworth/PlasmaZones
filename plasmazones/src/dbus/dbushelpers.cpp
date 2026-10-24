@@ -49,8 +49,14 @@ QRectF resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, PhosphorZones:
             return GeometryUtils::effectiveScreenGeometry(mgr, layout, screenId);
         }
     }
-    QScreen* screen =
-        PhosphorScreens::ScreenIdentity::findByIdOrName(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+    // A virtual screen the manager does not resolve (an id left over from a
+    // reconfigure) has no geometry of its own. Widened to its physical
+    // monitor, zone math would run against the whole monitor for a screen
+    // that no longer exists.
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        return {};
+    }
+    QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     if (!screen && mgr) {
         screen = mgr->physicalScreenFor(screenId).qscreen;
     }
@@ -116,28 +122,49 @@ bool sendBusError(const QObject* adaptor, QDBusError::ErrorType type, const QStr
     return true;
 }
 
-bool admitCompositorReport(const QObject* adaptor, QLatin1StringView member)
+std::optional<QString> busCallerOf(const QObject* adaptor, QLatin1StringView member)
 {
     const QDBusContext* const context = busContext(adaptor);
     if (!context) {
-        return true;
+        return std::nullopt;
     }
     const QDBusMessage& message = context->message();
     if (message.member() != member || !isCallToOwnInterface(adaptor, message)) {
-        return true;
+        return std::nullopt;
     }
-    const QObject* const host = adaptor->parent();
+    return message.service();
+}
+
+bool isBridgeCaller(const QObject* adaptor, const QString& busName)
+{
+    // The host's direct children are its adaptors, so the lookup is a few
+    // pointer comparisons, and reading the bridge where it lives keeps one
+    // record of the registered name.
+    const QObject* const host = adaptor ? adaptor->parent() : nullptr;
     const CompositorBridgeAdaptor* const bridge =
         host ? host->findChild<CompositorBridgeAdaptor*>(QString(), Qt::FindDirectChildrenOnly) : nullptr;
-    const QString caller = message.service();
-    if (bridge && bridge->isBridgeService(caller)) {
+    return bridge && bridge->isBridgeService(busName);
+}
+
+bool admitCompositorReport(const QObject* adaptor, QLatin1StringView member)
+{
+    const std::optional<QString> caller = busCallerOf(adaptor, member);
+    if (!caller || isBridgeCaller(adaptor, *caller)) {
         return true;
     }
     // Once per caller: a peer that keeps calling would otherwise fill the log.
+    // Bounded, because a peer that reconnects comes back under a new unique
+    // name each time and the names are never reused: past the bound a refusal
+    // logs at debug and the set stops growing.
+    constexpr qsizetype MaxWarnedCallers = 32;
     static QSet<QString> warned;
-    if (!warned.contains(caller)) {
-        warned.insert(caller);
-        qCWarning(lcDbus) << member << "refused for" << caller << "- reserved for the registered compositor bridge";
+    if (warned.contains(*caller)) {
+        qCDebug(lcDbus) << member << "refused for" << *caller;
+    } else if (warned.size() < MaxWarnedCallers) {
+        warned.insert(*caller);
+        qCWarning(lcDbus) << member << "refused for" << *caller << "- reserved for the registered compositor bridge";
+    } else {
+        qCDebug(lcDbus) << member << "refused for" << *caller << "- reserved for the registered compositor bridge";
     }
     sendBusError(adaptor, QDBusError::AccessDenied,
                  QStringLiteral("%1 is reserved for the registered compositor bridge").arg(member));

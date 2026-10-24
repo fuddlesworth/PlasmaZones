@@ -4,6 +4,7 @@
 #include "../ZoneManager.h"
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
+#include "phosphor_i18n.h"
 #include <PhosphorZones/Zone.h>
 
 #include <QtMath>
@@ -25,7 +26,8 @@ QString ZoneManager::duplicateZone(const QString& zoneId)
     const QVariantMap& srcZone = *zoneOpt;
     QString originalName = srcZone[::PhosphorZones::ZoneJsonKeys::Name].toString();
     int zoneNumber = nextAvailableZoneNumber();
-    QString copyName = originalName + QStringLiteral(" (Copy)");
+    QString copyName = PhosphorI18n::tr("%1 (Copy)", "@item zone name of a duplicated zone, %1 is the original name")
+                           .arg(originalName);
 
     if (isFixedMode(srcZone)) {
         // Fixed mode: duplicate in pixel space
@@ -100,7 +102,7 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
 
         // Create new zone in pixel space
         int zoneNumber = nextAvailableZoneNumber();
-        QVariantMap newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, 0, 0, 0.25, 0.25);
+        QVariantMap newZone = createZone(PhosphorI18n::tr("Zone %1").arg(zoneNumber), zoneNumber, 0, 0, 0.25, 0.25);
         newZone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
         if (horizontal) {
             newZone[::PhosphorZones::ZoneJsonKeys::FixedX] = fixedGeo.x();
@@ -150,14 +152,14 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
         original[::PhosphorZones::ZoneJsonKeys::Height] = newH;
         m_zones[index] = original;
         emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
-        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, geom.x(), geom.y() + newH,
+        newZone = createZone(PhosphorI18n::tr("Zone %1").arg(zoneNumber), zoneNumber, geom.x(), geom.y() + newH,
                              geom.width(), newH);
     } else {
         qreal newW = geom.width() / 2.0;
         original[::PhosphorZones::ZoneJsonKeys::Width] = newW;
         m_zones[index] = original;
         emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
-        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, geom.x() + newW, geom.y(), newW,
+        newZone = createZone(PhosphorI18n::tr("Zone %1").arg(zoneNumber), zoneNumber, geom.x() + newW, geom.y(), newW,
                              geom.height());
     }
 

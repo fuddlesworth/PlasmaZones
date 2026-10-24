@@ -18,7 +18,10 @@ namespace PhosphorZones {
  * @brief Geometry mode for individual zones.
  *
  * Relative: 0.0–1.0 normalized coordinates (default, resolution-independent).
- * Fixed:    Absolute pixel coordinates relative to reference screen origin.
+ * Fixed:    Pixel coordinates relative to the reference screen origin, in the
+ *           unit the owning layout names: logical pixels by default, or the
+ *           output's device pixels when Layout::fixedGeometryInDevicePixels()
+ *           is on (divided by the output's scale when resolved).
  *
  * Owned by phosphor-zones because it's a per-zone shape; the former
  * Phosphor-side using-alias in src/core/ was removed when the decoupling
@@ -217,8 +220,10 @@ public:
      * schema rejects with exclusiveMinimum 0 — and it rejects the WHOLE layout,
      * so storing one turns the next save into a file the loader drops.
      *
-     * Shared by every ingress that accepts the key (Zone::fromJson for files,
-     * LayoutAdaptor::updateLayout for D-Bus) so they cannot drift apart.
+     * Called from Zone::fromJson only. Every ingress that accepts the key
+     * builds its zones through fromJson (the layout file loader, and
+     * LayoutAdaptor::updateLayout for D-Bus), so they cannot drift apart. A
+     * new ingress that builds zones another way must call this itself.
      */
     static QRectF sanitizeFixedGeometry(const QRectF& geometry);
 
@@ -246,8 +251,17 @@ public:
     /// What this zone's fixed geometry is divided by on an output of logical
     /// scale @p screenScale: its layout's Layout::fixedGeometryDivisor, with a
     /// zero scale read as the layout's last recalculation scale, and 1.0 for a
-    /// zone with no layout.
+    /// zone with no layout. Note the zero case differs from the Layout
+    /// function, which reads a zero scale as "no scale" and answers 1.0.
     qreal fixedGeometryDivisor(qreal screenScale) const;
+
+    /// @p fixedGeometry in logical units: every component divided by
+    /// @p divisor, a non-positive one reading as 1.0. The one place the
+    /// division is written, shared by the absolute, normalized, bounding-box
+    /// and gap-edge readers and by the shell's placement-map parser
+    /// (PhosphorShell::PlacementMapParser::parseSnappingLayout) so none of
+    /// them can resolve the unit differently.
+    static QRectF fixedGeometryToLogical(const QRectF& fixedGeometry, qreal divisor);
 
     /**
      * @brief Pure helper shared between Zone::calculateAbsoluteGeometry and
@@ -305,7 +319,7 @@ private:
 
     // Per-zone geometry mode
     ZoneGeometryMode m_geometryMode = ZoneGeometryMode::Relative;
-    QRectF m_fixedGeometry; // Absolute pixel coords relative to screen origin
+    QRectF m_fixedGeometry; // Pixel coords relative to screen origin, in the layout's fixed unit
 };
 
 } // namespace PhosphorZones

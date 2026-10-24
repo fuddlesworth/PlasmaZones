@@ -1030,7 +1030,7 @@ private:
      *
      * Snapshot captures must NOT consult this: a parked column's offscreen
      * capture (close snapshot, decoration capture) is legitimate work on an
-     * invisible window. The two arms that would drop it carry the
+     * invisible window. The arms that would drop it carry the
      * m_capturingSnapshot exemption; the TRANSFORMED gates need none, since a
      * capture sets that flag in its own mask and never runs prePaintWindow.
      */
@@ -1431,8 +1431,8 @@ private:
 
     // There is deliberately NO hasPlacementSensitiveRuleWork() helper here. One
     // existed with a doc asserting callers gated on it and had none: a copy of the live
-    // gate in rule_invalidation.cpp that had fallen two terms behind
-    // (m_decorationExclusionRuleSet, effectVerdictRuleSet), both of which that file
+    // gate in rule_invalidation.cpp that had fallen behind it by the terms
+    // m_decorationExclusionRuleSet and effectVerdictRuleSet, both of which that file
     // explains are load-bearing. The gate lives at its one call site.
 
     /// Evaluate a config-default appearance scope token against a live window.
@@ -1581,17 +1581,21 @@ private:
     /// given, receives the strip's tracked screen once the gates resolved it.
     bool frameReadsAsColumnAnswer(KWin::EffectWindow* w, const QString& windowId, const ScrollOfferedColumn& offer,
                                   const QRect& live, QString* screenId = nullptr) const;
-    /// readColumnAnswer's offered-column centring of an answer @p live that
-    /// is not the column's size.
+    /// readColumnAnswer's offered-column centring of a Wayland answer @p live
+    /// that is not the column's size. Precondition: @p live has read as the
+    /// answer (frameReadsAsColumnAnswer), so it is settled; nothing here asks
+    /// again.
     void centreOnColumnAnswer(KWin::EffectWindow* w, const QString& windowId, const ScrollOfferedColumn& offer,
                               const QRect& live);
     /// Read the client's commits while @p entry's answer is owed.
     void armColumnAnswerWatch(KWin::EffectWindow* w, const QString& windowId, ScrollOfferedColumn& entry);
-    /// KWin (or the user) is about to change @p w's geometry outside any effect apply. A resize on KWin's account is
-    /// put back to the strip's rect from inside the request (ScrollDecisions::putsBackKWinResize, under a budget);
-    /// one that is not, and the user's resize, make the answer Foreign.
+    /// KWin (or the user) is about to change @p w's geometry outside any effect apply. For a Wayland window a resize
+    /// on KWin's account is put back to the strip's rect from inside the request (ScrollDecisions::putsBackKWinResize,
+    /// under a budget), and one that is not makes the answer Foreign. The user's resize makes any window's answer
+    /// Foreign. An X11 window's other requests are the counter-assert's (ScrollDecisions::x11ForeignSizeVerdict).
     void noteForeignStripRequest(KWin::EffectWindow* w);
-    /// Read every owed answer once more on the next event-loop turn, after a gate that refused one has cleared.
+    /// Read every owed answer, and every read one whose frame has since changed size, once more on the next
+    /// event-loop turn, after a gate that refused one has cleared.
     void scheduleColumnAnswerCatchUp();
 
     void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
@@ -1642,7 +1646,7 @@ private:
     ///        step later) and is exactly why a genuine teardown must not pass it: a
     ///        window removed with it left true is stranded redirected, presenting
     ///        through a shader with no decoration behind it. Genuine teardown
-    ///        (close, delete, undecorate) leaves it false. The three exits in
+    ///        (close, delete, undecorate) leaves it false. The exits in
     ///        updateWindowDecoration where a refresh discovers the window is no
     ///        longer decoratable run the release themselves.
     void removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint = nullptr,
@@ -2023,16 +2027,17 @@ private:
     /// Every path that DESTROYS a GL object (a shader, a texture, a framebuffer, or a
     /// window's offscreen redirect) has to be able to run off the paint cycle — a file
     /// watcher, a D-Bus reply, a QTimer, a window closing — and glDelete* against no
-    /// current context is undefined. This was asserted in six places and quietly ignored
-    /// in nine, including the hottest one (every time-driven animation's teardown). It is
+    /// current context is undefined. This was asserted at some sites and quietly ignored
+    /// at more, including the hottest one (every time-driven animation's teardown). It is
     /// one call here instead, idempotent and a no-op when the context is already current.
     ///
-    /// False for compositor teardown (no `KWin::effects`) and for a failed make-current:
-    /// GL is going away in the first, and there is no context to delete against in the
-    /// second. Callers that DISCARD the result proceed either way; the rest branch on it.
+    /// False for a failed make-current, where there is no context to delete against.
+    /// Callers that DISCARD the result proceed either way; the rest branch on it.
+    /// KWin::effects is not tested: the global outlives every effect, the teardown
+    /// included (see windowOutput).
     bool ensureGlContextCurrent() const
     {
-        return KWin::effects && KWin::effects->makeOpenGLContextCurrent();
+        return KWin::effects->makeOpenGLContextCurrent();
     }
 
     /// Wake every decorated window with one repaint each. Needed whenever a gate above
@@ -2623,13 +2628,13 @@ private:
     /// not engage (fails open).
     KWin::LogicalOutput* m_currentPassOutput = nullptr;
     /// The RenderView of the pass named by m_currentPassOutput, latched and
-    /// cleared in the same two places for the same bracket. KWin 6.8 keeps one
+    /// cleared at the same sites for the same bracket. KWin 6.8 keeps one
     /// ItemRenderer per RenderDevice rather than one per scene, and the view is
     /// the only per-output route to that device — so anything drawing a scene
     /// item by hand (currently just the cursor sprite) has to ask this pass's
     /// view which device it is rendering on. Reading the compositor's PRIMARY
     /// device instead would be wrong on a multi-GPU desktop, where an output can
-    /// render on a secondary one. Latched and cleared at the same two sites as
+    /// render on a secondary one. Latched and cleared at the same sites as
     /// m_currentPassOutput. ScreenPrePaintData::screen and ::view are independent
     /// fields, so this is not the same condition as that latch being null; it is
     /// the same bracket.
@@ -2647,8 +2652,8 @@ private:
     ///
     /// Set where a chained paint's failure abandons the PRESENTED frame, plus paintWindowImpl's
     /// m_capturingSnapshot arm, an offscreen capture that latches anyway through notePaintOk and is
-    /// unreachable under KWin's closed draw chain. Cleared in prePaintScreen beside the two latches
-    /// above. Read five times in paintScreenImpl, at the two other pill sites, THRICE in postPaintScreen.
+    /// unreachable under KWin's closed draw chain. Cleared in prePaintScreen beside the latches
+    /// above. Read in paintScreenImpl, at the other pill sites, and in postPaintScreen.
     bool m_currentPassPaintFailed = false;
 
     /// The three paint hooks' actual bodies, version-independent: true when the
@@ -2823,8 +2828,8 @@ private:
     /// handler. Keyed by window id, swept in slotWindowClosed with a
     /// windowDeleted backstop for a delete that had no preceding close, so it
     /// is bounded by the live traced population. Nothing re-enters it after the
-    /// close sweep: two of its three insert sites are behind a positive
-    /// scrollManagedOutputFor, which refuses a deleted window, and the third
+    /// close sweep: its insert sites are behind a positive
+    /// scrollManagedOutputFor, which refuses a deleted window, bar one that
     /// needs a live m_scrollVisualDelta entry that slotWindowClosed removes
     /// before the sweep. It was
     /// previously swept only on windowDeleted, and that removal sits behind the
@@ -2925,7 +2930,17 @@ private:
     /// KWin 6.8 clamps an out-of-view column back on screen on a commit that
     /// acks or reshapes. Consumed by TilingHandler::slotWindowFrameGeometryChanged
     /// (RATE-LIMITED to 3 per rolling second where a counter can loop, re-armed
-    /// by every batch command). A plain Wayland strip tile is centred within
+    /// by every batch command), which for an X11 window also keeps the size it
+    /// last put back (putBackSize) and the size it learned under the command
+    /// (learnedSize, ScrollDecisions::x11ForeignSizeVerdict). Read besides by
+    /// readColumnAnswer and the batch's size-continuity carry, which take an
+    /// X11 frame as the client's answer only at a size this command decided
+    /// (ScrollDecisions::x11SizeAnswersColumn); by noteForeignStripRequest and
+    /// the quick-tile cancel, as the rect to put back; by
+    /// TilingHandler::isKWinMoveOfStripTile, as the strip's rect; by
+    /// TilingHandler::reportStripCommit, for its recorded park; and by the
+    /// offered-column centring, which leaves an out-of-view column's seat to
+    /// the counter-assert. A plain Wayland strip tile is centred within
     /// m_scrollOfferedColumn; m_tileTargetZones holds no strip entry.
     /// Dropped on close, the deleted backstop, float cleanup
     /// (both channels), the untrack funnel (cleanupAutotileTracking), the
@@ -2950,11 +2965,12 @@ private:
     /// (stripOfferOnDeferredReplay); and the cancels that put a strip tile back
     /// after KWin's quick tile or axis-only maximize
     /// (TilingHandler::cancelStripQuickTile, TilingHandler::cancelAxisOnlyMaximize),
-    /// which re-record an entry already there and create none. The
-    /// size-continuity carry stays Wayland's; an X11 answer is judged against
-    /// its size hints' answer to the column (constrainTileGeometry), and the
-    /// counter-assert decides a size the batch did not command
-    /// (ScrollDecisions::x11ForeignSizeVerdict).
+    /// which re-record an entry already there and create none. An X11 answer
+    /// is judged against its size hints' answer to the column
+    /// (constrainTileGeometry), the counter-assert decides a size the batch did
+    /// not command (ScrollDecisions::x11ForeignSizeVerdict), and only a size it
+    /// commanded or learned is read or carried forward
+    /// (ScrollDecisions::x11SizeAnswersColumn).
     ///
     /// The discriminator for size continuity (see the strip apply). A genuine
     /// column change is "this size differs from the one recorded here" — our
@@ -2964,11 +2980,19 @@ private:
     /// its column be offered a stable size without ever freezing one that
     /// simply has not been asked yet.
     ///
-    /// Cleaned up on the same paths as m_scrollCommandedRects, which is the
-    /// right sibling: both are strip-scoped, so both must drop on a float
-    /// round trip and a screen change, where m_lastReportedMinSize
-    /// deliberately persists. A settled size surviving either would place the
-    /// window at a stale size on re-entry.
+    /// Strip-scoped like m_scrollCommandedRects, and dropped with it on every
+    /// untrack and strip exit (TilingHandler::dropScrollCompanions), on close
+    /// and the deleted backstop, and wholesale on daemon loss and at bring-up,
+    /// where m_lastReportedMinSize deliberately persists: a settled size
+    /// surviving a float round trip or a screen change would place the window
+    /// at a stale size on re-entry. It is also dropped on its own where the
+    /// column becomes declared state (maximized to the edges, windowed
+    /// fullscreen, a monocle entry on a strip) and at a scroll handoff's echo
+    /// when the destination batch has not delivered it. Unlike its sibling it
+    /// is NOT dropped by the per-batch disarm when a commit deferred or
+    /// bailed: an entry already there describes a column an earlier batch
+    /// delivered, and the deferred replay records the new one when it goes
+    /// out.
     ///
     /// The value also carries where the client's ANSWER to the column stands
     /// (ScrollDecisions::ColumnAnswer), so every remover above retires it with
@@ -3483,14 +3507,14 @@ private:
     // because it references Field::ActiveLayout (see effectNeverStampedFields
     // in shader_config_dbus.cpp).
     //
-    // Read by exactly one consumer: the seeding edge in
+    // Read only by the seeding edge in
     // TilingHandler::setActiveLayouts, which re-drives the whole rule fetch so
     // the held-out rules are admitted. Without this marker that re-drive is
     // unconditional, and every session with no ActiveLayout rule at all — the
     // overwhelming majority — pays a getAllRules round-trip, a full RuleSet
     // parse and an updateAllDecorations sweep for rules that do not exist.
     //
-    // Cleared on exactly one path: consumption by that seeding edge. Every
+    // Cleared only by that seeding edge consuming it. Every
     // loadRuleAnimationsFromDbus reply that PARSES recomputes it outright
     // (shader_config_dbus.cpp assigns the pass verdict, never ORs). The
     // refusal arms (over-cap payload, non-object JSON, RuleSet::fromJson

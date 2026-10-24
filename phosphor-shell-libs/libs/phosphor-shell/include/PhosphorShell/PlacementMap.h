@@ -58,8 +58,8 @@ class Workspaces;
  * promoteToMaster and toggleMaximizeColumn act on the screen's own
  * daemon-reported focus, and do nothing without one or on a pinned screen.
  *
- * `workArea` and `cellRect(id)` are in this screen's own pixels, origin
- * at the screen's top-left, so a full-screen surface on the screen can
+ * `workArea` and `cellRect(id)` are in this screen's logical coordinates,
+ * origin at the screen's top-left, so a full-screen surface on the screen can
  * place an item on a cell directly (the OSD and toast bands, A3 §3–§4).
  *
  * `currentDesktop` and `switchDesktop(index)` are both 0-based, matching
@@ -183,7 +183,7 @@ public:
     void serviceLost();
     /// Re-read the mode for the current (screen, desktop, activity).
     void refreshMode();
-    /// Re-read the work area.
+    /// Re-read the work area, the screen origin and the output's scale.
     void refreshGeometry();
     /// Occupancy (snapping) or focus (any mode) changed upstream.
     void occupancyChanged();
@@ -220,6 +220,7 @@ Q_SIGNALS:
 
 private:
     void resolveScreenId();
+    void fetchDeviceScale();
     void fetchModeData();
     void fetchSnappingLayout();
     void fetchStrip();
@@ -333,6 +334,12 @@ private:
     QVariantList m_menu;
 
     QTimer m_coalesce;
+
+    // The output's logical scale from the daemon (Screen.getScreenInfo
+    // devicePixelRatio), which a snapping layout counting its fixed zones in
+    // device pixels is divided by. 0 until the daemon has answered. Re-read
+    // with the work area. Appended last (installed class).
+    qreal m_deviceScale = 0.0;
 };
 
 /**

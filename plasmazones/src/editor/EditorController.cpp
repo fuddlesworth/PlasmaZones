@@ -28,10 +28,13 @@
 
 #include <QClipboard>
 #include <QDBusConnection>
+#include <QDBusServiceWatcher>
 #include <QGuiApplication>
+#include <QScreen>
 #include <QStringList>
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include "../common/daemonscreenscale.h"
 #include "../common/screenidresolver.h"
 
 namespace PlasmaZones {
@@ -163,6 +166,50 @@ EditorController::EditorController(QObject* parent)
     m_templateStore->loadTemplates();
     subscribe(iface, QStringLiteral("scrollingTemplatesChanged"), this, SLOT(reloadLocalTemplates()));
 
+    // The target screen's geometry is cached at switch time (virtual screen
+    // rect, scale, insets, and the bounds override measured against them), so
+    // a change under an unchanged target has to reach it some other way. The
+    // daemon announces resolution, scale and subdivision changes, the only
+    // source for a virtual screen or a fractional scale.
+    const QString screenIface = QString(PhosphorProtocol::Service::Interface::Screen);
+    subscribe(screenIface, QStringLiteral("screenGeometryChanged"), this, SLOT(onDaemonScreenGeometryChanged(QString)));
+    subscribe(screenIface, QStringLiteral("virtualScreensChanged"), this, SLOT(onDaemonVirtualScreensChanged(QString)));
+    // A panel added, removed or resized moves the work area under an
+    // unchanged screen rect, so screenGeometryChanged stays silent for it.
+    // The insets bound the reference fixed zones are drawn against, so the
+    // daemon's work-area signal refetches them; setInsets republishes.
+    subscribe(screenIface, QStringLiteral("availableGeometryChanged"), this,
+              SLOT(onDaemonAvailableGeometryChanged(QString)));
+    // A physical target is also measured off the editor's own QScreen
+    // (targetLogicalScreenSizeF), which updates on its own schedule, so watch
+    // that too. Its available-geometry arm only refetches the insets, and Qt
+    // reports a work area on only some Wayland compositors, which is why the
+    // daemon's signal above is the one a virtual screen relies on.
+    const auto watchScreen = [this](QScreen* screen) {
+        connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
+            if (PhosphorScreens::ScreenIdentity::findByIdOrName(m_targetScreen) == screen) {
+                refreshTargetScreenGeometry();
+            }
+        });
+        connect(screen, &QScreen::availableGeometryChanged, this, [this, screen]() {
+            if (PhosphorScreens::ScreenIdentity::findByIdOrName(m_targetScreen) == screen) {
+                refreshUsableAreaInsets();
+            }
+        });
+    };
+    const auto screens = QGuiApplication::screens();
+    for (QScreen* screen : screens) {
+        watchScreen(screen);
+    }
+    connect(qGuiApp, &QGuiApplication::screenAdded, this, watchScreen);
+
+    // A daemon that was not on the bus when a scale or a virtual screen's
+    // geometry was asked for left them unknown; ask again once it arrives.
+    auto* daemonWatcher = new QDBusServiceWatcher(svc, bus, QDBusServiceWatcher::WatchForRegistration, this);
+    connect(daemonWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
+        refreshTargetScreenGeometry();
+    });
+
     if (!failedSubscriptions.isEmpty()) {
         qCWarning(lcEditor) << "EditorController:" << failedSubscriptions.size()
                             << "D-Bus signal subscription(s) failed at construction — affected routes:"
@@ -258,7 +305,7 @@ EditorController::EditorController(QObject* parent)
     // Initialize canPaste state
     m_canPaste = canPaste();
 
-    // Load editor settings from KConfig
+    // Load editor settings from the JSON config backend
     loadEditorSettings();
 }
 
@@ -313,8 +360,8 @@ void EditorController::reloadLocalLayouts()
     // the connect block + rationale. loadLayouts() does no diffing: it
     // re-reads and rebuilds the whole catalogue every call, which is what
     // makes it a reload. The layout set is O(10s) of small JSON files and
-    // this only fires on a daemon layout signal, so the re-scan is not on
-    // any hot path.
+    // this runs only on a daemon layout signal or a successful saveLayout(),
+    // both user-paced, so the re-scan is not on any hot path.
     if (m_localLayoutManager) {
         m_localLayoutManager->loadLayouts();
     }
@@ -329,6 +376,11 @@ void EditorController::recalcLocalLayouts()
     if (!primary) {
         return;
     }
+    // A layout counting fixed sizes in device pixels is laid out at the
+    // output's logical scale, which only the daemon knows (QScreen reports the
+    // integer buffer scale). Asked once per pass rather than per layout; zero
+    // when the daemon cannot answer keeps each layout's last scale.
+    const qreal primaryScale = queryDaemonScreenScale(PhosphorScreens::ScreenIdentity::identifierFor(primary));
     for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
         if (!layout) {
             continue;
@@ -336,7 +388,7 @@ void EditorController::recalcLocalLayouts()
         // Editor is a separate process without a daemon ScreenManager — pass
         // nullptr and accept the Qt-availableGeometry fallback for previews.
         PhosphorZones::LayoutComputeService::recalculateSync(
-            layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
+            layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary), primaryScale);
     }
 }
 QString EditorController::selectedZoneId() const

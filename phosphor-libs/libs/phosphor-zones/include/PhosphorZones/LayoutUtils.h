@@ -76,11 +76,20 @@ PHOSPHORZONES_EXPORT void deserializeAllowLists(const QJsonObject& json, QString
  *
  * @param layout The layout containing zones (returns empty list if null)
  * @param fields Which fields to include for each zone
- * @param referenceGeometry Screen geometry for normalizing fixed zones (empty = use raw relativeGeometry)
+ * @param referenceGeometry Screen geometry for normalizing fixed zones. Empty
+ *        takes the layout's lastRecalcGeometry(), the rect of the output it was
+ *        last recalculated for.
+ * @param screenScale Logical scale of the output @p referenceGeometry belongs
+ *        to, which a layout counting fixed geometry in device pixels divides by
+ *        (Zone::normalizedGeometry). Zero, the default, takes the layout's
+ *        lastRecalcScale(). Honoured only alongside a non-empty
+ *        @p referenceGeometry: with an empty one the cached rect and its own
+ *        scale are used together, so the two never describe different outputs.
  * @return QVariantList of zone maps
  */
 PHOSPHORZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields fields = ZoneField::Minimal,
-                                                     const QRectF& referenceGeometry = QRectF());
+                                                     const QRectF& referenceGeometry = QRectF(),
+                                                     qreal screenScale = 0.0);
 
 /**
  * @brief Convert a layout to a QVariantMap (metadata + zones)

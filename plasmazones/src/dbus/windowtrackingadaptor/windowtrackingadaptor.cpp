@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
+#include "internal.h"
 #include "lifecyclerelay.h"
 #include "evacueeledger.h"
 #include "core/resolve/daemongeometryresolver.h"
@@ -220,7 +221,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
 
     // The instant-restore set (getPendingRestoreGeometries) is read against
     // the layout each context runs, the desktop and activity in view, the
-    // disabled contexts and the outputs: the effect fetches it again on
+    // disabled contexts and the outputs and their scale: the effect fetches it again on
     // pendingRestoresChanged, emitted once per burst however many of those
     // moved in it (F625, l18_p_q1_f625). A burst spans several event-loop
     // passes: a desktop switch reaches the daemon as separate bus messages
@@ -280,6 +281,12 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         connect(screenMgr, &PhosphorScreens::ScreenManager::screenRemoved, this, noteRestoresChanged);
         connect(screenMgr, &PhosphorScreens::ScreenManager::screenGeometryChanged, this, noteRestoresChanged);
         connect(screenMgr, &PhosphorScreens::ScreenManager::virtualScreensChanged, this, noteRestoresChanged);
+        // A zone whose fixed size counts device pixels moves when the scale
+        // does, at an unchanged output rect (#1160). The first such change
+        // lands at startup, when the sensor's real fractional scale replaces
+        // the coarse one the effect's first fetch was resolved under, so a
+        // window opened from that cache was placed twice.
+        connect(screenMgr, &PhosphorScreens::ScreenManager::logicalScaleChanged, this, noteRestoresChanged);
         // If panel geometry is already ready, trigger the check now
         if ((m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady())) {
             onPanelGeometryReady();
@@ -469,7 +476,9 @@ void WindowTrackingAdaptor::reapplyWindowAppearance()
             if (!frame.isValid() || stored.isEmpty()) {
                 continue;
             }
-            const QString at = Utils::effectiveScreenIdAt(m_service->screenManager(), frame.center());
+            // Empty for a centre on no output: a window hanging past an edge
+            // has not moved to another output, and must keep its zone.
+            const QString at = WindowTrackingInternal::screenContaining(m_service->screenManager(), frame.center());
             if (!at.isEmpty() && !PhosphorIdentity::VirtualScreenId::samePhysical(at, stored)) {
                 windowScreenChanged(windowId, at);
             }

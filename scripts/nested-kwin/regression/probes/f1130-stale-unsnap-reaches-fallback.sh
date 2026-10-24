@@ -6,13 +6,17 @@
 # live window's, reach the same window. Runner: 1 output, no flags.
 # Staging: Snap Assist off, Virtual-0 COLS3. A rule on the window titled l: IsSnapped true ->
 #   setHideTitleBar, so KWin's noBorder shows the snapped verdict. l and s open (both org.pz.plain),
-#   l left free. The nested daemon is frozen (dstop) and Snap.moveWindowToZone(s, zone 1) and
-#   Snap.windowUnsnapped(s) are queued behind it with dsend; s's client is killed, so the effect's
-#   windowClosed(s) queues behind them. Let run, the daemon emits windowStateChanged(s, snapped)
-#   then (s, unsnapped), both reaching the effect after s is gone: the zone notice takes the app-id
-#   fallback to l. Counts only when the monitor shows both notices for s and the daemon holds l in
-#   no zone. Control (F1111): l snapped for real into zone 2, s2 snapped into zone 3, then
-#   windowUnsnapped(s2) queued behind a frozen daemon while s2 closes.
+#   l left free. s is focused, the nested daemon is frozen (dstop), and Snap.moveWindowToZone(s,
+#   zone 1) and Snap.restoreWindowSize() are queued behind it with dsend; s's client is killed, so
+#   the effect's windowClosed(s) queues behind them. Snap.windowUnsnapped is the compositor's own
+#   report and refuses this shell, so the unsnap is the restore verb, which acts on the focused
+#   window: it takes s out of zone 1, floats it and moves it to its float-back. Let run, the daemon
+#   emits windowStateChanged(s, snapped), then (s, unsnapped) and (s, floated), all reaching the
+#   effect after s is gone: the zone notice takes the app-id fallback to l, the unsnapped notice
+#   takes the target it left, and the floated notice finds none left. Counts only when the monitor
+#   shows the snapped and unsnapped notices for s and the daemon holds l in no zone. Control
+#   (F1111): l snapped for real into zone 2, s2 snapped into zone 3 and focused, then the restore
+#   queued behind a frozen daemon while s2 closes.
 # Asserts: after both notices for s, l's noBorder is false (the clear went to the window the zone
 #   notice reached). Control: l keeps noBorder true after the closed s2's clear.
 # A FAIL means: the clear resolved s by instance, missed, and left l marked snapped.
@@ -50,12 +54,14 @@ MON="$NEST/f1130-monitor.log"
 mon_start "$MON" "type='signal',interface='org.plasmazones.WindowTracking',member='windowStateChanged'"
 mmark "$MON"
 dmark
-echo "== daemon frozen; snap and unsnap of s queued; s closed"
+echo "== s focused; daemon frozen; snap and restore of s queued; s closed"
 SPID=$(cpid s) || stage_fail "no client pid for s"
+activate s
+[ "$(activecap)" = s ] || stage_fail "s did not take focus ($(activecap))"
 dstop || stage_fail "the daemon could not be frozen"
 dsend org.plasmazones.Snap.moveWindowToZone "string:$S" "string:$Z1"
 sleep 0.5
-dsend org.plasmazones.Snap.windowUnsnapped "string:$S"
+dsend org.plasmazones.Snap.restoreWindowSize
 sleep 0.5
 kill "$SPID"
 sleep 1.5
@@ -92,13 +98,18 @@ sleep 2
 echo "  s2 $(geo s2) zone=$(zoneof "$S2")"
 case "$(zoneof "$S2")" in "{"*) ;; *) stage_fail "s2 did not snap into zone 3" ;; esac
 S2PID=$(cpid s2) || stage_fail "no client pid for s2"
+activate s2
+[ "$(activecap)" = s2 ] || stage_fail "s2 did not take focus ($(activecap))"
+mmark "$MON"
 dstop || stage_fail "the daemon could not be frozen"
-dsend org.plasmazones.Snap.windowUnsnapped "string:$S2"
+dsend org.plasmazones.Snap.restoreWindowSize
 sleep 0.5
 kill "$S2PID"
 sleep 1.5
 [ "$(wincount s2)" = 0 ] || stage_fail "KWin still lists s2 with the daemon frozen"
 dcont
 sleep 3
+[ "$(msgs "$MON" | grep "^windowStateChanged " | grep "$S2U" | grep -c " unsnapped ")" -ge 1 ] \
+    || stage_fail "the monitor shows no unsnapped notice for s2 (the restore did not take it out of zone 3)"
 check "l's noBorder after the closed s2's clear" "$(nbof "$(geo l)")" = true
 finish

@@ -9,7 +9,11 @@
  *        float of the desktop in view, not of a hidden one (F725, F741, F795);
  *        and entering a desktop states the float or free state a window on
  *        several desktops has there, the per-window reconcile touching no
- *        other window (F742, F777, F778).
+ *        other window (F742, F777, F778). The float-back goes back on for a
+ *        frame management left the window at, a size-increment client's
+ *        settled frame short of its zone included (F293), and never for one
+ *        the user dragged it to. A float re-stated on a return from a tiling
+ *        desktop is heard after that desktop's own float edge.
  */
 
 #include "wta_snap_nav_fixture.h"
@@ -331,14 +335,44 @@ private Q_SLOTS:
         QCOMPARE(applies.first().at(8).toInt(), static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
     }
 
-    // A float standing anywhere but on another desktop's zone is the user's,
-    // and is not moved (F777).
+    // A size-increment client settles short of its zone, so its frame is not
+    // the zone rect, yet management put it there. Entering the desktop where
+    // it floats puts it back on its float-back as for an exact zone frame
+    // (F293). The exact zone-rect compare alone missed it.
+    void aFloatSettledShortOfItsZoneIsPutBack()
+    {
+        StatementFixture f;
+        const QString w = f.registerWindow(QStringLiteral("s4-short"));
+        f.snappedOnOneFloatedOnTwo(w, kFreeLeft);
+        const QRect settled = f.zoneRect(0, kLeft).adjusted(0, 0, -7, -9);
+        f.setFrame(w, settled);
+        QVERIFY2(f.wta->isSettledManagedFrame(w, settled), "precondition: reported while it held its zone in view");
+        QSignalSpy relayed(f.wta, &WindowTrackingAdaptor::windowFloatingChanged);
+        QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        f.showDesktop(kLeft, 2);
+        f.snap->reconcileDesktopMemberships(kLeft, StatementFixture::onOneAndTwo());
+
+        QCOMPARE(relayed.count(), 1);
+        QCOMPARE(applies.count(), 1);
+        const QRect applied(applies.first().at(1).toInt(), applies.first().at(2).toInt(), applies.first().at(3).toInt(),
+                            applies.first().at(4).toInt());
+        QCOMPARE(applied, kFreeLeft);
+    }
+
+    // A float standing anywhere but where management left it is the user's,
+    // and is not moved (F777). The frame comes from a drag, which the adaptor
+    // never takes for a settled managed frame.
     void aFloatAwayFromAnyZoneIsNotMoved()
     {
         StatementFixture f;
         const QString w = f.registerWindow(QStringLiteral("s4-free"));
         f.snappedOnOneFloatedOnTwo(w, kFreeLeft);
-        f.setFrame(w, QRect(900, 300, 500, 400));
+        const QRect moved(900, 300, 500, 400);
+        f.wta->setInteractiveDragWindow(w);
+        f.setFrame(w, moved);
+        f.wta->setInteractiveDragWindow(QString());
+        QVERIFY(!f.wta->isSettledManagedFrame(w, moved));
         QSignalSpy relayed(f.wta, &WindowTrackingAdaptor::windowFloatingChanged);
         QSignalSpy applies(f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
@@ -398,6 +432,54 @@ private Q_SLOTS:
             }
         }
         QCOMPARE(unsnapped, 1);
+    }
+
+    // A sticky window floating on desktop 1, shown on desktop 2 while a
+    // tiling mode runs there. The float edge the tiling engine sends from
+    // there goes through the same relay as snapping's, so the relay's
+    // last-broadcast memory reads "not floating" by the return, and the float
+    // re-stated on desktop 1 is heard rather than taken for a repeat. With no
+    // edge from there, the memory and the effect both still read "floating".
+    void aFloatReStatedOnAReturnFromTilingIsHeard()
+    {
+        StatementFixture f;
+        const QString w = f.registerWindow(QStringLiteral("s4-tiling"));
+        f.showDesktop(kLeft, 1);
+        f.snapThenFloat(w, kLeft);
+        const auto* inView = static_cast<PhosphorSnapEngine::SnapState*>(f.snap->stateForScreen(kLeft));
+        QVERIFY2(inView && inView->isFloating(w) && inView->zonesForWindow(w).isEmpty(),
+                 "precondition: floating on desktop 1, with no zone there");
+        const PhosphorEngine::DesktopSpanQuery sticky = [](const QString&) {
+            PhosphorEngine::DesktopSpan span;
+            span.known = true;
+            span.sticky = true;
+            return span;
+        };
+        // Captures the engine, not the fixture: the fixture's type is in an
+        // anonymous namespace, which a capture would carry into this member's
+        // closure type (-Wsubobject-linkage).
+        auto* const snap = f.snap.get();
+        const auto runs = [snap](PhosphorZones::AssignmentEntry::Mode mode) {
+            snap->setLiveModeResolver([mode](const QString&) {
+                return mode;
+            });
+        };
+        QSignalSpy relayed(f.wta, &WindowTrackingAdaptor::windowFloatingChanged);
+
+        runs(PhosphorZones::AssignmentEntry::Mode::Autotile);
+        f.showDesktop(kLeft, 2);
+        f.snap->reconcileDesktopMemberships(kLeft, sticky);
+        // The tiling engine's edge, routed as the daemon's passive sync routes it.
+        f.wta->relayWindowFloatingChanged(w, false, kLeft);
+        QCOMPARE(relayed.count(), 1);
+        runs(PhosphorZones::AssignmentEntry::Mode::Snapping);
+        f.showDesktop(kLeft, 1);
+        f.snap->reconcileDesktopMemberships(kLeft, sticky);
+        f.snap->setLiveModeResolver({});
+
+        QCOMPARE(relayed.count(), 2);
+        QCOMPARE(relayed.last().at(0).toString(), w);
+        QCOMPARE(relayed.last().at(1).toBool(), true);
     }
 };
 

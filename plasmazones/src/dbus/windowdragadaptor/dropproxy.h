@@ -25,7 +25,7 @@ struct DropProxyCell
 
 /// A shell-registered drop proxy (WindowDrag.registerDropProxy): the
 /// miniature's bounding rect and its cells, all in the registering screen's
-/// own pixels with the screen's top-left as origin.
+/// logical coordinates with the screen's top-left as origin.
 struct DropProxy
 {
     QRect rect;

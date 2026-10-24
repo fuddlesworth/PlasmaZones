@@ -8,7 +8,10 @@
 #include <PhosphorProtocol/NavigationMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <QDBusAbstractAdaptor>
+#include <QHash>
 #include <QObject>
+#include <QRect>
+#include <QSet>
 #include <QStringList>
 #include <QVector>
 #include <functional>
@@ -46,6 +49,8 @@ class ISettings;
  * SnapEngine::resnapToNewLayoutRequested routes to this adaptor's
  * applyEngineResnap (bookkeeping + applyGeometriesBatch emission), not
  * directly to WTA; the bus slot handleBatchedResnap checks external batches.
+ * The batches and the re-statements go out through the announce sequencer
+ * (setAnnounceSequencer).
  *
  * @see SnapEngine, WindowTrackingAdaptor
  */
@@ -99,10 +104,16 @@ public:
         m_contextResolver = resolver;
     }
 
-    /// Runs the work it is handed (the bus emission of one of the engine's
-    /// own resnap batches) behind any screens announce still queued, so the
-    /// effect judges the batch against the managed set it was computed for
-    /// (TilingAdaptor::runBehindScreensAnnounce, #1151). Unset: emitted at once.
+    /// Runs the work it is handed behind any screens announce still queued,
+    /// so the effect judges a placement against the managed set it was
+    /// computed for (TilingAdaptor::runBehindScreensAnnounce, #1151). Every
+    /// zone batch this adaptor emits goes through it (the engine's own, the
+    /// settings reflows, the bus resnaps and the virtual-screen resnap), so
+    /// they reach the effect in the order they were committed, and so does
+    /// every re-statement of one window (restatementGeometryRequested). A held
+    /// placement of a window is dropped when another placement of that window
+    /// goes out before it (a user verb in the same turn). Unset: emitted at
+    /// once.
     using AnnounceSequencer = std::function<void(std::function<void()>)>;
     void setAnnounceSequencer(AnnounceSequencer sequencer)
     {
@@ -114,6 +125,11 @@ public Q_SLOTS:
     // Snap-commit D-Bus slots
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // The confirmations, recordSnapIntent, the snap-restore slots,
+    // calculateSnapAllWindows and windowUnsnappedForFloat are compositor-only
+    // (DbusHelpers::admitCompositorReport, #1155): any bus caller but the
+    // registered bridge is answered with AccessDenied and nothing runs.
+
     /**
      * @brief Confirm a single-zone snap from the KWin effect (snap assist).
      *        Commits only a live window, a known screen, a window on the
@@ -123,14 +139,15 @@ public Q_SLOTS:
     void windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId);
 
     /**
-     * @brief Confirm a multi-zone snap. No in-tree caller; external contract
-     *        surface, checked like windowSnapped.
+     * @brief Confirm a multi-zone snap, checked like windowSnapped. No
+     *        in-tree caller; a compositor bridge's contract surface.
      */
     void windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenId);
 
     /**
-     * @brief Confirm an unsnap. No in-tree caller; external contract surface.
-     *        A window left with no zone and no float also loses its snap slot.
+     * @brief Confirm an unsnap. No in-tree caller; a compositor bridge's
+     *        contract surface. A window left with no zone and no float also
+     *        loses its snap slot.
      */
     void windowUnsnapped(const QString& windowId);
 
@@ -150,14 +167,15 @@ public Q_SLOTS:
 
     /**
      * @brief Snap a new window to the last used zone. No in-tree caller (the
-     *        effect restores through resolveWindowRestore); external contract surface.
+     *        effect restores through resolveWindowRestore); a compositor
+     *        bridge's contract surface.
      */
     void snapToLastZone(const QString& windowId, const QString& windowScreenId, bool sticky, int& snapX, int& snapY,
                         int& snapWidth, int& snapHeight, bool& shouldSnap);
 
     /**
      * @brief Snap a window to its SnapToZone-rule-defined zone(s). No in-tree
-     *        caller; external contract surface like snapToLastZone.
+     *        caller; a compositor bridge's contract surface like snapToLastZone.
      */
     void snapToAppRule(const QString& windowId, const QString& windowScreenId, bool sticky, int& snapX, int& snapY,
                        int& snapWidth, int& snapHeight, bool& shouldSnap);
@@ -214,18 +232,23 @@ public Q_SLOTS:
     void resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId);
 
     /**
-     * @brief Calculate snap assignments for all provided windows
+     * @brief Calculate snap assignments for all provided windows. It records
+     *        each candidate's free frame, so it is compositor-only.
      */
     PhosphorProtocol::SnapAllResultList calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
 
     /**
-     * @brief Trigger snap-all-windows from daemon shortcut
+     * @brief Ask the effect to snap every window on a screen: a screen the
+     *        daemon knows, which snapping runs, switched on and not disabled
+     *        in the context in view (F381)
      */
     void snapAllWindows(const QString& screenId);
 
     /**
      * @brief Commit an external batch of resnap entries, each checked as a bus
-     *        snap is (admitBusSnap) and dropped when it fails
+     *        snap is (admitBusSnap) and dropped when it fails. A restore entry
+     *        (unsnap and put back at a caller's rect) is taken only from the
+     *        registered compositor bridge or a direct call (F312)
      */
     void handleBatchedResnap(const QString& resnapData);
 
@@ -319,9 +342,8 @@ public Q_SLOTS:
 
     /**
      * @brief Set a window's floating state on its live screen (snap-mode
-     *        direct, gated as the toggle is). Like calculateUnfloatRestore and
-     *        windowUnsnappedForFloat it has no in-tree caller and stays as
-     *        external contract surface.
+     *        direct, gated as the toggle is). Like calculateUnfloatRestore it
+     *        has no in-tree caller and stays as external contract surface.
      * @param windowId Window identifier
      * @param floating true to float, false to unfloat
      */
@@ -338,7 +360,9 @@ public Q_SLOTS:
     /**
      * @brief First half of a two-call float: unsnap the window and keep its
      *        zone as the pre-float home. It does not float the window, so
-     *        setWindowFloat(true) follows it.
+     *        setWindowFloat(true) follows it. Compositor-only: from another
+     *        caller the gated second half could refuse and leave the window
+     *        in neither state (F313).
      * @param windowId Window identifier
      */
     void windowUnsnappedForFloat(const QString& windowId);
@@ -454,8 +478,30 @@ private:
     /// validBusSnapTarget, then committed. True when committed.
     bool confirmSnap(const QString& windowId, const QString& zoneId, const QString& screenId);
     /// The engine's own resnap batches (resnapToNewLayoutRequested), committed
-    /// as they are.
+    /// as they are, their emission sequenced like every batch (commitBatch).
     void applyEngineResnap(const QString& resnapData);
+    /// Commit @p entries through SnapEngine::applyBatchAssignments at once and
+    /// emit the resulting applyGeometriesBatch through emitPlacementBatch.
+    /// True when anything was committed.
+    bool commitBatch(const QVector<ZoneAssignmentEntry>& entries, const QString& action);
+    /// commitBatch, relayed as "restate" (no Snap Assist, F461) when every
+    /// entry re-states a placement, else as "resnap".
+    void commitResnapBatch(const QVector<ZoneAssignmentEntry>& entries);
+    /// Emit @p geometries as applyGeometriesBatch through the announce
+    /// sequencer (see setAnnounceSequencer), or at once without one.
+    void emitPlacementBatch(PhosphorProtocol::WindowGeometryList geometries, const QString& action);
+    /// A re-statement of one window's placement as applyGeometryRequested,
+    /// sequenced like the batches.
+    void emitRestatement(const QString& windowId, const QRect& geometry, const QString& zoneId,
+                         const QString& screenId);
+    /// Hold a placement of @p windowIds: the serial it is held under, which is
+    /// from now on the newest held placement of each of them.
+    quint64 holdPlacement(const QStringList& windowIds);
+    /// Of @p windowIds, the ones whose newest held placement is @p serial,
+    /// released from the hold.
+    QSet<QString> releaseHeldPlacement(const QStringList& windowIds, quint64 serial);
+    /// Another placement of these windows went out: their held ones are stale.
+    void supersedeHeldPlacements(const QStringList& windowIds);
 
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;
@@ -471,6 +517,11 @@ private:
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     /// See setAnnounceSequencer.
     AnnounceSequencer m_announceSequencer;
+    /// The serial of the newest placement of each window still held behind
+    /// the announce, and the last serial handed out. A window leaves the map
+    /// when its held placement goes out or another placement of it does.
+    QHash<QString, quint64> m_heldPlacementSerial;
+    quint64 m_lastHeldSerial = 0;
 
     // Stored handles for the signal relays wired in the constructor so
     // clearEngine() can disconnect exactly the connections this class

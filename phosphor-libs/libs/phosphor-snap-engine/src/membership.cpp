@@ -14,12 +14,18 @@
 // came from, which is what made a sticky window share one zone across every
 // desktop.
 //
-// An adopted membership holds NO data until the user snaps or floats the
-// window there. On that desktop the window therefore reads as neither snapped
-// nor floating for this engine; float is per store in snapping, the same way
-// it is per engine across modes, so a window floated on desktop 1 is not
-// floating on desktop 2 until the user floats it there or carries a float
-// there.
+// An adopted membership starts with no data of its own. The one exception is
+// a zone the durable record remembers for that desktop: a window snapped there
+// that lost the live store to a mode handoff gets that zone back (the adopt
+// arm of applyMembershipWork). Otherwise the window reads as neither snapped
+// nor floating there for this engine until the user snaps or floats it there
+// or a carry brings a zone or a float. Float is per store in snapping, the
+// same way it is per engine across modes, so a window floated on desktop 1 is
+// not floating on desktop 2.
+//
+// A switch puts a window shown on several desktops back where the desktop
+// entered has it: the re-apply at the end of applyMembershipWork re-states
+// its zone there, or its float.
 //
 // The eviction in stateForWindowOnScreen is the other half: it spares stores
 // the window is a member of, so the two assignments coexist instead of the
@@ -189,7 +195,8 @@ struct ZoneLanding
 /// the release wipes the stores it reads.
 struct CarryPlan
 {
-    bool sourceFloating = false;
+    bool sourceFloating = false; // the window floated in a store the plan read
+    QSet<int> floatSourced; // destinations planned from a store it floated in
     std::optional<PhosphorEngine::ZoneAssignmentEntry> applied; // the one apply, through the batch
     QList<std::pair<int, QStringList>> silentZones; // pinned per-key writes, no apply
     QList<int> floats; // float bit and residence
@@ -367,6 +374,47 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             }
             return std::nullopt;
         }
+        // What the window held on one desktop of the context it left.
+        struct CarrySource
+        {
+            int desktop = 0;
+            bool floating = false;
+            QStringList zones;
+            QStringList preFloat;
+        };
+        const CarrySource firstFound{source.desktop, plan.sourceFloating, zones, preFloat};
+        // An activity move plans each desktop from the store the window held
+        // on that desktop of the activity it left: its own zone there, or its
+        // float. The store found first above would otherwise decide for every
+        // desktop it arrives on, so a window floating on one desktop and
+        // snapped on another arrived floating on both, or snapped on both,
+        // by the order its memberships were made in. A desktop it held
+        // nothing on takes the first one's.
+        QHash<int, CarrySource> ownSources;
+        if (activityMove) {
+            for (const PlacementStateKey& stale : entry.stale) {
+                if (stale.activity != source.activity || !entry.span.coversDesktop(stale.desktop)
+                    || m_layoutManager->modeForScreen(screenId, stale.desktop, stale.activity)
+                        != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+                    continue;
+                }
+                const SnapState* state = m_states.stateForKey(stale);
+                if (!state) {
+                    continue;
+                }
+                if (state->isFloating(entry.windowId)) {
+                    ownSources.insert(stale.desktop,
+                                      {stale.desktop, true, QStringList{}, state->preFloatZones(entry.windowId)});
+                    plan.sourceFloating = true;
+                } else if (const QStringList held = state->zonesForWindow(entry.windowId); !held.isEmpty()) {
+                    ownSources.insert(stale.desktop, {stale.desktop, false, held, QStringList{}});
+                }
+            }
+        }
+        const auto sourceFor = [&ownSources, &firstFound](int desktop) -> const CarrySource& {
+            const auto own = ownSources.constFind(desktop);
+            return own != ownSources.constEnd() ? *own : firstFound;
+        };
         const QList<int> destinations = carryDestinationDesktops(entry.span, activityMove ? 0 : source.desktop);
         const int viewDesktop = entry.span.coversKey(currentKey) ? currentKey.desktop : 0;
         const bool suspension = plan.sourceFloating && m_windowTracker->isSuspensionFloat(entry.windowId);
@@ -374,6 +422,10 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         QSet<int> keptFloats;
         QList<int> noSlot;
         for (const int desktop : destinations) {
+            const CarrySource& from = sourceFor(desktop);
+            if (from.floating) {
+                plan.floatSourced.insert(desktop);
+            }
             // The very key the commit will write (stateForWindowOnScreen pins
             // {screen, desktop, currentActivity()}), so "what does it hold
             // over there" is asked of the store the carry would land in.
@@ -400,18 +452,18 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                 || !m_layoutManager->layoutForScreen(screenId, desktop, currentActivity())) {
                 continue;
             }
-            if (plan.sourceFloating) {
+            if (from.floating) {
                 plan.floats.append(desktop);
                 plan.wrote.insert(desktop);
                 if (suspension) {
-                    if (const QStringList mapped = slotFor(preFloat, source.desktop, source.activity, desktop).first;
+                    if (const QStringList mapped = slotFor(from.preFloat, from.desktop, source.activity, desktop).first;
                         !mapped.isEmpty()) {
                         plan.preFloats.insert(desktop, mapped);
                     }
                 }
                 continue;
             }
-            const auto [slotZones, rect] = slotFor(zones, source.desktop, source.activity, desktop);
+            const auto [slotZones, rect] = slotFor(from.zones, from.desktop, source.activity, desktop);
             if (!slotZones.isEmpty() && rect.isValid()) {
                 zoned.append({desktop, slotZones, rect, false});
                 plan.wrote.insert(desktop);
@@ -623,8 +675,10 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             // below rather than waiting for the user to snap it again.
             SnapState* state = ensureStateForKey(currentKey);
             m_states.addMembership(entry.windowId, currentKey);
+            // Not for a window snapping leaves alone, which the carry and the
+            // activity flush refuse too (F445, F340).
             if (state && m_windowTracker && !carriedIntoCurrentContext && snapsInContext(currentKey)
-                && state->zonesForWindow(entry.windowId).isEmpty()) {
+                && !isWindowExcluded(entry.windowId, screenId) && state->zonesForWindow(entry.windowId).isEmpty()) {
                 if (const auto rec = m_windowTracker->placementStore().peekExact(entry.windowId)) {
                     const QStringList remembered = rec->slotFor(engineId()).zonesByDesktop.value(currentKey.desktop);
                     // Only into the layout this desktop runs NOW: the zone
@@ -687,10 +741,10 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         // desktop's first showing (F780). So is the restore arm's float onto
         // such a desktop: its apply reaches a suspended client, which drops a
         // grow (F1019). A shrink that landed moved the frame, and the debt
-        // lapses on the showing.
-        if ((restoring || (!plan->applied && plan->statedFloating)) && !plan->sourceFloating && viewDesktop == 0
-            && m_navState) {
-            const int owedDesktop = restoring ? plan->applied->virtualDesktop : plan->statedDesktop;
+        // lapses on the showing. The source asked is the owed desktop's own.
+        const int owedDesktop = restoring ? plan->applied->virtualDesktop : plan->statedDesktop;
+        if ((restoring || (!plan->applied && plan->statedFloating)) && !plan->floatSourced.contains(owedDesktop)
+            && viewDesktop == 0 && m_navState) {
             if (const QRect frame = m_navState->frameGeometry(entry.windowId); frame.isValid()) {
                 pendingCarriesOf(m_pendingCarries)
                     .owedFloatBacks.insert(entry.windowId,
@@ -721,10 +775,10 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         for (const QString& windowId : std::as_const(due)) {
             const PendingActivityCarry waiting = m_pendingCarries->byWindow.take(windowId);
             bool stillThere = true;
+            std::optional<QSet<int>> desktops;
             if (m_windowRegistry) {
                 const std::optional<PhosphorEngine::WindowDesktopContext> ctx =
                     m_windowRegistry->desktopContext(windowId);
-                std::optional<QSet<int>> desktops;
                 if (ctx) {
                     desktops = ctx->desktopSet();
                 }
@@ -733,19 +787,58 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                         || ctx->activities.contains(currentKey.activity))
                     && (!desktops || desktops->contains(currentKey.desktop));
             }
-            const SnapState* there = m_states.stateForKey(currentKey);
-            const bool holdsOwn = there && holdsWindowInState(windowId, there)
-                && (there->isWindowSnapped(windowId) || there->isFloating(windowId));
-            if (!stillThere || holdsOwn || !snapsInContext(currentKey) || isWindowExcluded(windowId, screenId)
-                || m_layoutManager->modeForScreen(screenId, currentKey.desktop, currentKey.activity)
-                    != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+            if (!stillThere || isWindowExcluded(windowId, screenId)) {
                 qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: dropping the activity carry of" << windowId
                                      << "— it no longer lands on desktop" << currentKey.desktop << "of" << screenId;
                 continue;
             }
-            const auto [zones, rect] = slotFor(waiting.zonesByDesktop.value(currentKey.desktop), currentKey.desktop,
-                                               waiting.fromActivity, currentKey.desktop);
+            // Whether the carry may land on @p desktop of the activity in view:
+            // snapping runs there, with a layout, and the window holds no
+            // state of its own there.
+            const auto landsOn = [&](int desktop) {
+                const PlacementStateKey key{screenId, desktop, currentKey.activity};
+                const SnapState* there = m_states.stateForKey(key);
+                const bool holdsOwn = there && holdsWindowInState(windowId, there)
+                    && (there->isWindowSnapped(windowId) || there->isFloating(windowId));
+                return !holdsOwn && snapsInContext(key)
+                    && m_layoutManager->modeForScreen(screenId, desktop, currentKey.activity)
+                    == PhosphorZones::AssignmentEntry::Mode::Snapping
+                    && m_layoutManager->layoutForScreen(screenId, desktop, currentKey.activity);
+            };
+            // The window's other desktops get their own zones too, written with
+            // no apply as the carry's silent slots are: a window on several
+            // desktops comes home in each one's zone, not only the one shown
+            // first (F431).
+            int firstSilent = 0;
+            for (auto other = waiting.zonesByDesktop.cbegin(); other != waiting.zonesByDesktop.cend(); ++other) {
+                const int desktop = other.key();
+                if (desktop == currentKey.desktop || desktop < 1 || (desktops && !desktops->contains(desktop))
+                    || !landsOn(desktop)) {
+                    continue;
+                }
+                const auto [otherZones, otherRect] = slotFor(other.value(), desktop, waiting.fromActivity, desktop);
+                if (otherZones.isEmpty() || !otherRect.isValid()) {
+                    continue;
+                }
+                stateForWindowOnScreen(windowId, screenId, desktop)
+                    ->assignWindowToZones(windowId, otherZones, screenId, desktop);
+                if (firstSilent == 0 || desktop < firstSilent) {
+                    firstSilent = desktop;
+                }
+            }
+            const auto [zones, rect] = landsOn(currentKey.desktop)
+                ? slotFor(waiting.zonesByDesktop.value(currentKey.desktop), currentKey.desktop, waiting.fromActivity,
+                          currentKey.desktop)
+                : std::pair<QStringList, QRect>{};
+            CarryAfter carry;
+            carry.windowId = windowId;
             if (zones.isEmpty() || !rect.isValid()) {
+                qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: the activity carry of" << windowId
+                                     << "does not land on desktop" << currentKey.desktop << "of" << screenId;
+                if (firstSilent != 0) {
+                    carry.recordDesktop = firstSilent;
+                    after.append(carry);
+                }
                 continue;
             }
             PhosphorEngine::ZoneAssignmentEntry assign;
@@ -760,8 +853,6 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             assign.restatement = true;
             carried.append(assign);
             statedThisPass.insert(windowId);
-            CarryAfter carry;
-            carry.windowId = windowId;
             carry.recordDesktop = currentKey.desktop;
             after.append(carry);
         }
@@ -807,10 +898,10 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         }
     }
 
-    // A window that holds a zone in the context just entered AND a place on
-    // another desktop is sitting at the other desktop's geometry right now (it
-    // is one window), so its own assignment here has to be re-applied. Only
-    // those: the single-desktop windows on the screen did not move, and
+    // A window that holds a zone in the context just entered AND a place in
+    // another context is sitting at that context's geometry right now (it is
+    // one window), so its own assignment here has to be re-applied. Only
+    // those: the windows shown in no other context did not move, and
     // re-committing every one of them on every switch was churn the effect had
     // to absorb for nothing. Computed AFTER the arms above, not before: a
     // window adopted into this desktop by this very pass has to count. On a
@@ -838,33 +929,84 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                 return state && (zone ? state->isWindowSnapped(windowId) : state->isFloating(windowId));
             });
         };
-        // The frame stands on the zone rect of another of its desktops.
-        const auto frameStandsOnAnotherZone = [this, &screenId, &currentKey](const QString& windowId) {
-            if (!m_navState || !m_windowTracker) {
+        // The frame stands where management left it, not where the user put
+        // it: on the zone rect of another of its desktops, or on the frame the
+        // window last settled at under a zone or a tile. The settled frame
+        // answers for a size-increment client that stops short of its zone
+        // (F293) and for another mode's tile, which is no zone of this
+        // engine's (F470).
+        const auto frameLeftByManagement = [this, &screenId, &currentKey](const QString& windowId) {
+            if (!m_navState) {
                 return false;
             }
             const QRect frame = m_navState->frameGeometry(windowId);
+            if (!frame.isValid()) {
+                return false;
+            }
+            if (m_navState->isSettledManagedFrame(windowId, frame)) {
+                return true;
+            }
+            if (!m_windowTracker) {
+                return false;
+            }
             const QList<PlacementStateKey> held = m_states.membershipsForWindow(windowId);
-            return frame.isValid() && std::any_of(held.cbegin(), held.cend(), [&](const PlacementStateKey& key) {
-                       const SnapState* state = key == currentKey ? nullptr : m_states.stateForKey(key);
-                       const QStringList zones = state ? state->zonesForWindow(windowId) : QStringList{};
-                       return !zones.isEmpty() && m_windowTracker->resolveZoneGeometry(zones, screenId) == frame;
-                   });
+            return std::any_of(held.cbegin(), held.cend(), [&](const PlacementStateKey& key) {
+                const SnapState* state = key == currentKey ? nullptr : m_states.stateForKey(key);
+                const QStringList zones = state ? state->zonesForWindow(windowId) : QStringList{};
+                return !zones.isEmpty() && m_windowTracker->resolveZoneGeometry(zones, screenId) == frame;
+            });
         };
-        // Shown on a desktop besides this one. A desktop of the span that runs
-        // tiling or scrolling holds no snap membership, so the membership count
-        // alone misses a window another engine placed there (#1151: back from
-        // a scrolling desktop, the window still stood at its strip rect). Only
-        // on the screen-wide pass a desktop switch runs, the one that follows a
-        // stay on another desktop. A per-window pass answers an edit of the
-        // window's own desktop set, which leaves it standing where the desktop
-        // in view put it (F477).
-        const auto shownElsewhere = [&spanOf, &onlyWindow](const QString& windowId) {
+        // Whether the context (@p desktop, @p activity) of this screen runs a
+        // mode other than snapping, hidden or not.
+        const auto runsAnotherMode = [this, &screenId](int desktop, const QString& activity) {
+            const PhosphorZones::AssignmentEntry::Mode mode = m_contextModeResolver
+                ? m_contextModeResolver(screenId, desktop, activity)
+                : (m_layoutManager ? m_layoutManager->modeForScreen(screenId, desktop, activity)
+                                   : PhosphorZones::AssignmentEntry::Mode::Snapping);
+            return mode != PhosphorZones::AssignmentEntry::Mode::Snapping;
+        };
+        // Shown in a context besides this one: another desktop, or another
+        // activity that runs another mode on one of the window's desktops. A
+        // context another mode runs grants no new snap membership, so the
+        // membership count alone misses a window another engine placed there
+        // (#1151: back from a scrolling desktop, the window still stood at its
+        // strip rect). An activity running snapping is no such context: it
+        // grants a membership of its own when it shows the window. Counted
+        // regardless of mode, a window on every activity read as shown
+        // elsewhere in any session running activities, a single one included,
+        // and every such window was re-committed or re-stated floating on
+        // every plain desktop switch. A window on every activity is measured
+        // against the activities this engine has been in, the only ones
+        // another engine can have placed it in. Only on a screen-wide
+        // pass, which a desktop switch, an activity switch and a returning
+        // output's desktop seed run, each the end of a stay in another
+        // context. A per-window pass answers an edit of the window's own
+        // desktop set, which leaves it standing where the desktop in view put
+        // it (F477).
+        const auto shownElsewhere = [this, &spanOf, &onlyWindow, &currentKey,
+                                     &runsAnotherMode](const QString& windowId) {
             if (!spanOf || !onlyWindow.isEmpty()) {
                 return false;
             }
             const DesktopSpan span = spanOf(windowId);
-            return span.known && (span.sticky || span.desktops.size() > 1);
+            if (!span.known) {
+                return false;
+            }
+            if (span.sticky || span.desktops.size() > 1) {
+                return true;
+            }
+            if (currentKey.activity.isEmpty()) {
+                return false;
+            }
+            const QStringList otherActivities = span.activities.size() > 1
+                ? span.activities
+                : (span.activity.isEmpty() ? m_enteredActivities.values() : QStringList{});
+            return std::any_of(otherActivities.cbegin(), otherActivities.cend(), [&](const QString& activity) {
+                return activity != currentKey.activity
+                    && std::any_of(span.desktops.cbegin(), span.desktops.cend(), [&](int desktop) {
+                           return runsAnotherMode(desktop, activity);
+                       });
+            });
         };
         const QStringList candidates = onlyWindow.isEmpty() ? m_states.trackedWindowIds() : QStringList{onlyWindow};
         for (const QString& windowId : candidates) {
@@ -875,29 +1017,45 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             if (!otherSnapMemberships && !shownElsewhere(windowId)) {
                 continue;
             }
+            // A window snapping leaves alone is neither put back nor stated,
+            // as the carry refuses it (F445, F340).
+            if (isWindowExcluded(windowId, screenId)) {
+                continue;
+            }
             const QStringList zones = currentState->zonesForWindow(windowId);
             if (!zones.isEmpty()) {
-                if (PhosphorZones::LayoutUtils::contextLayoutHoldsZones(
+                // Shown elsewhere with no other snap store, a window whose
+                // frame still stands on its zone here was not moved there, and
+                // re-committing it on every switch would be churn (F36).
+                bool standsOnItsZone = false;
+                if (!otherSnapMemberships && m_navState && m_windowTracker) {
+                    const QRect frame = m_navState->frameGeometry(windowId);
+                    standsOnItsZone = frame.isValid() && frame == m_windowTracker->resolveZoneGeometry(zones, screenId);
+                }
+                if (!standsOnItsZone
+                    && PhosphorZones::LayoutUtils::contextLayoutHoldsZones(
                         m_layoutManager, currentKey.screenId, currentKey.desktop, currentKey.activity, zones)) {
                     reapply.insert(windowId);
                 }
                 continue;
             }
-            // The float and unsnap statements below speak for the window's
-            // other snap stores, so they need one.
-            if (!onlyWindow.isEmpty() || !otherSnapMemberships) {
+            if (!onlyWindow.isEmpty()) {
                 continue;
             }
             // Entering a context where the window floats, or holds nothing,
-            // states that context: the effect keeps whatever the desktop it
-            // came from said (F742, F778). The float-back goes back on only
-            // when the frame stands on another desktop's zone rect (F777); a
-            // frame elsewhere is the user's.
+            // states that context: the effect keeps whatever the context it
+            // came from said (F742, F778), and another mode there said tiled
+            // (F35). The float statement is this store's own; the unsnap and
+            // unfloat statements answer another snap store's zone or float, so
+            // a window with no other snap store makes neither. The float-back
+            // goes back on only when the frame stands where management left it
+            // (F777); a frame elsewhere is the user's. A window that holds
+            // nothing here stays where it stands (F778).
             const bool floating = currentState->isFloating(windowId);
             if (floating) {
                 Q_EMIT windowFloatingChanged(windowId, true, screenId);
                 const bool minimized = m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false);
-                if (!minimized && frameStandsOnAnotherZone(windowId)) {
+                if (!minimized && m_windowTracker && frameLeftByManagement(windowId)) {
                     if (const auto back = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
                         back && back->isValid()) {
                         Q_EMIT restatementGeometryRequested(windowId, back->x(), back->y(), back->width(),
@@ -930,7 +1088,8 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                 const QRect carriedFrame = it->frame;
                 it = owed.erase(it);
                 if (statedThisPass.contains(windowId) || !m_states.hasMembership(windowId, currentKey)
-                    || !currentState->isFloating(windowId) || m_navState->frameGeometry(windowId) != carriedFrame) {
+                    || !currentState->isFloating(windowId) || m_navState->frameGeometry(windowId) != carriedFrame
+                    || isWindowExcluded(windowId, screenId)) {
                     continue;
                 }
                 if (const auto back = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
@@ -948,7 +1107,7 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         // and a whole-session resnap would fight whatever they are doing.
         qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: re-applying" << reapply.size() << "window(s) on"
                              << screenId << "for desktop" << currentKey.desktop
-                             << "— multi-desktop windows are snapped here";
+                             << "— windows shown in another context are snapped here";
         // A re-statement batch: no "nothing to resnap" OSD on a desktop
         // switch, no Snap Assist (F461).
         QVector<PhosphorEngine::ZoneAssignmentEntry> entries = calculateResnapFromCurrentAssignments(screenId, reapply);
@@ -1064,6 +1223,13 @@ void SnapEngine::rekeyMembershipsToRecordedScreens(const QString& physicalScreen
         PlacementStateKey to;
     };
     QList<Rekey> moves;
+    // A membership whose store records no screen for the window (an adopted
+    // one that holds nothing yet) has nothing of its own to go by. A window
+    // is on exactly one screen, so it follows the screen its other
+    // memberships record (F432); left under the old id, it could be the
+    // primary a float lands in while the re-apply reads another store.
+    QList<std::pair<QString, PlacementStateKey>> unrecorded;
+    QHash<QString, QString> recordedScreenOf;
     m_states.forEachMembership([&](const QString& windowId, const PlacementStateKey& key) {
         if (!onMonitor(key.screenId)) {
             return;
@@ -1076,10 +1242,24 @@ void SnapEngine::rekeyMembershipsToRecordedScreens(const QString& physicalScreen
         if (recorded.isEmpty()) {
             recorded = state->preFloatScreen(windowId);
         }
-        if (!recorded.isEmpty() && recorded != key.screenId && onMonitor(recorded)) {
+        if (recorded.isEmpty()) {
+            unrecorded.append({windowId, key});
+            return;
+        }
+        if (!onMonitor(recorded)) {
+            return;
+        }
+        recordedScreenOf.insert(windowId, recorded);
+        if (recorded != key.screenId) {
             moves.append({windowId, key, PlacementStateKey{recorded, key.desktop, key.activity}});
         }
     });
+    for (const auto& [windowId, key] : std::as_const(unrecorded)) {
+        const QString screen = recordedScreenOf.value(windowId);
+        if (!screen.isEmpty() && screen != key.screenId) {
+            moves.append({windowId, key, PlacementStateKey{screen, key.desktop, key.activity}});
+        }
+    }
     for (const Rekey& move : moves) {
         SnapState* from = m_states.stateForKey(move.from);
         SnapState* to = ensureStateForKey(move.to);

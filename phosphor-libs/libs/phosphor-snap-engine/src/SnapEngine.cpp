@@ -168,11 +168,12 @@ SnapState* SnapEngine::stateForWindowOnScreen(const QString& windowId, const QSt
     // in stores it is a member of. Re-keying moves only the reverse-map pointer
     // (PerScreenStates::migrate: "Only the reverse map moves"), so a store it has
     // left can retain stale data. That phantom is invisible to owner-map reads
-    // (like the autotile engine's) but forEachSnapAssignment, the resnap and
-    // rotation walk, raw-scans every store and would read the
-    // phantom's stale desktop, resnapping a window off its real desktop (the
-    // cross-desktop leak). Since every write path resolves its store through here
-    // first, evicting at resolution time keeps the phantom from ever forming.
+    // (like the autotile engine's), and forEachSnapAssignment, the resnap and
+    // rotation walk, skips it too, but any read that walks a store's own lists
+    // without asking for membership would take the phantom's stale desktop for
+    // the window's, resnapping it off its real desktop (the cross-desktop leak).
+    // Since every write path resolves its store through here first, evicting
+    // at resolution time keeps the phantom from ever forming.
     //
     // MEMBERSHIP is what separates a phantom from a legitimate second home. A
     // window present on several desktops holds a membership in each, and the zone
@@ -293,6 +294,9 @@ void SnapEngine::setCurrentDesktopForScreen(const QString& screenId, int desktop
 void SnapEngine::setCurrentActivity(const QString& activity)
 {
     m_context.setCurrentActivity(activity);
+    if (!activity.isEmpty()) {
+        m_enteredActivities.insert(activity);
+    }
 }
 
 void SnapEngine::forgetWindow(const QString& windowId)
@@ -303,8 +307,9 @@ void SnapEngine::forgetWindow(const QString& windowId)
     // still list the window, and with the memberships gone nothing would ever
     // resolve those stores for it again: the eviction in stateForWindowOnScreen
     // runs only when the window is next resolved, which a closed window never
-    // is. forEachSnapAssignment raw-scans every store,
-    // so the leftover would be a phantom occupant of its zone on that desktop.
+    // is. A read that walks a store's own lists without asking for membership
+    // would then count the leftover as a phantom occupant of its zone on that
+    // desktop.
     for (const PhosphorEngine::PlacementStateKey& key : m_states.membershipsForWindow(canonical)) {
         if (SnapState* state = m_states.stateForKey(key)) {
             state->removeWindowData(canonical);

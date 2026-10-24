@@ -803,9 +803,10 @@ struct Tile
     /// maximized: it cannot go stale the way the height itself does when the
     /// budget moves under it. Deliberately
     /// NOT serialized and not carried across a re-insert (migration, unfloat,
-    /// stash restore, drag commit), which is the same session-and-place scope
-    /// the width axis's slot has — a window that comes back from one of those
-    /// un-maximizes to Auto.
+    /// stash restore, drag commit, and the drag CANCEL too, whose Escape is an
+    /// exact restore of the slot but rebuilds the tile), which is the same
+    /// session-and-place scope the width axis's slot has — a window that comes
+    /// back from one of those un-maximizes to Auto.
     std::optional<WindowHeight> preMaximizeHeight;
     /// Minimized tiles keep their slot/order but are excluded from layout;
     /// unminimize restores the window into the same slot.
@@ -1029,10 +1030,12 @@ struct ScrollLayoutParams
     /// column MAIN floor, the tile CROSS floor and its rebalance, and the
     /// interactive-resize floor), and with them the extents a client's own
     /// commits hold its column and its tile to (committedFloor and
-    /// committedCrossFloor below) and the peek floor that memory raises. Off, the resolved rects obey the user's
-    /// intents and the compositor's own min-size enforcement decides what overhangs, and no committed extent is learned
-    /// or read. The work-area-oversized float escape for a DECLARED minimum ignores this flag; the one for a committed
-    /// extent cannot fire without it, since nothing is learned.
+    /// committedCrossFloor below) and the peek floor that memory raises. Off,
+    /// the resolved rects obey the user's intents and the compositor's own
+    /// min-size enforcement decides what overhangs, and no committed extent is
+    /// learned or read. The work-area-oversized float escape for a DECLARED
+    /// minimum ignores this flag; the one for a committed extent cannot fire
+    /// without it, since nothing is learned.
     bool respectMinimumSize = true;
     /// Whether a column whose visible tiles resolve to less than the column's
     /// own CROSS extent is centred on that axis instead of hugging the start

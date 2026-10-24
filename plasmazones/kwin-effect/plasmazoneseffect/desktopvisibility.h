@@ -20,10 +20,19 @@
 // visible because its own output switched while the global current is
 // elsewhere. Either way a placement gate acts on the wrong windows.
 //
-// Both helpers fall back to the global reading when the window has no output.
-// When Plasma is not running per-output desktops every output's current
-// desktop IS the global one, so these degrade exactly to what they replaced —
-// there is no capability to branch on and none is needed.
+// The three per-output helpers fall back to the global reading when the window
+// has no output. When Plasma is not running per-output desktops every output's
+// current desktop IS the global one, so these degrade exactly to what they
+// replaced — there is no capability to branch on and none is needed.
+//
+// spansContexts answers a different question, kept here because the same
+// placement gates ask it: whether the window belongs to more than one desktop
+// or activity context at all, whichever one is in view.
+//
+// KWin::effects is never null while an effect is loaded: KWin sets it before
+// loading any effect and clears it only after unloading them all. The
+// per-output helpers' null checks are therefore dead branches, kept as they
+// are, and spansContexts carries none.
 
 #include <effect/effecthandler.h>
 #include <virtualdesktops.h>
@@ -31,7 +40,7 @@
 namespace PlasmaZones {
 
 /// The VirtualDesktop shown on this window's own output, or the global current
-/// desktop when it has none. Null only when there is no effects handler.
+/// desktop when it has none.
 inline KWin::VirtualDesktop* desktopShownOn(const KWin::EffectWindow* w)
 {
     if (!KWin::effects) {
@@ -62,6 +71,22 @@ inline bool isOnDesktopShownOn(const KWin::EffectWindow* w, KWin::LogicalOutput*
     }
     KWin::VirtualDesktop* const shown = output && KWin::effects ? KWin::effects->currentDesktop(output) : nullptr;
     return shown ? w->isOnDesktop(shown) : w->isOnCurrentDesktop();
+}
+
+/// Whether the window lives in more than one desktop or activity context: on
+/// every desktop or several, or on every activity or several. KWin state such
+/// a window holds (its border, a maximize, its geometry) is global, so it may
+/// belong to another context's live session. An empty activity set reads as
+/// every activity only while the session has activities at all: without them
+/// every window reports none, and reading that as every activity made the
+/// desktop-switch and toggle passes skip every window (F554).
+inline bool spansContexts(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return false;
+    }
+    const bool everyActivity = w->activities().isEmpty() && !KWin::effects->currentActivity().isEmpty();
+    return w->isOnAllDesktops() || w->desktops().size() > 1 || everyActivity || w->activities().size() > 1;
 }
 
 } // namespace PlasmaZones

@@ -481,19 +481,36 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
             const QStringList restoreZones = slot.zonesByDesktop.isEmpty()
                 ? (slot.state == WindowPlacement::stateSnapped() ? slot.zoneIds : QStringList{})
                 : slot.zonesByDesktop.value(restoreDesktop);
+            // The managed-restore gate (restoreWindowsToZonesOnLogin and the
+            // SetRestoreToZoneOnLogin rule, skipped for a re-entry, whose
+            // window is already where the user left it) governs every zone the
+            // record remembers, not only the restore desktop's. A declined
+            // restore forgets every zone the record keeps per desktop: kept,
+            // the first visit to another of its desktops put the window back
+            // in its remembered zone through the adoption (F395). Asked only
+            // where a zone is remembered, so a floated single-desktop record
+            // never consults it.
+            const auto managedRestoreAllowed = [&]() {
+                return reEntry || !m_managedRestorePredicate || m_managedRestorePredicate(windowId);
+            };
+            const auto forgetRememberedDesktops = [&]() {
+                for (auto it = slot.zonesByDesktop.constBegin(); it != slot.zonesByDesktop.constEnd(); ++it) {
+                    m_windowTracker->forgetDesktopZones(windowId, engineId(), it.key());
+                }
+            };
             if (!restoreZones.isEmpty()) {
                 // A stored snap is subject to BOTH the disabled-context gate and
-                // the managed-restore gate (restoreWindowsToZonesOnLogin and the
-                // SetRestoreToZoneOnLogin rule, skipped for a re-entry, whose
-                // window is already in that zone). Either
-                // veto falls the window through to the normal auto-snap chain
-                // rather than re-applying the recorded zone. The context gate
-                // asks about the desktop being restored onto, and runs BEFORE
-                // any membership is granted or seeded below, so a refusal
-                // leaves nothing behind.
+                // the managed-restore gate above. Either veto falls the window
+                // through to the normal auto-snap chain rather than re-applying
+                // the recorded zone. The context gate asks about the desktop
+                // being restored onto, and runs BEFORE any membership is granted
+                // or seeded below, so a refusal leaves nothing behind.
                 const bool contextAllows =
                     !m_shouldRestorePredicate || m_shouldRestorePredicate(restoreScreen, restoreDesktop);
-                const bool managedAllows = reEntry || !m_managedRestorePredicate || m_managedRestorePredicate(windowId);
+                const bool managedAllows = managedRestoreAllowed();
+                if (!managedAllows) {
+                    forgetRememberedDesktops();
+                }
                 if (contextAllows && !managedAllows) {
                     // Distinct log so the managed gate (restoreWindowsToZonesOnLogin
                     // off) is identifiable separately from a disabled-context veto.
@@ -608,8 +625,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // Floating on the desktop being restored onto, snapped on
                 // others: the other desktops' zones go back into their own
                 // stores exactly as a snapped restore's do, or the window
-                // comes back floating everywhere.
-                seedPersistedDesktopZones(windowId, slot, restoreScreen, restoreDesktop, restoreActivity);
+                // comes back floating everywhere. Under the same managed-
+                // restore gate a snapped restore answers to (F395).
+                if (!slot.zonesByDesktop.isEmpty()) {
+                    if (managedRestoreAllowed()) {
+                        seedPersistedDesktopZones(windowId, slot, restoreScreen, restoreDesktop, restoreActivity);
+                    } else {
+                        forgetRememberedDesktops();
+                    }
+                }
                 // The geometry MOVE is gated on the unsnapped-position-restore
                 // opt-in (global setting + per-window RestorePosition rule) for
                 // ALL floated windows: when off, the window comes back floating

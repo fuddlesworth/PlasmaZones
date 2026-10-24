@@ -70,10 +70,6 @@ class PHOSPHORZONES_EXPORT Layout : public QObject
     Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY
                    useFullScreenGeometryChanged)
 
-    // Unit of fixed-geometry zones: device pixels (true) or logical ones (false)
-    Q_PROPERTY(bool fixedGeometryInDevicePixels READ fixedGeometryInDevicePixels WRITE setFixedGeometryInDevicePixels
-                   NOTIFY fixedGeometryInDevicePixelsChanged)
-
     // Aspect ratio classification
     Q_PROPERTY(
         int aspectRatioClass READ aspectRatioClassInt WRITE setAspectRatioClassInt NOTIFY aspectRatioClassChanged)
@@ -87,6 +83,11 @@ class PHOSPHORZONES_EXPORT Layout : public QObject
     Q_PROPERTY(QList<int> allowedDesktops READ allowedDesktops WRITE setAllowedDesktops NOTIFY allowedDesktopsChanged)
     Q_PROPERTY(
         QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
+
+    // Unit of fixed-geometry zones: device pixels (true) or logical ones (false).
+    // Last in the list so every older property keeps its metaobject index.
+    Q_PROPERTY(bool fixedGeometryInDevicePixels READ fixedGeometryInDevicePixels WRITE setFixedGeometryInDevicePixels
+                   NOTIFY fixedGeometryInDevicePixelsChanged)
 
 public:
     explicit Layout(QObject* parent = nullptr);
@@ -320,7 +321,13 @@ public:
     /// What a fixed geometry is divided by on an output whose logical scale is
     /// @p screenScale: that scale when fixedGeometryInDevicePixels() is on and
     /// the scale is usable, 1.0 otherwise. The single definition every
-    /// resolver shares, so a fixed zone cannot be read in two units.
+    /// resolver shares, so a fixed zone cannot be read in two units, and
+    /// Zone::fixedGeometryToLogical() applies it.
+    ///
+    /// The scale is taken as given: a non-positive one is "no scale" and
+    /// answers 1.0. Zone::fixedGeometryDivisor() differs on purpose, because it
+    /// reads a zero scale as "the scale of the last recalculation" and asks
+    /// this function with that one instead.
     qreal fixedGeometryDivisor(qreal screenScale) const
     {
         return (m_fixedGeometryInDevicePixels && screenScale > 0.0) ? screenScale : 1.0;
@@ -337,11 +344,13 @@ public:
 
     /// Reference geometry suitable for normalizing fixed-pixel zones to
     /// 0–1 relative coordinates. Returns @c lastRecalcGeometry() when it
-    /// accommodates @c fixedZoneBoundingBox(); falls back to the bounding
-    /// box itself when the recalc cache is stale (e.g. layout was recalced
-    /// against a different screen's orientation, leaving normalized coords
-    /// > 1 or a square reference frame). Empty rect when the layout has
-    /// no fixed-geometry zones.
+    /// accommodates @c fixedZoneBoundingBox(), with less than one logical
+    /// pixel of slack so a device-pixel box that exactly fills the screen
+    /// still fits after the division by a fractional scale. Falls back to the
+    /// bounding box in exactly two cases: the fixed zones overflow the last
+    /// recalculation rect, or no rect is known yet. It does not detect a
+    /// stale rect that still happens to hold the box. Empty rect when the
+    /// layout has no fixed-geometry zones.
     QRectF fixedZoneReferenceGeometry() const;
 
     /// Sentinel for "no explicit default order set" on @c defaultOrder.
@@ -407,34 +416,61 @@ public:
         }
     }
     /// The complete staleness predicate recalculateZoneGeometries() gates on:
-    /// the screen rect changed OR the zone set was edited since the last pass
-    /// (m_zoneGeometryDirty). Callers that skip work when a recalc "already
+    /// the screen rect changed OR the zone geometry inputs changed since the
+    /// last pass (m_zoneGeometryDirty: a zone-set edit or a flip of the
+    /// fixed-geometry unit). Callers that skip work when a recalc "already
     /// happened" MUST use this, not a bare lastRecalcGeometry() comparison —
     /// the rect alone reads as fresh after a zone add/remove at unchanged
     /// screen geometry, leaving the new zones with no absolute geometry.
     ///
     /// The output's logical scale @p screenScale is an input too, because a
-    /// device-pixel layout resolves differently at the same logical rect once
-    /// the scale moves (and the scale settles only after an output's sensor
-    /// maps, with the rect unchanged). A layout whose fixed geometry is
-    /// logical ignores the scale, since it cannot change anything for it. Zero
-    /// (the default) asks about the rect and the zone set alone.
+    /// device-pixel layout resolves its fixed zones differently at the same
+    /// logical rect once the scale moves (and the scale settles only after an
+    /// output's sensor maps, with the rect unchanged). A layout whose fixed
+    /// geometry is logical, or that has no fixed zone at all, ignores the
+    /// scale, since it cannot change anything for it. Zero (the default) asks
+    /// about the rect and the inputs alone.
     bool needsRecalc(const QRectF& screenGeometry, qreal screenScale = 0.0) const
     {
         return screenGeometry != m_lastRecalcGeometry || m_zoneGeometryDirty
-            || (screenScale > 0.0 && fixedGeometryDivisor(screenScale) != fixedGeometryDivisor(m_lastRecalcScale));
+            || (screenScale > 0.0 && fixedGeometryDivisor(screenScale) != fixedGeometryDivisor(m_lastRecalcScale)
+                && hasFixedGeometryZones());
     }
-    /// The output scale the zone geometries were last recalculated at (1.0
-    /// until a scale is known).
+    /// The newest output scale a recalculation was asked for (1.0 until a scale
+    /// is known). A recalculation asked with a positive scale stamps it, the
+    /// ones that find nothing to recompute included, so a reader that divides
+    /// by it (the bounding box, the serialized relative hint, the variant
+    /// lists) holds the output's current scale even on a layout the scale
+    /// cannot move. A call with scale zero keeps the last one, and an async
+    /// result a later sync recalculation superseded stamps nothing.
     qreal lastRecalcScale() const
     {
         return m_lastRecalcScale;
     }
+    /// Bumped when the zone set changes (a zone added, removed or replaced) or
+    /// the fixed-geometry unit flips, each of which also sets the dirty bit
+    /// needsRecalc() reads. A per-zone setter on an existing zone does not
+    /// bump it. The async compute path carries it through the
+    /// worker, so a result computed from an older zone set is never mistaken
+    /// for one that covers the current zones, even when the zone ids match.
+    quint64 zoneGeometryEpoch() const
+    {
+        return m_zoneGeometryEpoch;
+    }
+    /// Bumped by every recalculateZoneGeometries() call, including one that
+    /// finds nothing to recompute, because each call records the frame its
+    /// caller wants now. An async result whose snapshot was taken before the
+    /// bump was asked for earlier, so it must not overwrite that frame.
+    quint64 syncRecalcEpoch() const
+    {
+        return m_syncRecalcEpoch;
+    }
     /// Full-recalc bookkeeping for external appliers (the async worker path):
-    /// stamps the rect AND clears the zone-set dirty bit, exactly as
+    /// stamps the rect AND clears the dirty bit, exactly as
     /// recalculateZoneGeometries() does internally. Use only when the applied
-    /// result covered the layout's current zone set. A positive @p screenScale
-    /// is stamped as the scale too; zero keeps the last one.
+    /// geometries were computed from the layout's current inputs, that is at
+    /// the current zoneGeometryEpoch(). A positive @p screenScale is stamped as
+    /// the scale too; zero keeps the last one.
     void markRecalculated(const QRectF& geom, qreal screenScale = 0.0)
     {
         m_lastRecalcGeometry = geom;
@@ -516,12 +552,13 @@ Q_SIGNALS:
 public:
     /// Recalculate every zone's absolute geometry against @p screenGeometry.
     ///
-    /// The Phosphor application enforces its own "only LayoutComputeService
-    /// calls this" coalescing discipline via its type system — that
-    /// restriction is an application-layer concern, not a library one, so
-    /// the method is public here.  Direct callers bypass the service's
-    /// coalescing / threading contract and should only do so when they know
-    /// they're running on the main thread with no pending compute requests.
+    /// Public, and nothing restricts who calls it. Daemon code goes through
+    /// LayoutComputeService::recalculateSync by convention, and the editor
+    /// calls it directly on a temporary layout it owns. A direct call on a
+    /// layout the compute service also tracks is safe: it bumps
+    /// syncRecalcEpoch(), and the service will not let an async result asked
+    /// for before the call overwrite the frame it stamps. Call it on the GUI
+    /// thread only, as with every other Layout member.
     ///
     /// @p screenScale is the logical scale of the output @p screenGeometry
     /// belongs to, which a device-pixel layout divides its fixed geometries by.
@@ -530,6 +567,14 @@ public:
 
 private:
     void emitModifiedIfNotBatched();
+    /// The zone geometry inputs changed under an unchanged screen frame: set
+    /// the dirty bit and bump zoneGeometryEpoch() together, so neither is
+    /// written without the other.
+    void markZoneGeometryDirty()
+    {
+        m_zoneGeometryDirty = true;
+        ++m_zoneGeometryEpoch;
+    }
 
     /// Populate this layout in-place from a JSON object. Called by
     /// @c fromJson after constructing a blank Layout; keeps the raw
@@ -576,15 +621,17 @@ private:
     // Screen rect the zone geometries were last recalculated against. Empty
     // means "no screen known yet". Doubles as the reference frame the derived
     // relativeGeometry is defined over — see fixedZoneReferenceGeometry.
-    mutable QRectF m_lastRecalcGeometry;
+    QRectF m_lastRecalcGeometry;
 
-    // Set when the zone SET changes (add / remove / clear). Editing the zone
-    // list leaves the recalculated absolute geometries stale, but it does not
-    // move the layout to another screen, so the rect above stays valid as a
+    // Set when the zone geometry inputs change under an unchanged screen: the
+    // zone SET (add / remove / clear) or the fixed-geometry unit. Either edit
+    // leaves the recalculated absolute geometries stale, but it does not move
+    // the layout to another screen, so the rect above stays valid as a
     // reference and only the recompute is owed. Keeping these two facts apart
     // is what lets a serialization that follows a zone swap still normalize
     // against the screen instead of silently falling back to the fixed-zone
-    // bounding box.
+    // bounding box. Written through markZoneGeometryDirty, which also bumps
+    // m_zoneGeometryEpoch.
     bool m_zoneGeometryDirty = false;
 
     // Cached classification derived from m_sourcePath. Recomputed in
@@ -599,9 +646,18 @@ private:
     // Fixed-geometry unit: device pixels (true) or logical pixels (false).
     bool m_fixedGeometryInDevicePixels = false;
 
-    // The output scale m_lastRecalcGeometry was recalculated at, the other half
-    // of the reference frame a device-pixel layout's fixed geometry resolves in.
-    mutable qreal m_lastRecalcScale = 1.0;
+    // The newest output scale a recalculation was asked for, the other half of
+    // the reference frame a device-pixel layout's fixed geometry resolves in.
+    qreal m_lastRecalcScale = 1.0;
+
+    // See zoneGeometryEpoch() and syncRecalcEpoch().
+    quint64 m_zoneGeometryEpoch = 0;
+    quint64 m_syncRecalcEpoch = 0;
+
+    // Whether anything inside the current outermost batch marked the layout
+    // modified, so endBatchModify emits layoutModified for an edit made in
+    // that batch and not for a dirty bit left by an earlier, unsaved one.
+    bool m_batchModified = false;
 };
 
 } // namespace PhosphorZones

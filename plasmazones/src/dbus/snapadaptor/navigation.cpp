@@ -4,12 +4,12 @@
 #include "snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "core/platform/logging.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
-#include <QPointer>
 
 namespace PlasmaZones {
 
@@ -134,22 +134,24 @@ void SnapAdaptor::cycleWindowsInZone(bool forward)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Batch helper used by methods that operate on pre-built
-// ZoneAssignmentEntry vectors (resnapForVirtualScreenReconfigure,
-// handleBatchedResnap). Thin wrapper over
-// SnapEngine::applyBatchAssignments. The engine commits at once; only the
-// bus emission goes through @p sequencer when one is given.
+// Batch helper for every method here that commits pre-built
+// ZoneAssignmentEntry vectors: the engine's own batches (applyEngineResnap),
+// reapplySnapZones, resnapCurrentAssignments, resnapFromAutotileOrder,
+// resnapForVirtualScreenReconfigure and handleBatchedResnap. Thin wrapper
+// over SnapEngine::applyBatchAssignments. The engine commits at once, and
+// every one of these emissions goes through the announce sequencer
+// (emitPlacementBatch), so they reach the effect in commit order and behind
+// any screens announce queued before them (#1151).
 // ═══════════════════════════════════════════════════════════════════════════════
-static bool processBatchEntries(WindowTrackingAdaptor* wta, PhosphorSnapEngine::SnapEngine* engine,
-                                const QVector<ZoneAssignmentEntry>& entries, const QString& action,
-                                const SnapAdaptor::AnnounceSequencer& sequencer = {})
+bool SnapAdaptor::commitBatch(const QVector<ZoneAssignmentEntry>& entries, const QString& action)
 {
-    if (!engine || !wta) {
+    if (!m_engine || !m_adaptor) {
         return false;
     }
 
+    WindowTrackingAdaptor* const wta = m_adaptor;
     PhosphorProtocol::WindowGeometryList geometries =
-        engine->applyBatchAssignments(entries, SnapIntent::UserInitiated, [wta]() -> QString {
+        m_engine->applyBatchAssignments(entries, SnapIntent::UserInitiated, [wta]() -> QString {
             const QString cursor = wta->lastCursorScreenName();
             return cursor.isEmpty() ? wta->lastActiveScreenName() : cursor;
         });
@@ -157,29 +159,18 @@ static bool processBatchEntries(WindowTrackingAdaptor* wta, PhosphorSnapEngine::
     if (geometries.isEmpty()) {
         return false;
     }
-    if (!sequencer) {
-        Q_EMIT wta->applyGeometriesBatch(geometries, action);
-        return true;
-    }
-    sequencer([guard = QPointer<WindowTrackingAdaptor>(wta), geometries = std::move(geometries), action]() {
-        if (guard) {
-            Q_EMIT guard->applyGeometriesBatch(geometries, action);
-        }
-    });
+    emitPlacementBatch(std::move(geometries), action);
     return true;
 }
 
 /// A batch whose every entry re-states a placement (the desktop carry, the
 /// re-apply on a switch) is relayed as "restate": no Snap Assist (F461).
-static void processResnapEntries(WindowTrackingAdaptor* wta, PhosphorSnapEngine::SnapEngine* engine,
-                                 const QVector<ZoneAssignmentEntry>& entries,
-                                 const SnapAdaptor::AnnounceSequencer& sequencer = {})
+void SnapAdaptor::commitResnapBatch(const QVector<ZoneAssignmentEntry>& entries)
 {
     const bool restatement = !entries.isEmpty() && std::all_of(entries.cbegin(), entries.cend(), [](const auto& e) {
         return e.restatement;
     });
-    processBatchEntries(wta, engine, entries, restatement ? QStringLiteral("restate") : QStringLiteral("resnap"),
-                        sequencer);
+    commitBatch(entries, restatement ? QStringLiteral("restate") : QStringLiteral("resnap"));
 }
 
 QStringList SnapAdaptor::resolveSnapModeScreensForResnap(const QString& screenFilter) const
@@ -228,7 +219,7 @@ void SnapAdaptor::resnapCurrentAssignments(const QString& screenFilter)
                                              scope.isEmpty() ? m_adaptor->lastActiveScreenName() : scope);
         return;
     }
-    processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("resnap"));
+    commitBatch(entries, QStringLiteral("resnap"));
 }
 
 void SnapAdaptor::reapplySnapZones(const QStringList& screens, bool restatement)
@@ -245,8 +236,7 @@ void SnapAdaptor::reapplySnapZones(const QStringList& screens, bool restatement)
     for (ZoneAssignmentEntry& entry : entries) {
         entry.restatement = restatement;
     }
-    processBatchEntries(m_adaptor, m_engine, entries,
-                        restatement ? QStringLiteral("restate") : QStringLiteral("resnap"));
+    commitBatch(entries, restatement ? QStringLiteral("restate") : QStringLiteral("resnap"));
 }
 
 void SnapAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId)
@@ -271,7 +261,7 @@ void SnapAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder
     }
     const QVector<ZoneAssignmentEntry> entries = m_engine->calculateResnapEntriesFromAutotileOrder(order, screen);
     if (!entries.isEmpty()) {
-        processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("resnap"));
+        commitBatch(entries, QStringLiteral("resnap"));
     }
 }
 
@@ -296,13 +286,21 @@ void SnapAdaptor::resnapForVirtualScreenReconfigure(const QString& physicalScree
     // Tagged "vs_reconfigure" so the kwin-effect does NOT fire snap-assist
     // continuation — no user-initiated snap happened here, windows are just
     // following their VS's new geometry after a swap/rotate/split edit.
-    processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("vs_reconfigure"));
+    // Sequenced like the zone restores the same reconfigure flushes first
+    // (Daemon::flushPendingSnapZoneRestores), so this newer batch lands after
+    // them and not ahead (F272).
+    commitBatch(entries, QStringLiteral("vs_reconfigure"));
 }
 
 PhosphorProtocol::SnapAllResultList SnapAdaptor::calculateSnapAllWindows(const QStringList& windowIds,
                                                                          const QString& screenId)
 {
     qCDebug(lcDbusWindow) << "calculateSnapAllWindows: count=" << windowIds.size() << "screen=" << screenId;
+    // Compositor-only: it records each candidate's free frame, which a
+    // foreign caller could otherwise overwrite for any window (F167).
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return {};
+    }
     if (!m_engine) {
         return {};
     }
@@ -319,9 +317,18 @@ PhosphorProtocol::SnapAllResultList SnapAdaptor::calculateSnapAllWindows(const Q
 void SnapAdaptor::snapAllWindows(const QString& screenId)
 {
     qCDebug(lcDbusWindow) << "snapAllWindows: screen=" << screenId;
-    if (m_engine) {
-        m_engine->snapAllWindows(screenId);
+    if (!m_engine || !m_adaptor) {
+        return;
     }
+    // The effect zone-snaps every window on the screen it is asked for, so
+    // only a known screen snapping runs, switched on and not disabled in the
+    // context in view, as its sibling bus verbs gate it (F381).
+    const QString screen = m_adaptor->resolveBusScreen(screenId);
+    if (screen.isEmpty() || !m_engine->isActiveOnScreen(screen) || !snapPermittedForContext(QString(), screen, 0)) {
+        qCInfo(lcDbusWindow) << "Bus snap-all refused on" << screenId;
+        return;
+    }
+    m_engine->snapAllWindows(screen);
 }
 
 void SnapAdaptor::applyEngineResnap(const QString& resnapData)
@@ -338,8 +345,8 @@ void SnapAdaptor::applyEngineResnap(const QString& resnapData)
     }
     // The engine's batches come out of passes that can also change the
     // managed screen set (a desktop switch off a scrolling desktop), so the
-    // emission waits for that pass's announce.
-    processResnapEntries(m_adaptor, m_engine, entries, m_announceSequencer);
+    // emission waits for that pass's announce (commitBatch).
+    commitResnapBatch(entries);
 }
 
 void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
@@ -355,8 +362,13 @@ void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
         return;
     }
     // An external batch commits only what a bus snap could: a live window, a
-    // known screen, a desktop that exists, and a landing the snap gate admits
-    // (an unsnap entry only on a screen snapping runs).
+    // known screen, a desktop that exists, and a landing the snap gate admits.
+    // A restore entry unsnaps the window, floats it on the named screen and
+    // moves it to the entry's rect, none of which a snap gate checks, so it is
+    // taken only from the registered compositor bridge (or a direct call),
+    // and only on a screen snapping runs (F312).
+    const std::optional<QString> caller = DbusHelpers::busCallerOf(this, QLatin1StringView(__func__));
+    const bool restoresAdmitted = !caller || DbusHelpers::isBridgeCaller(this, *caller);
     const int desktops = m_adaptor->desktopCount();
     QVector<ZoneAssignmentEntry> admitted;
     for (ZoneAssignmentEntry entry : entries) {
@@ -368,7 +380,7 @@ void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
             continue;
         }
         if (entry.targetZoneId == PhosphorEngine::RestoreSentinel) {
-            if (!m_engine->isActiveOnScreen(screen)) {
+            if (!restoresAdmitted || !m_engine->isActiveOnScreen(screen)) {
                 continue;
             }
         } else {
@@ -388,7 +400,7 @@ void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
         qCInfo(lcDbusWindow) << "handleBatchedResnap: dropped" << entries.size() - admitted.size() << "of"
                              << entries.size() << "entries";
     }
-    processResnapEntries(m_adaptor, m_engine, admitted);
+    commitResnapBatch(admitted);
 }
 
 } // namespace PlasmaZones

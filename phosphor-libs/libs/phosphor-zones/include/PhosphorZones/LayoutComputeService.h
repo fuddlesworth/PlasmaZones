@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <memory>
 
 class QThread;
 
@@ -33,6 +34,9 @@ public:
                             qreal screenScale = 0.0);
     uint64_t currentGeneration(const QString& screenId) const;
 
+    /// Recalculate @p layout in place, on the calling (GUI) thread. Refuses an
+    /// invalid @p screenGeometry, as requestRecalculate does: an empty rect
+    /// would stamp a frame with no size and collapse every zone onto a point.
     static void recalculateSync(Layout* layout, const QRectF& screenGeometry, qreal screenScale = 0.0);
 
 Q_SIGNALS:
@@ -55,7 +59,13 @@ private:
     QHash<QString, uint64_t> m_screenGeneration;
     QPointer<LayoutRegistry> m_layoutManager;
     QThread* m_thread = nullptr;
-    LayoutWorker* m_worker = nullptr;
+    /// Owned here rather than by the thread's finished() → deleteLater: it is
+    /// reset in the destructor once the thread has stopped, on the one path
+    /// that also covers a worker thread that had to be terminated.
+    std::unique_ptr<LayoutWorker> m_worker;
+    /// Per-screen count of computes dispatched to the worker whose result has
+    /// not come back yet. An entry is removed when it drops to zero.
+    QHash<QString, int> m_inFlight;
 };
 
 } // namespace PhosphorZones

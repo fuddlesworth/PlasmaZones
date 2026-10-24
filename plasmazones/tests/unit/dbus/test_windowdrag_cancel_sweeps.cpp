@@ -3,10 +3,11 @@
 
 /**
  * @file test_windowdrag_cancel_sweeps.cpp
- * @brief Adaptor-level pins for the drag-insert cancel sweeps and the
- * desktop-switch announce burst (discussion #1028 follow-ups).
+ * @brief Adaptor-level pins for the drag-insert cancel sweeps, the
+ * desktop-switch announce burst (discussion #1028 follow-ups) and the
+ * placements held behind a queued announce (#1151).
  *
- * Three seams that previously had no test:
+ * Seams that previously had no test:
  *
  *  1. WindowDragAdaptor's LIVE sweep derives dragStillActive from
  *     isDragSessionActive() — replacing the derivation with a constant false
@@ -24,6 +25,15 @@
  *     notifyEngineScreensChanged(true), and only emit-time stamping makes
  *     the burst's single emission carry a fully consistent desktop map (the
  *     focus-follows-mouse leak fixed by [SEQ E½] in start.cpp).
+ *
+ *  4. TilingAdaptor::runBehindScreensAnnounce runs its work right behind a
+ *     queued announce and the tile batches held with it, at once with none
+ *     queued, and never for an announce clearEngine voided.
+ *
+ *  5. SnapAdaptor sends every snap batch and every re-statement through that
+ *     sequencer (the settings reflow as well as the engine's own batches),
+ *     and drops a held placement of a window another placement went out for
+ *     in the meantime.
  */
 
 #include <QCoreApplication>
@@ -41,6 +51,7 @@
 
 #include "config/configdefaults.h"
 #include "config/configkeys.h"
+#include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -50,10 +61,17 @@
 #include "helpers/StubOverlayService.h"
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
+#include "wta_float_back_fixture.h"
+
+#include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+
+#include <functional>
+#include <utility>
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -80,6 +98,49 @@ bool spyHasGeometryEntryFor(const QSignalSpy& spy, const QString& windowId)
     }
     return false;
 }
+
+/// True when any applyGeometriesBatch emission carries an entry for @p windowId.
+bool batchCarries(const QSignalSpy& spy, const QString& windowId)
+{
+    for (const QList<QVariant>& emission : spy) {
+        const auto geometries = emission.first().value<PhosphorProtocol::WindowGeometryList>();
+        for (const PhosphorProtocol::WindowGeometryEntry& entry : geometries) {
+            if (entry.windowId == windowId) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// A SnapAdaptor over a FloatBackFixture whose announce sequencer holds every
+/// piece of work until the test runs it, as a queued screens announce does.
+struct HeldSnapFixture
+{
+    HeldSnapFixture()
+    {
+        adaptor = new SnapAdaptor(f.snap.get(), f.wta, &f.settings, &adaptorParent);
+        adaptor->setAnnounceSequencer([this](std::function<void()> work) {
+            held.append(std::move(work));
+        });
+    }
+    ~HeldSnapFixture()
+    {
+        adaptor->clearEngine();
+    }
+    /// The announce goes out: the held work runs, in arrival order.
+    void announce()
+    {
+        for (const std::function<void()>& work : std::exchange(held, {})) {
+            work();
+        }
+    }
+
+    FloatBackFixture f;
+    QObject adaptorParent; // dies before the fixture's engine and adaptor
+    SnapAdaptor* adaptor = nullptr; // parent-owned
+    QList<std::function<void()>> held;
+};
 
 } // namespace
 
@@ -242,8 +303,10 @@ private Q_SLOTS:
     }
 
     // #1151: work handed to runBehindScreensAnnounce while an announce is
-    // queued runs right behind that announce, never ahead of it; with nothing
-    // queued it runs at once; clearEngine drops what the voided announce held.
+    // queued runs right behind that announce, never ahead of it, and behind
+    // the tile batches held with it even when it was handed over first; with
+    // nothing queued it runs at once; clearEngine drops what the voided
+    // announce held, so the next session's announce does not run it either.
     void workHeldBehindTheAnnounceRunsAfterIt()
     {
         IsolatedConfigGuard guard;
@@ -275,6 +338,22 @@ private Q_SLOTS:
         });
         QVERIFY2(ranAtOnce, "with no announce queued the work runs at once");
 
+        // Handed over BEFORE the tile batch, and still run after it: the held
+        // batches go out first, whatever order the two arrived in.
+        QSignalSpy tiles(&adaptor, &TilingAdaptor::windowsTileRequested);
+        int tilesWhenWorkRan = -1;
+        adaptor.notifyEngineScreensChanged(/*isDesktopSwitch=*/true);
+        adaptor.runBehindScreensAnnounce([&] {
+            tilesWhenWorkRan = tiles.count();
+        });
+        adaptor.relayTileRequestsJson(QStringLiteral(
+            "[{\"windowId\":\"held-tile\",\"screenId\":\"DP-1\",\"x\":0,\"y\":0,\"width\":800,\"height\":600}]"));
+        QCOMPARE(tiles.count(), 0);
+        QCOMPARE(adaptor.pendingHeldTileBatchCount(), 1);
+        QCoreApplication::processEvents();
+        QCOMPARE(tiles.count(), 1);
+        QCOMPARE(tilesWhenWorkRan, 1);
+
         bool ranAfterClear = false;
         adaptor.notifyEngineScreensChanged(/*isDesktopSwitch=*/false);
         adaptor.runBehindScreensAnnounce([&] {
@@ -283,6 +362,99 @@ private Q_SLOTS:
         adaptor.clearEngine();
         QCoreApplication::processEvents();
         QVERIFY2(!ranAfterClear, "clearEngine drops the work held behind the announce it voided");
+        // The voided announce's generation check alone would keep the work
+        // from running above. A restarted session's own announce runs
+        // whatever is still held, so only an emptied queue passes here.
+        const int announcedBefore = spy.count();
+        adaptor.setLifecycleEngines({&engine});
+        adaptor.notifyEngineScreensChanged(/*isDesktopSwitch=*/false);
+        QCoreApplication::processEvents();
+        QCOMPARE(spy.count(), announcedBefore + 1);
+        QVERIFY2(!ranAfterClear, "the next session's announce runs nothing the voided one held");
+    }
+
+    // #1151's snap half: the settings reflow is held behind a queued announce
+    // like the engine's own batches, and the batch goes out when the announce
+    // does.
+    void snapReflowWaitsForTheAnnounce()
+    {
+        HeldSnapFixture h;
+        const QString w = h.f.registerWindow(QStringLiteral("held-reflow"));
+        h.f.snap->commitSnap(w, h.f.zone(0), kLeft);
+        QSignalSpy batch(h.f.wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+
+        h.adaptor->reapplySnapZones();
+        QCOMPARE(batch.count(), 0);
+        QCOMPARE(h.held.size(), 1);
+
+        h.announce();
+        QCOMPARE(batch.count(), 1);
+        QVERIFY(batchCarries(batch, w));
+    }
+
+    void engineResnapBatchWaitsForTheAnnounce()
+    {
+        HeldSnapFixture h;
+        const QString w = h.f.registerWindow(QStringLiteral("held-carry"));
+        PhosphorEngine::ZoneAssignmentEntry entry;
+        entry.windowId = w;
+        entry.targetZoneId = h.f.zone(1);
+        entry.targetGeometry = h.f.zoneRect(1, kLeft);
+        entry.targetScreenId = kLeft;
+        QSignalSpy batch(h.f.wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+
+        h.f.snap->emitBatchedResnap({entry});
+        QCOMPARE(h.f.snap->zoneForWindow(w), h.f.zone(1));
+        QCOMPARE(batch.count(), 0);
+
+        h.announce();
+        QCOMPARE(batch.count(), 1);
+        QVERIFY(batchCarries(batch, w));
+    }
+
+    // A re-statement of one window is judged against the managed set like a
+    // batch, so it waits too (F166).
+    void restatementWaitsForTheAnnounce()
+    {
+        HeldSnapFixture h;
+        const QString w = h.f.registerWindow(QStringLiteral("held-restate"));
+        const QRect rect = h.f.zoneRect(0, kLeft);
+        QSignalSpy applies(h.f.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        Q_EMIT h.f.snap->restatementGeometryRequested(w, rect.x(), rect.y(), rect.width(), rect.height(), h.f.zone(0),
+                                                      kLeft);
+        QCOMPARE(applies.count(), 0);
+
+        h.announce();
+        QCOMPARE(applies.count(), 1);
+        QCOMPARE(applies.first().at(0).toString(), w);
+        QCOMPARE(applies.first().at(8).toInt(), static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
+    }
+
+    // A placement of the window that goes out while the batch is held (a user
+    // verb in the same turn) is the newer one: the held batch must not follow
+    // it and put the window back (F552). The other window in the batch still
+    // goes.
+    void heldPlacementSupersededByANewerOneIsDropped()
+    {
+        HeldSnapFixture h;
+        const QString moved = h.f.registerWindow(QStringLiteral("held-moved"));
+        const QString kept = h.f.registerWindow(QStringLiteral("held-kept"));
+        h.f.snap->commitSnap(moved, h.f.zone(0), kLeft);
+        h.f.snap->commitSnap(kept, h.f.zone(1), kLeft);
+        QSignalSpy batch(h.f.wta, &WindowTrackingAdaptor::applyGeometriesBatch);
+
+        h.adaptor->reapplySnapZones();
+        QCOMPARE(h.held.size(), 1);
+        const QRect elsewhere = h.f.zoneRect(2, kLeft);
+        Q_EMIT h.f.wta->applyGeometryRequested(moved, elsewhere.x(), elsewhere.y(), elsewhere.width(),
+                                               elsewhere.height(), h.f.zone(2), kLeft, false,
+                                               static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
+
+        h.announce();
+        QCOMPARE(batch.count(), 1);
+        QVERIFY2(!batchCarries(batch, moved), "the held batch followed the newer placement");
+        QVERIFY(batchCarries(batch, kept));
     }
 };
 

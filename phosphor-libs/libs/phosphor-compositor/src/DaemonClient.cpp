@@ -121,9 +121,31 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
         }
 
         m_daemonReady = true;
+        m_warnedUnregisteredReport = false;
         connectDaemonSignals();
         Q_EMIT bridgeRegistered(m_sessionId, peerVersion);
     });
+}
+
+bool DaemonClient::reportAdmitted(const char* method)
+{
+    // The daemon admits a compositor report only from the bus name that
+    // registered the bridge and answers anyone else with AccessDenied. A
+    // fire-and-forget call never sees that answer, so a report sent before
+    // registration lands would vanish without a trace. Refusing it here says
+    // so instead, once per registration so a 30 Hz drag stream does not
+    // flood the log.
+    if (!m_sessionId.isEmpty()) {
+        return true;
+    }
+    if (!m_warnedUnregisteredReport) {
+        m_warnedUnregisteredReport = true;
+        qCWarning(lcDaemonClient) << method
+                                  << "called before registerBridge succeeded. The daemon admits compositor reports"
+                                     " only from the registered bridge, so this and every report until "
+                                     "bridgeRegistered are not sent";
+    }
+    return false;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -132,6 +154,9 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
 
 void DaemonClient::notifyWindowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
+    if (!reportAdmitted("windowOpened")) {
+        return;
+    }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Tiling,
                                                 QStringLiteral("windowOpened"),
                                                 {windowId, screenId, minWidth, minHeight});
@@ -139,24 +164,36 @@ void DaemonClient::notifyWindowOpened(const QString& windowId, const QString& sc
 
 void DaemonClient::notifyWindowOpenedBatch(const PhosphorProtocol::WindowOpenedList& windows)
 {
+    if (!reportAdmitted("windowsOpenedBatch")) {
+        return;
+    }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Tiling,
                                                 QStringLiteral("windowsOpenedBatch"), {QVariant::fromValue(windows)});
 }
 
 void DaemonClient::notifyWindowClosed(const QString& windowId)
 {
+    if (!reportAdmitted("windowClosed")) {
+        return;
+    }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Tiling,
                                                 QStringLiteral("windowClosed"), {windowId});
 }
 
 void DaemonClient::notifyWindowActivated(const QString& windowId, const QString& screenId)
 {
+    if (!reportAdmitted("windowActivated")) {
+        return;
+    }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowTracking,
                                                 QStringLiteral("windowActivated"), {windowId, screenId});
 }
 
 void DaemonClient::notifyActiveWindowScreenChanged(const QString& windowId, const QString& screenId)
 {
+    if (!reportAdmitted("activeWindowScreenChanged")) {
+        return;
+    }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowTracking,
                                                 QStringLiteral("activeWindowScreenChanged"), {windowId, screenId});
 }
@@ -168,6 +205,9 @@ void DaemonClient::notifyActiveWindowScreenChanged(const QString& windowId, cons
 void DaemonClient::beginDrag(const QString& windowId, const QRect& frameGeometry, const QString& startScreenId,
                              int mouseButtons)
 {
+    if (!reportAdmitted("beginDrag")) {
+        return;
+    }
     auto* watcher =
         new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
                                         PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("beginDrag"),
@@ -196,6 +236,9 @@ void DaemonClient::beginDrag(const QString& windowId, const QRect& frameGeometry
 
 void DaemonClient::updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
 {
+    if (!reportAdmitted("updateDragCursor")) {
+        return;
+    }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
                                                 QStringLiteral("updateDragCursor"),
                                                 {windowId, cursorX, cursorY, modifiers, mouseButtons});
@@ -204,6 +247,9 @@ void DaemonClient::updateDragCursor(const QString& windowId, int cursorX, int cu
 void DaemonClient::endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
                            bool cancelled)
 {
+    if (!reportAdmitted("endDrag")) {
+        return;
+    }
     auto* watcher =
         new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
                                         PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("endDrag"),
@@ -235,12 +281,18 @@ void DaemonClient::endDrag(const QString& windowId, int cursorX, int cursorY, in
 
 void DaemonClient::notifyCursorScreenChanged(const QString& screenId)
 {
+    if (!reportAdmitted("cursorScreenChanged")) {
+        return;
+    }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowTracking,
                                                 QStringLiteral("cursorScreenChanged"), {screenId});
 }
 
 void DaemonClient::notifyPrimaryScreen(const QString& screenName)
 {
+    if (!reportAdmitted("setPrimaryScreenFromKWin")) {
+        return;
+    }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Screen,
                                                 QStringLiteral("setPrimaryScreenFromKWin"), {screenName});
 }
@@ -319,6 +371,9 @@ void DaemonClient::queryVirtualScreens(const QString& screenId)
 
 void DaemonClient::pruneStaleWindows(const QStringList& liveWindowIds)
 {
+    if (!reportAdmitted("pruneStaleWindows")) {
+        return;
+    }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowTracking,
                                                 QStringLiteral("pruneStaleWindows"), {liveWindowIds});
 }

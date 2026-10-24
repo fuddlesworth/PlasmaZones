@@ -11,7 +11,7 @@
 
 namespace PhosphorZones {
 
-PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, const QSize& canvas)
+PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, const QSize& canvas, qreal screenScale)
 {
     PhosphorLayout::LayoutPreview preview;
     if (!layout) {
@@ -30,9 +30,10 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, c
 
     // Reference geometry for fixed-pixel zones. Prefer the caller's
     // canvas when provided so the projection is deterministic per-call;
-    // otherwise ask the layout for its own reference geometry (which
-    // resolves a stale lastRecalcGeometry to the fixed-zone bounding
-    // box — see Layout::fixedZoneReferenceGeometry).
+    // otherwise ask the layout for its own reference geometry, which is its
+    // last recalculation rect when that rect holds the fixed zones and the
+    // fixed-zone bounding box when they overflow it or no rect is known yet
+    // (see Layout::fixedZoneReferenceGeometry).
     const bool hasFixed = layout->hasFixedGeometryZones();
     const QRectF refGeo = !canvas.isEmpty() ? QRectF(QPointF(), canvas) : layout->fixedZoneReferenceGeometry();
 
@@ -42,7 +43,12 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, c
 
     // Zone projection: relative geometry + 1-based zone numbers. Caller
     // (renderer) scales the relative rects into whatever canvas it has.
+    // The caller's scale goes with the caller's canvas only. The layout's own
+    // reference geometry is in the frame of its last recalculation, so it
+    // pairs with a zero scale, which normalizedGeometry() reads as
+    // lastRecalcScale().
     const QRectF projectRef = hasFixed ? refGeo : QRectF();
+    const qreal projectScale = !canvas.isEmpty() ? screenScale : 0.0;
     const auto zones = layout->zones();
     preview.zones.reserve(zones.size());
     preview.zoneNumbers.reserve(zones.size());
@@ -50,7 +56,7 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, c
         if (!zone) {
             continue;
         }
-        preview.zones.append(zone->normalizedGeometry(projectRef));
+        preview.zones.append(zone->normalizedGeometry(projectRef, projectScale));
         preview.zoneNumbers.append(zone->zoneNumber());
     }
 

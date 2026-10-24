@@ -137,8 +137,7 @@ int getEffectiveInnerGap(PhosphorZones::Layout* layout, ISettings* settings, con
     // rule, a hand-edited layout file and a hand-edited config can each carry
     // a gap the settings UI would never offer, and the autotile arm has always
     // bounded its own equivalents (the clampGap in PerScreenConfigResolver.cpp),
-    // so the
-    // snapping arm bounds the same quantity to the same range.
+    // so the snapping arm bounds the same quantity to the same range.
     const auto resolve = [&]() -> int {
         // Tier 1 — a context-rule gap override (per-screen/desktop/activity rule).
         if (auto v = PhosphorEngine::GapResolution::gapFromOverrideMap(ruleGapOverride, PSK::InnerGap, clampGap)) {

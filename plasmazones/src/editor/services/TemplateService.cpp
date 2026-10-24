@@ -8,6 +8,7 @@
 #include <QUuid>
 #include <QLatin1String>
 #include "core/platform/logging.h"
+#include "phosphor_i18n.h"
 
 using namespace PlasmaZones;
 
@@ -49,7 +50,7 @@ QVariantList GridTemplateStrategy::createZones(int columns, int rows)
     for (int r = 0; r < rows; ++r) {
         for (int c = 0; c < columns; ++c) {
             int currentNum = zoneNumber++;
-            zones.append(createZoneForTemplate(QStringLiteral("Zone %1").arg(currentNum), currentNum, c * cellWidth,
+            zones.append(createZoneForTemplate(PhosphorI18n::tr("Zone %1").arg(currentNum), currentNum, c * cellWidth,
                                                r * cellHeight, cellWidth, cellHeight));
         }
     }
@@ -66,8 +67,9 @@ QVariantList ColumnsTemplateStrategy::createZones(int columns, int rows)
     qreal colWidth = 1.0 / columns;
 
     for (int i = 0; i < columns; ++i) {
-        zones.append(
-            createZoneForTemplate(QStringLiteral("Column %1").arg(i + 1), i + 1, i * colWidth, 0.0, colWidth, 1.0));
+        zones.append(createZoneForTemplate(
+            PhosphorI18n::tr("Column %1", "@item zone name, numbered column of a layout").arg(i + 1), i + 1,
+            i * colWidth, 0.0, colWidth, 1.0));
     }
     return zones;
 }
@@ -83,7 +85,8 @@ QVariantList RowsTemplateStrategy::createZones(int columns, int rows)
 
     for (int i = 0; i < rows; ++i) {
         zones.append(
-            createZoneForTemplate(QStringLiteral("Row %1").arg(i + 1), i + 1, 0.0, i * rowHeight, 1.0, rowHeight));
+            createZoneForTemplate(PhosphorI18n::tr("Row %1", "@item zone name, numbered row of a layout").arg(i + 1),
+                                  i + 1, 0.0, i * rowHeight, 1.0, rowHeight));
     }
     return zones;
 }
@@ -95,12 +98,12 @@ QVariantList PriorityTemplateStrategy::createZones(int columns, int rows)
     QVariantList zones;
     using namespace PlasmaZones::Defaults;
 
-    zones.append(createZoneForTemplate(QStringLiteral("Main"), 1, 0.0, 0.0,
-                                       ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 1.0));
-    zones.append(createZoneForTemplate(QStringLiteral("Secondary Top"), 2,
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Main", "@item zone name, the large zone of a layout"), 1, 0.0,
+                                       0.0, ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 1.0));
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Secondary Top", "@item zone name"), 2,
                                        ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 0.0,
                                        ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio, 0.5));
-    zones.append(createZoneForTemplate(QStringLiteral("Secondary Bottom"), 3,
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Secondary Bottom", "@item zone name"), 3,
                                        ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 0.5,
                                        ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio, 0.5));
 
@@ -114,11 +117,12 @@ QVariantList FocusTemplateStrategy::createZones(int columns, int rows)
     QVariantList zones;
     using namespace PlasmaZones::Defaults;
 
-    zones.append(createZoneForTemplate(QStringLiteral("Left Panel"), 1, 0.0, 0.0,
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Left Panel", "@item zone name"), 1, 0.0, 0.0,
                                        ::PhosphorZones::ZoneDefaults::FocusSideRatio, 1.0));
-    zones.append(createZoneForTemplate(QStringLiteral("Center"), 2, ::PhosphorZones::ZoneDefaults::FocusSideRatio, 0.0,
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Center", "@item zone name, the middle zone of a layout"), 2,
+                                       ::PhosphorZones::ZoneDefaults::FocusSideRatio, 0.0,
                                        ::PhosphorZones::ZoneDefaults::FocusMainRatio, 1.0));
-    zones.append(createZoneForTemplate(QStringLiteral("Right Panel"), 3,
+    zones.append(createZoneForTemplate(PhosphorI18n::tr("Right Panel", "@item zone name"), 3,
                                        ::PhosphorZones::ZoneDefaults::FocusSideRatio
                                            + ::PhosphorZones::ZoneDefaults::FocusMainRatio,
                                        0.0, ::PhosphorZones::ZoneDefaults::FocusSideRatio, 1.0));

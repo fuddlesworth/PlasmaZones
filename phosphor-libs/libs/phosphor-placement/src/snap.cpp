@@ -98,7 +98,8 @@ void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
 
 bool WindowTrackingService::isAutoSnapped(const QString& windowId) const
 {
-    Q_ASSERT(hasSnapState());
+    // No snap store resolves: snapAllStates() is empty and nothing is marked.
+    // The compositor's windowActivated reaches this with no store.
     for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
         if (state->isAutoSnapped(windowId)) {
             return true;

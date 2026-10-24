@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include <QtGlobal>
 
 namespace PhosphorScrollEngine {
@@ -99,19 +101,18 @@ inline constexpr int kMaxClientExtentPx = 100000;
 inline constexpr int kMaxScrollViewPx = 1'000'000;
 
 /// How far a committed extent may differ from the offer and still count as
-/// the offer (ScrollEngine::reportCommittedSize). Fractional scaling rounds a
-/// logical size to whole device pixels and back, so a client that took its
-/// tile can commit one pixel either side of it; reading that as an answer
-/// would plant or give back a one-pixel floor and relayout the strip for it.
+/// the offer (ScrollEngine::reportCommittedSize), and the rounding allowance
+/// every committed-floor compare in engine_committed.cpp takes. Fractional
+/// scaling rounds a logical size to whole device pixels and back, so a client
+/// that took its tile can commit one pixel either side of it; reading that as
+/// an answer would plant or give back a one-pixel floor and relayout the strip
+/// for it.
 ///
-/// KEEP EQUAL to the compositor's CommittedSizeTolerancePx
-/// (plasmazones/kwin-effect/tilinghandler/scrolldecisions.h), hand-mirrored
-/// because the effect does not link this library. That one decides which
-/// answers are reported at all and this one which reported answers teach
-/// anything: a smaller value here would only judge answers the effect never
-/// sends, and a larger one would leave the effect reporting answers this
-/// engine always reads as the offer.
-inline constexpr int kCommittedExtentSlackPx = 1;
+/// The wire contract's own tolerance, not a copy of it: the compositor decides
+/// which answers it reports with the same constant, and the two ends must
+/// agree. PhosphorProtocol::Service::CommittedSizeTolerancePx carries the full
+/// contract.
+inline constexpr int kCommittedExtentSlackPx = PhosphorProtocol::Service::CommittedSizeTolerancePx;
 
 /// Sanity bounds for tab-indicator geometry. Deliberately NOT the rules
 /// layer's constants — this library does not depend on phosphor-rules — but

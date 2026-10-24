@@ -10,10 +10,12 @@
 
 #include "settingscontroller.h"
 
+#include "common/daemonscreenscale.h"
 #include "common/layoutpreviewserialize.h"
 #include "config/configdefaults.h"
 #include "core/utils/geometryutils.h"
 #include "core/platform/logging.h"
+#include "core/types/constants.h"
 #include "core/utils/utils.h"
 #include "phosphor_i18n.h"
 #include "settings/rules/ruleauthoring.h"
@@ -37,8 +39,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QScreen>
 #include <QUrl>
 #include <QUuid>
+#include <QtMath>
 
 namespace PlasmaZones {
 
@@ -259,6 +263,12 @@ void SettingsController::recalcLocalLayouts()
     if (!primary) {
         return;
     }
+    // A layout counting fixed sizes in device pixels is laid out at the
+    // output's logical scale; without it, its pixels are previewed as logical
+    // ones. Asked once per pass rather than per layout. Zero when the daemon
+    // cannot answer, which recalculateSync reads as "keep the layout's last
+    // scale".
+    const qreal primaryScale = queryDaemonScreenScale(PhosphorScreens::ScreenIdentity::identifierFor(primary));
     for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
         if (!layout) {
             continue;
@@ -267,7 +277,7 @@ void SettingsController::recalcLocalLayouts()
         // nullptr and accept the Qt-availableGeometry fallback (this preview code
         // path doesn't need VS-aware sub-regions).
         PhosphorZones::LayoutComputeService::recalculateSync(
-            layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
+            layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary), primaryScale);
     }
 }
 

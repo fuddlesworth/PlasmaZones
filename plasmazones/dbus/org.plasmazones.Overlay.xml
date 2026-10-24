@@ -59,7 +59,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
         <!-- Snap Assist: show window picker to fill empty zones after snapping -->
         <method name="showSnapAssist">
-            <annotation name="org.gtk.GDBus.DocString" value="Show Snap Assist overlay with candidate windows. Called by KWin effect after dragStopped when snapAssistRequested is true."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Show Snap Assist overlay with candidate windows. Called by KWin effect after dragStopped when snapAssistRequested is true. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen ID where the snap occurred."/>
             </arg>
@@ -85,7 +85,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setSnapAssistThumbnail">
-            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon as raw ARGB32 pixels. Called by the kwin-effect as the fallback for setWindowThumbnailDmabuf, whenever the zero-copy path is turned off or the driver, RHI backend or format cannot carry it; authenticated against /proc/&lt;pid&gt;/exe. Returns true iff the payload was accepted into the daemon's bounded LRU cache. See OverlayAdaptor::setSnapAssistThumbnail in src/dbus/overlayadaptor.cpp for the full validation and trust contract."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon as raw ARGB32 pixels. Called by the kwin-effect as the fallback for setWindowThumbnailDmabuf, whenever the zero-copy path is turned off or the driver, RHI backend or format cannot carry it. Only the compositor's own process may call it (the process serving the daemon's Wayland connection, or kwin_wayland as the direct child of kwin_wayland_wrapper), and any other caller is answered with AccessDenied. Returns true iff the payload was accepted into the daemon's bounded LRU cache. See OverlayAdaptor::setSnapAssistThumbnail in src/dbus/overlayadaptor.cpp for the full validation and trust contract."/>
             <arg name="compositorHandle" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>
             </arg>
@@ -103,7 +103,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setWindowThumbnailDmabuf">
-            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail as a single-plane DMA-BUF (zero-copy GPU path) instead of raw pixels. This is the default transport; the daemon refuses it and returns false when started with PLASMAZONES_DMABUF_THUMBNAILS=0, and on any false the caller must fall back to setSnapAssistThumbnail. Authenticated against /proc/&lt;pid&gt;/exe like the raw-pixel method. The fd is consumed/duplicated by the daemon's GPU import; the caller may close its copy after the call returns."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail as a single-plane DMA-BUF (zero-copy GPU path) instead of raw pixels. This is the default transport. The daemon refuses it and returns false when started with PLASMAZONES_DMABUF_THUMBNAILS=0, and on any false the caller must fall back to setSnapAssistThumbnail. Only the compositor's own process may call it, as for the raw-pixel method, and any other caller is answered with AccessDenied. The fd is consumed/duplicated by the daemon's GPU import, so the caller may close its copy after the call returns."/>
             <arg name="compositorHandle" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>
             </arg>

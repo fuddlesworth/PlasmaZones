@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <limits>
 #include <mutex>
+#include <utility>
 
 namespace PhosphorZones {
 
@@ -58,16 +59,6 @@ Layout::ScreenIdResolver Layout::screenIdResolver()
         }                                                                                                              \
     }
 
-// Simple setter without layoutModified signal (for internal properties)
-#define LAYOUT_SETTER_NO_MODIFIED(Type, name, member, signal)                                                          \
-    void Layout::set##name(Type value)                                                                                 \
-    {                                                                                                                  \
-        if (member != value) {                                                                                         \
-            member = value;                                                                                            \
-            Q_EMIT signal();                                                                                           \
-        }                                                                                                              \
-    }
-
 // Setter that allows -1 (use global setting) or any non-negative value
 #define LAYOUT_SETTER_MIN_NEGATIVE_ONE(name, member, signal)                                                           \
     void Layout::set##name(int value)                                                                                  \
@@ -96,14 +87,19 @@ Layout::Layout(const QString& name, QObject* parent)
 }
 
 // Zones are QObject children (addZone parents them), so ~QObject would reap
-// them anyway. Deleting them here first is deliberate and harmless: each Zone
-// de-registers itself from this object's child list as it is destroyed, so the
-// base destructor finds nothing left to do. Keeping the explicit sweep means
-// the zone list is torn down at a known point rather than during base-class
-// destruction, which matters for any zone slot still connected at that moment.
+// them anyway. Deleting them here first is a deliberate exception to the
+// parent-ownership rule, and harmless: each Zone de-registers itself from this
+// object's child list as it is destroyed, so the base destructor finds nothing
+// left to do. The explicit sweep tears the zones down while this Layout is
+// still a whole object, rather than during base-class destruction when its
+// members are already gone, which matters for any slot that a zone's
+// destroyed() reaches and that reads the layout back. The list is detached
+// first so such a slot sees an empty zones() instead of the pointers being
+// deleted under it.
 Layout::~Layout()
 {
-    qDeleteAll(m_zones);
+    const QVector<Zone*> zones = std::exchange(m_zones, {});
+    qDeleteAll(zones);
 }
 
 Layout* Layout::clone(QObject* parent) const
@@ -171,7 +167,7 @@ void Layout::setFixedGeometryInDevicePixels(bool enabled)
     // last pass computed are stale at an unchanged screen rect, exactly as
     // after a zone-set edit. Without the bit the next recalculation against
     // the same screen would early-out and keep the old resolution.
-    m_zoneGeometryDirty = true;
+    markZoneGeometryDirty();
     Q_EMIT fixedGeometryInDevicePixelsChanged();
     emitModifiedIfNotBatched();
 }
@@ -256,8 +252,10 @@ QRectF Layout::fixedZoneBoundingBox() const
     // m_lastRecalcGeometry: a device-pixel layout's raw extents are the
     // output's own pixels, which on a scaled output overflow the logical
     // screen they exactly fill.
-    const qreal divisor = fixedGeometryDivisor(m_lastRecalcScale);
-    return hasAny ? QRectF(0, 0, maxX / divisor, maxY / divisor) : QRectF();
+    if (!hasAny) {
+        return QRectF();
+    }
+    return Zone::fixedGeometryToLogical(QRectF(0, 0, maxX, maxY), fixedGeometryDivisor(m_lastRecalcScale));
 }
 
 QRectF Layout::fixedZoneReferenceGeometry() const
@@ -270,8 +268,18 @@ QRectF Layout::fixedZoneReferenceGeometry() const
     // whenever it can hold the fixed zones. Both extents are checked: a
     // width-only overflow stretches the editor canvas exactly as a height-only
     // one does.
+    //
+    // "Hold" allows less than one logical pixel of slack. A device-pixel box
+    // that exactly fills the output is divided by a fractional scale, and the
+    // quotient lands a rounding error past the integer logical rect (2208 /
+    // 1.15 is 1920.0000000002), or up to half a pixel past it where the
+    // compositor rounded the logical size. A strict compare would read that as
+    // overflow and fall back to the box. Integer logical geometry never
+    // overflows by less than a whole pixel, so the slack changes nothing there.
+    constexpr qreal SubPixelSlack = 1.0;
     if (m_lastRecalcGeometry.width() > 0 && m_lastRecalcGeometry.height() > 0
-        && bbox.width() <= m_lastRecalcGeometry.width() && bbox.height() <= m_lastRecalcGeometry.height()) {
+        && bbox.width() - m_lastRecalcGeometry.width() < SubPixelSlack
+        && bbox.height() - m_lastRecalcGeometry.height() < SubPixelSlack) {
         return m_lastRecalcGeometry;
     }
     // Either the zones genuinely overflow the screen (a 3840x2160 layout on a
@@ -347,8 +355,13 @@ void Layout::setSourcePath(const QString& path)
         if (m_sourcePath.isEmpty()) {
             m_isSystemLayout = false;
         } else {
+            // Anchored at a path separator: a bare prefix compare would file a
+            // sibling directory that merely shares the prefix (".../share-old")
+            // under the user's data directory.
             const QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-            m_isSystemLayout = !m_sourcePath.startsWith(userDataPath);
+            const QString userDataDir =
+                userDataPath.endsWith(QLatin1Char('/')) ? userDataPath : userDataPath + QLatin1Char('/');
+            m_isSystemLayout = !m_sourcePath.startsWith(userDataDir);
         }
         Q_EMIT sourcePathChanged();
     }
@@ -437,7 +450,7 @@ void Layout::addZone(Zone* zone)
         if (zone->zoneNumber() <= 0) {
             zone->setZoneNumber(m_zones.size());
         }
-        m_zoneGeometryDirty = true; // Absolute geometries owe a recompute
+        markZoneGeometryDirty(); // Absolute geometries owe a recompute
         Q_EMIT zoneAdded(zone);
         Q_EMIT zonesChanged();
         emitModifiedIfNotBatched();
@@ -447,7 +460,7 @@ void Layout::addZone(Zone* zone)
 void Layout::removeZone(Zone* zone)
 {
     if (zone && m_zones.removeOne(zone)) {
-        m_zoneGeometryDirty = true; // Absolute geometries owe a recompute
+        markZoneGeometryDirty(); // Absolute geometries owe a recompute
         // Renumber BEFORE emitting zoneRemoved so observers see a coherent
         // post-state: the removed zone is detached and the remaining zones
         // already carry their final 1..N numbers.
@@ -463,7 +476,7 @@ void Layout::removeZoneAt(int index)
 {
     if (index >= 0 && index < m_zones.size()) {
         auto zone = m_zones.takeAt(index);
-        m_zoneGeometryDirty = true; // Absolute geometries owe a recompute
+        markZoneGeometryDirty(); // Absolute geometries owe a recompute
         renumberZones();
         Q_EMIT zoneRemoved(zone);
         zone->deleteLater();
@@ -480,7 +493,7 @@ void Layout::clearZones()
         // post-state (here, the empty list), not the zone still attached.
         const QVector<Zone*> removed = m_zones;
         m_zones.clear();
-        m_zoneGeometryDirty = true; // Absolute geometries owe a recompute
+        markZoneGeometryDirty(); // Absolute geometries owe a recompute
         for (auto* zone : removed) {
             Q_EMIT zoneRemoved(zone);
             zone->deleteLater();
@@ -506,11 +519,16 @@ void Layout::emitModifiedIfNotBatched()
     m_dirty = true;
     if (m_batchModifyDepth == 0) {
         Q_EMIT layoutModified();
+    } else {
+        m_batchModified = true;
     }
 }
 
 void Layout::beginBatchModify()
 {
+    if (m_batchModifyDepth == 0) {
+        m_batchModified = false;
+    }
     ++m_batchModifyDepth;
 }
 
@@ -519,7 +537,11 @@ void Layout::endBatchModify()
     if (m_batchModifyDepth > 0) {
         --m_batchModifyDepth;
     }
-    if (m_batchModifyDepth == 0 && m_dirty) {
+    // Only an edit made inside this batch is news. m_dirty alone would also
+    // be set by an earlier edit that was never saved, and a batch that touched
+    // nothing (the async geometry apply) would re-announce it every time.
+    if (m_batchModifyDepth == 0 && m_batchModified) {
+        m_batchModified = false;
         Q_EMIT layoutModified();
     }
 }
@@ -593,16 +615,34 @@ void Layout::recalculateZoneGeometries(const QRectF& screenGeometry, qreal scree
     // whose zones were swapped since the last pass still carries the same
     // screen rect, so comparing the rect alone would early-out and leave the
     // new zones with no absolute geometry at all. The scale is the third
-    // input, for a device-pixel layout only (see needsRecalc).
-    if (!needsRecalc(screenGeometry, screenScale)) {
+    // input, for a device-pixel layout with fixed zones only (see needsRecalc).
+    //
+    // Every call records its caller's frame, the no-op ones included: an
+    // async result asked for before this call must not land over it (see
+    // syncRecalcEpoch). The scale is stamped before the early-out for the
+    // same reason. A layout the scale cannot move still answers the current
+    // one through lastRecalcScale(), so flipping it to device pixels later
+    // does not leave its readers dividing by a scale from an older pass.
+    // Stamping only after needsRecalc has read the old one keeps the check
+    // honest, and for a layout that does depend on the scale the early-out
+    // means the two are already equal.
+    ++m_syncRecalcEpoch;
+    const bool needed = needsRecalc(screenGeometry, screenScale);
+    if (screenScale > 0.0) {
+        m_lastRecalcScale = screenScale;
+    }
+    if (!needed) {
         return;
     }
     markRecalculated(screenGeometry, screenScale);
 
     qCDebug(PhosphorZones::lcLayoutLib) << "recalculateZoneGeometries layout=" << m_name
                                         << "screenGeometry=" << screenGeometry << "scale=" << m_lastRecalcScale;
+    // One divisor for the whole pass, resolved here rather than per zone.
+    const qreal divisor = fixedGeometryDivisor(m_lastRecalcScale);
     for (auto* zone : m_zones) {
-        zone->setGeometry(zone->calculateAbsoluteGeometry(screenGeometry, m_lastRecalcScale));
+        zone->setGeometry(Zone::computeAbsoluteGeometry(zone->geometryMode(), zone->relativeGeometry(),
+                                                        zone->fixedGeometry(), screenGeometry, divisor));
     }
 }
 

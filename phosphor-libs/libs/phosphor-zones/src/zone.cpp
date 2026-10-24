@@ -194,17 +194,21 @@ QRectF Zone::computeAbsoluteGeometry(ZoneGeometryMode mode, const QRectF& relati
 {
     if (mode == ZoneGeometryMode::Fixed) {
         // Fixed mode: pixel coords relative to screen origin, brought into the
-        // screen's logical units first. A non-positive divisor is no unit at
-        // all and reads as logical.
-        const qreal d = fixedDivisor > 0.0 ? fixedDivisor : 1.0;
-        return QRectF(screenGeometry.x() + fixedGeometry.x() / d, screenGeometry.y() + fixedGeometry.y() / d,
-                      fixedGeometry.width() / d, fixedGeometry.height() / d);
+        // screen's logical units first.
+        return fixedGeometryToLogical(fixedGeometry, fixedDivisor).translated(screenGeometry.topLeft());
     }
     // Relative mode: multiply by screen dimensions
     return QRectF(screenGeometry.x() + relativeGeometry.x() * screenGeometry.width(),
                   screenGeometry.y() + relativeGeometry.y() * screenGeometry.height(),
                   relativeGeometry.width() * screenGeometry.width(),
                   relativeGeometry.height() * screenGeometry.height());
+}
+
+QRectF Zone::fixedGeometryToLogical(const QRectF& fixedGeometry, qreal divisor)
+{
+    // A non-positive divisor is no unit at all and reads as logical.
+    const qreal d = divisor > 0.0 ? divisor : 1.0;
+    return QRectF(fixedGeometry.x() / d, fixedGeometry.y() / d, fixedGeometry.width() / d, fixedGeometry.height() / d);
 }
 
 qreal Zone::fixedGeometryDivisor(qreal screenScale) const
@@ -218,18 +222,17 @@ qreal Zone::fixedGeometryDivisor(qreal screenScale) const
 
 QRectF Zone::calculateAbsoluteGeometry(const QRectF& screenGeometry, qreal screenScale) const
 {
-    return computeAbsoluteGeometry(m_geometryMode, m_relativeGeometry, m_fixedGeometry, screenGeometry,
-                                   fixedGeometryDivisor(screenScale));
+    // Only a fixed zone has a unit, so only it pays for the layout lookup.
+    const qreal divisor = isFixedGeometry() ? fixedGeometryDivisor(screenScale) : 1.0;
+    return computeAbsoluteGeometry(m_geometryMode, m_relativeGeometry, m_fixedGeometry, screenGeometry, divisor);
 }
 
 QRectF Zone::normalizedGeometry(const QRectF& referenceGeometry, qreal screenScale) const
 {
     if (m_geometryMode == ZoneGeometryMode::Fixed && referenceGeometry.width() > 0 && referenceGeometry.height() > 0) {
-        const qreal d = fixedGeometryDivisor(screenScale);
-        return QRectF(m_fixedGeometry.x() / d / referenceGeometry.width(),
-                      m_fixedGeometry.y() / d / referenceGeometry.height(),
-                      m_fixedGeometry.width() / d / referenceGeometry.width(),
-                      m_fixedGeometry.height() / d / referenceGeometry.height());
+        const QRectF logical = fixedGeometryToLogical(m_fixedGeometry, fixedGeometryDivisor(screenScale));
+        return QRectF(logical.x() / referenceGeometry.width(), logical.y() / referenceGeometry.height(),
+                      logical.width() / referenceGeometry.width(), logical.height() / referenceGeometry.height());
     }
     return m_relativeGeometry;
 }

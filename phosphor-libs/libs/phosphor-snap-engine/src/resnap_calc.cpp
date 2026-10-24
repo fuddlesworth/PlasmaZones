@@ -106,16 +106,29 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
             // A return to the layout the window was snapped in (a screen coming
             // back to snapping from tiling or scrolling, the same layout picked
             // again) gets its exact zones back, a span included. Only the
-            // position mapping below collapsed a span (#1151).
-            if (!entry->fromRemovedLayout && !entry->zoneIds.isEmpty()
-                && PhosphorZones::LayoutUtils::layoutHoldsZones(newLayout, entry->zoneIds)) {
-                const QRect geo = m_windowTracker->resolveZoneGeometry(entry->zoneIds, screenId);
+            // position mapping below collapsed a span (#1151). Zone ids are
+            // unique across layouts, so a layout holding any of them is that
+            // layout. One edited meanwhile keeps the zones it still holds, as
+            // the stale-zone prune does, rather than collapsing to a position
+            // (F39). Not LayoutUtils::sameNumberedZones, whose all-or-position
+            // rule would collapse that partial span, and whose position half
+            // the buffer already carries as zonePosition.
+            QStringList heldZones;
+            if (!entry->fromRemovedLayout) {
+                for (const QString& zoneId : entry->zoneIds) {
+                    if (PhosphorZones::LayoutUtils::layoutHoldsZones(newLayout, QStringList{zoneId})) {
+                        heldZones.append(zoneId);
+                    }
+                }
+            }
+            if (!heldZones.isEmpty()) {
+                const QRect geo = m_windowTracker->resolveZoneGeometry(heldZones, screenId);
                 if (geo.isValid()) {
                     ZoneAssignmentEntry assignEntry;
                     assignEntry.windowId = entry->windowId;
-                    assignEntry.targetZoneId = entry->zoneIds.constFirst();
-                    if (entry->zoneIds.size() > 1) {
-                        assignEntry.targetZoneIds = entry->zoneIds;
+                    assignEntry.targetZoneId = heldZones.constFirst();
+                    if (heldZones.size() > 1) {
+                        assignEntry.targetZoneIds = heldZones;
                     }
                     assignEntry.targetGeometry = geo;
                     assignEntry.targetScreenId = screenId;
@@ -126,12 +139,12 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
             }
             // Map the window's primary zone position 1:1 into the new layout
             // (1->1, 2->2). A multi-zone span is specific to the layout it was
-            // made in, so on a switch to another layout a spanning window collapses to its
-            // primary zone rather than trying to reconstruct the span across a
-            // different zone arrangement. Windows whose primary position exceeds
-            // the new zone count are restored to their pre-tile geometry — a
-            // window snapped to zone 3 should go back to its original size when
-            // switching to a 2-zone layout.
+            // made in, so on a switch to another layout a spanning window
+            // collapses to its primary zone rather than trying to reconstruct
+            // the span across a different zone arrangement. Windows whose
+            // primary position exceeds the new zone count are restored to their
+            // pre-tile geometry — a window snapped to zone 3 should go back to
+            // its original size when switching to a 2-zone layout.
             if (entry->zonePosition > newZoneCount) {
                 tryAppendRestore(entry);
                 continue;
@@ -180,15 +193,24 @@ void SnapEngine::forEachSnapAssignment(
     // Keyed walk, so the callback also learns the desktop the STORE sits
     // under: a window present on several desktops holds one assignment per
     // store, and only the store's own key says which context each belongs to.
+    // Member stores only, as the WTS facade's walk reads them: a per-screen
+    // store the window is no member of can only hold a leftover, and the
+    // re-apply of a window with a single snap store (shown on a desktop
+    // another mode runs) would emit it as a second entry (F152). The global
+    // holder is never a membership, so its screenless entries are kept.
     for (auto st = m_states.states().constBegin(); st != m_states.states().constEnd(); ++st) {
         const SnapState* state = st.value();
         if (!state) {
             continue;
         }
+        const bool keyed = !st.key().screenId.isEmpty();
         const QHash<QString, QStringList>& stZones = state->zoneAssignments();
         const QHash<QString, QString>& stScreens = state->screenAssignments();
         const QHash<QString, int>& stDesktops = state->desktopAssignments();
         for (auto it = stZones.constBegin(); it != stZones.constEnd(); ++it) {
+            if (keyed && !m_states.hasMembership(it.key(), st.key())) {
+                continue;
+            }
             fn(it.key(), it.value(), stScreens.value(it.key()), stDesktops.value(it.key(), 0), st.key().desktop,
                st.key().activity);
         }
@@ -634,7 +656,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
     QHash<QString, bool> screenSnapsMemo; // one live-mode read per screen
     const QString activityInView = currentActivity();
     forEachSnapAssignment([&](const QString& windowId, const QStringList& zoneIdList, const QString& screenId,
-                              int desktop, int, const QString& storeActivity) {
+                              int desktop, int storeDesktop, const QString& storeActivity) {
         if (zoneIdList.isEmpty()) {
             return;
         }
@@ -665,6 +687,18 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
                 screenDesktopMemo.insert(screenId, screenDesktop);
             }
             if (screenDesktop > 0 && desktop != screenDesktop) {
+                return;
+            }
+        }
+        // A window held on several desktops rotates only the zone of the
+        // context the screen shows, judged by the STORE's key as the resnap
+        // judges it (calculateResnapFromCurrentAssignments). The recorded
+        // desktop above cannot say which store that is: a recorded 0 (sticky
+        // or unknown) passes the filter in every store the window holds, and
+        // the window would rotate from each of its zones in turn (F484).
+        if (m_states.membershipsForWindow(windowId).size() > 1) {
+            const PhosphorEngine::PlacementStateKey shown = currentKeyForScreen(screenId);
+            if (storeDesktop != shown.desktop || storeActivity != shown.activity) {
                 return;
             }
         }

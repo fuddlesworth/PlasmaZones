@@ -6,11 +6,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <interface name="org.plasmazones.CompositorBridge">
-        <annotation name="org.gtk.GDBus.DocString" value="Compositor-agnostic bridge protocol: registration handshake and modifier reporting. Window manipulation commands flow over org.plasmazones.WindowTracking (applyGeometryRequested, applyGeometriesBatch, ...)."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Compositor-agnostic bridge protocol: the registration handshake, and modifier and gesture reporting. The bus name that registers is the identity every compositor-only method on the daemon admits, not only the reports here. Window manipulation commands flow over org.plasmazones.WindowTracking (applyGeometryRequested, applyGeometriesBatch, ...)."/>
 
         <!-- Bridge registration (compositor → daemon) -->
         <method name="registerBridge">
-            <annotation name="org.gtk.GDBus.DocString" value="Register a compositor bridge. Returns session info."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Register a compositor bridge. Returns session info. Only the compositor's own process may register (the process serving the daemon's Wayland connection, or kwin_wayland as the direct child of kwin_wayland_wrapper), and only one bridge at a time, so while a registered bridge is still on the bus another connection's registration is refused. The bus name that registered is the one every compositor-only method on the daemon admits."/>
             <arg name="compositorName" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Compositor name (e.g. kwin, hyprland, sway)."/>
             </arg>
@@ -22,11 +22,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
             <arg name="result" type="(sss)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::BridgeRegistrationResult"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Struct: (apiVersion, bridgeName, sessionId). sessionId == 'REJECTED' signals a rejected registration — protocol-version mismatch or invalid input (empty compositorName) — callers MUST check it before sending stateful calls."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Struct: (apiVersion, bridgeName, sessionId). sessionId == 'REJECTED' signals a rejected registration, which callers MUST check before sending stateful calls. It answers an empty compositorName, a protocol version below the minimum, a caller that is not the compositor's process, and a registration while another bridge is still on the bus."/>
             </arg>
         </method>
         <method name="reportModifierState">
-            <annotation name="org.gtk.GDBus.DocString" value="Report keyboard modifier and mouse button state from compositor. Reserved forward surface for bridges without a drag channel — the KWin bridge reports modifiers through the drag pipeline instead (EXPERIMENTAL interface)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Report keyboard modifier and mouse button state from compositor. Reserved forward surface for bridges without a drag channel, since the KWin bridge reports modifiers through the drag pipeline instead (EXPERIMENTAL interface). Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="modifiers" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Qt::KeyboardModifiers bitmask."/>
             </arg>
@@ -36,7 +36,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="reportGesture">
-            <annotation name="org.gtk.GDBus.DocString" value="Report a completed touchpad gesture the compositor recognised on the shell's behalf. The daemon re-emits it as gestureReported for the shell, which maps it to a surface (three-finger swipe up opens the launcher, four-finger swipe up the dashboard, and so on). Only fires for gestures the bridge registered under the 'gestures' capability; progress is not reported."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Report a completed touchpad gesture the compositor recognised on the shell's behalf. The daemon re-emits it as gestureReported for the shell, which maps it to a surface (three-finger swipe up opens the launcher, four-finger swipe up the dashboard, and so on). Only fires for gestures the bridge registered under the 'gestures' capability, and progress is not reported. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="kind" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="'swipe' or 'pinch'."/>
             </arg>

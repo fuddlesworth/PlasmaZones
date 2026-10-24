@@ -69,14 +69,16 @@ public:
 
     /// Convenience overload — equivalent to windowOpened(id, screen, 0, 0).
     ///
-    /// UNCALLABLE through this interface as written: every implementation
-    /// overrides the four-argument virtual, and an override HIDES every
-    /// same-named base overload, so `engine->windowOpened(id, screen)` fails
-    /// to compile against a concrete engine. Each engine restores it with a
-    /// `using IPlacementEngine::windowOpened;`, which is what actually makes
-    /// the two-argument form work — so this overload is real but only for
-    /// implementations that opt back into it, not for interface-typed callers
-    /// that never see a concrete type.
+    /// UNCALLABLE through this interface: an IPlacementEngine-typed
+    /// `engine->windowOpened(id, screen)` sees both this overload and the
+    /// virtual above, whose defaulted arguments make it match two arguments
+    /// exactly as well, so the call is ambiguous and does not compile. Pass
+    /// all four arguments there. On a concrete engine the two-argument form
+    /// works, but only through the `using IPlacementEngine::windowOpened;` each
+    /// engine declares: the engine's own override (declared without defaults)
+    /// would otherwise hide this overload, and with the using-declaration it
+    /// still hides the defaulted base virtual, which is what leaves this
+    /// overload as the one match.
     void windowOpened(const QString& windowId, const QString& screenId)
     {
         windowOpened(windowId, screenId, 0, 0);
@@ -558,6 +560,11 @@ public:
     //  - begin on an engine already holding a preview cancels the old one
     //    first; commit/cancel are no-ops with no preview live; and
     //    dragInsertPreviewScreenId is empty with no preview live.
+    //  - after a successful begin the caller may hand over the size the
+    //    client chose for the window, through setDragInsertClientSize
+    //    (declared last in this class for ABI), and hand it again on later
+    //    ticks. A begin starts without one, and the call is a no-op with no
+    //    preview live.
 
     virtual bool hasDragInsertPreview() const
     {
@@ -1304,16 +1311,23 @@ public:
     /// Appended last for ABI.
     virtual void remapDesktops(const DesktopRemap& remap);
 
-    /// OPTIONAL: the size the window under the live drag-insert preview had
-    /// when the user picked it up, handed over right after a successful
+    /// OPTIONAL: the size the client chose for the window under the live
+    /// drag-insert preview, handed over right after a successful
     /// beginDragInsertPreview so the drop indicator and the commit both see
-    /// it. A move never resizes, so this is the size the user is holding. An engine that sizes an arriving window
-    /// from its client (the scroll engine's "the client decides" width and
-    /// height) reads it for a window that was FREE at begin, where no record
-    /// of the window's own size need be current. An empty size means the
-    /// caller has none to offer, for instance because the frame filled its
-    /// output. No-op with no preview live, and every begin starts without
-    /// one. Appended last for ABI.
+    /// it. Part of the preview protocol documented with
+    /// beginDragInsertPreview, and like the rest of it a no-op with no
+    /// preview live.
+    ///
+    /// The caller hands only a size the client chose: the frame a window
+    /// free at begin was picked up at, or, for one a zone or a tile placed,
+    /// the size a restore during the drag gave back (its drag-out or
+    /// drag-to-float size), and nothing before that restore lands. The caller
+    /// may hand it again on any later tick of the preview and right before
+    /// the commit, so a restore that lands after the begin is seen. An empty
+    /// size means the caller has none to offer (the frame filled its output,
+    /// or a managed window has not got its own size back yet).
+    ///
+    /// Every begin starts without one. Appended last for ABI.
     virtual void setDragInsertClientSize(const QSize& size)
     {
         Q_UNUSED(size)

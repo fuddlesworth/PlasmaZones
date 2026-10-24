@@ -153,3 +153,11 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorWorkspacesConfigVersion.cmake"
     DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorWorkspaces
 )
+
+# The only suite drives ActivityManager against a fake activity service, so it
+# has nothing to test in a build without the activities library.
+if((CMAKE_PROJECT_NAME STREQUAL "PhosphorWorkspaces" OR BUILD_TESTING)
+   AND (TARGET Plasma::Activities OR TARGET KF6::Activities))
+    enable_testing()
+    add_subdirectory(tests)
+endif()

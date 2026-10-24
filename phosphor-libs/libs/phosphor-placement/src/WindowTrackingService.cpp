@@ -237,14 +237,17 @@ bool WindowTrackingService::unassignFromStore(const QString& windowId, PhosphorS
 
 QString WindowTrackingService::zoneForWindow(const QString& windowId) const
 {
-    Q_ASSERT(hasSnapState());
+    // No snap store resolves (none wired, or the engine is gone): nothing
+    // holds a zone, so the answer is empty. Bus- and compositor-driven callers
+    // reach this with no store, so it is an answer, not a precondition.
     const PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
     return snapState ? snapState->zoneForWindow(windowId) : QString();
 }
 
 QStringList WindowTrackingService::zonesForWindow(const QString& windowId) const
 {
-    Q_ASSERT(hasSnapState());
+    // No snap store resolves: nothing holds a zone, so the answer is empty
+    // (see zoneForWindow).
     const PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
     return snapState ? snapState->zonesForWindow(windowId) : QStringList{};
 }
@@ -274,7 +277,8 @@ QString WindowTrackingService::screenForWindow(const QString& windowId, const QS
 
 QStringList WindowTrackingService::windowsInZone(const QString& zoneId) const
 {
-    Q_ASSERT(hasSnapState());
+    // No snap store resolves: snapAllStates() is empty and so is the answer,
+    // which a bus query (getWindowsInZone) can ask for at any time.
     // A zone lives on one screen, but iterate every store so the query is
     // screen-agnostic (matching the former single store).
     QStringList result;
@@ -288,7 +292,8 @@ QStringList WindowTrackingService::windowsInZone(const QString& zoneId) const
 
 QStringList WindowTrackingService::snappedWindows() const
 {
-    Q_ASSERT(hasSnapState());
+    // No snap store resolves: snapAllStates() is empty and nothing is snapped.
+    // Reached over the bus (getSnappedWindows) and from the effect's re-sync.
     QStringList result;
     for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
         result += state->snappedWindows();
@@ -301,7 +306,9 @@ QStringList WindowTrackingService::snappedWindows() const
 
 int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& rawAliveWindowIds)
 {
-    Q_ASSERT(hasSnapState());
+    // The compositor's stale-window prune reaches this with no snap store
+    // resolving (none wired yet, or the engine gone), and nothing is held to
+    // prune then. Not an assert: that is a legitimate state, not a bug.
     if (!hasSnapState())
         return 0;
     // Fail closed on an empty alive set (the WindowRegistry twin carries the
@@ -376,7 +383,8 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& rawAliveWi
 
 bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
 {
-    Q_ASSERT(hasSnapState());
+    // No snap store resolves: nothing holds the window snapped (see
+    // zoneForWindow).
     const PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
     return snapState && snapState->isWindowSnapped(windowId);
 }
@@ -954,6 +962,35 @@ void WindowTrackingService::clearPreFloatZone(const QString& windowId)
     }
 }
 
+void WindowTrackingService::clearPreFloatZoneExceptHiddenContexts(const QString& windowId, const QString& screenId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    // The context the screen shows now. With no screen, or no key to read it
+    // by, nothing is hidden and every store clears.
+    const PhosphorSnapEngine::SnapState* const shown = screenId.isEmpty() ? nullptr : snapForScreen(screenId);
+    const std::optional<PhosphorEngine::PlacementStateKey> shownKey =
+        (m_snapResolver.keyFor && shown) ? m_snapResolver.keyFor(shown) : std::nullopt;
+    bool removed = false;
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        if (shownKey && state != shown) {
+            // A store of the same screen for a desktop or activity it does
+            // not show is the window's home there, and keeps it.
+            const std::optional<PhosphorEngine::PlacementStateKey> key = m_snapResolver.keyFor(state);
+            if (key && PhosphorScreens::ScreenIdentity::screensMatch(key->screenId, shownKey->screenId)
+                && (key->desktop != shownKey->desktop || key->activity != shownKey->activity)) {
+                continue;
+            }
+        }
+        removed = state->clearPreFloatZone(windowId) || removed;
+    }
+    // Persisted like clearPreFloatZone's removal.
+    if (removed) {
+        markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
+    }
+}
+
 bool WindowTrackingService::clearFloatingForSnap(const QString& windowId)
 {
     if (!isWindowFloating(windowId)) {
@@ -1086,7 +1123,8 @@ const QSet<QString>& WindowTrackingService::userSnappedClasses() const
     if (m_pendingUserSnappedClasses) {
         return *m_pendingUserSnappedClasses;
     }
-    Q_ASSERT(hasSnapState());
+    // No snap store resolves (the engine destroyed before a late save): no
+    // classes to report, and the empty answer is the release path too.
     const PhosphorSnapEngine::SnapState* globals = snapGlobals();
     return globals ? globals->userSnappedClasses() : empty;
 }

@@ -5,9 +5,20 @@
 
 #include <PhosphorEngine/IWindowTrackingService.h>
 
+#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 namespace PhosphorScrollEngine {
+
+namespace {
+
+/// How far an edge of a resized frame may sit from where the gesture began and
+/// still count as not moved (onWindowResized's one-edge test). On a fractional
+/// scale the effect rounds the frame to whole pixels edge by edge, so the edge
+/// a one-edge drag never touched can read a pixel off at the end of it.
+constexpr int kFrameEdgeRoundingPx = 1;
+
+} // namespace
 
 // Minimum-size bookkeeping and the user's resize it feeds: the clamp a window
 // reports, the re-layout its change forces, and the resize echo that has to
@@ -63,13 +74,34 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     // The minimum this report replaces, read before any write below: the
     // strip tile while the window tiles, the FloatRestore entry while it
     // floats (windowMinimumSize answers both).
-    const QSize previousMin = windowMinimumSize(windowId);
+    QSize previousMin = windowMinimumSize(windowId);
     // While the window floats there is no tile to write to, and unfloat
     // re-applies the captured clamp — so without this write-through the
     // restore puts back whatever the client reported at float time.
     if (const auto it = m_floatRestore.find(windowId); it != m_floatRestore.end()) {
         it->minWidth = clampedMinWidth;
         it->minHeight = clampedMinHeight;
+    }
+    // The same write-through for a window a live drag-insert preview holds
+    // detached: it is in no strip and has no float slot for the hold, so the
+    // writes here would land nowhere, and the commit or the cancel would put
+    // the window back with the minimum it had at begin. The preview's copies
+    // are what put it back, so the new clamp goes into each of them.
+    if (m_dragInsertPreview && m_dragInsertPreview->windowId == windowId) {
+        DragInsertPreview& preview = *m_dragInsertPreview;
+        if (!previousMin.isValid()) {
+            previousMin = QSize(preview.carried.minWidth, preview.carried.minHeight);
+        }
+        const auto writeMinimum = [clampedMinWidth, clampedMinHeight](FloatRestore& slot) {
+            slot.minWidth = clampedMinWidth;
+            slot.minHeight = clampedMinHeight;
+        };
+        writeMinimum(preview.carried);
+        writeMinimum(preview.priorSlot);
+        writeMinimum(preview.defensiveSlot);
+        if (preview.hadFloatRestoreEntry) {
+            writeMinimum(preview.floatRestoreEntry);
+        }
     }
     // A LOWERED minimum along a strip's main axis is the client saying it can
     // now be narrower there, so what its earlier commits taught on that axis
@@ -127,6 +159,14 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     // absent — a min that shrinks back below the work area does not
     // auto-unfloat, because the float may have been rearranged meanwhile and
     // the manual unfloat path already restores the remembered slot.
+    //
+    // Judged in the context in view only (the membership stateForWindow
+    // resolves). A window that holds columns on other desktops stays tiled
+    // there at the oversized clamp: the unfloat slot is per WINDOW
+    // (m_floatRestore), so floating it in several contexts at once would
+    // overwrite one context's slot with another's and the unfloat would
+    // misplace it. The relayout clamps those columns to the work area until
+    // the window is floated or the client lowers its minimum.
     if (floatIfOutgrowsWorkArea(state, key, windowId, "windowMinSizeUpdated:")) {
         return;
     }
@@ -175,23 +215,10 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // Reconcile the column to the size the client/user actually settled on;
     // only the owning column relayouts (a resize never reflows neighbours'
     // widths — they just shift). Width intent is only rewritten when the
-    // WIDTH moved relative to the last applied rect — a vertical-only
-    // resize must not pin a Proportion/Preset column to pixels.
+    // WIDTH moved over the gesture (its start frame against the frame it
+    // ended on) — a vertical-only resize must not pin a Proportion/Preset
+    // column to pixels.
     //
-    // With NO last-applied rect there is no baseline to compare against, and
-    // treating that as "both changed" pinned BOTH intents to pixels — so a
-    // purely vertical resize arriving in the window between an adoption
-    // (handoffReceive, the setWindowFloat adoption branch, unfloatWindowInternal)
-    // and its scheduled applyLayout converted a Proportion column to Fixed,
-    // which is exactly what the widthChanged gate exists to prevent. Reconcile
-    // nothing in that case and let the pending relayout establish the baseline.
-    const QRect lastApplied = m_lastAppliedRect.value(windowId);
-    if (!lastApplied.isValid()) {
-        if (currentContext) {
-            scheduleRetileForScreen(key.screenId);
-        }
-        return;
-    }
     // Derived in ROLE terms against the same params the reconcile decodes the
     // acked size with. Comparing physical width/height here while the
     // reconcile reads main/cross would make each guard protect the intent it
@@ -204,11 +231,58 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // than its column, say): measured against it, a bottom-edge drag read as
     // a main-axis resize and pinned a proportional width to Fixed pixels. The
     // applied rect stands in only for a caller that sends no usable start.
+    //
+    // With NEITHER there is no baseline to compare against, and treating that
+    // as "both changed" pinned BOTH intents to pixels — so a purely vertical
+    // resize arriving in the window between an adoption (handoffReceive, the
+    // setWindowFloat adoption branch, unfloatWindowInternal) and its scheduled
+    // applyLayout converted a Proportion column to Fixed, which is exactly
+    // what the mainChanged gate exists to prevent. Reconcile nothing in that
+    // case and let the pending relayout establish the baseline. A missing
+    // last-applied rect alone is not that case: a start frame measures the
+    // gesture just as well, and returning on it discarded the user's next
+    // resize after any path that dropped the memory (the refused arm below
+    // does, on a frame held at its minimum), which the retile then undid.
+    const QRect lastApplied = m_lastAppliedRect.value(windowId);
     const QRect gestureStart = oldFrame.isValid() ? oldFrame : lastApplied;
+    if (!gestureStart.isValid()) {
+        if (currentContext) {
+            scheduleRetileForScreen(key.screenId);
+        }
+        return;
+    }
     const ScrollLayoutParams resizeParams = layoutParamsForKey(key);
     const StripAxis resizeAxis = resizeParams.axis;
     const bool mainChanged = resizeAxis.mainSize(gestureStart) != resizeAxis.mainSize(newFrame);
     const bool crossChanged = resizeAxis.crossSize(gestureStart) != resizeAxis.crossSize(newFrame);
+    const ScrollStrip& strip = state->strip();
+    const int colIdx = strip.columnOfWindow(windowId);
+    // The column's extent along the strip before anything below moves it,
+    // for the one-edge drag the view does not centre (the anchor shift after
+    // the reconcile).
+    const int mainExtentBefore = strip.windowColumnMainExtentPx(windowId, resizeParams);
+    // The windows whose committed floors this resize settles, per axis. ALONG
+    // the strip, every tile of the column: they share the column's extent,
+    // which is held to the largest floor among them (columnMinExtentPx), so a
+    // sibling's floor left standing held the column and the release reverted
+    // the drag. ACROSS it, the window's own tile in a stack, whose share is
+    // its own, and every tab of a TABBED column, which is committed at the one
+    // column rect and held to the largest cross floor in the set
+    // (tabbedColumnCrossPx).
+    QStringList mainSettled{windowId};
+    QStringList crossSettled{windowId};
+    if (colIdx >= 0) {
+        const Column& column = strip.columns().at(colIdx);
+        for (const Tile& tile : column.tiles) {
+            if (tile.windowId == windowId) {
+                continue;
+            }
+            mainSettled.append(tile.windowId);
+            if (column.display == ColumnDisplay::Tabbed) {
+                crossSettled.append(tile.windowId);
+            }
+        }
+    }
     // The user's own resize ALONG the strip settles the window's extent there,
     // so whatever its client's commits taught on this axis is superseded:
     // without the drop the floor kept the column wider than the size the user
@@ -217,12 +291,27 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // entry point that counts as a user resize — reconcileWindowSize is
     // reached from nowhere else — and the keyboard and D-Bus width verbs
     // deliberately do not: they write intents a floor can still outrank.
-    const bool floorDropped = mainChanged && dropCommittedForUserResize(windowId, resizeAxis);
+    // Every settled window is dropped: no drop may short-circuit another.
+    bool floorDropped = false;
     // Its resize ACROSS the strip settles the tile's share the same way, and
     // drops the cross floor on its own: a drag of both edges drops both, and
     // neither drop short-circuits the other. The height verbs, like the width
     // verbs, write intents a floor can still outrank and drop nothing.
-    const bool crossFloorDropped = crossChanged && dropCommittedCrossForUserResize(windowId, resizeAxis);
+    bool crossFloorDropped = false;
+    if (mainChanged) {
+        for (const QString& settled : std::as_const(mainSettled)) {
+            if (dropCommittedForUserResize(settled, resizeAxis)) {
+                floorDropped = true;
+            }
+        }
+    }
+    if (crossChanged) {
+        for (const QString& settled : std::as_const(crossSettled)) {
+            if (dropCommittedCrossForUserResize(settled, resizeAxis)) {
+                crossFloorDropped = true;
+            }
+        }
+    }
     // The extents the user settled on. When the relayout this resize triggers
     // will centre the window on an axis, a drag of ONE edge on that axis is
     // read as a drag from the centre: the extent grows, or shrinks, by twice
@@ -236,44 +325,88 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // the far edge would fight it. A drag of both edges on an axis, or of
     // none, is taken as it is.
     //
+    // An edge counts as moved only past kFrameEdgeRoundingPx: on a fractional
+    // scale the frame is rounded edge by edge, so the edge the user did not
+    // touch can read a pixel off, and a strict test took a one-edge drag for
+    // a drag of both and skipped the doubling. The drag is measured on the
+    // edge that moved, so that pixel does not leak into the extent.
+    //
     // Bounded to the work area: the relayout clamps a larger extent to it
-    // anyway, and the intent is persisted.
-    const auto centredExtent = [&](int startLow, int startHigh, int startExtent, int newLow, int newHigh, int newExtent,
-                                   int areaExtent) {
-        if ((startLow != newLow) == (startHigh != newHigh)) {
+    // anyway, and the intent is persisted. A shrink that would take the
+    // doubled extent below the window's own minimum (or past the centre,
+    // where it reaches nothing) is taken one-sided instead: the frame the
+    // drag ended at already honours the minimum, and a doubled answer under
+    // it would persist an intent the window can never take.
+    const auto centredExtent = [](int startLow, int startHigh, int startExtent, int newLow, int newHigh, int newExtent,
+                                  int minExtent, int areaExtent) {
+        const bool lowMoved = qAbs(newLow - startLow) > kFrameEdgeRoundingPx;
+        const bool highMoved = qAbs(newHigh - startHigh) > kFrameEdgeRoundingPx;
+        if (lowMoved == highMoved) {
             return newExtent;
         }
-        return qBound(1, startExtent + 2 * (newExtent - startExtent), qMax(1, areaExtent));
+        const int grownBy = lowMoved ? startLow - newLow : newHigh - startHigh;
+        const int doubled = startExtent + 2 * grownBy;
+        if (doubled < qMax(1, minExtent)) {
+            return newExtent;
+        }
+        return qMin(doubled, qMax(1, areaExtent));
     };
-    const ScrollStrip& strip = state->strip();
+    const QSize declaredMin = strip.windowMinimumSize(windowId);
     int settledMain = resizeAxis.mainSize(newFrame);
     int settledCross = resizeAxis.crossSize(newFrame);
-    // Along the strip, the focused column is what centres, and only it.
-    if (mainChanged && strip.isCenteringActiveColumn(resizeParams)
-        && strip.columnOfWindow(windowId) == strip.activeColumnIndex()) {
-        settledMain =
-            centredExtent(resizeAxis.mainLow(gestureStart), resizeAxis.mainHigh(gestureStart),
-                          resizeAxis.mainSize(gestureStart), resizeAxis.mainLow(newFrame),
-                          resizeAxis.mainHigh(newFrame), settledMain, resizeAxis.mainSize(resizeParams.workArea));
+    // Along the strip, the focused column is what centres, and only it, and
+    // only while the policy owns the view: a detached view (a pan, a drop) is
+    // left where it is by the relayout (updateViewForFocus), so nothing would
+    // re-centre a doubled extent.
+    const bool activeColumn = colIdx >= 0 && colIdx == strip.activeColumnIndex();
+    const bool viewCentresColumn = strip.isCenteringActiveColumn(resizeParams) && !strip.viewDetached();
+    // Under every other view, the column's leading edge sits at the view
+    // anchor and the relayout grows the column from there, so a drag of the
+    // LEADING edge alone would land the trailing edge out by the whole drag
+    // and leave the dragged edge where it started. The anchor is shifted
+    // after the reconcile instead, by however much the column actually grew,
+    // so the trailing edge stays put and the dragged one lands at the release.
+    bool keepTrailingEdge = false;
+    if (mainChanged && activeColumn) {
+        if (viewCentresColumn) {
+            settledMain = centredExtent(resizeAxis.mainLow(gestureStart), resizeAxis.mainHigh(gestureStart),
+                                        resizeAxis.mainSize(gestureStart), resizeAxis.mainLow(newFrame),
+                                        resizeAxis.mainHigh(newFrame), settledMain, resizeAxis.mainSize(declaredMin),
+                                        resizeAxis.mainSize(resizeParams.workArea));
+        } else {
+            keepTrailingEdge =
+                qAbs(resizeAxis.mainLow(newFrame) - resizeAxis.mainLow(gestureStart)) > kFrameEdgeRoundingPx
+                && qAbs(resizeAxis.mainHigh(newFrame) - resizeAxis.mainHigh(gestureStart)) <= kFrameEdgeRoundingPx;
+        }
     }
     // Across it, centerShortColumns centres any column whose content comes out
     // short, as one stack. Only a column that shows one rect is read this way:
     // a lone tile, or a tabbed column whose tabs share it. In a stack of
     // several the drag also moves the neighbouring tiles' shares, so no single
     // doubling lands the edge, and the drag is taken as it is.
-    if (crossChanged && resizeParams.centerShortColumns) {
-        const int colIdx = strip.columnOfWindow(windowId);
-        const Column* col = colIdx >= 0 ? &strip.columns().at(colIdx) : nullptr;
-        if (col && (col->display == ColumnDisplay::Tabbed || col->visibleTileCount() == 1)) {
-            settledCross = centredExtent(resizeAxis.crossLow(gestureStart), resizeAxis.crossHigh(gestureStart),
-                                         resizeAxis.crossSize(gestureStart), resizeAxis.crossLow(newFrame),
-                                         resizeAxis.crossHigh(newFrame), settledCross,
-                                         resizeAxis.crossSize(resizeParams.workArea));
+    if (crossChanged && resizeParams.centerShortColumns && colIdx >= 0) {
+        const Column& col = strip.columns().at(colIdx);
+        if (col.display == ColumnDisplay::Tabbed || col.visibleTileCount() == 1) {
+            settledCross = centredExtent(
+                resizeAxis.crossLow(gestureStart), resizeAxis.crossHigh(gestureStart),
+                resizeAxis.crossSize(gestureStart), resizeAxis.crossLow(newFrame), resizeAxis.crossHigh(newFrame),
+                settledCross, resizeAxis.crossSize(declaredMin), resizeAxis.crossSize(resizeParams.workArea));
         }
     }
     const QSize settledSize = resizeAxis.makeRect(0, 0, settledMain, settledCross).size();
     if (state->strip().reconcileWindowSize(windowId, settledSize, mainChanged, crossChanged, resizeParams)
         || floorDropped || crossFloorDropped) {
+        // The trailing-edge hold for a leading-edge drag (keepTrailingEdge):
+        // the anchor moves back by what the column grew, measured on the
+        // column itself so a floor or the work-area cap that held it to
+        // another extent than the drag is counted as it resolves. Persisted
+        // with the strip like any anchor, which the emit below covers.
+        if (keepTrailingEdge) {
+            const int grownBy = state->strip().windowColumnMainExtentPx(windowId, resizeParams) - mainExtentBefore;
+            if (grownBy != 0 && mainExtentBefore >= 0) {
+                state->strip().restoreViewAnchor(state->strip().viewAnchor() - grownBy, resizeParams);
+            }
+        }
         // The reconcile WROTE persisted intent (the column's Fixed width, the
         // tile's Fixed height — both serialized by serializeStripState), and
         // placementChanged is this engine's only way to mark DirtyScrollStrips
@@ -323,16 +456,35 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // This path is reached by a user's finished resize only (see the
     // reconcile's note); a client answering its offer with another size is
     // reportCommittedSize's to handle, not this arm's.
+    //
+    // With no memory at all (a path dropped it, and the gesture's start frame
+    // stood in as the baseline) there is nothing to compare: the retile
+    // re-applies the authoritative geometry and lays a fresh baseline down.
+    if (!lastApplied.isValid()) {
+        if (currentContext) {
+            scheduleRetileForScreen(key.screenId);
+        }
+        return;
+    }
     if (lastApplied != newFrame) {
+        // Compared within the fractional-scale rounding the committed sizes
+        // are judged with (kCommittedExtentSlackPx): the frame and the applied
+        // rect are both rounded to whole pixels, and an exact test read a
+        // frame a pixel off its offer, or off its minimum, as a displacement
+        // and re-offered the size the client had already refused.
+        const auto within = [](int a, int b) {
+            return qAbs(a - b) <= kCommittedExtentSlackPx;
+        };
         const QSize knownMin = state->strip().windowMinimumSize(windowId);
-        const bool pinnedAtMinW =
-            knownMin.width() > 0 && newFrame.width() == knownMin.width() && newFrame.width() > lastApplied.width();
-        const bool pinnedAtMinH =
-            knownMin.height() > 0 && newFrame.height() == knownMin.height() && newFrame.height() > lastApplied.height();
-        const bool widthExplained = lastApplied.width() == newFrame.width() || pinnedAtMinW;
-        const bool heightExplained = lastApplied.height() == newFrame.height() || pinnedAtMinH;
+        const bool pinnedAtMinW = knownMin.width() > 0 && within(newFrame.width(), knownMin.width())
+            && newFrame.width() > lastApplied.width();
+        const bool pinnedAtMinH = knownMin.height() > 0 && within(newFrame.height(), knownMin.height())
+            && newFrame.height() > lastApplied.height();
+        const bool widthExplained = within(lastApplied.width(), newFrame.width()) || pinnedAtMinW;
+        const bool heightExplained = within(lastApplied.height(), newFrame.height()) || pinnedAtMinH;
         m_lastAppliedRect.remove(windowId);
-        if (widthExplained && heightExplained && lastApplied.topLeft() == newFrame.topLeft()) {
+        if (widthExplained && heightExplained && within(lastApplied.x(), newFrame.x())
+            && within(lastApplied.y(), newFrame.y())) {
             return;
         }
         if (currentContext) {

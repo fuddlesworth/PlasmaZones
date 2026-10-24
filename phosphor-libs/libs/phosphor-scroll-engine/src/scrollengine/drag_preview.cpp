@@ -41,6 +41,42 @@ namespace {
 constexpr int kEdgeBandMaxPx = 96;
 constexpr int kEdgeBandDivisor = 4;
 
+/// Make @p windowId the active window of @p strip again, as it was when a
+/// hold began, without moving the view. A cancel's re-insert leaves whichever
+/// column inherited the focus at begin's take active (insertWindowAt takes no
+/// focus) or makes a re-joined stack's column active (insertWindowIntoColumnAt
+/// takes it), and the view anchor is stored relative to the active column, so
+/// a captured anchor replayed onto the wrong column shifts the view by that
+/// column's offset, can park the window off screen, and leaves the strip's
+/// focus disagreeing with the compositor's. The anchor is re-expressed against
+/// the refocused column so the view stays exactly where it was, and the detach
+/// latch the focus change clears is put back.
+void refocusKeepingView(ScrollStrip& strip, const QString& windowId, const ScrollLayoutParams& params)
+{
+    if (windowId.isEmpty() || strip.activeWindowId() == windowId || !strip.containsWindow(windowId)) {
+        return;
+    }
+    const int viewOffsetBefore = strip.relayout(params).viewOffset;
+    const bool detached = strip.viewDetached();
+    strip.focusWindow(windowId, params);
+    const int viewOffsetAfter = strip.relayout(params).viewOffset;
+    strip.restoreViewAnchor(strip.viewAnchor() + viewOffsetAfter - viewOffsetBefore, params);
+    strip.setViewDetached(detached);
+}
+
+/// Whether a drop that JOINED @p windowId into a column put it back into the
+/// column @p slot was captured from: the surviving sibling the slot anchors
+/// on sits in that column. Meaningful only on the strip the slot names, so
+/// callers ask it for a same-key drag alone.
+bool joinedOwnColumn(const ScrollStrip& strip, const QString& windowId, const FloatRestore& slot)
+{
+    if (slot.stackAnchor.isEmpty()) {
+        return false;
+    }
+    const int column = strip.columnOfWindow(windowId);
+    return column >= 0 && strip.columnOfWindow(slot.stackAnchor) == column;
+}
+
 } // namespace
 
 /// Capture @p windowId's current slot in FloatRestore vocabulary — the twin
@@ -104,16 +140,22 @@ bool ScrollEngine::dragPreviewRestoreSlot(ScrollState* state, const QString& win
             strip.setWindowMinimumSize(windowId, slot.minWidth, slot.minHeight);
         }
         if (slot.column >= 0 || slot.tileIndex >= 0) {
-            strip.setWindowHeightIntent(windowId, slot.height);
+            // Re-stated, not written as a bid: a tab that did NOT own its
+            // tabbed column goes back without taking the column from the tab
+            // that sizes it, which a non-Auto intent written through
+            // setWindowHeightIntent would (an Escape or zero-motion drop of a
+            // shown non-owner tab flipped the column to that tab's height).
+            strip.restateWindowHeightIntent(windowId, slot.height);
             // Same tile-captured gate: an Escape must hand back windowed
             // fullscreen and the tabbed extent ownership exactly as it hands
             // back the height intent. The ownership is not implied by that
             // write — it claims nothing for an Auto intent — so a cancelled
             // drag of the owning tab would otherwise leave the column at the
-            // height of whichever tab replaced it.
-            if (slot.ownedTabbedHeight) {
-                strip.setTabbedHeightOwner(windowId);
-            }
+            // height of whichever tab replaced it. A slot that is a float's
+            // entry rather than a drag capture (the zero-motion drop of a
+            // float back onto its own strip) names the heir its leave left,
+            // and is held to the unfloat's untouched-column test.
+            restoreTabbedHeightOwner(strip, windowId, slot);
             if (slot.windowedFullscreen) {
                 strip.setWindowedFullscreen(windowId, true);
             }
@@ -162,6 +204,9 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
     // exact pre-drag view along with the slot (the struct's field doc).
     preview.targetViewAnchorAtBegin = targetState->strip().viewAnchor();
     preview.targetViewDetachedAtBegin = targetState->strip().viewDetached();
+    // And the column that anchor is relative to: the take below hands the
+    // focus to a neighbour when the dragged window was the active one.
+    preview.targetActiveAtBegin = targetState->strip().activeWindowId();
 
     ScrollState* priorState = nullptr;
     // The membership the drag STARTED from: for a multi-desktop window that is
@@ -217,6 +262,7 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
             if (!preview.priorSameKey) {
                 preview.priorViewAnchorAtBegin = priorState->strip().viewAnchor();
                 preview.priorViewDetachedAtBegin = priorState->strip().viewDetached();
+                preview.priorActiveAtBegin = priorState->strip().activeWindowId();
             }
             priorState->strip().takeWindow(windowId, priorParams);
             // The take can leave the view over trailing dead space
@@ -301,26 +347,50 @@ void ScrollEngine::setDragInsertClientSize(const QSize& size)
 
 std::optional<QSize> ScrollEngine::dragDropClientSize(const DragInsertPreview& preview) const
 {
-    // A window that left a strip tile at begin is being REORDERED: its column
-    // shape is its own, the client never chose that frame freely, and the user
-    // is moving a column rather than resizing one. Everything else ARRIVES the
-    // way an opened window does (off a float here, from another engine, or
-    // untracked) and is sized the way the open path would size it.
-    if (preview.priorSlot.column >= 0 || preview.priorSlot.tileIndex >= 0) {
+    // A window this engine held as a strip TILE at begin is being REORDERED:
+    // its column shape is its own, the client never chose that frame freely,
+    // and the user is moving a column rather than resizing one. That is every
+    // tracked window that was not floating, so it covers the slot begin
+    // captured, the adopt-and-heal residue (tracked but held by neither the
+    // strip nor the floating set, a strip tile last), and the defensive take
+    // of a strip tile with no reverse-map entry. Everything else ARRIVES the
+    // way an opened window does (off a float, from another engine, or
+    // untracked) and is sized by the "the client decides" verdict the open
+    // path applies (dragDropIntents says which parts of the open path a drop
+    // does not replay).
+    if (preview.defensivelyDetached || (preview.hadPriorState && !preview.priorFloating)) {
         return std::nullopt;
     }
-    // A float here: the size the user is holding. The free-geometry record is
-    // NOT a stand-in for it. A float's size reaches the record on a user
-    // resize, but a window that became floating at a frame the record refuses
-    // (a fullscreen hold re-seated as a float when its output came back, at
-    // what the record calls a managed frame) has no record of the size on
-    // screen at all, and the drop then fell back to the configured default.
-    if (preview.priorFloating && preview.clientSize.isValid() && !preview.clientSize.isEmpty()) {
+    // Only for a drop that can use it: the target screen's "the client
+    // decides" verdict for the width or the height, with no rule pinning that
+    // axis (dragDropIntents and commitClientDecidedHeight ask the same). Asked
+    // ahead of any lookup because the indicator probe runs this on every tick
+    // of the hold, and a target sizing nothing from the client needs no
+    // record read for it.
+    const QVariantMap overrides = overridesForScreen(preview.targetScreenId);
+    const bool widthDecides = effectiveWidthClientDecides(overrides) && !ruleColumnWidthFraction(overrides).has_value();
+    const bool heightDecides =
+        effectiveHeightClientDecides(overrides) && !ruleWindowHeightFraction(overrides).has_value();
+    if (!widthDecides && !heightDecides) {
+        return std::nullopt;
+    }
+    // The size the user is holding, whatever engine the window comes from:
+    // the daemon reports one only for a window that was FREE at begin, whose
+    // frame is the client's own choice (IPlacementEngine::
+    // setDragInsertClientSize), and reports nothing for a frame a zone, a
+    // tile or the output decided. The free-geometry record is NOT a stand-in
+    // for it. A float's size reaches the record on a user resize, but a
+    // window that became floating at a frame the record refuses (a fullscreen
+    // hold re-seated as a float when its output came back, at what the record
+    // calls a managed frame) has no record of the size on screen at all, and
+    // a free window floated by another engine on another screen has none on
+    // this one: both dropped at the configured default.
+    if (!preview.clientSize.isEmpty()) {
         return preview.clientSize;
     }
-    // An adoption: the frame in hand may be a zone or a tile from the engine
-    // it came from, which is not the client's choice, so read what the open
-    // path reads.
+    // No live size: the frame in hand was a zone or a tile from the engine it
+    // came from, which is not the client's choice, so read what the open path
+    // reads.
     if (m_windowTracker) {
         if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(preview.windowId, preview.targetScreenId)) {
             return geo->size();
@@ -336,11 +406,22 @@ FloatRestore ScrollEngine::dragDropIntents(const DragInsertPreview& preview, con
     if (!clientSize) {
         return intents;
     }
+    // An arrival sized by its client opens the way an open would, and an open
+    // is never maximized. A carried maximize-to-edges flag (a float that left
+    // a maximized column as its lone tile) would hand the new column the raw
+    // work area on both axes in place of the size the client is holding.
+    intents.maximizedToEdges = false;
     // The open path's width gate, asked of the drop's target screen: the
     // per-screen kind answers by value and a rule width outranks the kind.
+    // Only that screen-level verdict: the per-WINDOW open rules (a width
+    // fraction, a maximized or a height open) and the template blueprint,
+    // which outrank it at an open, are not consulted. They shape a window's
+    // first arrival on a screen, and a drop is the user placing a window they
+    // are already holding, so the drop keeps the client's size or its carried
+    // intents instead.
     const QVariantMap overrides = overridesForScreen(preview.targetScreenId);
     if (effectiveWidthClientDecides(overrides) && !ruleColumnWidthFraction(overrides).has_value()) {
-        intents.width = clientDecidedColumnWidth(*clientSize, params);
+        intents.width = clientDecidedColumnWidth(*clientSize, params, intents.display);
     }
     return intents;
 }
@@ -370,8 +451,8 @@ void ScrollEngine::commitDragInsertPreview()
     // The STATE above came from the preview's captured key; params and the
     // applyLayout below resolve from the screen's CURRENT key. Those agree
     // only while the context holds still for the drag, which is a contract
-    // the DAEMON keeps: its six context-change handlers all cancel a live
-    // preview before touching desktop/activity state, and the engine's own
+    // the DAEMON keeps: every one of its context-change handlers cancels a
+    // live preview before touching desktop/activity state, and the engine's own
     // prunes and unpin migration do the same. Nothing here can enforce it,
     // and a violation is silent — the window lands in the old desktop's
     // strip while the layout is computed and emitted for the new one, so it
@@ -412,15 +493,22 @@ void ScrollEngine::commitDragInsertPreview()
     // on the same output is a reorder and keeps it, which is what the
     // indicator probe drew the slot with (it masks the floor for a
     // cross-output drop the same way).
-    const bool crossOutput = p.hadPriorState && p.priorKey.screenId != p.targetScreenId;
-    if (crossOutput) {
-        forgetCommittedExtents(p.windowId);
-    }
+    //
     // An ARRIVING window under "the client decides" keeps its own size, the
     // way it would opening on this screen (dragDropClientSize says which drops
-    // arrive and where the size comes from). The degrade arm below keeps
-    // p.carried, the window's own float intents, for a later unfloat.
+    // arrive and where the size comes from). Its floors go too, on any
+    // output: an arrival sized by its client opens the way an open does, and
+    // an open holds no floor. A floor learned while the window last tiled
+    // (it survives a float round trip on purpose) would hold the new column
+    // at that old extent and hide the size the user made the float, and a
+    // client that now takes the narrower column answers nothing that could
+    // give the floor back. The degrade arm below keeps p.carried, the
+    // window's own float intents, for a later unfloat.
+    const bool crossOutput = p.hadPriorState && p.priorKey.screenId != p.targetScreenId;
     const std::optional<QSize> clientSize = dragDropClientSize(p);
+    if (crossOutput || clientSize) {
+        forgetCommittedExtents(p.windowId);
+    }
     const FloatRestore dropIntents = dragDropIntents(p, clientSize, params);
     const int columnsBeforeDrop = strip.columnCount();
     bool inserted = false;
@@ -430,6 +518,9 @@ void ScrollEngine::commitDragInsertPreview()
     // would maximize a column the user never asked to maximize (the same
     // shared-column exclusion the capture makes).
     bool createdColumn = false;
+    // Whether the drop JOINED a host column, for the tabbed-extent hand-back
+    // below.
+    bool joinedColumn = false;
     if (p.lastTarget.isValid()) {
         if (p.lastTarget.newSlot || strip.isEmpty()) {
             inserted = strip.insertWindowAt(std::clamp(p.lastTarget.primary, 0, strip.columnCount()), p.windowId,
@@ -442,6 +533,7 @@ void ScrollEngine::commitDragInsertPreview()
                 : static_cast<int>(strip.columns().at(joinColumn).tiles.size());
             inserted = strip.insertWindowIntoColumnAt(joinColumn, tileIndex, p.windowId, params, dropIntents.minWidth,
                                                       dropIntents.minHeight);
+            joinedColumn = inserted;
         }
     }
     if (!inserted && p.hadPriorState && p.priorSameKey) {
@@ -456,6 +548,13 @@ void ScrollEngine::commitDragInsertPreview()
             // at the width the drop decided rather than the configured one.
             inserted = strip.insertWindow(p.windowId, slot.width, slot.display, params, slot.minWidth, slot.minHeight);
         }
+    }
+    if (!inserted && p.defensivelyDetached) {
+        // The same zero-motion fallback for begin's defensive take: the window
+        // WAS a tile of this strip, in the slot begin captured before taking
+        // it, and the cancel puts it back there. Appending it at the strip's
+        // end instead moved a window the user never aimed anywhere.
+        inserted = dragPreviewRestoreSlot(targetState, p.windowId, p.defensiveSlot, params, p.targetScreenId);
     }
     if (!inserted) {
         inserted = strip.insertWindow(p.windowId, dropIntents.width, dropIntents.display, params, dropIntents.minWidth,
@@ -519,8 +618,22 @@ void ScrollEngine::commitDragInsertPreview()
         // Only a FloatRestore that really captured a tile carries a height
         // intent; a default-constructed one would stamp Auto over the
         // context default the insert just seeded (same gate as
-        // dragPreviewRestoreSlot and unfloatWindowInternal).
-        strip.setWindowHeightIntent(p.windowId, p.carried.height);
+        // dragPreviewRestoreSlot and unfloatWindowInternal). Re-stated, not
+        // written as a bid: a JOIN into a tabbed host must not take the host's
+        // extent from the tab that sizes it, which a non-Auto intent written
+        // through setWindowHeightIntent would. A column the drop opened in
+        // tabbed display names the dropped window its owner by construction.
+        strip.restateWindowHeightIntent(p.windowId, p.carried.height);
+        // The one join that IS a bid for the extent: the owning tab dropped
+        // back into the tabbed column it was dragged out of. The take handed
+        // the ownership to the tab that came on show, and left there the
+        // column keeps that heir's height, which an Escape or a zero-motion
+        // drop would have handed back (dragPreviewRestoreSlot). Same-key only,
+        // because the slot's sibling anchor names the strip it was captured
+        // from.
+        if (joinedColumn && p.priorSameKey && joinedOwnColumn(strip, p.windowId, p.carried)) {
+            restoreTabbedHeightOwner(strip, p.windowId, p.carried);
+        }
         // The drop re-seats the tile, so windowed fullscreen survives the
         // reorder the same way the height intent does. The float-drop arm
         // above never reaches here, which is the exclusivity holding.
@@ -529,8 +642,9 @@ void ScrollEngine::commitDragInsertPreview()
         }
         // Maximize-to-edges, on the column-creating arms only. The zero-motion
         // restore arm is NOT one of them here: dragPreviewRestoreSlot hands the
-        // flag back itself, on its own slot's terms.
-        if (createdColumn && p.carried.maximizedToEdges) {
+        // flag back itself, on its own slot's terms. Read off dropIntents, which
+        // drops the flag for an arrival sized by its client.
+        if (createdColumn && dropIntents.maximizedToEdges) {
             strip.setMaximizedToEdgesForWindow(p.windowId, true);
         }
     }
@@ -621,6 +735,10 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
             if (ScrollState* targetState = stateForKey(p.targetKey, /*createIfMissing=*/false)) {
                 const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
                 if (dragPreviewRestoreSlot(targetState, p.windowId, p.defensiveSlot, params, p.targetScreenId)) {
+                    // The column the hold began on becomes the active one
+                    // again before any view is restored, since the anchor is
+                    // relative to it (refocusKeepingView).
+                    refocusKeepingView(targetState->strip(), p.targetActiveAtBegin, params);
                     // The restore's structural reanchor answered with the
                     // policy verdict; an Escape promises the pre-drag view
                     // back, so re-assert the captured pair raw (the field
@@ -690,6 +808,16 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
             // it, as on commit.
             m_lastAppliedRect.remove(p.windowId);
             m_parkedScrollEdge.remove(p.windowId);
+        }
+        // The strip's focus goes back to the window that held it when the hold
+        // began, before the view: begin's take handed it to a neighbour when
+        // the dragged window was active, and a stack restore takes it for the
+        // re-joined column. The anchor is relative to the active column, so
+        // replaying it onto the wrong one shifted the view by a column. Kept
+        // view either way: an auto-scrolled hold keeps the scrolled view
+        // across the refocus too.
+        if (targetState) {
+            refocusKeepingView(targetState->strip(), p.targetActiveAtBegin, params);
         }
         if (targetState && !p.viewScrolledDuringHold) {
             // Exact-view half of the Escape promise: begin's settle clamp and
@@ -793,6 +921,9 @@ void ScrollEngine::cancelDragInsertPreview(bool /*dragStillActive*/)
     } else {
         const ScrollLayoutParams priorParams = layoutParamsForScreen(p.priorKey.screenId);
         dragPreviewRestoreSlot(priorState, p.windowId, p.priorSlot, priorParams, p.priorKey.screenId);
+        // The prior strip's focus goes home first, the same-key arm's reason:
+        // the anchor below is relative to the column that was active at begin.
+        refocusKeepingView(priorState->strip(), p.priorActiveAtBegin, priorParams);
         // The window went home, and its strip's view goes home with it —
         // begin captured the pair before the take (the cross-key arm of the
         // capture), and the restore's structural reanchor just overwrote it
@@ -1002,13 +1133,16 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // as one — so the live params describe a work area the dropped window
     // never occupies.
     const int postDropColumns = probe.columnCount() + ((target.newSlot || probe.isEmpty()) ? 1 : 0);
-    // A cross-OUTPUT drop forgets the dragged window's committed floor before
-    // it inserts (commitDragInsertPreview), so the slot it promises is the
-    // unfloored one. Masked rather than forgotten: a cancel still returns the
-    // window to its own output, floor and all.
+    // A cross-OUTPUT drop, and an arrival sized by its client, forget the
+    // dragged window's committed floors before they insert
+    // (commitDragInsertPreview), so the slot it promises is the unfloored one.
+    // Masked rather than forgotten: a cancel still returns the window to its
+    // own place, floors and all.
     const bool crossOutput = p.hadPriorState && p.priorKey.screenId != p.targetScreenId;
+    const std::optional<QSize> clientSize = dragDropClientSize(p);
     const ScrollLayoutParams liveParams = layoutParamsForScreen(p.targetScreenId, postDropColumns);
-    const ScrollLayoutParams params = crossOutput ? withoutCommittedFloorOf(liveParams, p.windowId) : liveParams;
+    const ScrollLayoutParams params =
+        (crossOutput || clientSize) ? withoutCommittedFloorOf(liveParams, p.windowId) : liveParams;
     if (!params.workArea.isValid()) {
         return {};
     }
@@ -1022,10 +1156,11 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // Mirror of commit's insert selection, deliberately kept line-for-line
     // comparable with it: if the two ever diverge, the indicator lies.
     const int preInsertColumns = probe.columnCount();
-    const std::optional<QSize> clientSize = dragDropClientSize(p);
     const FloatRestore dropIntents = dragDropIntents(p, clientSize, params);
     bool inserted = false;
-    if (target.newSlot || probe.isEmpty()) {
+    // commit's createdColumn, for the maximize-to-edges stamp below.
+    const bool createsColumn = target.newSlot || probe.isEmpty();
+    if (createsColumn) {
         inserted = probe.insertWindowAt(std::clamp(target.primary, 0, probe.columnCount()), p.windowId,
                                         dropIntents.width, dropIntents.display, params);
     } else {
@@ -1039,16 +1174,25 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
         return {};
     }
     // The layout-affecting post-insert stamps commit applies, under the same
-    // gates — both change the resolved geometry, so omitting either would
-    // reintroduce a modelling error by the back door. Commit's THIRD stamp
-    // (the windowed-fullscreen re-seat) is deliberately absent: the flag is
-    // layout-neutral and never moves a resolved rect, so the probe has
-    // nothing to mirror for it.
+    // gates: the minimum size, the height intent and the maximize-to-edges
+    // flag (the raw work area on both axes) each change the resolved
+    // geometry, so omitting one would reintroduce a modelling error by the
+    // back door. The windowed-fullscreen re-seat is deliberately absent: the
+    // flag is layout-neutral and never moves a resolved rect, so the probe
+    // has nothing to mirror for it.
     if (p.carried.minWidth > 0 || p.carried.minHeight > 0) {
         probe.setWindowMinimumSize(p.windowId, p.carried.minWidth, p.carried.minHeight);
     }
     if (p.carried.column >= 0 || p.carried.tileIndex >= 0) {
-        probe.setWindowHeightIntent(p.windowId, p.carried.height);
+        probe.restateWindowHeightIntent(p.windowId, p.carried.height);
+        // commit's join-back hand-back, under its gate: the owner's height
+        // resizes every tab of the column it takes back.
+        if (!createsColumn && p.priorSameKey && joinedOwnColumn(probe, p.windowId, p.carried)) {
+            restoreTabbedHeightOwner(probe, p.windowId, p.carried);
+        }
+        if (createsColumn && dropIntents.maximizedToEdges) {
+            probe.setMaximizedToEdgesForWindow(p.windowId, true);
+        }
     }
     // And commit's client-decided height, under its gate: a column-opening
     // drop of an arriving window.
@@ -1097,6 +1241,18 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
                 // aimed from the first visible column's INNER band carries
                 // no tag and keeps the full rect over that column, exactly
                 // as the right neighbour's inner band covers it.
+                //
+                // The promise is the AIM, not the landing, on this one slot.
+                // The commit inserts at the first visible column's index and
+                // reanchorForDropCommit lands the new column at that column's
+                // strip position less the pre-drop view, which is where the
+                // first visible column stood, not the leading dead space this
+                // rect fills. A drop aimed past the leading edge therefore
+                // lands where that column stood, one column step inward of
+                // the hint. Kept, because the
+                // hint has to point past the edge to read as "ahead of
+                // everything", and moving the landing into the dead space
+                // would detach the drop from the view's own fit rules.
                 if (target.newSlot && target.leadingEdge && preInsertColumns > 0) {
                     rect = params.axis.translatedMain(rect, -(params.axis.mainSize(rect) + params.gap));
                 }

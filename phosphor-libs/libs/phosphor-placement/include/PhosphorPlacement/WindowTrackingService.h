@@ -509,6 +509,25 @@ public:
     /// Clear the window's pre-float zone in every snap store.
     void clearPreFloatZone(const QString& windowId) override;
 
+    /// Clear the window's pre-float zone in every snap store except the hidden contexts of @p screenId: a store
+    /// filed under that same screen for a desktop or activity it does not show now keeps its entry. That entry
+    /// is the window's snap home on that desktop (a window on several desktops, or a sticky one, holds one per
+    /// desktop), so a float on the desktop in view must not take it. The store @p screenId shows now clears, and
+    /// so does every store on another screen, because a window that moves forgets the zone it floated from
+    /// there. Screens compare by id (ScreenIdentity::screensMatch), so another virtual screen of the same
+    /// monitor counts as another screen: virtual screens are not per desktop, and a window present on several
+    /// desktops sits on the same one on each. An empty @p screenId, or a resolver that cannot name a store's
+    /// key (the single-store convenience), hides nothing and clears like clearPreFloatZone.
+    void clearPreFloatZoneExceptHiddenContexts(const QString& windowId, const QString& screenId);
+
+    /// True while the resolver's globals store resolves: wired, and (for the engine
+    /// resolver, whose arms hold a QPointer) while the snap engine is alive. The
+    /// read-only queries (zoneForWindow, zonesForWindow, isWindowSnapped,
+    /// windowsInZone, snappedWindows, isAutoSnapped, userSnappedClasses) need
+    /// no check first: with no store they answer empty or false. The writers
+    /// still assert it.
+    bool hasSnapState() const;
+
     /**
      * @brief Clear the float when a floating window is snapped
      *
@@ -964,6 +983,10 @@ private:
     /// The layout @p state's context runs on @p screenId: the store's own desktop and activity, for its
     /// last-used zone (F162) and the VS prunes (F533). Null for a context that does not snap or has none.
     PhosphorZones::Layout* lastUsedLayoutFor(const PhosphorSnapEngine::SnapState* state, const QString& screenId) const;
+    /// The (desktop, activity) context @p state's memory belongs to on @p screenId: its key when the resolver
+    /// can name it, else the desktop its last-used was recorded on, else the screen's current one. The context
+    /// lastUsedLayoutFor judges in, without its snapping-only gate. Needs a layout manager.
+    std::pair<int, QString> storeContextFor(const PhosphorSnapEngine::SnapState* state, const QString& screenId) const;
 
     /// Find the nearest virtual screen by index proximity.
     /// Used when a stored virtual screen ID no longer exists in the current configuration.
@@ -1060,9 +1083,6 @@ private:
     /// Every store, for aggregate iteration. Elements are never null (see the
     /// resolver's `allStates` contract), so callers deref them directly.
     QList<PhosphorSnapEngine::SnapState*> snapAllStates() const;
-    /// True while the resolver's globals store resolves: wired, and (for the engine
-    /// resolver, whose arms hold a QPointer) while the snap engine is alive.
-    bool hasSnapState() const;
     /// Invoke @p fn once per (window, store) zone assignment the window is a
     /// MEMBER of (a leftover in another store is skipped), with its zones and
     /// screen, the store's context and the store itself. @p desktop is 0 for a
@@ -1070,8 +1090,10 @@ private:
     /// Keyless (an unset keyFor, the single-store convenience) passes the
     /// window's recorded desktop and an empty activity, which every filter
     /// reads as current. @p fn must not mutate the stores: collect, then
-    /// mutate the visited @p store. SnapEngine::forEachSnapAssignment is not its
-    /// twin: it has no membership guard and visits leftovers too.
+    /// mutate the visited @p store. SnapEngine::forEachSnapAssignment is the
+    /// engine-side sibling with the same membership guard. It differs in what it
+    /// hands the callback: the window's recorded desktop beside the store key's,
+    /// and no store pointer.
     void forEachZoneAssignedWindow(
         const std::function<void(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                  int desktop, const QString& activity, PhosphorSnapEngine::SnapState* store)>& fn)

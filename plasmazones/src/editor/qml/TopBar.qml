@@ -377,7 +377,8 @@ ToolBar {
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // LAYOUT SETTINGS BUTTON (Per-layout gap overrides)
+        // LAYOUT SETTINGS BUTTON (per-layout gaps, overlay style, aspect
+        // ratio and geometry)
         // ═══════════════════════════════════════════════════════════════
         ToolButton {
             id: layoutSettingsButton
@@ -386,10 +387,10 @@ ToolBar {
             icon.name: "configure"
             enabled: topBar.editorController !== null && topBar.editorController !== undefined
             onClicked: topBar.layoutSettingsDialog.open()
-            ToolTip.text: i18nc("@tooltip", "Layout-specific settings (gaps)")
+            ToolTip.text: i18nc("@tooltip", "Settings for this layout only")
             ToolTip.visible: hovered
             Accessible.name: i18nc("@action", "Layout Settings")
-            Accessible.description: i18nc("@info", "Configure per-layout gap overrides")
+            Accessible.description: i18nc("@info", "Configure gaps, overlay style, aspect ratio and geometry for this layout")
         }
 
         // Visual separator (hidden with the layout settings button so template
@@ -436,11 +437,13 @@ ToolBar {
                 Accessible.description: i18nc("@info", "Import a layout from a JSON file")
             }
 
-            // Export button
+            // Export button. The daemon exports its saved copy, so the button
+            // waits for a save. A new layout counts as unsaved until its first
+            // save, so this covers it too.
             ToolButton {
                 visible: !topBar.previewMode && !topBar.templateMode
                 icon.name: "document-export"
-                enabled: topBar.editorController !== null && topBar.editorController !== undefined && topBar.editorController.layoutId !== ""
+                enabled: topBar.editorController !== null && topBar.editorController !== undefined && topBar.editorController.layoutId !== "" && !topBar.editorController.hasUnsavedChanges
                 onClicked: topBar.exportDialog.open()
                 ToolTip.text: i18nc("@tooltip", "Export layout to file")
                 ToolTip.visible: hovered

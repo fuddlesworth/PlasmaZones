@@ -965,6 +965,46 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         if (m_tileStaggerGeneration != gen) {
             return;
         }
+        // The saved stacking order is keyed by screen only, but it was saved for
+        // the desktop and activity in view at the toggle (the save's filter),
+        // so it is the batch of THAT context that spends it. A batch for the
+        // screen from another context (a desktop switched to since) finds
+        // none of the saved windows in view, and spending the order there lost
+        // the restore for the round trip back (F444). A sticky or
+        // multi-desktop window reads in view from every context it lives in,
+        // so it does not identify the saved one on its own
+        // (StackDecisions::savedOrderReplay decides). Raises the in-view
+        // windows in order when @p raiseOn is given (the replay; the
+        // scroll-only arm only consumes) and the batch is the saved context's,
+        // and answers whether the order is spent.
+        const auto replaySavedOrder = [this](const QString& screenId, KWin::Workspace* raiseOn) {
+            const QStringList savedOrder = m_savedAutotileStackingOrder.value(screenId);
+            QList<StackDecisions::SavedOrderWindow> read;
+            QList<KWin::EffectWindow*> inView;
+            for (const QString& windowId : savedOrder) {
+                // Exact: a fuzzy same-app hit would raise a SIBLING into
+                // this window's saved z-position.
+                KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
+                if (!w || w->isDeleted()) {
+                    continue;
+                }
+                const bool here = m_effect->getWindowScreenId(w) == screenId && isOnOwnOutputCurrentDesktop(w)
+                    && w->isOnCurrentActivity();
+                read.append({/*alive=*/true, here, spansContexts(w)});
+                if (here) {
+                    inView.append(w);
+                }
+            }
+            const StackDecisions::SavedOrderReplay replay = StackDecisions::savedOrderReplay(read);
+            if (replay.raise && raiseOn) {
+                for (KWin::EffectWindow* w : std::as_const(inView)) {
+                    if (KWin::Window* kw = w->window()) {
+                        raiseOn->raiseWindow(kw);
+                    }
+                }
+            }
+            return replay.spent;
+        };
         // Per-screen untile cleanup. For each screen that participated in
         // this retile, the set of windows previously tracked as tiled on
         // that screen minus the set in the new request is exactly the
@@ -1024,7 +1064,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     groups.append(group);
                 }
             }
-            if (!groups.isEmpty() && KWin::effects) {
+            if (!groups.isEmpty()) {
                 const QList<KWin::EffectWindow*> sequence =
                     StackDecisions::overlapRaiseSequence(KWin::effects->stackingOrder(), groups);
                 for (KWin::EffectWindow* w : sequence) {
@@ -1043,28 +1083,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // above: a newer batch's onComplete owns that screen's
             // stacking, and this batch must neither re-impose a stale order on
             // top of it nor CONSUME the saved entry the newer batch still
-            // needs — the remove() below is a one-shot.
+            // needs — the remove() below is a one-shot, spent only by the
+            // context the order was saved in (replaySavedOrder).
             for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
                 const QString& screenId = it.key();
-                if (m_tileStaggerGenByScreen.value(screenId) != genByScreen.value(screenId)) {
+                if (m_tileStaggerGenByScreen.value(screenId) != genByScreen.value(screenId)
+                    || !m_savedAutotileStackingOrder.contains(screenId)) {
                     continue;
                 }
-                const QStringList savedOrder = m_savedAutotileStackingOrder.value(screenId);
-                if (savedOrder.isEmpty()) {
-                    continue;
+                if (replaySavedOrder(screenId, ws)) {
+                    m_savedAutotileStackingOrder.remove(screenId);
                 }
-                for (const QString& windowId : savedOrder) {
-                    // Exact: a fuzzy same-app hit would raise a SIBLING into
-                    // this window's saved z-position.
-                    KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
-                    if (w && !w->isDeleted() && m_effect->getWindowScreenId(w) == screenId
-                        && isOnOwnOutputCurrentDesktop(w) && w->isOnCurrentActivity()) {
-                        if (KWin::Window* kw = w->window()) {
-                            ws->raiseWindow(kw);
-                        }
-                    }
-                }
-                m_savedAutotileStackingOrder.remove(screenId);
             }
 
             if (!m_pendingAutotileFocusWindowId.isEmpty()) {
@@ -1072,7 +1101,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // above. Raised only while still active (F247).
                 KWin::EffectWindow* focusWin = m_effect->findWindowByIdExact(m_pendingAutotileFocusWindowId);
                 m_pendingAutotileFocusWindowId.clear();
-                if (focusWin && KWin::effects && focusWin == KWin::effects->activeWindow()) {
+                if (focusWin && focusWin == KWin::effects->activeWindow()) {
                     KWin::Window* kw = focusWin->window();
                     if (kw) {
                         ws->raiseWindow(kw);
@@ -1085,8 +1114,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // back above its group — the same raise KWin performs on
             // activation — so the window the user is typing into stays
             // visible. Non-members were never moved.
-            if (KWin::EffectWindow* active = KWin::effects ? KWin::effects->activeWindow() : nullptr;
-                active && groupMembers.contains(active)) {
+            if (KWin::EffectWindow* active = KWin::effects->activeWindow(); active && groupMembers.contains(active)) {
                 if (KWin::Window* kw = active->window()) {
                     ws->raiseWindow(kw);
                 }
@@ -1102,10 +1130,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // unconsumed, would be spent by the first later non-scroll batch raising a stale window (the raise is
             // redundant here: KWin raises on activation). The saved stacking order is a one-shot the replay
             // normally consumes, dropped here without replaying so a much-older z-order is not re-imposed the
-            // first time the screen leaves scrolling. Supersession guard matches the replay loop's.
+            // first time the screen leaves scrolling, and like the replay only by a batch of the context it
+            // was saved in (replaySavedOrder). Supersession guard matches the replay loop's.
             m_pendingAutotileFocusWindowId.clear();
             for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
-                if (m_tileStaggerGenByScreen.value(it.key()) == genByScreen.value(it.key())) {
+                if (m_tileStaggerGenByScreen.value(it.key()) == genByScreen.value(it.key())
+                    && m_savedAutotileStackingOrder.contains(it.key())
+                    && replaySavedOrder(it.key(), /*raiseOn=*/nullptr)) {
                     m_savedAutotileStackingOrder.remove(it.key());
                 }
             }
@@ -1117,7 +1148,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // it is a stale focus steal (F230). Skipped during show-desktop/peek,
         // which activateWindow() would cancel; the restore is only cosmetic.
         if (const QPointer<KWin::EffectWindow> reactivate = std::exchange(m_pendingReactivateWindow, nullptr);
-            reactivate && !reactivate->isDeleted() && KWin::effects && reactivate == KWin::effects->activeWindow()
+            reactivate && !reactivate->isDeleted() && reactivate == KWin::effects->activeWindow()
             && !PlasmaZonesEffect::isShowingDesktop()) {
             KWin::effects->activateWindow(reactivate);
         }
@@ -1142,17 +1173,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // re-tiled, so their rebuild damaged a band nothing could yet paint).
         // Damage the pill bounds now that an anchor exists; a no-op on the
         // ordinary relayout path, where the strips' own push damaged them.
-        if (KWin::effects) {
-            for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
-                // Heartbeat ticks skip this: their per-tick strip payload
-                // push already damages the band, so this handover repaint
-                // would be a redundant boundsFor + addRepaint per tick.
-                if (immediateViewScreens.contains(screenIt.key())) {
-                    continue;
-                }
-                const QString strip = stripKeyFor(screenIt.key());
-                damageScrollTabBand(strip, m_effect->m_scrollTabPainter->boundsFor(strip));
+        for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
+            // Heartbeat ticks skip this: their per-tick strip payload
+            // push already damages the band, so this handover repaint
+            // would be a redundant boundsFor + addRepaint per tick.
+            if (immediateViewScreens.contains(screenIt.key())) {
+                continue;
             }
+            const QString strip = stripKeyFor(screenIt.key());
+            damageScrollTabBand(strip, m_effect->m_scrollTabPainter->boundsFor(strip));
         }
     };
 
@@ -1244,7 +1273,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // the visual-delta, offered-column, commanded-rect and apply writes still run in that
             // gap and are dropped by the enter branch. No capture in own fullscreen (column rect).
             const bool inOwnFullscreen = isInOwnFullscreen(snap.window, snap.windowId, snap.isWindowedFullscreen);
-            if (!inOwnFullscreen) {
+            // Read before the mark below: whether this entry enters the screen's tiling.
+            const auto tiledHere = m_border.tiledWindowsByScreen.constFind(snap.screenId);
+            const bool entersTiling = !inOwnFullscreen
+                && (tiledHere == m_border.tiledWindowsByScreen.constEnd() || !tiledHere->contains(snap.windowId));
+            // Not on a heartbeat view tick for a window already tiled here: the
+            // tick re-commits every column at pointer rate, and the capture
+            // has nothing to take from a window that entered tiling at an
+            // earlier batch, whose first capture already stands (F417).
+            if (!inOwnFullscreen && (entersTiling || !immediateViewScreens.contains(snap.screenId))) {
                 saveAndRecordPreTileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
             }
             // Not on a heartbeat view tick, which re-commits every column at pointer rate.
@@ -1269,10 +1306,6 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                   << "predicted=" << m_effect->constrainTileGeometry(snap.window, snap.geometry)
                                   << "x11=" << snap.window->isX11Client();
             }
-            // Read before the mark below: whether this entry enters the screen's tiling.
-            const auto tiledHere = m_border.tiledWindowsByScreen.constFind(snap.screenId);
-            const bool entersTiling = !inOwnFullscreen
-                && (tiledHere == m_border.tiledWindowsByScreen.constEnd() || !tiledHere->contains(snap.windowId));
             if (!inOwnFullscreen) {
                 markWindowTiled(snap.screenId, snap.windowId);
             }
@@ -1542,10 +1575,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 } else {
                     visualDeltaChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
                 }
-                // The KWin::effects term matches the sibling removers across
-                // the handler — one rule for every m_scrollVisualDelta damage
-                // pair. Unlike those removers (rare events: window close,
-                // screen change), this site is driven per batch and the edge
+                // Unlike the sibling m_scrollVisualDelta removers across the
+                // handler (rare events: window close, screen change), this
+                // site is driven per batch and the edge
                 // auto-scroll heartbeat re-derives every parked column's
                 // relocation from the moving strip each tick, so this fires
                 // at ~60 Hz for the length of a drag hold — full-canvas
@@ -1553,7 +1585,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // to the window's own output; the relocation cannot paint
                 // beyond it (the paint path clips parked columns to their
                 // output), and Full stays as the unresolvable fallback.
-                if (visualDeltaChanged && KWin::effects) {
+                if (visualDeltaChanged) {
                     if (KWin::LogicalOutput* vout = m_effect->outputForScreenId(snap.screenId)) {
                         KWin::effects->addRepaint(KWin::Rect(vout->geometry()));
                     } else {
@@ -1972,9 +2004,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // X11 windows are offered a column too, and their answer is
                 // read the same way, so a client that resizes itself past the
                 // column widens it rather than sitting under the next one
-                // (#1157). Only the size-continuity carry below stays
-                // Wayland's: it ends Wayland's asynchronous renegotiation,
-                // which X11's synchronous applies never had.
+                // (#1157). The carry below serves them as well: an X11 client
+                // that insists on a size short of its column (across the strip,
+                // or along it on a preset width) was otherwise offered the
+                // column on every batch, put back once and learned again, three
+                // resizes per scroll step (F208). It carries only a size the
+                // counter-assert's command decided, the one it commanded or the
+                // one it learned (ScrollDecisions::x11SizeAnswersColumn), never
+                // a KWin resize it could not put back.
                 QRect stripOfferedColumn;
                 if (isScrollingScreen(snap.screenId) && !snap.isWindowedFullscreen && !snap.isMaximizedToEdges) {
                     const QSize columnSize = geo.size();
@@ -2014,7 +2051,30 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     KWin::Window* kwCarry = snap.window->window();
                     const bool resizeInFlight =
                         kwCarry && QRectF(kwCarry->moveResizeGeometry()).toRect().size() != committedSize;
-                    if (snap.window->isWaylandClient() && !resizeInFlight
+                    // An X11 frame is carried only at a size its last strip
+                    // command decided, read before this entry's apply replaces
+                    // that command. Its record's existence is the test, not its
+                    // stamp: building this batch already bumped the window's
+                    // stamp past it. The strip's own hand-offs drop the record
+                    // (dropScrollCompanions, the deferred and bailed disarm
+                    // below), but a snap or float command issued before the
+                    // strip's release lands leaves it standing, stale by stamp
+                    // (the counter-assert's gate in
+                    // slotWindowFrameGeometryChanged).
+                    // What carries is still only a size the STRIP decided: the
+                    // record names the strip's command and learned size, never
+                    // the other command's, so a frame that command sized
+                    // carries only where it matches one of them, within the
+                    // pixel of rounding x11SizeAnswersColumn allows.
+                    bool committedIsAnswer = snap.window->isWaylandClient();
+                    if (!committedIsAnswer) {
+                        const auto commandedIt = m_effect->m_scrollCommandedRects.constFind(snap.windowId);
+                        const bool guarded = commandedIt != m_effect->m_scrollCommandedRects.constEnd();
+                        committedIsAnswer = ScrollDecisions::x11SizeAnswersColumn(
+                            guarded, guarded ? commandedIt->rect.size() : QSize(),
+                            guarded ? commandedIt->learnedSize : QSize(), committedSize);
+                    }
+                    if (committedIsAnswer && !resizeInFlight
                         && ScrollDecisions::mayCarryCommittedSize(/*declaredRect=*/false, columnUnchanged,
                                                                   committedSize, columnSize)) {
                         // Centred the same way the paint resolver centres
@@ -2152,14 +2212,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // window is its size hints' answer to the column
                     // (constrainTileGeometry): a terminal with size increments
                     // is asked the same narrowed size on every batch, which
-                    // asks it nothing new. Unchanged for Wayland.
+                    // asks it nothing new, and a pixel of XWayland rounding is
+                    // no new size either (F336). Unchanged for Wayland.
                     const KWin::Window* const kwOffer = snap.window->window();
                     const bool sendsSize =
                         kwOffer
                         && ScrollDecisions::stripEntrySendsSize(
                             kwinTileDrop.dropped ? kwinTileDrop.requested
                                                  : QRectF(kwOffer->moveResizeGeometry()).toRect().size(),
-                            m_effect->constrainTileGeometry(snap.window, geo).size());
+                            m_effect->constrainTileGeometry(snap.window, geo).size(), !snap.window->isWaylandClient());
                     m_effect->recordStripOffer(snap.window, snap.windowId, stripOfferedColumn, sendsSize);
                 }
 
@@ -2622,6 +2683,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                                   originOverride, visualTargetOverride, std::nullopt,
                                                   deferredStripOffer);
                     m_effect->m_daemonGate.departureLegOwed = prevLegOwed;
+                    // The offer recorded above was recorded before this apply
+                    // took its command stamp (its size test reads KWin's state
+                    // before the apply), so it names the apply's stamp now, as
+                    // the cancels and the deferred replay record theirs after
+                    // their applies. A scroll handoff's echo reads it to tell
+                    // the destination's own offer from the source's
+                    // (handleWindowOutputChanged).
+                    if (deliversStripOffer && !deferredStripOffer) {
+                        if (const auto offer = m_effect->m_scrollOfferedColumn.find(snap.windowId);
+                            offer != m_effect->m_scrollOfferedColumn.end()) {
+                            offer->commandStamp = m_effect->m_daemonGate.commandStamps.current(snap.window);
+                        }
+                    }
                 }
                 // The tile dropped above may have a configure the client can
                 // still ack at the tile's size, now the column is placed.
@@ -2886,14 +2960,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // entry instead disarms the counter until the next batch.
                 // A fresh command resets the counter-assert burst budget and
                 // records this apply's command stamp (F71).
+                //
+                // The offered column is NOT dropped with it, by the rule the
+                // offer record above states: this batch wrote none (it delivers
+                // no offer when the commit is deferred or bailed), and the
+                // entry already there describes a column an earlier batch
+                // genuinely delivered. A deferred commit records its own when
+                // the replay sends it. Nothing reads an X11 answer while the
+                // counter is disarmed: with no commanded rect no size is one
+                // the strip decided (ScrollDecisions::x11SizeAnswersColumn).
                 const bool commitDeferredOrBailed =
                     snap.window->isUserMove() || snap.window->isUserResize() || fullscreenBailSkippedCommit;
                 if (commitDeferredOrBailed) {
                     m_effect->m_scrollCommandedRects.remove(snap.windowId);
-                    // The offer goes with it: an X11 window is offered its
-                    // column too (#1157), and an entry for a commit that never
-                    // went out would read as answered.
-                    m_effect->m_scrollOfferedColumn.remove(snap.windowId);
                 } else {
                     const QRect committed = snap.window->frameGeometry().toRect();
                     const QRect stripRect = m_stripScreenRectAtBatch.value(snap.screenId);

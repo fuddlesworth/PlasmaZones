@@ -9,7 +9,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <interface name="org.plasmazones.WindowTracking">
         <annotation name="org.gtk.GDBus.DocString" value="Window-to-zone tracking: pre-snap geometry for restore, floating state, zone geometry, drag-out unsnap, resolution-change handling, keyboard-navigation feedback, window-metadata registration, and the Phosphor shell surface (activateWindow, getWindowMetadata, moveWindowToDesktop, getUrgentWindows, getWindowStatesForDesktop, findWindowByPid with the windowMetadataChanged and windowUrgencyChanged announcements). Snap commits, snap-restore fallback chains, and daemon-driven navigation targets live on the org.plasmazones.Snap adaptor."/>
         <method name="notifyDragOutUnsnap">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without the activation trigger and dropped on the screen it is snapped on. Saves pre-float zone, marks floating, and clears zone assignment so the window does not auto-restore to the zone on close/reopen. A drag that ends on another screen is resolved by the drag adaptor at the end of the drag."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without the activation trigger and dropped on the screen it is snapped on. Saves pre-float zone, marks floating, and clears zone assignment so the window does not auto-restore to the zone on close/reopen. A drag that ends on another screen is resolved by the drag adaptor at the end of the drag. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID from the effect."/>
             </arg>
@@ -48,7 +48,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="pruneStaleWindows">
-            <annotation name="org.gtk.GDBus.DocString" value="Drop the windows not in the alive set: capture the final placement of each one the daemon holds a frame for, then release it from every engine, the window registry and the daemon's per-window shadows. An empty set is refused. Called by the KWin effect after the daemon is ready."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Drop the windows not in the alive set: capture the final placement of each one the daemon holds a frame for, then release it from every engine, the window registry and the daemon's per-window shadows. An empty set is refused. Called by the KWin effect after the daemon is ready. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="aliveWindowIds" type="as" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window IDs currently known to KWin."/>
             </arg>
@@ -70,7 +70,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="storePreTileGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Store window geometry before tiling (snap or autotile). With overwrite false an existing entry is kept."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Store window geometry before tiling (snap or autotile). With overwrite false an existing entry is kept. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -124,7 +124,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="clearPreTileGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Clear stored pre-tile geometry for a window."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Clear stored pre-tile geometry for a window. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -166,7 +166,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="clearPreFloatZone">
-            <annotation name="org.gtk.GDBus.DocString" value="Clear saved pre-float zone for the window."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Clear saved pre-float zone for the window. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -202,7 +202,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="reportOutputSettle">
-            <annotation name="org.gtk.GDBus.DocString" value="Report the windows a screen-change settle moved. Sent when a settle added or removed an output, or held back a crossing during the debounce. The daemon compares each window with the state it had before its output went away and answers with one verdict per window. A window KWin returned untouched is re-seated in its old zone, tile or column. An evacuee floats where KWin put it. A placement KWin moved is re-asserted, and anything else is the user's move."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Report the windows a screen-change settle moved. Sent when a settle added or removed an output, or held back a crossing during the debounce. The daemon compares each window with the state it had before its output went away and answers with one verdict per window. A window KWin returned untouched is re-seated in its old zone, tile or column. An evacuee floats where KWin put it. A placement KWin moved is re-asserted, and anything else is the user's move. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="rows" type="a(ssssbiiiiiiiiiiibbbbssiiibiiii)" direction="in">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::OutputSettleRowList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, outputUuid, screenId, sourceScreenId, sourceConnected, x, y, width, height, baseX, baseY, baseWidth, baseHeight, moveResizeCount, maximizeMode, quickTileMode, fullscreen, kwinOnly, placeableNow, hasS0, s0Uuid, s0ScreenId, s0MoveResizeCount, s0MaximizeMode, s0QuickTileMode, s0Fullscreen, s0X, s0Y, s0Width, s0Height)."/>
@@ -219,7 +219,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="reportNavigationFeedback">
-            <annotation name="org.gtk.GDBus.DocString" value="Report keyboard-navigation result from KWin effect; daemon emits navigationFeedback for OSD."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Report keyboard-navigation result from KWin effect, which the daemon emits as navigationFeedback for OSD. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="success" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True if navigation succeeded."/>
             </arg>
@@ -379,13 +379,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <method name="cursorScreenChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Report that the cursor has moved to a different screen: across monitors, across the virtual screens of one, or a re-send when the daemon starts. A screen the daemon does not know yet is held and applied when it appears. Shortcuts use this screen when no window has focus."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Report that the cursor has moved to a different screen: across monitors, across the virtual screens of one, or a re-send when the daemon starts. A screen the daemon does not know yet is held and applied when it appears. Shortcuts use this screen when no window has focus. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier the cursor is now on (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>
         </method>
         <method name="screenDesktopChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Report a screen's current virtual desktop (Plasma 6.7 per-output virtual desktops). Called by the KWin effect on KWin::EffectsHandler::desktopChanged, on a window activation, and in its bring-up re-sync. KWin's own D-Bus interface only exposes the global current desktop, so per-screen data arrives this way."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Report a screen's current virtual desktop (Plasma 6.7 per-output virtual desktops). Called by the KWin effect on KWin::EffectsHandler::desktopChanged, on a window activation, and in its bring-up re-sync. KWin's own D-Bus interface only exposes the global current desktop, so per-screen data arrives this way. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Physical screen identifier whose desktop changed (NOT virtual-screen-suffixed; per-output desktops belong to the physical output)."/>
             </arg>
@@ -394,7 +394,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="seedScreenDesktop">
-            <annotation name="org.gtk.GDBus.DocString" value="Report the virtual desktop an output shows as it is connected or comes back. KWin picks it without a desktop change, so this is a seed, not a switch: the engines take the desktop and the managed screens are recomputed, with no desktop-switch OSD and no switch announce."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Report the virtual desktop an output shows as it is connected or comes back. KWin picks it without a desktop change, so this is a seed, not a switch: the engines take the desktop and the managed screens are recomputed, with no desktop-switch OSD and no switch announce. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Physical screen identifier of the output that was added."/>
             </arg>
@@ -403,7 +403,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setWindowMetadata">
-            <annotation name="org.gtk.GDBus.DocString" value="Register or update metadata for a live window. Called by the compositor bridge on window-added and on every mutation of the window's app class, desktop file, caption, virtual desktop, activity or role, and on its minimize, urgency, maximize and fullscreen edges, a maximize on one axis included. Idempotent, so it is safe to call on every observation and a no-op if metadata is unchanged."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Register or update metadata for a live window. Called by the compositor bridge on window-added and on every mutation of the window's app class, desktop file, caption, virtual desktop, activity or role, and on its minimize, urgency, maximize and fullscreen edges, a maximize on one axis included. Idempotent, so it is safe to call on every observation and a no-op if metadata is unchanged. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="instanceId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Opaque compositor handle, stable for the window lifetime (KWin internalId)."/>
             </arg>
@@ -436,7 +436,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="windowClosed">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was closed (cleanup)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was closed (cleanup). Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -448,7 +448,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="windowActivated">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was activated/focused."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was activated/focused. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -457,7 +457,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="activeWindowScreenChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that the focused window moved to another screen without a new activation, whether a user, KWin or daemon move did it. Window shortcuts act on the focused window's screen, which windowActivated otherwise sets, so a key pressed after such a move acted on the screen the window had left. Updates only that record, and only when windowId is the focused window."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that the focused window moved to another screen without a new activation, whether a user, KWin or daemon move did it. Window shortcuts act on the focused window's screen, which windowActivated otherwise sets, so a key pressed after such a move acted on the screen the window had left. Updates only that record, and only when windowId is the focused window. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -466,7 +466,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setFrameGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Push current frame geometry for a window into the daemon's shadow. Called by the compositor plugin on windowFrameGeometryChanged, throttled to one push per window every 50 ms. Sent for every window the plugin manages, including ones kept above others, and not for a window an exclusion rule matches. Enables daemon-local shortcut handlers (e.g. float toggle) to read fresh geometry without a cross-process round-trip."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Push current frame geometry for a window into the daemon's shadow. Called by the compositor plugin on windowFrameGeometryChanged, throttled to one push per window every 50 ms. Sent for every window the plugin manages, including ones kept above others, and not for a window an exclusion rule matches. Enables daemon-local shortcut handlers (e.g. float toggle) to read fresh geometry without a cross-process round-trip. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -476,7 +476,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="height" type="i" direction="in"/>
         </method>
         <method name="notifyWindowResized">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a tiled window finished an interactive edge/border resize. The scrolling engine fits the column to the new size, or the autotile engine reflows neighbouring windows to fill the gap (GitHub #652). Fire-and-forget, since the resize is already committed in the compositor. The old/new frames are the window's geometry before and after the resize, supplied by the compositor plugin (the daemon's throttled frame shadow is unreliable as a baseline because it updates during the drag). Floating, untracked and snap-mode windows are ignored daemon-side, and the autotile engine also ignores a resize that carried the window's centre off its screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a tiled window finished an interactive edge/border resize. The scrolling engine fits the column to the new size, or the autotile engine reflows neighbouring windows to fill the gap (GitHub #652). Fire-and-forget, since the resize is already committed in the compositor. The old/new frames are the window's geometry before and after the resize, supplied by the compositor plugin (the daemon's throttled frame shadow is unreliable as a baseline because it updates during the drag). Floating, untracked and snap-mode windows are ignored daemon-side, and the autotile engine also ignores a resize that carried the window's centre off its screen. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -490,7 +490,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="newHeight" type="i" direction="in"/>
         </method>
         <method name="setWindowSticky">
-            <annotation name="org.gtk.GDBus.DocString" value="Set whether a window is sticky (visible on all virtual desktops)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set whether a window is sticky (visible on all virtual desktops). Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -499,7 +499,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="windowScreenChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Record that a window moved to a different screen. The daemon releases the window's snap memory off the new screen. A snapped window loses its zone unless the daemon put it on that screen itself (a restore, resnap or snap assist assigns the zone first), and a floating window forgets the zone it floated from."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Record that a window moved to a different screen. The daemon releases the window's snap memory off the new screen. A snapped window loses its zone unless the daemon put it on that screen itself (a restore, resnap or snap assist assigns the zone first), and a floating window forgets the zone it floated from. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -508,7 +508,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="windowCrossedScreens">
-            <annotation name="org.gtk.GDBus.DocString" value="Record that KWin moved a window between screens where a tiling engine runs on either end (the effect hands the window to the tiling engines itself). The daemon releases what every engine still holds of the window off the new screen: snap zones and floats, another tiling engine's background hold, and the record's slots naming the old monitor, keeping the engine that took the window there."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Record that KWin moved a window between screens where a tiling engine runs on either end (the effect hands the window to the tiling engines itself). The daemon releases what every engine still holds of the window off the new screen: snap zones and floats, another tiling engine's background hold, and the record's slots naming the old monitor, keeping the engine that took the window there. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -536,7 +536,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="reapplyWindowAppearance">
-            <annotation name="org.gtk.GDBus.DocString" value="Re-drive each placement engine's per-window decoration inputs (snap border / hidden title bar, autotile border; the scrolling engine has none of its own) for every window it manages. Snap re-states the zone only of a window it holds on the desktop shown on a screen it runs, so no window is moved into a zone it is not in. The compositor effect calls this after (re)registering its bridge so a freshly-(re)started effect converges on the daemon's authoritative appearance without waiting for the next natural change. Window-rule decoration overrides flow separately via the Rules rulesChanged broadcast."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Re-drive each placement engine's per-window decoration inputs (snap border / hidden title bar, autotile border, while the scrolling engine has none of its own) for every window it manages. Snap re-states the zone only of a window it holds on the desktop shown on a screen it runs, so no window is moved into a zone it is not in. The compositor effect calls this after (re)registering its bridge so a freshly-(re)started effect converges on the daemon's authoritative appearance without waiting for the next natural change. Window-rule decoration overrides flow separately via the Rules rulesChanged broadcast. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
         </method>
         <signal name="snapAllWindowsRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when snap-all-windows shortcut is triggered. KWin effect should collect unsnapped windows and call calculateSnapAllWindows (on org.plasmazones.Snap)."/>

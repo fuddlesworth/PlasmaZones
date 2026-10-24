@@ -11,12 +11,17 @@
 #include "../undo/commands/UpdateZoneNameCommand.h"
 #include "../undo/commands/UpdateZoneNumberCommand.h"
 #include "../undo/commands/UpdateZoneAppearanceCommand.h"
+#include "../undo/commands/BatchUpdateAppearanceCommand.h"
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
 
 #include "phosphor_i18n.h"
+#include <QMap>
 #include <QPointer>
 #include <QtMath>
+
+#include <array>
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -303,11 +308,53 @@ void EditorController::updateZoneAppearance(const QString& zoneId, const QString
 
     QVariant oldValue = zone.value(propertyName);
 
+    // Switching custom colours on also seeds the colours, in one undo step.
+    const bool enablesCustomColors =
+        propertyName.compare(::PhosphorZones::ZoneJsonKeys::UseCustomColors, Qt::CaseInsensitive) == 0 && value.toBool()
+        && !oldValue.toBool();
+    if (enablesCustomColors) {
+        m_undoController->beginMacro(PhosphorI18n::tr("Change Zone Appearance", "@action"));
+    }
+
     // Create and push command
     auto* command = new UpdateZoneAppearanceCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, propertyName,
                                                     oldValue, value, QString());
     m_undoController->push(command);
+
+    if (enablesCustomColors) {
+        seedCustomColors({zoneId});
+        m_undoController->endMacro();
+    }
     markUnsaved();
+}
+
+void EditorController::seedCustomColors(const QStringList& zoneIds)
+{
+    // A zone switching custom colours on starts from the theme defaults QML
+    // handed setDefaultZoneColors, which are what the global settings show,
+    // rather than whatever stored colours it carried while it followed the
+    // theme. Each colour is a command of its own inside the caller's macro, so
+    // undoing the switch puts the previous colours back too.
+    const std::array<std::pair<QLatin1String, QString>, 3> defaults{{
+        {::PhosphorZones::ZoneJsonKeys::HighlightColor, m_defaultHighlightColor},
+        {::PhosphorZones::ZoneJsonKeys::InactiveColor, m_defaultInactiveColor},
+        {::PhosphorZones::ZoneJsonKeys::BorderColor, m_defaultBorderColor},
+    }};
+    for (const auto& [key, color] : defaults) {
+        if (color.isEmpty()) {
+            continue;
+        }
+        const QString colorType(key);
+        QMap<QString, QString> oldColors;
+        for (const QString& zoneId : zoneIds) {
+            const QVariantMap zone = m_zoneManager->getZoneById(zoneId);
+            if (!zone.isEmpty()) {
+                oldColors[zoneId] = zone.value(colorType).toString();
+            }
+        }
+        m_undoController->push(
+            new BatchUpdateColorCommand(QPointer<ZoneManager>(m_zoneManager), zoneIds, colorType, oldColors, color));
+    }
 }
 
 /**

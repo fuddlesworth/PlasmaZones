@@ -20,6 +20,8 @@ class EditorController;
  * (e.g., SpinBox value drags) into a single undo step.
  *
  * Value semantics: -1 = no override (use global default), >= 0 = per-layout override.
+ * The per-layout aspect ratio class rides along as one more int setting; its
+ * value is the class itself (0 = Any), with no -1 state.
  */
 class UpdateGapOverrideCommand : public QUndoCommand
 {
@@ -32,7 +34,8 @@ public:
         OuterGapLeft,
         OuterGapRight,
         UsePerSideOuterGap,
-        OverlayDisplayMode
+        OverlayDisplayMode,
+        AspectRatioClass
     };
 
     explicit UpdateGapOverrideCommand(QPointer<EditorController> editorController, GapType type, int oldValue,

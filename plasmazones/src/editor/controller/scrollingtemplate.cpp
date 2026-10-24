@@ -19,6 +19,8 @@
 #include <QJsonObject>
 #include <QUuid>
 
+#include <utility>
+
 namespace PlasmaZones {
 
 // ---------------------------------------------------------------------------
@@ -43,10 +45,8 @@ void EditorController::setEditorModeInternal(int mode)
     }
     // A parked screen switch answers a question about the PREVIOUS edited
     // object; once the mode changed, applying it later could save or discard
-    // the wrong one. Drop it — the prompt's dialog acts on a cleared park as
-    // a no-op.
-    m_pendingTargetScreen.reset();
-    m_pendingTargetEditsLayout = false;
+    // the wrong one. Drop it, which also closes the prompt that asked.
+    dropPendingTargetScreen();
     // m_pendingLaunch is deliberately NOT dropped here, unlike the park
     // above: a parked launch has its own confirmation dialog whose Confirm
     // applies the launch wholesale (mode included), so it stays meaningful
@@ -90,8 +90,7 @@ void EditorController::beginTemplateSession(const QString& id, const QString& na
     // template session — the same-mode swap — would keep a park answering
     // for the PREVIOUS template and later save or discard the wrong one.
     // Same rationale as the setter's own clear, applied per session.
-    m_pendingTargetScreen.reset();
-    m_pendingTargetEditsLayout = false;
+    dropPendingTargetScreen();
 
     // A template has no fixed-zone reference, so the layout bounding box a
     // previous FIXED-geometry layout left behind is never the right basis for
@@ -101,8 +100,16 @@ void EditorController::beginTemplateSession(const QString& id, const QString& na
     // strip direction from the old layout's bounding box instead of the
     // monitor. Neither clearer on the launch path runs in that case, because
     // applyLaunch's screen switch early-returns when the target is unchanged.
-    if (m_layoutBoundsOverride.isValid()) {
-        m_layoutBoundsOverride = QSize();
+    // The device-pixel unit goes for the same reason: it scales
+    // targetScreenSize() too, and a template counts nothing in pixels. Each
+    // route back into layout mode reads both again from the layout it loads.
+    const QSize previousSize = targetScreenSize();
+    m_layoutBoundsOverride = QSizeF();
+    const bool oldFixedUnit = std::exchange(m_fixedGeometryInDevicePixels, false);
+    if (oldFixedUnit) {
+        Q_EMIT fixedGeometryInDevicePixelsChanged();
+    }
+    if (targetScreenSize() != previousSize) {
         Q_EMIT targetScreenSizeChanged();
     }
 
@@ -244,6 +251,12 @@ bool EditorController::saveScrollingTemplateNow()
     m_isNewLayout = false;
     const bool unsavedCleared = m_hasUnsavedChanges;
     m_hasUnsavedChanges = false;
+    // Same reason as saveLayout's registry reload: the daemon's
+    // scrollingTemplatesChanged reaches us only after this call returns, and
+    // a prompt's Save is followed at once by the load it was guarding, which
+    // would open the pre-save copy from the local store. The offline arm
+    // above wrote the store itself, so a reload there is a plain rescan.
+    reloadLocalTemplates();
     // Reconcile the model with what actually persisted: both paths normalize
     // (drop degenerate columns, sort/dedupe/cap presets, demote an
     // unusable Preset default), and fromJson applies the identical

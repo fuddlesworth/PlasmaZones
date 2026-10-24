@@ -214,22 +214,31 @@ bool ScrollEngine::outgrowsWorkArea(const ScrollState& state, const QString& win
     if (!params.respectMinimumSize || column.maximizedToEdges) {
         return false;
     }
+    // Past the work area by more than the rounding slack: a floor a pixel over
+    // is a fractional-scale answer to a column the work area capped, and the
+    // relayout holds it at the work area without stranding anything.
+    // settleCommittedFloors drops on the same test, so a floor this keeps
+    // tiled is one that sweep keeps too.
     const CommittedExtent committed = m_committedExtents.value(windowId);
     const int floorPx = extentFor(committed, params.axis).floorPx;
     if (floorPx > 0
-        && floorPx + ScrollStrip::tabbedMainReservationPx(column, params) > params.axis.mainSize(params.workArea)) {
+        && floorPx + ScrollStrip::tabbedMainReservationPx(column, params)
+            > params.axis.mainSize(params.workArea) + kCommittedExtentSlackPx) {
         return true;
     }
     // Across the strip, the most the column can ever give the tile while its
     // siblings keep their own floors: the stack can never hold a floor past
     // that, however its split is asked for. A minimized tile is laid out
-    // nowhere and reads no capacity.
+    // nowhere and reads no capacity. When two tiles' floors cannot fit the
+    // column together, whichever client teaches its floor SECOND is the one
+    // judged here against the other's, so that window floats: the floor is
+    // read as that window's claim on a column already holding its sibling's.
     const int crossFloorPx = crossExtentFor(committed, params.axis).floorPx;
     if (crossFloorPx <= 0) {
         return false;
     }
     const int capacityPx = strip.tileCrossCapacityPx(windowId, params);
-    return capacityPx >= 0 && crossFloorPx > capacityPx;
+    return capacityPx >= 0 && crossFloorPx > capacityPx + kCommittedExtentSlackPx;
 }
 
 bool ScrollEngine::floatIfOutgrowsWorkArea(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
@@ -247,7 +256,12 @@ bool ScrollEngine::floatIfOutgrowsWorkArea(ScrollState* state, const PhosphorEng
                            << committedCrossFloorFor(windowId, params.axis) << "outgrew work area"
                            << params.workArea.size() << "on" << key.screenId
                            << "— floating (open-time oversized policy)";
-    return floatWindowInternal(state, key, windowId, key.screenId, FloatAnnounce::Active, /*fullscreenHold=*/false,
+    // Passive, the open-time oversized float's announcement (finishFloatedOpen
+    // emits windowFloatingStateSynced): the engine decided this float, not the
+    // user, so the daemon mirrors the state with no float OSD and no restore
+    // to the window's free geometry, which for a window too large for any
+    // column is a size its client already refused.
+    return floatWindowInternal(state, key, windowId, key.screenId, FloatAnnounce::Passive, /*fullscreenHold=*/false,
                                applyAfter);
 }
 
@@ -327,7 +341,11 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
                 continue;
             }
             CommittedMainExtent& extent = extentFor(*it, params.axis);
-            if (extent.floorPx > 0 && extent.floorPx + reservation > workMain) {
+            // Both tests allow the rounding slack, outgrowsWorkArea's terms:
+            // a floor a pixel past the work area is one the relayout caps
+            // harmlessly, and an offer a pixel short of the floor satisfies it,
+            // since the client's answer to that offer would read as the offer.
+            if (extent.floorPx > 0 && extent.floorPx + reservation > workMain + kCommittedExtentSlackPx) {
                 // A floor its column can never offer. reportCommittedSize
                 // floats the window over one when the client teaches it, so
                 // this is a work area that shrank under a held floor: dropped,
@@ -341,12 +359,13 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
                                        << "— dropped";
                 dropFloor(extent);
                 layoutChanged = true;
-            } else if (extent.floorPx > 0
-                       && tileMainOfferPx(strip, tile.windowId, withoutCommittedFloorOf(params, tile.windowId))
-                           >= extent.floorPx
+            } else if (const int offerWithout = extent.floorPx > 0
+                           ? tileMainOfferPx(strip, tile.windowId, withoutCommittedFloorOf(params, tile.windowId))
+                           : -1;
+                       extent.floorPx > 0 && offerWithout >= extent.floorPx - kCommittedExtentSlackPx
                        && everyOtherColumnOffers(tile.windowId, key, params.axis,
                                                  [floorPx = extent.floorPx](int offerPx) {
-                                                     return offerPx >= floorPx;
+                                                     return offerPx >= floorPx - kCommittedExtentSlackPx;
                                                  })) {
                 // Satisfied: the column offers the tile at least the floor
                 // without it, because the user widened it or a sibling's floor
@@ -358,7 +377,12 @@ bool ScrollEngine::settleCommittedFloors(ScrollState& state, const PhosphorEngin
                 // narrows and pin it to an answer the client gave under other
                 // conditions. Dropped, the narrower column is offered as
                 // asked, and a client that still will not take it answers with
-                // a new floor. Layout-neutral by construction.
+                // a new floor. Layout-neutral by construction, except for an
+                // offer within the rounding slack SHORT of the floor, whose
+                // column narrows by that much and is reported.
+                if (offerWithout < extent.floorPx) {
+                    layoutChanged = true;
+                }
                 dropFloor(extent);
             }
             if (settleCommittedCrossFloor(strip, key, params, tile.windowId, crossExtentFor(*it, params.axis))) {
@@ -377,6 +401,14 @@ bool ScrollEngine::settleCommittedCrossFloor(const ScrollStrip& strip, const Pho
                                              CommittedCrossExtent& cross) const
 {
     if (cross.floorPx <= 0) {
+        // Give-back history with no floor left (CommittedCrossExtent::gaveBack)
+        // lasts while the tile is offered the width it was given back at. A
+        // new width is new conditions for a client that picks its cross
+        // extent from its width, and history kept past it would pin the next
+        // floor that client teaches as though it were a re-teach.
+        if (cross.gaveBack && qAbs(tileMainOfferPx(strip, windowId, params) - cross.mainPx) > kCommittedExtentSlackPx) {
+            cross = CommittedCrossExtent{};
+        }
         return false;
     }
     const int floorPx = cross.floorPx;
@@ -386,9 +418,11 @@ bool ScrollEngine::settleCommittedCrossFloor(const ScrollStrip& strip, const Pho
     // that changed under a held one. Dropped, the stack is split as asked,
     // and a client that still will not take its share answers again and gets
     // the oversized float. Left standing, the relayout would clamp it at the
-    // column's budget and lay the siblings past the work area.
+    // column's budget and lay the siblings past the work area. The rounding
+    // slack is outgrowsWorkArea's, so a floor that verdict keeps tiled is one
+    // this keeps too.
     const int capacityPx = strip.tileCrossCapacityPx(windowId, params);
-    if (capacityPx >= 0 && floorPx > capacityPx) {
+    if (capacityPx >= 0 && floorPx > capacityPx + kCommittedExtentSlackPx) {
         qCInfo(lcScrollEngine) << "settleCommittedFloors:" << windowId << "cross floor" << floorPx
                                << "no longer fits its column's" << capacityPx << "on" << key.screenId << "— dropped";
         cross = CommittedCrossExtent{};
@@ -397,9 +431,29 @@ bool ScrollEngine::settleCommittedCrossFloor(const ScrollStrip& strip, const Pho
     // The premise moved: the tile is offered another extent along the strip
     // than the one the client answered with this floor. A client that picks
     // its cross extent from its main one answers the new width differently,
-    // and since the compositor never reports a SHORTER cross answer, nothing
-    // would revise a floor kept past this. Dropped, the tile is offered its
-    // share, and a client still taller than that answers with a new floor.
+    // and is held to an answer it gave another width for as long as the floor
+    // stands. Dropped, the tile is offered its share, and a client still
+    // taller than that answers with a new floor.
+    //
+    // The cost is a round trip per width change the client did not cause: a
+    // user's width change, or a sibling's, drops the floor before the client
+    // has answered the new width, the stack re-splits without it for one
+    // pass, and a client still taller re-teaches it. A width change the
+    // client's own answer caused re-stamps the premise instead
+    // (reportCommittedSize), so it costs nothing, but only while that answer
+    // leaves a floor along the strip standing or itself moves the cross
+    // floor. An answer that gives the floor along the strip back entirely,
+    // with nothing new to say across it, leaves the premise at the old width
+    // and pays the round trip like a width change it did not cause.
+    //
+    // Judged against THIS context's column only, like every drop in this
+    // sweep, while the floor is the window's: a window on several desktops
+    // whose columns there have different widths drops the floor on every
+    // switch to a desktop whose width is not the premise, and its client
+    // teaches it again there. Accepted, since holding one desktop's answer
+    // over another desktop's column is the stale floor this drop exists to
+    // prevent, and per-context floors would be a structural change to the
+    // per-window record (CommittedExtent).
     const int mainOfferPx = tileMainOfferPx(strip, windowId, params);
     if (qAbs(mainOfferPx - cross.mainPx) > kCommittedExtentSlackPx) {
         qCInfo(lcScrollEngine) << "settleCommittedFloors:" << windowId << "cross floor" << floorPx << "learned at"
@@ -413,17 +467,21 @@ bool ScrollEngine::settleCommittedCrossFloor(const ScrollStrip& strip, const Pho
     // other column the window holds. Kept, it would come back into force the
     // moment a sibling joins and hold the tile to an answer the client gave
     // under other conditions. Dropped, the next split is offered as asked.
-    // Unlike the floor along the strip this need not be layout-neutral: the
-    // floor also lowers the tile's slack in the stack's rebalance, so a
-    // column whose siblings' minimums overflow it can split differently
-    // without it, and that is measured rather than assumed.
+    // Unlike the floor along the strip, whose satisfied drop moves the layout
+    // only for an offer within the slack short of it, this can move it
+    // further: the floor also lowers the tile's slack in the stack's
+    // rebalance, so a column whose siblings' minimums overflow it can split
+    // differently without it, and that is measured rather than assumed.
+    //
+    // A share within the rounding slack of the floor satisfies it, the
+    // floor-along-the-strip arm's terms.
     const ScrollLayoutParams without = withoutCommittedFloorOf(params, windowId);
     const int shareWithoutPx = strip.windowTileCrossExtentPx(windowId, without);
-    if (shareWithoutPx < floorPx
+    if (shareWithoutPx < floorPx - kCommittedExtentSlackPx
         || !everyOtherColumnOffers(
             windowId, key, params.axis,
             [floorPx](int offerPx) {
-                return offerPx >= floorPx;
+                return offerPx >= floorPx - kCommittedExtentSlackPx;
             },
             OfferAxis::Cross)) {
         return false;
@@ -590,11 +648,19 @@ void ScrollEngine::reportCommittedSize(const QString& rawWindowId, const QSize& 
     // tile there. A shorter cross overshoot is a tile in a stack answering
     // longer than its share of the column, and teaches a floor on that share
     // (CommittedCrossExtent), so the stack's split makes room for the window
-    // instead of laying the tile below it underneath.
-    const bool crossOverflow = axis.crossSize(committed) > axis.crossSize(params.workArea);
+    // instead of laying the tile below it underneath. Past the work area by
+    // more than the slack, like every compare here: a lone tile offered the
+    // whole cross extent answers a pixel over it on a fractional scale, and
+    // reading that as "cannot fit" floated a window that took its tile.
+    const bool crossOverflow = axis.crossSize(committed) > axis.crossSize(params.workArea) + kCommittedExtentSlackPx;
     const int offeredCross = axis.crossSize(offered);
     const int committedCross = qMin(axis.crossSize(committed), kMaxClientExtentPx);
     const bool taller = !crossOverflow && committedCross > offeredCross + kCommittedExtentSlackPx;
+    // Shorter than the offer across the strip: what gives a held cross floor
+    // back, the narrower answer's twin. A client holding an aspect ratio
+    // answers a full-height column a little short on every placement, and
+    // with no cross floor held that teaches nothing.
+    const bool shorter = committedCross < offeredCross - kCommittedExtentSlackPx;
     const CommittedExtent beforeEntry = m_committedExtents.value(windowId);
     const CommittedMainExtent before = extentFor(beforeEntry, axis);
     const CommittedCrossExtent crossBefore = crossExtentFor(beforeEntry, axis);
@@ -603,6 +669,15 @@ void ScrollEngine::reportCommittedSize(const QString& rawWindowId, const QSize& 
     // offer narrower than the memory, a park included, so what it said
     // earlier no longer stands. The compositor sends a parked tile's matched
     // answer for exactly this.
+    //
+    // The no-floor term is load-bearing, not a readability guard: the arm it
+    // gates resets the whole extent, floor included. Every write keeps the
+    // memory at or under the floor, and a held floor normally holds the offer
+    // at or over it, but not when the work area caps the column. A floor up to
+    // kCommittedExtentSlackPx past the work area stays tiled
+    // (outgrowsWorkArea, settleCommittedFloors), its column is capped below
+    // it, and a matched answer to that capped offer then reads as a memory
+    // longer than the offer. Without the term it would wipe the floor.
     const bool matched = !wider && !narrower;
     const bool mayEndPeek = matched && before.floorPx == 0 && before.peekPx > offeredMain;
     // Nothing to learn and nothing to float, answered before the relayout
@@ -612,15 +687,18 @@ void ScrollEngine::reportCommittedSize(const QString& rawWindowId, const QSize& 
     // end, a wider one repeating the floor already held, a narrower one with
     // no floor to give back and no memory to replace, or a narrower one
     // repeating the memory while no floor can move (none held, or a pinned
-    // one). Across it: an answer no longer than the offer, or one repeating
-    // the cross floor already held. Only an answer that is steady on both
-    // axes returns here; one steady along the strip alone learns only across
-    // it below, so a repeated wider answer cannot pin its floor on the way.
+    // one). Across it: a longer answer repeating the cross floor already
+    // held, or any answer no longer than the offer that cannot give a cross
+    // floor back (none held, or a pinned one). Only an answer that is steady
+    // on both axes returns here; one steady along one axis alone learns only
+    // along the other below, so a repeated answer cannot pin a floor on the
+    // way.
     const bool mainNoop = !crossOverflow
         && ((matched && !mayEndPeek) || (wider && committedMain == before.floorPx)
             || (narrower && before.floorPx == 0 && before.peekPx == 0)
             || (narrower && committedMain == before.peekPx && (before.floorPx == 0 || before.pinned)));
-    const bool crossNoop = !taller || committedCross == crossBefore.floorPx;
+    const bool crossNoop =
+        taller ? committedCross == crossBefore.floorPx : !(shorter && crossBefore.floorPx > 0 && !crossBefore.pinned);
     if (mainNoop && crossNoop) {
         return;
     }
@@ -652,7 +730,6 @@ void ScrollEngine::reportCommittedSize(const QString& rawWindowId, const QSize& 
     const int extentBefore = strip.windowColumnMainExtentPx(windowId, params);
     CommittedExtent& entry = m_committedExtents[windowId];
     CommittedMainExtent& extent = extentFor(entry, axis);
-    bool peekEnded = false;
     // An answer steady along the strip learns nothing along it: only its
     // cross half below is new.
     if (wider && !mainNoop) {
@@ -681,10 +758,13 @@ void ScrollEngine::reportCommittedSize(const QString& rawWindowId, const QSize& 
         // Narrower than an offer a floor had widened gives the widening back:
         // down to the answer while that still overshoots what the column
         // offers without the floor, entirely once it does not. A pinned floor
-        // stays.
+        // stays. "Overshoots" by more than the slack: a floor kept a pixel
+        // past what the column offers without it is one settleCommittedFloors
+        // could never find satisfied, and it would hold the column a pixel
+        // wide for good.
         if (extent.floorPx > 0 && !extent.pinned) {
             const int offerWithout = tileMainOfferPx(strip, windowId, withoutCommittedFloorOf(params, windowId));
-            extent.floorPx = committedMain > offerWithout ? committedMain : 0;
+            extent.floorPx = committedMain > offerWithout + kCommittedExtentSlackPx ? committedMain : 0;
             extent.gaveBack = true;
         }
     } else if (mayEndPeek) {
@@ -696,27 +776,48 @@ void ScrollEngine::reportCommittedSize(const QString& rawWindowId, const QSize& 
         // give-back history with it, endStalePeeks' reason. Kept while
         // another column the window holds still offers the memory, which is
         // endStalePeeks' rule too: that one is not stale. A held floor never
-        // reaches here, so a matched answer never touches one.
+        // reaches here, so a matched answer never touches one. (mayEndPeek
+        // already holds the memory longer than this offer.)
         const int peekPx = extent.peekPx;
-        if (offeredMain < peekPx
-            && everyOtherColumnOffers(
-                windowId, key, axis,
-                [peekPx](int offerPx) {
-                    return offerPx < peekPx;
-                })) {
+        if (everyOtherColumnOffers(windowId, key, axis, [peekPx](int offerPx) {
+                return offerPx < peekPx;
+            })) {
             extent = CommittedMainExtent{};
-            peekEnded = true;
         }
     }
     const int floorAfter = extent.floorPx;
+    // Read before the entry can be erased below: whether the peek memory
+    // moved, which the exit for an unchanged extent lays out again for.
+    const bool peekMoved = extent.peekPx != before.peekPx;
     // Across the strip: a tile answering longer than its share of the stack,
     // inside the work area, holds that share at the answer, so the split
     // gives the tile at least this and shrinks its siblings. Its premise is
     // the offer along the strip read AFTER the floor along it is recorded,
-    // since that is the extent the tile is offered from here on.
+    // since that is the extent the tile is offered from here on. A longer
+    // answer after a give-back pins the floor, the rule along the strip.
     CommittedCrossExtent& cross = crossExtentFor(entry, axis);
-    if (taller) {
+    if (taller && !crossNoop) {
+        if (cross.gaveBack) {
+            cross.pinned = true;
+        }
         cross.floorPx = committedCross;
+        cross.mainPx = tileMainOfferPx(strip, windowId, params);
+    } else if (shorter && cross.floorPx > 0 && !cross.pinned) {
+        // Shorter than a share a floor had lengthened gives the lengthening
+        // back, the narrower answer's rule across the strip: down to the
+        // answer while that still overshoots the share the tile gets without
+        // the floor, entirely once it does not.
+        const int shareWithout = strip.windowTileCrossExtentPx(windowId, withoutCommittedFloorOf(params, windowId));
+        cross.floorPx = committedCross > shareWithout + kCommittedExtentSlackPx ? committedCross : 0;
+        cross.gaveBack = true;
+        cross.mainPx = tileMainOfferPx(strip, windowId, params);
+    } else if (cross.floorPx > 0 && floorAfter > 0 && floorAfter != before.floorPx) {
+        // This answer moved the tile's offer along the strip (its floor there
+        // changed), and the cross extent in the same commit was given at that
+        // width, so the held cross floor's premise is the new offer.
+        // Otherwise the next sweep would read a premise this answer itself
+        // moved, drop the floor, and wait a round trip for the client to
+        // teach it again.
         cross.mainPx = tileMainOfferPx(strip, windowId, params);
     }
     const int crossFloorAfter = cross.floorPx;
@@ -734,16 +835,20 @@ void ScrollEngine::reportCommittedSize(const QString& rawWindowId, const QSize& 
         qCInfo(lcScrollEngine) << "reportCommittedSize:" << windowId << "offered" << offered << "committed" << committed
                                << "cannot fit the work area" << params.workArea.size() << "on" << key.screenId
                                << "— floating (open-time oversized policy)";
-        floatWindowInternal(state, key, windowId, key.screenId);
+        // Passive, floatIfOutgrowsWorkArea's reason: the engine decided it.
+        floatWindowInternal(state, key, windowId, key.screenId, FloatAnnounce::Passive);
         return;
     }
     // A cross floor moves the stack's split, which the column's extent along
     // the strip does not show, so it counts as a change on its own.
     if (strip.windowColumnMainExtentPx(windowId, params) == extentBefore && crossFloorAfter == crossBefore.floorPx) {
-        // An ended memory moves no model state, only which of the park and
-        // the screen-edge clamp the next pass picks for a straddling tile, so
-        // it is laid out again without being republished.
-        if (peekEnded && key == currentKeyForScreen(key.screenId)) {
+        // A peek memory that ended or was replaced moves no model state, only
+        // which of the park and the screen-edge clamp the next pass picks for
+        // a straddling tile, so it is laid out again without being
+        // republished. A narrower answer that lowered the memory counts too:
+        // a straddler parked on the old memory would otherwise stay parked on
+        // it until something else retiled.
+        if (peekMoved && key == currentKeyForScreen(key.screenId)) {
             scheduleRetileForScreen(key.screenId);
         }
         return;

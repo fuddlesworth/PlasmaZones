@@ -341,6 +341,31 @@ void TilingHandler::reportScrollClipLoss(const QString& windowId, const QString&
 
 QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
 {
+    // Every routine negative answers empty from the resolve: a dialog, popup or
+    // non-strip window, and a tiled member of a NON-scrolling screen (every
+    // autotile and snap window in a mixed session, per frame). Not a clip loss,
+    // and the message would have to allocate (a values() copy plus a join) on
+    // the paint path just to say so.
+    const QString tracked = scrollStripScreenFor(windowId);
+    if (tracked.isEmpty()) {
+        return QString();
+    }
+    // Connected-output gate (see the header doc): cached set lookup, so the
+    // per-candidate calls inside the focus-follows-mouse stacking walks pay
+    // a hash probe instead of an O(outputs) id-building scan.
+    const QString trackedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(tracked);
+    if (!m_effect->connectedPhysicalIds().contains(trackedPhysical)) {
+        reportScrollClipLoss(windowId, QStringLiteral("tracked screen %1 has no connected output").arg(tracked));
+        return QString();
+    }
+    // Answered. Re-arm the report so a LATER loss for this window is announced
+    // rather than swallowed as already-seen.
+    m_scrollClipLossReported.remove(windowId);
+    return tracked;
+}
+
+QString TilingHandler::scrollStripScreenFor(const QString& windowId) const
+{
     // Membership FIRST, and it supplies the screen. The two facts used to come
     // from different maps written under different conditions: the apply loop
     // marks a window tiled (bar its own fullscreen) but only records its screen when
@@ -352,8 +377,6 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
     // took clicks on, the neighbouring output.
     const QString tiledScreen = TilingStateHelpers::screenForTiledWindow(m_border, windowId);
     if (tiledScreen.isEmpty()) {
-        // Routine negative: every dialog, popup and non-strip window takes
-        // this exit per frame. Not a clip loss — nothing to report.
         return QString();
     }
     // Both maps get a say, and the one that names an actual scrolling screen
@@ -384,31 +407,11 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
     // the scrolling set arrive on independent signals, so intersecting made a
     // screen leaving scrolling lose clip AND override together for the frames
     // between them. The intersection belongs on the rule and verb consumers.
-    QString tracked;
     if (m_scrollingScreens.contains(tiledScreen)) {
-        tracked = tiledScreen;
-    } else if (const QString recorded = m_notifiedWindowScreens.value(windowId);
-               m_scrollingScreens.contains(recorded)) {
-        tracked = recorded;
-    } else {
-        // Routine negative: a tiled member of a NON-scrolling screen — every
-        // autotile and snap window in a mixed session answers here per frame.
-        // Not a clip loss, and the message would have to allocate (a values()
-        // copy plus a join) on the paint path just to say so.
-        return QString();
+        return tiledScreen;
     }
-    // Connected-output gate (see the header doc): cached set lookup, so the
-    // per-candidate calls inside the focus-follows-mouse stacking walks pay
-    // a hash probe instead of an O(outputs) id-building scan.
-    const QString trackedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(tracked);
-    if (!m_effect->connectedPhysicalIds().contains(trackedPhysical)) {
-        reportScrollClipLoss(windowId, QStringLiteral("tracked screen %1 has no connected output").arg(tracked));
-        return QString();
-    }
-    // Answered. Re-arm the report so a LATER loss for this window is announced
-    // rather than swallowed as already-seen.
-    m_scrollClipLossReported.remove(windowId);
-    return tracked;
+    const QString recorded = m_notifiedWindowScreens.value(windowId);
+    return m_scrollingScreens.contains(recorded) ? recorded : QString();
 }
 
 bool TilingHandler::atScrollPark(KWin::EffectWindow* w) const

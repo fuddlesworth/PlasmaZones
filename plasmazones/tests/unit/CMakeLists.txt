@@ -212,9 +212,15 @@ target_link_libraries(test_wts_activity_scope PRIVATE Qt6::Test Qt6::Core Qt6::D
 add_test(NAME test_wts_activity_scope COMMAND test_wts_activity_scope)
 
 # The snap engine's per-desktop membership arm: adoption grants a store of
-# its own on the desktop in view, the persisted per-desktop zone map, and the
-# close / release / restore paths over every member store. Same fixture shape
-# as test_snap_per_monitor (QTEST_MAIN so zone geometry resolves).
+# its own on the desktop in view, the persisted per-desktop zone map, the
+# close / release / restore paths over every member store, the carry into
+# another desktop's layout, and the re-apply on a desktop or activity switch,
+# including the return from a tiling or scrolling desktop or activity to a
+# window shown in both (#1151). Also the span a layout-switch resnap keeps,
+# the declined managed restore's forget, the re-file of an adopted membership
+# on a split, and the member-only reads of the resnap and the rotation. Same
+# fixture shape as test_snap_per_monitor (QTEST_MAIN so zone geometry
+# resolves).
 add_executable(test_snap_desktop_membership core/snap/test_snap_desktop_membership.cpp)
 target_link_libraries(test_snap_desktop_membership PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_desktop_membership COMMAND test_snap_desktop_membership)
@@ -920,7 +926,9 @@ p_add_test(test_layout_registry_cache core/layout/test_layout_registry_cache.cpp
 # The editor's save payload is schema-gated at the D-Bus boundary, so the shape
 # EditorController::saveLayout emits has to satisfy the layout schema. Pins both
 # serialized forms of aspectRatioClass (editor int, canonical string from
-# Layout::toJson) against the schema that gates createLayoutFromJson/updateLayout.
+# Layout::toJson) against the schema that gates createLayoutFromJson/updateLayout,
+# the type of the device-pixel unit flag (#1160), and the Layout::toJson round
+# trip of fixed zones, in logical and in device pixels, back through that gate.
 p_add_test(test_layout_schema_editor_shape core/layout/test_layout_schema_editor_shape.cpp)
 
 # exportLayout / importLayout report their outcome rather than logging it and
@@ -1320,14 +1328,18 @@ add_test(NAME test_shader_timing COMMAND test_shader_timing)
 
 # Pure-logic test for the scroll-managed window decision helpers
 # (tilinghandler/scrolldecisions.h) — the windowed-fullscreen 5-way batch
-# decision and the maximize-to-edges 3-way decision (a 16-row truth table
+# decision and the maximize-to-edges 3-way decision (a full truth table
 # each, plus their in-flight marker walks), the counter-assert burst budget
 # (rate limit, rollover, fresh-batch re-arm), the compositor-claim release
-# table with its teardown order and fullscreen-skip retention, and the
-# size-continuity carry-forward table. Same header-only reach as the anchor
-# test.
+# table with its teardown order and fullscreen-skip retention, the
+# size-continuity carry-forward table, the KWin move off a strip
+# (isKWinMoveOffStrip, a cropped straddler sent to the next output included),
+# the X11 foreign-size verdict that learns a size the client insists on, and
+# which committed sizes are reported to the engine, an answer at a park
+# included. The file's own header lists the rest. Same header-only reach as
+# the anchor test.
 add_executable(test_scroll_decisions ui/effect/test_scroll_decisions.cpp)
-target_link_libraries(test_scroll_decisions PRIVATE Qt6::Test Qt6::Core)
+target_link_libraries(test_scroll_decisions PRIVATE Qt6::Test Qt6::Core PhosphorProtocol::PhosphorProtocol)
 target_include_directories(test_scroll_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
 add_test(NAME test_scroll_decisions COMMAND test_scroll_decisions)
 
@@ -1341,9 +1353,11 @@ add_test(NAME test_strip_keys COMMAND test_strip_keys)
 
 # Pure-logic test for the desktop-switch pre-autotile restore decision
 # (tilinghandler/pretiledecisions.h) — the truth table over
-# (local rect, rect's bucket screen, tracked-ness, windowed fullscreen),
-# pinning the cross-screen decline that keeps a bucket rect from another
-# monitor moving the window there. Same header-only reach as the scroll test.
+# (local rect, rect's bucket screen, tracked-ness, windowed fullscreen,
+# tiled-ness), pinning the cross-screen decline that keeps a bucket rect from
+# another monitor moving the window there and the never-tiled decline that
+# keeps the daemon's mode-shared record out of it (#1151). Same header-only
+# reach as the scroll test.
 add_executable(test_pretile_decisions ui/effect/test_pretile_decisions.cpp)
 target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
@@ -1393,7 +1407,8 @@ add_test(NAME test_command_stamps COMMAND test_command_stamps)
 
 # Pure-logic test for a tile batch's overlap restack
 # (tilinghandler/stackdecisions.h): each group at its lowest member's slot,
-# every other window kept where it is. Same header-only reach.
+# every other window kept where it is, and when a saved stacking order is
+# replayed for the context a batch belongs to. Same header-only reach.
 add_executable(test_stack_decisions ui/effect/test_stack_decisions.cpp)
 target_link_libraries(test_stack_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_stack_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
@@ -1616,8 +1631,9 @@ target_link_libraries(test_wta_bus_boundary PRIVATE Qt6::Test Qt6::Core Qt6::DBu
 add_test(NAME test_wta_bus_boundary COMMAND test_wta_bus_boundary)
 
 # The bus snap gate: a D-Bus snap of one window lands only where a keyboard
-# snap could. Same fixture.
-add_executable(test_snap_adaptor_gates dbus/test_snap_adaptor_gates.cpp
+# snap could. Same fixture. helpers/BusPeer.h is listed so AUTOMOC generates
+# the BusHost metaobject a stranger peer's batch is called through.
+add_executable(test_snap_adaptor_gates dbus/test_snap_adaptor_gates.cpp helpers/BusPeer.h
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_snap_adaptor_gates PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_link_libraries(test_snap_adaptor_gates PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
@@ -1762,6 +1778,10 @@ add_executable(test_adaptor_bus_context dbus/test_adaptor_bus_context.cpp helper
 target_link_libraries(test_adaptor_bus_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_adaptor_bus_context COMMAND test_adaptor_bus_context)
 
+# DbusHelpers::admitCompositorReport and CompositorBridgeAdaptor registration
+# over a private bus (#1155), plus a source tripwire tying every XML method
+# documented compositor-only to a gated slot. Links plasmazones_core only;
+# PhosphorProtocol arrives through it.
 add_executable(test_compositor_only_gate dbus/test_compositor_only_gate.cpp helpers/BusPeer.h)
 target_link_libraries(test_compositor_only_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_compositor_only_gate COMMAND test_compositor_only_gate)
@@ -1897,8 +1917,10 @@ add_test(NAME test_drag_policy COMMAND test_drag_policy)
 
 # Drag-insert cancel sweep seams + desktop-switch announce burst (the #1028
 # follow-up mechanisms): the live sweep's dragStillActive derivation, the
-# dead-session sweep's mark-first ordering, and TilingAdaptor's emit-time
-# desktop stamping under a per-output report burst.
+# dead-session sweep's mark-first ordering, TilingAdaptor's emit-time
+# desktop stamping under a per-output report burst, and the placements held
+# behind a queued screens announce (#1151): TilingAdaptor::runBehindScreensAnnounce
+# and SnapAdaptor's sequenced batches and re-statements.
 add_executable(test_windowdrag_cancel_sweeps dbus/test_windowdrag_cancel_sweeps.cpp
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_windowdrag_cancel_sweeps PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
@@ -1910,12 +1932,19 @@ add_test(NAME test_windowdrag_cancel_sweeps COMMAND test_windowdrag_cancel_sweep
 
 # A drag ending on another monitor than the one snap holds the window on:
 # the pending and dead arms through dragEndedOnScreen, an activated drop
-# through its cross-screen block. Two snapping outputs on a fake source.
+# through its cross-screen block, Escape on a pending drag, the drag-out size
+# preview across monitors and the drop-indicator overrides. Two snapping
+# outputs on a fake source, and for the drag re-insert arms the second one
+# turned into an autotile or a scrolling screen (a real AutotileEngine and a
+# real ScrollEngine; plasmazones_core already carries both, the engines are
+# named here because the test constructs them directly).
 add_executable(test_windowdrag_cross_screen dbus/test_windowdrag_cross_screen.cpp
                ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_windowdrag_cross_screen PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_link_libraries(test_windowdrag_cross_screen PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
-                                                           PhosphorSnapEngine::PhosphorSnapEngine)
+                                                           PhosphorSnapEngine::PhosphorSnapEngine
+                                                           PhosphorTileEngine::PhosphorTileEngine
+                                                           PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_windowdrag_cross_screen COMMAND test_windowdrag_cross_screen)
 
 # The shell's drop proxy on WindowDragAdaptor (registerDropProxy /
@@ -2751,8 +2780,8 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench" TIMEOUT 900)
 #   test_desktop_move_stash: the free geometry a desktop move carries
 #   test_exact_trigger_match: trigger-set exact-match resolution
 #   test_scroll_behaviour_parse: scrolling behaviour token parsing
-#   test_scroll_tab_layout: tab-indicator layout geometry (declared ~300
-#     lines below this block, not with the declarations that follow it)
+#   test_scroll_tab_layout: tab-indicator layout geometry (declared further
+#     down the file, not with the declarations that follow this block)
 #   test_transition_pass_pure: transition-pass pure helpers
 #   test_modifier_utils: modifier parsing (source lives in core/, declared here)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2961,16 +2990,25 @@ unset(_pack_validator_arms)
 # A hole or a tie in the zOrder run therefore mis-paints the canvas and breaks
 # divider hit-testing, silently. This pins density across every mutation, plus
 # the contract that undoing a delete returns the zone to its original height
-# rather than to the top. ZoneManager lives in the editor executable rather than
-# a library, so its TUs are compiled into the test directly.
+# rather than to the top. Beside those, the manager's fixed-zone and input
+# edges: a resync of fixed zones is no edit, non-finite input is refused,
+# switching custom colours on sets only that property, the geometry snapshot
+# the fill and divider undo replay (pixels back verbatim, the relative copy
+# re-derived against the current reference, and a cancel's restore left
+# unclamped and unmarked), and the clipboard's round trip of a fixed zone. ZoneManager, the two commands and the clipboard
+# helper live in the editor executable rather than a library, so their TUs are
+# compiled into the test directly.
 add_executable(test_zone_zorder editor/test_zone_zorder.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/helpers/ZoneSerialization.cpp
                ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/ZoneManager.cpp
                ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/ZoneAutoFiller.cpp
                ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/zonemanager/divider.cpp
                ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/zonemanager/zorder.cpp
                ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/zonemanager/serialization.cpp
                ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/undo/commands/BaseZoneCommand.cpp
-               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/undo/commands/DeleteZoneCommand.cpp)
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/undo/commands/DeleteZoneCommand.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/undo/commands/DividerResizeCommand.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/undo/commands/FillZoneCommand.cpp)
 # Qt6::Gui is explicit: DeleteZoneCommand derives from QUndoCommand. It arrives
 # transitively via plasmazones_core today, but that is not a contract.
 target_link_libraries(test_zone_zorder PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)

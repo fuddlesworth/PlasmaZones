@@ -251,9 +251,13 @@ void WindowTrackingService::bufferWindowsOfRemovedLayout(PhosphorZones::Layout* 
             if (position <= 0 || screenId.isEmpty() || store->isFloating(windowId)) {
                 return;
             }
+            // A screen with no desktop known (shown <= 0) holds every desktop
+            // in view, the answer updatedWindowGeometries gives: with nothing to
+            // say a window is hidden, it keeps its slot rather than being
+            // unsnapped by the prune.
             const int shown = m_layoutManager->currentVirtualDesktopForScreen(screenId);
             const bool inView =
-                (desktop == 0 || (shown > 0 && desktop == shown)) && activityInView(activity, currentActivity);
+                (desktop == 0 || shown <= 0 || desktop == shown) && activityInView(activity, currentActivity);
             if (!inView || (m_snapEngine && !m_snapEngine->isActiveOnScreen(screenId))) {
                 return;
             }

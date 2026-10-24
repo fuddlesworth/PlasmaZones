@@ -39,6 +39,7 @@
 #include <PhosphorZones/ZoneDetector.h>
 #include <QProcess>
 #include <QPointer>
+#include <QSet>
 #include "config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -233,19 +234,13 @@ void Daemon::connectScreenSignals()
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
                 PhosphorScreens::ScreenIdentity::invalidateEdidCache(removedName);
 
-                // Clean stale entries from layout visibility restrictions
-                // Check both screen ID (new) and connector name (legacy)
-                for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
-                    QStringList allowed = layout->allowedScreens();
-                    if (allowed.isEmpty())
-                        continue;
-                    bool changed = false;
-                    changed |= (allowed.removeAll(removedScreenId) > 0);
-                    changed |= (allowed.removeAll(removedName) > 0);
-                    if (changed) {
-                        layout->setAllowedScreens(allowed);
-                    }
-                }
+                // A layout's allowedScreens is left as the user set it: an
+                // absent screen's id in it matches no screen while it is gone,
+                // and the monitor coming back finds its restriction in place,
+                // as its assignments and virtual-screen config do. Stripping
+                // it here persisted the loss, and a layout restricted to that
+                // monitor alone became one shown on every screen.
+
                 // Drop the removed screen from the assignment snapshot so it
                 // doesn't linger as a stale entry (kept consistent with the
                 // add / context-switch / apply refresh points), and from the
@@ -293,17 +288,69 @@ void Daemon::connectScreenSignals()
     });
 
     // A scale change moves every zone of a layout whose fixed geometry counts
-    // device pixels, at an unchanged logical rect, so it takes the same
-    // debounced pass: the recalculation it requests carries the new scale, and
-    // the overlays and snapped windows follow from there. It also fires once
-    // per output at startup, when the output's sensor maps and the coarse
-    // integer scale gives way to the real fractional one. A layout whose fixed
-    // geometry is logical, or that has none, is left as it is by the recalc's
-    // own staleness check.
-    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::logicalScaleChanged, this, [this] {
-        m_geometryUpdatePending = true;
-        m_geometryUpdateTimer.start();
-    });
+    // device pixels, at an unchanged logical rect, and nothing else. It fires
+    // when an output's real scale differs from the one known before (at
+    // startup that is a fractional scale, once the output's sensor maps and
+    // the coarse integer one gives way to it), so a session with no such
+    // layout has nothing to redo.
+    //
+    // A device-pixel layout shown on the output takes the debounced geometry
+    // pass: the recalculation it requests carries the new scale, and the
+    // overlays follow, as do snapped windows when the setting that keeps them
+    // in their zones across a resolution change is on. One shown nowhere was
+    // last computed against the primary screen for the previews (the
+    // all-layouts recalculation in initLayoutAndSettingsWiring), so a change
+    // of the primary's scale recalculates it the same way.
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::logicalScaleChanged, this,
+            [this](const PhosphorScreens::PhysicalScreen& screen) {
+                if (!m_layoutManager || !m_screenManager) {
+                    return;
+                }
+                QList<PhosphorZones::Layout*> devicePixelLayouts;
+                for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
+                    if (layout->fixedGeometryInDevicePixels()) {
+                        devicePixelLayouts.append(layout);
+                    }
+                }
+                if (devicePixelLayouts.isEmpty()) {
+                    return;
+                }
+                // The connector name stands in for a screen with no identity,
+                // as the screen adaptor's own handler of this signal reads it.
+                const QString physId = screen.identifier.isEmpty() ? screen.name : screen.identifier;
+                const QString activity = currentActivity();
+                QSet<PhosphorZones::Layout*> shown;
+                bool shownOnOutput = false;
+                for (const QString& screenId : m_screenManager->effectiveScreenIds()) {
+                    PhosphorZones::Layout* const layout =
+                        m_layoutManager->layoutForScreen(screenId, currentDesktopForScreen(screenId), activity);
+                    if (!layout) {
+                        continue;
+                    }
+                    shown.insert(layout);
+                    if (layout->fixedGeometryInDevicePixels()
+                        && PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physId)) {
+                        shownOnOutput = true;
+                    }
+                }
+                if (shownOnOutput) {
+                    m_geometryUpdatePending = true;
+                    m_geometryUpdateTimer.start();
+                }
+                QScreen* const primary = Utils::primaryScreen();
+                if (!primary || PhosphorScreens::ScreenIdentity::identifierFor(primary) != physId) {
+                    return;
+                }
+                const qreal primaryScale =
+                    PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), physId, primary);
+                for (PhosphorZones::Layout* layout : std::as_const(devicePixelLayouts)) {
+                    if (!shown.contains(layout)) {
+                        PhosphorZones::LayoutComputeService::recalculateSync(
+                            layout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary),
+                            primaryScale);
+                    }
+                }
+            });
 
     // Don't pre-create overlay windows at startup. On Wayland with the layer-shell
     // QPA plugin this can cause visibility issues. Create on-demand in show() instead,
@@ -541,6 +588,11 @@ void Daemon::connectDesktopActivity()
         // Connect activity changes: update all components
         connect(m_activityManager.get(), &PhosphorWorkspaces::ActivityManager::currentActivityChanged, this,
                 [this](const QString& activityId) {
+                    // The first activity known after a late start is no
+                    // switch: the startup welcome OSD waits for exactly this
+                    // change and shows it (finalizeStartup), so the switch OSD
+                    // below would be a second one.
+                    const bool initial = m_layoutManager->currentActivity().isEmpty();
                     // Registry before overlay — see the initial-activity note
                     // above (the overlay's refresh resolves via the registry).
                     m_layoutManager->setCurrentActivity(activityId);
@@ -592,7 +644,9 @@ void Daemon::connectDesktopActivity()
                         m_overlayService->updateGeometries();
                     }
 
-                    showDesktopSwitchOsd(activityId);
+                    if (!initial) {
+                        showDesktopSwitchOsd(activityId);
+                    }
                     // Refresh the active-assignment snapshot for the new activity
                     // context (no apply — the switch handles its own windows) so a
                     // later rule edit doesn't falsely re-resnap. Mirrors the

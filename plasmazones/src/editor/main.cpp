@@ -210,7 +210,7 @@ int main(int argc, char* argv[])
     });
 
     // Create the editor controller. This is cheap: wires up services and
-    // loads local KConfig but does not make any blocking D-Bus calls to
+    // loads the local JSON config but does not make any blocking D-Bus calls to
     // the daemon — those happen only when applyLaunchArgs() invokes
     // loadLayout/createNewLayout.
     EditorController controller;

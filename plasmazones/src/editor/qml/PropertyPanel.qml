@@ -96,10 +96,35 @@ Rectangle {
             return;
 
         fixedGeometryCheck.checked = zone.geometryMode === 1;
-        fixedXSpin.value = zone.fixedX !== undefined ? zone.fixedX : 0;
-        fixedYSpin.value = zone.fixedY !== undefined ? zone.fixedY : 0;
-        fixedWidthSpin.value = zone.fixedWidth !== undefined ? zone.fixedWidth : 50;
-        fixedHeightSpin.value = zone.fixedHeight !== undefined ? zone.fixedHeight : 50;
+        // Each spin box's from/to widen around its `stored` value, and a spin
+        // box clamps a value written outside its current bounds. A caller
+        // handing in a fresh zone runs before selectedZone catches up, so the
+        // stored values (and with them the bounds) still describe the previous
+        // zone. Write stored from the zone being synced first, so the bounds
+        // are already right when the value lands.
+        fixedXSpin.stored = zone.fixedX !== undefined ? zone.fixedX : 0;
+        fixedYSpin.stored = zone.fixedY !== undefined ? zone.fixedY : 0;
+        fixedWidthSpin.stored = zone.fixedWidth !== undefined ? zone.fixedWidth : 50;
+        fixedHeightSpin.stored = zone.fixedHeight !== undefined ? zone.fixedHeight : 50;
+        fixedXSpin.value = fixedXSpin.stored;
+        fixedYSpin.value = fixedYSpin.stored;
+        fixedWidthSpin.value = fixedWidthSpin.stored;
+        fixedHeightSpin.value = fixedHeightSpin.stored;
+    }
+
+    // Commit one fixed-geometry field, taking the other three from the zone
+    // itself. Reading them off the sibling spin boxes would hand the model
+    // their clamped values (a spin box holds no value past its own bounds),
+    // so editing one field could silently truncate another.
+    function commitFixedField(field, newValue) {
+        if (!selectedZoneId || !editorController)
+            return;
+
+        const zone = editorController.getZoneById(selectedZoneId);
+        if (!zone || !zone.id)
+            return;
+
+        editorController.updateZoneFixedGeometry(selectedZoneId, field === "x" ? newValue : zone.fixedX, field === "y" ? newValue : zone.fixedY, field === "width" ? newValue : zone.fixedWidth, field === "height" ? newValue : zone.fixedHeight);
     }
 
     // Same imperative-sync idiom for the appearance controls. Note what does
@@ -587,15 +612,19 @@ Rectangle {
 
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "X:")
-                    from: 0
-                    to: editorController ? editorController.targetScreenSize.width : 99999
-                    value: selectedZone ? (selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0) : 0
+                    property real stored: selectedZone && selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0
+
+                    // Widened to hold whatever the zone already stores (an
+                    // offset past the screen, or a negative one the format
+                    // allows), so showing it never clamps it. Writable because
+                    // syncGeometryControls sets it from a fresher zone than
+                    // selectedZone before it writes the value.
+                    from: Math.min(0, Math.floor(stored))
+                    to: Math.max(editorController ? editorController.targetScreenSize.width : 99999, Math.ceil(stored))
+                    value: stored
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "X position in pixels")
-                    onValueModified: {
-                        if (selectedZoneId && editorController)
-                            editorController.updateZoneFixedGeometry(selectedZoneId, value, fixedYSpin.value, fixedWidthSpin.value, fixedHeightSpin.value);
-                    }
+                    onValueModified: propertyPanel.commitFixedField("x", value)
                 }
 
                 SpinBox {
@@ -603,15 +632,14 @@ Rectangle {
 
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "Y:")
-                    from: 0
-                    to: editorController ? editorController.targetScreenSize.height : 99999
-                    value: selectedZone ? (selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0) : 0
+                    property real stored: selectedZone && selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0
+
+                    from: Math.min(0, Math.floor(stored))
+                    to: Math.max(editorController ? editorController.targetScreenSize.height : 99999, Math.ceil(stored))
+                    value: stored
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "Y position in pixels")
-                    onValueModified: {
-                        if (selectedZoneId && editorController)
-                            editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, value, fixedWidthSpin.value, fixedHeightSpin.value);
-                    }
+                    onValueModified: propertyPanel.commitFixedField("y", value)
                 }
 
                 SpinBox {
@@ -619,15 +647,14 @@ Rectangle {
 
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "Width:")
-                    from: 50
-                    to: editorController ? editorController.targetScreenSize.width : 99999
-                    value: selectedZone ? (selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50) : 50
+                    property real stored: selectedZone && selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50
+
+                    from: Math.min(50, Math.floor(stored))
+                    to: Math.max(editorController ? editorController.targetScreenSize.width : 99999, Math.ceil(stored))
+                    value: stored
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "Width in pixels")
-                    onValueModified: {
-                        if (selectedZoneId && editorController)
-                            editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, fixedYSpin.value, value, fixedHeightSpin.value);
-                    }
+                    onValueModified: propertyPanel.commitFixedField("width", value)
                 }
 
                 SpinBox {
@@ -635,15 +662,14 @@ Rectangle {
 
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "Height:")
-                    from: 50
-                    to: editorController ? editorController.targetScreenSize.height : 99999
-                    value: selectedZone ? (selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50) : 50
+                    property real stored: selectedZone && selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50
+
+                    from: Math.min(50, Math.floor(stored))
+                    to: Math.max(editorController ? editorController.targetScreenSize.height : 99999, Math.ceil(stored))
+                    value: stored
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "Height in pixels")
-                    onValueModified: {
-                        if (selectedZoneId && editorController)
-                            editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, fixedYSpin.value, fixedWidthSpin.value, value);
-                    }
+                    onValueModified: propertyPanel.commitFixedField("height", value)
                 }
 
                 // Sync geometry, name, and number controls when zone data changes
@@ -930,8 +956,8 @@ Rectangle {
                             return;
 
                         // Re-sync every editable control imperatively: their
-                        // declarative bindings die on the first user edit (QQC2)
-                        // or imperative sync, after which a selection change
+                        // declarative bindings die on the first imperative sync
+                        // (a user edit alone does not sever them), after which a selection change
                         // would keep showing the previous zone's values and any
                         // edit would stamp those stale values onto the new zone.
                         // If the lookup comes back empty the zone is gone or

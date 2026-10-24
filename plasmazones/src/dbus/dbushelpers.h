@@ -229,32 +229,6 @@ inline PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::IZoneLayoutRegist
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * @brief Get a screen by name with null check and warning
- * @param screenId Screen ID to find (empty = primary screen)
- * @param operation Description for error logging
- * @param category Logging category to use
- * @return Screen pointer or nullptr (logs warning if not found)
- */
-template<typename LogCategory>
-QScreen* getScreenOrWarn(const QString& screenId, const QString& operation, LogCategory category)
-{
-    QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
-    if (!screen) {
-        qCWarning(category) << operation << ": screen not found:" << screenId;
-        return nullptr;
-    }
-    return screen;
-}
-
-/**
- * @brief Overload using default lcDbus category
- */
-inline QScreen* getScreenOrWarn(const QString& screenId, const QString& operation)
-{
-    return getScreenOrWarn(screenId, operation, lcDbus);
-}
-
-/**
  * @brief Get primary screen with null check and warning
  * @param operation Description for error logging
  * @param category Logging category to use
@@ -351,9 +325,11 @@ inline bool validateDesktopNumber(int virtualDesktop, const QString& operation, 
 /**
  * @brief Resolve a screen ID to an effective (virtual-aware) screen ID
  *
- * When screenId is empty, resolves via cursor position then primary screen fallback.
- * When non-empty, passes virtual screen IDs through and resolves physical names
- * via PhosphorScreens::ScreenIdentity::idForName.
+ * When screenId is empty, resolves to the primary screen, or to its first
+ * virtual screen when it is subdivided. The cursor is never read: a Wayland
+ * background daemon's cursor position is stale. When non-empty, passes virtual
+ * screen IDs through and resolves physical names via
+ * PhosphorScreens::ScreenIdentity::idForName.
  */
 QString resolveScreenId(PhosphorScreens::ScreenManager* mgr, const QString& screenId);
 
@@ -375,7 +351,8 @@ QScreen* resolvePhysicalQScreen(PhosphorScreens::ScreenManager* mgr, const QStri
  *
  * Prefers PhosphorScreens::ScreenManager geometry (virtual-screen-aware) when available,
  * falls back to resolving the physical QScreen and using the QScreen overload.
- * Returns an invalid QRectF if no geometry can be resolved.
+ * A virtual screen id the manager does not resolve is never widened to its
+ * physical monitor. Returns an invalid QRectF if no geometry can be resolved.
  */
 QRectF resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* layout,
                              const QString& screenId);
@@ -411,6 +388,29 @@ PLASMAZONES_EXPORT const QDBusContext* busContext(const QObject* adaptor);
 PLASMAZONES_EXPORT QString busCaller(const QObject* adaptor);
 
 /**
+ * @brief The unique bus name of the sender of the call @p adaptor is serving,
+ *        when that call is @p member on @p adaptor's own D-Bus interface (or
+ *        names none, which Qt dispatches by member name); nullopt otherwise.
+ *
+ * Nullopt for a direct call, and for a slot reached in-process while the host
+ * serves another message: that message's sender is not this slot's caller.
+ * A served call can still answer an empty name (a peer-to-peer connection
+ * names no sender), which matches no registered bridge.
+ */
+PLASMAZONES_EXPORT std::optional<QString> busCallerOf(const QObject* adaptor, QLatin1StringView member);
+
+/**
+ * @brief Whether @p busName is the unique bus name the compositor bridge
+ *        registered from, read from the CompositorBridgeAdaptor on
+ *        @p adaptor's host.
+ *
+ * The one test of "the caller is the registered bridge": admitCompositorReport
+ * applies it to compositor-only slots, and the daemon hands it to the adaptors
+ * that treat the bridge's calls differently from other callers'.
+ */
+PLASMAZONES_EXPORT bool isBridgeCaller(const QObject* adaptor, const QString& busName);
+
+/**
  * @brief Answer the bus call @p adaptor is serving with the error @p type,
  *        and report whether a reply went out.
  *
@@ -444,7 +444,17 @@ PLASMAZONES_EXPORT bool sendBusError(const QObject* adaptor, QDBusError::ErrorTy
  * one (endDrag calling windowScreenChanged, say). That outer slot answers for
  * its own caller. So the check runs only when the message being served is a
  * method call of @p member on @p adaptor's own interface, or one naming no
- * interface, which Qt dispatches by member name.
+ * interface, which Qt dispatches by member name (busCallerOf).
+ *
+ * The identity is a bus connection, not a component: everything that shares
+ * the compositor's connection passes too. Under KWin that is every effect and
+ * every KWin script, since they all call through KWin's one session-bus
+ * connection. Registration is held to the compositor's process
+ * (CompositorBridgeAdaptor::setCompositorIdentityCheck), so a peer outside it
+ * never passes.
+ *
+ * A refused caller is logged once at warning, for a bounded number of
+ * distinct callers, and at debug after that.
  */
 PLASMAZONES_EXPORT bool admitCompositorReport(const QObject* adaptor, QLatin1StringView member);
 

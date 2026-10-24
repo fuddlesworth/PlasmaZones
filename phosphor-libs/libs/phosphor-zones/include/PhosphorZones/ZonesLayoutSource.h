@@ -24,13 +24,22 @@ namespace PhosphorZones {
 ///
 /// @p canvas (optional) — reference geometry used when projecting zones
 /// that were authored in fixed-pixel mode. When empty (the default), the
-/// projection falls back to @c Layout::lastRecalcGeometry(), which holds
+/// projection falls back to @c Layout::fixedZoneReferenceGeometry(), which
+/// answers @c Layout::lastRecalcGeometry() whenever that rect holds the fixed
+/// zones (and the fixed-zone bounding box otherwise). That rect is
 /// whichever screen most recently triggered a recalc — fine for caller
 /// topologies with a single monitor, but stale if two different screens
 /// share a Layout* and query their previews in alternation. Passing the
 /// caller's own canvas makes the projection deterministic per-call.
+///
+/// @p screenScale (optional) — logical scale of the output @p canvas
+/// belongs to. A layout that counts fixed geometry in device pixels divides
+/// by it before projecting (Zone::normalizedGeometry). Zero, the default,
+/// takes the layout's lastRecalcScale(), which is the scale of whichever
+/// output was recalculated last. Honoured only with a non-empty @p canvas;
+/// the layout's own reference geometry is always paired with its own scale.
 PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout,
-                                                                     const QSize& canvas = {});
+                                                                     const QSize& canvas = {}, qreal screenScale = 0.0);
 
 /// ILayoutSource adapter wrapping an IZoneLayoutRegistry.
 ///

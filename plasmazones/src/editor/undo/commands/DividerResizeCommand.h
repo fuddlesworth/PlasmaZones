@@ -4,22 +4,22 @@
 #pragma once
 
 #include "BaseZoneCommand.h"
-#include <QRectF>
+#include "../../services/ZoneManager.h"
 #include <QString>
 #include <QVector>
-#include <QPair>
 
 namespace PlasmaZones {
 
 /**
  * @brief Command for resizing zones at a divider (drag between zones)
  *
- * Undo restores all affected zones to their previous geometry.
+ * Undo restores all affected zones to their previous geometry, fixed zones'
+ * pixels included.
  */
 class DividerResizeCommand : public BaseZoneCommand
 {
 public:
-    using GeometryMap = QVector<QPair<QString, QRectF>>;
+    using GeometryMap = QVector<ZoneGeometrySnapshot>;
 
     explicit DividerResizeCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId1, const QString& zoneId2,
                                   qreal newDividerX, qreal newDividerY, bool isVertical, GeometryMap&& oldGeometries,

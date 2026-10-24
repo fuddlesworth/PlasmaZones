@@ -285,8 +285,14 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // prune above tore down the current-context state only, and
         // removeWindowsIf drops every membership, which would leave those
         // strips holding a tile nothing reaps.
+        // Its per-window memories go with the last of them: releaseScreenState
+        // keeps them for a window another live context still holds, and that
+        // context has just let it go. No snapshot is owed first, because the
+        // released context is the current one, which is the window's primary,
+        // so releaseScreenState has already recorded it.
         for (const QString& windowId : std::as_const(releasedWindows)) {
             dropFromOtherContexts(windowId, PhosphorEngine::PlacementStateKey{});
+            forgetReleasedWindowMemories(windowId);
         }
         const QSet<QString> releasedSet(releasedWindows.cbegin(), releasedWindows.cend());
         m_states.removeWindowsIf([&releasedSet](const QString& windowId, const PhosphorEngine::PlacementStateKey&) {
@@ -497,6 +503,47 @@ void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& 
     // arrival-time raise like any other.
     if (stash.isEmpty() && stash.blueprintCursor <= 0) {
         return;
+    }
+    // An entry already at this key can still hold tiles whose windows never
+    // came back: the strip was stashed, some of its windows re-announced and
+    // rebuilt a live strip here, and that strip is now leaving again before
+    // the rest returned. Replacing the entry destroyed those pending tiles,
+    // so they are folded in behind the fresh capture instead, on
+    // serializeStripState's terms for a stash beside a live strip: the live
+    // columns first, then the stashed tiles that are neither in the capture
+    // nor already claimed, with the larger of the two cursors.
+    if (const auto existing = m_stripStash.constFind(key); existing != m_stripStash.cend()) {
+        QSet<QString> captured;
+        for (const StashedColumn& col : std::as_const(stash.columns)) {
+            for (const StashedTile& tile : col.tiles) {
+                captured.insert(tile.windowId);
+            }
+        }
+        const QSet<QString> consumed = m_stripStashConsumed.value(key);
+        for (StashedColumn col : existing->columns) {
+            col.tiles.removeIf([&captured, &consumed](const StashedTile& tile) {
+                return captured.contains(tile.windowId) || consumed.contains(tile.windowId);
+            });
+            if (!col.tiles.isEmpty()) {
+                stash.columns.append(col);
+            }
+        }
+        // Absorbed only when both cursors count against the same blueprint,
+        // migrateStateKey's rule for the same pairing: a cursor is meaningful
+        // only beside the identity it was counted against.
+        const bool sameBlueprint = !stash.blueprintIdentity.isValid() || !existing->blueprintIdentity.isValid()
+            || stash.blueprintIdentity == existing->blueprintIdentity;
+        if (sameBlueprint) {
+            stash.blueprintCursor = qMax(stash.blueprintCursor, existing->blueprintCursor);
+        }
+        if (!stash.blueprintIdentity.isValid() && existing->blueprintIdentity.isValid()) {
+            stash.blueprintIdentity = existing->blueprintIdentity;
+        }
+        // A fuzzy-claim window the pending tiles were staged under keeps
+        // running for them; the fresh capture never starts one of its own.
+        if (!stash.fuzzyClaimWindow.isValid()) {
+            stash.fuzzyClaimWindow = existing->fuzzyClaimWindow;
+        }
     }
     // Recency stamp: serializeStripState resolves a window listed under two
     // different keys in favour of the newer entry, and keys do not collide so
@@ -1317,17 +1364,26 @@ void ScrollEngine::applyPerScreenConfig(const QString& screenId, const QVariantM
 
 void ScrollEngine::clearPerScreenConfig(const QString& screenId)
 {
-    // Every context on the screen, not just the current one: this is the
-    // whole-SCREEN door, and the caller is telling us the screen has left
-    // scrolling entirely, so no context's overrides survive it. A caller that
-    // means "this CONTEXT resolved no overrides" must not come here — it
-    // pushes an empty map through applyPerScreenConfig instead, which reads
-    // identically at every effective* reader without touching the sibling
-    // contexts. The in-tree caller is updateScrollingScreens' departing-screen
-    // loop, which runs after setActiveScreens has already dropped the screen.
+    // The whole-SCREEN door: the caller is telling us the screen has left
+    // scrolling, which setActiveScreens has already acted on by tearing down
+    // the screen's CURRENT context. The screen's other contexts keep their
+    // strips through that trip (a desktop in another mode leaves the scrolling
+    // desktops beside it standing), and those strips are still laid out in the
+    // background: a close, a min-size report or a membership change there
+    // resolves its params through layoutParamsForKey, which reads this map.
+    // Wiping their overrides handed those passes the global vocabulary and
+    // axis, so only a context with no live state left loses its entry. A
+    // caller that means "this CONTEXT resolved no overrides" must not come
+    // here — it pushes an empty map through applyPerScreenConfig instead,
+    // which reads identically at every effective* reader without touching the
+    // sibling contexts. The in-tree caller is updateScrollingScreens'
+    // departing-screen loop, which runs after setActiveScreens has already
+    // dropped the screen. A surviving context's entry is refreshed by the
+    // producer's push when that context is next current, and purged by the
+    // desktop, activity and output prunes like every other entry.
     bool removed = false;
     for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
-        if (it.key().screenId == screenId) {
+        if (it.key().screenId == screenId && !m_states.stateForKey(it.key())) {
             it = m_perScreenOverrides.erase(it);
             removed = true;
         } else {

@@ -14,6 +14,8 @@
 #include <QDBusPendingCall>
 #include <QSet>
 
+#include <algorithm>
+
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
@@ -69,6 +71,54 @@
 #include "dbus/snapadaptor/snapadaptor.h"
 
 namespace PlasmaZones {
+
+void Daemon::recalculateActiveLayout(PhosphorZones::Layout* layout)
+{
+    if (!layout || !m_screenManager || !m_layoutManager || !m_layoutComputeService) {
+        return;
+    }
+    // One recalculation, not one per screen: the active layout is one object,
+    // and recalculating it per screen overwrites each pass (last wins). The
+    // overlay computes per-screen geometry on the fly through
+    // GeometryUtils::getZoneGeometryWithGaps.
+    //
+    // Requested against a screen that SHOWS the layout, the primary's first.
+    // The compute service keeps one generation per screen, and a request
+    // supersedes whatever is in flight for that screen, whichever layout it
+    // was for. Asked against the primary for a layout the primary does not
+    // show, it discarded the primary's own layout's result from a geometry
+    // pass, whose completion barrier then finished on this one and refreshed
+    // the overlay from stale zones. A layout shown nowhere, or only on screens
+    // with no usable geometry yet, is recalculated in place against the
+    // primary, as the startup pass does for the previews.
+    QScreen* const primary = Utils::primaryScreen();
+    const QString primaryId = primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
+    const QString activity = currentActivity();
+    QStringList candidates = m_screenManager->effectiveScreenIds();
+    std::stable_partition(candidates.begin(), candidates.end(), [&primaryId](const QString& screenId) {
+        return !primaryId.isEmpty() && PhosphorIdentity::VirtualScreenId::samePhysical(screenId, primaryId);
+    });
+    for (const QString& screenId : std::as_const(candidates)) {
+        if (m_layoutManager->layoutForScreen(screenId, currentDesktopForScreen(screenId), activity) != layout) {
+            continue;
+        }
+        // A screen showing the layout with no usable geometry (one still
+        // coming up, or degenerate) cannot recalculate it, so the next one
+        // showing it is asked instead.
+        const QRectF geometry = GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screenId);
+        if (!geometry.isValid()) {
+            continue;
+        }
+        m_layoutComputeService->requestRecalculate(
+            layout, screenId, geometry, PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), screenId));
+        return;
+    }
+    if (primary) {
+        PhosphorZones::LayoutComputeService::recalculateSync(
+            layout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary),
+            PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), primaryId, primary));
+    }
+}
 
 void Daemon::initLayoutAndSettingsWiring()
 {
@@ -304,26 +354,15 @@ void Daemon::initLayoutAndSettingsWiring()
     // Connect layout changes to zone detector and overlay service
     // activeLayoutChanged fires when the global active layout changes; layoutAssigned
     // fires for per-screen assignments. We handle both but avoid redundant recalculations.
-    m_layoutSettingsWiringConnections.append(
-        connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
-                [this](PhosphorZones::Layout* layout) {
-                    if (layout) {
-                        // Recalculate zone geometries asynchronously using primary screen geometry.
-                        // Active layout is global; recalculating per-screen overwrites each
-                        // iteration (last-wins bug). The overlay computes per-screen geometry
-                        // on the fly via GeometryUtils::getZoneGeometryWithGaps(m_screenManager.get(), ).
-                        QScreen* primary = Utils::primaryScreen();
-                        if (primary) {
-                            QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(primary);
-                            m_layoutComputeService->requestRecalculate(
-                                layout, screenId,
-                                GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary),
-                                PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), screenId, primary));
-                        }
-                    }
-                    m_zoneDetector->setLayout(layout);
-                    m_overlayService->updateLayout(layout);
-                }));
+    m_layoutSettingsWiringConnections.append(connect(m_layoutManager.get(),
+                                                     &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
+                                                     [this](PhosphorZones::Layout* layout) {
+                                                         if (layout) {
+                                                             recalculateActiveLayout(layout);
+                                                         }
+                                                         m_zoneDetector->setLayout(layout);
+                                                         m_overlayService->updateLayout(layout);
+                                                     }));
 
     // Connect per-screen layout assignments
     // Only update if this is a DIFFERENT layout than the active one
@@ -334,8 +373,10 @@ void Daemon::initLayoutAndSettingsWiring()
             if (!layout) {
                 return;
             }
-            // Skip if this layout is already the active layout
-            // (activeLayoutChanged handler already processed it for all screens)
+            // Skip if this layout is already the active layout: the
+            // activeLayoutChanged handler requested its recalculation, once,
+            // against one screen that shows it (recalculateActiveLayout),
+            // not against every screen.
             if (layout == m_layoutManager->activeLayout()) {
                 return;
             }
@@ -437,25 +478,50 @@ void Daemon::initLayoutAndSettingsWiring()
             handleAutotileDisabled();
         }
 
-        // Handle activation of autotile mode.
-        // Fires when either:
+        // Handle activation of autotile mode, with snapping off. Fires when
+        // either:
         //   (a) Snapping toggled OFF while autotile is already enabled, OR
-        //   (b) Autotile toggled ON (regardless of snapping state)
-        // Both paths need per-screen autotile assignments created.
-        // handleSnappingToAutotile() skips screens already on an autotile
-        // assignment, so mixed-mode setups (screen A snapping, screen B
-        // autotile) correctly flip screen A without clobbering screen B's
-        // per-screen algorithm customization.
+        //   (b) Autotile toggled ON while snapping is already off
+        // Both paths restore the contexts the last disable flipped and convert
+        // the screens still on snapping to autotile, persisted (2.3.3; see
+        // handleSnappingToAutotile, and the daemon.h docblock for why the
+        // Snapping-on edge does not convert them back). It skips screens
+        // already on an autotile assignment, so mixed-mode setups (screen A
+        // snapping, screen B autotile) correctly flip screen A without
+        // clobbering screen B's per-screen algorithm customization.
+        //
+        // Autotile toggled ON with snapping on converts nothing, since every
+        // screen still has a mode it runs, but it restores what the last
+        // disable flipped: turning tiling off and on again puts every context
+        // back on its tiling (3.3.8, 3.4.0), which with snapping on it used
+        // not to, leaving every context in Snapping. The restore cannot tell a
+        // context the disable flipped from one the user switched to Snapping
+        // by hand: both keep the tiling algorithm they carried, the only
+        // thing it reads. So a hand-switched context that once tiled is
+        // revived as well. That is intended, as
+        // LayoutRegistry::restoreAutotileAssignments documents: every
+        // entering-autotile edge revives them, this one included.
         const bool enteringAutotile =
             (snappingToggled && !snappingNow && autotileNow) || (autotileToggled && autotileNow && !snappingNow);
         if (enteringAutotile) {
             handleSnappingToAutotile();
+        } else if (autotileToggled && autotileNow) {
+            restoreTilingAssignments();
         }
 
         // Re-derive autotile screens and apply per-screen overrides.
         // windowsReleased clears floating state for released windows.
         updateEngineScreens();
         updateLayoutFilter();
+
+        // The screens a tiling engine ran on before the switch and none runs
+        // on now: the only ones whose windows this save released.
+        QSet<QString> leftTiling = tiledBefore;
+        if (m_screenModeRouter && m_screenManager) {
+            const auto parts = m_screenModeRouter->partitionByMode(m_screenManager->effectiveScreenIds());
+            leftTiling.subtract(QSet<QString>(parts.autotile.begin(), parts.autotile.end()));
+            leftTiling.subtract(QSet<QString>(parts.scrolling.begin(), parts.scrolling.end()));
+        }
 
         // Resnap after a tiling-family engine is disabled: restore windows to
         // their pre-tiling zone positions. PhosphorZones::Zone assignments are
@@ -467,10 +533,10 @@ void Daemon::initLayoutAndSettingsWiring()
         if (((autotileToggled && !autotileNow) || (scrollingToggled && !scrollingNow)) && m_windowTrackingAdaptor
             && m_snapAdaptor && m_snapEngine) {
             // Silent, and only the screens that went from tiling to snapping.
-            // None tiled is none to resnap: reapplySnapZones reads an empty
+            // None left is none to resnap: reapplySnapZones reads an empty
             // list as every snapping screen (F1042).
-            if (!tiledBefore.isEmpty()) {
-                m_snapAdaptor->reapplySnapZones(QStringList(tiledBefore.begin(), tiledBefore.end()), false);
+            if (!leftTiling.isEmpty()) {
+                m_snapAdaptor->reapplySnapZones(QStringList(leftTiling.begin(), leftTiling.end()), false);
             }
             // Batched float-restore: one resnap signal per autotile-disabled
             // toggle instead of per-window D-Bus chatter. Downcast mirrors
@@ -496,14 +562,28 @@ void Daemon::initLayoutAndSettingsWiring()
                 // orders captured on other activities, and this caller is
                 // desktop-unscoped (per-screen desktops differ, so no single
                 // desktop filter applies) — the builder's per-window guards
-                // cover the rest.
-                QVector<ZoneAssignmentEntry> entries =
-                    buildAutotileRestoreEntries(restoredWindows, -1, currentActivity());
+                // cover the rest. And to the screens that left tiling: the
+                // orders also hold screens still tiled (autotile when only
+                // scrolling went off, and the reverse) and screens that left
+                // tiling long ago, and a restore entry for a window still
+                // tiled on one of those floated it, dropped its float-back and
+                // moved it to a stale spot.
+                QVector<ZoneAssignmentEntry> entries;
+                for (const QString& screenId : std::as_const(leftTiling)) {
+                    entries.append(buildAutotileRestoreEntries(restoredWindows, -1, currentActivity(), screenId));
+                }
                 entries.append(m_pendingSnapFloatRestores);
                 m_pendingSnapFloatRestores.clear();
                 concreteSnap->emitBatchedResnap(entries);
             }
         }
+        // Any other save can release windows too: one that demotes a screen
+        // resolved through the global defaults (switching snapping on moves
+        // such a screen off tiling) runs the same derive pass. Nothing above
+        // consumes the snap-zone half of those releases, so it goes out here,
+        // as every other recompute without a resnap of its own does. A no-op
+        // when the master-switch arm above already took the batch.
+        flushPendingSnapZoneRestores();
 
         // Re-resolve the active layout from assignments for the current context.
         // Resnap/retile/OSD is triggered separately by applyAssignmentChanges()

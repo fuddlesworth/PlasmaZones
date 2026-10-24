@@ -74,7 +74,8 @@ void PlasmaZonesEffect::slotDaemonReady()
 
     // Register the compositor bridge with the daemon, passing our protocol
     // version so the daemon can reject us if we're too old. The daemon returns
-    // its own API version and a session ID; "REJECTED" means version mismatch.
+    // its own API version and a session ID, or "REJECTED" for a refused
+    // registration (see the reply handler for the causes).
     //
     // All post-registration work (state re-push, virtual screen fetch, etc.) is
     // deferred into the reply callback so that on REJECTED / protocol mismatch
@@ -117,14 +118,17 @@ void PlasmaZonesEffect::slotDaemonReady()
                     return;
                 }
                 if (result.sessionId == QLatin1String("REJECTED")) {
-                    // REJECTED covers any invalid registration (the daemon also
-                    // rejects an empty compositorName); this caller always sends a
-                    // non-empty name, so for it the only reachable cause is a
-                    // protocol-version mismatch — diagnose that.
-                    qCCritical(lcEffect) << "Daemon REJECTED this effect's registration: daemon apiVersion="
-                                         << result.apiVersion << "but this effect speaks"
-                                         << PhosphorProtocol::Service::ApiVersion
-                                         << "— a version mismatch; update the effect to match the daemon.";
+                    // REJECTED covers every refused registration. This caller
+                    // always sends a non-empty compositorName, so the reachable
+                    // causes are a version below the daemon's minimum, a caller
+                    // the daemon does not recognise as the compositor's own
+                    // process (#1155), or another bridge still registered on
+                    // the bus. Name all three rather than guess.
+                    qCCritical(lcEffect) << "Daemon REJECTED this effect's registration (daemon apiVersion"
+                                         << result.apiVersion << ", effect" << PhosphorProtocol::Service::ApiVersion
+                                         << "): a version below the daemon's minimum, a caller the daemon does not"
+                                         << "recognise as the compositor's process, or another bridge still"
+                                         << "registered on the bus.";
                     return;
                 }
                 int daemonVersion = result.apiVersion.toInt();

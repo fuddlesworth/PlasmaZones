@@ -158,9 +158,14 @@ f1149-overlapping-settle-reports f1149-overlapping-settle-reports.sh 4 -
 f1151-touch-forgets-claim f1151-touch-forgets-claim.sh 2 -
 f1151-scroll-visit-back-to-zone f1151-scroll-visit-back-to-zone.sh 1 -
 f1153-cropped-straddler-move f1153-cropped-straddler-move.sh 2 S
+f1154-straddle-peek f1154-straddle-peek.sh 1 S
 f1155-compositor-only-gate f1155-compositor-only-gate.sh 1 -
+f1156-cross-floor f1156-cross-floor.sh 1 S
+f1157-x11-column-answer f1157-x11-column-answer.sh 1 XS
+f1157-x11-column-answer-scaled f1157-x11-column-answer.sh 1 XS PZ_F1157_SCALE=1.25
 fdrag-float-keeps-size fdrag-float-keeps-size.sh 1 FS
 fsplash-sibling-size-scroll fsplash-sibling-size.sh 1 S PZ_FSPLASH_MODE=scroll
+fsplash-sibling-size-tile fsplash-sibling-size.sh 1 S PZ_FSPLASH_MODE=tile
 fsplash-sibling-size-snap fsplash-sibling-size.sh 1 S PZ_FSPLASH_MODE=snap
 fresize-centred-edge fresize-centred-edge.sh 1 FS
 fscale-fixed-device-pixels fscale-fixed-device-pixels.sh 1 S
@@ -420,6 +425,9 @@ for name in "${RUN[@]}"; do
             result=STAGING-FAILED
             reason="the nested session or its daemon did not start (see $name.session.log)"
         else
+            # The last probe's pre-restart daemon log must not be filed under this one, which may
+            # end before it sources lib.sh, the other place that clears it.
+            rm -f "$NEST/daemon.log.earlier"
             env "${penv[@]}" PZR_FAKEINPUT="$FI" PZR_X11_BEFORE="$X11_BEFORE" PZR_HOST_DISPLAY="$HOST_DISPLAY" \
                 bash "$HERE/probes/$script" "$NEST" "$OUT/$name.kwin.log" > "$OUT/$name.out" 2>&1 < /dev/null
             rc=$?

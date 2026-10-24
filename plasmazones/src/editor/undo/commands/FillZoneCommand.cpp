@@ -8,10 +8,9 @@
 
 using namespace PlasmaZones;
 
-FillZoneCommand::FillZoneCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId, const QRectF& oldGeometry,
-                                 const QRectF& newGeometry, const QString& text, QUndoCommand* parent)
+FillZoneCommand::FillZoneCommand(QPointer<ZoneManager> zoneManager, const ZoneGeometrySnapshot& oldGeometry,
+                                 const ZoneGeometrySnapshot& newGeometry, const QString& text, QUndoCommand* parent)
     : BaseZoneCommand(zoneManager, text.isEmpty() ? PhosphorI18n::tr("Fill Zone", "@action") : text, parent)
-    , m_zoneId(zoneId)
     , m_oldGeometry(oldGeometry)
     , m_newGeometry(newGeometry)
 {
@@ -19,18 +18,16 @@ FillZoneCommand::FillZoneCommand(QPointer<ZoneManager> zoneManager, const QStrin
 
 void FillZoneCommand::undo()
 {
-    if (!validateZoneExists(m_zoneId)) {
+    if (!validateZoneExists(m_oldGeometry.zoneId)) {
         return;
     }
-    m_zoneManager->updateZoneGeometry(m_zoneId, m_oldGeometry.x(), m_oldGeometry.y(), m_oldGeometry.width(),
-                                      m_oldGeometry.height());
+    m_zoneManager->restoreGeometrySnapshot(m_oldGeometry);
 }
 
 void FillZoneCommand::redo()
 {
-    if (!validateZoneExists(m_zoneId)) {
+    if (!validateZoneExists(m_newGeometry.zoneId)) {
         return;
     }
-    m_zoneManager->updateZoneGeometry(m_zoneId, m_newGeometry.x(), m_newGeometry.y(), m_newGeometry.width(),
-                                      m_newGeometry.height());
+    m_zoneManager->restoreGeometrySnapshot(m_newGeometry);
 }

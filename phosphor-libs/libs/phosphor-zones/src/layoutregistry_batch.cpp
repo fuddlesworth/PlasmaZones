@@ -98,7 +98,12 @@ int flipAssignmentModes(QList<PWR::Rule>& updated, QSet<ContextDims>& affected, 
 void LayoutRegistry::clearAutotileAssignments()
 {
     // Flip every Autotile assignment rule to Snapping (preserving the layout
-    // fields) and drop autotile quick-layout slots.
+    // fields). The autotile quick-layout slots are left alone, as the
+    // scrolling ones are when scrolling is switched off: with no context in
+    // Autotile the quick-layout shortcut never resolves to that array, and
+    // keeping it is what lets a Tiling off/on round trip come back with the
+    // user's bindings instead of an empty set restoreAutotileAssignments has
+    // nothing to rebuild from.
     QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
     // `affected` collects the FULL context dims for the debug log; the EMIT
     // loop below dedupes on (screen, desktop) only. That collapse is
@@ -113,25 +118,10 @@ void LayoutRegistry::clearAutotileAssignments()
         flipAssignmentModes(updated, affected, AssignmentEntry::Snapping, [](const AssignmentEntry& entry) {
             return entry.mode == AssignmentEntry::Autotile;
         });
-    bool changed = flipped > 0;
-
-    // Drop autotile quick-layout slots — clearing autotile everywhere
-    // includes the per-mode autotile bindings. The Snapping and Scrolling
-    // slots are untouched: each mode owns a separate array. This is a
-    // ONE-WAY loss: restoreAutotileAssignments rebuilds the assignment
-    // rules but has nothing to rebuild these from, and writeQuickLayouts()
-    // persists the wipe immediately.
-    auto& autotileSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)];
-    if (!autotileSlots.isEmpty()) {
-        autotileSlots.clear();
-        changed = true;
-    }
-
-    if (changed) {
+    if (flipped > 0) {
         if (!m_ruleStore->setAllRules(updated)) {
             qCWarning(lcZonesLib) << "clearAutotileAssignments: rule store refused to persist the flipped assignments";
         }
-        writeQuickLayouts();
         // The EMIT dedupes on (screen, desktop) only. The payload resolves
         // under m_currentActivity and layoutAssigned carries no activity, so
         // two rules differing only in activity would produce two BYTE-IDENTICAL
@@ -176,8 +166,8 @@ int LayoutRegistry::restoreAutotileAssignments()
 {
     // Reverse direction of clearAutotileAssignments for the ASSIGNMENT RULES:
     // flip context-assignment rules back to Autotile where a previous global
-    // disable neutered them. The quick-layout slots that disable wiped are not
-    // recoverable and stay gone.
+    // disable neutered them. The quick-layout slots need nothing here, because
+    // the disable keeps them.
     //
     // The disable is global — it walks every context-assignment rule regardless
     // of desktop or activity — while the re-enable in the daemon only ever wrote

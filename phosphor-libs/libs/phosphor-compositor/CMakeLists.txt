@@ -149,3 +149,12 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorCompositorConfigVersion.cmake"
     DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorCompositor
 )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if(CMAKE_PROJECT_NAME STREQUAL "PhosphorCompositor" OR BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

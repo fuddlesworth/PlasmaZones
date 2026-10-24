@@ -24,7 +24,8 @@ namespace PlasmaZones {
 namespace {
 /// The replay's keys, spelled to match what relayTileRequestsJson PARSES
 /// (relay.cpp reads the same literals off the engines' batch JSON), so a
-/// client can feed a replay back through the same reader. Kept beside the
+/// client can feed a replay back through the same reader. zoneId is the one
+/// key the reader does not parse: it is written for shape parity only. Kept beside the
 /// serializer rather than in the protocol header because the batch JSON is
 /// an in-process contract between the engines and this adaptor, not a wire
 /// vocabulary the effect reads.

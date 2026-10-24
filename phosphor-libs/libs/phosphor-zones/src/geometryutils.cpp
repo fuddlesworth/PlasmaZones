@@ -65,9 +65,7 @@ EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom, qreal 
         // In the screen's logical units, which is what screenGeom is: a
         // device-pixel zone's raw right edge runs past the logical width on a
         // scaled output and would read as touching the edge when it does not.
-        const qreal divisor = zone->fixedGeometryDivisor(scale);
-        const QRectF raw = zone->fixedGeometry();
-        const QRectF fixedGeo(raw.x() / divisor, raw.y() / divisor, raw.width() / divisor, raw.height() / divisor);
+        const QRectF fixedGeo = Zone::fixedGeometryToLogical(zone->fixedGeometry(), zone->fixedGeometryDivisor(scale));
         edges.left = (fixedGeo.left() < pixelTolerance);
         edges.top = (fixedGeo.top() < pixelTolerance);
         edges.right = (fixedGeo.right() > (screenGeom.width() - pixelTolerance));
@@ -101,12 +99,15 @@ QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const QRectF&
         geoF.setHeight(1.0);
     }
     // Clamp the gapped rect into the reference (screen / available) area.
-    // A well-formed zone is a subdivision of the screen, so its gapped rect
-    // is already inside referenceGeom and the contains() check makes this a
-    // true no-op. It acts only on malformed layout data — a hand-edited
-    // layout whose relative x+width or y+height exceeds 1.0 — which would
-    // otherwise place a window past the screen edge. Boundary validation on
-    // untrusted layout input, not a workaround.
+    // A well-formed relative zone is a subdivision of the screen, so its
+    // gapped rect is already inside referenceGeom and the contains() check
+    // makes this a true no-op. It acts in two cases. One is malformed relative
+    // data, a hand-edited layout whose x+width or y+height exceeds 1.0. The
+    // other is a fixed zone that legitimately overflows the area it resolves
+    // against: fixed pixels are authored against one screen, and the same
+    // layout on a smaller or panel-reduced one (or a negative fixed offset,
+    // which the format allows) reaches past its edge. Either way the window
+    // would otherwise be placed past the screen edge.
     if (referenceGeom.isValid() && !referenceGeom.contains(geoF)) {
         geoF = geoF.intersected(referenceGeom);
     }
@@ -129,7 +130,10 @@ QRectF getZoneGeometryWithGaps(PhosphorScreens::ScreenManager* mgr, Zone* zone, 
     if (!zone || !screen) {
         return QRectF();
     }
-    const QString resolvedId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
+    // The id is only ever read through the manager, so without one there is
+    // nothing to resolve it for.
+    const QString resolvedId =
+        (mgr && screenId.isEmpty()) ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
     const qreal scale = screenScale(mgr, resolvedId, screen);
     QRectF geom;
     if (useAvailableGeometry) {
@@ -228,6 +232,13 @@ QRectF effectiveScreenGeometry(PhosphorScreens::ScreenManager* mgr, Layout* layo
             return QRectF(geom);
         }
         return availGeom.isValid() ? QRectF(availGeom) : QRectF(geom);
+    }
+    // The rule getZoneGeometryForScreenF follows: a virtual screen the manager
+    // cannot resolve has no frame of its own. findByIdOrName would hand back
+    // its physical parent, and measuring against that lays the layout out
+    // across every sibling at once.
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        return QRectF();
     }
     QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     return effectiveScreenGeometry(mgr, layout, screen);

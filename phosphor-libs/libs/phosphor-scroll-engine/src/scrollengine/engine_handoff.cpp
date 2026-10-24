@@ -12,7 +12,6 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 
-#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 namespace PhosphorScrollEngine {
@@ -85,6 +84,12 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     if (key == currentKeyForScreen(key.screenId)) {
         scheduleRetileForScreen(key.screenId);
     }
+    // The strip's structure changed (the released column is gone, or the
+    // managed set shrank by a float), and placementChanged is this engine's
+    // only way to mark DirtyScrollStrips and republish the strip, the reason
+    // windowClosed emits it at the same point. The scheduled retile does not
+    // cover it: applyLayout announces only when the view anchor moved.
+    Q_EMIT placementChanged(key.screenId);
 }
 
 void ScrollEngine::handoffReceive(const HandoffContext& ctx)
@@ -114,9 +119,20 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     PhosphorEngine::PlacementStateKey staleKey;
     bool migratedWindowedFs = false;
     bool migratedMaximizedToEdges = false;
+    std::optional<WindowHeight> migratedHeight;
     if (ScrollState* staleState = stateForWindow(windowId, &staleKey); staleState && staleKey != key) {
-        const ScrollLayoutParams staleParams = layoutParamsForScreen(staleKey.screenId);
+        // The stale context's OWN params, not the screen's current one: it is
+        // usually a background desktop, and takeWindow re-derives that strip's
+        // anchor from these.
+        const ScrollLayoutParams staleParams = layoutParamsForKey(staleKey);
         const bool staleWasFloating = staleState->isFloating(windowId);
+        // The tile's height intent too, windowOpened's migration rule: the hop
+        // is a move, and the height the window already had outranks the
+        // context default the insert below seeds. Only off a real tile, for
+        // that migration's reason (a float's answer is a default Auto).
+        if (staleState->strip().containsWindow(windowId)) {
+            migratedHeight = staleState->strip().windowHeightIntent(windowId);
+        }
         // Capture before takeWindow destroys the tile, mirroring
         // windowOpened's migration: the receive re-applies it after its own
         // insert so the presentation survives this defence-in-depth hop too.
@@ -238,29 +254,33 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // insertOpenedWindow's re-resolve and commitDragInsertPreview's predicted
     // count; unlike the cross-monitor move, nothing re-stamps the height after
     // this insert, so the params have to be right the first time.
-    const ScrollLayoutParams params = layoutParamsForScreen(ctx.toScreenId, state->strip().columnCount() + 1);
+    // The receiving context's OWN params (layoutParamsForKey): ctx.toDesktop
+    // can name a desktop that is not the one in view, and the screen form
+    // would resolve the gaps and work area of the desktop in view instead.
+    const ScrollLayoutParams params = layoutParamsForKey(key, state->strip().columnCount() + 1);
     // params already resolved this screen's default width one line up —
     // re-fetching the override map for the same value is the duplicate
     // resolve this params-first convention exists to avoid.
     ColumnWidth width = params.defaultColumnWidth;
+    // The receiving context's override map for the same reason: the
+    // screen-id form reads the context in view, which a background
+    // ctx.toDesktop is not.
+    const ColumnDisplay display = effectiveDefaultColumnDisplay(m_perScreenOverrides.value(key));
     if (ctx.sourceGeometry.isValid()) {
-        // sourceGeometry is the window's PHYSICAL frame at handoff time, so
-        // decode it by the TARGET strip's role: the value being minted is an
-        // intent for the strip receiving the window. Reading .width() feeds a
-        // cross extent into a main-axis intent on a vertical target.
-        // Bounded like every other Fixed intent this engine mints: the source
-        // geometry is a compositor-reported frame, so a degenerate or absurd
-        // extent would otherwise become the column's standing width intent.
-        const int sourceMain = params.axis.mainSize(ctx.sourceGeometry.size());
-        width = ColumnWidth::makeFixed(qBound(1, sourceMain, static_cast<int>(kMaxFixedExtentPx)));
+        // sourceGeometry is the window's PHYSICAL frame at handoff time, and
+        // the column keeps the size the window arrives at: the same conversion
+        // "the client decides" makes, decoded by the TARGET strip's role (the
+        // value being minted is an intent for the strip receiving the window),
+        // lifted by a tabbed column's reservation, and bounded like every
+        // other Fixed intent this engine mints.
+        width = clientDecidedColumnWidth(ctx.sourceGeometry.size(), params, display);
     }
     // Entry position comes from the CALLER: the cross-mode dispatcher
     // derives insertIndex from the crossing direction (0 when entering from
     // the strip's left edge), and -1 appends at the right end. This
     // function has no direction of its own to derive an edge from.
     const int columnIdx = (ctx.insertIndex >= 0) ? ctx.insertIndex : state->strip().columnCount();
-    if (state->strip().insertWindowAt(columnIdx, windowId, width, effectiveDefaultColumnDisplay(ctx.toScreenId),
-                                      params)) {
+    if (state->strip().insertWindowAt(columnIdx, windowId, width, display, params)) {
         // Seed the source engine's last-known min size so the first relayout
         // clamps correctly instead of waiting a refuse/re-discover round-trip.
         // Clamped per axis rather than OR-gated through: a mixed pair like
@@ -278,6 +298,9 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         }
         if (migratedMaximizedToEdges) {
             state->strip().setMaximizedToEdgesForWindow(windowId, true);
+        }
+        if (migratedHeight) {
+            state->strip().restateWindowHeightIntent(windowId, *migratedHeight);
         }
         m_states.addMembership(windowId, key);
         const bool isCurrentContext = key == currentKeyForScreen(ctx.toScreenId);

@@ -19,27 +19,34 @@ namespace ZoneSerialization {
 /**
  * @brief Serialize zones to JSON format for clipboard
  * @param zones List of zones to serialize (QVariantMap format from ZoneManager)
+ * @param fixedGeometryInDevicePixels The source layout's unit for its fixed
+ *        zones' pixels, so a paste into a layout counting the other unit can
+ *        convert them
  * @return JSON string containing zone data with PlasmaZones clipboard format
  *
  * The output format includes:
  * - version: "1.0"
  * - application: "PlasmaZones"
  * - dataType: "zones"
- * - zones: Array of zone objects with all properties
+ * - fixedGeometryInDevicePixels: the unit above
+ * - zones: Array of zone objects with all properties, a fixed zone's
+ *   geometry mode and pixel rect included
  *
  * Each zone gets a new UUID generated for paste operations.
  */
-QString serializeZonesToClipboard(const QVariantList& zones);
+QString serializeZonesToClipboard(const QVariantList& zones, bool fixedGeometryInDevicePixels);
 
 /**
  * @brief Deserialize zones from clipboard JSON format
  * @param clipboardText JSON string from clipboard
+ * @param fixedGeometryInDevicePixels Receives the unit the fixed zones' pixels
+ *        were copied in (false when the clipboard does not say); may be null
  * @return List of zones in QVariantMap format, or empty list if invalid
  *
  * Validates the clipboard format (application = "PlasmaZones", dataType = "zones")
  * and converts all zone properties back to QVariantMap format used by ZoneManager.
  */
-QVariantList deserializeZonesFromClipboard(const QString& clipboardText);
+QVariantList deserializeZonesFromClipboard(const QString& clipboardText, bool* fixedGeometryInDevicePixels = nullptr);
 
 /**
  * @brief Validate clipboard content without full deserialization

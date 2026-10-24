@@ -157,12 +157,12 @@ struct WindowPlacement
     /// already in the right coordinates.
     ///
     /// The widening is load-bearing, not defensive. VirtualScreenMigration
-    /// rewrites these keys to the new virtual screen only for windows it can
-    /// resolve zones for, and deliberately keeps the PHYSICAL key otherwise
-    /// ("No zone info — keep physical ID, don't guess VS"). A floating window
-    /// has no zones by definition, so on a virtual-screen setup its key stays
-    /// physical while every reader asks with the virtual id. An exact-only
-    /// lookup therefore missed exactly the records this map exists to serve.
+    /// rewrites these keys to the new virtual screen by the window's zones,
+    /// or for a record with no zones (a floating window has none by
+    /// definition) by the virtual screen the rect's centre falls in. A rect
+    /// that no virtual screen holds, one left partly off the output for
+    /// instance, keeps its PHYSICAL key while every reader asks with a
+    /// virtual id, and an exact-only lookup would miss it.
     QRect freeGeometryFor(const QString& screenId) const
     {
         const auto exact = freeGeometryByScreen.constFind(screenId);

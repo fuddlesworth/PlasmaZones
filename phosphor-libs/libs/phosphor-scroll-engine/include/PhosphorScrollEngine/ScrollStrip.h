@@ -284,9 +284,10 @@ public:
     /// Remove @p windowId with no focus policy beyond index fixups — the
     /// cross-context transfer / float path (the caller re-homes the window).
     /// Everything the tile carried goes with it, so a caller that re-homes the
-    /// window reads its intents first. A committed floor is not tile state:
-    /// the engine holds it per window (ScrollLayoutParams::committedFloor), and
-    /// neither this nor removeWindow touches it.
+    /// window reads its intents first. A committed floor, along the strip or
+    /// across it, is not tile state: the engine holds both per window
+    /// (ScrollLayoutParams::committedFloor and committedCrossFloor), and
+    /// neither this nor removeWindow touches them.
     bool takeWindow(const QString& windowId, const ScrollLayoutParams& params);
 
     // ── Sizing ───────────────────────────────────────────────────────────────
@@ -450,7 +451,8 @@ public:
     /// are. A column floored by its frame minimum or by its client's own
     /// commits (ScrollLayoutParams::committedFloor) is back at the default
     /// INTENT and still renders at its floor, so this can answer true with
-    /// that column unmoved.
+    /// that column unmoved, and a tile held across the strip by a committed
+    /// cross floor (committedCrossFloor) keeps its share the same way.
     bool resetToDefaults(const std::optional<ColumnWidth>& defaultWidth,
                          const std::optional<WindowHeight>& defaultHeight, ColumnDisplay defaultDisplay,
                          const ScrollLayoutParams& params);
@@ -477,8 +479,9 @@ public:
     /// CROSS extent. The current height is read off a fresh relayout, since an
     /// Auto tile only gets a pixel value from the whole column distribution,
     /// and the result is floored the way adjustActiveColumnWidth floors its
-    /// width (MinWindowHeightFraction, raised to the frame minimum while
-    /// @c respectMinimumSize is on). A TABBED column adjusts too, in the same
+    /// width (MinWindowHeightFraction, raised to the tile's floor across while
+    /// @c respectMinimumSize is on: its frame minimum and any committed cross
+    /// floor, activeWindowHeightFloorPx). A TABBED column adjusts too, in the same
     /// column-extent space the cycle measures in. @p deltaPercent is refused
     /// and bounded the way adjustActiveColumnWidth's is.
     bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
@@ -580,9 +583,13 @@ public:
     bool equalizeActiveColumnHeights();
     /// Record the size a client/user resize actually settled on. The acked
     /// MAIN extent becomes the column's Fixed width intent only when
-    /// @p mainChanged (the engine compares against the last applied rect) — a
-    /// resize purely ACROSS the strip must not pin a Proportion/Preset column
-    /// to pixels. The acked CROSS extent becomes the tile's Fixed height
+    /// @p mainChanged (the engine compares the gesture's start frame with the
+    /// frame it ended on) — a resize purely ACROSS the strip must not pin a
+    /// Proportion/Preset column to pixels. @p ackedSize is the size the engine
+    /// settled on, which is the frame the resize ended at except on an axis
+    /// where the relayout will centre the window: there a drag of one edge is
+    /// doubled (ScrollEngine::onWindowResized) so the dragged edge lands where
+    /// it was released once the column is centred again. The acked CROSS extent becomes the tile's Fixed height
     /// intent symmetrically, only when @p crossChanged; a lone tile is
     /// included, because relayout honours a solo tile's Fixed height (niri
     /// parity). On a TABBED column both intents size the COLUMN rather than
@@ -616,8 +623,11 @@ public:
     /// exactly as the relayout resolves it (the stack's split with its floors,
     /// or a tabbed column's content rect), or -1 when this strip lays no tile
     /// out for the window (it does not hold it, or the tile is minimized). The
-    /// cross twin of windowColumnMainExtentPx, which the engine's cross-floor
-    /// bookkeeping measures with the same way.
+    /// cross twin of windowColumnMainExtentPx: the engine's cross-floor
+    /// bookkeeping measures a tile's share with it the same way, passing
+    /// params whose ScrollLayoutParams::committedCrossFloor it has masked when
+    /// it needs the share a tile resolves to without one window's floor. A
+    /// full relayout per call.
     int windowTileCrossExtentPx(const QString& windowId, const ScrollLayoutParams& params) const;
     /// The most @p windowId's column can ever give its tile ACROSS the strip
     /// under @p params while its siblings keep their own floors: for a stack,
@@ -626,8 +636,10 @@ public:
     /// (tileMinCrossPx, a pixel at least); for a tabbed column, its cross
     /// extent less the indicator's cross reservation, since every tab shares
     /// one rect. -1 when this strip does not hold the window as a visible
-    /// tile or the work area is degenerate. A committed cross floor past this
-    /// is one the column can never hold (ScrollEngine::outgrowsWorkArea).
+    /// tile or the work area is degenerate, and never below 0 otherwise (0
+    /// when the siblings' floors alone fill the column). A committed cross
+    /// floor past this is one the column can never hold
+    /// (ScrollEngine::outgrowsWorkArea).
     int tileCrossCapacityPx(const QString& windowId, const ScrollLayoutParams& params) const;
     /// Pixels the tab indicator takes out of column @p c ALONG the strip: the
     /// difference between the column's main extent and the one its tiles are
@@ -637,6 +649,14 @@ public:
     /// The main-axis twin of tabbedCrossReservationPx, and the reservation
     /// columnMinExtentPx adds to each tile's floor.
     static int tabbedMainReservationPx(const Column& c, const ScrollLayoutParams& params);
+    /// Pixels the tab indicator takes out of column @p c ACROSS the strip, the
+    /// cross-axis twin of tabbedMainReservationPx. 0 for a column that is not
+    /// tabbed, and whenever the indicator's thickness eats the MAIN axis
+    /// instead (which of the two it eats depends on the strip's axis, see
+    /// TabIndicatorParams::reservedThickness). Public beside its twin for the
+    /// engine's client-decided height, which lifts an intent into column
+    /// space the way reconcileWindowSize does.
+    static int tabbedCrossReservationPx(const Column& c, const ScrollLayoutParams& params);
 
     // ── Display ──────────────────────────────────────────────────────────────
     /// Toggle the active column between Normal and Tabbed presentation.
@@ -665,6 +685,14 @@ public:
     /// an unchanged intent that moved no ownership. Unlike setActiveWindowHeight
     /// it leaves a maximize-to-edges override standing.
     bool setWindowHeightIntent(const QString& windowId, const WindowHeight& height);
+    /// setWindowHeightIntent for a REMEMBERED intent re-stated on the way
+    /// back into a column (an unfloat, a cancelled or dropped drag, a
+    /// migration): the intent is written the same way, but a tabbed column's
+    /// extent owner is left as the column held it before the write, so a
+    /// non-Auto height does not take the column from the tab that sizes it.
+    /// A caller whose window owned the column when it left hands that back
+    /// through setTabbedHeightOwner. Returns whether the intent changed.
+    bool restateWindowHeightIntent(const QString& windowId, const WindowHeight& height);
 
     /// The height intent @p windowId's tile carries, or a default-constructed
     /// (Auto) one for an unknown window. The reader half of
@@ -1004,12 +1032,6 @@ private:
     /// tab is committed at this column's content rect, including the hidden
     /// ones, so the floor is the whole set's and not just the shown tab's.
     static int tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params);
-    /// Pixels the tab indicator takes out of column @p c ACROSS the strip, the
-    /// cross-axis twin of tabbedMainReservationPx. 0 for a column that is not
-    /// tabbed, and whenever the indicator's thickness eats the MAIN axis
-    /// instead (which of the two it eats depends on the strip's axis, see
-    /// TabIndicatorParams::reservedThickness).
-    static int tabbedCrossReservationPx(const Column& c, const ScrollLayoutParams& params);
     /// Strip-coordinate LEADING edge of @p columnIndex under @p params.
     int columnStripPos(int columnIndex, const ScrollLayoutParams& params) const;
     /// Total strip MAIN extent under @p params.
@@ -1073,9 +1095,12 @@ private:
     /// arbitrary column, so a second maximize anywhere discards the first
     /// column's stored width. That column then un-maximizes to the context
     /// default rather than to what it had. The toggle handles it — its
-    /// no-usable-slot arm exists for exactly this, and for the two other ways
-    /// the slot goes missing (a stash round trip and a restart, neither of
-    /// which carries it) — so the degradation is defined rather than a leak.
+    /// no-usable-slot arm exists for exactly this, and for the other ways the
+    /// slot goes missing (a stash round trip and a restart, neither of which
+    /// carries it, and a drag hold of the column's only window, whose take
+    /// closes the column and drops the slot with it even when an Escape then
+    /// rebuilds the column exactly) — so the degradation is defined rather
+    /// than a leak.
     ///
     /// Making it per-column would be an improvement and is a design change,
     /// not a bug fix: the index is maintained across every insert, remove and

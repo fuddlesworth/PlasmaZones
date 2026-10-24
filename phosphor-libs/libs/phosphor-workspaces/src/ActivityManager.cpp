@@ -43,29 +43,47 @@ bool ActivityManager::isAvailable()
 bool ActivityManager::init()
 {
 #ifdef KACTIVITIES_AVAILABLE
+    // A second init would create a second controller and stack a second
+    // status handler on it, each announcing every service bounce.
+    if (m_controller) {
+        return true;
+    }
     auto* controller = new KActivities::Controller(this);
     m_controller = controller;
 
     connect(controller, &KActivities::Controller::serviceStatusChanged, this,
-            [this, controller](KActivities::Controller::ServiceStatus status) {
+            [this](KActivities::Controller::ServiceStatus status) {
                 bool wasAvailable = m_activitiesAvailable;
                 m_activitiesAvailable = (status == KActivities::Controller::Running);
+
+                // A manager that was never started, or was stopped, tracks
+                // availability only. It reports nothing, and start() picks up
+                // whatever changed in the meantime.
+                if (!m_startRequested) {
+                    return;
+                }
 
                 if (m_activitiesAvailable && !wasAvailable) {
                     // A start() that ran while the service was still down
                     // returned without connecting the activity signals. Connect
                     // them now, or no later activity switch is ever seen.
-                    if (m_startRequested && !m_running) {
+                    if (!m_running) {
                         m_running = true;
                         connectSignals();
                     }
-                    m_currentActivity = controller->currentActivity();
                     Q_EMIT activitiesChanged();
-                    if (!m_currentActivity.isEmpty()) {
-                        Q_EMIT currentActivityChanged(m_currentActivity);
-                    }
+                    // Notifies only on a real change. A service that merely
+                    // restarted reports the activity kept through its outage,
+                    // so the return is not announced as a switch. The first
+                    // activity known after a late start is a change, and is.
+                    adoptControllerActivity();
                 } else if (!m_activitiesAvailable && wasAvailable) {
-                    m_currentActivity.clear();
+                    // The last known activity is kept through the outage.
+                    // Clearing it would resolve every placement made meanwhile
+                    // under "every activity" while the layout registry and the
+                    // engines still hold the last one, and the service's return
+                    // would then announce a switch to an activity that never
+                    // changed.
                     Q_EMIT activitiesChanged();
                 }
             });
@@ -96,6 +114,27 @@ void ActivityManager::start()
 #ifdef KACTIVITIES_AVAILABLE
     m_running = true;
     connectSignals();
+    // The status handler reports nothing while the manager is stopped, and
+    // the activity signals were disconnected, so catch up on a switch made
+    // in the meantime (or on a service that came up between init() and here).
+    adoptControllerActivity();
+#endif
+}
+
+void ActivityManager::adoptControllerActivity()
+{
+#ifdef KACTIVITIES_AVAILABLE
+    auto* controller = qobject_cast<KActivities::Controller*>(m_controller);
+    if (!controller) {
+        return;
+    }
+    // An empty answer is the service not having settled on one yet. The
+    // controller's own currentActivityChanged reports it once it has, so the
+    // kept activity is not cleared for it.
+    const QString activityId = controller->currentActivity();
+    if (!activityId.isEmpty()) {
+        onCurrentActivityChanged(activityId);
+    }
 #endif
 }
 

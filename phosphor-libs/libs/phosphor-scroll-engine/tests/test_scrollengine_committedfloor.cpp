@@ -19,11 +19,14 @@
  * the preset cycles and minimize-width.
  *
  * Across the strip: the floor a taller answer holds its stacked tile's share
- * to, the float when the stack can never hold it, and its own drops (alone in
- * its column, a stack that can no longer hold it, a moved offer along the
- * strip, a user resize across, a lowered minimum across, a leave). And the
- * parked tile's matched answer, which ends a peek memory the client no longer
- * draws to.
+ * to, the slack that tells an answer from the offer, the float when the stack
+ * can never hold it, its own drops (alone in its column, satisfied in every
+ * desktop, a stack or work area that can no longer hold it, a moved offer
+ * along the strip, a user resize across, a lowered minimum across, a leave)
+ * and what keeps it (a raised minimum, a float round trip, Retile). An answer
+ * for a background strip is learned for that strip, and a dragged frame
+ * teaches nothing. And the parked tile's matched answer, which ends a peek
+ * memory the client no longer draws to.
  */
 
 #include <QCoreApplication>
@@ -142,9 +145,10 @@ int crossOf(ScrollEngine* engine, const QString& windowId)
 /// The floor fixture with b consumed into a's column: one 300px column
 /// stacking a over b, 400px each across the 800px work area.
 ScrollEngine* makeStackEngine(QObject* owner, StubScrollSettings** outSettings = nullptr,
-                              bool respectMinimumSize = true, GeometryFn screenGeometry = {})
+                              bool respectMinimumSize = true, GeometryFn screenGeometry = {},
+                              GeometryFn availableGeometry = {})
 {
-    ScrollEngine* engine = makeFloorEngine(owner, outSettings, respectMinimumSize, screenGeometry);
+    ScrollEngine* engine = makeFloorEngine(owner, outSettings, respectMinimumSize, screenGeometry, availableGeometry);
     engine->consumeWindowIntoColumn(kS1);
     engine->retile(kS1);
     QCoreApplication::processEvents();
@@ -240,6 +244,60 @@ ScrollEngine* makeStraddleEngine(QObject* owner, GeometryFn screenGeometry = {},
 bool isParked(ScrollEngine* engine, const QString& windowId)
 {
     return engine->lastManagedRect(windowId).y() > defaultScreenRect().bottom();
+}
+
+/// kSticky on every desktop, kD2 on desktop 2, everything else on desktop 1.
+PhosphorEngine::DesktopSpanQuery stickyBesideD2()
+{
+    return [](const QString& windowId) {
+        PhosphorEngine::DesktopSpan span;
+        span.known = true;
+        span.sticky = (windowId == kSticky);
+        if (!span.sticky) {
+            span.desktops = {windowId == kD2 ? 2 : 1};
+        }
+        return span;
+    };
+}
+
+/// The two-desktop peek fixture, under makeStraddleEngine's half-width columns
+/// and Always centring: the sticky window taught a 700 floor on desktop 1,
+/// was adopted onto desktop 2 beside d2, and both its columns were widened
+/// to 800, which satisfies the floor everywhere and leaves the 700 memory.
+/// Desktop 1's column was then narrowed to 600, so it offers less than the
+/// memory while desktop 2's still offers more. Desktop 1 is in view and the
+/// sticky window focused. Null when the adoption onto desktop 2 failed.
+ScrollEngine* makeTwoDesktopPeekEngine(QObject* owner)
+{
+    StubScrollSettings* settings = makeFloorSettings(owner);
+    settings->widthValue = 0.5;
+    settings->centerFocused = static_cast<int>(CenterFocusedColumn::Always);
+    ScrollEngine* engine = engineWith(owner, settings, {kS1});
+    engine->setCurrentDesktopForScreen(kS1, 1);
+    engine->windowOpened(kD1, kS1, 0, 0);
+    engine->windowOpened(kSticky, kS1, 0, 0);
+    engine->windowFocused(kSticky, kS1);
+    engine->retile(kS1);
+    QCoreApplication::processEvents();
+    answer(engine, kSticky, 700);
+
+    switchTo(engine, 2);
+    engine->windowOpened(kD2, kS1, 0, 0);
+    QCoreApplication::processEvents();
+    adopt(engine, stickyBesideD2());
+    if (!engine->heldKeyForWindow(kSticky).has_value()) {
+        return nullptr;
+    }
+    engine->windowFocused(kSticky, kS1);
+    engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1);
+    QCoreApplication::processEvents();
+    switchTo(engine, 1);
+    engine->windowFocused(kSticky, kS1);
+    engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1); // satisfied on both: the floor goes
+    QCoreApplication::processEvents();
+    engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1); // offers less here only
+    QCoreApplication::processEvents();
+    return engine;
 }
 
 /// Whether any windowsTiled batch @p tiled caught carries an entry for
@@ -426,6 +484,38 @@ private Q_SLOTS:
     }
 
     // ── Giving a floor back ─────────────────────────────────────────────
+
+    // A narrower answer a pixel past what the column offers without the floor
+    // is that offer, within the rounding slack: the widening goes entirely.
+    // Kept a pixel wide, the floor is one no sweep could ever find satisfied,
+    // and it would hold the column a pixel wide for good (F367).
+    void aGiveBackWithinTheSlackDropsTheFloor()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        answer(engine, kA, 450);
+        QCOMPARE(extentOf(engine, kA), 450);
+        answer(engine, kA, 301); // offered 450; the column asks for 300
+        QCOMPARE(extentOf(engine, kA), 300);
+    }
+
+    // A narrower answer to a park lowers the peek memory without touching the
+    // column, and the straddler parked on the old memory is laid out again on
+    // the new one, which no longer protects its remainder (F187).
+    void aNarrowerAnswerToAParkLaysTheStraddlerOutAgain()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStraddleEngine(&owner);
+        answer(engine, kA, 700);
+        engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1); // satisfied: the floor goes, the memory stays
+        QCoreApplication::processEvents();
+        engine->windowFocused(kB, kS1);
+        QCoreApplication::processEvents();
+        QVERIFY2(isParked(engine, kA), "precondition: the 700 memory parks the straddler");
+
+        answer(engine, kA, 250); // offered the whole parked 800
+        QVERIFY2(!isParked(engine, kA), "the lowered memory no longer parks it, and the strip says so at once");
+    }
 
     void aNarrowerAnswerGivesTheWideningBack()
     {
@@ -910,40 +1000,8 @@ private Q_SLOTS:
     void aTakenParkKeepsThePeekWhileAnotherDesktopOffersIt()
     {
         QObject owner;
-        StubScrollSettings* settings = makeFloorSettings(&owner);
-        settings->widthValue = 0.5;
-        settings->centerFocused = static_cast<int>(CenterFocusedColumn::Always);
-        ScrollEngine* engine = engineWith(&owner, settings, {kS1});
-        engine->setCurrentDesktopForScreen(kS1, 1);
-        engine->windowOpened(kD1, kS1, 0, 0);
-        engine->windowOpened(kSticky, kS1, 0, 0);
-        engine->windowFocused(kSticky, kS1);
-        engine->retile(kS1);
-        QCoreApplication::processEvents();
-        answer(engine, kSticky, 700);
-
-        switchTo(engine, 2);
-        engine->windowOpened(kD2, kS1, 0, 0);
-        QCoreApplication::processEvents();
-        adopt(engine, [](const QString& windowId) {
-            PhosphorEngine::DesktopSpan span;
-            span.known = true;
-            span.sticky = (windowId == kSticky);
-            if (!span.sticky) {
-                span.desktops = {windowId == kD2 ? 2 : 1};
-            }
-            return span;
-        });
-        QVERIFY2(engine->heldKeyForWindow(kSticky).has_value(), "precondition: adopted onto desktop 2");
-        engine->windowFocused(kSticky, kS1);
-        engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1);
-        QCoreApplication::processEvents();
-        switchTo(engine, 1);
-        engine->windowFocused(kSticky, kS1);
-        engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1); // satisfied on both: the floor goes
-        QCoreApplication::processEvents();
-        engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1); // offers less here only
-        QCoreApplication::processEvents();
+        ScrollEngine* engine = makeTwoDesktopPeekEngine(&owner);
+        QVERIFY2(engine, "precondition: adopted onto desktop 2");
         QCOMPARE(extentOf(engine, kSticky), 600);
 
         engine->windowFocused(kD1, kS1);
@@ -953,11 +1011,31 @@ private Q_SLOTS:
         engine->retile(kS1);
         QCoreApplication::processEvents();
         QVERIFY2(isParked(engine, kSticky), "a column elsewhere that still offers the memory keeps it");
+
+        // The control: what kept the memory was desktop 2's column. Narrowed
+        // there too, it offers less everywhere, the memory ends and desktop
+        // 1's straddle peeks.
+        switchTo(engine, 2);
+        engine->windowFocused(kSticky, kS1);
+        engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1);
+        QCoreApplication::processEvents();
+        switchTo(engine, 1);
+        engine->windowFocused(kD1, kS1);
+        QCoreApplication::processEvents();
+        QVERIFY2(!isParked(engine, kSticky), "with every column offering less, the straddle peeks");
     }
 
     // A held floor is never touched by a matched answer: the column is held
     // at it, so a matched answer to the park only says the client took the
-    // floor it taught, and nothing is republished.
+    // floor it taught, and nothing is republished. Neither is the memory the
+    // floor carries, which outlives the floor once a wider column satisfies
+    // it, as aSatisfiedFloorStillProtectsThePeek shows without the matched
+    // answer.
+    //
+    // A floor the column is held at never leaves the memory longer than the
+    // offer, so here mayEndPeek's no-floor term is not what keeps the floor.
+    // It is load-bearing where the work area caps the column below the floor,
+    // which aMatchedAnswerToACappedFloorKeepsIt pins.
     void aMatchedAnswerUnderAFloorChangesNothing()
     {
         QObject owner;
@@ -974,11 +1052,61 @@ private Q_SLOTS:
         QCOMPARE(placement.count(), 0);
         QCOMPARE(extentOf(engine, kA), 700);
         QVERIFY2(isParked(engine, kA), "the floor still parks the straddler");
+
+        // The floor satisfied by an 800 column goes, and the memory is still
+        // there to park the next straddle.
+        engine->windowFocused(kA, kS1);
+        engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 800);
+        engine->windowFocused(kB, kS1);
+        QCoreApplication::processEvents();
+        QVERIFY2(isParked(engine, kA), "the matched answer left the memory standing");
+    }
+
+    // A floor up to the rounding slack past the work area stays tiled, and the
+    // work area caps its column a pixel below it. The client's matched answer
+    // to that capped offer then sits under a memory longer than the offer,
+    // which is the shape that ends a peek memory. Under a held floor it must
+    // not: ending it would wipe the floor with it. The 1100 work area grows
+    // back to the screen afterwards, where the column reads the floor whole
+    // and shows it is still the 1101 the client taught.
+    void aMatchedAnswerToACappedFloorKeepsIt()
+    {
+        QObject owner;
+        auto available = std::make_shared<QRect>(Ax::t(QRect(0, 0, 1100, ScrollTestUtils::kCrossExtent)));
+        ScrollEngine* engine = makeFloorEngine(
+            &owner, nullptr, true,
+            [](const QString&) {
+                return defaultScreenRect();
+            },
+            [available](const QString&) {
+                return *available;
+            });
+        engine->setColumnWidth(ColumnWidth::makeFixed(1099), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(Ax::mainLen(engine->lastManagedRect(kA)), 1099);
+
+        answer(engine, kA, 1101);
+        QVERIFY2(!engine->isWindowFloatingInScroll(kA), "a floor a pixel past the work area stays tiled");
+        QCOMPARE(Ax::mainLen(engine->lastManagedRect(kA)), 1100);
+
+        answer(engine, kA, 1100); // took the capped offer
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 1100);
+
+        *available = defaultScreenRect();
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 1101);
     }
 
     // A matched answer from a window nothing has been learned about is the
-    // compositor's steady state: refused before anything resolves, with no
-    // republish and no batch.
+    // compositor's steady state, with no republish and no batch. The
+    // axis-free early return answers it before anything resolves; were that
+    // return gone, the steady-state return after it would answer it the same
+    // way, so what this pins is the silence, not which return gives it.
     void aMatchedAnswerWithoutMemoryIsSilent()
     {
         QObject owner;
@@ -1031,40 +1159,9 @@ private Q_SLOTS:
     void aPeekEndsOnlyWhenEveryDesktopOffersLess()
     {
         QObject owner;
-        StubScrollSettings* settings = makeFloorSettings(&owner);
-        settings->widthValue = 0.5;
-        settings->centerFocused = static_cast<int>(CenterFocusedColumn::Always);
-        ScrollEngine* engine = engineWith(&owner, settings, {kS1});
-        engine->setCurrentDesktopForScreen(kS1, 1);
-        engine->windowOpened(kD1, kS1, 0, 0);
-        engine->windowOpened(kSticky, kS1, 0, 0);
-        engine->windowFocused(kSticky, kS1);
-        engine->retile(kS1);
-        QCoreApplication::processEvents();
-        answer(engine, kSticky, 700);
-
-        switchTo(engine, 2);
-        engine->windowOpened(kD2, kS1, 0, 0);
-        QCoreApplication::processEvents();
-        adopt(engine, [](const QString& windowId) {
-            PhosphorEngine::DesktopSpan span;
-            span.known = true;
-            span.sticky = (windowId == kSticky);
-            if (!span.sticky) {
-                span.desktops = {windowId == kD2 ? 2 : 1};
-            }
-            return span;
-        });
-        QVERIFY2(engine->heldKeyForWindow(kSticky).has_value(), "precondition: adopted onto desktop 2");
-        engine->windowFocused(kSticky, kS1);
-        engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1);
-        QCoreApplication::processEvents();
-        switchTo(engine, 1);
-        engine->windowFocused(kSticky, kS1);
-        engine->setColumnWidth(ColumnWidth::makeFixed(800), kS1); // satisfied on both: the floor goes
-        QCoreApplication::processEvents();
-        engine->setColumnWidth(ColumnWidth::makeFixed(600), kS1); // offers less here, shown whole
-        QCoreApplication::processEvents();
+        // Desktop 1's column offers less than the memory, shown whole.
+        ScrollEngine* engine = makeTwoDesktopPeekEngine(&owner);
+        QVERIFY2(engine, "precondition: adopted onto desktop 2");
         QCOMPARE(extentOf(engine, kSticky), 600);
 
         // Desktop 2's column still offers 800, so the memory stands there.
@@ -1137,6 +1234,19 @@ private Q_SLOTS:
 
     // ── The oversized verdict ───────────────────────────────────────────
 
+    // A lone tile offered the whole cross extent answers a pixel over it on a
+    // fractional scale. That is the offer, within the rounding slack, and not
+    // an answer that cannot fit the work area: the window stays tiled (F321).
+    void aCrossAnswerAPixelPastTheWorkAreaStaysTiled()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        QCOMPARE(crossOf(engine, kA), ScrollTestUtils::kCrossExtent);
+        answer(engine, kA, 300, 1);
+        QVERIFY(!engine->isWindowFloatingInScroll(kA));
+        QCOMPARE(crossOf(engine, kA), ScrollTestUtils::kCrossExtent);
+    }
+
     // A floor no column can offer floats the window, the policy a declared
     // minimum past the work area already gets.
     void aFloorPastTheWorkAreaFloatsTheWindow()
@@ -1172,10 +1282,7 @@ private Q_SLOTS:
     void aCrossAnswerPastTheWorkAreaFloatsTheWindow()
     {
         QObject owner;
-        ScrollEngine* engine = makeFloorEngine(&owner);
-        engine->consumeWindowIntoColumn(kS1); // b joins a's column
-        engine->retile(kS1);
-        QCoreApplication::processEvents();
+        ScrollEngine* engine = makeStackEngine(&owner);
         const QRect offered = engine->lastManagedRect(kA);
         QCOMPARE(Ax::crossLen(offered), 400);
 
@@ -1270,6 +1377,34 @@ private Q_SLOTS:
     }
 
     // ── Other drops ─────────────────────────────────────────────────────
+
+    // Every tab of a column shares its extent along the strip, which is held
+    // to the largest floor among them, so a user resize of the shown tab
+    // settles the hidden tab's floor too. Left standing it held the column,
+    // and the release reverted the drag (F254).
+    void aShownTabsResizeDropsAHiddenTabsFloor()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeFloorEngine(&owner);
+        engine->consumeWindowIntoColumn(kS1); // b joins a's column
+        engine->toggleColumnTabbed(kS1);
+        engine->windowFocused(kB, kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        answer(engine, kB, 450); // b, shown, teaches 450
+        QCOMPARE(extentOf(engine, kA), 450);
+
+        engine->windowFocused(kA, kS1);
+        QCoreApplication::processEvents();
+        const QRect applied = engine->lastManagedRect(kA);
+        QCOMPARE(Ax::mainLen(applied), 450);
+        QRect settled = Ax::t(applied);
+        settled.setWidth(350);
+        settled = Ax::t(settled);
+        engine->onWindowResized(kA, applied, settled, kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 350);
+    }
 
     // The user's own resize along the strip settles the extent there, so the
     // floor is superseded: without the drop it kept the column wider than the
@@ -1530,6 +1665,25 @@ private Q_SLOTS:
 
     // A window that moved desktop re-enters as a migration, which starts the
     // new context unfloored.
+    // A desktop move through the membership pass, into the desktop in view,
+    // starts the new context unfloored too: the window gives up every context
+    // it held, so what its client taught answered strips it has left. It used
+    // to keep the floor this way and lose it on a move into a background
+    // desktop, on nothing but which desktop it went to (F463).
+    void aMembershipMoveIntoTheDesktopInViewDropsTheFloor()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeDesktopFloorEngine(&owner);
+        answer(engine, kSticky, 450);
+        QCOMPARE(extentOf(engine, kSticky), 450);
+
+        switchTo(engine, 2);
+        adopt(engine, stickyMovedTo(2));
+        QVERIFY2(engine->heldKeyForWindow(kSticky).has_value(), "precondition: moved onto desktop 2");
+        QCOMPARE(engine->heldKeyForWindow(kSticky)->desktop, 2);
+        QCOMPARE(extentOf(engine, kSticky), 300);
+    }
+
     void aCrossDesktopMigrationDropsTheFloor()
     {
         QObject owner;
@@ -1822,8 +1976,50 @@ private Q_SLOTS:
         QCOMPARE(extentOf(engine, kA), 300);
     }
 
+    // The slack across the strip, the twin of anAnswerWithinTheSlackIsTheOffer:
+    // a pixel taller than the share is the offer and teaches nothing, two
+    // pixels is an answer. The floor's premise, the offer along the strip it
+    // was learned at, has the same slack: a column a pixel wider keeps the
+    // floor, two pixels wider drops it.
+    void aCrossAnswerWithinTheSlackIsTheOffer()
+    {
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStackEngine(&owner);
+            answer(engine, kA, 300, 1);
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(crossOf(engine, kA), 400);
+        }
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStackEngine(&owner);
+            answer(engine, kA, 300, 2);
+            QCOMPARE(crossOf(engine, kA), 402);
+            QCOMPARE(crossOf(engine, kB), 398);
+        }
+        {
+            QObject owner;
+            ScrollEngine* engine = makeStackEngine(&owner);
+            answer(engine, kA, 300, 100);
+            QCOMPARE(crossOf(engine, kA), 500);
+            engine->setColumnWidth(ColumnWidth::makeFixed(301), kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(extentOf(engine, kA), 301);
+            QCOMPARE(crossOf(engine, kA), 500);
+            engine->setColumnWidth(ColumnWidth::makeFixed(302), kS1);
+            QCoreApplication::processEvents();
+            QCOMPARE(extentOf(engine, kA), 302);
+            QCOMPARE(crossOf(engine, kA), 400);
+        }
+    }
+
     // The steady state: the client answering the share it is now held at,
     // and a late copy of the answer that taught the floor, are both silent.
+    // What this pins is the silence. The late copy answers an offer the strip
+    // no longer holds, so the whole-tile gate would refuse it even without
+    // the steady-state return that answers it first, and nothing observable
+    // tells the two apart.
     void aRepeatedTallerAnswerIsSilent()
     {
         QObject owner;
@@ -1870,9 +2066,10 @@ private Q_SLOTS:
         }
     }
 
-    // Alone in its column the tile is offered the whole work area, which
-    // satisfies the floor, so it goes. A sibling that joins later is split
-    // as asked until the client answers again.
+    // Alone in its column the tile, at its Auto height, is offered the whole
+    // work area across the strip, which satisfies the floor, so it goes. A
+    // sibling that joins later is split as asked until the client answers
+    // again.
     void aCrossFloorDropsWhenItsTileIsAlone()
     {
         QObject owner;
@@ -1973,7 +2170,8 @@ private Q_SLOTS:
     }
 
     // A LOWERED declared minimum across the strip drops the cross floor and
-    // announces the change. One lowered along the strip leaves it.
+    // announces the change. A raised one takes nothing, and one lowered
+    // along the strip leaves it.
     void aLoweredMinimumAcrossDropsTheCrossFloor()
     {
         {
@@ -1986,6 +2184,12 @@ private Q_SLOTS:
             QCOMPARE(crossOf(engine, kA), 500);
 
             QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+            const QSize min150 = roleSize(0, 150);
+            engine->windowMinSizeUpdated(kA, min150.width(), min150.height());
+            QCOMPARE(placement.count(), 0); // raised: nothing dropped, nothing to announce
+            QCoreApplication::processEvents();
+            QCOMPARE(crossOf(engine, kA), 500);
+
             const QSize min50 = roleSize(0, 50);
             engine->windowMinSizeUpdated(kA, min50.width(), min50.height());
             QCOMPARE(placement.count(), 1);
@@ -2011,11 +2215,14 @@ private Q_SLOTS:
 
     // A float round trip brings the tile back into its stack held to the
     // share its client taught, like the floor along the strip. Closing the
-    // window, one of the leave paths, takes it.
+    // window, one of the leave paths, takes it. The reopened window goes
+    // straight into b's stack: opened alone, its column would satisfy any
+    // floor it still held and drop it, and the close would go untested.
     void aCrossFloorSurvivesAFloatRoundTripAndDropsOnALeave()
     {
         QObject owner;
-        ScrollEngine* engine = makeStackEngine(&owner);
+        StubScrollSettings* settings = nullptr;
+        ScrollEngine* engine = makeStackEngine(&owner, &settings);
         answer(engine, kA, 300, 100);
         engine->setWindowFloat(kA, true, kS1);
         engine->setWindowFloat(kA, false, kS1);
@@ -2027,14 +2234,16 @@ private Q_SLOTS:
         QCOMPARE(crossOf(engine, kA), 500);
 
         engine->windowClosed(kA);
-        engine->windowOpened(kA, kS1, 0, 0);
+        settings->insertPosition = static_cast<int>(ScrollInsertPosition::IntoActiveColumn);
+        engine->refreshConfigFromSettings();
         engine->windowFocused(kB, kS1);
-        engine->consumeWindowIntoColumn(kS1);
+        engine->windowOpened(kA, kS1, 0, 0);
         engine->retile(kS1);
         QCoreApplication::processEvents();
         state = stateOf(engine);
         QVERIFY(state);
         QCOMPARE(state->strip().columnCount(), 1);
+        QCOMPARE(state->strip().columnOfWindow(kA), state->strip().columnOfWindow(kB));
         QCOMPARE(crossOf(engine, kA), 400);
     }
 
@@ -2057,6 +2266,9 @@ private Q_SLOTS:
         *geometry = Ax::t(QRect(0, 0, 800, 1200));
         engine->retile(kS1);
         QCoreApplication::processEvents();
+        // Without the flip the floor would still be read, and the split below
+        // would pass for an unrelated reason.
+        QVERIFY2(engine->stripAxisForScreen(kS1) != Ax::stripAxis(), "precondition: the rotation flips the axis");
         QCOMPARE(Ax::mainLen(engine->lastManagedRect(kA)), Ax::mainLen(engine->lastManagedRect(kB)));
 
         *geometry = defaultScreenRect();
@@ -2078,6 +2290,256 @@ private Q_SLOTS:
         engine->retile(kS1);
         QCoreApplication::processEvents();
         QCOMPARE(crossOf(engine, kA), 500);
+    }
+
+    // A shorter answer gives the cross floor back, the narrower answer's twin:
+    // down to the answer while that still overshoots the share the tile gets
+    // without the floor, entirely once it does not. A taller answer after a
+    // give-back is a client that does not answer one offer the same way
+    // twice, so the re-taught floor is pinned, and a shorter answer then
+    // keeps it (F266).
+    void aShorterAnswerGivesTheCrossFloorBack()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        answer(engine, kA, 300, 100); // offered 400, answers 500
+        QCOMPARE(crossOf(engine, kA), 500);
+
+        answer(engine, kA, 300, -50); // offered 500, answers 450: still past the 400 share
+        QCOMPARE(crossOf(engine, kA), 450);
+        QCOMPARE(crossOf(engine, kB), 350);
+
+        answer(engine, kA, 300, -49); // offered 450, answers 401: the share, within the slack
+        QCOMPARE(crossOf(engine, kA), 400);
+
+        answer(engine, kA, 300, 100); // offered 400, answers 500 again: re-taught, pinned
+        QCOMPARE(crossOf(engine, kA), 500);
+        answer(engine, kA, 300, -50); // offered 500, answers 450: the pin holds
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 500);
+    }
+
+    // A wider answer moves the tile's offer along the strip, and the cross
+    // extent in the same commit was given at that width, so a held cross
+    // floor takes the new offer as its premise. Read against the old one, the
+    // next pass dropped it and waited a round trip for the client to teach it
+    // again (F251).
+    void aWiderAnswerKeepsTheHeldCrossFloor()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        answer(engine, kA, 300, 100);
+        QCOMPARE(crossOf(engine, kA), 500);
+
+        answer(engine, kA, 450); // offered 300 x 500, answers 450 x 500
+        QCOMPARE(extentOf(engine, kA), 450);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 500);
+        QCOMPARE(crossOf(engine, kB), 300);
+    }
+
+    // Siblings whose own floors fill the column leave the floored tile a
+    // capacity of nothing, which reads as 0 and not as the "no tile here"
+    // sentinel, so the held floor is dropped like any the stack can no longer
+    // hold. A negative capacity kept it, and the share came back the moment
+    // the siblings let go (F186).
+    void aCrossFloorDropsWhenItsSiblingsFillTheColumn()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        engine->windowOpened(kC, kS1, 0, 0);
+        engine->windowFocused(kA, kS1);
+        engine->consumeWindowIntoColumn(kS1); // c joins too: a over b over c
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        ScrollState* state = stateOf(engine);
+        QVERIFY(state);
+        QCOMPARE(state->strip().columnCount(), 1);
+        const int evenShare = crossOf(engine, kA);
+        answer(engine, kA, 300, 100);
+        QCOMPARE(crossOf(engine, kA), evenShare + 100);
+
+        // b and c each declare 500 across: 1000 of an 800 column.
+        const QSize min500 = roleSize(0, 500);
+        engine->windowMinSizeUpdated(kB, min500.width(), min500.height());
+        engine->windowMinSizeUpdated(kC, min500.width(), min500.height());
+        QCoreApplication::processEvents();
+        QVERIFY(!engine->isWindowFloatingInScroll(kA));
+
+        // They let go, and a is split as asked: its floor went.
+        engine->windowMinSizeUpdated(kB, 0, 0);
+        engine->windowMinSizeUpdated(kC, 0, 0);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), evenShare);
+    }
+
+    // Retile resets the stack's heights to the even split, and a cross floor
+    // is not a height: the floored tile keeps its share.
+    void retileKeepsTheCrossFloor()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        answer(engine, kA, 300, 100);
+        QCOMPARE(crossOf(engine, kA), 500);
+        engine->resetStripToDefaults(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 500);
+        QCOMPARE(crossOf(engine, kB), 300);
+    }
+
+    // A work area that shrinks across the strip under a held cross floor
+    // leaves a share the stack can no longer give. It is dropped, announced,
+    // and stays dropped when the area grows again, the twin of
+    // aWorkAreaShrinkDropsAFloorItCanNoLongerHold. The shrunk area keeps the
+    // strip's orientation and its extent along the strip, so the floor's
+    // premise is untouched and only the capacity drops it.
+    void aWorkAreaShrinkDropsACrossFloorItCanNoLongerHold()
+    {
+        QObject owner;
+        auto available = std::make_shared<QRect>(defaultScreenRect());
+        ScrollEngine* engine = makeStackEngine(
+            &owner, nullptr, true,
+            [](const QString&) {
+                return defaultScreenRect();
+            },
+            [available](const QString&) {
+                return *available;
+            });
+        answer(engine, kA, 300, 100);
+        QCOMPARE(crossOf(engine, kA), 500);
+
+        QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+        *available = Ax::t(QRect(0, 0, 1200, 450));
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(extentOf(engine, kA), 300);
+        QCOMPARE(crossOf(engine, kA), 225);
+        QCOMPARE(crossOf(engine, kB), 225);
+        QVERIFY(placement.count() > 0);
+        QCOMPARE(placement.last().at(0).toString(), kS1);
+
+        *available = defaultScreenRect();
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 400);
+    }
+
+    // A taller answer from a window whose strip is in the BACKGROUND is judged
+    // against that strip under its own context, the twin of
+    // aBackgroundWindowsAnswerIsLearnedForItsOwnStrip: learned, and holding
+    // its share when the desktop returns.
+    void aBackgroundWindowsTallerAnswerIsLearnedForItsOwnStrip()
+    {
+        QObject owner;
+        ScrollEngine* engine = engineWith(&owner, makeFloorSettings(&owner), {kS1});
+        engine->setCurrentDesktopForScreen(kS1, 1);
+        engine->windowOpened(kD1, kS1, 0, 0);
+        engine->windowOpened(kA, kS1, 0, 0);
+        engine->windowFocused(kD1, kS1);
+        engine->consumeWindowIntoColumn(kS1); // a joins d1's column
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 400);
+
+        switchTo(engine, 2);
+        answer(engine, kA, 300, 100);
+        switchTo(engine, 1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 500);
+        QCOMPARE(crossOf(engine, kD1), 300);
+    }
+
+    // A frame under an interactive move is motion, not an answer, across the
+    // strip as along it.
+    void aDraggedWindowsTallerAnswerTeachesNothing()
+    {
+        QObject owner;
+        ScrollEngine* engine = makeStackEngine(&owner);
+        engine->setInteractiveDragWindow(kA);
+        answer(engine, kA, 300, 100);
+        engine->setInteractiveDragWindow(QString());
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(crossOf(engine, kA), 400);
+    }
+
+    // The cross floor is the window's, read by every desktop's stack it holds
+    // a tile in, so it goes only once EVERY one of those tiles is offered at
+    // least the floor without it, the twin of
+    // aFloorDropsOnlyWhenEveryDesktopSatisfiesIt. The sticky window taught
+    // 500 in a stack on desktop 1 and is adopted onto desktop 2. Alone on
+    // desktop 1 afterwards, its share satisfies the floor there; whether the
+    // floor goes then turns on desktop 2's share, as a sibling that joins on
+    // desktop 1 shows. That share, not the tile's extent along the strip
+    // (300 on both, under the floor either way), is what is measured.
+    void aCrossFloorDropsOnlyWhenEveryDesktopSatisfiesIt()
+    {
+        // The sticky window's 500 floor learned under d1 on desktop 1, then
+        // adopted onto desktop 2 beside d2, stacked under it when
+        // @p stackedThere. Desktop 2 is in view.
+        const auto adoptedOntoDesktop2 = [](QObject* owner, bool stackedThere) {
+            ScrollEngine* engine = engineWith(owner, makeFloorSettings(owner), {kS1});
+            engine->setCurrentDesktopForScreen(kS1, 1);
+            engine->windowOpened(kD1, kS1, 0, 0);
+            engine->windowOpened(kSticky, kS1, 0, 0);
+            engine->windowFocused(kD1, kS1);
+            engine->consumeWindowIntoColumn(kS1); // the sticky one joins d1's column
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            answer(engine, kSticky, 300, 100);
+            switchTo(engine, 2);
+            engine->windowOpened(kD2, kS1, 0, 0);
+            QCoreApplication::processEvents();
+            adopt(engine, stickyBesideD2());
+            if (stackedThere) {
+                engine->windowFocused(kD2, kS1);
+                engine->consumeWindowIntoColumn(kS1); // the sticky one joins d2's column
+            }
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            return engine;
+        };
+        // Back on desktop 1: d1 closes, so the sticky window is alone there,
+        // then c opens and joins its column.
+        const auto aloneThenJoined = [](ScrollEngine* engine) {
+            switchTo(engine, 1);
+            engine->windowClosed(kD1);
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            const int alone = crossOf(engine, kSticky);
+            engine->windowOpened(kC, kS1, 0, 0);
+            engine->windowFocused(kSticky, kS1);
+            engine->consumeWindowIntoColumn(kS1); // c joins the sticky one's column
+            engine->retile(kS1);
+            QCoreApplication::processEvents();
+            return alone;
+        };
+        {
+            // Desktop 2 stacks it under d2, a 400 share without the floor:
+            // not satisfied there, so the floor holds the rejoined stack.
+            QObject owner;
+            ScrollEngine* engine = adoptedOntoDesktop2(&owner, true);
+            QVERIFY2(engine->heldKeyForWindow(kSticky).has_value(), "precondition: adopted onto desktop 2");
+            QCOMPARE(crossOf(engine, kSticky), 500);
+            QCOMPARE(aloneThenJoined(engine), 800);
+            QCOMPARE(crossOf(engine, kSticky), 500);
+            QCOMPARE(crossOf(engine, kC), 300);
+        }
+        {
+            // Desktop 2 shows it alone, the whole 800: satisfied there too, so
+            // the floor goes and the rejoined stack splits as asked.
+            QObject owner;
+            ScrollEngine* engine = adoptedOntoDesktop2(&owner, false);
+            QVERIFY2(engine->heldKeyForWindow(kSticky).has_value(), "precondition: adopted onto desktop 2");
+            QCOMPARE(crossOf(engine, kSticky), 800);
+            QCOMPARE(aloneThenJoined(engine), 800);
+            QCOMPARE(crossOf(engine, kSticky), 400);
+            QCOMPARE(crossOf(engine, kC), 400);
+        }
     }
 
     // The minimum sizes setting gates the cross floor on both ends, like the
@@ -2354,11 +2816,10 @@ private Q_SLOTS:
         QCOMPARE(Ax::crossLen(ScrollTestUtils::rectOf(strip.relayout(params), QStringLiteral("a"))), 800);
     }
 
-    // The stack's rebalance takes the overflow a floor causes from the tiles
-    // that still have slack above their own floors, and a committed cross
-    // floor leaves its tile none: a is held at 500 and b alone gives way,
-    // down to 290 of the 790 the 10px gap leaves.
-    void aRebalanceNeverShrinksATileHeldByACrossFloor()
+    // At the strip level a committed cross floor holds its tile's share of the
+    // stack: a is held at 500 and b alone gives way, down to 290 of the 790
+    // the 10px gap leaves. Without the lookup the stack splits evenly.
+    void aCrossFloorHoldsItsTileWhileTheSiblingGivesWay()
     {
         ScrollLayoutParams params = ScrollTestUtils::defaultParams();
         params.respectMinimumSize = true;

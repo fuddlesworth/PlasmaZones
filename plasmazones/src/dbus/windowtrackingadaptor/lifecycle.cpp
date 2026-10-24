@@ -4,8 +4,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // WindowTrackingAdaptor — window lifecycle
 //
-// Placement capture, window screen changes, close, metadata upserts and
-// frame-geometry tracking. The focus and activation reports live in
+// Placement capture, close, metadata upserts, frame-geometry tracking, the
+// interactive-resize report, the sticky bit and the context-release relay.
+// Screen changes live in screenleave.cpp, the focus and activation reports in
 // activation.cpp and the stale-window prune in prune.cpp.
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -323,18 +324,26 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // No m_service re-check: the entry guard at the top of this function
     // already established it.
     if (!authoritativeScreen.isEmpty() && !m_service->isWindowEngineTiled(windowId)) {
-        // A window excluded from placement (under the minimum size, or matched
-        // by an exclude rule) was never placed by any engine, which is why it
-        // reaches this branch at all. Its frame is no float-back worth keeping:
-        // it would be refused as excluded if it reopened, so the one window the
-        // record can reach is ANOTHER instance of the app, through the reopen's
-        // same-app FIFO. An app's splash screen closing just before its main
-        // window opens handed the main window the splash's size and spot,
-        // floating, and on a small enough splash out of tiling for good.
-        // Asked against the live frame, which is still in the shadow here.
-        if (m_cachedSnapEngine && m_cachedSnapEngine->isWindowExcluded(windowId, authoritativeScreen)) {
+        // This branch is the routine close capture of every free window no
+        // engine tracks (any free window on a snapping screen lands here), so
+        // an excluded window (under the minimum size, or matched by an exclude
+        // rule) is refused only a NEW record. A window nothing ever recorded
+        // would hand its record to ANOTHER instance of the app, through the
+        // reopen's same-app FIFO: an app's splash screen closing just before
+        // its main window opens handed the main window the splash's size and
+        // spot, floating, and on a small enough splash out of tiling for good.
+        // A window with a record of its own keeps it current instead, since
+        // that record exists whatever this close does and refusing the update
+        // only leaves it on an older frame (a window shrunk under the minimum
+        // would otherwise lose its close capture). The verdict is snap's, the
+        // one exclusion query this adaptor holds, and float-back memory serves
+        // every mode, so it may only stop a record from being created, never
+        // freeze one another mode wrote. Asked against the live frame, which is
+        // still in the shadow here.
+        if (m_cachedSnapEngine && !m_service->placementStore().peekExact(windowId)
+            && m_cachedSnapEngine->isWindowExcluded(windowId, authoritativeScreen)) {
             qCDebug(lcDbusWindow) << "captureWindowPlacement: no float-back for" << windowId
-                                  << "— excluded from placement";
+                                  << "— excluded from placement, with no record of its own";
             return;
         }
         const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
@@ -348,12 +357,13 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         // before WindowTracking, in-order), so it lands here with its frame
         // still the tile rect — only the engine's retained memory (kept
         // through its windowClosed exactly for this read) lets the guard
-        // refuse it. Skipping deliberately forfeits this close's
-        // OTHER effects too (the screen adoption and pure-float sibling
-        // collapse recordFloatingClose bundles): the record keeps its prior
-        // screen and geometry, which is strictly better than adopting a
-        // poisoned one — recordFloatingClose has no geometry-less mode, and
-        // a genuine free frame at the next close records normally.
+        // refuse it. The whole call is skipped, not only the geometry, although
+        // recordFloatingClose refuses a managed frame itself and records the
+        // rest: that rest (the close screen adopted as the record's screen, a
+        // floating slot for the owning engine, the pure-float sibling
+        // collapse) states the window closed FREE, and one still on its zone
+        // or tile rect did not. The record keeps its prior screen and slots,
+        // and a genuine free frame at the next close records normally.
         if (frame.isValid() && !m_service->isManagedFrame(windowId, frame)) {
             m_service->recordFloatingClose(windowId, authoritativeScreen, frame);
         }
@@ -480,9 +490,11 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
         // screen's suffix, so one a subdivision change removed read as known.
         const QString known = resolveBusScreen(closeScreen, windowId);
         if (known.isEmpty()) {
+            // No primary-screen fallback for a centre on no output: that
+            // would file the close on a screen the window was never on.
             const QRect closeFrame = m_frameGeometry.value(shadowWindowId(windowId));
             closeScreen = closeFrame.isValid()
-                ? Utils::effectiveScreenIdAt(m_service->screenManager(), closeFrame.center())
+                ? WindowTrackingInternal::screenContaining(m_service->screenManager(), closeFrame.center())
                 : QString();
             qCDebug(lcDbusWindow) << "windowClosed: unknown close screen" << screenId << "for" << windowId
                                   << "— resolved to" << closeScreen;
@@ -741,12 +753,15 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                 // Multi-desktop span list (absent for single-desktop / sticky
                 // windows, so an absent key correctly clears a previous span).
                 // Over the bus it arrives as a QDBusArgument, which toList()
-                // reads as empty, so it is unwrapped first (F1003).
+                // reads as empty, so it is unwrapped first (F1003). A repeated
+                // desktop is dropped like a repeated activity below, so a
+                // malformed [1, 1] cannot pass the two-or-more span invariant.
                 const QVariantList list = DBusVariantUtils::convertDbusArgument(v).toList();
                 meta.virtualDesktops.reserve(list.size());
                 for (const QVariant& d : list) {
                     const int desktop = d.toInt();
-                    if (desktop > 0 && (desktops <= 0 || desktop <= desktops)) {
+                    if (desktop > 0 && (desktops <= 0 || desktop <= desktops)
+                        && !meta.virtualDesktops.contains(desktop)) {
                         meta.virtualDesktops.append(desktop);
                     }
                 }

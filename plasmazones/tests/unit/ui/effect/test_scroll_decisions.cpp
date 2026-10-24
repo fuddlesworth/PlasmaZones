@@ -18,9 +18,11 @@
 // maximize-membership and claimed-press answers, when an apply at its target
 // still owes a leg (departureOwesLeg), the view-carried origin, the passive
 // float scope, the user Monocle unmaximize read, the restore-rect output
-// check, the KWin move off a strip, when a strip window's frame reads as its
-// client's answer to its column, whether that answer is new, and which
-// answers are reported to the engine. Same header-only reach as
+// check, what the counter-assert does with an X11 size it did not command
+// (x11ForeignSizeVerdict) and which X11 sizes are read as an answer
+// (x11SizeAnswersColumn), when a strip window's frame reads as its
+// client's answer to its column, whether that answer is new, which answers
+// are reported to the engine, and the size it is told. Same header-only reach as
 // test_anchor_uniforms: kwin-effect has no linkable test target, so the pure
 // halves are extracted into a header this test includes directly.
 
@@ -635,8 +637,23 @@ private Q_SLOTS:
     // rect does: the move-resize split, one row each way.
     void stripEntrySendsSize_onlyWhenTheSizeDiffers()
     {
-        QVERIFY(stripEntrySendsSize(QSize(2880, 2052), QSize(1908, 2052)));
-        QVERIFY(!stripEntrySendsSize(QSize(1908, 2052), QSize(1908, 2052)));
+        QVERIFY(stripEntrySendsSize(QSize(2880, 2052), QSize(1908, 2052), /*x11Client=*/false));
+        QVERIFY(!stripEntrySendsSize(QSize(1908, 2052), QSize(1908, 2052), /*x11Client=*/false));
+        QVERIFY(stripEntrySendsSize(QSize(2880, 2052), QSize(1908, 2052), /*x11Client=*/true));
+        QVERIFY(!stripEntrySendsSize(QSize(1908, 2052), QSize(1908, 2052), /*x11Client=*/true));
+    }
+
+    // An X11 entry's delivered size is a prediction KWin rounds at a
+    // fractional XWayland scale, so a pixel off the frame it committed last
+    // time is no new size (F336). A Wayland entry is exact: a pixel there is
+    // a configure the client answers.
+    void stripEntrySendsSize_x11ToleratesRounding()
+    {
+        const QSize committed(1908, 2052);
+        QVERIFY(!stripEntrySendsSize(committed, QSize(1909, 2052), /*x11Client=*/true));
+        QVERIFY(!stripEntrySendsSize(committed, QSize(1908, 2051), /*x11Client=*/true));
+        QVERIFY(stripEntrySendsSize(committed, QSize(1910, 2052), /*x11Client=*/true));
+        QVERIFY(stripEntrySendsSize(committed, QSize(1909, 2052), /*x11Client=*/false));
     }
 
     // A request outside the effect's applies resizes on KWin's account only
@@ -806,20 +823,20 @@ private Q_SLOTS:
         // as a size, and the settled answer is owed and reported.
         const QSize wider(2880, 2052);
         QVERIFY(!mayCarryCommittedSize(false, /*columnAnswered=*/true, wider, column));
-        QVERIFY(stripEntrySendsSize(/*commanded=*/wider, /*delivered=*/column));
-        QVERIFY(isNewColumnAnswer(ColumnAnswer::Owed, wider, wider));
+        QVERIFY(stripEntrySendsSize(/*commanded=*/wider, /*delivered=*/column, /*x11Client=*/false));
+        QVERIFY(isNewColumnAnswer(ColumnAnswer::Owed, wider, wider, /*x11Client=*/false));
         QVERIFY(shouldReportCommittedSize(column, wider, /*vertical=*/false, /*offerParked=*/false));
         // Longer across it: also never carried, so also re-offered.
         const QSize taller(1908, 2400);
         QVERIFY(!mayCarryCommittedSize(false, true, taller, column));
-        QVERIFY(stripEntrySendsSize(taller, column));
+        QVERIFY(stripEntrySendsSize(taller, column, false));
         // Narrower: carried, so nothing is offered and nothing re-read, which
         // loses nothing, because a narrower answer never sets a floor.
         const QSize narrower(1500, 2052);
         QVERIFY(mayCarryCommittedSize(false, true, narrower, column));
-        QVERIFY(!stripEntrySendsSize(narrower, narrower));
+        QVERIFY(!stripEntrySendsSize(narrower, narrower, false));
         // A client that took the column has nothing to answer.
-        QVERIFY(!stripEntrySendsSize(column, column));
+        QVERIFY(!stripEntrySendsSize(column, column, false));
         QVERIFY(!shouldReportCommittedSize(column, column, false, false));
     }
 
@@ -1075,6 +1092,11 @@ private Q_SLOTS:
         // not handed over while the screens settle (accepted).
         QTest::newRow("cropped straddler, screens settling")
             << QRectF(3848, 8, 1264, 1004) << a << b << false << false << false << false << false;
+        // ...and a frame that misses both IS handed over while they settle:
+        // the row that fails if the centre's term is dropped from the
+        // stale-coordinates arm.
+        QTest::newRow("plain move to B, screens settling")
+            << QRectF(3848, 8, 500, 752) << a << a << false << false << false << false << true;
         QTest::newRow("no tracked output, frame on B")
             << QRectF(3848, 8, 500, 752) << none << a << true << false << false << false << true;
         QTest::newRow("no tracked output, frame on A")
@@ -1115,7 +1137,8 @@ private Q_SLOTS:
 
     // An X11 strip window at a size its batch did not command is put back the
     // first time and learned only when it insists from a readable frame, so a
-    // one-shot KWin resize is never learned and one commit is never both (#1157).
+    // resize KWin makes once is never learned and one commit is never both
+    // (#1157).
     void x11ForeignSizeVerdictTable_data()
     {
         QTest::addColumn<QSize>("commanded");
@@ -1134,6 +1157,15 @@ private Q_SLOTS:
         QTest::newRow("a different second size") << column << QSize(1800, 1004) << wider << true << false;
         QTest::newRow("insists on a narrower size") << column << QSize(1000, 1004) << QSize(1000, 1004) << true << true;
         QTest::newRow("empty commit") << column << QSize() << QSize() << true << false;
+        // The commanded-size guard on its own: rounding of the command, with a
+        // memory that matches it, is still no new size to learn. Without the
+        // guard this row learns.
+        QTest::newRow("a pixel off the command, remembered")
+            << column << QSize(1265, 1004) << QSize(1265, 1004) << true << false;
+        // The emptiness guard on its own: a degenerate commit beside a
+        // memory it rounds to is no answer. Without the guard this row learns.
+        QTest::newRow("zero-width commit beside a one-pixel memory")
+            << column << QSize(0, 1004) << QSize(1, 1004) << true << false;
     }
 
     void x11ForeignSizeVerdictTable()
@@ -1145,6 +1177,42 @@ private Q_SLOTS:
         QFETCH(bool, learn);
         QCOMPARE(x11ForeignSizeVerdict(commanded, committed, lastPutBack, readsAsAnswer) == ForeignSizeVerdict::Learn,
                  learn);
+    }
+
+    // Which X11 frame sizes are read as the client's answer: only under a
+    // guarded command, and only a size that command decided (F116). A KWin
+    // resize the counter-assert's budget would not put back is the shape that
+    // planted a floor at KWin's size.
+    void x11SizeAnswersColumnTable_data()
+    {
+        QTest::addColumn<bool>("commandCurrent");
+        QTest::addColumn<QSize>("commanded");
+        QTest::addColumn<QSize>("learned");
+        QTest::addColumn<QSize>("live");
+        QTest::addColumn<bool>("answers");
+
+        const QSize column(1264, 1004);
+        const QSize learned(1680, 1004);
+        QTest::newRow("the commanded size") << true << column << QSize() << column << true;
+        QTest::newRow("a pixel of rounding") << true << column << QSize() << QSize(1265, 1003) << true;
+        QTest::newRow("the learned size") << true << column << learned << learned << true;
+        QTest::newRow("the learned size within a pixel") << true << column << learned << QSize(1681, 1004) << true;
+        QTest::newRow("KWin's resize, not put back") << true << column << QSize() << QSize(2400, 1004) << false;
+        QTest::newRow("another size than the learned one") << true << column << learned << QSize(2400, 1004) << false;
+        // No guarded command: a batch the user's gesture deferred records
+        // none, and neither its column nor any other size is read then.
+        QTest::newRow("no guarded command, its column") << false << QSize() << QSize() << column << false;
+        QTest::newRow("command superseded, commanded size") << false << column << QSize() << column << false;
+    }
+
+    void x11SizeAnswersColumnTable()
+    {
+        QFETCH(bool, commandCurrent);
+        QFETCH(QSize, commanded);
+        QFETCH(QSize, learned);
+        QFETCH(QSize, live);
+        QFETCH(bool, answers);
+        QCOMPARE(x11SizeAnswersColumn(commandCurrent, commanded, learned, live), answers);
     }
 
     // When a strip window's frame reads as its client's answer to its column:
@@ -1230,16 +1298,34 @@ private Q_SLOTS:
     void columnAnswerNewness()
     {
         const QSize answered(2880, 2052);
-        QVERIFY(isNewColumnAnswer(ColumnAnswer::Owed, answered, answered));
-        QVERIFY(isNewColumnAnswer(ColumnAnswer::Owed, QSize(), answered));
-        QVERIFY(!isNewColumnAnswer(ColumnAnswer::Read, answered, answered));
-        QVERIFY(isNewColumnAnswer(ColumnAnswer::Read, answered, QSize(3000, 2052)));
-        QVERIFY(!isNewColumnAnswer(ColumnAnswer::Foreign, answered, QSize(3000, 2052)));
+        for (const bool x11 : {false, true}) {
+            QVERIFY(isNewColumnAnswer(ColumnAnswer::Owed, answered, answered, x11));
+            QVERIFY(isNewColumnAnswer(ColumnAnswer::Owed, QSize(), answered, x11));
+            QVERIFY(!isNewColumnAnswer(ColumnAnswer::Read, answered, answered, x11));
+            QVERIFY(isNewColumnAnswer(ColumnAnswer::Read, answered, QSize(3000, 2052), x11));
+            QVERIFY(!isNewColumnAnswer(ColumnAnswer::Foreign, answered, QSize(3000, 2052), x11));
+        }
     }
 
-    // Which readable answers reach the engine. Along the strip a difference
-    // either way; across it only a longer answer, which hangs past the work
-    // area; within a pixel, never.
+    // An X11 frame KWin committed a pixel off the move-resize size recorded as
+    // read is XWayland rounding, not a size the client moved to: read as new,
+    // a parked column's frame was re-read and reported on every pan, since a
+    // park reports any answer. A Wayland frame is read exactly, and an owed
+    // answer is new whatever its size.
+    void columnAnswerNewness_x11ToleratesRounding()
+    {
+        const QSize answered(1908, 2052);
+        QVERIFY(!isNewColumnAnswer(ColumnAnswer::Read, answered, QSize(1909, 2052), /*x11Client=*/true));
+        QVERIFY(!isNewColumnAnswer(ColumnAnswer::Read, answered, QSize(1908, 2051), /*x11Client=*/true));
+        QVERIFY(isNewColumnAnswer(ColumnAnswer::Read, answered, QSize(1910, 2052), /*x11Client=*/true));
+        QVERIFY(isNewColumnAnswer(ColumnAnswer::Read, answered, QSize(1909, 2052), /*x11Client=*/false));
+        QVERIFY(isNewColumnAnswer(ColumnAnswer::Owed, answered, QSize(1909, 2052), /*x11Client=*/true));
+    }
+
+    // Which readable answers reach the engine. Off a park, a difference of
+    // more than a pixel either way on either axis: a longer cross answer hangs
+    // past the work area, and a shorter one gives back a cross floor (F266).
+    // At a park, every answer, the one that takes it included (#1154).
     void committedSizeReportTable_data()
     {
         QTest::addColumn<QSize>("offered");
@@ -1253,9 +1339,11 @@ private Q_SLOTS:
         // little short across it.
         QTest::newRow("wider along the strip") << column << QSize(2880, 1948) << false << false << true;
         QTest::newRow("narrower along the strip") << column << QSize(1500, 2052) << false << false << true;
-        // Shorter across the strip only: the commit path already centres it,
-        // and reporting would send the engine a no-op on every placement.
-        QTest::newRow("shorter across, horizontal strip") << column << QSize(1908, 1948) << false << false << false;
+        // Shorter across the strip only: reported, so the engine can give back
+        // a cross floor an earlier, longer answer set, the way a narrower
+        // answer gives back a width floor (F266). The engine reads it as a
+        // no-op where no cross floor is held.
+        QTest::newRow("shorter across, horizontal strip") << column << QSize(1908, 1948) << false << false << true;
         // Longer across the strip, main axis equal: it hangs past the work
         // area's edge, which is the engine's to judge (F166).
         QTest::newRow("longer across, horizontal strip") << column << QSize(1908, 2200) << false << false << true;
@@ -1264,7 +1352,7 @@ private Q_SLOTS:
         // mirror the horizontal ones, so each axis's arm is driven in both
         // directions and a flipped comparison on either fails a row.
         QTest::newRow("longer across, vertical strip") << column << QSize(2880, 2052) << true << false << true;
-        QTest::newRow("shorter across, vertical strip") << column << QSize(1500, 2052) << true << false << false;
+        QTest::newRow("shorter across, vertical strip") << column << QSize(1500, 2052) << true << false << true;
         QTest::newRow("taller along a vertical strip") << column << QSize(1908, 2400) << true << false << true;
         QTest::newRow("shorter along a vertical strip") << column << QSize(1908, 1948) << true << false << true;
         // A pixel either way is decoration rounding at a fractional scale,
@@ -1272,8 +1360,10 @@ private Q_SLOTS:
         QTest::newRow("a pixel wider along the strip") << column << QSize(1909, 2052) << false << false << false;
         QTest::newRow("a pixel narrower along the strip") << column << QSize(1907, 2052) << false << false << false;
         QTest::newRow("a pixel longer across the strip") << column << QSize(1908, 2053) << false << false << false;
+        QTest::newRow("a pixel shorter across the strip") << column << QSize(1908, 2051) << false << false << false;
         QTest::newRow("two pixels wider along the strip") << column << QSize(1910, 2052) << false << false << true;
         QTest::newRow("two pixels longer across the strip") << column << QSize(1908, 2054) << false << false << true;
+        QTest::newRow("two pixels shorter across the strip") << column << QSize(1908, 2050) << false << false << true;
         // Degenerate sizes carry no answer (a mid-unmap commit, a column not
         // yet known). The zero-height row pins isEmpty rather than isNull,
         // which would let a size with one zero extent through.
@@ -1298,6 +1388,38 @@ private Q_SLOTS:
         QFETCH(bool, parked);
         QFETCH(bool, reports);
         QCOMPARE(shouldReportCommittedSize(offered, committed, vertical, parked), reports);
+    }
+
+    // The size the engine is told (F118). The engine judges the answer against
+    // the column it laid out, so an extent the client's hints let it take whole
+    // goes as the offer's; the live shape is a terminal whose cell grid narrows
+    // a 1264 px park to 1258, which read there as a narrower answer and never
+    // ended the peek memory it was reported for (#1154).
+    void reportedCommittedSize_takenExtentIsTheOffers()
+    {
+        const QSize offered(1264, 1004);
+        const QSize expected(1258, 999); // the size hints' answer to the column
+        QCOMPARE(reportedCommittedSize(offered, expected, expected), offered);
+        // Rounding of the expected extent is taken too.
+        QCOMPARE(reportedCommittedSize(offered, expected, QSize(1259, 998)), offered);
+    }
+    // An answer beyond the tolerance goes as it is, per axis.
+    void reportedCommittedSize_answerBeyondTheHintsIsKept()
+    {
+        const QSize offered(1264, 1004);
+        const QSize expected(1258, 999);
+        QCOMPARE(reportedCommittedSize(offered, expected, QSize(1680, 999)), QSize(1680, 1004));
+        QCOMPARE(reportedCommittedSize(offered, expected, QSize(1258, 900)), QSize(1264, 900));
+        QCOMPARE(reportedCommittedSize(offered, expected, QSize(1000, 1200)), QSize(1000, 1200));
+    }
+    // A Wayland client's expected size is the offer itself: within the
+    // tolerance it is reported as the offer, which the engine reads the same
+    // way, and beyond it unchanged.
+    void reportedCommittedSize_waylandIsTheAnswer()
+    {
+        const QSize offered(1908, 2052);
+        QCOMPARE(reportedCommittedSize(offered, offered, QSize(1909, 2052)), offered);
+        QCOMPARE(reportedCommittedSize(offered, offered, QSize(2880, 1948)), QSize(2880, 1948));
     }
 };
 

@@ -14,14 +14,17 @@
  * LayoutRegistry::isLayoutJsonValid, so any key the editor emits in a shape the
  * schema does not accept fails the save and drops the user's authored layout.
  * The hand-built envelope is what the makeZone / makeEditorLayout helpers below
- * model, and the aspectRatioClass cases exercise it.
+ * model, and the aspectRatioClass cases and the device-pixel unit flag case
+ * (#1160) exercise it.
  *
  * Layout::toJson is the OTHER producer: it is what LayoutRegistry persists and
  * re-reads through the same gate at startup. The fixed-zone cases build their
  * payload from it rather than by hand, because fixed zones are where the two
  * ends of the round-trip disagree about what the derived relativeGeometry
  * should be, and a hand-written rect would only pin what this file believes the
- * serializer does.
+ * serializer does. They cover a zone overflowing the recalc rect, a negative
+ * offset, a zone set replaced wholesale, and the round trip of a document the
+ * gate accepted, with its fixed pixels counted in logical and in device pixels.
  *
  * Nothing else in the suite exercises either JSON shape against the gate, which
  * is how a schema that accepted only the string form of `aspectRatioClass`
@@ -121,8 +124,10 @@ private Q_SLOTS:
     void offContractFormsRejected();
 
     /// The fixed-geometry unit flag (#1160): saveLayout writes it as `true`
-    /// only when set, and the gate has to let that through, and only that
-    /// type, or a typo'd hand edit would be read as logical without a word.
+    /// only when set, and the gate has to let a boolean through and refuse any
+    /// other type, or a hand edit that wrote it as text would be read as
+    /// logical without a word. A misspelled key is not caught: the layout
+    /// object admits keys the schema does not name.
     void fixedGeometryUnitFlagValidates();
 
     /// A fixed-geometry zone authored against the full screen, then recalculated
@@ -321,27 +326,37 @@ void TestLayoutSchemaEditorShape::fixedZoneNegativeOffsetValidates()
 void TestLayoutSchemaEditorShape::acceptedFixedGeometryDocSurvivesSaveRoundTrip_data()
 {
     QTest::addColumn<QJsonObject>("fixedGeometry");
+    QTest::addColumn<bool>("devicePixels");
 
     // The schema constrains relativeGeometry and never mentions fixedGeometry,
     // so every one of these rides through the gate untouched on the way in. Each
-    // then has to come back out inside the schema's range.
+    // then has to come back out inside the schema's range, whichever unit its
+    // pixels count (#1160): a device-pixel layout normalizes its pixels divided
+    // by the output's scale, which moves every quotient the hint is built from.
     const auto geo = [](double x, double y, double w, double h) {
         return QJsonObject{{Keys::X, x}, {Keys::Y, y}, {Keys::Width, w}, {Keys::Height, h}};
     };
-    QTest::newRow("negative x bleeds off-screen left") << geo(-960, 0, 4800, 2160);
-    QTest::newRow("negative y bleeds off-screen top") << geo(0, -540, 3840, 2700);
-    QTest::newRow("overflows the screen") << geo(0, 0, 7680, 4320);
-    QTest::newRow("negative width") << geo(0, 0, -100, 1080);
-    QTest::newRow("negative height") << geo(0, 0, 1920, -100);
-    QTest::newRow("zero extent") << geo(0, 0, 0, 0);
-    // A JSON null reads back as 0.0, and a NaN cannot be spelled in JSON at
-    // all, so the reachable non-finite case is the absent key.
-    QTest::newRow("empty payload") << QJsonObject{};
+    for (const bool devicePixels : {false, true}) {
+        const char* const unit = devicePixels ? ", device pixels" : ", logical pixels";
+        QTest::addRow("negative x bleeds off-screen left%s", unit) << geo(-960, 0, 4800, 2160) << devicePixels;
+        QTest::addRow("negative y bleeds off-screen top%s", unit) << geo(0, -540, 3840, 2700) << devicePixels;
+        QTest::addRow("overflows the screen%s", unit) << geo(0, 0, 7680, 4320) << devicePixels;
+        QTest::addRow("negative width%s", unit) << geo(0, 0, -100, 1080) << devicePixels;
+        QTest::addRow("negative height%s", unit) << geo(0, 0, 1920, -100) << devicePixels;
+        QTest::addRow("zero extent%s", unit) << geo(0, 0, 0, 0) << devicePixels;
+        // A JSON null reads back as 0.0, and a NaN cannot be spelled in JSON
+        // at all, so the reachable non-finite case is the absent key.
+        QTest::addRow("empty payload%s", unit) << QJsonObject{} << devicePixels;
+    }
+    // Fills the 3840x2160 logical screen exactly at 125%, the shape the
+    // option exists for.
+    QTest::newRow("fills the screen at its scale, device pixels") << geo(0, 0, 4800, 2700) << true;
 }
 
 void TestLayoutSchemaEditorShape::acceptedFixedGeometryDocSurvivesSaveRoundTrip()
 {
     QFETCH(QJsonObject, fixedGeometry);
+    QFETCH(bool, devicePixels);
 
     // Build the doc the way a hostile-but-accepted payload arrives: a valid
     // relativeGeometry (so the gate lets it in) plus a fixedGeometry the gate
@@ -351,15 +366,20 @@ void TestLayoutSchemaEditorShape::acceptedFixedGeometryDocSurvivesSaveRoundTrip(
     zone[Keys::FixedGeometry] = fixedGeometry;
     QJsonObject doc = makeEditorLayout();
     doc[Keys::Zones] = QJsonArray{zone};
+    if (devicePixels) {
+        doc[Keys::FixedGeometryInDevicePixels] = true;
+    }
 
     QVERIFY2(PhosphorZones::LayoutRegistry::isLayoutJsonValid(doc, QStringLiteral("ingress")),
              "Precondition: the gate accepts this doc, so the invariant below is the one that matters.");
 
     // Ingress -> in-memory -> persist, which is what the daemon does on every
-    // save, and then the startup re-read.
+    // save, and then the startup re-read. The scale is the 125% the device-pixel
+    // rows are written for, and a logical layout ignores it.
     std::unique_ptr<PhosphorZones::Layout> layout(PhosphorZones::Layout::fromJson(doc));
     QVERIFY(layout);
-    layout->recalculateZoneGeometries(QRectF(0, 0, 3840, 2160));
+    QCOMPARE(layout->fixedGeometryInDevicePixels(), devicePixels);
+    layout->recalculateZoneGeometries(QRectF(0, 0, 3840, 2160), 1.25);
 
     QVERIFY2(PhosphorZones::LayoutRegistry::isLayoutJsonValid(layout->toJson(), QStringLiteral("persisted")),
              "A doc the gate accepted serialized into one it rejects: the daemon writes a layout it will refuse to "

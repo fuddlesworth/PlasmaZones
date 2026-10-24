@@ -981,7 +981,10 @@ void Daemon::initEnginesAndWiring()
     // (org.plasmazones.Autotile / org.plasmazones.Scrolling), and its
     // engine-typed connections are made HERE, at the composition root.
     m_tilingAdaptor = new TilingAdaptor(m_screenManager.get(), this);
-    // The snap engine's own batches trail a queued screens announce (#1151).
+    // Every zone batch the snap adaptor emits, not only the snap engine's own
+    // (the settings reflows, the bus resnaps and the virtual-screen resnap
+    // too), and every re-statement of one window, trail a queued screens
+    // announce (#1151). See SnapAdaptor::setAnnounceSequencer.
     m_snapAdaptor->setAnnounceSequencer(
         [tiling = QPointer<TilingAdaptor>(m_tilingAdaptor)](std::function<void()> work) {
             if (tiling) {
@@ -1114,7 +1117,9 @@ void Daemon::initEnginesAndWiring()
                 }
                 m_windowTrackingAdaptor->syncWindowFloating(windowId, floating);
                 if (floating) {
-                    m_windowTrackingAdaptor->service()->clearPreFloatZone(windowId);
+                    // As in syncAutotileFloatState: this screen's hidden
+                    // desktops and activities keep their snap homes.
+                    m_windowTrackingAdaptor->service()->clearPreFloatZoneExceptHiddenContexts(windowId, screenId);
                     m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
                 }
                 if (navigationOsdAllowed(screenId)) {

@@ -10,7 +10,10 @@
 #include <QSet>
 #include <QHash>
 #include <QString>
+#include <QGuiApplication>
+#include <QPoint>
 #include <QPointer>
+#include <QScreen>
 #include <optional>
 #include "core/interfaces/isettings.h"
 #include "core/types/constants.h"
@@ -22,6 +25,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorRules/WindowQuery.h>
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "core/platform/logging.h"
 #include "plasmazones_export.h"
@@ -40,6 +44,23 @@ QString snapZoneScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& wind
 /// Whether snap holds @p windowId in any store on another screen than
 /// @p keepScreenId (another virtual screen of the same monitor counts).
 bool snapHoldsOffScreen(PhosphorSnapEngine::SnapEngine* snap, const QString& windowId, const QString& keepScreenId);
+
+/// The effective screen whose area holds @p pos, or empty when the point lies
+/// on no output. Utils::effectiveScreenIdAt answers the primary screen for an
+/// off-output point instead, so a window whose centre hangs past an edge read
+/// as having moved to the primary. A screen-left decision needs the empty answer.
+inline QString screenContaining(PhosphorScreens::ScreenManager* mgr, const QPoint& pos)
+{
+    if (mgr) {
+        return mgr->effectiveScreenAt(pos);
+    }
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (screen->geometry().contains(pos)) {
+            return PhosphorScreens::ScreenIdentity::identifierFor(screen);
+        }
+    }
+    return {};
+}
 
 /// Release @p windowId from @p source (when given and distinct from the
 /// destination) and receive it into @p dest, VERIFYING adoption.

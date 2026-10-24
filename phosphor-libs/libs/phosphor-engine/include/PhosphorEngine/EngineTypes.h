@@ -167,7 +167,8 @@ struct ResnapEntry
     bool fromRemovedLayout = false;
     /// Every zone the window held, primary first. A layout that still holds them all gets them back
     /// as they were, so a span survives a round trip through tiling or scrolling on the same layout;
-    /// any other layout takes zonePosition. Appended for ABI.
+    /// any other layout takes zonePosition. Empty on a fromRemovedLayout entry, whose zones went with
+    /// the deleted layout, so zonePosition alone decides there. Appended for ABI.
     QStringList zoneIds{};
 };
 

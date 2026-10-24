@@ -1039,6 +1039,11 @@ Window {
             notifications.showSuccess(i18nc("@info", "Layout exported"));
         }
 
+        // Export failures arrive as self-contained sentences, so no prefix.
+        function onLayoutExportFailed(error) {
+            notifications.showError(error);
+        }
+
         // The template paths emit self-contained sentences ("That template
         // is no longer available."), so they show verbatim; the layout paths
         // emit fragments that need the prefix.
@@ -1081,6 +1086,13 @@ Window {
         function onTargetScreenChangeRequiresConfirmation(screenName) {
             confirmScreenSwitchDialog.screenName = editorWindow.displayNameForScreen(screenName);
             confirmScreenSwitchDialog.open();
+        }
+
+        // The parked switch was dropped because what it asked about was
+        // replaced underneath the prompt (another layout or template loaded).
+        // Its Save would now save the replacement, so the prompt goes.
+        function onPendingTargetScreenDropped() {
+            confirmScreenSwitchDialog.close();
         }
 
         // The controller parked a forwarded launch because the current layout

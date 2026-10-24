@@ -24,25 +24,37 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // Public-API belt at the one boundary the update path already guards:
     // windowMinSizeUpdated clamps because "a negative floor flows into
     // Tile::minWidth/minHeight, and the relayout slack math is not written
-    // for one" — the open path feeds the same five sinks (both insert
-    // shapes, the float-restore seed and the stash-restore inserts) and let
-    // raw values through. The in-tree daemon forwards KWin's minimum size
+    // for one" — the open path feeds the same sinks (both insert shapes,
+    // the float-restore seed and the stash-restore inserts) and let raw
+    // values through. The in-tree daemon forwards KWin's minimum size
     // and never sends a negative, so this is a belt for embedders.
     const int minWidth = qMax(0, minWidthIn);
     const int minHeight = qMax(0, minHeightIn);
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
-    // ONE fetch for the whole open path. Five effective* values are resolved
-    // out of this map below (sticky handling, default display, the two
-    // client-decides verdicts and the insert position) plus the template
-    // blueprint, and the screenId-taking wrappers would each rebuild it.
+    // ONE fetch for the whole open path. The effective* values below are
+    // resolved out of this map (sticky handling, default display, the
+    // client-decides verdicts for width and height, and the insert position)
+    // along with the template blueprint, and the screenId-taking wrappers
+    // would each rebuild it.
     const QVariantMap screenOverrides = overridesForScreen(screenId);
 
     // Fixed-size / oversized windows cannot honour a column slot: float them
     // at their native size instead of forcing a tile (the min size is the
     // only constraint the compositor reports; a rule `float` action covers
     // the rest).
-    const bool oversized =
-        params.workArea.isValid() && (minWidth > params.workArea.width() || minHeight > params.workArea.height());
+    //
+    // Judged against the work area the arrival will OCCUPY, resolved for the
+    // post-insert column count like commitDragInsertPreview's predicted
+    // params: with smart gaps a one-column strip has no outer gaps, so the
+    // live params on such a strip measure an area that is gone the moment
+    // this window opens a second column, and a minimum that fits only the
+    // ungapped area passed the verdict and then tiled at a size no column
+    // could honour. Every column-creating arm adds one, which is the common
+    // case; a join keeps the count and is judged one column early, on the
+    // smaller of the two areas.
+    const ScrollLayoutParams verdictParams = layoutParamsForScreen(screenId, state->strip().columnCount() + 1);
+    const bool oversized = verdictParams.workArea.isValid()
+        && (minWidth > verdictParams.workArea.width() || minHeight > verdictParams.workArea.height());
     const bool ruleFloated = m_floatPredicate && m_floatPredicate(windowId, screenId);
     // Sticky handling gates insertion only: RestoreOnly and IgnoreAll both
     // keep sticky windows out of the strip, because insertion is active
@@ -77,9 +89,10 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                           placedBefore, nullptr);
         return true;
     }
-    // Never on an ADOPTION: the same three verdicts already ran for this
-    // window on the desktop it came from and answered "tile" (a floating
-    // source is adopted as floating by the caller and never reaches here).
+    // Never on an ADOPTION: the same float verdicts (oversized, rule float,
+    // sticky handling) already ran for this window on the desktop it came
+    // from and answered "tile" (a floating source is adopted as floating by
+    // the caller and never reaches here).
     // An engine-decided float still consumes its FLOATING placement record
     // and restores the remembered float-back — autotile reaches the same
     // outcome through its record branch (record first, rule float layered on
@@ -138,42 +151,18 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // preset vocabulary, and the screenId overload would parse both again.
     ColumnWidth width = params.defaultColumnWidth;
     ColumnDisplay display = effectiveDefaultColumnDisplay(screenOverrides);
-    // "Client decides" is the CONFIG default, so a per-screen rule override
-    // outranks it — the header documents these overrides as layering over the
-    // config defaults. Overwriting unconditionally meant a
-    // SetScrollDefaultColumnWidth rule pinned to a screen never took effect
-    // while the global kind was ClientDecides, with no diagnostic. (The
-    // per-WINDOW open rule below is applied after this block and wins over
-    // both, which is the intended precedence.)
-    // The rule channel's bare fraction pins a width outright. The settings
-    // channel's kind trio answers BY VALUE through
-    // effectiveWidthClientDecides: a per-screen kind of Fixed/Preset/
-    // Proportion pins a width (params.defaultColumnWidth above already
-    // carries it resolved), while a per-screen kind of ClientDecides means exactly
-    // that — testing the kind key's mere PRESENCE here inverted the setting,
-    // gating the client-size branch off on precisely the monitors scoped to
-    // it.
-    // The rule gate asks the RESOLVER's question, not "is the key there":
-    // effectiveDefaultColumnWidth validates the fraction and falls through on
-    // an out-of-range one, so a presence test let a rule that contributed no
-    // width suppress the client-sized open anyway — the column then took the
-    // configured default, which is neither what the rule asked for nor what
-    // the ClientDecides setting asked for.
-    const bool rulePinsWidth = ruleColumnWidthFraction(screenOverrides).has_value();
-    if (effectiveWidthClientDecides(screenOverrides) && m_windowTracker && !rulePinsWidth) {
-        // Open at the client's own size when one is on record; the first
-        // client resize reconciles it afterwards.
-        // A column width is a PER-WINDOW contract, and the resolver is
-        // per-window by construction — there is no sharing mode to opt out of.
-        // That matters here specifically: minting one window's sizing intent
-        // out of another instance's remembered rect would open the column at a
-        // size this window never asked for.
-        // validatedUnmanagedGeometry validates only that a geometry EXISTS for
-        // the window on that screen; the helper decodes and bounds its extents.
-        if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
-            width = clientDecidedColumnWidth(geo->size(), params);
-        }
-    }
+    // "The client decides": open at the client's own size when one is on
+    // record (clientSizeForDecidedWidth carries the gate), and the first
+    // client resize reconciles it afterwards. Held as the client's SIZE rather
+    // than minted into `width` here, because the Fixed width it becomes
+    // depends on the display the column finally opens in (a tabbed column's
+    // indicator takes its reservation out of the column along the strip), and
+    // the open rules and the template blueprint below can still change that
+    // display. Every arm below that pins a width of its own drops it.
+    std::optional<QSize> clientWidthSize = clientSizeForDecidedWidth(windowId, screenId, screenOverrides);
+    const auto widthFor = [&](ColumnDisplay columnDisplay) {
+        return clientWidthSize ? clientDecidedColumnWidth(*clientWidthSize, params, columnDisplay) : width;
+    };
 
     // Per-window open rules layer over the context/config defaults.
     ScrollOpenParams openParams;
@@ -185,6 +174,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     }
     if (openParams.widthFraction) {
         width = ColumnWidth::makeProportion(qBound<qreal>(MinColumnWidthFraction, *openParams.widthFraction, 1.0));
+        clientWidthSize.reset();
     }
     // A maximized open is the stronger width verdict: it outranks the
     // fraction arm above and (via ruleMaximized) the template blueprint's
@@ -200,6 +190,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const bool ruleMaximized = openParams.maximized.value_or(false);
     if (ruleMaximized) {
         width = ColumnWidth::makeProportion(1.0);
+        clientWidthSize.reset();
     }
     if (openParams.tabbed) {
         display = *openParams.tabbed ? ColumnDisplay::Tabbed : ColumnDisplay::Normal;
@@ -258,8 +249,9 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     if (!inserted && openParams.consume && *openParams.consume && !state->strip().isEmpty()) {
         const std::optional<ColumnDisplay> displayOverride =
             openParams.tabbed ? std::optional<ColumnDisplay>(display) : std::nullopt;
-        if (state->strip().insertWindowIntoActiveColumn(windowId, width, displayOverride, params, minWidth,
-                                                        minHeight)) {
+        if (state->strip().insertWindowIntoActiveColumn(windowId,
+                                                        widthFor(displayOverride.value_or(ColumnDisplay::Normal)),
+                                                        displayOverride, params, minWidth, minHeight)) {
             // Consume this id from the mode-transition seed too — leaving
             // it would let a stale entry re-position an unrelated later
             // open (the block below documents exactly that hazard).
@@ -290,7 +282,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                     ++columnIdx;
                 }
             }
-            inserted = state->strip().insertWindowAt(columnIdx, windowId, width, display, params);
+            inserted = state->strip().insertWindowAt(columnIdx, windowId, widthFor(display), display, params);
             if (inserted) {
                 insertArm = "order-seed";
                 state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
@@ -336,7 +328,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // retroactively — a template change reshapes nothing that already
         // exists. Precedence: per-window open rules above outrank the
         // blueprint; the blueprint outranks every default, including a
-        // client-decides width already resolved into `width`.
+        // client-decides width (its width drops clientWidthSize).
         const auto blueprintIt = screenOverrides.constFind(ScrollPerScreenKeys::templateColumns());
         // Blueprint-swap detection, here rather than on the override map's
         // writes. The map is dropped and rebuilt on ordinary context changes
@@ -389,6 +381,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 if (!openParams.widthFraction && !ruleMaximized && fraction >= MinColumnWidthFraction
                     && fraction <= 1.0) {
                     width = ColumnWidth::makeProportion(fraction);
+                    clientWidthSize.reset();
                 }
                 // Guarded on the VALUE, not merely on the key's presence, and
                 // for the same reason effectiveDefaultColumnDisplay is:
@@ -424,15 +417,16 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             // is what an arriving TILE should do by default.
             const std::optional<ColumnDisplay> displayOverride =
                 openParams.tabbed ? std::optional<ColumnDisplay>(display) : std::nullopt;
-            inserted = state->strip().insertWindowIntoActiveColumn(windowId, width, displayOverride, params, minWidth,
-                                                                   minHeight);
+            inserted = state->strip().insertWindowIntoActiveColumn(
+                windowId, widthFor(displayOverride.value_or(ColumnDisplay::Normal)), displayOverride, params, minWidth,
+                minHeight);
             if (inserted) {
                 insertArm = "into-active-column";
             }
         }
         if (!inserted) {
             inserted = state->strip().insertWindow(
-                windowId, width, display, params, minWidth, minHeight,
+                windowId, widthFor(display), display, params, minWidth, minHeight,
                 insertPos == ScrollInsertPosition::IntoActiveColumn ? ScrollInsertPosition::RightOfActive : insertPos);
             // The entry is spent HERE and nowhere else: this is the only arm
             // that creates a column out of the blueprint. The
@@ -637,6 +631,15 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // new screen's open path just committed. The windowed-fullscreen twin
         // gets away with the unconditional read because a false flag is a
         // no-op write; an Auto height is not.
+        //
+        // The column WIDTH is not carried. The insert opens the window's
+        // column through the destination's own width verdicts (the context
+        // default, the client-decided width, the open rules, the template
+        // blueprint), and a width the user set on the old context was chosen
+        // against that context's work area and neighbours, which a column on
+        // another output or desktop does not share. So a migration lands at
+        // the destination's width, and only the height, which shapes the
+        // window's share of its own column, comes across.
         if (oldState->strip().containsWindow(windowId)) {
             migratedHeight = oldState->strip().windowHeightIntent(windowId);
         }
@@ -745,8 +748,11 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // the client extent there, which on a migration would discard the user's
     // height). Guarded on the window actually being a tile: insertOpenedWindow
     // returns true on its float exits too, and a float has no tile to carry.
+    // Re-stated rather than written as a bid: a migration that joined a
+    // tabbed host (a consume rule, the IntoActiveColumn position) must not
+    // take the host's extent away from the tab that sizes it.
     if (migratedHeight && state->strip().containsWindow(windowId)) {
-        state->strip().setWindowHeightIntent(windowId, *migratedHeight);
+        state->strip().restateWindowHeightIntent(windowId, *migratedHeight);
     }
     // Hand the migrated windowed-fullscreen flag to the fresh tile (captured
     // above, before takeWindow destroyed the old one). insertOpenedWindow

@@ -26,8 +26,10 @@
 
 #include "phosphor_i18n.h"
 #include <QGuiApplication>
+#include <QJsonObject>
 #include <QPointer>
 #include <QScreen>
+#include <memory>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -91,11 +93,18 @@ void EditorController::setUseFullScreenGeometry(bool enabled)
 
 void EditorController::setUseFullScreenGeometryDirect(bool enabled)
 {
-    if (m_useFullScreenGeometry != enabled) {
-        m_useFullScreenGeometry = enabled;
-        markUnsaved();
-        Q_EMIT useFullScreenGeometryChanged();
+    if (m_useFullScreenGeometry == enabled) {
+        return;
     }
+    const QSize previous = targetScreenSize();
+    m_useFullScreenGeometry = enabled;
+    // The area zones occupy grows or shrinks by the panels, and the
+    // reference fixed zones are drawn against is that area, so it moves with
+    // it, the bounds override included.
+    refreshFixedBoundsOverride(currentLayoutJson());
+    markUnsaved();
+    Q_EMIT useFullScreenGeometryChanged();
+    republishTargetScreenSize(previous);
 }
 
 bool EditorController::fixedGeometryInDevicePixels() const
@@ -118,11 +127,19 @@ void EditorController::setFixedGeometryInDevicePixelsDirect(bool enabled)
     }
     const QSize previous = targetScreenSize();
     m_fixedGeometryInDevicePixels = enabled;
+    if (enabled) {
+        ensureTargetScreenScale();
+    }
     // The fixed zones keep their numbers and change unit, so the reference
     // they are drawn against moves: the device-pixel scaling below, and the
     // bounds override, which was measured in the old unit and can come or go
     // (a device-pixel layout that fills a scaled screen overflows it read as
-    // logical pixels).
+    // logical pixels). The override is re-derived from the zones as they
+    // stand, not restored from before the toggle, on undo and redo alike: it
+    // is a function of the zones, the unit and the screen, and the zones may
+    // have been edited since. So toggling twice returns the unit but can pin
+    // a different override than the layout had, which matches what a save
+    // and reload of those zones would show.
     refreshFixedBoundsOverride(currentLayoutJson());
     markUnsaved();
     Q_EMIT fixedGeometryInDevicePixelsChanged();
@@ -140,50 +157,101 @@ void EditorController::setAspectRatioClass(int cls)
         return;
     }
     if (m_aspectRatioClass != cls) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::AspectRatioClass,
+                                                 m_aspectRatioClass, cls);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setAspectRatioClassDirect(int cls)
+{
+    if (cls < 0 || cls > static_cast<int>(PhosphorLayout::AspectRatioClass::Portrait)) {
+        return;
+    }
+    if (m_aspectRatioClass != cls) {
         m_aspectRatioClass = cls;
         markUnsaved();
         Q_EMIT aspectRatioClassChanged();
     }
 }
 
-// Shared helper: resolve m_targetScreen to a QScreen*, falling back to primary.
+// Shared helper: resolve a screen id to a QScreen*, falling back to primary.
+// A virtual screen resolves to its physical monitor.
 static QScreen* findTargetScreen(const QString& targetScreen)
 {
-    if (!targetScreen.isEmpty()) {
-        for (QScreen* screen : QGuiApplication::screens()) {
-            if (PhosphorScreens::ScreenIdentity::identifierFor(screen) == targetScreen
-                || screen->name() == targetScreen) {
-                return screen;
-            }
-        }
+    if (QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(targetScreen)) {
+        return screen;
     }
     return QGuiApplication::primaryScreen();
 }
 
 QSize EditorController::targetScreenSize() const
 {
-    const QSize logical = targetLogicalScreenSize();
+    const QSizeF logical = targetLogicalScreenSizeF();
     if (!m_fixedGeometryInDevicePixels || m_targetScreenScale <= 0.0) {
-        return logical;
+        return logical.toSize();
     }
-    // The device pixels the logical size covers on the target output.
-    return QSize(qRound(logical.width() * m_targetScreenScale), qRound(logical.height() * m_targetScreenScale));
+    // Device pixels per logical pixel on each axis. The daemon's pixelSize
+    // for the target's full rect fixes the ratio so the full area maps onto
+    // exactly that many device pixels. It is used only when it agrees with
+    // the scale to within a couple of device pixels over the full rect, which
+    // rejects a size measured over a different rect (a virtual screen whose
+    // own geometry the daemon could not give, so the full size below is the
+    // whole monitor). Without it, or from a daemon older than the key, the
+    // ratio is the scale itself.
+    qreal ratioX = m_targetScreenScale;
+    qreal ratioY = m_targetScreenScale;
+    const QSize full = targetFullLogicalScreenSize();
+    if (m_targetScreenPixelSize.isValid() && !full.isEmpty()) {
+        const qreal tolerance = m_targetScreenScale + 1.0;
+        if (qAbs(m_targetScreenPixelSize.width() - full.width() * m_targetScreenScale) <= tolerance
+            && qAbs(m_targetScreenPixelSize.height() - full.height() * m_targetScreenScale) <= tolerance) {
+            ratioX = static_cast<qreal>(m_targetScreenPixelSize.width()) / full.width();
+            ratioY = static_cast<qreal>(m_targetScreenPixelSize.height()) / full.height();
+        }
+    }
+    // The device pixels the logical size covers on the target output,
+    // rounded once from the unrounded logical size.
+    return QSize(qRound(logical.width() * ratioX), qRound(logical.height() * ratioY));
 }
 
-QSize EditorController::targetLogicalScreenSize() const
+QSize EditorController::targetFullLogicalScreenSize() const
 {
-    // Fixed-geometry layouts pin the reference to their own zone bounding
-    // box so previews/canvas render against the size the layout was authored
-    // for, not whichever screen happens to be live.
-    if (m_layoutBoundsOverride.isValid()) {
-        return m_layoutBoundsOverride;
-    }
-    // Virtual screens: use cached geometry from daemon (set in setTargetScreen)
+    // The full area of the target: a virtual screen's from the daemon (cached
+    // by cacheVirtualScreenGeometry), else the physical monitor's. A virtual
+    // screen whose geometry the daemon could not give falls back to its
+    // physical monitor, the closest size the editor knows.
     if (m_virtualScreenSize.isValid()) {
         return m_virtualScreenSize;
     }
     QScreen* screen = findTargetScreen(m_targetScreen);
     return screen ? screen->geometry().size() : QSize(1920, 1080);
+}
+
+QSize EditorController::targetLogicalScreenSize() const
+{
+    return targetLogicalScreenSizeF().toSize();
+}
+
+QSizeF EditorController::targetLogicalScreenSizeF() const
+{
+    // A layout whose fixed zones overflow the area below pins the reference
+    // to that overflow (refreshFixedBoundsOverride), so the canvas shows every
+    // fixed zone instead of squashing the ones past the edge. A layout that
+    // fits is drawn against the live area, whatever size it was authored for.
+    if (m_layoutBoundsOverride.isValid()) {
+        return m_layoutBoundsOverride;
+    }
+    const QSize full = targetFullLogicalScreenSize();
+    // Zones occupy the usable area unless the layout covers the full screen,
+    // which is the area the canvas shows and the daemon lays fixed zones out
+    // in, so it is the area their numbers are measured against.
+    if (m_useFullScreenGeometry) {
+        return QSizeF(full);
+    }
+    const int width = full.width() - m_insetLeft - m_insetRight;
+    const int height = full.height() - m_insetTop - m_insetBottom;
+    return (width > 0 && height > 0) ? QSizeF(width, height) : QSizeF(full);
 }
 
 int EditorController::insetLeft() const
@@ -210,17 +278,35 @@ void EditorController::setInsets(int left, int top, int right, int bottom)
 {
     if (m_insetLeft == left && m_insetTop == top && m_insetRight == right && m_insetBottom == bottom)
         return;
+    const QSize previous = targetScreenSize();
     m_insetLeft = left;
     m_insetTop = top;
     m_insetRight = right;
     m_insetBottom = bottom;
     Q_EMIT usableAreaInsetsChanged();
+    // The insets bound the area zones occupy, which is the reference fixed
+    // zones are drawn against unless the layout covers the full screen. They
+    // land asynchronously from refreshUsableAreaInsets(), after a screen
+    // switch, a change to the target screen's geometry or a panel moving on
+    // it, so this is where that reference, and the bounds override measured
+    // against it, catch up.
+    if (!m_useFullScreenGeometry) {
+        if (m_editorMode == ModeLayout) {
+            refreshFixedBoundsOverride(currentLayoutJson());
+        }
+        republishTargetScreenSize(previous);
+    }
 }
 
 void EditorController::refreshUsableAreaInsets()
 {
     // For virtual screens, use the daemon's geometry (QScreen doesn't know about VS).
     // The daemon's getScreenGeometry and getAvailableGeometry handle VS IDs.
+    // The request is stamped, and its replies carry the stamp and the screen
+    // they were asked about: a switch while they are in flight makes them
+    // answers for a screen that is no longer the target, and they are dropped.
+    const QString requestedScreen = m_targetScreen;
+    const quint64 generation = ++m_insetsRequestGeneration;
     QString screenId = m_targetScreen;
     bool isVirtual = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
 
@@ -252,27 +338,26 @@ void EditorController::refreshUsableAreaInsets()
     auto* geoWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(geoMsg), this);
     auto* availWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(availMsg), this);
 
-    // Use shared state to wait for both replies.
-    // QPointer guards against EditorController being destroyed before callbacks fire
-    // (e.g., rapid screen switches that destroy and recreate the editor window).
+    // Use shared state to wait for both replies. The watchers are children of
+    // this controller and their connections use it as context, so a reply
+    // that outlives the controller is never delivered and no guard is needed.
     auto fullGeomResult = std::make_shared<QRect>(fullGeom);
     auto availGeomResult = std::make_shared<QRect>();
     auto pending = std::make_shared<int>(2);
-    QPointer<EditorController> self(this);
 
-    auto applyWhenReady = [self, fullGeomResult, availGeomResult, pending]() {
+    auto applyWhenReady = [this, fullGeomResult, availGeomResult, pending, generation, requestedScreen]() {
         if (--(*pending) > 0) {
             return;
         }
-        if (!self) {
+        if (generation != m_insetsRequestGeneration) {
             return;
         }
         QRect fg = *fullGeomResult;
         QRect ag = availGeomResult->isValid() ? *availGeomResult : fg;
         if (fg.isValid()) {
-            self->applyUsableAreaInsets(fg, ag);
+            applyUsableAreaInsets(fg, ag, requestedScreen);
         } else {
-            self->setInsets(0, 0, 0, 0);
+            setInsets(0, 0, 0, 0);
         }
     };
 
@@ -296,13 +381,17 @@ void EditorController::refreshUsableAreaInsets()
             });
 }
 
-void EditorController::applyUsableAreaInsets(const QRect& fullGeom, const QRect& daemonAvailGeom)
+void EditorController::applyUsableAreaInsets(const QRect& fullGeom, const QRect& daemonAvailGeom,
+                                             const QString& requestedScreen)
 {
     QRect availGeom = daemonAvailGeom;
 
-    // Fallback: try Qt's available geometry (works on some Wayland compositors)
-    if (availGeom == fullGeom) {
-        QScreen* screen = findTargetScreen(m_targetScreen);
+    // Fallback: try Qt's available geometry (works on some Wayland
+    // compositors). Not for a virtual screen: Qt knows only its physical
+    // monitor, whose available rect measured against the virtual screen's
+    // full rect yields the offset between the two rather than any panel.
+    if (availGeom == fullGeom && !PhosphorIdentity::VirtualScreenId::isVirtual(requestedScreen)) {
+        QScreen* screen = findTargetScreen(requestedScreen);
         if (screen) {
             QRect qtAvail = screen->availableGeometry();
             if (qtAvail != fullGeom && qtAvail.isValid()) {
@@ -354,7 +443,9 @@ void EditorController::toggleZoneGeometryMode(const QString& zoneId)
         // Switching to Fixed: convert relative -> pixel
         newFixedGeo = QRectF(oldRelGeo.x() * sw, oldRelGeo.y() * sh, oldRelGeo.width() * sw, oldRelGeo.height() * sh);
     } else {
-        // Switching to Relative: convert pixel -> relative (keep relativeGeometry as-is since it's maintained)
+        // Switching to Relative: re-derive the relative rect from the pixels
+        // against the current reference, so the zone stays where it is drawn
+        // (the stored relative copy is kept only when there are no pixels)
         if (oldFixedGeo.isValid() && sw > 0 && sh > 0) {
             newRelGeo =
                 QRectF(oldFixedGeo.x() / sw, oldFixedGeo.y() / sh, oldFixedGeo.width() / sw, oldFixedGeo.height() / sh);
@@ -373,12 +464,6 @@ void EditorController::updateZoneFixedGeometry(const QString& zoneId, qreal x, q
         return;
     }
 
-    // Validate fixed geometry
-    x = qMax(0.0, x);
-    y = qMax(0.0, y);
-    w = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), w);
-    h = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), h);
-
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
         return;
@@ -387,6 +472,24 @@ void EditorController::updateZoneFixedGeometry(const QString& zoneId, qreal x, q
     // Capture old state for undo
     QRectF oldFixed = m_zoneManager->extractFixedGeometry(zone);
     QRectF oldRelative = m_zoneManager->extractZoneGeometry(zone);
+
+    // Validate fixed geometry, clamping only the fields this edit changes.
+    // The property panel commits one field at a time and passes the zone's
+    // own values for the rest, which may legitimately sit outside what an
+    // edit can produce (a negative offset the file format allows, or a size
+    // below the editor's minimum) and must come through untouched.
+    if (x != oldFixed.x()) {
+        x = qMax(0.0, x);
+    }
+    if (y != oldFixed.y()) {
+        y = qMax(0.0, y);
+    }
+    if (w != oldFixed.width()) {
+        w = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), w);
+    }
+    if (h != oldFixed.height()) {
+        h = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), h);
+    }
     QRectF newFixed(x, y, w, h);
 
     // Compute new relative fallback
@@ -463,13 +566,12 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
 
 void EditorController::refreshGlobalGapOverlaySettings()
 {
-    // Fetches every gap and overlay key the editor cares about in a single
-    // daemon round-trip. Prior to this the editor ctor path made 8 sequential
-    // blocking getSetting() calls (1 zonePadding + 6 outerGap-related +
-    // 1 overlayDisplayMode) — each constructing a fresh QDBusInterface.
-    // SettingsAdaptor::getSettings reads straight from the in-memory
-    // registry so the daemon-side cost is unchanged, and we avoid N-1
-    // extra IPC round-trips on the editor startup hot path.
+    // Fetches every gap and overlay key the editor cares about (innerGap, the
+    // outerGap cluster and overlayDisplayMode) in a single daemon round-trip
+    // instead of one blocking getSetting() call per key, each of which built
+    // a fresh QDBusInterface. SettingsAdaptor::getSettings reads straight from
+    // the in-memory registry, so the daemon-side cost is unchanged and the
+    // editor startup hot path saves the extra IPC round-trips.
     static const QStringList kGapOverlayKeys = {
         QStringLiteral("innerGap"),      QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
         QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),

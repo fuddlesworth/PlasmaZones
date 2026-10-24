@@ -16,8 +16,20 @@
  * stack whose minimums overflow the work area parking its tail across the
  * strip (in crop mode too), the hidden tabs of an on-screen tabbed column and
  * the tab bar of a fully parked one, and a user resize that overshoots the
- * work area across the strip being committed back. A client that commits a
- * frame other than its column is test_scrollengine_committedfloor's.
+ * work area across the strip being committed back. And a user resize of one
+ * edge of a column the relayout centres, along the strip (the focused column
+ * under Always or a lone one under alwaysCenterSingleColumn) or across it (a
+ * short column that shows one rect under centerShortColumns): the dragged
+ * edge lands at the release and the width or height it keeps stops at the
+ * work area, while an unfocused column, a stack and a drag of both edges take
+ * the frame as it is. The centred doubling has its limits: a shrink it would
+ * take past the centre or below the window's minimum, and any drag under a
+ * view the user panned away, are taken one-sided. Under a view that centres
+ * nothing the focused column keeps its trailing edge, so a drag of its
+ * leading edge lands at the release too. A resize the strip refuses within a
+ * rounding pixel of the rect it offered schedules no retile, and the next
+ * resize still lands. A client that commits a frame other than its column is
+ * test_scrollengine_committedfloor's.
  */
 
 #include <QJsonArray>
@@ -25,20 +37,26 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QSignalSpy>
+#include <QStringList>
 #include <QTest>
 
 #include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorScrollEngine/ScrollState.h>
+#include <PhosphorScrollEngine/ScrollStrip.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "scrollstriptestutils.h"
 #include "scrollstubsettings.h"
+
+#include <functional>
 
 using PhosphorScrollEngine::ScrollEngine;
 namespace Ax = ScrollTestUtils::Ax;
 
 using ScrollTestUtils::defaultScreenRect;
 using ScrollTestUtils::makeProviderEngine;
+using ScrollTestUtils::tileRectOn;
 
 namespace {
 
@@ -88,26 +106,102 @@ QJsonObject lastEntryFor(QSignalSpy& tiled, const QString& windowId)
     return {};
 }
 
-/// @p windowId's resolved tile rect on @p screenId, null when it has none.
-/// Read after a user resize instead of the last batch: a relayout that lands
-/// the window exactly on the frame it already sits at sends no batch, by the
-/// emit-on-change gate, so the last batch would still show the old rect.
-QRect tileRectOn(ScrollEngine* engine, const QString& screenId, const QString& windowId)
-{
-    const auto tiles = engine->visibleTiles(screenId);
-    for (const auto& tile : tiles) {
-        if (tile.windowId == windowId) {
-            return tile.rect;
-        }
-    }
-    return {};
-}
-
 /// The committed rect a windowsTiled batch entry describes.
 QRect rectOfEntry(const QJsonObject& o)
 {
     return QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
                  o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
+}
+
+/// How far a user resize moves each edge of a window, in role space: the low
+/// and high edges along the strip, and the low and high edges across it.
+struct EdgeDrag
+{
+    int mainLow = 0;
+    int mainHigh = 0;
+    int crossLow = 0;
+    int crossHigh = 0;
+};
+
+/// What a user resize of one window came to.
+struct ResizeOutcome
+{
+    QRect applied; ///< the rect committed before the resize; empty when none was
+    QRect settled; ///< the window's tile rect once the relayout ran
+    bool held = false; ///< the strip still holds the window, so the intents below are its own
+    PhosphorScrollEngine::ColumnWidth width; ///< the resized column's stored width intent
+    PhosphorScrollEngine::WindowHeight height; ///< the resized tile's stored height intent
+};
+
+/// Opens @p windows on kS1 under the boundary settings @p configure adjusts,
+/// focuses @p focused (and makes its column tabbed when @p tabbed), runs
+/// @p prepare on the laid-out strip when given, then has the user resize
+/// @p target from its committed rect by @p drag. The engine and its settings
+/// die with the call, so everything a case asserts on is read out here.
+ResizeOutcome resizeOneWindow(const std::function<void(ScrollTestUtils::StubScrollSettings*)>& configure,
+                              const QStringList& windows, const QString& focused, const QString& target,
+                              const EdgeDrag& drag, bool tabbed = false,
+                              const std::function<void(ScrollEngine*)>& prepare = {})
+{
+    QObject owner;
+    auto* settings = makeBoundarySettings(&owner);
+    configure(settings);
+    ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+    engine->setEngineSettings(settings);
+    engine->refreshConfigFromSettings();
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    for (const QString& windowId : windows) {
+        engine->windowOpened(windowId, kS1, 0, 0);
+    }
+    engine->windowFocused(focused, kS1);
+    if (tabbed) {
+        engine->toggleColumnTabbed(kS1);
+    }
+    engine->retile(kS1);
+    QCoreApplication::processEvents();
+    if (prepare) {
+        prepare(engine);
+        QCoreApplication::processEvents();
+    }
+
+    ResizeOutcome outcome;
+    outcome.applied = rectOfEntry(lastEntryFor(tiled, target));
+    if (outcome.applied.isEmpty()) {
+        return outcome;
+    }
+    // Role space, transposed with the arm: x and width run along the strip.
+    QRect settled = Ax::t(outcome.applied);
+    settled.setLeft(settled.left() + drag.mainLow);
+    settled.setRight(settled.right() + drag.mainHigh);
+    settled.setTop(settled.top() + drag.crossLow);
+    settled.setBottom(settled.bottom() + drag.crossHigh);
+    engine->onWindowResized(target, outcome.applied, Ax::t(settled), kS1);
+    QCoreApplication::processEvents();
+
+    outcome.settled = tileRectOn(engine, kS1, target);
+    const auto* state = static_cast<const PhosphorScrollEngine::ScrollState*>(
+        static_cast<const ScrollEngine*>(engine)->stateForScreen(kS1));
+    const int columnIdx = state ? state->strip().columnOfWindow(target) : -1;
+    if (columnIdx >= 0) {
+        const PhosphorScrollEngine::Column& column = state->strip().columns().at(columnIdx);
+        const int tileIdx = column.indexOfWindow(target);
+        if (tileIdx >= 0) {
+            outcome.held = true;
+            outcome.width = column.width;
+            outcome.height = column.tiles.at(tileIdx).height;
+        }
+    }
+    return outcome;
+}
+
+/// A stored Fixed intent of @p px, as a resize writes one.
+bool isFixedWidth(const PhosphorScrollEngine::ColumnWidth& width, int px)
+{
+    return width.kind == PhosphorScrollEngine::ColumnWidth::Fixed && width.fixedPx == px;
+}
+bool isFixedHeight(const PhosphorScrollEngine::WindowHeight& height, int px)
+{
+    return height.kind == PhosphorScrollEngine::WindowHeight::Fixed && height.fixedPx == px;
 }
 
 } // namespace
@@ -581,61 +675,253 @@ private Q_SLOTS:
     // centres, lands the dragged edge where it was released: the column takes
     // twice the drag and the far edge moves by the same amount. Taken
     // one-sided, the re-centre moved each edge by half the drag and the
-    // dragged edge sprang back from the cursor. Under Never nothing re-centres,
-    // so the column takes the frame as the user left it.
+    // dragged edge sprang back from the cursor. Only the focused column
+    // centres, under Always or under alwaysCenterSingleColumn on a lone
+    // column, and a drag of both edges is taken as it is. Under Never nothing
+    // re-centres, so the column takes the frame as the user left it.
     void oneEdgeResizeOfACentredColumnLandsTheDraggedEdgeAtTheRelease()
     {
-        // Resizes the lone window's column, returning its committed rect. @p
-        // lowDrag and @p highDrag move the low and high edges along the strip.
-        const auto resized = [](int centerFocused, int lowDrag, int highDrag) {
-            QObject owner;
-            auto* settings = makeBoundarySettings(&owner);
-            settings->centerFocused = centerFocused;
-            ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
-            engine->setEngineSettings(settings);
-            engine->refreshConfigFromSettings();
-            QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
-            engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-            engine->retile(kS1);
-            QCoreApplication::processEvents();
-            const QRect applied = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
-            // Role space, transposed with the arm.
-            QRect settled = Ax::t(applied);
-            settled.setLeft(settled.left() + lowDrag);
-            settled.setRight(settled.right() + highDrag);
-            engine->onWindowResized(QStringLiteral("app|a"), applied, Ax::t(settled), kS1);
-            QCoreApplication::processEvents();
-            return std::pair{applied, tileRectOn(engine, kS1, QStringLiteral("app|a"))};
+        const QString lone = QStringLiteral("app|a");
+        // The lone window's column under @p centerFocused (and
+        // alwaysCenterSingleColumn when @p centerSingle), its edges moved
+        // along the strip by @p lowDrag and @p highDrag.
+        const auto resized = [&lone](int centerFocused, bool centerSingle, int lowDrag, int highDrag) {
+            return resizeOneWindow(
+                [centerFocused, centerSingle](ScrollTestUtils::StubScrollSettings* settings) {
+                    settings->centerFocused = centerFocused;
+                    settings->alwaysCenterSingleColumn = centerSingle;
+                },
+                {lone}, lone, lone, EdgeDrag{lowDrag, highDrag, 0, 0});
         };
         const int always = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always);
         const int never = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never);
 
         // Precondition the arithmetic below leans on: a centred 600px column
         // on the 1200px screen.
-        const auto [start, grown] = resized(always, -200, 0);
-        QCOMPARE(Ax::mainPos(start), 300);
-        QCOMPARE(Ax::mainLen(start), 600);
+        const ResizeOutcome grown = resized(always, false, -200, 0);
+        QVERIFY2(!grown.applied.isEmpty() && grown.held, "precondition: the column is committed before the resize");
+        QCOMPARE(Ax::mainPos(grown.applied), 300);
+        QCOMPARE(Ax::mainLen(grown.applied), 600);
 
         // The low edge dragged out from 300 to 100: the column takes 1000 and,
         // centred, starts at the release point.
-        QCOMPARE(Ax::mainLen(grown), 1000);
-        QCOMPARE(Ax::mainPos(grown), 100);
+        QCOMPARE(Ax::mainLen(grown.settled), 1000);
+        QCOMPARE(Ax::mainPos(grown.settled), 100);
+        QVERIFY(isFixedWidth(grown.width, 1000));
 
         // The high edge dragged in by 100: the column gives up 200 and its
         // high edge ends where the drag did.
-        const auto [startShrunk, shrunk] = resized(always, 0, -100);
-        QCOMPARE(Ax::mainLen(shrunk), 400);
-        QCOMPARE(Ax::mainEnd(shrunk), Ax::mainEnd(startShrunk) - 100);
+        const ResizeOutcome shrunk = resized(always, false, 0, -100);
+        QVERIFY(!shrunk.applied.isEmpty());
+        QCOMPARE(Ax::mainLen(shrunk.settled), 400);
+        QCOMPARE(Ax::mainEnd(shrunk.settled), Ax::mainEnd(shrunk.applied) - 100);
 
-        // A drag past what the screen can hold stops at the work area.
-        const auto [startWide, wide] = resized(always, -400, 0);
-        Q_UNUSED(startWide)
-        QCOMPARE(Ax::mainLen(wide), 1200);
+        // A drag past what the screen can hold stops at the work area, and so
+        // does the width the column keeps: the doubled 1400 would come back
+        // on every later relayout the clamp does not reach.
+        const ResizeOutcome wide = resized(always, false, -400, 0);
+        QVERIFY(!wide.applied.isEmpty() && wide.held);
+        QCOMPARE(Ax::mainLen(wide.settled), 1200);
+        QVERIFY2(isFixedWidth(wide.width, 1200),
+                 qPrintable(QStringLiteral("the stored width must be the work area's 1200, got kind %1 at %2px")
+                                .arg(static_cast<int>(wide.width.kind))
+                                .arg(wide.width.fixedPx)));
 
-        // Under Never the frame is the answer.
-        const auto [startNever, never200] = resized(never, -200, 0);
-        Q_UNUSED(startNever)
-        QCOMPARE(Ax::mainLen(never200), 800);
+        // Both edges dragged out by 100: taken as it is, 800 wide, and centred
+        // both edges are where the user let go.
+        const ResizeOutcome both = resized(always, false, -100, 100);
+        QVERIFY(!both.applied.isEmpty() && both.held);
+        QCOMPARE(Ax::mainLen(both.settled), 800);
+        QCOMPARE(Ax::mainPos(both.settled), Ax::mainPos(both.applied) - 100);
+        QVERIFY(isFixedWidth(both.width, 800));
+
+        // alwaysCenterSingleColumn centres the lone column under Never, so the
+        // drag lands the same way it does under Always.
+        const ResizeOutcome single = resized(never, true, -200, 0);
+        QVERIFY(!single.applied.isEmpty());
+        QCOMPARE(Ax::mainPos(single.applied), 300);
+        QCOMPARE(Ax::mainLen(single.settled), 1000);
+        QCOMPARE(Ax::mainPos(single.settled), 100);
+
+        // Under Never the frame is the answer: the high edge dragged out by
+        // 200 makes the column 200 wider and leaves its low edge in place.
+        const ResizeOutcome plain = resized(never, false, 0, 200);
+        QVERIFY(!plain.applied.isEmpty() && plain.held);
+        QCOMPARE(Ax::mainLen(plain.settled), Ax::mainLen(plain.applied) + 200);
+        QCOMPARE(Ax::mainPos(plain.settled), Ax::mainPos(plain.applied));
+        QVERIFY(isFixedWidth(plain.width, Ax::mainLen(plain.applied) + 200));
+    }
+
+    // The doubling's edges. A shrink the doubling would take past the centre,
+    // or below the window's own declared minimum, is taken one-sided: the
+    // frame the drag ended at already honours both, and a doubled answer
+    // under them would persist an intent the window can never take (F104).
+    // An edge the user did not touch may read a pixel off on a fractional
+    // scale, and still counts as untouched (F281). A view the user panned
+    // away (detached) is left where it is by the relayout, so nothing
+    // re-centres and the drag is taken as it is (F105).
+    void theCentredResizeDoublingHasItsLimits()
+    {
+        const QString lone = QStringLiteral("app|a");
+        const int always = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always);
+        const auto alwaysCentred = [always](ScrollTestUtils::StubScrollSettings* settings) {
+            settings->centerFocused = always;
+        };
+
+        // Past the centre: 600 less twice 350 is nothing, so the frame's 250.
+        const ResizeOutcome pastCentre = resizeOneWindow(alwaysCentred, {lone}, lone, lone, EdgeDrag{0, -350, 0, 0});
+        QVERIFY(!pastCentre.applied.isEmpty() && pastCentre.held);
+        QCOMPARE(Ax::mainLen(pastCentre.applied), 600);
+        QCOMPARE(Ax::mainLen(pastCentre.settled), 250);
+        QVERIFY(isFixedWidth(pastCentre.width, 250));
+
+        // Below a declared 500 minimum: the doubled 400 would not do, the
+        // frame's 500 does.
+        const ResizeOutcome belowMin = resizeOneWindow(
+            alwaysCentred, {lone}, lone, lone, EdgeDrag{0, -100, 0, 0}, false, [&lone](ScrollEngine* engine) {
+                const QSize min = Ax::t(QSize(500, 0));
+                engine->windowMinSizeUpdated(lone, min.width(), min.height());
+            });
+        QVERIFY(!belowMin.applied.isEmpty() && belowMin.held);
+        QCOMPARE(Ax::mainLen(belowMin.applied), 600);
+        QCOMPARE(Ax::mainLen(belowMin.settled), 500);
+        QVERIFY(isFixedWidth(belowMin.width, 500));
+
+        // The far edge a pixel off still reads as untouched: doubled to 1000.
+        const ResizeOutcome rounded = resizeOneWindow(alwaysCentred, {lone}, lone, lone, EdgeDrag{-200, 1, 0, 0});
+        QVERIFY(!rounded.applied.isEmpty() && rounded.held);
+        QCOMPARE(Ax::mainLen(rounded.settled), 1000);
+        QCOMPARE(Ax::mainPos(rounded.settled), Ax::mainPos(rounded.applied) - 200);
+
+        // A panned (detached) view: the drag is taken as it is.
+        const QString b = QStringLiteral("app|b");
+        const ResizeOutcome detached = resizeOneWindow(
+            [always](ScrollTestUtils::StubScrollSettings* settings) {
+                settings->centerFocused = always;
+                settings->widthValue = 0.5;
+            },
+            {QStringLiteral("app|a"), b, QStringLiteral("app|c")}, b, b, EdgeDrag{-200, 0, 0, 0}, false,
+            [](ScrollEngine* engine) {
+                engine->scrollViewByPx(100, kS1);
+            });
+        QVERIFY(!detached.applied.isEmpty() && detached.held);
+        QVERIFY2(Ax::mainPos(detached.applied) != 300, "precondition: the pan moved the centred column");
+        QCOMPARE(Ax::mainLen(detached.settled), 800);
+        QVERIFY(isFixedWidth(detached.width, 800));
+    }
+
+    // A user resize the strip refuses, with a frame within a pixel of the
+    // rect it was offered, is explained by rounding: the memory of the
+    // applied rect is dropped and no retile is scheduled, since one would
+    // offer the size the client already refused (F324). The next resize still
+    // reconciles with the memory gone, measured from the gesture's own start
+    // frame, instead of being discarded until a retile laid a new baseline
+    // (F323).
+    void aRefusedResizeWithinARoundingPixelSkipsTheRetileAndTheNextOneStillLands()
+    {
+        QObject owner;
+        auto* settings = makeBoundarySettings(&owner);
+        settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never);
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setEngineSettings(settings);
+        engine->refreshConfigFromSettings();
+        const QString a = QStringLiteral("app|a");
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        engine->windowOpened(a, kS1, 0, 0);
+        engine->setColumnWidth(PhosphorScrollEngine::ColumnWidth::makeFixed(300), kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+        const QRect applied = rectOfEntry(lastEntryFor(tiled, a));
+        QVERIFY2(!applied.isEmpty(), "precondition: a is committed");
+        QCOMPARE(Ax::mainLen(applied), 300);
+
+        // The gesture started from a frame 10px narrower and ended at the
+        // column's own 300, a pixel along: the Fixed(300) intent already says
+        // so, the reconcile refuses, and the pixel is rounding.
+        QRect start = Ax::t(applied);
+        start.setWidth(290);
+        QRect settled = Ax::t(applied);
+        settled.translate(1, 0);
+        tiled.clear();
+        engine->onWindowResized(a, Ax::t(start), Ax::t(settled), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(tiled.count(), 0);
+
+        // The next drag, from where the window sits, to 400.
+        QRect wider = settled;
+        wider.setWidth(400);
+        engine->onWindowResized(a, Ax::t(settled), Ax::t(wider), kS1);
+        QCoreApplication::processEvents();
+        QCOMPARE(Ax::mainLen(tileRectOn(engine, kS1, a)), 400);
+    }
+
+    // Under a view that does not centre, the focused column's leading edge
+    // sits at the view anchor and the relayout grows the column from there,
+    // so the view moves by what the column grew: the dragged leading edge
+    // lands at the release and the trailing edge stays where it was.
+    void oneLeadingEdgeResizeUnderNeverLandsTheDraggedEdgeAtTheRelease()
+    {
+        const ResizeOutcome outcome = resizeOneWindow(
+            [](ScrollTestUtils::StubScrollSettings* settings) {
+                settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never);
+            },
+            {QStringLiteral("app|a"), QStringLiteral("app|b")}, QStringLiteral("app|b"), QStringLiteral("app|b"),
+            EdgeDrag{-100, 0, 0, 0});
+        QVERIFY2(!outcome.applied.isEmpty() && outcome.held, "precondition: b is committed before the resize");
+        QCOMPARE(Ax::mainPos(outcome.applied), 600);
+        QCOMPARE(Ax::mainLen(outcome.applied), 600);
+
+        QCOMPARE(Ax::mainLen(outcome.settled), 700);
+        QCOMPARE(Ax::mainPos(outcome.settled), Ax::mainPos(outcome.applied) - 100);
+        QCOMPARE(Ax::mainEnd(outcome.settled), Ax::mainEnd(outcome.applied));
+        QVERIFY(isFixedWidth(outcome.width, 700));
+
+        // The focused column in the middle of three quarter-width columns:
+        // the same, with c beyond it untouched.
+        const auto quarterColumns = [](ScrollTestUtils::StubScrollSettings* settings) {
+            settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never);
+            settings->widthValue = 0.25;
+        };
+        const QStringList three{QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")};
+        const ResizeOutcome middle = resizeOneWindow(quarterColumns, three, QStringLiteral("app|b"),
+                                                     QStringLiteral("app|b"), EdgeDrag{-100, 0, 0, 0});
+        QVERIFY(!middle.applied.isEmpty() && middle.held);
+        QCOMPARE(Ax::mainPos(middle.applied), 300);
+        QCOMPARE(Ax::mainLen(middle.settled), 400);
+        QCOMPARE(Ax::mainPos(middle.settled), Ax::mainPos(middle.applied) - 100);
+        QCOMPARE(Ax::mainEnd(middle.settled), Ax::mainEnd(middle.applied));
+
+        // The shift is the focused column's only: b dragged while a is
+        // focused grows from its leading edge, which stays put.
+        const ResizeOutcome unfocused = resizeOneWindow(quarterColumns, three, QStringLiteral("app|a"),
+                                                        QStringLiteral("app|b"), EdgeDrag{-100, 0, 0, 0});
+        QVERIFY(!unfocused.applied.isEmpty() && unfocused.held);
+        QCOMPARE(Ax::mainPos(unfocused.applied), 300);
+        QCOMPARE(Ax::mainLen(unfocused.settled), 400);
+        QCOMPARE(Ax::mainPos(unfocused.settled), Ax::mainPos(unfocused.applied));
+    }
+
+    // Only the FOCUSED column centres, so a column beside it takes a drag of
+    // one edge as it is. Its low edge still lands at the release, since it
+    // packs against the centred column, which did not move.
+    void oneEdgeResizeOfAnUnfocusedColumnIsTakenAsItIs()
+    {
+        const ResizeOutcome outcome = resizeOneWindow(
+            [](ScrollTestUtils::StubScrollSettings* settings) {
+                // 300px columns, so the lead neighbour of the centred one is
+                // fully on screen and is committed at its true rect.
+                settings->widthValue = 0.25;
+            },
+            {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}, QStringLiteral("app|b"),
+            QStringLiteral("app|a"), EdgeDrag{-100, 0, 0, 0});
+        QVERIFY2(!outcome.applied.isEmpty() && outcome.held, "precondition: a is committed before the resize");
+        QCOMPARE(Ax::mainLen(outcome.applied), 300);
+        QVERIFY2(Ax::mainPos(outcome.applied) >= 100, "precondition: a sits fully on screen beside the centred b");
+
+        QCOMPARE(Ax::mainLen(outcome.settled), 400);
+        QCOMPARE(Ax::mainPos(outcome.settled), Ax::mainPos(outcome.applied) - 100);
+        QCOMPARE(Ax::mainEnd(outcome.settled), Ax::mainEnd(outcome.applied));
+        QVERIFY(isFixedWidth(outcome.width, 400));
     }
 
     // The twin across the strip: with centerShortColumns on, a column that
@@ -645,48 +931,68 @@ private Q_SLOTS:
     // other tiles' shares and no single doubling lands the edge.
     void oneEdgeResizeOfAShortColumnLandsTheDraggedEdgeAtTheRelease()
     {
-        // Opens @p tiles windows into one column and drags the bottom (cross
-        // high) edge of the first by @p highDrag, returning its rect before
-        // and after.
-        const auto resized = [](bool centerShort, int tiles, int highDrag) {
-            QObject owner;
-            auto* settings = makeBoundarySettings(&owner);
-            settings->centerShortColumns = centerShort;
-            settings->insertPosition = static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::IntoActiveColumn);
-            ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
-            engine->setEngineSettings(settings);
-            engine->refreshConfigFromSettings();
-            QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        const QString first = QStringLiteral("app|t0");
+        // Opens @p tiles windows into one column (tabbed when @p tabbed),
+        // focuses the first and moves its top (cross low) and bottom (cross
+        // high) edges by @p lowDrag and @p highDrag.
+        const auto resized = [&first](bool centerShort, int tiles, int lowDrag, int highDrag, bool tabbed = false) {
+            QStringList windows;
             for (int i = 0; i < tiles; ++i) {
-                engine->windowOpened(QStringLiteral("app|t%1").arg(i), kS1, 0, 0);
+                windows.append(QStringLiteral("app|t%1").arg(i));
             }
-            engine->retile(kS1);
-            QCoreApplication::processEvents();
-            const QString first = QStringLiteral("app|t0");
-            const QRect applied = rectOfEntry(lastEntryFor(tiled, first));
-            QRect settled = Ax::t(applied);
-            settled.setBottom(settled.bottom() + highDrag);
-            engine->onWindowResized(first, applied, Ax::t(settled), kS1);
-            QCoreApplication::processEvents();
-            return std::pair{applied, tileRectOn(engine, kS1, first)};
+            return resizeOneWindow(
+                [centerShort](ScrollTestUtils::StubScrollSettings* settings) {
+                    settings->centerShortColumns = centerShort;
+                    settings->insertPosition =
+                        static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::IntoActiveColumn);
+                },
+                windows, first, first, EdgeDrag{0, 0, lowDrag, highDrag}, tabbed);
         };
 
         // A lone tile filling the 800px cross extent, its bottom edge dragged
         // up 100px: it takes 600, and centred its bottom edge is at the
         // release.
-        const auto [start, shrunk] = resized(true, 1, -100);
-        QCOMPARE(Ax::crossLen(start), 800);
-        QCOMPARE(Ax::crossLen(shrunk), 600);
-        QCOMPARE(Ax::crossEnd(shrunk), Ax::crossEnd(start) - 100);
+        const ResizeOutcome shrunk = resized(true, 1, 0, -100);
+        QVERIFY2(!shrunk.applied.isEmpty() && shrunk.held, "precondition: the tile is committed before the resize");
+        QCOMPARE(Ax::crossLen(shrunk.applied), 800);
+        QCOMPARE(Ax::crossLen(shrunk.settled), 600);
+        QCOMPARE(Ax::crossEnd(shrunk.settled), Ax::crossEnd(shrunk.applied) - 100);
+        QVERIFY(isFixedHeight(shrunk.height, 600));
+
+        // The top edge the same way: dragged down 100px, the tile starts
+        // where it was let go.
+        const ResizeOutcome fromTop = resized(true, 1, 100, 0);
+        QVERIFY(!fromTop.applied.isEmpty());
+        QCOMPARE(Ax::crossLen(fromTop.settled), 600);
+        QCOMPARE(Ax::crossPos(fromTop.settled), Ax::crossPos(fromTop.applied) + 100);
+
+        // Dragged past the work area, the doubled extent stops at it in the
+        // height the tile keeps, not only in the rect this relayout clamps.
+        const ResizeOutcome tall = resized(true, 1, 0, 100);
+        QVERIFY(!tall.applied.isEmpty() && tall.held);
+        QCOMPARE(Ax::crossLen(tall.settled), 800);
+        QVERIFY2(isFixedHeight(tall.height, 800),
+                 qPrintable(QStringLiteral("the stored height must be the work area's 800, got kind %1 at %2px")
+                                .arg(static_cast<int>(tall.height.kind))
+                                .arg(tall.height.fixedPx)));
 
         // Not centred, the frame is the answer.
-        const auto [startPlain, plain] = resized(false, 1, -100);
-        Q_UNUSED(startPlain)
-        QCOMPARE(Ax::crossLen(plain), 700);
+        const ResizeOutcome plain = resized(false, 1, 0, -100);
+        QVERIFY(!plain.applied.isEmpty());
+        QCOMPARE(Ax::crossLen(plain.settled), 700);
+
+        // A tabbed column shows one rect, its tabs sharing it, so a drag of the
+        // shown tab's edge lands like the lone tile's.
+        const ResizeOutcome tabbed = resized(true, 2, 0, -100, /*tabbed=*/true);
+        QVERIFY2(!tabbed.applied.isEmpty(), "precondition: the shown tab is committed before the resize");
+        QCOMPARE(Ax::crossLen(tabbed.applied), 800);
+        QCOMPARE(Ax::crossLen(tabbed.settled), 600);
+        QCOMPARE(Ax::crossEnd(tabbed.settled), Ax::crossEnd(tabbed.applied) - 100);
 
         // A stack of two takes the drag as it is.
-        const auto [startStack, stacked] = resized(true, 2, -100);
-        QCOMPARE(Ax::crossLen(stacked), Ax::crossLen(startStack) - 100);
+        const ResizeOutcome stacked = resized(true, 2, 0, -100);
+        QVERIFY(!stacked.applied.isEmpty());
+        QCOMPARE(Ax::crossLen(stacked.settled), Ax::crossLen(stacked.applied) - 100);
     }
 };
 

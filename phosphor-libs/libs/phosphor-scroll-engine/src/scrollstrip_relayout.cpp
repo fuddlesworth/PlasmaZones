@@ -5,6 +5,7 @@
 
 #include "scrollengine/scrollenginelogging.h"
 
+#include <QVarLengthArray>
 #include <QtGlobal>
 
 namespace PhosphorScrollEngine {
@@ -199,9 +200,12 @@ int ScrollStrip::tileCrossCapacityPx(const QString& windowId, const ScrollLayout
     // relayout's availH for this column (the gaps BETWEEN the visible tiles
     // come out of the budget), less what the siblings' own floors keep: the
     // relayout's rebalance never shrinks a tile below its floor, nor an Auto
-    // one below a pixel.
+    // one below a pixel. Never below 0: siblings whose floors alone fill the
+    // column leave the tile nothing, and a negative answer would read as the
+    // -1 "no tile here" sentinel, so a floor the tile holds there would be
+    // neither floated nor dropped.
     const int availH = qMax(visibleTiles, fullCross - params.gap * (visibleTiles - 1));
-    return availH - siblingFloors;
+    return qMax(0, availH - siblingFloors);
 }
 
 int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params)
@@ -1241,8 +1245,10 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 // strip, so the floor is the frame minimum on that axis,
                 // raised to any share the client's own commits hold the tile
                 // to. Resolved once, since the rebalance below reads it per
-                // pass.
-                QVector<int> floors(n, 0);
+                // pass. Held inline for an ordinary stack, so the relayout
+                // (which the indicator probe and the auto-scroll run per tick)
+                // pays no heap allocation for it; every slot is written below.
+                QVarLengthArray<int, 8> floors(n);
                 for (int vi = 0; vi < n; ++vi) {
                     floors[vi] = tileMinCrossPx(col.tiles.at(visible.at(vi)), col, params);
                 }

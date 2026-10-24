@@ -3,10 +3,11 @@
 //
 // Pure-logic tests for the pre-autotile restore decisions
 // (tilinghandler/pretiledecisions.h): which rect may safely be applied for a
-// window on a given output, and what the desktop-switch demote pass does with
-// the answer. Same header-only reach as test_scroll_decisions: kwin-effect has
-// no linkable test target, so the pure halves are extracted into a header this
-// test includes directly.
+// window on a given output, whether a managed-set announce still describes
+// the desktops in view (announceMatchesReportedDesktops), and what the
+// desktop-switch demote pass does with the answer. Same header-only reach as
+// test_scroll_decisions: kwin-effect has no linkable test target, so the pure
+// halves are extracted into a header this test includes directly.
 
 #include <tilinghandler/pretiledecisions.h>
 
@@ -93,6 +94,36 @@ private Q_SLOTS:
         const QRectF live(1440, 8, 472, 1064);
         const QRectF output(0, 0, 1920, 1080);
         QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/false, live, output), QRectF(720, 8, 1200, 800));
+    }
+
+    // The other clamps of the same rule (F503). A degraded size that would
+    // hang below its output is moved up inside it.
+    void rect_degradedSizeStaysAboveItsOutputsBottom()
+    {
+        const QRectF saved(4000, 100, 600, 900);
+        const QRectF live(100, 600, 400, 300);
+        const QRectF output(0, 0, 1920, 1080);
+        QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/false, live, output), QRectF(100, 180, 600, 900));
+    }
+
+    // A live frame left of its output's origin (a tile cropped at the edge
+    // of an output to the right of another) is moved right inside it.
+    void rect_degradedSizeStaysRightOfItsOutputsLeft()
+    {
+        const QRectF saved(100, 100, 800, 600);
+        const QRectF live(1900, 8, 472, 1064);
+        const QRectF output(1920, 0, 1920, 1080);
+        QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/false, live, output), QRectF(1920, 8, 800, 600));
+    }
+
+    // And one above its output's top (an output stacked below another) is
+    // moved down inside it.
+    void rect_degradedSizeStaysBelowItsOutputsTop()
+    {
+        const QRectF saved(100, 100, 800, 600);
+        const QRectF live(100, 1000, 472, 1064);
+        const QRectF output(0, 1080, 1920, 1080);
+        QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/false, live, output), QRectF(100, 1080, 800, 600));
     }
 
     // An output that did not move still holds the rect's centre: applied whole.
@@ -189,8 +220,12 @@ private Q_SLOTS:
             QTest::addRow("untracked, no rect, windowed fs%s", t)
                 << false << false << true << tiled << e(PreTileRestore::None);
 
-            // A local rect is only stored by a window that was tiled, so it
-            // is applied whatever the live fact says.
+            // A local rect is applied whatever the live fact says. It is not
+            // proof the window was tiled (the genuine toggle saves one for
+            // every window on a screen entering tiling), but it was measured
+            // by this effect on the window's own output (the caller degrades
+            // a foreign one to its size), unlike the daemon's mode-shared
+            // record, which is why only the daemon arm needs the tiled fact.
             QTest::addRow("tracked, rect%s", t) << true << true << false << tiled << e(PreTileRestore::Apply);
             QTest::addRow("tracked, rect, windowed fs%s", t)
                 << true << true << true << tiled << e(PreTileRestore::QueueForWindowedFullscreen);
@@ -202,8 +237,9 @@ private Q_SLOTS:
         QTest::newRow("tracked, no rect, windowed fs, tiled")
             << false << true << true << true << e(PreTileRestore::AskDaemon);
         // Tracked but never tiled: only the announce trail, from an open the
-        // daemon refused, or a window floating in the tiling mode. The
-        // daemon's record is mode-shared, so it is not asked (#1151).
+        // daemon refused. The daemon's record is mode-shared, so it is not
+        // asked (#1151). A window floating in the tiling mode is skipped by
+        // the demote pass before this decision.
         QTest::newRow("tracked, no rect, not tiled") << false << true << false << false << e(PreTileRestore::None);
         QTest::newRow("tracked, no rect, windowed fs, not tiled")
             << false << true << true << false << e(PreTileRestore::None);

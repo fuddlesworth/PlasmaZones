@@ -128,8 +128,17 @@ PHOSPHORSHELL_EXPORT qreal hueFor(const QRectF& rect);
  * work-area size; when that size is unknown (empty) they are dropped,
  * since there is nothing to scale against. Zones with a degenerate rect
  * are dropped as well.
+ *
+ * A layout with `fixedGeometryInDevicePixels` set counts its fixed zones in
+ * the output's device pixels, and `deviceScale` is that output's logical
+ * scale (the daemon's `Screen.getScreenInfo` `devicePixelRatio`, not the
+ * QScreen ratio, which is the integer buffer scale on Wayland). Its fixed
+ * zones are divided by the scale before the work area normalises them, and
+ * dropped while the scale is unknown (0, the default). The scale is ignored
+ * for every other layout.
  */
-PHOSPHORSHELL_EXPORT QList<Cell> parseSnappingLayout(const QString& layoutJson, const QSize& workAreaSize);
+PHOSPHORSHELL_EXPORT QList<Cell> parseSnappingLayout(const QString& layoutJson, const QSize& workAreaSize,
+                                                     qreal deviceScale = 0.0);
 
 /**
  * @brief Normalise a tile batch for one screen against the work area.

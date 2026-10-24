@@ -59,8 +59,11 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZ
     , m_windowTracking(windowTracking)
 {
     // Every dep below is mandatory (screenManager is the deliberate
-    // exception: every use of it carries a fallback, so it stays optional and
-    // is not checked here) — a misordered Daemon wiring that
+    // exception: every use of it degrades without one, so it stays optional
+    // and is not checked here. The screen lookups fall back to the QScreen,
+    // and the scale reads answer zero, which a layout reads as the scale of
+    // its last recalculation, since GeometryUtils::screenScale consults its
+    // QScreen argument only through a manager) — a misordered Daemon wiring that
     // constructs WindowDragAdaptor before its dependencies would
     // otherwise produce a silently-no-op (but D-Bus-callable) object
     // that crashes on the first slot dispatch instead of at
@@ -264,16 +267,34 @@ QSize WindowDragAdaptor::dragInsertAdoptedMinSize(const QString& windowId) const
 
 QSize WindowDragAdaptor::dragInsertClientSize() const
 {
-    // A pending snap-path drag has not promoted its frame yet, and the begin
-    // that wants this can run on such a drag the moment it crosses onto an
-    // engine screen.
-    const bool pending = !m_originalGeometry.isValid();
-    const QRect frame = pending ? m_pendingSnapDragGeometry : m_originalGeometry;
-    const bool fillsOutput = pending ? m_pendingSnapDragFillsOutput : m_originalFrameFillsOutput;
-    if (fillsOutput || !frame.isValid()) {
+    // Every reader runs on an active drag (dragMoved, and the drop's settle),
+    // whose frame dragStarted or beginDrag's bypass arm recorded. A pending
+    // drag never begins a preview: its ticks stop at the promotion check.
+    //
+    // An engine sizes an arriving window by whatever this hands it (the
+    // scroll engine's "the client decides" width and height), so only a size
+    // the client chose may go out. A window that was managed when the drag
+    // began (in a zone, or a tile of either tiling engine) started on a frame
+    // a zone or a tile decided, which is not one. It hands a size only once a
+    // restore during the drag gave it its own back: the daemon's drag-out
+    // size (m_dragRestoredSize), else the effect's drag-to-float restore,
+    // seen as a live frame whose size differs from the one the drag began
+    // with. Until then it hands none, and the engine reads the window's
+    // float-back record instead.
+    if (m_dragStartManaged) {
+        if (m_dragRestoredSize.isValid() && !m_dragRestoredSize.isEmpty()) {
+            return m_dragRestoredSize;
+        }
+        const QRect live = m_windowTracking ? m_windowTracking->frameGeometry(m_draggedWindowId) : QRect();
+        if (live.isValid() && m_originalGeometry.isValid() && live.size() != m_originalGeometry.size()) {
+            return live.size();
+        }
         return {};
     }
-    return frame.size();
+    if (m_originalFrameFillsOutput || !m_originalGeometry.isValid()) {
+        return {};
+    }
+    return m_originalGeometry.size();
 }
 
 bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) const
@@ -307,7 +328,7 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
     // land between the decision to end the preview and the teardown below.
     // Neither call here spins the event loop today, so the order is currently
     // unobservable, but the two sites encoding opposite orders is how that
-    // stops being true without anyone noticing. The third stop site,
+    // stops being true without anyone noticing. One stop site,
     // cancelDragInsertPreviewsForScreen, is deliberately inverted (stop
     // LAST): its `!dragInsertPreviewEngine()` condition can only be
     // evaluated after its per-screen cancels have run, so do not
@@ -519,11 +540,14 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
         // indices were computed against the detach-emulated snapshot, so
         // they are valid against the strip begin just produced. A failed
         // begin falls through to the caller's float-drop. Deliberately NO
-        // isWindowTiled gate here, unlike the two per-tick begin sites: a
-        // floating window dropped on a popup card is an EXPLICIT pick, and
-        // adopting it into the strip is exactly what the pick asks for —
-        // the tiled gate exists to keep passive drags of floating windows
-        // free, not to veto an aimed drop.
+        // isWindowTiled gate here, unlike the always-on reorder arms
+        // (beginDrag's eager begin and updateDragCursor's re-latch), which
+        // begin with no trigger held: a floating window dropped on a popup
+        // card is an EXPLICIT pick, and adopting it into the strip is exactly
+        // what the pick asks for. The tiled gate exists to keep passive drags
+        // of floating windows free, not to veto an aimed drop. dragMoved's
+        // own begin carries no tiled gate either, since a held trigger is
+        // aimed too.
         if (popupOwns && !windowId.isEmpty() && scrollSelectorScreen(releaseScreenId)
             && m_scrollEngine->beginDragInsertPreview(windowId, releaseScreenId)) {
             // Captured BEFORE the commit: a cross-engine adoption releases
@@ -541,9 +565,9 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
             return true;
         }
         // No preview to settle — but the drag is ENDING here, so this is a
-        // teardown path like the two below it. The engine may have dropped its
-        // own preview after the last push (five engine-side self-cancel sites
-        // do exactly that), leaving the indicator painted. It must go.
+        // teardown path like the arms below it. The engine may have dropped its
+        // own preview after the last push (engine-side self-cancel sites do
+        // exactly that), leaving the indicator painted. It must go.
         clearScrollDropIndicator();
         return false;
     }
@@ -569,6 +593,9 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
     // record of the client's minimum with it, and the preview itself carries
     // no minimum for a window the scroll engine never tracked.
     const QSize adoptedMin = dragInsertAdoptedMinSize(windowId);
+    // The size at the release, which a restore since the last tick may have
+    // changed (see dragInsertClientSize).
+    engine->setDragInsertClientSize(dragInsertClientSize());
     engine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
     if (adoptedMin.width() > 0 || adoptedMin.height() > 0) {
         engine->windowMinSizeUpdated(windowId, adoptedMin.width(), adoptedMin.height());
@@ -613,18 +640,29 @@ void WindowDragAdaptor::cancelSnap()
     // a fresh rising edge (beginDrag's seed contract).
     m_dragInsertToggled = false;
     m_prevDragInsertHeld = true;
+    // Clearing the toggle is still not enough: under "always re-insert" the
+    // AlwaysActive sentinel reads as held on every tick, and a hold-mode
+    // trigger still down reads the same way, so the next tick would begin the
+    // preview again and the drop would commit it. This latch keeps the
+    // re-insert dismissed until a real trigger re-press (dragMoved), and the
+    // policy-flip re-latch honours it so a screen crossing cannot re-arm
+    // reorder either. The grace stamp goes too, or the release grace would
+    // read the trigger as held for its window.
+    m_dragInsertCancelled = true;
+    m_dragInsertReleasedAfterCancel = false;
+    m_dragInsertLastHeldMs = -1;
     // Escape during a PENDING (never-activated) snap drag must stay
     // cancelled for the rest of the gesture: dragStarted unconditionally
-    // clears m_snapCancelled on a later promotion, so kill the pending
-    // state itself rather than racing that flag. The interactive-drag mark
-    // is re-set afterwards — the compositor move CONTINUES after Escape,
-    // and clearPendingSnapDragState's mark clear would let a scroll retile
-    // fight the still-live move; the endDrag mismatch-with-no-live-drag
-    // sweep clears the mark when the gesture really ends.
+    // clears m_snapCancelled on a later promotion, so the pending drag is
+    // barred from promoting instead. Its identity stays: the compositor move
+    // CONTINUES after Escape, so the drop is still a drop, and endDrag's
+    // pending branch is what hands a window dragged off its zone or its
+    // monitor to the drag-out (clearing the identity here sent that endDrag
+    // down the mismatch branch, which left the window its zone and its old
+    // monitor's memory). The interactive-drag mark stays with it and goes
+    // when that branch clears the pending state.
     if (m_draggedWindowId.isEmpty() && !m_pendingSnapDragWindowId.isEmpty()) {
-        const QString pendingWindow = m_pendingSnapDragWindowId;
-        clearPendingSnapDragState();
-        setEngineInteractiveDragWindow(pendingWindow);
+        m_pendingSnapDragCancelled = true;
     }
     m_currentZoneId.clear();
     m_currentZoneScreenId.clear();
@@ -651,7 +689,7 @@ void WindowDragAdaptor::cancelSnap()
     // computeAndEmitSnapAssist would still emit snapAssistReady for a snap
     // the user just cancelled. Clearing the pending IDs makes the deferred
     // call early-return on its empty-id guard. clearForCompositorReconnect
-    // does the same two-line clear for the same reason.
+    // does the same clear for the same reason.
     m_snapAssistPendingWindowId.clear();
     m_snapAssistPendingScreenId.clear();
     m_snapAssistPendingDesktop = 0;
@@ -703,7 +741,7 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
     // schedules `computeAndEmitSnapAssist` via QTimer::singleShot(0); if the
     // window closes before that tick, the deferred call would emit
     // `snapAssistReady` for a window that no longer exists. cancelSnap and
-    // clearForCompositorReconnect do the same two-line clear for the same
+    // clearForCompositorReconnect do the same clear for the same
     // reason.
     if (windowId == m_snapAssistPendingWindowId) {
         m_snapAssistPendingWindowId.clear();
@@ -755,8 +793,8 @@ void WindowDragAdaptor::releaseCancelOverlayShortcutIfIdle()
     // must first confirm no OTHER consumer is still showing — otherwise it
     // tears the grab out from under a visible picker or snap assist, leaving
     // that overlay un-dismissable by Escape. This is the single canonical guard
-    // every normal release site routes through. Two sites deliberately bypass
-    // it with an unconditional release: cancelSnap() (the explicit
+    // every normal release site routes through. The sites that deliberately
+    // bypass it with an unconditional release are cancelSnap() (the explicit
     // Escape-pressed teardown) and clearForCompositorReconnect() (force-release
     // when the compositor that held the grab is already gone).
     if (m_overlayService && (m_overlayService->isLayoutPickerVisible() || m_overlayService->isSnapAssistVisible())) {
@@ -780,8 +818,8 @@ void WindowDragAdaptor::ensureLayoutPickerNavShortcutsRegistered(std::function<v
     if (!m_shortcutRegistrar || !moveCb || !confirmCb) {
         return;
     }
-    // One batch, one backend flush: six per-id registrations would issue six
-    // Portal BindShortcuts requests, each superseding the prior in-flight
+    // One batch, one backend flush: a registration per id would issue a
+    // Portal BindShortcuts request per id, each superseding the prior in-flight
     // Response (see IAdhocRegistrar::registerAdhocShortcuts).
     using AdhocBinding = PhosphorShortcutsIntegration::IAdhocRegistrar::AdhocBinding;
     m_shortcutRegistrar->registerAdhocShortcuts(QVector<AdhocBinding>{
@@ -977,10 +1015,10 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // so the flag cannot survive into the next drag and suppress a real commit.
     m_dragExternallyCancelled = false;
     // The dragged window's drop-indicator colour overrides die with the drag
-    // that resolved them. Left set, the NEXT drag would paint the previous
-    // window's colours until beginDrag re-resolved — and a drag of a window
-    // with no rule would inherit them outright, since an empty resolve writes
-    // an empty map only if it runs.
+    // that resolved them. Left set, a drag of a window with no rule would
+    // inherit the previous window's colours. beginDrag runs this reset too, so
+    // it pushes the new drag's overrides AFTER calling here, in both its
+    // branches; a push ahead of the reset is wiped before any tick paints.
     if (m_overlayService) {
         m_overlayService->setScrollDropIndicatorWindowOverrides({});
         // The strip popup's card exclusion dies with the drag too — left
@@ -1008,6 +1046,8 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_draggedWindowId.clear();
     m_originalGeometry = QRect();
     m_originalFrameFillsOutput = false;
+    m_dragStartManaged = false;
+    m_dragRestoredSize = QSize();
     m_currentZoneId.clear();
     m_currentZoneScreenId.clear();
     m_currentZoneGeometry = QRect();
@@ -1021,11 +1061,15 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_prevTriggerHeld = false;
     m_wasSnapped = false;
     // Per-drag reorder latch: cleared here alongside the sibling latches so the
-    // shared teardown (cancelSnap, clearForCompositorReconnect) leaves no stale
-    // true for the next drag. endDrag also clears it directly before its own
-    // early-return branches that don't route through resetDragState.
+    // shared teardown (the drop exits, beginDrag's clean slate,
+    // handleWindowClosed, clearForCompositorReconnect) leaves no stale true
+    // for the next drag. cancelSnap does not route through here and clears it
+    // itself, and endDrag clears it directly before its own early-return
+    // branches that don't route through resetDragState.
     m_dragReorderActive = false;
     m_dragReorderAbandoned = false;
+    m_dragInsertCancelled = false;
+    m_dragInsertReleasedAfterCancel = false;
     m_dragWindowExcludedFromSelector = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
@@ -1055,26 +1099,9 @@ bool WindowDragAdaptor::windowFillsOutput(const QString& windowId) const
 
 std::optional<QSize> WindowDragAdaptor::preSnapSizeFor(const QString& windowId, const QString& screenId) const
 {
-    auto* wts = m_windowTracking ? m_windowTracking->service() : nullptr;
-    if (!wts) {
-        return std::nullopt;
-    }
-    if (const auto here = wts->validatedUnmanagedGeometry(windowId, screenId)) {
-        return here->size();
-    }
-    const auto own = wts->placementStore().peekExact(windowId);
-    const QRect elsewhere = own ? own->anyFreeGeometry() : QRect();
-    if (!elsewhere.isValid()) {
-        return std::nullopt;
-    }
-    QSize size = elsewhere.size();
-    // An unresolvable screen answers an invalid rect, whose 0x0 size would
-    // bound the size to nothing.
-    const QRect available = wts->screenAvailableGeometry(screenId);
-    if (available.isValid() && !available.isEmpty()) {
-        size = size.boundedTo(available.size());
-    }
-    return size;
+    // One rule for every drag-out path, the tracking adaptor's pending and
+    // tiling-screen drops included.
+    return m_windowTracking ? m_windowTracking->preSnapSizeOn(windowId, screenId) : std::nullopt;
 }
 
 void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry,
@@ -1088,13 +1115,8 @@ void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, const Q
         return;
     }
     if (m_windowTracking && m_windowTracking->service() && originalGeometry.isValid()) {
-        QString screenId = effectiveScreenIdAt(originalGeometry.center().x(), originalGeometry.center().y());
-        if (screenId.isEmpty()) {
-            QScreen* screen = Utils::findScreenAtPosition(originalGeometry.center());
-            if (screen) {
-                screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-            }
-        }
+        // effectiveScreenIdAt already falls back to the QScreen at the point.
+        const QString screenId = effectiveScreenIdAt(originalGeometry.center().x(), originalGeometry.center().y());
         m_windowTracking->service()->recordFreeGeometry(windowId, screenId, originalGeometry, false);
     }
 }
@@ -1121,6 +1143,11 @@ void WindowDragAdaptor::onLayoutChanged()
         m_currentAdjacentZoneIds.clear();
         m_isMultiZoneMode = false;
         m_paintedZoneIds.clear();
+        // The pair cancelSnap and resetDragState clear beside the zone block:
+        // the new layout's first zone rect must emit even when it equals the
+        // last one sent, and the drag-out preview re-reads.
+        m_lastEmittedZoneGeometry = QRect();
+        m_restoreSizeEmittedDuringDrag = false;
 
         // Clear highlight state since zones are now invalid
         if (m_zoneDetector) {

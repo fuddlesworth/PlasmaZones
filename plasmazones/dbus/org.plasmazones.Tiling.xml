@@ -46,7 +46,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
              ═══════════════════════════════════════════════════════════════════════════ -->
 
         <method name="notifyWindowFocused">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window has been focused (called from KWin effect). Updates the owning engine's focus tracking and window-to-screen mapping. The screenId must name a screen the compositor currently reports for that window: a screen no engine knows is ignored rather than treated as a move, because reading an unknown screen as a genuine cross-screen move would untrack the window with no repair path on this channel."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window has been focused (called from KWin effect). Updates the owning engine's focus tracking and window-to-screen mapping. The screenId must name a screen the compositor currently reports for that window: a screen no engine knows is ignored rather than treated as a move, because reading an unknown screen as a genuine cross-screen move would untrack the window with no repair path on this channel. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID that gained focus."/>
             </arg>
@@ -56,7 +56,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="windowOpened">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window genuinely opened (called from KWin effect). The only announce that may take focus under Focus new windows."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window genuinely opened (called from KWin effect). The only announce that may take focus under Focus new windows. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
             </arg>
@@ -72,7 +72,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="windowReannounced">
-            <annotation name="org.gtk.GDBus.DocString" value="Hand an already-shown window (back) to the tiling engines without it counting as an open: a desktop-switch catch-scan, a cross-output re-add, an unminimize. Placed exactly like windowOpened, but never takes focus. Added in API v10."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Hand an already-shown window (back) to the tiling engines without it counting as an open: a desktop-switch catch-scan, a cross-output re-add, an unminimize. Placed exactly like windowOpened, but never takes focus. Added in API v10. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
             </arg>
@@ -88,7 +88,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="windowsOpenedBatch">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch re-announce: process multiple windows in one D-Bus call. Used on daemon startup/restart and mode toggle-on, so its entries are re-placements and never take focus. Array of (windowId, screenId, minWidth, minHeight)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch re-announce: process multiple windows in one D-Bus call. Used on daemon startup/restart and mode toggle-on, so its entries are re-placements and never take focus. Array of (windowId, screenId, minWidth, minHeight). Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="entries" type="a(ssii)" direction="in">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::WindowOpenedList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of window-opened entry structs."/>
@@ -96,7 +96,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="windowMinSizeUpdated">
-            <annotation name="org.gtk.GDBus.DocString" value="Update a window's minimum size at runtime. Called by KWin effect when a window's minimum size changes after initial windowOpened. Triggers retiling if the value differs."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Update a window's minimum size at runtime. Called by KWin effect when a window's minimum size changes after initial windowOpened. Triggers retiling if the value differs. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
             </arg>
@@ -109,14 +109,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="windowClosed">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window was closed (called from KWin effect)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window was closed (called from KWin effect). Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
             </arg>
         </method>
 
         <method name="releaseWindowTracking">
-            <annotation name="org.gtk.GDBus.DocString" value="Drop a LIVE window from engine tracking without a close, such as one crossing to another output or desktop or no longer tileable. Unlike windowClosed, no placement capture runs: the window is not dying and its current frame is transient state, not a placement."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Drop a LIVE window from engine tracking without a close, such as one crossing to another output or desktop or no longer tileable. Unlike windowClosed, no placement capture runs: the window is not dying and its current frame is transient state, not a placement. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
             </arg>
@@ -158,7 +158,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
              ═══════════════════════════════════════════════════════════════════════════ -->
 
         <method name="currentTilesJson">
-            <annotation name="org.gtk.GDBus.DocString" value="The last geometry batch this interface emitted for a screen, replayed as JSON so a client that attaches after the batch went out can rebuild the screen's tiles without asking for a retile. A JSON array with one object per entry of the last windowsTileRequested batch that named this screen, restricted to that screen's entries, carrying the keys the daemon's own batch parser reads: windowId, x, y, width, height, screenId, monocle, floating and zoneId. x, y, width and height are the committed rect in absolute logical pixels and are all 0 on a floating entry, which carries no rect. zoneId is reserved and always empty, as on the signal. The daemon keeps ONE batch per screen, replaced whenever a newer batch names the screen, and prunes an entry the moment its window is closed or released from tracking, so a replay never resurrects a window that has already gone. A screen that leaves the engine-managed set has its batch dropped with the announce that removes it, and a daemon restart starts with nothing. The array is empty (the two characters []) for a screen no batch has named, for an empty screenId, and after the screen's batch was dropped. This is a replay of what was SENT, not a fresh resolve: the paint hints the signal carries beside the rect (scrollEdge, viewDelta, the visual position, tabFrom, viewImmediate) are deliberately absent, because they described a transition rather than a state."/>
+            <annotation name="org.gtk.GDBus.DocString" value="The last geometry batch this interface emitted for a screen, replayed as JSON so a client that attaches after the batch went out can rebuild the screen's tiles without asking for a retile. A JSON array with one object per entry of the last windowsTileRequested batch that named this screen, restricted to that screen's entries, carrying the keys the daemon's own batch parser reads (windowId, x, y, width, height, screenId, monocle and floating) and zoneId, which that parser does not read. x, y, width and height are the committed rect in absolute logical pixels and are all 0 on a floating entry, which carries no rect. zoneId is reserved and always empty, as on the signal. The daemon keeps ONE batch per screen, replaced whenever a newer batch names the screen, and prunes an entry the moment its window is closed or released from tracking, so a replay never resurrects a window that has already gone. A screen that leaves the engine-managed set has its batch dropped with the announce that removes it, and a daemon restart starts with nothing. The array is empty (the two characters []) for a screen no batch has named, for an empty screenId, and after the screen's batch was dropped. This is a replay of what was SENT, not a fresh resolve: the paint hints the signal carries beside the rect (scrollEdge, viewDelta, the visual position, tabFrom, viewImmediate) are deliberately absent, because they described a transition rather than a state."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose last batch to replay. An empty string yields an empty array."/>
             </arg>

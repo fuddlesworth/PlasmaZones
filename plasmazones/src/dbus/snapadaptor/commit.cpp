@@ -14,7 +14,8 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Snap confirmations from the effect and external callers: each is checked by
+// Snap confirmations from the compositor: only the registered bridge may make
+// them (DbusHelpers::admitCompositorReport, #1155), and each is checked by
 // validBusSnapTarget (busgate.cpp), then committed through the engine, which
 // owns the orchestration (clear floating and the auto-snapped flag, assign,
 // last-used tracking, the state-change signal). They confirm placements already
@@ -46,6 +47,9 @@ bool SnapAdaptor::confirmSnap(const QString& windowId, const QString& zoneId, co
 
 void SnapAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("track multi-zone window snap"))) {
         return;
     }
@@ -60,6 +64,9 @@ void SnapAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringL
 
 void SnapAdaptor::windowUnsnapped(const QString& windowId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("untrack window"))) {
         return;
     }
@@ -340,6 +347,12 @@ PhosphorProtocol::UnfloatRestoreResult SnapAdaptor::calculateUnfloatRestore(cons
 
 void SnapAdaptor::windowUnsnappedForFloat(const QString& windowId)
 {
+    // Compositor-only: from any other caller it unsnapped a window that its
+    // gated second half (setWindowFloat) could then refuse to float, leaving
+    // it in neither state.
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("prepare float"))) {
         return;
     }

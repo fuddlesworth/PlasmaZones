@@ -1493,18 +1493,17 @@ private Q_SLOTS:
         QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2).mode,
                  PhosphorZones::AssignmentEntry::Autotile);
 
-        // An autotile quick-layout slot the disable will wipe. The wipe is
-        // documented as ONE-WAY (layoutregistry_batch.cpp): the restore rebuilds
-        // assignment rules and has nothing to rebuild slots from, so the slot must
-        // still be gone after it runs. Pinning it here keeps a future "make the
-        // restore symmetric" change from happening by accident.
+        // An autotile quick-layout slot. The disable keeps it, as the scrolling
+        // slots are kept when scrolling is switched off: the restore rebuilds
+        // assignment rules only and has nothing to rebuild a slot from, so a
+        // wiped slot would be lost for good across a Tiling off/on round trip.
         mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Autotile, 1, QStringLiteral("autotile:bsp"));
         QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).value(1),
                  QStringLiteral("autotile:bsp"));
 
         mgr->clearAutotileAssignments();
-        QVERIFY2(!mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).contains(1),
-                 "the disable wipes autotile quick-layout slots");
+        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).value(1),
+                 QStringLiteral("autotile:bsp"));
         // Both flipped, both algorithms preserved — that preservation is what the
         // restore keys on, and what the disable's own comment promises.
         QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1).mode,
@@ -1524,9 +1523,9 @@ private Q_SLOTS:
         QCOMPARE(d2.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(d2.tilingAlgorithm, QStringLiteral("dwindle"));
 
-        // The slot the disable wiped stays wiped — the restore is one-way there.
-        QVERIFY2(!mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).contains(1),
-                 "restoreAutotileAssignments rebuilds assignment rules only, never quick-layout slots");
+        // The slot the disable kept is still there after the restore.
+        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).value(1),
+                 QStringLiteral("autotile:bsp"));
     }
 
     // An activity-pinned context is a Combined (screen + desktop + activity) rule,

@@ -47,6 +47,19 @@ public:
     /// Returns an invalid QRect when the window is unknown.
     virtual QRect frameGeometry(const QString& windowId) const = 0;
 
+    /// Whether @p frame is where management last left @p windowId: the frame
+    /// it settled at while a zone or a tile held it in view, which a
+    /// size-increment or size-constrained client leaves short of the rect it
+    /// was given, and not one the user moved it to. Appended last (installed
+    /// interface). The default answers false, which leaves the membership
+    /// pass's exact zone-rect compare as the only test.
+    virtual bool isSettledManagedFrame(const QString& windowId, const QRect& frame) const
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(frame)
+        return false;
+    }
+
     INavigationStateProvider(const INavigationStateProvider&) = delete;
     INavigationStateProvider& operator=(const INavigationStateProvider&) = delete;
 };

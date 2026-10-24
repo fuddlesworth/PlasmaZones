@@ -163,6 +163,30 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
     //     committed frame against the request): no stale-ack answer armed,
     //     which is how every apply behaved before that answer existed.
     //
+    // The strip's X11 answer adds comparands that take a pixel of tolerance
+    // (ScrollDecisions::CommittedSizeTolerancePx) instead of sharing that
+    // rounding rule, because KWin rounds an X11 request through device pixels
+    // at a fractional XWayland scale, so the committed FRAME can sit a pixel
+    // off the command it answers:
+    //
+    //   - the offer test (ScrollDecisions::stripEntrySendsSize, in the batch
+    //     and the deferred replay, against commandedRectOf read before the
+    //     apply), on the size alone: a needless Owed answer, read again and, at
+    //     a park, reported again;
+    //   - the answer's newness (ScrollDecisions::isNewColumnAnswer, in
+    //     readColumnAnswer and the catch-up walk), the frame against the size
+    //     recorded as read, which a batch that sends no size takes from
+    //     commandedRectOf: the same answer read again and, at a park, reported
+    //     again;
+    //   - the answer's report (readColumnAnswer, through
+    //     ScrollDecisions::shouldReportCommittedSize), the frame against this
+    //     rect's size: a report of rounding, which the engine reads as the
+    //     offer;
+    //   - the reported committed size (ScrollDecisions::reportedCommittedSize),
+    //     where a frame extent within the tolerance of this rect's is reported
+    //     as the offer's: at worst the engine is told the client took a column
+    //     it answered a pixel off.
+    //
     // None of those can put the window at a wrong position. The divergences
     // documented above can defeat these comparisons; they cannot make one
     // fire on the wrong window position, which is what makes the failure
@@ -477,7 +501,8 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // Foreign.
                 if (stripOfferOnDeferredReplay && safeWindow && !safeWindow->isDeleted()) {
                     recordStripOffer(safeWindow.data(), getWindowId(safeWindow.data()), *stripOfferOnDeferredReplay,
-                                     ScrollDecisions::stripEntrySendsSize(sentBeforeReplay, replayRect.size()));
+                                     ScrollDecisions::stripEntrySendsSize(sentBeforeReplay, replayRect.size(),
+                                                                          !safeWindow->isWaylandClient()));
                 }
                 // The bracket hid this move's own output change from the
                 // crossing arm, which also skips the stamp; a stamp written
