@@ -461,8 +461,10 @@ RuleModel::Section RuleModel::sectionFor(const Rule& rule)
         // while naming no monitor. No curated section describes it, so it goes
         // to Advanced / Custom.
         const bool pinsScreenScoped = pinsScreen || fields.contains(Field::VirtualDesktop)
-            || fields.contains(Field::ScreenOrientation) || fields.contains(Field::ActiveLayout)
-            || fields.contains(Field::Mode) || fields.contains(Field::TiledWindowCount);
+            || fields.contains(Field::ScreenOrientation) || fields.contains(Field::ScreenWidth)
+            || fields.contains(Field::ScreenHeight) || fields.contains(Field::ScreenAspectRatio)
+            || fields.contains(Field::ActiveLayout) || fields.contains(Field::Mode)
+            || fields.contains(Field::TiledWindowCount);
         return pinsScreenScoped ? Section::Monitor : Section::Advanced;
     }
 

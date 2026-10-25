@@ -28,9 +28,9 @@ namespace PhosphorRules {
  * any Window-sourced field, via MatchExpression::negatesAnyField over
  * windowSourcedFields().
  *
- * Context attributes are present even for a windowless context query, with one
- * exception: `tiledWindowCount` is optional and absent when the count is
- * unknown. `virtualDesktop == 0` means "all desktops" (a sticky window); empty
+ * Context attributes are present even for a windowless context query, with
+ * three exceptions: `tiledWindowCount`, `screenWidth` and `screenHeight` are
+ * optional and absent when unknown. `virtualDesktop == 0` means "all desktops" (a sticky window); empty
  * `activity` means "all activities".
  */
 struct WindowQuery
@@ -82,6 +82,16 @@ struct WindowQuery
     QString activeLayout; ///< layout id resolved for the screen (snap UUID / "autotile:<algo>" / "scrolling:"); empty
                           ///< where unpopulated
     QString colorScheme; ///< "light" / "dark" system colour scheme; empty = unknown (no provider)
+    QString screenAspectRatio; ///< nearest common aspect ratio of the resolving screen ("16:9", "32:9", …);
+                               ///< empty = unknown (no size provider)
+
+    /// The resolving screen's size in DEVICE pixels (its mode, not the scaled
+    /// logical size). Optional for the same reason as tiledWindowCount: there is
+    /// no width that means "unknown", so each is engaged only where a size
+    /// provider answered and absent otherwise, which keeps a size predicate
+    /// inert wherever the size is unknown.
+    std::optional<int> screenWidth;
+    std::optional<int> screenHeight;
 
     /// Tiled-window count for the screen + desktop being resolved. Optional
     /// rather than defaulted because 0 is a meaningful value (an empty tiled
@@ -150,6 +160,12 @@ struct WindowQuery
             return std::optional<QVariant>(activeLayout);
         case Field::ColorScheme:
             return std::optional<QVariant>(colorScheme);
+        case Field::ScreenWidth:
+            return screenWidth ? std::optional<QVariant>(*screenWidth) : std::nullopt;
+        case Field::ScreenHeight:
+            return screenHeight ? std::optional<QVariant>(*screenHeight) : std::nullopt;
+        case Field::ScreenAspectRatio:
+            return std::optional<QVariant>(screenAspectRatio);
         case Field::TiledWindowCount:
             return tiledWindowCount ? std::optional<QVariant>(*tiledWindowCount) : std::nullopt;
         case Field::IsMaximized:

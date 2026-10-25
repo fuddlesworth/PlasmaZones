@@ -492,6 +492,7 @@ void Daemon::stop()
         m_layoutManager->setDefaultAutotileAlgorithmProvider({});
         m_layoutManager->setTiledWindowCountProvider({});
         m_layoutManager->setScreenOrientationProvider({});
+        m_layoutManager->setScreenPixelSizeProvider({});
         m_layoutManager->setColorSchemeProvider({});
         m_layoutManager->setCurrentVirtualDesktopProvider({});
         m_layoutManager->setSnappingPreferredProvider({});
@@ -748,8 +749,8 @@ void Daemon::stop()
     // Sibling latch, same per-session shape (its queued single-shot also
     // gates on m_shuttingDown, so this is symmetry rather than a live fix).
     m_reconcileAssignmentsPending = false;
-    // Its colour-scheme twin, same shape and same reasoning.
-    m_colorSchemeRefreshPending = false;
+    // Its overlay-refresh twin, same shape and same reasoning.
+    m_contextOverlayRefreshPending = false;
     // And the tab-colour broadcast latch, same shape (its single shot gates on m_shuttingDown).
     m_scrollTabColorsBroadcastPending = false;
     // Per-session restore staging: entries computed against the pre-stop

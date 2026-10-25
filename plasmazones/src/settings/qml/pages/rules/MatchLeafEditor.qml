@@ -306,6 +306,9 @@ RowLayout {
             if (leaf._valueKind === "orientation")
                 return orientationValueEditor;
 
+            if (leaf._valueKind === "aspectRatio")
+                return aspectRatioValueEditor;
+
             if (leaf._valueKind === "colorScheme")
                 return colorSchemeValueEditor;
 
@@ -707,6 +710,43 @@ RowLayout {
                 return String(v);
             }
             Accessible.name: i18n("Screen orientation")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
+
+    Component {
+        id: aspectRatioValueEditor
+
+        WideComboBox {
+            // Aspect ratio is a string field whose value IS the wire token
+            // ("16:9", "32:9"); the options carry {value, wire, label} triples
+            // straight from the rules library's ratio table, same shape as the
+            // orientation editor above.
+            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+
+            model: _options
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < _options.length; ++i) {
+                    if (_options[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            displayText: {
+                if (currentIndex >= 0)
+                    return currentText;
+                var v = leaf.node.value;
+                if (v === undefined || v === null || v === "")
+                    return i18n("Choose an aspect ratio…");
+                return String(v);
+            }
+            Accessible.name: i18n("Aspect ratio")
             onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);

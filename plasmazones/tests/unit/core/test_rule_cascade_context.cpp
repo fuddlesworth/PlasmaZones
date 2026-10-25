@@ -146,6 +146,89 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-3"), 0, QString()).isEmpty());
     }
 
+    // ─── Screen size drives the layout assignment and follows a mode change ───
+    // The discussion #1145 case: one monitor that a KVM switches between a full
+    // 32:9 mode and a 16:9 half-width mode should get a different layout in each.
+    // A ScreenAspectRatio rule must win the assignment over the monitor's plain
+    // assignment rule through priority, and the cached assignment must follow a
+    // live mode change with no rule-set revision bump (the size rides the key).
+    void testContextScreenSize_drivesAssignmentAndFollowsModeChange()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        std::optional<QSize> size = QSize(5120, 1440);
+        f.registry->setScreenPixelSizeProvider([&size](const QString& screenId) -> std::optional<QSize> {
+            return screenId == QLatin1String("DP-1") ? size : std::nullopt;
+        });
+
+        const QString fullWidthLayout = QStringLiteral("{11111111-1111-1111-1111-111111111111}");
+        const QString halfWidthLayout = QStringLiteral("{22222222-2222-2222-2222-222222222222}");
+        const auto snapRule = [](int priority, const PWR::MatchExpression& match, const QString& layout) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = QStringLiteral("size assignment");
+            r.enabled = true;
+            r.priority = priority;
+            r.match = match;
+            r.actions = CRB::makeAssignmentActions(QStringLiteral("snapping"), layout, QString(), QString());
+            return r;
+        };
+        const PWR::Rule monitorRule = snapRule(
+            100, PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1")),
+            fullWidthLayout);
+        const PWR::Rule halfWidthRule = snapRule(
+            500,
+            PWR::MatchExpression::makeAll(
+                {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1")),
+                 PWR::MatchExpression::makeLeaf(PWR::Field::ScreenAspectRatio, PWR::Operator::Equals,
+                                                QStringLiteral("16:9"))}),
+            halfWidthLayout);
+        QVERIFY(f.store->setAllRules({monitorRule, halfWidthRule}));
+
+        // Full width: 32:9, the aspect rule does not match, the monitor rule wins.
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout,
+                 fullWidthLayout);
+
+        // The KVM drops the monitor to half width. Same rule set, no revision
+        // bump: only the size moved, and the cached verdict must follow it.
+        size = QSize(2560, 1440);
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout,
+                 halfWidthLayout);
+
+        // And back again.
+        size = QSize(5120, 1440);
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout,
+                 fullWidthLayout);
+
+        // Unknown size: the aspect ratio is empty, so the rule stays inert.
+        size = std::nullopt;
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout,
+                 fullWidthLayout);
+
+        // The numeric fields gate a non-assignment resolver too, through the
+        // Int operators: a narrow-mode gap.
+        PWR::RuleAction gapAction;
+        gapAction.type = QString(PWR::ActionType::SetInnerGap);
+        gapAction.params.insert(QString(PWR::ActionParam::Value), 7);
+        PWR::Rule narrowGap;
+        narrowGap.id = QUuid::createUuid();
+        narrowGap.name = QStringLiteral("narrow gap");
+        narrowGap.enabled = true;
+        narrowGap.priority = 400;
+        narrowGap.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenWidth, PWR::Operator::LessThan, 3000);
+        narrowGap.actions = {gapAction};
+        QVERIFY(f.store->setAllRules({narrowGap}));
+
+        size = QSize(2560, 1440);
+        const PhosphorZones::ContextGapOverride narrow =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(narrow.innerGap.has_value());
+        QCOMPARE(*narrow.innerGap, 7);
+        size = QSize(5120, 1440);
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).isEmpty());
+        // A screen the provider does not know has no width, so the rule is inert.
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+    }
+
     // ─── ActiveLayout is stamped onto the non-assignment resolvers, gates rules,
     //     and does NOT recurse ──────────────────────────────────────────────────
     // The gap/lock/overlay resolvers stamp the screen's resolved active-layout id

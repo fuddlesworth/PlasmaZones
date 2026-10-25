@@ -35,6 +35,7 @@
 #include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
+#include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/ZoneDetector.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -256,6 +257,26 @@ void Daemon::initLayoutAndSettingsWiring()
             return std::nullopt;
         }
         return geom.height() > geom.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+    });
+    // Size provider — the screen's size in DEVICE pixels, the resolution its
+    // display settings report, so a Field::ScreenWidth / ScreenHeight /
+    // ScreenAspectRatio rule can tell one monitor's modes apart (a
+    // super-ultrawide a KVM drops to half width, for one). The logical geometry
+    // times the output's scale; a virtual screen takes its own logical rect and
+    // its physical output's scale, so it reports its share of the panel.
+    // nullopt for an unknown geometry or scale keeps the predicates inert.
+    // Re-driven on a geometry or scale change by the screen handlers in
+    // start.cpp (scheduleReconcileActiveAssignments).
+    m_layoutManager->setScreenPixelSizeProvider([this](const QString& screenId) -> std::optional<QSize> {
+        if (!m_screenManager) {
+            return std::nullopt;
+        }
+        const QRect geom = m_screenManager->screenGeometry(screenId);
+        const qreal scale = PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), screenId);
+        if (!geom.isValid() || scale <= 0.0) {
+            return std::nullopt;
+        }
+        return QSize(qRound(geom.width() * scale), qRound(geom.height() * scale));
     });
     // Colour-scheme provider — session-wide "light" / "dark" from the live
     // application palette, so a Field::ColorScheme rule can drive any context

@@ -18,7 +18,7 @@ private Q_SLOTS:
         // Canary: the loop bound is derived from FieldCount, not hard-coded.
         // If this fails, an enumerator was added/removed without updating
         // FieldCount in MatchTypes.h.
-        QCOMPARE(FieldCount, 41);
+        QCOMPARE(FieldCount, 44);
         QTest::addColumn<int>("fieldValue");
         for (int v = 0; v < FieldCount; ++v) {
             QTest::addRow("field-%d", v) << v;
@@ -101,9 +101,10 @@ private Q_SLOTS:
 
     void testFieldIsContext()
     {
-        // Exactly the eight context fields are context (screen / desktop /
+        // Exactly the eleven context fields are context (screen / desktop /
         // activity, the placement Mode, the tiled-window count, the screen
-        // orientation, the active layout, and the system colour scheme) —
+        // orientation, the active layout, the system colour scheme, and the
+        // screen width, height and aspect ratio) —
         // everything else is a window property. Action/match compatibility hinges on this split, so pin it
         // down explicitly rather than re-deriving it from
         // fieldIsString/fieldIsBool/fieldIsNumeric.
@@ -127,6 +128,15 @@ private Q_SLOTS:
         // ColorScheme is the session-wide light/dark context field, stamped
         // during windowless context resolution AND on daemon window queries.
         QVERIFY(fieldIsContext(Field::ColorScheme));
+        // The screen-size fields are context too, so a resolution-keyed rule can
+        // drive the assignment cascade. Width and height are numeric (the Int
+        // operators), the aspect ratio a string token.
+        QVERIFY(fieldIsContext(Field::ScreenWidth));
+        QVERIFY(fieldIsContext(Field::ScreenHeight));
+        QVERIFY(fieldIsContext(Field::ScreenAspectRatio));
+        QVERIFY(fieldIsNumeric(Field::ScreenWidth));
+        QVERIFY(fieldIsNumeric(Field::ScreenHeight));
+        QVERIFY(fieldIsString(Field::ScreenAspectRatio));
 
         // The capability fields added alongside them are window properties, not
         // context, so a rule keying on them is a per-window match.
@@ -194,6 +204,59 @@ private Q_SLOTS:
         QVERIFY(QString(ModeToken::Tiling) != QStringLiteral("autotile"));
         for (const QLatin1StringView token : kModeTokens) {
             QVERIFY2(QString(token) != QStringLiteral("autotile"), token.data());
+        }
+    }
+
+    void testAspectRatioToken_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::addColumn<int>("height");
+        QTest::addColumn<QString>("token");
+        // The resolutions the vocabulary exists for, each under the name the
+        // monitor is sold as. The ultrawide family is not exactly 21:9, and
+        // all of it must still land there rather than on 16:9 or 32:10.
+        QTest::addRow("5120x1440 super-ultrawide") << 5120 << 1440 << QStringLiteral("32:9");
+        QTest::addRow("2560x1440 its KVM half") << 2560 << 1440 << QStringLiteral("16:9");
+        QTest::addRow("1920x1080") << 1920 << 1080 << QStringLiteral("16:9");
+        QTest::addRow("1366x768 off by a pixel") << 1366 << 768 << QStringLiteral("16:9");
+        QTest::addRow("3440x1440 ultrawide") << 3440 << 1440 << QStringLiteral("21:9");
+        QTest::addRow("2560x1080 ultrawide") << 2560 << 1080 << QStringLiteral("21:9");
+        QTest::addRow("3840x1600 ultrawide") << 3840 << 1600 << QStringLiteral("21:9");
+        QTest::addRow("3840x1200 dual 16:10") << 3840 << 1200 << QStringLiteral("32:10");
+        QTest::addRow("1920x1200") << 1920 << 1200 << QStringLiteral("16:10");
+        QTest::addRow("2256x1504") << 2256 << 1504 << QStringLiteral("3:2");
+        QTest::addRow("1600x1200") << 1600 << 1200 << QStringLiteral("4:3");
+        QTest::addRow("1280x1024") << 1280 << 1024 << QStringLiteral("5:4");
+        QTest::addRow("square") << 1920 << 1920 << QStringLiteral("1:1");
+        QTest::addRow("1080x1920 rotated") << 1080 << 1920 << QStringLiteral("9:16");
+        QTest::addRow("1200x1920 rotated 16:10") << 1200 << 1920 << QStringLiteral("10:16");
+        QTest::addRow("1440x3440 rotated ultrawide") << 1440 << 3440 << QStringLiteral("9:21");
+        QTest::addRow("zero width") << 0 << 1080 << QString();
+        QTest::addRow("negative height") << 1920 << -1 << QString();
+    }
+
+    void testAspectRatioToken()
+    {
+        QFETCH(int, width);
+        QFETCH(int, height);
+        QFETCH(QString, token);
+        QCOMPARE(aspectRatioTokenFor(width, height), token);
+    }
+
+    void testAspectRatioVocabularyIsUnique()
+    {
+        // The picker lists the vocabulary verbatim, so a duplicate token would
+        // show twice and a duplicate ratio would make the nearest-match order
+        // decide between two names for one shape.
+        QSet<QString> tokens;
+        QSet<double> ratios;
+        for (const AspectRatioToken& entry : kAspectRatioTokens) {
+            QVERIFY2(!tokens.contains(QString(entry.token)), entry.token.data());
+            QVERIFY2(!ratios.contains(entry.ratio), entry.token.data());
+            tokens.insert(QString(entry.token));
+            ratios.insert(entry.ratio);
+            // Each token names a ratio it maps back to.
+            QCOMPARE(aspectRatioTokenFor(qRound(entry.ratio * 1000.0), 1000), QString(entry.token));
         }
     }
 

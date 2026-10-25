@@ -407,7 +407,8 @@ void TestRuleController::authoringMetadata()
                 || kind == QLatin1String("screen") || kind == QLatin1String("activity")
                 || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop")
                 || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
-                || kind == QLatin1String("layout") || kind == QLatin1String("colorScheme"));
+                || kind == QLatin1String("layout") || kind == QLatin1String("colorScheme")
+                || kind == QLatin1String("aspectRatio"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }
@@ -520,6 +521,23 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(kindByWire.value(QStringLiteral("isNotification")), QStringLiteral("bool"));
     QCOMPARE(kindByWire.value(QStringLiteral("width")), QStringLiteral("number"));
     QCOMPARE(kindByWire.value(QStringLiteral("height")), QStringLiteral("number"));
+    // The screen-size context fields: width and height take the numeric editor,
+    // the aspect ratio its own dropdown, whose options are exactly the rules
+    // library's ratio vocabulary so the picker cannot offer a token nothing stamps.
+    QCOMPARE(kindByWire.value(QStringLiteral("screenWidth")), QStringLiteral("number"));
+    QCOMPARE(kindByWire.value(QStringLiteral("screenHeight")), QStringLiteral("number"));
+    QCOMPARE(kindByWire.value(QStringLiteral("screenAspectRatio")), QStringLiteral("aspectRatio"));
+    for (const QVariant& v : fields) {
+        const QVariantMap f = v.toMap();
+        if (f.value(QStringLiteral("wire")).toString() != QLatin1String("screenAspectRatio")) {
+            continue;
+        }
+        const QVariantList options = f.value(QStringLiteral("options")).toList();
+        QCOMPARE(options.size(), static_cast<int>(std::size(PhosphorRules::kAspectRatioTokens)));
+        QCOMPARE(options.first().toMap().value(QStringLiteral("wire")).toString(),
+                 QString(PhosphorRules::kAspectRatioTokens[0].token));
+    }
+    QCOMPARE(controller.operatorsForField(valueByWire.value(QStringLiteral("screenAspectRatio"), -1)).size(), 1);
 
     const auto opWires = [&](const QString& wire) {
         QSet<QString> s;

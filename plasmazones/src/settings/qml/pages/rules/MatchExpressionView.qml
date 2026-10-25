@@ -85,7 +85,7 @@ ColumnLayout {
 
     /// Wire→valueKind helper for `_valueLabel`. Returns the field's controller-side
     /// kind string (any of the kinds MatchLeafEditor dispatches on: string, number,
-    /// bool, screen, activity, windowType, virtualDesktop, mode, orientation,
+    /// bool, screen, activity, windowType, virtualDesktop, mode, orientation, aspectRatio,
     /// colorScheme, layout) or "string" for unknown fields — the safest default
     /// since `String(value)` is what a plain-string render would do anyway.
     function _valueKind(wire) {
@@ -103,7 +103,7 @@ ColumnLayout {
     ///   - activity → `appSettings.activities.name` for the matching id
     ///   - windowType → the enum option's label from the field entry
     ///   - layout → `appSettings.activeLayoutMatchOptions` displayName for the matching id
-    ///   - mode / orientation / colorScheme → the token's option label from the field entry
+    ///   - mode / orientation / aspectRatio / colorScheme → the token's option label from the field entry
     ///   - everything else (string, number) → `String(value)`
     /// Falls back to the raw wire value when a lookup misses (e.g. the
     /// rule references an unplugged monitor or removed activity), matching
@@ -183,7 +183,7 @@ ColumnLayout {
         // options, the same way windowType does, so the tree shows "Portrait"
         // not the raw "portrait". Every closed-vocabulary kind belongs in this
         // list: a kind missing here renders its untranslated wire token.
-        if (kind === "mode" || kind === "orientation" || kind === "colorScheme") {
+        if (kind === "mode" || kind === "orientation" || kind === "aspectRatio" || kind === "colorScheme") {
             for (var m = 0; m < root.matchFieldOptions.length; ++m) {
                 var modeEntry = root.matchFieldOptions[m];
                 if (modeEntry.wire !== fieldWire)

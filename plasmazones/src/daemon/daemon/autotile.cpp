@@ -797,6 +797,42 @@ void Daemon::reconcileActiveAssignments()
     }
 }
 
+void Daemon::scheduleReconcileActiveAssignments()
+{
+    if (m_reconcileAssignmentsPending) {
+        return;
+    }
+    m_reconcileAssignmentsPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_reconcileAssignmentsPending = false;
+        // A trigger landing in the same event-loop turn as stop() leaves this
+        // single-shot queued past teardown; without the gate a non-empty diff
+        // would drive a full assignment-apply pass on a stopped daemon
+        // (m_layoutAdaptor is Qt-parented and outlives the per-sender
+        // connection sweep).
+        if (m_shuttingDown) {
+            return;
+        }
+        reconcileActiveAssignments();
+    });
+}
+
+void Daemon::scheduleContextOverlayRefresh()
+{
+    if (m_contextOverlayRefreshPending) {
+        return;
+    }
+    m_contextOverlayRefreshPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_contextOverlayRefreshPending = false;
+        if (m_shuttingDown || !m_overlayService) {
+            return;
+        }
+        m_overlayService->refreshContextLockState();
+        m_overlayService->refreshOverlayPropertiesIfShown();
+    });
+}
+
 /**
  * @brief Deactivate autotile: flip every autotile assignment to Snapping,
  *        keeping each context's snapping layout and tiling algorithm, and set

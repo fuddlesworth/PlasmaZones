@@ -8,6 +8,7 @@
 
 namespace KWin {
 class EffectWindow;
+class LogicalOutput;
 }
 
 namespace PlasmaZones {
@@ -89,15 +90,21 @@ bool windowIsBareOverrideRedirect(KWin::EffectWindow* w);
 PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
                                         bool isTiled, const QString& zoneId);
 
-/// "portrait" / "landscape" for the output containing @p w's frame centre, or
-/// an empty string when no output does. A square screen counts as landscape,
-/// matching the daemon-side orientation provider.
+/// The output containing @p w's frame centre, or null when no output does.
 ///
-/// This is the position-derived FALLBACK for the screen orientation: it is
+/// This is the position-derived FALLBACK for the screen-shape fields: it is
 /// wrong for a scroll strip's off-screen parked windows (their centre lies
 /// outside every output, or inside the neighbour's), so a caller holding a
-/// resolved screen id should derive the orientation from that id and use this
-/// only when the id resolves to no output.
-QString centreScreenOrientation(KWin::EffectWindow* w);
+/// resolved screen id should take the output from that id and use this only
+/// when the id resolves to no output.
+const KWin::LogicalOutput* centreScreenOutput(KWin::EffectWindow* w);
+
+/// Stamp @p output's shape onto @p query: the orientation ("portrait" when
+/// taller than wide, a square screen counting as landscape), the size in
+/// device pixels (logical geometry times scale) and the aspect-ratio token
+/// derived from it. The same derivations as the daemon's providers, so a
+/// window rule and a context rule read a screen alike. A no-op for a null
+/// output or one with no valid geometry, which leaves the fields unknown.
+void stampScreenShape(PhosphorRules::WindowQuery& query, const KWin::LogicalOutput* output);
 
 } // namespace PlasmaZones
