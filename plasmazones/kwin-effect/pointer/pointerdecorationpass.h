@@ -33,6 +33,7 @@ class GLFramebuffer;
 class GLShader;
 class GLTexture;
 class LogicalOutput;
+class PlatformCursorImage;
 class RenderDevice;
 class RenderTarget;
 class RenderViewport;
@@ -444,10 +445,12 @@ private:
     /// Draw a unit NDC quad for a buffer stage (FBO to FBO, no projection).
     static void drawFullscreenQuad();
 
-    /// Upload (or reuse) the compositor's cursor sprite for a `needsCursor`
-    /// pack. Returns null when there is no cursor image, in which case
-    /// uPointerFlags.x is pushed as 0.
-    KWin::GLTexture* cursorSpriteTexture();
+    /// Upload (or reuse) @p cursor as the sprite for a `needsCursor` pack.
+    /// Returns null when there is no cursor image, in which case
+    /// uPointerFlags.x is pushed as 0. Takes the image paintOutput already
+    /// read rather than asking KWin itself, because that read must stay
+    /// outside the draw bracket (see paintOutput).
+    KWin::GLTexture* cursorSpriteTexture(const KWin::PlatformCursorImage& cursor);
 
     /// Is @p screen covered by the effect's fullscreen gate? Inline and header-
     /// resident because both TUs that gate on suppression consult it: every liveness,
@@ -511,6 +514,9 @@ private:
     ///     is released, and only then does the raised counter read as gone.
     ///     A `below` chain never holds a hide and is unaffected.
     bool cursorSpriteGone() const;
+    /// The same test against a @p cursor image the caller already read, so a
+    /// frame that needs the image for other things asks KWin for it once.
+    bool cursorSpriteGone(const KWin::PlatformCursorImage& cursor) const;
 
     /// Drop the live trail because the pointer stopped being a pointer worth
     /// decorating, repainting away what is still on screen first. @p next
@@ -553,6 +559,8 @@ private:
     /// The cursor sprite's rect in @p screen's device-px canvas, hotspot
     /// applied. A null rect when the compositor reports no cursor image.
     QRectF cursorCanvasRect(KWin::LogicalOutput* screen) const;
+    /// The same rect from a @p cursor image the caller already read.
+    QRectF cursorCanvasRect(KWin::LogicalOutput* screen, const KWin::PlatformCursorImage& cursor) const;
 
     /// Take the compositor's cursor hide, if an `above` layer is engaged and
     /// the pointer is on @p screen. A no-op when something else already hides

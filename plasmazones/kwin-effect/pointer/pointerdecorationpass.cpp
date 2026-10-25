@@ -473,8 +473,13 @@ QRectF PointerDecorationPass::cursorCanvasRect(KWin::LogicalOutput* screen) cons
     if (!screen || !KWin::effects) {
         return {};
     }
-    const KWin::PlatformCursorImage cursor = KWin::effects->cursorImage();
-    if (cursor.isNull()) {
+    return cursorCanvasRect(screen, KWin::effects->cursorImage());
+}
+
+QRectF PointerDecorationPass::cursorCanvasRect(KWin::LogicalOutput* screen,
+                                               const KWin::PlatformCursorImage& cursor) const
+{
+    if (!screen || !KWin::effects || cursor.isNull()) {
         return {};
     }
     const QImage img = cursor.image();
@@ -550,9 +555,17 @@ bool PointerDecorationPass::cursorSpriteGone() const
     if (!KWin::effects) {
         return false;
     }
+    return cursorSpriteGone(KWin::effects->cursorImage());
+}
+
+bool PointerDecorationPass::cursorSpriteGone(const KWin::PlatformCursorImage& cursor) const
+{
+    if (!KWin::effects) {
+        return false;
+    }
     // An empty image is a client-installed blank cursor: nothing is on screen
     // to decorate, whatever the hide counter says.
-    if (KWin::effects->cursorImage().isNull()) {
+    if (cursor.isNull()) {
         return true;
     }
     // A non-empty image with the counter at zero is KWin's own composited (or
