@@ -8,6 +8,7 @@
  *        running-windows rows.
  */
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -85,8 +86,11 @@ private Q_SLOTS:
     // a real name already shaped like a suffixed one, names differing only
     // in a slash the picker swaps for U+2215, and zones of one layout sharing
     // a name, or a name equal to an unnamed sibling's "Zone N", all read
-    // apart. An unnamed layout still has a name to group under, and a name
-    // holding "%2" is not substituted twice. FAILS if any two labels match.
+    // apart. A name the user typed keeps its plain label whichever item comes
+    // first: the real "Grid (2)" and the zone named "Zone 3" are not
+    // suffixed, the repeat and the fallback are. An unnamed layout still has
+    // a name to group under, and a name holding "%2" is not substituted
+    // twice. FAILS if any two labels match or a typed name is suffixed.
     void zoneMatchOptions_noTwoLabelsReadAlike()
     {
         QObject owner;
@@ -107,8 +111,8 @@ private Q_SLOTS:
         auto* repeats = new PhosphorZones::Layout(QStringLiteral("Repeats"), &owner);
         addZone(repeats, 1, QStringLiteral("Main"));
         addZone(repeats, 2, QStringLiteral("Main"));
-        addZone(repeats, 3, QString());
-        addZone(repeats, 4, QStringLiteral("Zone 3"));
+        PhosphorZones::Zone* unnamedThird = addZone(repeats, 3, QString());
+        PhosphorZones::Zone* namedZone3 = addZone(repeats, 4, QStringLiteral("Zone 3"));
         auto* unnamed = new PhosphorZones::Layout(QString(), &owner);
         addZone(unnamed, 1, QStringLiteral("Only"));
 
@@ -117,18 +121,23 @@ private Q_SLOTS:
         QCOMPARE(options.size(), 12);
         QStringList labels;
         QSet<QString> keys;
+        QHash<QString, QString> labelById;
         for (const QVariant& o : options) {
-            const QString label = o.toMap().value(QStringLiteral("displayName")).toString();
+            const QVariantMap map = o.toMap();
+            const QString label = map.value(QStringLiteral("displayName")).toString();
             labels.append(label);
             keys.insert(label.toLower().replace(QLatin1Char('/'), QChar(0x2215)));
+            labelById.insert(map.value(QStringLiteral("id")).toString(), label);
         }
         const QString all = labels.join(QLatin1Char('|'));
         QCOMPARE(keys.size(), labels.size());
         QVERIFY2(labels.contains(QStringLiteral("Grid — Zone 1")), qPrintable(all));
-        QVERIFY2(labels.contains(QStringLiteral("grid (2) — Zone 1")), qPrintable(all));
+        QVERIFY2(labels.contains(QStringLiteral("grid (3) — Zone 1")), qPrintable(all));
+        QVERIFY2(labels.contains(QStringLiteral("Grid (2) — Zone 1")), qPrintable(all));
         QVERIFY2(labels.contains(QStringLiteral("Mine %2 (2) — Zone 1")), qPrintable(all));
         QVERIFY2(labels.contains(QStringLiteral("Repeats — Main (2)")), qPrintable(all));
-        QVERIFY2(labels.contains(QStringLiteral("Repeats — Zone 3 (2)")), qPrintable(all));
+        QCOMPARE(labelById.value(namedZone3->id().toString()), QStringLiteral("Repeats — Zone 3"));
+        QCOMPARE(labelById.value(unnamedThird->id().toString()), QStringLiteral("Repeats — Zone 3 (2)"));
         QVERIFY2(labels.contains(QStringLiteral("Unnamed layout — Only")), qPrintable(all));
     }
 

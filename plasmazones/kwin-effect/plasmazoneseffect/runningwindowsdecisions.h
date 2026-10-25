@@ -149,6 +149,10 @@ private:
     }
 
     std::array<QSet<QString>, 3> m_seen;
+    // One set per key space after None, so a space added to the enum without
+    // a set fails here instead of indexing past the array.
+    static_assert(static_cast<std::size_t>(KeySpace::ClasslessDesktopFile) == std::tuple_size_v<decltype(m_seen)>,
+                  "RowFilter::m_seen needs one set per KeySpace after None");
 };
 
 /// The byte budget of the serialized list (a compact JSON array), so the

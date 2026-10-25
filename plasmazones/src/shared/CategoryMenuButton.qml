@@ -188,11 +188,12 @@ ComboBox {
                 arr.push(items[i]);
         }
         // An item's own `order` comes first when the host gives one; a missing
-        // or non-numeric one sorts after every ordered item, and ties fall
-        // back to the name, so a host that sets none keeps the name order.
+        // or non-numeric one (null, "" and false included, which Number()
+        // would read as 0) sorts after every ordered item, and ties fall back
+        // to the name, so a host that sets none keeps the name order.
         var orderOf = function (item) {
-            var o = item ? Number(item.order) : NaN;
-            return isFinite(o) ? o : Infinity;
+            var o = item ? item.order : undefined;
+            return (typeof o === "number" && isFinite(o)) ? o : Infinity;
         };
         arr.sort(function (a, b) {
             var oa = orderOf(a);

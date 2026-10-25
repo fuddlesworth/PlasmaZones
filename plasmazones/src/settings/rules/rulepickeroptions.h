@@ -23,9 +23,10 @@ namespace PlasmaZones::RulePickerOptions {
 ///     daemon and the KWin effect stamp into a window's Zone rule field;
 ///   - `zoneName` is the zone's name, or "Zone <number>" when it has none;
 ///   - `layoutName` is the layout's name, or "Unnamed layout" when it has none;
-///   - a layout name that another layout already took, ignoring case, gets
-///     a "(2)", "(3)" suffix, and so does a zone name repeated within one
-///     layout, so no two options read alike;
+///   - no two layouts, and no two zones of one layout, read alike: compared
+///     ignoring case and with "/" read as the slash the picker shows, a
+///     repeated name or a fallback that another item's own name holds gets a
+///     "(2)", "(3)" suffix, while a name the user typed keeps its plain label;
 ///   - `displayName` is "<layoutName> — <zoneName>", the label the picker and
 ///     the rule list both show;
 ///   - `layoutOrder` is the layout's position, so a picker grouping by layout

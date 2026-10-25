@@ -20,7 +20,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QScopeGuard>
 #include <QSet>
 #include <QTemporaryDir>
 #include <QTest>
@@ -34,6 +33,7 @@
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include "helpers/IsolatedConfigGuard.h"
+#include "helpers/XdgEnvGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -139,11 +139,11 @@ private Q_SLOTS:
                           + QStringLiteral(".json"),
                       withoutZoneIds(layoutJson(kOriginalId, QStringLiteral("Shipped"),
                                                 {QUuid::createUuid().toString(), QUuid::createUuid().toString()}))));
-        const QByteArray oldDataDirs = qgetenv("XDG_DATA_DIRS");
+        // Restores XDG_DATA_DIRS on every exit, unsetting it again when it was
+        // unset before; declared before the registry's owner so the registry
+        // is gone first.
+        const XdgEnvGuard restoreDataDirs;
         qputenv("XDG_DATA_DIRS", systemRoot.path().toUtf8());
-        const auto restoreDataDirs = qScopeGuard([&oldDataDirs]() {
-            qputenv("XDG_DATA_DIRS", oldDataDirs);
-        });
 
         QObject owner;
         PhosphorZones::LayoutRegistry* registry = loadedRegistry(&owner);
