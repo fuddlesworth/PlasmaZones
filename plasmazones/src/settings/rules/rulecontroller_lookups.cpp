@@ -3,7 +3,8 @@
 
 // RuleController label-lookup setters. These are tiny pass-throughs that
 // forward the resolver into RuleModel, plus the zone-name enumerator the
-// SnapToZone picker reads, and they form a coherent sub-surface.
+// SnapToZone picker reads and the zone-option enumerator the Zone condition
+// picker reads, and they form a coherent sub-surface.
 // Same class as rulecontroller.cpp, separate TU, no API change.
 
 #include "rulecontroller.h"
@@ -81,18 +82,38 @@ void RuleController::setZoneNamesProvider(std::function<QStringList()> provider)
     // publishes immediately so the picker is populated before the first
     // registry reload.
     if (m_zoneNamesProvider) {
-        refreshZoneNames();
+        refreshZoneLists();
     }
 }
 
-void RuleController::refreshZoneNames()
+void RuleController::setZoneMatchOptionsProvider(std::function<QVariantList()> provider)
 {
-    QStringList next = m_zoneNamesProvider ? m_zoneNamesProvider() : QStringList();
-    if (next == m_zoneNames) {
-        return;
+    // Same clear-keeps-the-last-list contract as setZoneNamesProvider.
+    m_zoneMatchOptionsProvider = std::move(provider);
+    if (m_zoneMatchOptionsProvider) {
+        refreshZoneLists();
     }
-    m_zoneNames = std::move(next);
-    Q_EMIT zoneNamesChanged();
+}
+
+void RuleController::refreshZoneLists()
+{
+    // A cleared provider leaves its cached list alone rather than publishing an
+    // empty one, so a refresh that lands between the two teardown clears
+    // cannot blank a picker the user still has open.
+    if (m_zoneNamesProvider) {
+        QStringList next = m_zoneNamesProvider();
+        if (next != m_zoneNames) {
+            m_zoneNames = std::move(next);
+            Q_EMIT zoneNamesChanged();
+        }
+    }
+    if (m_zoneMatchOptionsProvider) {
+        QVariantList next = m_zoneMatchOptionsProvider();
+        if (next != m_zoneMatchOptions) {
+            m_zoneMatchOptions = std::move(next);
+            Q_EMIT zoneMatchOptionsChanged();
+        }
+    }
 }
 
 void RuleController::setCurveLabelResolver(const QJSValue& resolver)

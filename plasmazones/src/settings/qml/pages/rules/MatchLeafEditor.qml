@@ -312,6 +312,9 @@ RowLayout {
             if (leaf._valueKind === "layout")
                 return layoutValueEditor;
 
+            if (leaf._valueKind === "zone")
+                return zoneValueEditor;
+
             return stringValueEditor;
         }
     }
@@ -780,6 +783,40 @@ RowLayout {
             // stays visible even when no current layout matches.
             displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose a layout…"))
             Accessible.name: i18n("Active layout")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
+
+    Component {
+        id: zoneValueEditor
+
+        WideComboBox {
+            id: zoneCombo
+
+            // Picker over `controller.zoneMatchOptions`: every zone of every
+            // layout, labelled "<layout> — <zone>". The wire value stays the
+            // braced zone UUID the Zone condition matches on. Mirrors the
+            // layout picker above.
+            readonly property var _zones: (leaf.controller && leaf.controller.zoneMatchOptions) || []
+
+            model: _zones
+            textRole: "displayName"
+            valueRole: "id"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < zoneCombo._zones.length; ++i) {
+                    if (zoneCombo._zones[i].id === target)
+                        return i;
+                }
+                return -1;
+            }
+            // Fall back to the raw id (e.g. a zone whose layout was deleted) so
+            // the rule's pin stays visible even when no current zone matches.
+            displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose a zone…"))
+            Accessible.name: i18n("Zone")
             onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);

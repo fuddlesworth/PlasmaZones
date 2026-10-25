@@ -57,6 +57,7 @@ private Q_SLOTS:
     void stageUserRulesEnforcesTheAddRuleBoundary();
     void stageUserRulesRaisesTheCommitGate();
     void promotedLeafRootRoundTrips();
+    void zoneListProvidersPublishOnlyOnChange();
 };
 
 void TestRuleController::newEmptyRuleShapesBySubject()
@@ -407,7 +408,8 @@ void TestRuleController::authoringMetadata()
                 || kind == QLatin1String("screen") || kind == QLatin1String("activity")
                 || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop")
                 || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
-                || kind == QLatin1String("layout") || kind == QLatin1String("colorScheme"));
+                || kind == QLatin1String("layout") || kind == QLatin1String("colorScheme")
+                || kind == QLatin1String("zone"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }
@@ -520,6 +522,10 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(kindByWire.value(QStringLiteral("isNotification")), QStringLiteral("bool"));
     QCOMPARE(kindByWire.value(QStringLiteral("width")), QStringLiteral("number"));
     QCOMPARE(kindByWire.value(QStringLiteral("height")), QStringLiteral("number"));
+    // Zone drives the zone picker. Reverting it to a bare string would put the
+    // user back to hand-typing a braced UUID out of a layout file.
+    QCOMPARE(kindByWire.value(QStringLiteral("zone")), QStringLiteral("zone"));
+    QCOMPARE(controller.operatorsForField(valueByWire.value(QStringLiteral("zone"), -1)).size(), 1);
 
     const auto opWires = [&](const QString& wire) {
         QSet<QString> s;
@@ -1013,6 +1019,57 @@ void TestRuleController::stageUserRulesRaisesTheCommitGate()
     controller.stageUserRules({good});
     QVERIFY(controller.isDirty());
     QCOMPARE(dirtySpy.count(), 2);
+}
+
+void TestRuleController::zoneListProvidersPublishOnlyOnChange()
+{
+    RuleController controller;
+    QSignalSpy namesSpy(&controller, &RuleController::zoneNamesChanged);
+    QSignalSpy optionsSpy(&controller, &RuleController::zoneMatchOptionsChanged);
+
+    const auto option = [](const QString& id, const QString& displayName) {
+        QVariantMap m;
+        m[QStringLiteral("id")] = id;
+        m[QStringLiteral("displayName")] = displayName;
+        return QVariant(m);
+    };
+    QVariantList options{
+        option(QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"), QStringLiteral("Columns — Left"))};
+    QStringList names{QStringLiteral("Left")};
+
+    // Installing a provider publishes at once, so the picker is populated
+    // before the first registry reload.
+    controller.setZoneMatchOptionsProvider([&options]() {
+        return options;
+    });
+    QCOMPARE(optionsSpy.count(), 1);
+    QCOMPARE(controller.zoneMatchOptions(), options);
+    controller.setZoneNamesProvider([&names]() {
+        return names;
+    });
+    QCOMPARE(namesSpy.count(), 1);
+    QCOMPARE(controller.zoneNames(), names);
+
+    // A refresh with nothing changed emits neither signal.
+    controller.refreshZoneLists();
+    QCOMPARE(optionsSpy.count(), 1);
+    QCOMPARE(namesSpy.count(), 1);
+
+    // A zone rename changes the option label but not the id, and must still
+    // republish. The name list moves independently of the options.
+    options = {option(QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"), QStringLiteral("Columns — Media"))};
+    controller.refreshZoneLists();
+    QCOMPARE(optionsSpy.count(), 2);
+    QCOMPARE(controller.zoneMatchOptions(), options);
+    QCOMPARE(namesSpy.count(), 1);
+
+    // Clearing a provider keeps the last published list and stays silent, so
+    // a refresh landing mid-teardown cannot blank an open picker.
+    controller.setZoneMatchOptionsProvider({});
+    options.clear();
+    controller.refreshZoneLists();
+    QCOMPARE(optionsSpy.count(), 2);
+    QCOMPARE(controller.zoneMatchOptions().size(), 1);
 }
 
 QTEST_MAIN(TestRuleController)

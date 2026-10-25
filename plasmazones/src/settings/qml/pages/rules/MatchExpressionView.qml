@@ -86,7 +86,7 @@ ColumnLayout {
     /// Wire→valueKind helper for `_valueLabel`. Returns the field's controller-side
     /// kind string (any of the kinds MatchLeafEditor dispatches on: string, number,
     /// bool, screen, activity, windowType, virtualDesktop, mode, orientation,
-    /// colorScheme, layout) or "string" for unknown fields — the safest default
+    /// colorScheme, layout, zone) or "string" for unknown fields — the safest default
     /// since `String(value)` is what a plain-string render would do anyway.
     function _valueKind(wire) {
         for (var i = 0; i < root.matchFieldOptions.length; ++i) {
@@ -103,6 +103,7 @@ ColumnLayout {
     ///   - activity → `appSettings.activities.name` for the matching id
     ///   - windowType → the enum option's label from the field entry
     ///   - layout → `appSettings.activeLayoutMatchOptions` displayName for the matching id
+    ///   - zone → `controller.zoneMatchOptions` displayName for the matching id
     ///   - mode / orientation / colorScheme → the token's option label from the field entry
     ///   - everything else (string, number) → `String(value)`
     /// Falls back to the raw wire value when a lookup misses (e.g. the
@@ -159,6 +160,16 @@ ColumnLayout {
                 for (var L = 0; L < layouts.length; ++L) {
                     if (layouts[L].id === value)
                         return layouts[L].displayName || String(value);
+                }
+            }
+        }
+        if (kind === "zone" && root.controller) {
+            // Same "<layout> — <zone>" options the editor's zone picker offers.
+            var zones = root.controller.zoneMatchOptions;
+            if (zones) {
+                for (var Z = 0; Z < zones.length; ++Z) {
+                    if (zones[Z].id === value)
+                        return zones[Z].displayName || String(value);
                 }
             }
         }

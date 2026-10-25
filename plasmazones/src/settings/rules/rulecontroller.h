@@ -67,8 +67,16 @@ class RuleController : public PhosphorControl::PageController
     /// rule resolves against whichever layout is active on the placement screen
     /// at open time, so this is a suggestion list, not a constraint. Filled by
     /// the provider SettingsController installs (setZoneNamesProvider) and
-    /// re-read on refreshZoneNames(); empty until then.
+    /// re-read on refreshZoneLists(); empty until then.
     Q_PROPERTY(QStringList zoneNames READ zoneNames NOTIFY zoneNamesChanged)
+    /// Every zone of every layout on disk, for the `Zone` match condition's
+    /// picker and the read-only match tree. Each entry is
+    /// `{ id: zone UUID (braced), displayName: "<layout> — <zone>" }`, ordered
+    /// by layout name and then zone number. The id is the wire value a Zone
+    /// leaf stores. Filled by the provider SettingsController installs
+    /// (setZoneMatchOptionsProvider) and re-read on refreshZoneLists(); empty
+    /// until then.
+    Q_PROPERTY(QVariantList zoneMatchOptions READ zoneMatchOptions NOTIFY zoneMatchOptionsChanged)
 
 public:
     explicit RuleController(QObject* parent = nullptr);
@@ -129,16 +137,26 @@ public:
     /// settings app publishes to QML carries geometry and numbers, not names)
     /// and returns the distinct sorted names; the controller caches the result
     /// and emits zoneNamesChanged only when it differs. Install-once, then
-    /// call refreshZoneNames() on every registry reload; pass `{}` to clear
+    /// call refreshZoneLists() on every registry reload; pass `{}` to clear
     /// before the captured registry is destroyed.
     void setZoneNamesProvider(std::function<QStringList()> provider);
-    /// Re-read the provider and publish the result if it changed. Cheap when
-    /// nothing changed (one list compare), so the parent may call it on every
-    /// registry reload without an equality guard of its own.
-    void refreshZoneNames();
+    /// Install the enumerator behind the `zoneMatchOptions` property. Same
+    /// contract as setZoneNamesProvider: it reads the caller's layout
+    /// registry, the controller caches the answer and emits
+    /// zoneMatchOptionsChanged only when it differs, and `{}` clears it before
+    /// the captured registry is destroyed.
+    void setZoneMatchOptionsProvider(std::function<QVariantList()> provider);
+    /// Re-read both zone providers and publish whichever result changed. Cheap
+    /// when nothing changed (one list compare each), so the parent may call it
+    /// on every registry reload without an equality guard of its own.
+    void refreshZoneLists();
     QStringList zoneNames() const
     {
         return m_zoneNames;
+    }
+    QVariantList zoneMatchOptions() const
+    {
+        return m_zoneMatchOptions;
     }
 
     /// Curve wire-string → display name resolver for OverrideAnimationCurve
@@ -338,8 +356,8 @@ public:
     /// Match fields suitable for the leaf-editor field dropdown. Each entry:
     /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
     ///    valueKind: "string"|"number"|"bool"|"windowType"|"virtualDesktop"|
-    ///    "screen"|"activity"|"mode"|"orientation"|"layout"|"colorScheme" }`. The screen /
-    /// activity / virtualDesktop / layout kinds drive dedicated pickers; the
+    ///    "screen"|"activity"|"mode"|"orientation"|"layout"|"colorScheme"|"zone" }`. The screen /
+    /// activity / virtualDesktop / layout / zone kinds drive dedicated pickers; the
     /// closed-vocab kinds (windowType / mode / orientation) also carry an
     /// `options` list. QML keys off `wire` so it never has to reconstruct the
     /// enum↔wire-string table.
@@ -439,6 +457,7 @@ Q_SIGNALS:
     void daemonReachableChanged();
     void daemonChangedWhileDirtyChanged();
     void zoneNamesChanged();
+    void zoneMatchOptionsChanged();
     /// Emitted on the async fetch reply path after the model has been
     /// repopulated with the daemon's authoritative rule set. Lets tests and
     /// QML observers know when the initial load (or a daemon-broadcast
@@ -580,6 +599,10 @@ private:
     /// fires on a real change.
     std::function<QStringList()> m_zoneNamesProvider;
     QStringList m_zoneNames;
+    /// Zone-option enumerator (see setZoneMatchOptionsProvider) and its last
+    /// answer, cached and compared for the same reasons as the name list.
+    std::function<QVariantList()> m_zoneMatchOptionsProvider;
+    QVariantList m_zoneMatchOptions;
 };
 
 } // namespace PlasmaZones

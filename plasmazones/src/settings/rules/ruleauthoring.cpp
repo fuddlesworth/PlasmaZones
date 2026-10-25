@@ -638,6 +638,12 @@ QVariantList matchFields()
             // screen / activity pickers), so the user picks a friendly name
             // while the wire value stays the id.
             kind = QStringLiteral("layout");
+        } else if (f == Field::Zone) {
+            // The value is a braced zone UUID. The QML editor swaps this for a
+            // zone-picker ComboBox driven by `RuleController::zoneMatchOptions`
+            // ("<layout> — <zone>" labels), so nobody has to copy a UUID out of
+            // a layout file by hand.
+            kind = QStringLiteral("zone");
         }
         entry[QStringLiteral("valueKind")] = kind;
         out.append(entry);
@@ -670,9 +676,7 @@ QVariantList operatorsForField(int fieldValue)
         // id, a zone UUID) — only an exact-token Equals is meaningful. A substring or
         // regex against a closed token set, a layout UUID, or a zone UUID is a
         // footgun the picker cannot author sensibly. Mirrors the WindowType
-        // enum treatment. Zone has no picker of its own yet, so its value is
-        // still a hand-typed brace-wrapped UUID; restricting the operators at
-        // least stops a partial-UUID Contains from silently matching nothing.
+        // enum treatment.
         ops = {Operator::Equals};
     } else if (PhosphorRules::fieldIsString(field)) {
         ops = {Operator::Equals, Operator::Contains, Operator::StartsWith, Operator::EndsWith, Operator::Regex};

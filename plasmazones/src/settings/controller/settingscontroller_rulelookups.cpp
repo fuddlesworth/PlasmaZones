@@ -31,6 +31,20 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// "<layout> — <zone>" label for a Zone match value, shared by the rule-list
+/// summary lookup and the Zone condition picker so the two always agree. An
+/// unnamed zone reads as "Zone <number>"; an unnamed layout drops its half.
+QString zoneMatchDisplayLabel(const PhosphorZones::Layout& layout, const PhosphorZones::Zone& zone)
+{
+    const QString zoneName = zone.name().isEmpty() ? PhosphorI18n::tr("Zone %1").arg(zone.zoneNumber()) : zone.name();
+    const QString layoutName = layout.name();
+    return layoutName.isEmpty() ? zoneName : PhosphorI18n::tr("%1 — %2").arg(layoutName, zoneName);
+}
+
+} // namespace
+
 void SettingsController::refreshRuleLabels()
 {
     if (m_rulesPage && m_rulesPage->model()) {
@@ -87,16 +101,10 @@ void SettingsController::installRuleLabelLookups()
         }
         return QString();
     });
-    // Zone (snap-zone UUID) → friendly "<layout> — <zone>" label, walking the
-    // local manual layouts for the zone whose id matches. Resolved live so a
-    // later layout/zone rename surfaces on the next refreshLabels(). The zone-name
-    // data is not in the LayoutPreview list (it carries geometry + numbers, not
-    // UUIDs), so this reads the registry's actual Zone objects directly. Unknown
-    // ids (deleted layout, hand-edited rule) round-trip verbatim.
     // Distinct zone names for the SnapToZone "Zone names" picker, read from the
-    // same registry Zone objects as the lookup below and for the same reason
-    // (the preview list has no names). Deduplicated on the case-folded key the
-    // engine's zoneByName matches on, keeping the first spelling seen, and
+    // same registry Zone objects as the zone lookup below and for the same
+    // reason (the preview list has no names). Deduplicated on the case-folded
+    // key the engine's zoneByName matches on, keeping the first spelling seen, and
     // sorted with the locale collation the layout pickers use. Refreshed from
     // the registry's layoutsChanged handler; the controller emits only on change.
     m_rulesPage->setZoneNamesProvider([this]() -> QStringList {
@@ -133,6 +141,12 @@ void SettingsController::installRuleLabelLookups()
         });
         return names;
     });
+    // Zone (snap-zone UUID) → friendly "<layout> — <zone>" label, walking the
+    // local manual layouts for the zone whose id matches. Resolved live so a
+    // later layout/zone rename surfaces on the next refreshLabels(). The zone
+    // data is not in the LayoutPreview list (it carries geometry + numbers, not
+    // UUIDs), so this reads the registry's actual Zone objects directly. Unknown
+    // ids (deleted layout, hand-edited rule) round-trip verbatim.
     m_rulesPage->setZoneLookup([this](const QString& zoneId) -> QString {
         if (zoneId.isEmpty() || !m_localLayoutManager) {
             return zoneId;
@@ -142,16 +156,52 @@ void SettingsController::installRuleLabelLookups()
                 continue;
             }
             for (PhosphorZones::Zone* zone : layout->zones()) {
-                if (!zone || zone->id().toString() != zoneId) {
-                    continue;
+                if (zone && zone->id().toString() == zoneId) {
+                    return zoneMatchDisplayLabel(*layout, *zone);
                 }
-                const QString zoneName =
-                    zone->name().isEmpty() ? PhosphorI18n::tr("Zone %1").arg(zone->zoneNumber()) : zone->name();
-                const QString layoutName = layout->name();
-                return layoutName.isEmpty() ? zoneName : PhosphorI18n::tr("%1 — %2").arg(layoutName, zoneName);
             }
         }
         return zoneId;
+    });
+    // Every zone of every local manual layout, for the Zone condition's picker.
+    // The id is the braced UUID string the effect's zone cache stamps into the
+    // rule query, so a picked value matches exactly. Ordered by layout name with
+    // the locale collation the layout pickers use, then by zone number, so a
+    // layout's zones sit together in the order the editor numbers them.
+    m_rulesPage->setZoneMatchOptionsProvider([this]() -> QVariantList {
+        QVariantList options;
+        if (!m_localLayoutManager) {
+            return options;
+        }
+        QList<PhosphorZones::Layout*> layouts;
+        for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
+            if (layout) {
+                layouts.append(layout);
+            }
+        }
+        std::stable_sort(layouts.begin(), layouts.end(),
+                         [](const PhosphorZones::Layout* a, const PhosphorZones::Layout* b) {
+                             return QString::localeAwareCompare(a->name(), b->name()) < 0;
+                         });
+        for (const PhosphorZones::Layout* layout : std::as_const(layouts)) {
+            QList<PhosphorZones::Zone*> zones;
+            for (PhosphorZones::Zone* zone : layout->zones()) {
+                if (zone) {
+                    zones.append(zone);
+                }
+            }
+            std::stable_sort(zones.begin(), zones.end(),
+                             [](const PhosphorZones::Zone* a, const PhosphorZones::Zone* b) {
+                                 return a->zoneNumber() < b->zoneNumber();
+                             });
+            for (const PhosphorZones::Zone* zone : std::as_const(zones)) {
+                QVariantMap option;
+                option[QStringLiteral("id")] = zone->id().toString();
+                option[QStringLiteral("displayName")] = zoneMatchDisplayLabel(*layout, *zone);
+                options.append(option);
+            }
+        }
+        return options;
     });
     // SettingsController::layouts() is the union of three id families:
     // snapping layouts (UUID-keyed), autotile entries (algorithm-token-keyed

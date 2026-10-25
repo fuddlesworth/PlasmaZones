@@ -298,6 +298,7 @@ SettingsController::~SettingsController()
         // The zone-name provider captures `this` and walks m_localLayoutManager;
         // clear it for the same reason (the controller keeps its last list).
         m_rulesPage->setZoneNamesProvider({});
+        m_rulesPage->setZoneMatchOptionsProvider({});
         m_rulesPage->setVirtualDesktopLookup({});
         m_rulesPage->setSnappingLayoutLookup({});
         m_rulesPage->setTilingAlgorithmLookup({});
@@ -405,14 +406,15 @@ SettingsController::SettingsController(QObject* parent)
     // at m_layouts.
     connect(m_localLayoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this]() {
         recalcLocalLayouts();
-        // The SnapToZone picker's zone-name list comes from the registry's Zone
-        // objects, not from the LayoutPreview projection below (which carries
-        // geometry and numbers only), so a rename that changes no preview still
-        // has to reach it. Refresh BEFORE the withhold / equality gates below:
-        // both key off the preview list, and the controller compares the name
-        // list itself so this is a no-op emit-wise when nothing changed.
+        // The SnapToZone picker's zone-name list and the Zone condition's
+        // zone options come from the registry's Zone objects, not from the
+        // LayoutPreview projection below (which carries geometry and numbers
+        // only), so a rename that changes no preview still has to reach them.
+        // Refresh BEFORE the withhold / equality gates below: both key off the
+        // preview list, and the controller compares each list itself so this
+        // is a no-op emit-wise when nothing changed.
         if (m_rulesPage) {
-            m_rulesPage->refreshZoneNames();
+            m_rulesPage->refreshZoneLists();
         }
         QVariantList localLayouts = localLayoutPreviews();
         // An empty disk view is published like any other: when the user deletes
