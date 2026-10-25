@@ -309,10 +309,7 @@ int reissueTakenZoneIds(QJsonObject& layoutJson, const QList<Layout*>& loaded)
     for (qsizetype i = 0; i < zones.size(); ++i) {
         QJsonObject zone = zones.at(i).toObject();
         const QUuid id = QUuid::fromString(zone.value(Id).toString());
-        if (id.isNull()) {
-            continue; // Zone::fromJson mints one
-        }
-        if (!taken.contains(id) && !seen.contains(id)) {
+        if (!id.isNull() && !taken.contains(id) && !seen.contains(id)) {
             seen.insert(id);
             continue;
         }
@@ -322,7 +319,18 @@ int reissueTakenZoneIds(QJsonObject& layoutJson, const QList<Layout*>& loaded)
         // given above, so it is re-derived with a counter until it is free
         // (F1052): the first try is the plain name, which keeps every id this
         // gave before.
-        const QString name = id.toString() + QLatin1Char('#') + QString::number(i);
+        //
+        // A zone with no id (a hand-written layout; the schema requires only
+        // its geometry) is derived the same way, from its position alone.
+        // Left to Zone::fromJson it got a random id on every parse, so each
+        // process, and each reload within one, named it differently: a rule
+        // picking it in the settings app never matched the id the daemon
+        // stamps. Counted as reissued, so a user file is written back with it
+        // and keeps it from then on. A system file is never written back, so
+        // there the id stays tied to the position: an update that inserts a
+        // zone before it moves the id onto another zone.
+        const QString name =
+            (id.isNull() ? QStringLiteral("unset") : id.toString()) + QLatin1Char('#') + QString::number(i);
         QUuid fresh = QUuid::createUuidV5(nameSpace, name);
         for (int attempt = 1; taken.contains(fresh) || seen.contains(fresh); ++attempt) {
             fresh = QUuid::createUuidV5(nameSpace, name + QLatin1Char('#') + QString::number(attempt));

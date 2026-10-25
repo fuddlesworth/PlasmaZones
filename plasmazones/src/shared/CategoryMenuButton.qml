@@ -67,7 +67,9 @@ import org.kde.kirigami as Kirigami
  *
  * Required:
  *   - `items`: var — list of `{ id, name, category?, categoryOrder?,
- *     categoryGroup?, dimmed?, dimReason? }` maps. A `dimmed` item renders
+ *     categoryGroup?, order?, dimmed?, dimReason? }` maps. Items sort by
+ *     `order` (number) when they carry one and by name otherwise, within
+ *     each (sub)category and in the flat tail. A `dimmed` item renders
  *     greyed with a warning icon + `dimReason` tooltip (still selectable —
  *     the host surfaces the consequence). `categoryOrder` (int) sorts
  *     both top-level categories and sub-categories, each by the smallest
@@ -185,7 +187,20 @@ ComboBox {
             if (items[i])
                 arr.push(items[i]);
         }
+        // An item's own `order` comes first when the host gives one; a missing
+        // or non-numeric one (null, "" and false included, which Number()
+        // would read as 0) sorts after every ordered item, and ties fall back
+        // to the name, so a host that sets none keeps the name order.
+        var orderOf = function (item) {
+            var o = item ? item.order : undefined;
+            return (typeof o === "number" && isFinite(o)) ? o : Infinity;
+        };
         arr.sort(function (a, b) {
+            var oa = orderOf(a);
+            var ob = orderOf(b);
+            if (oa !== ob)
+                return oa < ob ? -1 : 1;
+
             var na = (a && a.name !== undefined) ? String(a.name) : "";
             var nb = (b && b.name !== undefined) ? String(b.name) : "";
             return na.localeCompare(nb);

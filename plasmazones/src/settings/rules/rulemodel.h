@@ -37,15 +37,17 @@ namespace PlasmaZones {
  *   - `monitor`     — context-only rule (ScreenId / VirtualDesktop / Activity)
  *                     whose actions are layout / engine / disable. The
  *                     "Monitor & Layout" group.
- *   - `application` — a window-property rule (AppId / WindowClass / …) whose
- *                     actions are float / exclude / opacity / engine.
+ *   - `application` — a window-property rule (AppId / WindowClass / …, or
+ *                     window state such as Zone / IsSnapped / IsFloating)
+ *                     whose actions are float / exclude / opacity / engine.
  *   - `activity`    — reserved alias for context-only rules pinned to an
  *                     Activity only (still surfaces under `monitor` visually,
  *                     but the chip filter distinguishes them).
  *   - `animation`   — any rule carrying an OverrideAnimation* action.
  *   - `advanced`    — anything that "graduated": a composite match a
  *                     specialized section cannot represent, or a mixed action
- *                     set. The Advanced / Custom group.
+ *                     set, plus a context-only rule that names no screen
+ *                     (a ColorScheme-only match). The Advanced / Custom group.
  *
  * A rule "graduates" to `advanced` the moment its shape exceeds what a
  * specialized section can edit without data loss — the specialized views then

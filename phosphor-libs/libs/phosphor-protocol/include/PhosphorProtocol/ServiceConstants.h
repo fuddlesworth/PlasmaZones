@@ -31,6 +31,14 @@ inline constexpr QLatin1String ObjectPath("/PlasmaZones");
 /// ever changes.
 inline constexpr int QuickLayoutSlotCount = 9;
 
+/// The largest running-windows payload (Settings.provideRunningWindows) the
+/// daemon relays, in UTF-8 bytes. Protocol-level because the daemon refuses a
+/// larger one at the D-Bus boundary while the KWin effect builds it, so the
+/// effect can leave out rows rather than build a payload the daemon drops
+/// whole. Generous next to a real window list: it bounds one call, it is not a
+/// working limit.
+inline constexpr int MaxRunningWindowsPayloadBytes = 1 << 20;
+
 namespace Interface {
 inline constexpr QLatin1String Settings("org.plasmazones.Settings");
 inline constexpr QLatin1String WindowDrag("org.plasmazones.WindowDrag");
