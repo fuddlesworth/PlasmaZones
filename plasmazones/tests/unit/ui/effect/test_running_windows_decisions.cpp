@@ -7,11 +7,26 @@
  *        (plasmazoneseffect/runningwindowsdecisions.h).
  */
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTest>
 
 #include "plasmazoneseffect/runningwindowsdecisions.h"
 
 using namespace PlasmaZones::RunningWindowsDecisions;
+
+namespace {
+/// The effect's use of the filter for a row the budget takes.
+bool keep(RowFilter& filter, const Row& row)
+{
+    if (!filter.admits(row)) {
+        return false;
+    }
+    filter.record(row);
+    return true;
+}
+} // namespace
 
 class TestRunningWindowsDecisions : public QObject
 {
@@ -50,20 +65,68 @@ private Q_SLOTS:
     }
 
     // Classed windows are listed once per class (the first fed, the topmost),
-    // classless ones once per caption, and a classless window without a
-    // caption is left out. The two keys are kept apart: a caption equal to a
-    // class token does not shadow it. FAILS if classless windows are dropped
-    // or all collapse onto one row.
+    // classless ones once per caption, or once per desktop file when they
+    // have no caption, and a classless window with neither is left out. The
+    // keys are kept apart: a caption equal to a class token does not shadow
+    // it. FAILS if classless windows are dropped or all collapse onto one row.
     void rowFilter_keysClassedAndClasslessApart()
     {
         RowFilter filter;
-        QVERIFY(filter.admit(makeRow(QStringLiteral("firefox firefox"), QStringLiteral("Top"), QString())));
-        QVERIFY(!filter.admit(makeRow(QStringLiteral("firefox firefox"), QStringLiteral("Below"), QString())));
-        QVERIFY(filter.admit(makeRow(QStringLiteral(" "), QStringLiteral("Game A"), QString())));
-        QVERIFY(filter.admit(makeRow(QStringLiteral(" "), QStringLiteral("Game B"), QString())));
-        QVERIFY(!filter.admit(makeRow(QStringLiteral(" "), QStringLiteral("Game A"), QString())));
-        QVERIFY(!filter.admit(makeRow(QStringLiteral(" "), QString(), QString())));
-        QVERIFY(filter.admit(makeRow(QStringLiteral(" "), QStringLiteral("firefox"), QString())));
+        QVERIFY(keep(filter, makeRow(QStringLiteral("firefox firefox"), QStringLiteral("Top"), QString())));
+        QVERIFY(!keep(filter, makeRow(QStringLiteral("firefox firefox"), QStringLiteral("Below"), QString())));
+        QVERIFY(keep(filter, makeRow(QStringLiteral(" "), QStringLiteral("Game A"), QString())));
+        QVERIFY(keep(filter, makeRow(QStringLiteral(" "), QStringLiteral("Game B"), QString())));
+        QVERIFY(!keep(filter, makeRow(QStringLiteral(" "), QStringLiteral("Game A"), QString())));
+        QVERIFY(!keep(filter, makeRow(QStringLiteral(" "), QString(), QString())));
+        QVERIFY(keep(filter, makeRow(QStringLiteral(" "), QStringLiteral("firefox"), QString())));
+        QVERIFY(keep(filter, makeRow(QStringLiteral(" "), QString(), QStringLiteral("org.example.Game"))));
+        QVERIFY(!keep(filter, makeRow(QStringLiteral(" "), QString(), QStringLiteral("org.example.Game"))));
+    }
+
+    // A row that is checked but not recorded (the budget refused it) leaves
+    // its key free for the next row of its group. FAILS if admits() records.
+    void rowFilter_admitsDoesNotRecord()
+    {
+        RowFilter filter;
+        const Row top = makeRow(QStringLiteral("steam steam"), QStringLiteral("A very long title"), QString());
+        QVERIFY(filter.admits(top));
+        const Row below = makeRow(QStringLiteral("steam steam"), QStringLiteral("Steam"), QString());
+        QVERIFY(filter.admits(below));
+        filter.record(below);
+        QVERIFY(!filter.admits(top));
+    }
+
+    // The keys the settings app reads, and a budget fed each row's compact
+    // size totals exactly the compact array the daemon measures. FAILS if a
+    // key is renamed or the budget's bracket and comma count drifts.
+    void toJson_keysAndBudgetMatchTheWire()
+    {
+        const Row konsole = makeRow(QStringLiteral("konsole org.kde.konsole"), QStringLiteral("Shell"),
+                                    QStringLiteral("org.kde.konsole"));
+        const QJsonObject obj = toJson(konsole);
+        QCOMPARE(obj.value(QLatin1String("windowClass")).toString(), konsole.windowClass);
+        QCOMPARE(obj.value(QLatin1String("rawWindowClass")).toString(), konsole.rawWindowClass);
+        QCOMPARE(obj.value(QLatin1String("appName")).toString(), konsole.appName);
+        QCOMPARE(obj.value(QLatin1String("caption")).toString(), konsole.caption);
+        QCOMPARE(obj.value(QLatin1String("desktopFile")).toString(), konsole.desktopFile);
+        QCOMPARE(obj.size(), 5);
+
+        const QList<Row> rows{konsole, makeRow(QStringLiteral(" "), QStringLiteral("Gämescope ✓"), QString()),
+                              makeRow(QStringLiteral("steam steam"), QStringLiteral("Steam"), QString())};
+        QJsonArray array;
+        qsizetype rowBytes = 0;
+        for (const Row& row : rows) {
+            const QJsonObject rowObj = toJson(row);
+            rowBytes += QJsonDocument(rowObj).toJson(QJsonDocument::Compact).size();
+            array.append(rowObj);
+        }
+        const qsizetype arrayBytes = QJsonDocument(array).toJson(QJsonDocument::Compact).size();
+        QCOMPARE(arrayBytes, rowBytes + 2 + (rows.size() - 1));
+        PayloadBudget exact(arrayBytes);
+        for (const Row& row : rows) {
+            QVERIFY(exact.take(QJsonDocument(toJson(row)).toJson(QJsonDocument::Compact).size()));
+        }
+        QVERIFY(!exact.take(0));
     }
 
     // The serialized list never crosses the cap: a row that would is left out

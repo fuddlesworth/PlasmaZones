@@ -98,9 +98,9 @@ PickerCategory fieldCategory(Field f)
 }
 
 /// Short, user-facing help for one match Field — surfaced as the hover
-/// tooltip on the leaf editor's info icon. Kept concise (one line); the
-/// switch is exhaustive so every field, including the picker-hidden ones,
-/// has a description.
+/// tooltip on the leaf editor's info icon. Kept concise; the switch is
+/// exhaustive so every field, including the picker-hidden ones, has a
+/// description.
 QString fieldDescription(Field f)
 {
     switch (f) {
@@ -309,8 +309,10 @@ QList<ClosedTokenOption> colorSchemeOptions()
 }
 QString closedTokenLabel(const QList<ClosedTokenOption>& opts, const QString& token)
 {
+    // Ignoring case, as the engine's Equals compares these leaves, so a
+    // hand-edited "DARK" reads as the option it matches.
     for (const ClosedTokenOption& o : opts) {
-        if (o.wire == token) {
+        if (o.wire.compare(token, Qt::CaseInsensitive) == 0) {
             return o.label;
         }
     }
@@ -643,9 +645,9 @@ QVariantList matchFields()
             kind = QStringLiteral("layout");
         } else if (f == Field::Zone) {
             // The value is a braced zone UUID. The QML editor swaps this for a
-            // zone-picker ComboBox driven by `RuleController::zoneMatchOptions`
-            // ("<layout> — <zone>" labels), so nobody has to copy a UUID out of
-            // a layout file by hand.
+            // zone picker with one submenu per layout, driven by
+            // `RuleController::zoneMatchOptions`, so nobody has to copy a UUID
+            // out of a layout file by hand.
             kind = QStringLiteral("zone");
         }
         entry[QStringLiteral("valueKind")] = kind;

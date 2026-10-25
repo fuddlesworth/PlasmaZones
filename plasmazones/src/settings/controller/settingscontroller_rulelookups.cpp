@@ -225,10 +225,10 @@ void SettingsController::installRuleLabelLookups()
     // Dissolve" read as two rows and two sections' "Show" events cannot
     // collapse into one label. Both halves are the translated segment labels
     // the animations page and the event picker show
-    // (AnimationsPageController::segmentLabel). m_animationsPage
-    // already exists here (the SettingsController ctor builds it before calling
-    // installRuleLabelLookups); the null guard
-    // only covers the lookup being exercised after teardown has cleared it.
+    // (AnimationsPageController::segmentLabel). m_animationsPage already
+    // exists here (the SettingsController ctor builds it before calling
+    // installRuleLabelLookups); the null guard only covers the lookup being
+    // exercised after teardown has cleared it.
     m_rulesPage->setAnimationEventLookup([this](const QString& path) -> QString {
         if (path.isEmpty() || !m_animationsPage) {
             return path;
@@ -259,11 +259,11 @@ void SettingsController::installRuleLabelLookups()
     // the friendly name via the overlay shader registry (the same source the
     // rule editor's overlay-shader picker reads), so the list shows
     // "Overlay shader: <name>" rather than the raw id. Unknown ids round-trip
-    // verbatim (registry miss → empty name → raw id). m_overlayShaderRegistry is
-    // built later in the SettingsController ctor than the
+    // verbatim (registry miss → empty name → raw id). m_overlayShaderRegistry
+    // is built later in the SettingsController ctor than the
     // installRuleLabelLookups call; the `!m_overlayShaderRegistry` guard below
-    // covers that window — the lambda captures `this` and is invoked only lazily
-    // (on the model's first label render, after construction completes).
+    // covers that window — the lambda captures `this` and is invoked only
+    // lazily (on the model's first label render, after construction completes).
     auto resolveOverlayShaderLookup = [this](const QString& effectId) -> QString {
         if (effectId.isEmpty() || !m_overlayShaderRegistry) {
             return effectId;

@@ -446,10 +446,11 @@ SettingsController::SettingsController(QObject* parent)
     // only when loadLayouts() is called — it watches nothing, so an explicit
     // call is the sole reload trigger. This one covers startup;
     // loadLayoutsAsync() re-calls it off the daemon's D-Bus layout signals.
-    // That is enough because every layout write goes through the daemon (the
-    // editor saves over D-Bus, DBusLayoutService), so a change it makes is
-    // always followed by one of those signals, and with the daemon down no
-    // layout changes on disk for this process to miss.
+    // That is enough because every PlasmaZones layout write goes through the
+    // daemon (the editor saves over D-Bus, DBusLayoutService), so a change it
+    // makes is always followed by one of those signals. A file copied or
+    // edited by hand in the layouts directory is the one change that arrives
+    // without one, and it is picked up at the next reload.
     m_localLayoutManager->loadLayouts();
     // `loadLayouts()` emits `layoutsChanged` synchronously, which the
     // handler wired above already routes through `recalcLocalLayouts()`
@@ -825,10 +826,10 @@ SettingsController::SettingsController(QObject* parent)
         syncPointer();
         // Overlay is NOT seeded here: m_overlayShaderRegistry does not exist
         // yet. It is built after installRuleLabelLookups(), further down this
-        // ctor, so seeding it from
-        // this block only ever hit its own null guard and every overlay pack's
-        // shipped presets stayed invisible to the settings UI. It is seeded, and
-        // its reload edge connected, immediately after that registry is built.
+        // ctor, so seeding it from this block only ever hit its own null guard
+        // and every overlay pack's shipped presets stayed invisible to the
+        // settings UI. It is seeded, and its reload edge connected,
+        // immediately after that registry is built.
 
         connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
                 syncAnimation);

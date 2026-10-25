@@ -290,12 +290,9 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // A zone id names one layout for good: the resnap's position map and
         // every remembered zone rely on it. A file that copied another
         // layout's zones gets ids of its own (F552, l18_duplicate_zone_ids),
-        // and its windows snapped under the old ids lose those snaps once.
+        // and its windows snapped under the old ids lose those snaps once. A
+        // zone the file holds no id for gets one derived from its position.
         const int reissued = LayoutUtils::reissueTakenZoneIds(merged, m_layouts);
-        if (reissued > 0) {
-            qCWarning(lcZonesLib) << "Layout file" << filePath << "reused or lacked" << reissued
-                                  << "zone id(s) - gave them ids of its own";
-        }
 
         auto layout = PhosphorZones::Layout::fromJson(merged, this);
         if (!layout) {
@@ -306,6 +303,20 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // Set source path - this determines if layout is system or user layout
         // isSystemLayout() checks if sourcePath is outside user's writable directory
         layout->setSourcePath(filePath);
+
+        // A user file is written back with its new ids below, so it warns
+        // once. A system file is read-only and gets the same ids on every
+        // load, so warning there would repeat on every start and reload over
+        // a file the user cannot fix.
+        if (reissued > 0) {
+            if (layout->isSystemLayout()) {
+                qCDebug(lcZonesLib) << "System layout file" << filePath << "reused or lacked" << reissued
+                                    << "zone id(s) - derived ids of its own";
+            } else {
+                qCWarning(lcZonesLib) << "Layout file" << filePath << "reused or lacked" << reissued
+                                      << "zone id(s) - gave them ids of its own";
+            }
+        }
 
         if (!layout->name().isEmpty() && layout->zoneCount() > 0) {
             // Check for duplicate IDs
@@ -789,7 +800,17 @@ PhosphorZones::Layout* LayoutRegistry::restoreSystemLayout(const QUuid& id, cons
         return nullptr;
     }
 
-    auto* layout = PhosphorZones::Layout::fromJson(doc.object(), this);
+    // The same zone ids the directory scan gave this file, so the restored
+    // layout's zones keep the ids rules and remembered snaps name: a zone the
+    // file holds no id for is derived from its position as the scan derives
+    // it, where a bare fromJson would mint it a random one.
+    QJsonObject restoredJson = doc.object();
+    if (const int reissued = LayoutUtils::reissueTakenZoneIds(restoredJson, m_layouts); reissued > 0) {
+        qCDebug(lcZonesLib) << "restoreSystemLayout:" << reissued
+                            << "zone id(s) that another layout held or that were missing given ids of their own";
+    }
+
+    auto* layout = PhosphorZones::Layout::fromJson(restoredJson, this);
     if (!layout || layout->id() != id) {
         if (layout) {
             // deleteLater, not delete — see the override branch in loadLayouts().

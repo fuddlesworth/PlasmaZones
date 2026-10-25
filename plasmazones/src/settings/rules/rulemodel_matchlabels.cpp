@@ -22,6 +22,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QStringList>
+#include <QUuid>
 
 namespace PlasmaZones {
 
@@ -30,6 +31,17 @@ namespace {
 using PhosphorRules::Field;
 using PhosphorRules::MatchExpression;
 using PhosphorRules::Operator;
+
+/// @p id with a UUID lowercased, the case QUuid::toString() writes and the
+/// layouts list keys by, so a hand-edited upper-case UUID in an ActiveLayout
+/// leaf still finds its layout: the engine compares the leaf ignoring case.
+/// The brace form is kept, and any other id is returned as is, because an
+/// algorithm id is looked up exactly by the tiling lookup that also labels
+/// SetTilingAlgorithm actions.
+QString layoutLookupKey(const QString& id)
+{
+    return QUuid::fromString(id).isNull() ? id : id.toLower();
+}
 
 /// Human label for a single leaf predicate ("Monitor: LG Ultra HD").
 /// @p screenLookup and @p activityLookup resolve the opaque ScreenId /
@@ -138,7 +150,7 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
             // manual layouts and need the family marker. A lookup MISS still
             // falls through to the verbatim "scrolling:<uuid>" in `label`.
             if (layoutLookup) {
-                const QString templateId = PhosphorLayout::LayoutId::extractTemplateId(value);
+                const QString templateId = layoutLookupKey(PhosphorLayout::LayoutId::extractTemplateId(value));
                 const QString resolved = layoutLookup(templateId);
                 if (!resolved.isEmpty() && resolved != templateId) {
                     label = resolved;
@@ -170,8 +182,9 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
             // would print it verbatim as a layout named "none".
             label = PhosphorI18n::tr("Snapping (no layout)");
         } else if (layoutLookup) {
-            const QString resolved = layoutLookup(value);
-            if (!resolved.isEmpty()) {
+            const QString key = layoutLookupKey(value);
+            const QString resolved = layoutLookup(key);
+            if (!resolved.isEmpty() && resolved != key) {
                 label = resolved;
             }
         }

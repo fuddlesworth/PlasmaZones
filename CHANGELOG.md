@@ -12,7 +12,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Pick a zone for a Zone condition**: a rule's Zone condition now offers every zone of every layout, grouped by layout and named as in the editor, where it used to need the zone's ID typed in by hand. That makes a rule for one zone easy to write, for example keeping a window above the others while it sits in a zone that overlaps a panel. The rule list shows the same names, and a rule that matches only a zone is listed under Custom. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
+- **Pick a zone for a Zone condition**: a rule's Zone condition now offers every zone of every layout, grouped by layout and named as in the editor, where it used to need the zone's ID typed in by hand. That makes a rule for one zone easy to write, for example keeping a window above the others while it sits in a zone that overlaps a panel. The rule list shows the same names. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
 
 ### Fixed
 

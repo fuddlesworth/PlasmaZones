@@ -9,7 +9,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 
-#include <QHash>
+#include <QSet>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -19,6 +19,31 @@
 #include <algorithm>
 
 namespace PlasmaZones::RulePickerOptions {
+
+namespace {
+
+/// @p base, or the first "@p base (N)" from N = 2 up that is not in @p taken,
+/// recorded there so no later call returns it. Labels are compared ignoring
+/// case and with "/" read as U+2215, the slash the zone picker substitutes so
+/// a name cannot split its submenu, so two labels that read alike there are
+/// never both handed out. A real name already shaped "Foo (2)" counts as
+/// taken like any other.
+QString uniqueLabel(const QString& base, QSet<QString>& taken)
+{
+    const auto keyOf = [](QString label) {
+        return label.toLower().replace(QLatin1Char('/'), QChar(0x2215));
+    };
+    QString label = base;
+    for (int n = 2; taken.contains(keyOf(label)); ++n) {
+        // Single-pass arg: a name holding "%2" must not be substituted again.
+        label = PhosphorI18n::tr("%1 (%2)", "a name, then a number telling it apart from others of the same name")
+                    .arg(base, QString::number(n));
+    }
+    taken.insert(keyOf(label));
+    return label;
+}
+
+} // namespace
 
 QVariantList zoneMatchOptions(const QVector<PhosphorZones::Layout*>& layouts)
 {
@@ -37,14 +62,12 @@ QVariantList zoneMatchOptions(const QVector<PhosphorZones::Layout*>& layouts)
                      });
 
     QVariantList options;
-    QHash<QString, int> seenLayoutNames;
+    QSet<QString> takenLayoutNames;
     for (int layoutOrder = 0; layoutOrder < ordered.size(); ++layoutOrder) {
         const PhosphorZones::Layout* layout = ordered.at(layoutOrder);
         const QString name = layout->name().trimmed();
-        const QString baseName = name.isEmpty() ? PhosphorI18n::tr("Unnamed layout") : name;
-        const int occurrence = ++seenLayoutNames[baseName.toLower()];
         const QString layoutName =
-            occurrence > 1 ? PhosphorI18n::tr("%1 (%2)").arg(baseName).arg(occurrence) : baseName;
+            uniqueLabel(name.isEmpty() ? PhosphorI18n::tr("Unnamed layout") : name, takenLayoutNames);
 
         QVector<const PhosphorZones::Zone*> zones;
         for (const PhosphorZones::Zone* zone : layout->zones()) {
@@ -55,9 +78,11 @@ QVariantList zoneMatchOptions(const QVector<PhosphorZones::Layout*>& layouts)
         std::stable_sort(zones.begin(), zones.end(), [](const PhosphorZones::Zone* a, const PhosphorZones::Zone* b) {
             return a->zoneNumber() < b->zoneNumber();
         });
+        QSet<QString> takenZoneNames;
         for (const PhosphorZones::Zone* zone : std::as_const(zones)) {
             const QString ownName = zone->name().trimmed();
-            const QString zoneName = ownName.isEmpty() ? PhosphorI18n::tr("Zone %1").arg(zone->zoneNumber()) : ownName;
+            const QString zoneName = uniqueLabel(
+                ownName.isEmpty() ? PhosphorI18n::tr("Zone %1").arg(zone->zoneNumber()) : ownName, takenZoneNames);
             QVariantMap option;
             option[QStringLiteral("id")] = zone->id().toString();
             option[QStringLiteral("displayName")] = PhosphorI18n::tr("%1 — %2").arg(layoutName, zoneName);

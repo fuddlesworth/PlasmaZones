@@ -325,7 +325,10 @@ int reissueTakenZoneIds(QJsonObject& layoutJson, const QList<Layout*>& loaded)
         // Left to Zone::fromJson it got a random id on every parse, so each
         // process, and each reload within one, named it differently: a rule
         // picking it in the settings app never matched the id the daemon
-        // stamps. Counted as reissued, so a user file is written back with it.
+        // stamps. Counted as reissued, so a user file is written back with it
+        // and keeps it from then on. A system file is never written back, so
+        // there the id stays tied to the position: an update that inserts a
+        // zone before it moves the id onto another zone.
         const QString name =
             (id.isNull() ? QStringLiteral("unset") : id.toString()) + QLatin1Char('#') + QString::number(i);
         QUuid fresh = QUuid::createUuidV5(nameSpace, name);

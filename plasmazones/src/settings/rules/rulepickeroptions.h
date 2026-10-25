@@ -22,9 +22,10 @@ namespace PlasmaZones::RulePickerOptions {
 ///   - `id` is the zone UUID with braces (QUuid::toString()), the form the
 ///     daemon and the KWin effect stamp into a window's Zone rule field;
 ///   - `zoneName` is the zone's name, or "Zone <number>" when it has none;
-///   - `layoutName` is the layout's name, "Unnamed layout" when it has none,
-///     with a "(2)", "(3)" suffix on each further layout sharing a name, so no
-///     two layouts' zones read alike;
+///   - `layoutName` is the layout's name, or "Unnamed layout" when it has none;
+///   - a layout name that another layout already took, ignoring case, gets
+///     a "(2)", "(3)" suffix, and so does a zone name repeated within one
+///     layout, so no two options read alike;
 ///   - `displayName` is "<layoutName> — <zoneName>", the label the picker and
 ///     the rule list both show;
 ///   - `layoutOrder` is the layout's position, so a picker grouping by layout

@@ -41,7 +41,6 @@
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QRect>
 #include <QScreen>

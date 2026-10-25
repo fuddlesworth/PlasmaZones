@@ -596,6 +596,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/wizard/WizardConfigCard.qml
         qml/pages/wizard/WizardPreviewFrame.qml
         qml/js/WizardUtils.js
+        qml/js/MatchWireValue.js
     NO_PLUGIN
 )
 

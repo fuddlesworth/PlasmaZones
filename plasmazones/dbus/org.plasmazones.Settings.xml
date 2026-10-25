@@ -169,7 +169,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="provideRunningWindows">
             <annotation name="org.gtk.GDBus.DocString" value="KWin effect to daemon callback: deliver the enumerated running-windows list in response to requestRunningWindows. The daemon re-broadcasts it via runningWindowsAvailable. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="json" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of window rows: [{windowClass, rawWindowClass, appName, caption, desktopFile}, ...]. windowClass is the canonical class token, rawWindowClass the &quot;resourceName resourceClass&quot; the WindowClass rule field compares, appName the short name of the window&apos;s app id. windowClass, rawWindowClass, appName and desktopFile may each be empty: a window with no class is listed when it has a caption. At most PhosphorProtocol::Service::MaxRunningWindowsPayloadBytes of UTF-8; the effect leaves rows out rather than exceed it."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of window rows: [{windowClass, rawWindowClass, appName, caption, desktopFile}, ...]. windowClass is the canonical class token, rawWindowClass the &quot;resourceName resourceClass&quot; the WindowClass rule field compares, appName the short name of the window&apos;s app id. Any field may be empty, but every row carries a class, a caption or a desktop file: a window with no class is listed when it has a caption or a desktop file. At most 1 MiB (1048576 bytes) of UTF-8 (PhosphorProtocol::Service::MaxRunningWindowsPayloadBytes); the effect leaves rows out rather than exceed it."/>
             </arg>
         </method>
         <signal name="runningWindowsRequested">
@@ -178,7 +178,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <signal name="runningWindowsAvailable">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a fresh running-windows list has arrived from the KWin effect."/>
             <arg name="json" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of window rows: [{windowClass, rawWindowClass, appName, caption, desktopFile}, ...]. windowClass is the canonical class token, rawWindowClass the &quot;resourceName resourceClass&quot; the WindowClass rule field compares, appName the short name of the window&apos;s app id. windowClass, rawWindowClass, appName and desktopFile may each be empty: a window with no class is listed when it has a caption. At most PhosphorProtocol::Service::MaxRunningWindowsPayloadBytes of UTF-8; the effect leaves rows out rather than exceed it."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of window rows: [{windowClass, rawWindowClass, appName, caption, desktopFile}, ...]. windowClass is the canonical class token, rawWindowClass the &quot;resourceName resourceClass&quot; the WindowClass rule field compares, appName the short name of the window&apos;s app id. Any field may be empty, but every row carries a class, a caption or a desktop file: a window with no class is listed when it has a caption or a desktop file. At most 1 MiB (1048576 bytes) of UTF-8 (PhosphorProtocol::Service::MaxRunningWindowsPayloadBytes); the effect leaves rows out rather than exceed it."/>
             </arg>
         </signal>
     </interface>

@@ -17,11 +17,11 @@
 
 #include <QJsonObject>
 #include <QSet>
-
-#include <algorithm>
 #include <QSignalSpy>
 #include <QTest>
 #include <QUuid>
+
+#include <algorithm>
 
 #include "settings/rules/ruleauthoring.h"
 #include "settings/rules/rulecontroller.h"

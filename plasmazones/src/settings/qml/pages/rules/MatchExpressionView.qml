@@ -8,6 +8,7 @@ import org.kde.kirigami as Kirigami
 import org.plasmazones.settings
 
 import "../../js/FontUtils.js" as FontUtils
+import "../../js/MatchWireValue.js" as MatchWireValue
 
 /**
  * @brief Read-only match-expression preview backed by
@@ -85,16 +86,6 @@ ColumnLayout {
         return opWire;
     }
 
-    /// True when a stored leaf value names the same entry as a list value:
-    /// strings match ignoring case, as the rule engine's Equals does and as
-    /// the leaf editor's pickers match them.
-    function _sameWireValue(a, b) {
-        if (typeof a === "string" && typeof b === "string")
-            return a.toLowerCase() === b.toLowerCase();
-
-        return a === b;
-    }
-
     /// Wire→valueKind helper for `_valueLabel`. Returns the field's controller-side
     /// kind string (any of the kinds MatchLeafEditor dispatches on: string, number,
     /// bool, screen, activity, windowType, virtualDesktop, mode, orientation,
@@ -133,7 +124,7 @@ ColumnLayout {
             var screens = root.appSettings.screens;
             if (screens) {
                 for (var i = 0; i < screens.length; ++i) {
-                    if (root._sameWireValue(screens[i].name, value)) {
+                    if (MatchWireValue.same(screens[i].name, value)) {
                         // displayLabel carries make/model/resolution + connector;
                         // mark the primary monitor to match the editor's picker.
                         var label = screens[i].displayLabel || String(value);
@@ -155,7 +146,7 @@ ColumnLayout {
             var activities = root.appSettings.activities;
             if (activities) {
                 for (var j = 0; j < activities.length; ++j) {
-                    if (root._sameWireValue(activities[j].id, value))
+                    if (MatchWireValue.same(activities[j].id, value))
                         return activities[j].name || String(value);
                 }
             }
@@ -170,7 +161,7 @@ ColumnLayout {
             var layouts = root.appSettings.activeLayoutMatchOptions;
             if (layouts) {
                 for (var L = 0; L < layouts.length; ++L) {
-                    if (root._sameWireValue(layouts[L].id, value))
+                    if (MatchWireValue.same(layouts[L].id, value))
                         return layouts[L].displayName || String(value);
                 }
             }
@@ -180,7 +171,7 @@ ColumnLayout {
             var zones = root.controller.zoneMatchOptions;
             if (zones) {
                 for (var Z = 0; Z < zones.length; ++Z) {
-                    if (root._sameWireValue(zones[Z].id, value))
+                    if (MatchWireValue.same(zones[Z].id, value))
                         return zones[Z].displayName || String(value);
                 }
             }
@@ -195,7 +186,7 @@ ColumnLayout {
                     continue;
                 var opts = entry.options || [];
                 for (var o = 0; o < opts.length; ++o) {
-                    if (root._sameWireValue(opts[o].value, value))
+                    if (MatchWireValue.same(opts[o].value, value))
                         return opts[o].label || String(value);
                 }
                 break;
@@ -213,7 +204,7 @@ ColumnLayout {
                     continue;
                 var modeOpts = modeEntry.options || [];
                 for (var mo = 0; mo < modeOpts.length; ++mo) {
-                    if (root._sameWireValue(modeOpts[mo].value, value))
+                    if (MatchWireValue.same(modeOpts[mo].value, value))
                         return modeOpts[mo].label || String(value);
                 }
                 break;

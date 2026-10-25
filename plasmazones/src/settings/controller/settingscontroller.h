@@ -830,9 +830,9 @@ Q_SIGNALS:
      * @brief Fresh running-windows list has arrived from the daemon.
      *
      * Emitted in response to requestRunningWindows(). The @p windows list
-     * is a QVariantList of {windowClass, appName, caption, desktopFile}
-     * maps ready for QML consumption. Also updates cachedRunningWindows()
-     * so later queries can read the last-seen value synchronously.
+     * is a QVariantList of {windowClass, rawWindowClass, appName, caption,
+     * desktopFile} maps ready for QML consumption (RulePickerOptions::runningWindows). Also updates
+     * cachedRunningWindows() so later queries can read the last-seen value synchronously.
      */
     void runningWindowsAvailable(const QVariantList& windows);
 
@@ -921,7 +921,7 @@ private:
     void installRuleLabelLookups();
     /// Re-emit the rule model's label-derived roles; connected to every
     /// upstream change a resolver reads (screens, activities, layouts, zone
-    /// names, desktop names, the three shader registries).
+    /// options, desktop names, the three shader registries).
     void refreshRuleLabels();
     void setNeedsSave(bool needs);
     /// Reload deferred by onExternalSettingsChanged() while edits were

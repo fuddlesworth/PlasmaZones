@@ -466,18 +466,14 @@ RuleModel::Section RuleModel::sectionFor(const Rule& rule)
         return pinsScreenScoped ? Section::Monitor : Section::Advanced;
     }
 
-    // Window-property match with no animation action — Applications, when a
-    // leaf names the application. A match whose window leaves are all
-    // PlasmaZones' own placement state (snapped, floating, tiled, the zone it
-    // sits in) names no application, so it does not belong under that heading,
-    // and no curated section describes it: it goes to Advanced / Custom.
-    QList<Field> fields;
-    collectFields(rule.match, fields);
-    const bool namesApplication = std::any_of(fields.cbegin(), fields.cend(), [](Field field) {
-        return !PhosphorRules::fieldIsContext(field) && field != Field::IsSnapped && field != Field::IsFloating
-            && field != Field::IsTiled && field != Field::Zone;
-    });
-    return namesApplication ? Section::Application : Section::Advanced;
+    // Window-property match with no animation action — Applications. The
+    // section is the per-window one, not only rules that name an app: a match
+    // on window state (the zone a window sits in, whether it is snapped,
+    // floating or maximized) lands here too. The section also seeds where a
+    // new rule is inserted (RuleController::bandSeededInsertIndex), and the
+    // Application band keeps a state-only rule below the Advanced rules a
+    // user ordered by hand instead of putting it on top of them.
+    return Section::Application;
 }
 
 int RuleModel::conditionCount(const MatchExpression& match)

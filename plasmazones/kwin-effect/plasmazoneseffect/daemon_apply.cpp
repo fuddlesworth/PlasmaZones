@@ -29,7 +29,6 @@
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QScopeGuard>
-#include <QSet>
 #include <QStringList>
 
 #include "tilinghandler/tilinghandler.h"
@@ -600,9 +599,9 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 // entry is judged as a re-statement, those of the user-started
                 // snap_all and rotate batches included, so a maximized or
                 // fullscreen window keeps that state and the rect becomes the
-                // one it returns to (F509, F547). A
-                // float/restore entry (empty screenId) is judged on the screen
-                // its rect lies on, and keeps a maximize the same way (F548).
+                // one it returns to (F509, F547). A float/restore entry (empty
+                // screenId) is judged on the screen its rect lies on, and keeps
+                // a maximize the same way (F548).
                 const QString target = p.screenId.isEmpty()
                     ? resolveEffectiveScreenId(p.geometry.center(), KWin::effects->screenAt(p.geometry.center()))
                     : p.screenId;
@@ -1100,23 +1099,15 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
         // it stays listed: the picker greys out the modes it has no value for
         // and offers its caption to Title mode.
         const RunningWindowsDecisions::Row row = RunningWindowsDecisions::makeRow(rawClass, w->caption(), desktopFile);
-        if (!filter.admit(row)) {
+        if (!filter.admits(row)) {
             continue;
         }
-
-        QJsonObject obj;
-        // windowClass stays the canonical token for older settings builds,
-        // which offer it to Classes mode; rawWindowClass is what the
-        // WindowClass rule field actually compares.
-        obj[QLatin1String("windowClass")] = row.windowClass;
-        obj[QLatin1String("rawWindowClass")] = row.rawWindowClass;
-        obj[QLatin1String("appName")] = row.appName;
-        obj[QLatin1String("caption")] = row.caption;
-        obj[QLatin1String("desktopFile")] = row.desktopFile;
+        const QJsonObject obj = RunningWindowsDecisions::toJson(row);
         if (!budget.take(QJsonDocument(obj).toJson(QJsonDocument::Compact).size())) {
             ++overBudget;
             continue;
         }
+        filter.record(row);
         windowArray.append(obj);
     }
 

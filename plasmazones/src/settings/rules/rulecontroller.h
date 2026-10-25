@@ -72,9 +72,10 @@ class RuleController : public PhosphorControl::PageController
     Q_PROPERTY(QStringList zoneNames READ zoneNames NOTIFY zoneNamesChanged)
     /// Every zone of every layout on disk, for the `Zone` match condition's
     /// picker and the read-only match tree. Each entry is
-    /// `{ id: zone UUID (braced), displayName: "<layout> — <zone>" }`, ordered
-    /// by layout name and then zone number. The id is the wire value a Zone
-    /// leaf stores. Filled by the provider SettingsController installs
+    /// `{ id: zone UUID (braced), displayName: "<layout> — <zone>", zoneName,
+    /// layoutName, layoutOrder }`, ordered by layout name and then zone number
+    /// (RulePickerOptions::zoneMatchOptions builds it). The id is the wire
+    /// value a Zone leaf stores. Filled by the provider SettingsController installs
     /// (setZoneMatchOptionsProvider) and re-read on refreshZoneLists(); empty
     /// until then.
     Q_PROPERTY(QVariantList zoneMatchOptions READ zoneMatchOptions NOTIFY zoneMatchOptionsChanged)

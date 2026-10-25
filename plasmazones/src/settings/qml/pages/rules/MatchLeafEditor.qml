@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as PZCommon
+import "../../js/MatchWireValue.js" as MatchWireValue
 
 /**
  * @brief One leaf predicate row — `{ field, op, value }`.
@@ -675,11 +676,11 @@ RowLayout {
             // The option the stored id names, matched ignoring case as the
             // rule engine's Equals does, or null for an unset or vanished zone.
             readonly property var _current: {
-                const target = String(leaf.node.value || "").toLowerCase();
+                const target = String(leaf.node.value || "");
                 if (target === "")
                     return null;
                 for (let i = 0; i < zonePicker._zones.length; ++i) {
-                    if (String(zonePicker._zones[i].id).toLowerCase() === target)
+                    if (MatchWireValue.same(String(zonePicker._zones[i].id), target))
                         return zonePicker._zones[i];
                 }
                 return null;
@@ -687,13 +688,16 @@ RowLayout {
 
             // The category string is split on "/" into a submenu level, so a
             // slash in a layout name is shown as the look-alike division slash
-            // (U+2215) to keep the layout one submenu.
-            items: zonePicker._zones.map(function (zone) {
+            // (U+2215) to keep the layout one submenu. `order` keeps each
+            // submenu in zone-number order, the order the options arrive in,
+            // where the menu would otherwise sort its items by name.
+            items: zonePicker._zones.map(function (zone, index) {
                 return {
                     "id": zone.id,
                     "name": zone.zoneName,
                     "category": String(zone.layoutName).replace(/\//g, "∕"),
-                    "categoryOrder": zone.layoutOrder
+                    "categoryOrder": zone.layoutOrder,
+                    "order": index
                 };
             })
             currentId: zonePicker._current ? zonePicker._current.id : ""
@@ -705,9 +709,12 @@ RowLayout {
             // name alone is ambiguous across layouts. A zone whose layout was
             // deleted shows its stored id, as the other pickers do.
             displayText: zonePicker._current ? zonePicker._current.displayName : (leaf.node.value ? String(leaf.node.value) : zonePicker.placeholderText)
-            Accessible.name: i18n("Zone")
+            // The button's accessible name is its selection (displayText), so
+            // the field goes in the description, as the other pickers on the
+            // rules page do.
+            Accessible.description: i18n("Zone")
             onSelected: function (id) {
-                if (id && id.toLowerCase() !== String(leaf.node.value || "").toLowerCase())
+                if (id && !MatchWireValue.same(String(id), String(leaf.node.value || "")))
                     leaf._emit(leaf.node.field, leaf.node.op, id);
             }
         }

@@ -122,7 +122,40 @@ private Q_SLOTS:
     void snapToZoneSummaryQuotesNamesAndFiltersTargets();
     void animationOverridesSummariseWithTheirEvent();
     void actionLabelPrefixesAreUnique();
+    void matchLabelsIgnoreCaseLikeTheEngine();
 };
+
+// The engine's Equals compares these leaves ignoring case, so the summary
+// resolves a hand-edited value spelled in another case to the option it
+// matches, and a value that names nothing still reads verbatim. FAILS if the
+// ActiveLayout UUID or the ColorScheme token is resolved case-sensitively.
+void TestRuleModel::matchLabelsIgnoreCaseLikeTheEngine()
+{
+    const QString layoutId = QUuid::createUuid().toString();
+    const auto leafRule = [](Field field, const QString& value) {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.match = MatchExpression::makeLeaf(field, Operator::Equals, value);
+        RuleAction floatAction;
+        floatAction.type = QString(ActionType::Float);
+        rule.actions = {floatAction};
+        return rule;
+    };
+    const QString unknownId = QUuid::createUuid().toString().toUpper();
+    RuleModel model;
+    model.setRules({leafRule(Field::ActiveLayout, layoutId.toUpper()),
+                    leafRule(Field::ColorScheme, QStringLiteral("DARK")), leafRule(Field::ActiveLayout, unknownId)});
+    model.setSnappingLayoutLabelLookup([layoutId](const QString& id) {
+        return id == layoutId ? QStringLiteral("Columns") : id;
+    });
+    model.refreshLabels();
+    const auto summaryAt = [&model](int row) {
+        return model.data(model.index(row, 0), RuleModel::MatchSummaryRole).toString();
+    };
+    QVERIFY2(summaryAt(0).contains(QStringLiteral("Columns")), qPrintable(summaryAt(0)));
+    QVERIFY2(summaryAt(1).contains(QStringLiteral("Dark")), qPrintable(summaryAt(1)));
+    QVERIFY2(summaryAt(2).contains(unknownId), qPrintable(summaryAt(2)));
+}
 
 void TestRuleModel::rolesExposed()
 {
@@ -185,33 +218,33 @@ void TestRuleModel::sectionDerivation()
     screenScroll.actions = {columnWidth};
     QCOMPARE(RuleModel::sectionFor(screenScroll), RuleModel::Section::Monitor);
 
-    // A window rule matching only PlasmaZones' own placement state (the zone
-    // a window sits in, whether it is snapped) names no application, so it
-    // is not filed under Applications. Adding an application leaf files it
-    // there again. FAILS if a zone-only rule reads as an application rule.
-    RuleAction keepAbove;
-    keepAbove.type = QString(ActionType::Float);
+    // A window rule matching only window state (the zone a window sits in,
+    // whether it is snapped or floating, on a given monitor or not) is a
+    // per-window rule like one naming an app, so it files under Applications
+    // and a new one is seeded in that band rather than above every rule the
+    // user ordered under Advanced. FAILS if a state-only window rule is moved
+    // to another section, which also moves where a new one is inserted.
+    RuleAction floatAction;
+    floatAction.type = QString(ActionType::Float);
     Rule zoneOnly;
     zoneOnly.id = QUuid::createUuid();
     zoneOnly.match = MatchExpression::makeLeaf(Field::Zone, Operator::Equals, QUuid::createUuid().toString());
-    zoneOnly.actions = {keepAbove};
-    QCOMPARE(RuleModel::sectionFor(zoneOnly), RuleModel::Section::Advanced);
+    zoneOnly.actions = {floatAction};
+    QCOMPARE(RuleModel::sectionFor(zoneOnly), RuleModel::Section::Application);
+
+    Rule floatingOnly;
+    floatingOnly.id = QUuid::createUuid();
+    floatingOnly.match = MatchExpression::makeLeaf(Field::IsFloating, Operator::Equals, true);
+    floatingOnly.actions = {floatAction};
+    QCOMPARE(RuleModel::sectionFor(floatingOnly), RuleModel::Section::Application);
 
     Rule snappedOnScreen;
     snappedOnScreen.id = QUuid::createUuid();
     snappedOnScreen.match = MatchExpression::makeAll(
         {MatchExpression::makeLeaf(Field::IsSnapped, Operator::Equals, true),
          MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"))});
-    snappedOnScreen.actions = {keepAbove};
-    QCOMPARE(RuleModel::sectionFor(snappedOnScreen), RuleModel::Section::Advanced);
-
-    Rule appInZone;
-    appInZone.id = QUuid::createUuid();
-    appInZone.match = MatchExpression::makeAll(
-        {MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("firefox")),
-         MatchExpression::makeLeaf(Field::Zone, Operator::Equals, QUuid::createUuid().toString())});
-    appInZone.actions = {keepAbove};
-    QCOMPARE(RuleModel::sectionFor(appInZone), RuleModel::Section::Application);
+    snappedOnScreen.actions = {floatAction};
+    QCOMPARE(RuleModel::sectionFor(snappedOnScreen), RuleModel::Section::Application);
 }
 
 void TestRuleModel::compositeGraduatesToAdvanced()

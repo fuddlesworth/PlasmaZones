@@ -155,7 +155,8 @@ PHOSPHORZONES_EXPORT QStringList sameNumberedZones(const QStringList& zoneIds, c
                                                    const QHash<QString, int>& positions);
 
 /**
- * @brief Give a layout document's zones ids no other layout holds (F552).
+ * @brief Give a layout document's zones ids no other layout holds (F552), and
+ *        a zone with no id one of its own.
  *
  * Every zone id in @p layoutJson's zones array that a layout in @p loaded
  * already holds, or that repeats within the document, is replaced, and a zone
@@ -169,9 +170,9 @@ PHOSPHORZONES_EXPORT QStringList sameNumberedZones(const QStringList& zoneIds, c
  * instead, as Layout::fromJson mints it a random id. Returns the number of ids
  * replaced or given.
  *
- * The registry's directory load and its import run every document through
- * this before Layout::fromJson, which is what makes the uniqueness the
- * position map and layoutHoldsZones rely on hold.
+ * The registry's directory load, its import and its restore of a system layout
+ * run every document through this before Layout::fromJson, which is what makes
+ * the uniqueness the position map and layoutHoldsZones rely on hold.
  */
 PHOSPHORZONES_EXPORT int reissueTakenZoneIds(QJsonObject& layoutJson, const QList<Layout*>& loaded);
 

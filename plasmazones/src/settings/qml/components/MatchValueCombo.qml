@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import "../js/MatchWireValue.js" as MatchWireValue
 
 /**
  * @brief The dropdown a rule condition uses when its value is picked from a
@@ -18,7 +19,9 @@ import QtQuick.Controls
  * than as a blank combo, and an unset one shows `placeholderText`.
  *
  * String values match ignoring case, as the rule engine's Equals does, so a
- * hand-edited id in another case still selects its entry. `picked(value)`
+ * hand-edited id in another case still selects its entry (MatchWireValue.same).
+ * That is why this is a condition control: the action editors match exactly,
+ * because whatever applies an action looks its value up exactly. `picked(value)`
  * fires only when the user picks a value other than the stored one.
  */
 WideComboBox {
@@ -33,24 +36,17 @@ WideComboBox {
 
     readonly property bool _hasValue: combo.value !== undefined && combo.value !== null && combo.value !== ""
 
-    function _same(a, b) {
-        if (typeof a === "string" && typeof b === "string")
-            return a.toLowerCase() === b.toLowerCase();
-
-        return a === b;
-    }
-
     currentIndex: {
         const items = combo.model || [];
         for (let i = 0; i < items.length; ++i) {
-            if (items[i] && combo._same(items[i][combo.valueRole], combo.value))
+            if (items[i] && MatchWireValue.same(items[i][combo.valueRole], combo.value))
                 return i;
         }
         return -1;
     }
     displayText: combo.currentIndex >= 0 ? combo.currentText : (combo._hasValue ? String(combo.value) : combo.placeholderText)
     onActivated: function (index) {
-        if (!combo._same(combo.currentValue, combo.value))
+        if (!MatchWireValue.same(combo.currentValue, combo.value))
             combo.picked(combo.currentValue);
     }
 }
