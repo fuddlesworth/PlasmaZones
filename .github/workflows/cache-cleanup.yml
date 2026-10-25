@@ -1,0 +1,62 @@
+# Delete the Actions caches no CI run will restore again.
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# CI saves a compiler cache on every run (ci.yml), and the repository's caches
+# share 10 GB, past which GitHub evicts the least recently used: possibly the
+# very entry main's next run restores. scripts/trim-actions-caches.py deletes
+# the closed pull requests', the gone branches' and the replaced entries, so
+# the room stays with the caches builds read.
+
+name: Cache cleanup
+
+on:
+  # A closed pull request's caches. pull_request_target, so a fork's are
+  # deleted too: the job runs the base branch's copy of this workflow and
+  # script, and checks out nothing from the pull request.
+  pull_request_target:
+    types: [closed]
+  # The entries a CI run's new caches replaced.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: List what would be deleted, delete nothing
+        type: boolean
+        default: true
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+# One pass at a time, queued rather than cancelled: a pass waiting behind
+# another reads the listing afresh when it starts.
+concurrency:
+  group: cache-cleanup
+
+jobs:
+  trim:
+    name: Delete the caches no run restores
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/trim-actions-caches.py
+          sparse-checkout-cone-mode: false
+
+      - name: Delete them
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if [ "$DRY_RUN" = true ]; then
+            python3 scripts/trim-actions-caches.py --dry-run
+          else
+            python3 scripts/trim-actions-caches.py
+          fi
