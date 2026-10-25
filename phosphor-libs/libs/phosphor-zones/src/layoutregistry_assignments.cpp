@@ -590,9 +590,11 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
         // because the losslessness contract above is easy to over-read: when
         // no exact rule exists yet, an activity-scoped write starts from an
         // empty entry, so the siblings a BROADER (empty-activity) entry
-        // remembers are not carried onto it — and since the cascade returns
-        // the most specific entry whole rather than merging fields, the new
-        // entry shadows them.
+        // remembers are not stored on the new rule. They still resolve,
+        // because resolveAssignmentEntry resolves per slot: a payload slot the
+        // exact rule lacks is filled by the highest-priority matching rule
+        // carrying it, which is the broader entry when nothing outranks it.
+        // What the new rule does replace is the slots it carries itself.
         //
         // This is a property of every caller of this write path, not of any
         // one mode: the picker's manual, autotile and no-layout branches all

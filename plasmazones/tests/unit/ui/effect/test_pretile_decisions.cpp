@@ -3,10 +3,11 @@
 //
 // Pure-logic tests for the pre-autotile restore decisions
 // (tilinghandler/pretiledecisions.h): which rect may safely be applied for a
-// window on a given output, and what the desktop-switch demote pass does with
-// the answer. Same header-only reach as test_scroll_decisions: kwin-effect has
-// no linkable test target, so the pure halves are extracted into a header this
-// test includes directly.
+// window on a given output, whether a managed-set announce still describes
+// the desktops in view (announceMatchesReportedDesktops), and what the
+// desktop-switch demote pass does with the answer. Same header-only reach as
+// test_scroll_decisions: kwin-effect has no linkable test target, so the pure
+// halves are extracted into a header this test includes directly.
 
 #include <tilinghandler/pretiledecisions.h>
 
@@ -95,6 +96,36 @@ private Q_SLOTS:
         QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/false, live, output), QRectF(720, 8, 1200, 800));
     }
 
+    // The other clamps of the same rule (F503). A degraded size that would
+    // hang below its output is moved up inside it.
+    void rect_degradedSizeStaysAboveItsOutputsBottom()
+    {
+        const QRectF saved(4000, 100, 600, 900);
+        const QRectF live(100, 600, 400, 300);
+        const QRectF output(0, 0, 1920, 1080);
+        QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/false, live, output), QRectF(100, 180, 600, 900));
+    }
+
+    // A live frame left of its output's origin (a tile cropped at the edge
+    // of an output to the right of another) is moved right inside it.
+    void rect_degradedSizeStaysRightOfItsOutputsLeft()
+    {
+        const QRectF saved(100, 100, 800, 600);
+        const QRectF live(1900, 8, 472, 1064);
+        const QRectF output(1920, 0, 1920, 1080);
+        QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/false, live, output), QRectF(1920, 8, 800, 600));
+    }
+
+    // And one above its output's top (an output stacked below another) is
+    // moved down inside it.
+    void rect_degradedSizeStaysBelowItsOutputsTop()
+    {
+        const QRectF saved(100, 100, 800, 600);
+        const QRectF live(100, 1000, 472, 1064);
+        const QRectF output(0, 1080, 1920, 1080);
+        QCOMPARE(applicablePreTileRect(saved, /*sameOutput=*/false, live, output), QRectF(100, 1080, 800, 600));
+    }
+
     // An output that did not move still holds the rect's centre: applied whole.
     void rect_sameOutputStillInside_appliedWhole()
     {
@@ -166,34 +197,52 @@ private Q_SLOTS:
         QTest::addColumn<bool>("haveLocalRect");
         QTest::addColumn<bool>("wasTracked");
         QTest::addColumn<bool>("wasWindowedFs");
+        QTest::addColumn<bool>("wasTiled");
         QTest::addColumn<int>("expected");
 
         const auto e = [](PreTileRestore r) {
             return static_cast<int>(r);
         };
 
-        // Untracked: the buckets survive non-destructively, so a window already
-        // restored by an earlier switch must not be re-teleported on every
-        // later switch onto this desktop.
-        QTest::newRow("untracked, no rect") << false << false << false << e(PreTileRestore::None);
-        QTest::newRow("untracked, rect") << true << false << false << e(PreTileRestore::None);
-        QTest::newRow("untracked, rect, windowed fs") << true << false << true << e(PreTileRestore::None);
-        // The eighth combination. Untracked short-circuits before the windowed-
-        // fullscreen term is read, so this row is equivalent to the first by
-        // construction — which is precisely why it belongs here: the table
-        // claims to be total over three booleans, and a reader checking that
-        // claim should find all 2^3 rows rather than having to re-derive which
-        // one was left out and why it did not matter.
-        QTest::newRow("untracked, no rect, windowed fs") << false << false << true << e(PreTileRestore::None);
+        // Total over the four booleans: all 2^4 rows, so a reader checking the
+        // claim finds every combination rather than re-deriving which were
+        // left out and why they did not matter.
+        for (const bool tiled : {false, true}) {
+            const char* const t = tiled ? ", tiled" : ", not tiled";
+            // Untracked: the buckets survive non-destructively, so a window
+            // already restored by an earlier switch must not be re-teleported
+            // on every later switch onto this desktop. Untracked short-circuits
+            // before the other terms are read.
+            QTest::addRow("untracked, no rect%s", t) << false << false << false << tiled << e(PreTileRestore::None);
+            QTest::addRow("untracked, rect%s", t) << true << false << false << tiled << e(PreTileRestore::None);
+            QTest::addRow("untracked, rect, windowed fs%s", t)
+                << true << false << true << tiled << e(PreTileRestore::None);
+            QTest::addRow("untracked, no rect, windowed fs%s", t)
+                << false << false << true << tiled << e(PreTileRestore::None);
 
-        // Tracked with nothing stored: the window was snap-managed when it
-        // entered autotile, so the daemon's record is the only source.
-        QTest::newRow("tracked, no rect") << false << true << false << e(PreTileRestore::AskDaemon);
-        QTest::newRow("tracked, no rect, windowed fs") << false << true << true << e(PreTileRestore::AskDaemon);
+            // A local rect is applied whatever the live fact says. It is not
+            // proof the window was tiled (the genuine toggle saves one for
+            // every window on a screen entering tiling), but it was measured
+            // by this effect on the window's own output (the caller degrades
+            // a foreign one to its size), unlike the daemon's mode-shared
+            // record, which is why only the daemon arm needs the tiled fact.
+            QTest::addRow("tracked, rect%s", t) << true << true << false << tiled << e(PreTileRestore::Apply);
+            QTest::addRow("tracked, rect, windowed fs%s", t)
+                << true << true << true << tiled << e(PreTileRestore::QueueForWindowedFullscreen);
+        }
 
-        QTest::newRow("tracked, rect") << true << true << false << e(PreTileRestore::Apply);
-        QTest::newRow("tracked, rect, windowed fs")
-            << true << true << true << e(PreTileRestore::QueueForWindowedFullscreen);
+        // Tracked and tiled with nothing stored: the window was snap-managed
+        // when it entered autotile, so the daemon's record is the only source.
+        QTest::newRow("tracked, no rect, tiled") << false << true << false << true << e(PreTileRestore::AskDaemon);
+        QTest::newRow("tracked, no rect, windowed fs, tiled")
+            << false << true << true << true << e(PreTileRestore::AskDaemon);
+        // Tracked but never tiled: only the announce trail, from an open the
+        // daemon refused. The daemon's record is mode-shared, so it is not
+        // asked (#1151). A window floating in the tiling mode is skipped by
+        // the demote pass before this decision.
+        QTest::newRow("tracked, no rect, not tiled") << false << true << false << false << e(PreTileRestore::None);
+        QTest::newRow("tracked, no rect, windowed fs, not tiled")
+            << false << true << true << false << e(PreTileRestore::None);
     }
 
     void restoreTruthTable()
@@ -201,9 +250,10 @@ private Q_SLOTS:
         QFETCH(bool, haveLocalRect);
         QFETCH(bool, wasTracked);
         QFETCH(bool, wasWindowedFs);
+        QFETCH(bool, wasTiled);
         QFETCH(int, expected);
 
-        QCOMPARE(static_cast<int>(resolvePreTileRestore(haveLocalRect, wasTracked, wasWindowedFs)), expected);
+        QCOMPARE(static_cast<int>(resolvePreTileRestore(haveLocalRect, wasTracked, wasWindowedFs, wasTiled)), expected);
     }
 
     // AskDaemon is for a genuinely EMPTY bucket, never for a rect that was
@@ -212,8 +262,8 @@ private Q_SLOTS:
     // trade a good answer for a worse one.
     void askDaemonOnlyWhenNothingIsStored()
     {
-        QCOMPARE(resolvePreTileRestore(/*haveLocalRect=*/true, true, false), PreTileRestore::Apply);
-        QCOMPARE(resolvePreTileRestore(/*haveLocalRect=*/false, true, false), PreTileRestore::AskDaemon);
+        QCOMPARE(resolvePreTileRestore(/*haveLocalRect=*/true, true, false, true), PreTileRestore::Apply);
+        QCOMPARE(resolvePreTileRestore(/*haveLocalRect=*/false, true, false, true), PreTileRestore::AskDaemon);
     }
 };
 

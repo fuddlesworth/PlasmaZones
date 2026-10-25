@@ -174,7 +174,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="updateLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Replace an existing layout with the supplied full layout JSON (editor save path). The layout's UUID is taken from the JSON. Layout and zone names longer than 40 characters are shortened to fit."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Replace an existing layout with the supplied full layout JSON (editor save path). The layout's UUID is taken from the JSON. Layout and zone names longer than 40 characters are shortened to fit. An id of the form 'autotile:&lt;algorithmId&gt;' saves that tiling algorithm's gaps, overlay style and allow-lists instead, and is refused for an algorithm the daemon does not know, a gap or style out of range, a per-side gap toggle (usePerSideOuterGap) that is not a boolean, or a malformed allow-list."/>
             <arg name="layoutJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
             </arg>
@@ -674,7 +674,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="layoutChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted on structural layout mutations (updateLayout, the editor's save path) and on every active-layout switch, alongside the cheaper activeLayoutChanged(id). Usually carries the full layout JSON payload; when the update targeted an AUTOTILE entry the payload is instead the caller's raw autotile-override object (id 'autotile:&lt;algorithmId&gt;', not a serialized layout), so subscribers must not blindly parse it as a layout. createLayoutFromJson does not emit this; a new layout announces itself with layoutCreated(id). Scalar property mutations (hidden, autoAssign, aspectRatioClass) emit layoutPropertyChanged instead to avoid the full serialization."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted on structural layout mutations (updateLayout, the editor's save path) and on every active-layout switch, alongside the cheaper activeLayoutChanged(id). Usually carries the full layout JSON payload. When the update targeted an AUTOTILE entry the payload is instead that algorithm's autotile-override entry as stored, under its id 'autotile:&lt;algorithmId&gt;' (not a serialized layout), so subscribers must not blindly parse it as a layout. createLayoutFromJson does not emit this, because a new layout announces itself with layoutCreated(id). Scalar property mutations (hidden, autoAssign, aspectRatioClass) emit layoutPropertyChanged instead to avoid the full serialization."/>
             <arg name="layoutJson" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
             </arg>

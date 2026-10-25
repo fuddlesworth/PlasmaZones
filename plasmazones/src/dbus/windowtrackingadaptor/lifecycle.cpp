@@ -4,8 +4,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // WindowTrackingAdaptor — window lifecycle
 //
-// Placement capture, window screen changes, close, metadata upserts and
-// frame-geometry tracking. The focus and activation reports live in
+// Placement capture, close, metadata upserts, frame-geometry tracking, the
+// interactive-resize report, the sticky bit and the context-release relay.
+// Screen changes live in screenleave.cpp, the focus and activation reports in
 // activation.cpp and the stale-window prune in prune.cpp.
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -15,9 +16,11 @@
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include "core/utils/dbusvariantutils.h"
+#include "dbus/dbushelpers.h"
 
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/WindowRegistry.h>
 // Complete type required for the m_ruleEvaluator->evictCached calls below.
 #include <PhosphorRules/RuleEvaluator.h>
@@ -321,6 +324,28 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // No m_service re-check: the entry guard at the top of this function
     // already established it.
     if (!authoritativeScreen.isEmpty() && !m_service->isWindowEngineTiled(windowId)) {
+        // This branch is the routine close capture of every free window no
+        // engine tracks (any free window on a snapping screen lands here), so
+        // an excluded window (under the minimum size, or matched by an exclude
+        // rule) is refused only a NEW record. A window nothing ever recorded
+        // would hand its record to ANOTHER instance of the app, through the
+        // reopen's same-app FIFO: an app's splash screen closing just before
+        // its main window opens handed the main window the splash's size and
+        // spot, floating, and on a small enough splash out of tiling for good.
+        // A window with a record of its own keeps it current instead, since
+        // that record exists whatever this close does and refusing the update
+        // only leaves it on an older frame (a window shrunk under the minimum
+        // would otherwise lose its close capture). The verdict is snap's, the
+        // one exclusion query this adaptor holds, and float-back memory serves
+        // every mode, so it may only stop a record from being created, never
+        // freeze one another mode wrote. Asked against the live frame, which is
+        // still in the shadow here.
+        if (m_cachedSnapEngine && !m_service->placementStore().peekExact(windowId)
+            && m_cachedSnapEngine->isWindowExcluded(windowId, authoritativeScreen)) {
+            qCDebug(lcDbusWindow) << "captureWindowPlacement: no float-back for" << windowId
+                                  << "— excluded from placement, with no record of its own";
+            return;
+        }
         const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
         // The managed-frame refusal, as in the primary capture path: a window tiled
         // by autotile, handed off, and closed
@@ -332,12 +357,13 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         // before WindowTracking, in-order), so it lands here with its frame
         // still the tile rect — only the engine's retained memory (kept
         // through its windowClosed exactly for this read) lets the guard
-        // refuse it. Skipping deliberately forfeits this close's
-        // OTHER effects too (the screen adoption and pure-float sibling
-        // collapse recordFloatingClose bundles): the record keeps its prior
-        // screen and geometry, which is strictly better than adopting a
-        // poisoned one — recordFloatingClose has no geometry-less mode, and
-        // a genuine free frame at the next close records normally.
+        // refuse it. The whole call is skipped, not only the geometry, although
+        // recordFloatingClose refuses a managed frame itself and records the
+        // rest: that rest (the close screen adopted as the record's screen, a
+        // floating slot for the owning engine, the pure-float sibling
+        // collapse) states the window closed FREE, and one still on its zone
+        // or tile rect did not. The record keeps its prior screen and slots,
+        // and a genuine free frame at the next close records normally.
         if (frame.isValid() && !m_service->isManagedFrame(windowId, frame)) {
             m_service->recordFloatingClose(windowId, authoritativeScreen, frame);
         }
@@ -401,6 +427,9 @@ void WindowTrackingAdaptor::pruneExcludedPlacements(const QStringList& patterns)
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty()) {
         return;
     }
@@ -414,6 +443,9 @@ void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky
 
 void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("clean up closed window"))) {
         return;
     }
@@ -458,9 +490,11 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
         // screen's suffix, so one a subdivision change removed read as known.
         const QString known = resolveBusScreen(closeScreen, windowId);
         if (known.isEmpty()) {
+            // No primary-screen fallback for a centre on no output: that
+            // would file the close on a screen the window was never on.
             const QRect closeFrame = m_frameGeometry.value(shadowWindowId(windowId));
             closeScreen = closeFrame.isValid()
-                ? Utils::effectiveScreenIdAt(m_service->screenManager(), closeFrame.center())
+                ? WindowTrackingInternal::screenContaining(m_service->screenManager(), closeFrame.center())
                 : QString();
             qCDebug(lcDbusWindow) << "windowClosed: unknown close screen" << screenId << "for" << windowId
                                   << "— resolved to" << closeScreen;
@@ -531,6 +565,9 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                                               const QString& windowRole, int pid, int virtualDesktop,
                                               const QString& activity, int windowType, const QVariantMap& extended)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!m_windowRegistry) {
         // Teardown or a registry-less unit test. The effect re-emits anyway.
         return;
@@ -624,15 +661,24 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             // causes this: WindowRegistry::remapDesktops moves the span with
             // the scalar) therefore arrives with a fresh scalar beside a span
             // from before the move, which breaks WindowMetadata's stated
-            // invariant that a non-empty span starts with the scalar. Drop the
-            // span in that case: it describes a membership the window no
-            // longer has, and the next full push re-establishes it. Consumers
-            // then read the scalar, which is the one field this push knows.
-            if (!meta.virtualDesktops.isEmpty() && meta.virtualDesktops.constFirst() != meta.virtualDesktop) {
+            // invariant that a non-empty span starts with the scalar. Compare
+            // by membership, not position: KWin does not keep a window's
+            // desktop list in a stable order, so a window on {1,3} can tick in
+            // with 3 as its scalar without having moved (#1147). A scalar still
+            // inside the span is moved to its front, which restores the
+            // invariant and keeps the span. A scalar outside it means the
+            // window really moved: the span describes a membership the window
+            // no longer has, so it goes, and the next full push re-establishes
+            // it. Consumers then read the scalar, the one field this push knows.
+            if (const qsizetype at = meta.virtualDesktops.indexOf(meta.virtualDesktop); at > 0) {
+                meta.virtualDesktops.move(at, 0);
+            } else if (at < 0) {
                 meta.virtualDesktops.clear();
             }
             // The activity span, likewise (F426).
-            if (!meta.activities.isEmpty() && meta.activities.constFirst() != meta.activity) {
+            if (const qsizetype at = meta.activities.indexOf(meta.activity); at > 0) {
+                meta.activities.move(at, 0);
+            } else if (at < 0) {
                 meta.activities.clear();
             }
         }
@@ -707,12 +753,15 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                 // Multi-desktop span list (absent for single-desktop / sticky
                 // windows, so an absent key correctly clears a previous span).
                 // Over the bus it arrives as a QDBusArgument, which toList()
-                // reads as empty, so it is unwrapped first (F1003).
+                // reads as empty, so it is unwrapped first (F1003). A repeated
+                // desktop is dropped like a repeated activity below, so a
+                // malformed [1, 1] cannot pass the two-or-more span invariant.
                 const QVariantList list = DBusVariantUtils::convertDbusArgument(v).toList();
                 meta.virtualDesktops.reserve(list.size());
                 for (const QVariant& d : list) {
                     const int desktop = d.toInt();
-                    if (desktop > 0 && (desktops <= 0 || desktop <= desktops)) {
+                    if (desktop > 0 && (desktops <= 0 || desktop <= desktops)
+                        && !meta.virtualDesktops.contains(desktop)) {
                         meta.virtualDesktops.append(desktop);
                     }
                 }
@@ -760,6 +809,9 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
 
 void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int y, int width, int height)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty() || width <= 0 || height <= 0) {
         return;
     }
@@ -795,6 +847,9 @@ bool WindowTrackingAdaptor::isInteractiveDragWindow(const QString& windowId) con
 void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth,
                                                 int oldHeight, int newX, int newY, int newWidth, int newHeight)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("reflow after interactive resize"))) {
         return;
     }

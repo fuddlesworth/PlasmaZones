@@ -137,8 +137,7 @@ int getEffectiveInnerGap(PhosphorZones::Layout* layout, ISettings* settings, con
     // rule, a hand-edited layout file and a hand-edited config can each carry
     // a gap the settings UI would never offer, and the autotile arm has always
     // bounded its own equivalents (the clampGap in PerScreenConfigResolver.cpp),
-    // so the
-    // snapping arm bounds the same quantity to the same range.
+    // so the snapping arm bounds the same quantity to the same range.
     const auto resolve = [&]() -> int {
         // Tier 1 — a context-rule gap override (per-screen/desktop/activity rule).
         if (auto v = PhosphorEngine::GapResolution::gapFromOverrideMap(ruleGapOverride, PSK::InnerGap, clampGap)) {
@@ -305,9 +304,11 @@ PhosphorProtocol::EmptyZoneList buildEmptyZoneList(PhosphorScreens::ScreenManage
     }
 
     bool useAvail = !layout->useFullScreenGeometry();
-    PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveScreenGeometry(mgr, layout, screen));
-
     QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
+    PhosphorZones::LayoutComputeService::recalculateSync(
+        layout, effectiveScreenGeometry(mgr, layout, screen),
+        PhosphorZones::GeometryUtils::screenScale(mgr, screenId, screen));
+
     const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, settings, screenId);
     int zonePadding = getEffectiveInnerGap(layout, settings, ruleGaps);
     ::PhosphorLayout::EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, ruleGaps);
@@ -330,7 +331,8 @@ PhosphorProtocol::EmptyZoneList buildEmptyZoneList(PhosphorScreens::ScreenManage
     if (vsGeom.isValid()) {
         bool useAvail = !layout->useFullScreenGeometry();
         QRectF effectiveGeom = useAvail && vsAvailGeom.isValid() ? QRectF(vsAvailGeom) : QRectF(vsGeom);
-        PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveGeom);
+        PhosphorZones::LayoutComputeService::recalculateSync(
+            layout, effectiveGeom, PhosphorZones::GeometryUtils::screenScale(mgr, screenId, physScreen));
 
         const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, settings, screenId);
         int zonePadding = getEffectiveInnerGap(layout, settings, ruleGaps);

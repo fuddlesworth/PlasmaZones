@@ -327,7 +327,7 @@ public Q_SLOTS:
      * absolute setters live only on this surface. All four share focusColumn's
      * silent ownership and per-context gates, and each refuses out-of-range
      * values silently — proportions outside the settings UI's proportion
-     * range, pixels outside its fixed range (the width and height fixed
+     * range, logical pixels outside its fixed range (the width and height fixed
      * ranges happen to agree today; each is validated against its own
      * accessor). A value equal to the current intent answers with a no-target
      * OSD, like the step verbs, except on a column maximized to its edges,
@@ -451,8 +451,11 @@ public Q_SLOTS:
      * Deliberately NOT ownership- or context-gated, unlike focusColumn and the
      * width setters: this is a RECONCILIATION call, and a refusal would leave
      * the strip's flag permanently disagreeing with a client that has already
-     * left fullscreen. The engine's own lookup rejects an untracked window,
-     * which is the only check this needs.
+     * left fullscreen. The engine's own lookup rejects an untracked window.
+     * Compositor-only all the same: any bus caller but the registered bridge
+     * is answered with AccessDenied (DbusHelpers::admitCompositorReport), as
+     * for reapplyWindowGeometry, reportCommittedSize and
+     * setWindowFullscreenFloat.
      *
      * @param windowId Window whose flag to clear; an empty string is ignored
      */
@@ -470,7 +473,9 @@ public Q_SLOTS:
      * context not in view only loses the memory, and is re-carried when that
      * context is shown. Silent no-op for an unknown window, same wire-boundary
      * policy as clearWindowedFullscreen: a repair call, so neither
-     * ownership- nor context-gated.
+     * ownership- nor context-gated, but compositor-only: any bus caller but
+     * the registered bridge is answered with AccessDenied
+     * (DbusHelpers::admitCompositorReport).
      *
      * @param windowId Window to re-emit; an empty string is ignored
      */
@@ -480,22 +485,30 @@ public Q_SLOTS:
      * @brief Report the size a strip window's client settled on (compositor
      *        reconciliation)
      *
-     * The KWin effect calls this for a Wayland strip window whose settled
-     * frame differs from the rect it was offered (its own tile), once per
+     * The KWin effect calls this for a strip window, Wayland or XWayland,
+     * whose settled frame differs from the rect it was offered (its own tile), once per
      * batch that sent the client a new size and once per size the client then
-     * settles on by itself, only with no geometry configure in flight. A
-     * commit longer than the tile along the strip gives the column a floor
-     * at that extent, so the neighbours are laid out beside the window instead
-     * of under it; a floor past the work area, or an answer longer than the
-     * work area across the strip, floats the window instead. A later shorter
-     * answer gives the floor back, and the floor is learned only while
-     * minimum sizes are respected. ScrollEngine::reportCommittedSize carries
+     * settles on by itself, only with no geometry configure in flight. For a
+     * tile parked off screen it also reports a settled frame that equals the
+     * offer along the strip. A commit longer than the tile along the strip
+     * gives the column a floor at that extent, so the neighbours are laid out
+     * beside the window instead of under it; one longer across the strip,
+     * inside the work area, holds the tile at that share of its stacked
+     * column, so the tiles beside it shrink instead of lying under it. A
+     * floor past the work area, a share the stack cannot hold beside its
+     * other tiles, or an answer longer than the work area across the strip,
+     * floats the window instead. A later shorter answer gives the floor along
+     * the strip back, a parked tile's matched answer ends the peek memory a
+     * wider answer left, and nothing is learned unless minimum sizes are
+     * respected. ScrollEngine::reportCommittedSize carries
      * the whole contract, the XML DocString its wire summary. Same
      * wire-boundary policy as clearWindowedFullscreen: neither ownership- nor
      * context-gated, since it reports what the client has already done.
      *
-     * Refused HERE only for a null engine, an empty id or a non-positive
-     * size. The engine repeats the size check (QSize::isEmpty) and owns every
+     * Refused HERE only for a caller other than the registered compositor
+     * bridge (answered with AccessDenied, DbusHelpers::admitCompositorReport),
+     * a null engine, an empty id or a non-positive size. The engine repeats
+     * the size check (QSize::isEmpty) and owns every
      * other refusal: an interactive move, an unknown, floating or
      * maximized-to-edges window, minimum sizes off, and an offer that is not
      * the tile's whole current rect.
@@ -527,7 +540,8 @@ public Q_SLOTS:
      * this call's own float answers true.
      *
      * Same wire-boundary policy as clearWindowedFullscreen: a reconciliation
-     * call, so neither ownership- nor context-gated. The engine's own lookup
+     * call, so neither ownership- nor context-gated, but compositor-only
+     * (AccessDenied for any other bus caller). The engine's own lookup
      * rejects an untracked window.
      *
      * @param windowId Window to hold out or return; an empty string answers false

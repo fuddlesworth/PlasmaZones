@@ -4,69 +4,30 @@
 #include "daemon/daemon.h"
 #include "helpers.h"
 
-#include <QGuiApplication>
-#include <QDBusConnection>
-
-#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
-#include <PhosphorAnimation/AnimationShaderRegistry.h>
-#include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include "daemon/overlayservice.h"
-#include "daemon/controllers/unifiedlayoutcontroller.h"
 #include "daemon/controllers/shortcutmanager.h"
-#include "daemon/controllers/enginefactory.h"
-#include "daemon/controllers/contextresolverwiring.h"
-#include "daemon/rendering/zoneentryscaffold.h"
-#include "daemon/rendering/zoneshadernoderhi.h"
 
-#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
-#include <PhosphorZones/ZonesLayoutSource.h>
-#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/ZoneDetector.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/AutotileConstants.h>
-#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
-#include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorScreens/DBusScreenAdaptor.h>
-#include <PhosphorScreens/Swapper.h>
-#include <PhosphorScreens/PlasmaPanelSource.h>
-#include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorSnapEngine/SnapState.h>
-#include <PhosphorTileEngine/AutotileEngine.h>
-#include <PhosphorRules/ExclusionRules.h>
-#include <PhosphorRules/RuleAction.h>
-#include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleStore.h>
 
-#include "config/configbackends.h"
-#include "config/configdefaults.h"
 #include "config/settingsconfigstore.h"
 #include "config/settings.h"
-#include "core/types/baselinecleanup.h"
 #include "core/types/constants.h"
-#include "core/resolve/crosssurfaceresolver.h"
-#include "core/resolve/animationbootstrap.h"
-#include "core/resolve/screenmoderouter.h"
-#include "core/utils/geometryutils.h"
-#include "core/utils/utils.h"
 #include "core/platform/logging.h"
 #include "core/interfaces/shaderregistry.h"
-#include "common/screenidresolver.h"
-#include "common/layoutbundlebuilder.h"
-#include "phosphor_i18n.h"
+#include "dbus/dbushelpers.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
 #include "dbus/overlayadaptor.h"
@@ -198,6 +159,13 @@ void Daemon::initCoreAdaptors()
     // Overlay adaptor - overlay visibility and highlighting
     m_overlayAdaptor = new OverlayAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
                                           m_screenManager.get(), m_settings.get(), this);
+    // A bridge registers only from the compositor's own process, the one the
+    // thumbnail entries are held to, so no other peer can take the
+    // registration first and keep KWin out (#1155). Both adaptors are
+    // children of this daemon and go together.
+    m_compositorBridge->setCompositorIdentityCheck([overlay = m_overlayAdaptor](const QString& busName) {
+        return overlay->isCompositorPeer(busName);
+    });
 
     // PhosphorZones::Zone detection adaptor - zone detection queries
     m_zoneDetectionAdaptor = new ZoneDetectionAdaptor(m_zoneDetector.get(), m_layoutManager.get(),
@@ -224,8 +192,8 @@ void Daemon::initCoreAdaptors()
     });
     // The compositor bridge's screen-form floats act on the window where it
     // is; any other bus caller's are gated as the screenless verb is (F1108).
-    m_windowTrackingAdaptor->setBridgeCallerCheck([this](const QString& busName) {
-        return m_compositorBridge && m_compositorBridge->isBridgeService(busName);
+    m_windowTrackingAdaptor->setBridgeCallerCheck([adaptor = m_windowTrackingAdaptor](const QString& busName) {
+        return DbusHelpers::isBridgeCaller(adaptor, busName);
     });
     // An evacuee on a hidden desktop floats by the mode that desktop runs,
     // decided as the engine screen sets decide it in view (F1122).
@@ -258,8 +226,13 @@ void Daemon::initCoreAdaptors()
     // m_virtualScreenSwapper. One store per process, one change-signal
     // channel, no parallel Settings observer.
     m_screenAdaptor = new PhosphorScreens::DBusScreenAdaptor(m_screenManager.get(), m_virtualScreenStore.get(), this);
+    // Its compositor reports answer to the registered bridge through the same
+    // gate as the daemon's own compositor-only slots (#1155).
+    m_screenAdaptor->setCompositorReportGate([adaptor = m_screenAdaptor](QLatin1StringView member) {
+        return DbusHelpers::admitCompositorReport(adaptor, member);
+    });
 
-    // Window drag adaptor - handles drag events from KWin script
+    // Window drag adaptor - handles drag events from the KWin effect
     // All drag logic (modifiers, zones, snapping) handled here
     m_windowDragAdaptor = new WindowDragAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
                                                 m_screenManager.get(), m_settings.get(), m_windowTrackingAdaptor, this);

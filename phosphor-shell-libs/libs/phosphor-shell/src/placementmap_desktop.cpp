@@ -88,7 +88,7 @@ void PlacementMapScreen::fetchPinnedSnappingLayout()
                                         if (m_mode != Snapping || !isPinned()) {
                                             return;
                                         }
-                                        m_source = parseSnappingLayout(json, m_workArea.size());
+                                        m_source = parseSnappingLayout(json, m_workArea.size(), m_deviceScale);
                                         m_sourceLens = QRectF();
                                         rebuildFromSource();
                                     });

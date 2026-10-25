@@ -3,7 +3,9 @@
 
 /**
  * @file test_layout_core.cpp
- * @brief Unit tests for PhosphorZones::Layout dirty tracking, batch modify, per-side gaps, clone()
+ * @brief Unit tests for PhosphorZones::Layout dirty tracking, batch modify, per-side gaps, clone(),
+ * aspect-ratio classification, the fixed-zone reference geometry, fixed geometry counted in device
+ * pixels (issue #1160), and the LayoutSettingsStore split of per-layout settings
  */
 
 #include <QTest>
@@ -20,8 +22,12 @@
 #include "core/types/constants.h"
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/LayoutSettingsStore.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/Zone.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
+#include <PhosphorZones/ZonesLayoutSource.h>
 
 using namespace PlasmaZones;
 using PhosphorLayout::AspectRatioClass;
@@ -149,6 +155,18 @@ private Q_SLOTS:
         layout.clearDirty();
         layout.setAllowedActivities({QStringLiteral("{activity-uuid}")});
         QVERIFY2(layout.isDirty(), "setAllowedActivities did not mark the layout modified");
+
+        // The fixed-geometry unit is hand-written too, and it notifies only on
+        // a real change: setting the value it already holds is no edit.
+        QSignalSpy unitSpy(&layout, &PhosphorZones::Layout::fixedGeometryInDevicePixelsChanged);
+        layout.clearDirty();
+        layout.setFixedGeometryInDevicePixels(true);
+        QVERIFY2(layout.isDirty(), "setFixedGeometryInDevicePixels did not mark the layout modified");
+        QCOMPARE(unitSpy.count(), 1);
+        layout.clearDirty();
+        layout.setFixedGeometryInDevicePixels(true);
+        QVERIFY2(!layout.isDirty(), "setting the unit it already has marked the layout modified");
+        QCOMPARE(unitSpy.count(), 1);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -189,6 +207,22 @@ private Q_SLOTS:
 
         layout.endBatchModify();
         QCOMPARE(modifiedSpy.count(), 1);
+    }
+
+    // A batch that edits nothing announces nothing, even on a layout an
+    // earlier, unsaved edit left dirty: the async geometry apply runs in a
+    // batch on every recalculation and must not re-announce that edit (F427).
+    void testLayout_batchModify_emptyBatchOnADirtyLayoutIsSilent()
+    {
+        PhosphorZones::Layout layout(QStringLiteral("Test"));
+        layout.setName(QStringLiteral("A"));
+        QVERIFY(layout.isDirty());
+        QSignalSpy modifiedSpy(&layout, &PhosphorZones::Layout::layoutModified);
+
+        layout.beginBatchModify();
+        layout.endBatchModify();
+
+        QCOMPARE(modifiedSpy.count(), 0);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -596,6 +630,220 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Fixed geometry in device pixels (issue #1160)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // At 125% the logical screen is 6144x1728. Counted in device pixels, the
+    // zones are divided by the scale and fill it exactly: 819.2 + 3072 +
+    // 2252.8. Counted in logical pixels (the default, and every older layout)
+    // the same numbers are used as they are and overflow it.
+    void testLayout_fixedDevicePixels_divideByTheScale()
+    {
+        const QRectF logicalScreen(0, 0, 6144, 1728);
+        const std::unique_ptr<PhosphorZones::Layout> device = makeUltrawideLayout(true);
+        device->recalculateZoneGeometries(logicalScreen, 1.25);
+        QCOMPARE(device->zones().at(0)->geometry(), QRectF(0, 0, 819.2, 1728));
+        QCOMPARE(device->zones().at(1)->geometry(), QRectF(819.2, 0, 3072, 1728));
+        QCOMPARE(device->zones().at(2)->geometry(), QRectF(3891.2, 0, 2252.8, 1728));
+        // Measured in logical units, the zones fit the screen they fill.
+        QCOMPARE(device->fixedZoneBoundingBox(), QRectF(0, 0, 6144, 1728));
+        QCOMPARE(device->fixedZoneReferenceGeometry(), logicalScreen);
+        QCOMPARE(device->zones().at(2)->normalizedGeometry(logicalScreen, 1.25).right(), 1.0);
+
+        // On a secondary monitor the screen rect carries an origin the
+        // origin-anchored bounding box does not, so the two differ. The zones
+        // still fit, and the screen, origin included, stays the reference
+        // rather than the bounding box.
+        const QRectF secondScreen(6144, 0, 6144, 1728);
+        const std::unique_ptr<PhosphorZones::Layout> onSecond = makeUltrawideLayout(true);
+        onSecond->recalculateZoneGeometries(secondScreen, 1.25);
+        QCOMPARE(onSecond->zones().at(1)->geometry(), QRectF(6144 + 819.2, 0, 3072, 1728));
+        QVERIFY(onSecond->fixedZoneBoundingBox() != secondScreen);
+        QCOMPARE(onSecond->fixedZoneReferenceGeometry(), secondScreen);
+
+        const std::unique_ptr<PhosphorZones::Layout> logical = makeUltrawideLayout(false);
+        logical->recalculateZoneGeometries(logicalScreen, 1.25);
+        QCOMPARE(logical->zones().at(2)->geometry(), QRectF(4864, 0, 2816, 2160));
+        QCOMPARE(logical->fixedZoneReferenceGeometry(), QRectF(0, 0, 7680, 2160));
+    }
+
+    // The scale is a recalculation input for a device-pixel layout only, and
+    // the unit flag itself invalidates the zones at an unchanged screen.
+    void testLayout_fixedDevicePixels_scaleIsARecalcInput()
+    {
+        const QRectF screen(0, 0, 6144, 1728);
+        const std::unique_ptr<PhosphorZones::Layout> device = makeUltrawideLayout(true);
+        device->recalculateZoneGeometries(screen, 1.25);
+        QVERIFY(!device->needsRecalc(screen, 1.25));
+        QVERIFY(device->needsRecalc(screen, 1.5));
+        // Zero means "no scale known": the rect and zone set decide alone.
+        QVERIFY(!device->needsRecalc(screen));
+        device->recalculateZoneGeometries(screen, 1.5);
+        QCOMPARE(device->zones().at(0)->geometry().width(), 1024 / 1.5);
+
+        const std::unique_ptr<PhosphorZones::Layout> logical = makeUltrawideLayout(false);
+        logical->recalculateZoneGeometries(screen, 1.25);
+        QVERIFY(!logical->needsRecalc(screen, 2.0));
+
+        logical->setFixedGeometryInDevicePixels(true);
+        QVERIFY(logical->needsRecalc(screen, 1.25));
+        logical->recalculateZoneGeometries(screen, 1.25);
+        QCOMPARE(logical->zones().at(0)->geometry().width(), 819.2);
+    }
+
+    // A recalculation the scale cannot change still records the scale it was
+    // asked at, so a logical layout flipped to device pixels later divides by
+    // the output's current scale and not one from an older pass (F206).
+    void testLayout_fixedDevicePixels_noOpRecalcStillRecordsTheScale()
+    {
+        const QRectF screen(0, 0, 6144, 1728);
+        const std::unique_ptr<PhosphorZones::Layout> layout = makeUltrawideLayout(false);
+        layout->recalculateZoneGeometries(screen, 1.0);
+        layout->recalculateZoneGeometries(screen, 1.25);
+        QCOMPARE(layout->lastRecalcScale(), 1.25);
+
+        layout->setFixedGeometryInDevicePixels(true);
+        QCOMPARE(layout->fixedZoneBoundingBox(), QRectF(0, 0, 6144, 1728));
+    }
+
+    // A caller projecting a device-pixel layout onto its own output passes
+    // that output's scale with its rect. The layout was last recalculated on
+    // another output at 200%, and dividing by that scale against the caller's
+    // rect gives the middle zone 1920 / 6144 = 0.3125 instead of 3840 / 1.25 /
+    // 6144 = 0.5. With no rect of the caller's own, the layout's cached frame
+    // answers, rect and scale together, and a caller scale is not paired with
+    // it (F130).
+    void testLayout_fixedDevicePixels_projectionTakesTheCallersScale()
+    {
+        namespace K = ::PhosphorZones::ZoneJsonKeys;
+        const std::unique_ptr<PhosphorZones::Layout> device = makeUltrawideLayout(true);
+        device->recalculateZoneGeometries(QRectF(0, 0, 2560, 1440), 2.0);
+        const auto middleWidth = [](const QVariantList& zones) {
+            return zones.at(1).toMap().value(K::RelativeGeometry).toMap().value(K::Width).toDouble();
+        };
+
+        const QVariantList onCaller = PhosphorZones::LayoutUtils::zonesToVariantList(
+            device.get(), PhosphorZones::ZoneField::Minimal, QRectF(0, 0, 6144, 1728), 1.25);
+        QCOMPARE(onCaller.size(), 3);
+        QCOMPARE(middleWidth(onCaller), 0.5);
+
+        const QVariantList cached = PhosphorZones::LayoutUtils::zonesToVariantList(
+            device.get(), PhosphorZones::ZoneField::Minimal, QRectF(), 1.25);
+        QCOMPARE(cached.size(), 3);
+        QCOMPARE(middleWidth(cached), 0.75);
+
+        const PhosphorLayout::LayoutPreview preview =
+            PhosphorZones::previewFromLayout(device.get(), QSize(6144, 1728), 1.25);
+        QCOMPARE(preview.zones.size(), 3);
+        QCOMPARE(preview.zones.at(1).width(), 0.5);
+    }
+
+    // A device-pixel box that exactly fills the output lands a rounding error
+    // past the logical rect once divided by a fractional scale (2560 / 1.15 is
+    // 2226.09 against a 2226 wide screen). That is a fit, not an overflow, so
+    // the screen stays the reference (F261).
+    void testLayout_fixedDevicePixels_fractionalScaleFillStillFits()
+    {
+        const QRectF screen(0, 0, 2226, 1252);
+        PhosphorZones::Layout layout(QStringLiteral("Fractional"));
+        layout.setFixedGeometryInDevicePixels(true);
+        auto* zone = new PhosphorZones::Zone();
+        zone->setGeometryMode(PhosphorZones::ZoneGeometryMode::Fixed);
+        zone->setFixedGeometry(QRectF(0, 0, 2560, 1440));
+        layout.addZone(zone);
+
+        layout.recalculateZoneGeometries(screen, 1.15);
+
+        QVERIFY(layout.fixedZoneBoundingBox().width() > screen.width());
+        QCOMPARE(layout.fixedZoneReferenceGeometry(), screen);
+    }
+
+    // The flag survives the JSON round trip and clone(), is written only when
+    // set, and an absent key reads as logical pixels.
+    void testLayout_fixedDevicePixels_serializesAndClones()
+    {
+        const std::unique_ptr<PhosphorZones::Layout> device = makeUltrawideLayout(true);
+        const QJsonObject json = device->toJson();
+        QVERIFY(json.value(QLatin1String("fixedGeometryInDevicePixels")).toBool());
+        std::unique_ptr<PhosphorZones::Layout> loaded(PhosphorZones::Layout::fromJson(json));
+        QVERIFY(loaded && loaded->fixedGeometryInDevicePixels());
+        std::unique_ptr<PhosphorZones::Layout> copy(device->clone());
+        QVERIFY(copy->fixedGeometryInDevicePixels());
+
+        const std::unique_ptr<PhosphorZones::Layout> logical = makeUltrawideLayout(false);
+        const QJsonObject logicalJson = logical->toJson();
+        QVERIFY(!logicalJson.contains(QLatin1String("fixedGeometryInDevicePixels")));
+        std::unique_ptr<PhosphorZones::Layout> loadedLogical(PhosphorZones::Layout::fromJson(logicalJson));
+        QVERIFY(loadedLogical && !loadedLogical->fixedGeometryInDevicePixels());
+    }
+
+    // The relativeGeometry hint toJson writes beside a fixed zone's pixels is
+    // normalized in the units of the last recalculation. toJson passes no
+    // scale, so the zone falls back to the layout's lastRecalcScale(): the
+    // middle zone is 3072 of the 6144 logical pixels at 125%, half the screen,
+    // not the 3840 / 6144 its raw numbers would give.
+    void testLayout_fixedDevicePixels_relativeHintUsesTheRecalcScale()
+    {
+        const QRectF logicalScreen(0, 0, 6144, 1728);
+        const std::unique_ptr<PhosphorZones::Layout> device = makeUltrawideLayout(true);
+        device->recalculateZoneGeometries(logicalScreen, 1.25);
+        const QJsonArray zones = device->toJson().value(QLatin1String("zones")).toArray();
+        QCOMPARE(zones.size(), 3);
+        const QJsonObject middle = zones.at(1).toObject().value(QLatin1String("relativeGeometry")).toObject();
+        QCOMPARE(middle.value(QLatin1String("x")).toDouble(), 819.2 / 6144.0);
+        QCOMPARE(middle.value(QLatin1String("width")).toDouble(), 0.5);
+        QCOMPARE(middle.value(QLatin1String("height")).toDouble(), 1.0);
+        const QJsonObject last = zones.at(2).toObject().value(QLatin1String("relativeGeometry")).toObject();
+        QCOMPARE(last.value(QLatin1String("x")).toDouble() + last.value(QLatin1String("width")).toDouble(), 1.0);
+    }
+
+    // The off-thread path: the service snapshots the divisor, the worker
+    // resolves with it, and the applied result lands on the same rects as the
+    // in-place recalculation at the same screen and scale. A later request
+    // that passes no scale keeps the one the layout was last laid out at.
+    void testLayout_fixedDevicePixels_workerPathDivides()
+    {
+        const QRectF screen(100, 50, 6144, 1728);
+        const std::unique_ptr<PhosphorZones::Layout> inPlace = makeUltrawideLayout(true);
+        inPlace->recalculateZoneGeometries(screen, 1.25);
+
+        const std::unique_ptr<PhosphorZones::Layout> device = makeUltrawideLayout(true);
+        PhosphorZones::LayoutComputeService service;
+        QSignalSpy computed(&service, &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration);
+        QVERIFY(service.requestRecalculate(device.get(), QStringLiteral("DP-1"), screen, 1.25));
+        QTRY_COMPARE(computed.size(), 1);
+        for (int i = 0; i < device->zoneCount(); ++i) {
+            QCOMPARE(device->zones().at(i)->geometry(), inPlace->zones().at(i)->geometry());
+        }
+        QCOMPARE(device->zones().at(1)->geometry(), QRectF(100 + 819.2, 50, 3072, 1728));
+        QCOMPARE(device->lastRecalcScale(), 1.25);
+
+        const QRectF moved(0, 0, 6144, 1728);
+        QVERIFY(service.requestRecalculate(device.get(), QStringLiteral("DP-1"), moved));
+        QTRY_COMPARE(computed.size(), 2);
+        QCOMPARE(device->zones().at(1)->geometry(), QRectF(819.2, 0, 3072, 1728));
+        QCOMPARE(device->lastRecalcScale(), 1.25);
+    }
+
+    // The static resolver the worker calls takes the divisor itself, and a
+    // divisor that is no scale at all, zero or negative, reads as logical.
+    void testLayout_fixedDevicePixels_workerHelperDivides()
+    {
+        const QRectF rect = PhosphorZones::Zone::computeAbsoluteGeometry(PhosphorZones::ZoneGeometryMode::Fixed,
+                                                                         QRectF(), QRectF(1024, 0, 3840, 2160),
+                                                                         QRectF(100, 50, 6144, 1728), 1.25);
+        QCOMPARE(rect, QRectF(100 + 819.2, 50, 3072, 1728));
+        const QRectF atZero =
+            PhosphorZones::Zone::computeAbsoluteGeometry(PhosphorZones::ZoneGeometryMode::Fixed, QRectF(),
+                                                         QRectF(1024, 0, 3840, 2160), QRectF(0, 0, 6144, 1728), 0.0);
+        QCOMPARE(atZero, QRectF(1024, 0, 3840, 2160));
+        const QRectF atNegative =
+            PhosphorZones::Zone::computeAbsoluteGeometry(PhosphorZones::ZoneGeometryMode::Fixed, QRectF(),
+                                                         QRectF(1024, 0, 3840, 2160), QRectF(0, 0, 6144, 1728), -1.25);
+        QCOMPARE(atNegative, QRectF(1024, 0, 3840, 2160));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // LayoutSettingsStore: per-layout settings split out of the layout file
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -775,6 +1023,22 @@ private Q_SLOTS:
     }
 
 private:
+    // The layout of issue #1160: three fixed zones that fill a 7680x2160 panel
+    // in its own pixels, 1024 + 3840 + 2816.
+    static std::unique_ptr<PhosphorZones::Layout> makeUltrawideLayout(bool devicePixels)
+    {
+        auto layout = std::make_unique<PhosphorZones::Layout>(QStringLiteral("Ultrawide"));
+        layout->setFixedGeometryInDevicePixels(devicePixels);
+        const QList<QRectF> rects{QRectF(0, 0, 1024, 2160), QRectF(1024, 0, 3840, 2160), QRectF(4864, 0, 2816, 2160)};
+        for (const QRectF& rect : rects) {
+            auto* z = new PhosphorZones::Zone();
+            z->setGeometryMode(PhosphorZones::ZoneGeometryMode::Fixed);
+            z->setFixedGeometry(rect);
+            layout->addZone(z);
+        }
+        return layout;
+    }
+
     // Build a full layout JSON (as Layout::toJson would) carrying both structural
     // data and per-layout settings, including one zone with a custom appearance.
     QJsonObject makeFullLayoutWithSettings() const

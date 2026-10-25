@@ -6,12 +6,14 @@
 // a drag float, the shell placement map) and announces PASSIVE, so the daemon
 // floats the window where it is. The user float verbs (Meta+F, move to
 // floating, move to tiling) announce ACTIVE, so the daemon still restores the
-// float-back and shows the OSD.
+// float-back and shows the OSD. The oversized verdict, a float the engine
+// decides on its own, announces PASSIVE too.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 
 #include "scrollstriptestutils.h"
+#include "scrollstubsettings.h"
 
 #include <QSignalSpy>
 #include <QtTest>
@@ -113,6 +115,59 @@ private Q_SLOTS:
         QCOMPARE(active.at(0).at(0).toString(), kB);
         QCOMPARE(active.at(0).at(1).toBool(), true);
         QCOMPARE(active.at(1).at(1).toBool(), false);
+    }
+
+    // The oversized verdict is the engine's decision, not the user's, so it
+    // announces PASSIVE: the daemon floats the window where it is, with no
+    // OSD and no restore to a free geometry its client already refused. A
+    // minimum the client pins past the work area after mapping is one way in.
+    void anOversizedMinimumFloatIsPassive()
+    {
+        QObject owner;
+        ScrollEngine* engine = threeColumns(&owner);
+        QSignalSpy passive(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+        QSignalSpy active(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+        const QSize oversized = ScrollTestUtils::Ax::t(QSize(ScrollTestUtils::kMainExtent + 100, 0));
+        engine->windowMinSizeUpdated(kB, oversized.width(), oversized.height());
+        QVERIFY(engine->isWindowFloatingInScroll(kB));
+
+        QCOMPARE(active.count(), 0);
+        QCOMPARE(passive.count(), 1);
+        QCOMPARE(passive.at(0).at(0).toString(), kB);
+        QCOMPARE(passive.at(0).at(1).toBool(), true);
+    }
+
+    // ...and a client that answers its column wider than the work area is the
+    // other, through reportCommittedSize. Minimum sizes are respected, the
+    // setting the committed floor rides.
+    void aCommittedOverflowFloatIsPassive()
+    {
+        QObject owner;
+        auto* settings = new ScrollTestUtils::StubScrollSettings(&owner);
+        settings->respectMinimumSize = true;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kScreen});
+        engine->setEngineSettings(settings);
+        engine->refreshConfigFromSettings();
+        for (const QString& id : {kA, kB, kC}) {
+            engine->windowOpened(id, kScreen, 0, 0);
+        }
+        engine->windowFocused(kB, kScreen);
+        QCoreApplication::processEvents();
+        const QRect offered = engine->lastManagedRect(kB);
+        QVERIFY2(offered.isValid(), "precondition: b holds an applied tile to answer");
+        QSignalSpy passive(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+        QSignalSpy active(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+        engine->reportCommittedSize(
+            kB, offered.size(),
+            ScrollTestUtils::Ax::t(QSize(ScrollTestUtils::kMainExtent + 100, ScrollTestUtils::Ax::crossLen(offered))));
+        QVERIFY(engine->isWindowFloatingInScroll(kB));
+
+        QCOMPARE(active.count(), 0);
+        QCOMPARE(passive.count(), 1);
+        QCOMPARE(passive.at(0).at(0).toString(), kB);
+        QCOMPARE(passive.at(0).at(1).toBool(), true);
     }
 };
 

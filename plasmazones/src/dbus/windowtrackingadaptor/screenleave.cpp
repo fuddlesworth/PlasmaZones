@@ -17,6 +17,7 @@
 #include "internal.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
@@ -87,6 +88,32 @@ QString resolveReportedScreen(PhosphorScreens::ScreenManager* mgr, const QString
         }
     }
     return reported;
+}
+
+/// @p record, read before anything was released, names the screen the window
+/// left: every engine's slot there goes, @p arrival's excepted, or a reopen or
+/// a mode switch on the new monitor would read a tile or a float of the old
+/// one (F673). The tiling seeds read their slot's float verdict whatever
+/// screen the record names. A record for an output that went away is the
+/// evacuee park's.
+void releaseSlotsLeftBehind(PhosphorPlacement::WindowTrackingService* service, const QString& windowId,
+                            const std::optional<PhosphorEngine::WindowPlacement>& record, const QString& keepScreenId,
+                            const PhosphorEngine::IPlacementEngine* arrival)
+{
+    if (!service || !record) {
+        return;
+    }
+    PhosphorScreens::ScreenManager* mgr = service->screenManager();
+    const QString recordPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(record->screenId);
+    if (recordPhysical.isEmpty() || PhosphorScreens::ScreenIdentity::screensMatch(record->screenId, keepScreenId)
+        || !mgr || !mgr->physicalScreenFor(recordPhysical).isValid()) {
+        return;
+    }
+    for (auto it = record->engines.cbegin(); it != record->engines.cend(); ++it) {
+        if (!arrival || it.key() != arrival->engineId()) {
+            service->releaseEngineSlot(windowId, it.key());
+        }
+    }
 }
 
 } // namespace
@@ -161,6 +188,9 @@ void WindowTrackingAdaptor::releaseLeftScreens(const QString& windowId, const QS
 void WindowTrackingAdaptor::windowCrossedScreens(const QString& windowId, const QString& fromScreenId,
                                                  const QString& toScreenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!m_service || !validateWindowId(windowId, QStringLiteral("crossed screens"))) {
         return;
     }
@@ -199,22 +229,7 @@ void WindowTrackingAdaptor::windowCrossedScreens(const QString& windowId, const 
     const auto record = m_service->placementStore().peekExact(canonical);
 
     releaseLeftScreens(windowId, resolved, arrival);
-
-    // The record names the screen the window left: every engine's slot there
-    // goes, the arriving engine's excepted, or a reopen or a mode switch on the
-    // new monitor would read a tile or a float of the old one (F673). A record
-    // for an output that went away is the evacuee park's.
-    if (record) {
-        const QString recordPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(record->screenId);
-        if (!recordPhysical.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(record->screenId, resolved)
-            && mgr && mgr->physicalScreenFor(recordPhysical).isValid()) {
-            for (auto it = record->engines.cbegin(); it != record->engines.cend(); ++it) {
-                if (!arrival || it.key() != arrival->engineId()) {
-                    m_service->releaseEngineSlot(windowId, it.key());
-                }
-            }
-        }
-    }
+    releaseSlotsLeftBehind(m_service, windowId, record, resolved, arrival);
     qCInfo(lcDbusWindow) << "windowCrossedScreens:" << windowId << "from" << fromScreenId << "to" << resolved
                          << "arrival" << (arrival ? arrival->engineId() : QString());
     if (heldSnap) {
@@ -223,6 +238,29 @@ void WindowTrackingAdaptor::windowCrossedScreens(const QString& windowId, const 
                                                                      QStringLiteral("screen_changed"), QStringList{},
                                                                      false});
     }
+}
+
+std::optional<QSize> WindowTrackingAdaptor::preSnapSizeOn(const QString& windowId, const QString& screenId) const
+{
+    if (!m_service) {
+        return std::nullopt;
+    }
+    if (const auto here = m_service->validatedUnmanagedGeometry(windowId, screenId)) {
+        return here->size();
+    }
+    const auto own = m_service->placementStore().peekExact(windowId);
+    const QRect elsewhere = own ? own->anyFreeGeometry() : QRect();
+    if (!elsewhere.isValid()) {
+        return std::nullopt;
+    }
+    QSize size = elsewhere.size();
+    // An unresolvable screen answers an invalid rect, whose 0x0 size would
+    // bound the size to nothing.
+    const QRect available = m_service->screenAvailableGeometry(screenId);
+    if (available.isValid() && !available.isEmpty()) {
+        size = size.boundedTo(available.size());
+    }
+    return size;
 }
 
 bool WindowTrackingAdaptor::dragEndedOnScreen(const QString& windowId, const QString& releaseScreenId,
@@ -250,11 +288,12 @@ bool WindowTrackingAdaptor::dragEndedOnScreen(const QString& windowId, const QSt
     }
     const QString sourceScreen = !zoneScreen.isEmpty() ? zoneScreen : trackedScreen;
     const bool wasSnapped = !WindowTrackingInternal::snapZoneScreen(snap, windowId, QString()).isEmpty();
-    // The pre-snap size, read before the release consumes the source screen's
-    // memory: the window keeps where it was dropped and gets back its size.
-    std::optional<QRect> preSnapGeo;
+    // The pre-snap size on the RELEASE monitor, the rule the activated drop
+    // follows too (preSnapSizeOn), read before the move below runs: the
+    // window keeps where it was dropped and gets back its size.
+    std::optional<QSize> preSnapSize;
     if (wasSnapped && shouldRestoreSizeOnUnsnap(windowId)) {
-        preSnapGeo = m_service->validatedUnmanagedGeometry(windowId, sourceScreen);
+        preSnapSize = preSnapSizeOn(windowId, releaseScreenId);
     }
     qCInfo(lcDbusWindow) << "dragEndedOnScreen:" << windowId << "dropped on" << releaseScreenId << "from"
                          << sourceScreen;
@@ -274,11 +313,12 @@ bool WindowTrackingAdaptor::dragEndedOnScreen(const QString& windowId, const QSt
         snap->handoffReceive(ctx);
         captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
     }
-    if (preSnapGeo && preSnapGeo->width() > 0 && preSnapGeo->height() > 0) {
-        Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapGeo->width(), preSnapGeo->height(), QString(),
+    if (preSnapSize && preSnapSize->width() > 0 && preSnapSize->height() > 0) {
+        Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapSize->width(), preSnapSize->height(), QString(),
                                       releaseScreenId, true,
                                       static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
-        m_service->clearFreeGeometry(windowId, sourceScreen);
+        // Consume-once on the release screen, as the activated drop does.
+        m_service->clearFreeGeometry(windowId, releaseScreenId);
     }
     return true;
 }
@@ -302,10 +342,11 @@ bool WindowTrackingAdaptor::dragEndedOnTilingScreen(PhosphorEngine::PlacementEng
     const QString snapScreen = WindowTrackingInternal::snapZoneScreen(snap, windowId, releaseScreenId);
     const bool heldSnap =
         !snapScreen.isEmpty() || WindowTrackingInternal::snapHoldsOffScreen(snap, windowId, releaseScreenId);
-    // The pre-snap size, read before the release consumes that screen's memory.
-    std::optional<QRect> preSnapGeo;
+    // The pre-snap size on the release monitor, bounded to it
+    // (preSnapSizeOn), read before the adoption below runs.
+    std::optional<QSize> preSnapSize;
     if (!snapScreen.isEmpty() && shouldRestoreSizeOnUnsnap(windowId)) {
-        preSnapGeo = m_service->validatedUnmanagedGeometry(windowId, snapScreen);
+        preSnapSize = preSnapSizeOn(windowId, releaseScreenId);
     }
     PhosphorEngine::IPlacementEngine::HandoffContext ctx;
     ctx.windowId = windowId;
@@ -330,11 +371,11 @@ bool WindowTrackingAdaptor::dragEndedOnTilingScreen(PhosphorEngine::PlacementEng
                                                                      false});
     }
     captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
-    if (preSnapGeo && preSnapGeo->width() > 0 && preSnapGeo->height() > 0) {
-        Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapGeo->width(), preSnapGeo->height(), QString(),
+    if (preSnapSize && preSnapSize->width() > 0 && preSnapSize->height() > 0) {
+        Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapSize->width(), preSnapSize->height(), QString(),
                                       releaseScreenId, true,
                                       static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
-        m_service->clearFreeGeometry(windowId, snapScreen);
+        m_service->clearFreeGeometry(windowId, releaseScreenId);
     }
     return true;
 }
@@ -351,6 +392,9 @@ void WindowTrackingAdaptor::announceOutputMove(const QString& windowId, const QS
 
 void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const QString& newScreenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!m_service)
         return;
     if (!validateWindowId(windowId, QStringLiteral("screen changed"))) {
@@ -381,6 +425,10 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         });
         return;
     }
+
+    // Read before anything below releases: the record still names the screen
+    // the window left, which is what decides whether its slots are stale.
+    const auto record = m_service->placementStore().peekExact(shadowWindowId(windowId));
 
     // A tiling hold the window keeps on the screen it left (a background
     // desktop's tile or column of a multi-desktop window) is stale memory, on
@@ -450,6 +498,12 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         if (WindowTrackingInternal::guardedHandoff(source, dest, ctx, trackedScreen)) {
             qCInfo(lcDbusWindow) << "windowScreenChanged: floating window" << windowId << "moved from" << trackedScreen
                                  << "to" << resolved << "- handoff complete";
+            // The receive moved only the float. Every other engine's slot on
+            // the monitor left goes, and the leave hook runs, as they do for a
+            // crossing between tiling screens (windowCrossedScreens): a later
+            // mode switch here would otherwise seed the old screen's verdict.
+            releaseLeftScreens(windowId, resolved, dest);
+            releaseSlotsLeftBehind(m_service, windowId, record, resolved, dest);
             // The record is re-captured now, without the home the receive
             // dropped: an unfloat before the next save would otherwise
             // re-derive it from the record. The float relay dedups on the
@@ -478,10 +532,10 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         snappedInView ? storedScreen : WindowTrackingInternal::snapZoneScreen(snap, windowId, resolved);
     if (heldScreen.isEmpty()) {
         // Free: only residue to release (an adopted membership with no zone,
-        // a floating one on another desktop, a pre-float home).
-        if (snap) {
-            snap->releaseWindowOffScreen(windowId, resolved);
-        }
+        // a floating one on another desktop, a pre-float home, and every
+        // engine's slot on the monitor left).
+        releaseLeftScreens(windowId, resolved, nullptr);
+        releaseSlotsLeftBehind(m_service, windowId, record, resolved, nullptr);
         return;
     }
 
@@ -499,6 +553,10 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     // The record's snap slot goes too, or the next restore or resnap reads
     // A's zone from it and applies it on B.
     m_service->releaseEngineSlot(windowId, PhosphorEngine::WindowPlacement::snapEngineId());
+    // And so does every other engine's slot on A, with the leave hook, or a
+    // mode switch on B seeds A's tiling float verdict.
+    releaseLeftScreens(windowId, resolved, nullptr);
+    releaseSlotsLeftBehind(m_service, windowId, record, resolved, nullptr);
 
     // Report the resolved (effective) screen, the same value the decision and
     // log above use, not the raw newScreenId.

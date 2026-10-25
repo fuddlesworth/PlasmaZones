@@ -10,10 +10,12 @@
 
 #include "settingscontroller.h"
 
+#include "common/daemonscreenscale.h"
 #include "common/layoutpreviewserialize.h"
 #include "config/configdefaults.h"
 #include "core/utils/geometryutils.h"
 #include "core/platform/logging.h"
+#include "core/types/constants.h"
 #include "core/utils/utils.h"
 #include "phosphor_i18n.h"
 #include "settings/rules/ruleauthoring.h"
@@ -30,6 +32,7 @@
 #include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -37,8 +40,11 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QScreen>
 #include <QUrl>
 #include <QUuid>
+
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -259,6 +265,14 @@ void SettingsController::recalcLocalLayouts()
     if (!primary) {
         return;
     }
+    // A layout counting fixed sizes in device pixels is laid out at the
+    // output's logical scale; without it, its pixels are previewed as logical
+    // ones. The scale is the one refreshPrimaryScreenScale cached, because
+    // this runs on every local reload and must not block on the daemon. Zero
+    // until the daemon has answered for the current primary screen, which
+    // recalculateSync reads as "keep the layout's last scale".
+    const qreal primaryScale =
+        PhosphorScreens::ScreenIdentity::identifierFor(primary) == m_primaryScreenScaleId ? m_primaryScreenScale : 0.0;
     for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
         if (!layout) {
             continue;
@@ -267,8 +281,47 @@ void SettingsController::recalcLocalLayouts()
         // nullptr and accept the Qt-availableGeometry fallback (this preview code
         // path doesn't need VS-aware sub-regions).
         PhosphorZones::LayoutComputeService::recalculateSync(
-            layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
+            layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary), primaryScale);
     }
+}
+
+void SettingsController::refreshPrimaryScreenScale()
+{
+    // Numbered before the early return, so a request made while there is no
+    // primary screen still retires any older one still in flight.
+    const quint64 request = ++m_primaryScreenScaleRequest;
+    QScreen* primary = Utils::primaryScreen();
+    const QString screenId = primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
+    if (screenId.isEmpty()) {
+        return;
+    }
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Screen,
+                                                   QStringLiteral("getScreenInfo"), {screenId}),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, request, screenId](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (request != m_primaryScreenScaleRequest) {
+            return;
+        }
+        // A failed or implausible reply keeps the last good scale, the same
+        // "keep what you had" the recalc applies to a zero one.
+        const qreal scale = parseDaemonScreenScale(w->reply(), screenId);
+        if (scale <= 0.0 || (screenId == m_primaryScreenScaleId && scale == m_primaryScreenScale)) {
+            return;
+        }
+        m_primaryScreenScaleId = screenId;
+        m_primaryScreenScale = scale;
+        // The reload runs recalcLocalLayouts again with the new scale and
+        // republishes the cards. Only a device-pixel layout reads the scale,
+        // so any other change leaves nothing to redo.
+        const auto layouts = m_localLayoutManager ? m_localLayoutManager->layouts() : QVector<PhosphorZones::Layout*>();
+        if (std::any_of(layouts.cbegin(), layouts.cend(), [](const PhosphorZones::Layout* layout) {
+                return layout && layout->fixedGeometryInDevicePixels();
+            })) {
+            scheduleLayoutLoad();
+        }
+    });
 }
 
 void SettingsController::createNewLayout()

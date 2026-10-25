@@ -142,24 +142,24 @@ public:
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
 
     /**
-     * @brief Predicate consulted on the auto-snap entry path to suppress
-     *        zone restores onto a context the user disabled.
+     * @brief Predicate deciding whether snapping may place a window on
+     *        (@p screenId, @p desktop), so nothing is placed in a context the
+     *        user disabled snapping for.
      *
      * True if the context is active for snap mode. The daemon injects it (the
      * engine library is settings-agnostic); its closure reads the current
-     * activity itself. Applied by, among others, resolveWindowRestore, the
-     * desktop carry, the adoption's remembered-zone restore, the membership
-     * re-apply, the layout-switch resnap, the rotation and the landing of a
-     * keyboard move or swap (#461 item 7, F445, F208). Unset, every context is active.
+     * activity itself. Asked for the desktop a restore puts the window ONTO
+     * (not always the one the screen shows), the context a SnapToZone rule
+     * targets, or the opening screen's current desktop for the auto-snap
+     * levels. Applied by, among others, resolveWindowRestore, the desktop
+     * carry, the adoption's remembered-zone restore, the membership re-apply,
+     * the layout-switch resnap, the rotation and the landing of a keyboard
+     * move or swap (#461 item 7, F445, F208). Unset, every context is active.
      */
-    /// Answers whether snapping may place a window on (@p screenId, @p desktop):
-    /// the desktop a restore puts it ONTO (not always the one the screen shows),
-    /// the context a SnapToZone rule targets, or the opening screen's current
-    /// desktop for the auto-snap levels.
     using ShouldRestorePredicate = std::function<bool(const QString& screenId, int desktop)>;
 
     /**
-     * @brief Inject the auto-snap-restore gate. See ShouldRestorePredicate.
+     * @brief Inject the disabled-context placement gate. See ShouldRestorePredicate.
      *
      * Ownership: the caller keeps any captured state valid for the engine's lifetime. To detach safely, clear
      * via `setShouldRestorePredicate({})` before destroying the captured object.
@@ -208,9 +208,15 @@ public:
      *
      * When it returns false the stored snap is not re-applied and the window
      * falls through to the auto-snap chain, as a disabled-context rejection
-     * does. When UNSET (default) snapped records restore unconditionally, the
-     * behaviour unit tests rely on. Independent of @ref ShouldRestorePredicate
-     * (the disabled-context gate); both must opt in.
+     * does. It governs every zone the record remembers, not only the restore
+     * desktop's: a FLOATED record's zones on its other desktops are seeded into
+     * their stores only when it opts in, and a decline, on either leg, forgets
+     * every per-desktop zone the record keeps. The forget is durable, so the
+     * adoption on a first visit to another of the window's desktops does not
+     * put the declined zone back either. Asked only where the record remembers
+     * a zone. When UNSET (default) snapped records restore unconditionally,
+     * the behaviour unit tests rely on. Independent of
+     * @ref ShouldRestorePredicate (the disabled-context gate); both must opt in.
      */
     using ManagedRestorePredicate = std::function<bool(const QString& windowId)>;
 
@@ -376,7 +382,11 @@ public:
         Silent
     };
 
-    /// Resnap a switch's populated buffer by zone number into the new layouts.
+    /// Resnap a switch's populated buffer into the new layouts: a window back in
+    /// the layout it was snapped in gets the zones of it that layout still
+    /// holds (a span stays a span), any other window the zone at its primary
+    /// zone's position, or its pre-tile geometry when the new layout has no
+    /// zone there.
     void resnapToNewLayout();
     void resnapToNewLayout(ResnapFeedback feedback);
 
@@ -983,6 +993,11 @@ public:
     /// the screen the navigation verbs act on, the open path's landing screen,
     /// or the drag selector's source screen.
     bool isWindowExcluded(const QString& windowId, const QString& screenHint = QString()) const;
+    /// isWindowExcluded without the minimum-window-size floor: the Exclude rule
+    /// set alone, against the same full query. For a caller that judges the
+    /// floor on a size of its own, as the drag selector does on the size the
+    /// window holds as its own rather than the frame a zone or tile gave it.
+    bool isWindowExcludedByRule(const QString& windowId, const QString& screenHint = QString()) const;
 
 Q_SIGNALS:
     // ── Signals (relayed to the effect by SnapAdaptor and the WTA) ──
@@ -1042,12 +1057,14 @@ private:
     /// first use, seeding it with the shared window registry.
     SnapState* ensureStateForKey(const PhosphorEngine::PlacementStateKey& key);
 
-    /// Invoke @p fn once per (window, store) zone assignment across every snap
-    /// store, with the window's zones, screen and recorded desktop read from
-    /// that store, plus the desktop and activity the STORE is keyed under. The
+    /// Invoke @p fn once per (window, store) zone assignment across the snap
+    /// stores the window is a member of (and the screenless global holder),
+    /// with the window's zones, screen and recorded desktop read from that
+    /// store, plus the desktop and activity the STORE is keyed under. The
     /// engine-side sibling of WindowTrackingService::forEachZoneAssignedWindow,
     /// shared by the resnap and rotation producers. A window held on several
-    /// desktops is visited once per member store. @p fn must not mutate them.
+    /// desktops is visited once per member store, and a leftover in a store it
+    /// is no member of not at all. @p fn must not mutate them.
     void forEachSnapAssignment(
         const std::function<void(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                  int desktop, int storeDesktop, const QString& storeActivity)>& fn) const;
@@ -1066,12 +1083,17 @@ private:
     void collectMembershipWork(const QString& windowId, const QString& screenId,
                                const PhosphorEngine::PlacementStateKey& currentKey,
                                const PhosphorEngine::DesktopSpan& span, QList<PendingMembership>& pending) const;
-    /// @p onlyWindow scopes the re-apply and the activity-carry flush to that
-    /// window (a per-window reconcile); empty is a screen-wide pass.
+    /// @p onlyWindow scopes the re-apply, the activity-carry flush and the owed
+    /// float-backs to that window (a per-window reconcile); empty is a
+    /// screen-wide pass. @p spanOf tells the screen-wide re-apply which windows
+    /// are also shown in another context. Nothing here reads it on a
+    /// per-window pass, which answers an edit of the window's own desktop set,
+    /// not a stay elsewhere.
     PhosphorEngine::MembershipReconcileResult applyMembershipWork(const QString& screenId,
                                                                   const PhosphorEngine::PlacementStateKey& currentKey,
                                                                   const QList<PendingMembership>& pending,
-                                                                  const QString& onlyWindow);
+                                                                  const QString& onlyWindow,
+                                                                  const PhosphorEngine::DesktopSpanQuery& spanOf);
 
     /// migrateWindowToScreen onto an explicit key: a pinned commit or a
     /// cross-desktop handoff lands in exactly the context it names.
@@ -1210,6 +1232,10 @@ private:
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
     /// isWindowExcluded with the query's desktop set to @p desktop (>= 1), for a move not landed yet.
     bool isWindowExcludedAt(const QString& windowId, const QString& screenHint, int desktop) const;
+    /// The query both exclusion paths judge: the provider's full attributes
+    /// when wired, else the appId-only query, with the desktop set to
+    /// @p desktop when it is >= 1.
+    PhosphorRules::WindowQuery exclusionQueryFor(const QString& windowId, const QString& screenHint, int desktop) const;
     /// The windows snapped in @p zoneId on @p screenId in the context it shows, sorted, once each, without
     /// @p excludeWindowId (canonical compare) and without a float that still holds a zone (F182).
     QStringList windowsInZoneInView(const QString& zoneId, const QString& screenId,
@@ -1256,7 +1282,7 @@ private:
     // Last-focused screen (updated by windowFocused)
     QString m_lastActiveScreenId;
 
-    // Auto-snap entry gate. Empty until the daemon wires it; while empty
+    // Disabled-context placement gate. Empty until the daemon wires it; while empty
     // the engine treats every screen as active — preserving the
     // historical default that unit tests rely on. (See the
     // ShouldRestorePredicate doc above and discussion #461 item 7.)
@@ -1277,6 +1303,12 @@ private:
     ExclusionAdmission m_exclusionAdmission{};
     std::unique_ptr<SnapPendingCarries> m_pendingCarries; // created by the first carry left for a hidden context
     ContextModeResolver m_contextModeResolver{};
+    // Every activity setCurrentActivity has put this engine in, less the ones
+    // pruneStatesForActivities removed: the only activities another engine can
+    // have placed a window on every activity in while the daemon ran. The
+    // membership re-apply asks them whether such a window was shown in
+    // another mode's context.
+    QSet<QString> m_enteredActivities;
 };
 
 } // namespace PhosphorSnapEngine

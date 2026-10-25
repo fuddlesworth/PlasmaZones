@@ -144,7 +144,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <signal name="zoneDetected">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a zone is detected at a position."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a zone is detected at a position. It carries the zone's rect on the screen the position was detected on, not on the primary screen."/>
             <arg name="zoneId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
             </arg>

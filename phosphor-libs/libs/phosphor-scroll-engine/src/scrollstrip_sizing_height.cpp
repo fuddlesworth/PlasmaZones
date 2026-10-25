@@ -646,6 +646,24 @@ bool ScrollStrip::setWindowHeightIntent(const QString& windowId, const WindowHei
     return true;
 }
 
+bool ScrollStrip::restateWindowHeightIntent(const QString& windowId, const WindowHeight& height)
+{
+    const int colIdx = columnOfWindow(windowId);
+    if (colIdx < 0) {
+        return false;
+    }
+    // The extent owner as the column holds it before the write. A non-Auto
+    // intent claims a tabbed column through setWindowHeightIntent, and a
+    // remembered intent re-stated on the way back in is not a bid for the
+    // column: claiming would size every tab to the arrival's height. A caller
+    // whose window DID own the column says so through setTabbedHeightOwner.
+    const QString ownerBefore = m_columns.at(colIdx).heightOwnerId;
+    const bool intentChanged = !(windowHeightIntent(windowId) == height);
+    setWindowHeightIntent(windowId, height);
+    m_columns[colIdx].heightOwnerId = ownerBefore;
+    return intentChanged;
+}
+
 bool ScrollStrip::equalizeActiveColumnHeights()
 {
     Column* col = activeColumnMutable();

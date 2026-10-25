@@ -11,12 +11,11 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
 #include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
-#include <QScreen>
+#include "dbus/dbushelpers.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -27,6 +26,9 @@ namespace PlasmaZones {
 void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x, int y, int width, int height,
                                                  const QString& screenId, bool overwrite)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("store pre-tile geometry"))) {
         return;
     }
@@ -73,6 +75,11 @@ bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
 
 void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
 {
+    // The inverse of storePreTileGeometry takes its gate (#1155): another peer
+    // must not wipe every screen's float-back of a window.
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("clear pre-tile geometry"))) {
         return;
     }
@@ -387,51 +394,14 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
             return sid;
         }
     }
-
-    // Fallback: zone not in any screen-specific layout, try geometry projection
-    // with the active layout (single-monitor or unconfigured multi-monitor)
-    auto* layout = m_layoutManager->activeLayout();
-    if (!layout) {
-        return QString();
-    }
-    PhosphorZones::Zone* zone = layout->zoneById(*zoneUuid);
-    if (!zone) {
-        return QString();
-    }
-    // Use effective screen IDs for virtual screen support
-    auto* mgr = m_service->screenManager();
-    if (mgr) {
-        for (const QString& sid : mgr->effectiveScreenIds()) {
-            if (!mgr->physicalScreenFor(sid).isValid()) {
-                continue;
-            }
-            QRect effGeom = mgr->screenGeometry(sid);
-            if (!effGeom.isValid()) {
-                continue;
-            }
-            // Use effGeom consistently for both normalization and containment
-            // so the zone center projection matches the containment bounds.
-            // Using different geometries causes mismatches when available
-            // geometry differs from full geometry.
-            QRectF effGeomF(effGeom);
-            QRectF normGeom = zone->normalizedGeometry(effGeomF);
-            QPoint zoneCenter(effGeom.x() + qRound(normGeom.center().x() * effGeom.width()),
-                              effGeom.y() + qRound(normGeom.center().y() * effGeom.height()));
-            if (effGeom.contains(zoneCenter)) {
-                return sid;
-            }
-        }
-    } else {
-        for (QScreen* screen : Utils::allScreens()) {
-            QRectF refGeom = GeometryUtils::effectiveScreenGeometry(m_service->screenManager(), layout, screen);
-            QRectF normGeom = zone->normalizedGeometry(refGeom);
-            QPoint zoneCenter(refGeom.x() + qRound(normGeom.center().x() * refGeom.width()),
-                              refGeom.y() + qRound(normGeom.center().y() * refGeom.height()));
-            if (screen->geometry().contains(zoneCenter)) {
-                return PhosphorScreens::ScreenIdentity::identifierFor(screen);
-            }
-        }
-    }
+    // A zone no screen's layout holds names no screen. There used to be a
+    // projection of the zone's centre under the active layout here, but a
+    // zone's normalized geometry is relative to the very screen it is
+    // projected onto, so for any zone that fits its screen the centre landed
+    // inside the first screen tried, and the answer was that screen whatever
+    // the zone. Empty lets
+    // resolveScreenForSnap fall through to the cursor's or the focused
+    // window's screen, which at least describe where the user is.
     return QString();
 }
 

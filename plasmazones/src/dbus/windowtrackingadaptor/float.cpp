@@ -235,6 +235,12 @@ void WindowTrackingAdaptor::setBridgeCallerCheck(std::function<bool(const QStrin
 
 void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
 {
+    // A compositor drag report (#1155): only the registered bridge may unsnap a
+    // window as a drag-out over the bus. endDrag's in-process call is admitted,
+    // since the host is serving endDrag then, not this method.
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("drag-out unsnap"))) {
         return;
     }
@@ -253,9 +259,11 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     // frame (zone dimensions) into the same per-screen free-geometry map this
     // read consumes — reading afterwards would "restore" the zone size and
     // destroy the genuine pre-snap size in the process.
-    std::optional<QRect> preSnapGeo;
+    // The same rule as every drag-out path (preSnapSizeOn): this screen's
+    // float-back, else the size of another monitor's, bounded to this one.
+    std::optional<QSize> preSnapSize;
     if (shouldRestoreSizeOnUnsnap(windowId)) {
-        preSnapGeo = m_service->validatedUnmanagedGeometry(windowId, screenId);
+        preSnapSize = preSnapSizeOn(windowId, screenId);
     }
 
     // Delegate unsnap-for-float to the service directly (the SnapAdaptor
@@ -270,14 +278,15 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     // Dimension guard mirrors the drop.cpp twin: a degenerate stored rect
     // produces a RestoreSize outcome that validates to "requires non-zero
     // size" and is dropped effect-side — don't claim success for it.
-    if (preSnapGeo && preSnapGeo->width() > 0 && preSnapGeo->height() > 0) {
-        Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapGeo->width(), preSnapGeo->height(), QString(), screenId,
+    if (preSnapSize && preSnapSize->width() > 0 && preSnapSize->height() > 0) {
+        Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapSize->width(), preSnapSize->height(), QString(), screenId,
                                       true, static_cast<int>(PhosphorProtocol::PlacementPurpose::UserVerb));
-        // Consume-once, per screen: only this screen's float-back was used;
-        // other monitors' remembered positions stay intact.
+        // Consume-once, per screen: other monitors' remembered positions stay
+        // intact.
         m_service->clearFreeGeometry(windowId, screenId);
-        qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << preSnapGeo->width() << "x" << preSnapGeo->height();
-    } else if (preSnapGeo) {
+        qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << preSnapSize->width() << "x"
+                             << preSnapSize->height();
+    } else if (preSnapSize) {
         qCInfo(lcDbusWindow) << "Drag-out unsnap: degenerate stored size for" << windowId << "— skipping restore";
     }
 }
@@ -297,6 +306,12 @@ bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zo
 
 void WindowTrackingAdaptor::clearPreFloatZone(const QString& windowId)
 {
+    // The inverse of a compositor-recorded float home, so it takes the same
+    // gate as the writes it undoes (#1155): another peer must not wipe a
+    // window's pre-float zone.
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty()) {
         return;
     }

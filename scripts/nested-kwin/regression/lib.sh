@@ -140,6 +140,9 @@ finish() {
 # --------------------------------------------------------------------------------------------
 
 [ -n "${NEST:-}" ] && [ -n "${LOG:-}" ] || stage_fail "probe bug: NEST and LOG must be set before sourcing lib.sh"
+# A previous probe's pre-restart daemon log (drestart) is not this probe's. Removed before the wait
+# below, so a probe that stage-fails there does not leave it to be filed under its own name.
+rm -f "$NEST/daemon.log.earlier"
 # The effect logs "need snap restore" once it has its first answer from the daemon.
 for _ in $(seq 120); do
     grep -q "need snap restore" "$LOG" 2>/dev/null && break
@@ -148,8 +151,6 @@ done
 grep -q "need snap restore" "$LOG" 2>/dev/null || stage_fail "the effect never came up (no 'need snap restore' in $LOG)"
 [ -r "$NEST/env.sh" ] || stage_fail "no nested session state at $NEST/env.sh"
 . "$NEST/env.sh"
-# A previous probe's pre-restart daemon log (drestart) is not this probe's.
-rm -f "$NEST/daemon.log.earlier"
 
 # Distros ship the Qt6 D-Bus CLI under three names; probes call it qdbus6.
 if ! command -v qdbus6 >/dev/null 2>&1; then
@@ -249,10 +250,15 @@ activate() {
 }
 todesk() { on "$1" "w[i].desktops = [workspace.desktops[$(($2 - 1))]];"; }
 moveto() { on "$1" "w[i].frameGeometry = {x: $2, y: $3, width: w[i].frameGeometry.width, height: w[i].frameGeometry.height};"; }
-# sendto CAPTION OUTPUT: KWin's Move to Screen; fails when the window is not on OUTPUT after three tries
+# sendto_once CAPTION OUTPUT: one KWin Move to Screen of the window onto OUTPUT, unless it is there
+# already, with no settle and no retry. sendto CAPTION OUTPUT: the same, retried; fails when the
+# window is not on OUTPUT after three tries
+sendto_once() {
+    js "var o = null; for (var i = 0; i < workspace.screens.length; i++) { if (workspace.screens[i].name === \"$2\") { o = workspace.screens[i]; } } const w = workspace.windowList(); for (var j = 0; j < w.length; j++) { if (w[j].caption === \"$1\" && o && w[j].output !== o) { workspace.sendClientToScreen(w[j], o); } }"
+}
 sendto() {
     for _ in 1 2 3; do
-        js "var o = null; for (var i = 0; i < workspace.screens.length; i++) { if (workspace.screens[i].name === \"$2\") { o = workspace.screens[i]; } } const w = workspace.windowList(); for (var j = 0; j < w.length; j++) { if (w[j].caption === \"$1\" && o && w[j].output !== o) { workspace.sendClientToScreen(w[j], o); } }"
+        sendto_once "$1" "$2"
         sleep 2
         [ "$(outof "$(geo "$1")")" = "$2" ] && return 0
     done
@@ -293,7 +299,8 @@ uuid() { grep "IDWIN .* cap=$1 " "$LOG" | tail -1 | sed 's/.*IDWIN {\([^}]*\)}.*
 
 # client SCRIPT ARG...: a test client on the nested Wayland display; xclient SCRIPT ARG...: the
 # same on the nested Xwayland; qtclient SCRIPT ARG...: a PySide6 client, run without the session's
-# QT_PLUGIN_PATH (it points at the build tree's plugins). Each waits 3 s for the window to map.
+# QT_PLUGIN_PATH (it points at the build tree's plugins); xqtclient SCRIPT ARG...: the same on the
+# nested Xwayland. Each waits 3 s for the window to map.
 client() {
     local s="$1"
     shift
@@ -315,23 +322,49 @@ qtclient() {
         python3 "$PZR_CLIENTS/$s" "$@" >/dev/null 2>&1 < /dev/null &
     sleep 3
 }
+xqtclient() {
+    local s="$1" xd
+    shift
+    xd=$(xdisplay) || stage_fail "no nested Xwayland display (the probe needs flag X)"
+    setsid env -u QT_PLUGIN_PATH -u WAYLAND_DISPLAY DISPLAY="$xd" QT_QPA_PLATFORM=xcb \
+        python3 "$PZR_CLIENTS/$s" "$@" >/dev/null 2>&1 < /dev/null &
+    sleep 3
+}
 # open CAPTION [W H]: plain_gtk.py (app id org.pz.plain); openapp CAPTION APPID [W H]: appid_gtk.py;
 # xopen CAPTION [W H]: plain_gtk.py on Xwayland
 open() { client plain_gtk.py "$1" "${2:-400}" "${3:-300}"; }
 openapp() { client appid_gtk.py "$1" "$2" "${3:-400}" "${4:-300}"; }
 xopen() { xclient plain_gtk.py "$1" "${2:-400}" "${3:-300}"; }
-# xdisplay -> ":N", the nested Xwayland's display: the X socket that was not there before run.sh
-# started the session (PZR_X11_BEFORE) and is not the host's own display.
+# xdisplay -> ":N", the nested Xwayland's display, status 1 when none is found in about 15 s. It is
+# the first argument of the Xwayland process the nested compositor (kwinpid) started. Before that
+# process exists, it is the lowest-numbered X socket that was not there when run.sh started the
+# session (PZR_X11_BEFORE) and is not the host's own display: KWin opens two X sockets and serves
+# the display on the lower one, so a client sent to the higher one never maps. That second reading
+# needs PZR_X11_BEFORE set (run.sh sets it, empty when the host had no X socket). Without it every
+# X socket on the host looks new, so with it unset only the Xwayland process is read.
 xdisplay() {
-    local s n
+    local k x d s
     for _ in $(seq 15); do
-        for s in $(ls -t /tmp/.X11-unix/ 2>/dev/null); do
-            n=":${s#X}"
-            [ "$n" = "${PZR_HOST_DISPLAY:-}" ] && continue
-            case " ${PZR_X11_BEFORE:-} " in *" $s "*) continue ;; esac
-            echo "$n"
-            return 0
-        done
+        k=$(kwinpid)
+        if [ -n "$k" ]; then
+            for x in $(pgrep -P "$k" -x Xwayland); do
+                d=$(tr '\0' '\n' < "/proc/$x/cmdline" 2>/dev/null | sed -n 2p)
+                case "$d" in :[0-9]*)
+                    echo "$d"
+                    return 0
+                    ;;
+                esac
+            done
+        fi
+        if [ -n "${PZR_X11_BEFORE+set}" ]; then
+            for s in $(ls /tmp/.X11-unix/ 2>/dev/null | sort -V); do
+                d=":${s#X}"
+                [ "$d" = "${PZR_HOST_DISPLAY:-}" ] && continue
+                case " $PZR_X11_BEFORE " in *" $s "*) continue ;; esac
+                echo "$d"
+                return 0
+            done
+        fi
         sleep 1
     done
     return 1
@@ -392,6 +425,14 @@ altdrag() {
         keydown 56 wait 150 path "$cx" "$cy" "$2" "$3" 20 30 wait 900 up left wait 80 keyup 56 keyup 125
     sleep 2
 }
+# metaresize X Y DX DY: KWin's modifier resize, a Meta+right drag from (X, Y) by (DX, DY), then a
+# 2.5 s settle. KWin picks the edges from where the press lands: the middle third of a side takes
+# that edge alone, a corner third takes both of its edges.
+metaresize() {
+    fake abs "$1" "$2" wait 100 keydown 125 wait 50 down right wait 150 \
+        path "$1" "$2" $(($1 + $3)) $(($2 + $4)) 10 30 wait 300 up right wait 50 keyup 125
+    sleep 2.5
+}
 
 # --------------------------------------------------------------------------------------------
 # Daemon
@@ -413,6 +454,13 @@ gsetting() {
     gdbus call --session --dest org.plasmazones --object-path /PlasmaZones \
         --method org.plasmazones.Settings.setSetting "$1" "$2" 2>&1
 }
+# gsetting_ok KEY GVARIANT: gsetting that stage-fails unless the daemon answers true, so a refused
+# key never leaves the probe running on that key's default
+gsetting_ok() {
+    local r
+    r=$(gsetting "$1" "$2")
+    [ "$r" = "(true,)" ] || stage_fail "setSetting $1 $2 was not taken ($r)"
+}
 assign() { PZ org.plasmazones.LayoutRegistry.assignLayoutToScreen "$1" "$2" >/dev/null; }
 assignd() { PZ org.plasmazones.LayoutRegistry.assignLayoutToScreenDesktop "$1" "$2" "$3" >/dev/null; }
 shortcut() {
@@ -420,6 +468,20 @@ shortcut() {
         >/dev/null 2>&1
 }
 yesno() { if eval "$1"; then echo yes; else echo no; fi; }
+# within GOT WANT [TOL] -> "yes" when the integer GOT is within TOL (default 2) of WANT, else
+# "no (GOT vs WANT)"; assert it with check DESC "$(within ...)" = yes
+within() {
+    # A failed read hands an empty or non-numeric value, which arithmetic
+    # would take for 0 and so answer yes beside a want of 0. Each argument
+    # must be a whole integer, as check's numeric compares require.
+    local t="${3:-2}"
+    if ! [[ "$1" =~ ^-?[0-9]+$ && "$2" =~ ^-?[0-9]+$ && "$t" =~ ^[0-9]+$ ]]; then
+        echo "no ($1 vs $2)"
+        return
+    fi
+    local d=$(($1 - $2))
+    if [ "$d" -ge "-$t" ] && [ "$d" -le "$t" ]; then echo yes; else echo "no ($1 vs $2)"; fi
+}
 # zoneid LAYOUT N -> the id of zone number N in layout LAYOUT
 zoneid() {
     PZ org.plasmazones.LayoutRegistry.getLayout "$1" | python3 -c '
@@ -479,6 +541,11 @@ for c in m.get("columns", []):
         ts.append(names.get(u, u[-8:]))
     cols.append("+".join(ts))
 print(" | ".join(cols) if cols else "(empty)")' "$LOG"
+}
+# instrip CAPTION [SCREEN] -> "yes" when a column of SCREEN's strip (default Virtual-0) holds
+# CAPTION, else "no" (run ids first, so striporder can name it)
+instrip() {
+    if striporder "${2:-Virtual-0}" | tr ' |+' '\n\n\n' | grep -qxF "$1"; then echo yes; else echo no; fi
 }
 
 # dpid -> the nested daemon's pid, or nothing (status 1): the process that owns org.plasmazones

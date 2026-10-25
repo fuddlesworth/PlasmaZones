@@ -19,6 +19,12 @@
  *
  * Also covers the active-layout-per-screen wire (discussion #919): the
  * snapshot readback, the changed-screens broadcast, and the empty-id contract.
+ * And the adaptor's other document paths: getLayout's cache invalidation and
+ * its autotile schema, createLayoutFromJson's zone ids, and updateLayout, the
+ * editor's save path, for a manual layout (the fixed-geometry unit) and for an
+ * autotile entry (the per-side gaps it keeps and what it refuses). The
+ * negative-desktop guard sweep and the order of a save batch's active-layout
+ * write close it out.
  */
 
 #include <QTest>
@@ -344,6 +350,91 @@ private Q_SLOTS:
         QCOMPARE(relGeo.value(K::Width).toDouble(), 0.5);
         QCOMPARE(zone0.value(K::ZoneNumber).toInt(), 1);
         QVERIFY2(!zone0.value(K::Id).toString().isEmpty(), "zone needs a stable id (editor keys zones by id)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // updateLayout, the editor's save path.
+    // ─────────────────────────────────────────────────────────────────
+
+    // The unit of a layout's fixed zones is saved with it, and a save that
+    // leaves the key out resets it, as every other editor-managed key does.
+    void testUpdateLayout_savesTheFixedGeometryUnit()
+    {
+        namespace K = ::PhosphorZones::ZoneJsonKeys;
+        PhosphorZones::Layout* layout = m_layoutManager->layoutById(QUuid::fromString(m_layoutId));
+        QVERIFY(layout);
+        QJsonObject obj = QJsonDocument::fromJson(m_adaptor->getLayout(m_layoutId).toUtf8()).object();
+        QVERIFY(!obj.isEmpty());
+
+        obj[K::FixedGeometryInDevicePixels] = true;
+        QVERIFY(m_adaptor->updateLayout(QString::fromUtf8(QJsonDocument(obj).toJson())));
+        QVERIFY(layout->fixedGeometryInDevicePixels());
+
+        obj.remove(K::FixedGeometryInDevicePixels);
+        QVERIFY(m_adaptor->updateLayout(QString::fromUtf8(QJsonDocument(obj).toJson())));
+        QVERIFY(!layout->fixedGeometryInDevicePixels());
+    }
+
+    // An autotile entry keeps the per-side outer gaps the editor writes,
+    // toggle included, and getLayout serves them back. Before, only the
+    // uniform gap was copied into the stored overrides.
+    void testUpdateLayout_autotileKeepsThePerSideOuterGaps()
+    {
+        namespace K = ::PhosphorZones::ZoneJsonKeys;
+        PhosphorTiles::AlgorithmRegistry registry;
+        registry.registerAlgorithm(QStringLiteral("twocol"), new TwoColumnStubAlgorithm);
+        m_adaptor->setAlgorithmRegistry(&registry);
+        const auto detachRegistry = qScopeGuard([this] {
+            m_adaptor->setAlgorithmRegistry(nullptr);
+        });
+        const QString autotileId = PhosphorLayout::LayoutId::makeAutotileId(QStringLiteral("twocol"));
+
+        QJsonObject obj;
+        obj[K::Id] = autotileId;
+        obj[K::UsePerSideOuterGap] = true;
+        obj[K::OuterGapTop] = 7;
+        QVERIFY(m_adaptor->updateLayout(QString::fromUtf8(QJsonDocument(obj).toJson())));
+
+        const QJsonObject stored = m_layoutManager->loadAutotileOverrides(QStringLiteral("twocol"));
+        QCOMPARE(stored.value(K::UsePerSideOuterGap).toBool(false), true);
+        QCOMPARE(stored.value(K::OuterGapTop).toInt(-1), 7);
+        const QJsonObject served = QJsonDocument::fromJson(m_adaptor->getLayout(autotileId).toUtf8()).object();
+        QCOMPARE(served.value(K::UsePerSideOuterGap).toBool(false), true);
+        QCOMPARE(served.value(K::OuterGapTop).toInt(-1), 7);
+    }
+
+    // The autotile save checks what it stores at the bus boundary: a gap out
+    // of range, a per-side toggle that is not a boolean, and an algorithm the
+    // registry does not know (whose sidecar group nothing would ever read),
+    // are refused and store nothing.
+    void testUpdateLayout_autotileRefusesWhatItCannotStore_data()
+    {
+        QTest::addColumn<QString>("algorithmId");
+        QTest::addColumn<int>("outerGapTop");
+        QTest::addColumn<bool>("toggleIsBoolean");
+        QTest::newRow("negative per-side gap") << QStringLiteral("twocol") << -5 << true;
+        QTest::newRow("per-side toggle not a boolean") << QStringLiteral("twocol") << 7 << false;
+        QTest::newRow("unknown algorithm") << QStringLiteral("no-such-algorithm") << 7 << true;
+    }
+    void testUpdateLayout_autotileRefusesWhatItCannotStore()
+    {
+        namespace K = ::PhosphorZones::ZoneJsonKeys;
+        QFETCH(QString, algorithmId);
+        QFETCH(int, outerGapTop);
+        QFETCH(bool, toggleIsBoolean);
+        PhosphorTiles::AlgorithmRegistry registry;
+        registry.registerAlgorithm(QStringLiteral("twocol"), new TwoColumnStubAlgorithm);
+        m_adaptor->setAlgorithmRegistry(&registry);
+        const auto detachRegistry = qScopeGuard([this] {
+            m_adaptor->setAlgorithmRegistry(nullptr);
+        });
+
+        QJsonObject obj;
+        obj[K::Id] = PhosphorLayout::LayoutId::makeAutotileId(algorithmId);
+        obj[K::UsePerSideOuterGap] = toggleIsBoolean ? QJsonValue(true) : QJsonValue(1);
+        obj[K::OuterGapTop] = outerGapTop;
+        QVERIFY(!m_adaptor->updateLayout(QString::fromUtf8(QJsonDocument(obj).toJson())));
+        QVERIFY(!m_layoutManager->loadAutotileOverrides(algorithmId).contains(K::OuterGapTop));
     }
 
     // ─────────────────────────────────────────────────────────────────

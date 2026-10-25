@@ -13,8 +13,13 @@
  *        with an empty zone commits nothing (F459). A restore pinned to one
  *        desktop leaves the window's other desktops alone (F477), and a float
  *        parked before the window had a store ends with the unfloat (F331).
+ *        A window snapping leaves alone gets no remembered zone back on an
+ *        adoption, no re-apply or statement on a switch, and no owed
+ *        float-back.
  */
 
+#include <QHash>
+#include <QRect>
 #include <QSet>
 #include <QSignalSpy>
 #include <QString>
@@ -35,6 +40,7 @@
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleSet.h>
+#include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -76,6 +82,32 @@ PhosphorEngine::DesktopSpanQuery spanOf(const PhosphorEngine::DesktopSpan& windo
 }
 } // namespace
 
+/// The compositor's frames, as the effect reports them. Outside the anonymous
+/// namespace: the test class holds one as a member, and a member of an
+/// internal-linkage type is -Wsubobject-linkage.
+class GateFrameNav : public PhosphorSnapEngine::INavigationStateProvider
+{
+public:
+    QString lastCursorScreenName() const override
+    {
+        return kScreen;
+    }
+    QString lastActiveScreenName() const override
+    {
+        return kScreen;
+    }
+    QString lastActiveWindowId() const override
+    {
+        return {};
+    }
+    QRect frameGeometry(const QString& windowId) const override
+    {
+        return m_frames.value(windowId);
+    }
+
+    QHash<QString, QRect> m_frames;
+};
+
 class TestSnapCarryGates : public QObject
 {
     Q_OBJECT
@@ -113,6 +145,8 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_engine->setNavigationStateProvider(nullptr);
+        m_nav.m_frames.clear();
         m_engine->setExcludeRuleSet(nullptr);
         m_service->setSnapState(nullptr);
         m_service->setSnapEngine(nullptr);
@@ -389,6 +423,79 @@ private Q_SLOTS:
         QVERIFY2(!m_engine->isFloating(kWindow), "the unfloat clears the parked bit");
     }
 
+    // A window snapping leaves alone gets no remembered zone back when it is
+    // adopted into a desktop, as the carry refuses it one.
+    void adoptionRestoresNoRememberedZoneForAnExcludedWindow()
+    {
+        const QString remembered = m_destination->zones().at(1)->id().toString();
+        snapOn(1, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        m_service->assignWindowToZone(kWindow, remembered, kScreen, 2);
+        const auto captured = m_engine->capturePlacement(kWindow);
+        QVERIFY(captured.has_value());
+        QCOMPARE(captured->slotFor(WindowPlacement::snapEngineId()).zonesByDesktop.value(2), QStringList{remembered});
+        m_service->placementStore().record(*captured);
+        m_engine->forgetWindow(kWindow); // the handoff dropped every context
+
+        snapOn(1, m_zoneIds[0]);
+        excludeApp(QStringLiteral("app"));
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        const auto result = m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+
+        QCOMPARE(result.adopted.size(), 1);
+        QVERIFY2(zonesOn(2).isEmpty(), "an excluded window gets no remembered zone back");
+    }
+
+    // ...nor, on a desktop switch, the re-apply of its zone or a statement of
+    // the state the entered desktop holds for it: neither the unsnap of a
+    // desktop that holds nothing for it nor the float of one where it floats.
+    void anExcludedWindowIsNeitherReappliedNorStatedOnASwitch()
+    {
+        snapOn(1, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+        excludeApp(QStringLiteral("app"));
+        m_batch.clear();
+        QSignalSpy states(m_engine, &SnapEngine::windowSnapStateChanged);
+        QSignalSpy floats(m_engine, &SnapEngine::windowFloatingChanged);
+        const auto switchAwayAndBack = [this] {
+            for (const int desktop : {1, 2}) {
+                m_engine->setCurrentDesktopForScreen(kScreen, desktop);
+                m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
+            }
+        };
+
+        switchAwayAndBack();
+        QVERIFY2(m_batch.isEmpty(), "an excluded window is not re-applied");
+        QCOMPARE(states.count(), 0);
+
+        m_engine->stateForWindowOnScreen(kWindow, kScreen, 2)->setFloatingOnScreen(kWindow, kScreen, 2);
+        switchAwayAndBack();
+        QCOMPARE(floats.count(), 0);
+    }
+
+    // ...nor the float-back a carry left owed for a hidden desktop's first
+    // showing, when snapping has come to leave it alone since.
+    void anExcludedWindowIsOwedNoFloatBack()
+    {
+        snapOn(1, m_zoneIds[0]);
+        m_engine->stateForWindowOnScreen(kWindow, kScreen, 2)->setFloatingOnScreen(kWindow, kScreen, 2);
+        recordFreeGeometry(QRect(100, 100, 600, 400));
+        m_nav.m_frames.insert(kWindow, m_service->resolveZoneGeometry({m_zoneIds[0]}, kScreen));
+        m_engine->setNavigationStateProvider(&m_nav);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+        QVERIFY2(m_batch.isEmpty(), "precondition: a kept float on a hidden desktop takes no apply now");
+        excludeApp(QStringLiteral("app"));
+        QSignalSpy restated(m_engine, &SnapEngine::restatementGeometryRequested);
+
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->reconcileDesktopMemberships(kScreen, spanOf(on({2})));
+
+        QCOMPARE(restated.count(), 0);
+    }
+
 private:
     /// kWindow in zone 1 and a second window in zone 2, on desktop 1.
     void snapTwo()
@@ -459,6 +566,7 @@ private:
     QStringList m_zoneIds;
     QVector<PhosphorEngine::ZoneAssignmentEntry> m_batch;
     std::unique_ptr<PhosphorRules::RuleSet> m_excludeSet;
+    GateFrameNav m_nav;
 };
 
 QTEST_MAIN(TestSnapCarryGates)

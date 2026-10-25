@@ -13,6 +13,7 @@
 
 #include <functional>
 
+class QDBusConnection;
 class QDBusServiceWatcher;
 
 namespace PhosphorScreens {
@@ -73,6 +74,14 @@ public:
     /// Everything else in the check runs as it does in the daemon.
     using CompositorResolver = std::function<Compositor()>;
     void setCompositorResolverForTesting(CompositorResolver resolver);
+
+    /// Whether @p uniqueName, a unique name on the session bus, is the
+    /// compositor's own connection (@ref trustIfCompositor). A name not
+    /// trusted yet has its pid resolved with a bounded blocking call. The
+    /// compositor bridge's registration is held to it as well as the
+    /// thumbnail entries (#1155), so no other peer can register first and
+    /// keep the compositor out.
+    bool isCompositorPeer(const QString& uniqueName);
 
 public Q_SLOTS:
     // Visibility control
@@ -159,6 +168,10 @@ private:
      */
     bool authenticateKwinSender();
 
+    /// isCompositorPeer, resolving the pid on @p bus, the connection the
+    /// call being checked arrived on.
+    bool isCompositorPeerOn(const QDBusConnection& bus, const QString& uniqueName);
+
     /**
      * @brief Async pre-warm the trusted-sender cache against the current
      *        owner of @c org.kde.KWin.
@@ -209,7 +222,7 @@ private:
      *
      * Single source of truth for the trust-admission step shared by the
      * pre-warm path (@ref resolvePidAndTrust) and the sync fallback
-     * (@ref authenticateKwinSender). Idempotent against duplicate
+     * (@ref isCompositorPeerOn). Idempotent against duplicate
      * admissions for the same unique name.
      *
      * @return true iff @p uniqueName is now in the trust cache.

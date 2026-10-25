@@ -211,6 +211,9 @@ ScrollLayoutParams ScrollEngine::layoutParamsForKey(const PhosphorEngine::Placem
     params.committedFloor = [this](const QString& windowId) {
         return committedFloorFor(windowId);
     };
+    params.committedCrossFloor = [this, axis = params.axis](const QString& windowId) {
+        return committedCrossFloorFor(windowId, axis);
+    };
     return params;
 }
 
@@ -363,9 +366,9 @@ QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& scr
             // edge is what tells the viewer the strip continues off-screen.
             const QRect clipped = tile.rect.intersected(clipArea);
             if (!clipped.isEmpty()) {
-                // Designated, not positional: three of these eight are ints in
-                // a row, so a member inserted mid-struct would compile clean
-                // and silently reassign the rest.
+                // Designated, not positional: several of these members are
+                // ints in a row, so a member inserted mid-struct would compile
+                // clean and silently reassign the rest.
                 out.append(VisibleTile{.windowId = tile.windowId,
                                        .columnIndex = column.columnIndex,
                                        .zoneNumber = ++zoneNumber,

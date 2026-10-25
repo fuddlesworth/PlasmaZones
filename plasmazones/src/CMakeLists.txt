@@ -245,7 +245,7 @@ generate_export_header(plasmazones_core
 # The compatibility wrappers were removed with the move; nothing remains here.
 # PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
 
-# All seven TUs below are excluded from unity build:
+# Every TU below is excluded from unity build:
 #   configdefaults.cpp — Settings PCH includes that conflict with unity macros
 #   drag.cpp / drag_protocol.cpp / drop.cpp / dragtimers.cpp /
 #   dragzonespan.cpp / selector_gate.cpp —
@@ -406,7 +406,7 @@ install(TARGETS plasmazones_core
     # NOTE: PlasmaZonesTargets is assigned here but never installed -- there
     # is no install(EXPORT PlasmaZonesTargets) and no PlasmaZonesConfig.cmake
     # anywhere in the tree, so find_package(PlasmaZones) cannot work and the
-    # INSTALL_INTERFACE include dirs below are inert. Kept because dropping
+    # INSTALL_INTERFACE include dirs above are inert. Kept because dropping
     # the keyword changes install() semantics; wire up the config-file pair
     # if the app tier is ever meant to be consumable.
     EXPORT PlasmaZonesTargets
@@ -476,7 +476,7 @@ install(TARGETS plasmazones_rendering
     # NOTE: PlasmaZonesTargets is assigned here but never installed -- there
     # is no install(EXPORT PlasmaZonesTargets) and no PlasmaZonesConfig.cmake
     # anywhere in the tree, so find_package(PlasmaZones) cannot work and the
-    # INSTALL_INTERFACE include dirs below are inert. Kept because dropping
+    # INSTALL_INTERFACE include dirs above are inert. Kept because dropping
     # the keyword changes install() semantics; wire up the config-file pair
     # if the app tier is ever meant to be consumable.
     EXPORT PlasmaZonesTargets
@@ -529,7 +529,7 @@ install(TARGETS plasmazones_shaderpreview
     # NOTE: PlasmaZonesTargets is assigned here but never installed -- there
     # is no install(EXPORT PlasmaZonesTargets) and no PlasmaZonesConfig.cmake
     # anywhere in the tree, so find_package(PlasmaZones) cannot work and the
-    # INSTALL_INTERFACE include dirs below are inert. Kept because dropping
+    # INSTALL_INTERFACE include dirs above are inert. Kept because dropping
     # the keyword changes install() semantics; wire up the config-file pair
     # if the app tier is ever meant to be consumable.
     EXPORT PlasmaZonesTargets
@@ -656,12 +656,12 @@ target_link_libraries(plasmazonesd
         PhosphorShortcuts::PhosphorShortcuts  # ShortcutManager / Registry / backends
         PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
         PhosphorSurfaces::PhosphorSurfaces  # managed surface lifecycle (engine, keep-alive)
-        # Named directly, not left to plasmazones_core's PUBLIC edge: eleven daemon TUs
-        # include <PhosphorSurface/...> and daemon/overlayservice/decoration.cpp calls its
-        # exported chain-compose helpers, so a future demotion of that edge to PRIVATE
-        # would break them. The other chain hosts (kwin-effect, phosphor-shell, and the
-        # settings app's decoration preview) all
-        # name it explicitly already.
+        # Named directly, not left to plasmazones_core's PUBLIC edge: daemon TUs
+        # include <PhosphorSurface/...> and daemon/overlayservice/decoration.cpp
+        # calls its exported chain-compose helpers, so a future demotion of that
+        # edge to PRIVATE would break them. The other chain hosts (kwin-effect,
+        # phosphor-shell, and the settings app's decoration preview) all name it
+        # explicitly already.
         PhosphorSurface::PhosphorSurface  # SurfaceChainCompose / registry / DecorationSupportedPaths
         PhosphorServiceIdle::PhosphorServiceIdle  # ext-idle-notify-v1; the daemon owns session-idle detection and pushes it to the KWin effect (a compositor SERVES that protocol, it cannot consume it)
         PhosphorOverlay::PhosphorOverlay  # per-screen shell-host + slot mechanism (Phase 2 onward)
@@ -842,6 +842,8 @@ set(plasmazones_editor_SRCS
     editor/undo/commands/UpdateGapOverrideCommand.h
     editor/undo/commands/UpdateFullScreenGeometryCommand.cpp
     editor/undo/commands/UpdateFullScreenGeometryCommand.h
+    editor/undo/commands/UpdateFixedGeometryUnitCommand.cpp
+    editor/undo/commands/UpdateFixedGeometryUnitCommand.h
     editor/undo/commands/ToggleGeometryModeCommand.cpp
     editor/undo/commands/ToggleGeometryModeCommand.h
     editor/undo/commands/UpdateFixedGeometryCommand.cpp

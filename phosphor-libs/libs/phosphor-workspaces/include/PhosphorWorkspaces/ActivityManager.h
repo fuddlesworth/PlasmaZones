@@ -22,6 +22,9 @@ public:
     void start();
     void stop();
 
+    /// The last activity the service reported. Kept through a service outage
+    /// rather than cleared, so a restart of the service is not a switch.
+    /// Empty only before the service has named one.
     QString currentActivity() const;
     static bool isAvailable();
 
@@ -48,11 +51,17 @@ private Q_SLOTS:
 private:
     void connectSignals();
     void disconnectSignals();
+    /// Take the controller's current activity when it names one, notifying
+    /// only on a real change (onCurrentActivityChanged).
+    void adoptControllerActivity();
 
     QObject* m_controller = nullptr;
     bool m_running = false;
     QString m_currentActivity;
     bool m_activitiesAvailable = false;
+    /// start() was called and stop() has not undone it. Lets the service
+    /// status handler connect the signals when the service comes up late.
+    bool m_startRequested = false;
 };
 
 } // namespace PhosphorWorkspaces

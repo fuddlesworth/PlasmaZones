@@ -281,8 +281,10 @@ inline constexpr QLatin1String Minimized("minimized");
 /// as a drop proxy lets a real compositor drag that lands on the miniature
 /// resolve to the full-size zone under the cursor. The shell builds the
 /// object, the daemon (src/dbus/windowdragadaptor/dropproxy.cpp) parses it.
-/// Every rect is [x, y, w, h] in the registering screen's own pixels, with
-/// the screen's top-left corner as the origin.
+/// Every rect is [x, y, w, h] in the registering screen's LOGICAL pixels,
+/// the units the compositor lays windows out in (not the output's device
+/// pixels, which differ on a scaled output), with the screen's top-left
+/// corner as the origin.
 namespace DropProxyKey {
 /// The miniature's bounding rect on its screen. A cursor outside it is not
 /// over the proxy at all.
@@ -662,8 +664,8 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       effect never connects it and reads the parkDropped as it always did.
 //
 //   After v10, WITHOUT a bump: Scrolling gains reportCommittedSize
-//       (s i i i i), through which the effect reports the size a Wayland
-//       client settled on when it differs from the rect the strip offered it,
+//       (s i i i i), through which the effect reports the size a client
+//       settled on when it differs from the rect the strip offered it,
 //       so the engine can hold the column to it. v10 shipped in 3.5.0, so the
 //       method cannot fold into it, and it takes no v11 because it is
 //       ADDITIVE and neither mismatched pairing gives a wrong answer, which is
@@ -675,9 +677,76 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       a bump would instead refuse the whole bridge over a missing nicety. A
 //       later change that makes the method REQUIRED, or changes its arguments,
 //       needs v11.
+//
+//   Also after v10, WITHOUT a bump: reportCommittedSize widens in MEANING,
+//       with the same (s i i i i) signature. The engine now reads an answer
+//       longer ACROSS the strip, inside the work area, as a floor on the
+//       tile's share of its stacked column (#1156), where it used to ignore
+//       it. The effect now also reports a parked tile's settled commit when
+//       it equals the offer along the strip, and the engine ends a peek
+//       memory on that matched answer (#1154). Both pairings degrade safely.
+//       A new effect on a daemon from before this change sends matched
+//       answers the old engine reads as steady state and drops, and cross
+//       answers it was already sending, so a straddle-only column keeps
+//       parking and a tall stacked window keeps overlapping, as before. An
+//       old effect on a new daemon never sends a matched answer, so the
+//       memory ends only the old way, and the cross answers it already sends
+//       start holding their tiles. Neither gives a wrong answer, so neither
+//       needs v11.
+//
+//   Also after v10, WITHOUT a bump: reportCommittedSize carries X11 clients'
+//       answers too (#1157), with the same signature. The effect used to
+//       record the strip's offer, and so report an answer to it, for Wayland
+//       clients only, and an X11 window that widened itself past its column
+//       was never reported. The engine never asked which kind of client
+//       answered. A new effect on a daemon that has the method sends X11
+//       answers the engine holds its columns to exactly as it holds a Wayland
+//       one, which is the fix, and on a daemon without it the method is
+//       latched off as above. An old effect on a new daemon never sends an
+//       X11 answer, so an X11 window that outgrows its column keeps the next
+//       column starting under it, as before. Neither gives a wrong answer.
+//
+//   Also after v10, WITHOUT a bump: the methods through which the compositor
+//       reports what it saw (window metadata and frames, opens and closes,
+//       screen crossings and output settles, drags, committed sizes,
+//       fullscreen holds, the work area and primary screen, Snap Assist
+//       candidates, and the other reports the daemon's
+//       DbusHelpers::admitCompositorReport gate covers) answer AccessDenied
+//       to every bus caller but the one that registered the bridge, and
+//       registerBridge answers a REJECTED session to a second peer while the
+//       registered one is still on the bus (#1155). registerBridge also
+//       answers REJECTED to any caller outside the compositor's own process
+//       (the far end of the daemon's Wayland connection, or a direct child
+//       of kwin_wayland_wrapper), so a bridge must run inside the compositor.
+//       No signature changes. A compositor that waits for its registration
+//       to answer before it reports sees no difference against either
+//       daemon, and an old daemon admits every caller as it always did. The
+//       change is for a client that reports before it has registered, or
+//       without registering, or registers from another process: its
+//       registration or its calls are refused, and a fire-and-forget report
+//       is dropped with no answer the client sees. That is a client defect
+//       the gate exists to expose, not a pairing the version can sort out, so
+//       it takes no v11.
+//       PhosphorCompositor::DaemonClient documents the ordering it needs.
 
 inline constexpr int ApiVersion = 10;
 inline constexpr int MinPeerApiVersion = 10;
+
+// Scrolling.reportCommittedSize tolerance, in logical pixels, on each axis:
+// a size a client committed within this many pixels of the rect the strip
+// offered it COUNTS AS THE OFFER. It is not an answer, and nothing about it
+// teaches the engine anything. Fractional scaling, and a server-side
+// decoration with fractional borders, round the frame of a client that took
+// its tile exactly to a pixel either side of it, and reading that pixel as an
+// answer would plant (or give back) a one-pixel floor and relayout the strip
+// for it.
+//
+// Both ends of the wire apply it, and they must agree, which is why it lives
+// here. The compositor reports only answers beyond it, and the engine reads
+// any answer within it as the offer. A wider value on the compositor side
+// would withhold answers the engine would act on. A narrower one would send
+// answers the engine discards as the offer.
+inline constexpr int CommittedSizeTolerancePx = 1;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

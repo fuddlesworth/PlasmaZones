@@ -117,8 +117,14 @@ enum class PreTileRestore {
 /// The 4-way pre-tile restore decision.
 ///
 /// @p haveLocalRect   TilingHandler::preTileRestoreRectFor answered a usable rect
-/// @p wasTracked      the window was autotile-tracked on the desktop being left
+/// @p wasTracked      the window was autotile-tracked when its context stopped
+///                    tiling: tracked on the desktop switched onto (the switch
+///                    pass for the arrived desktop), or parked for the desktop's
+///                    return when an earlier switch left it, since the daemon
+///                    still holds a parked window in that desktop's state
 /// @p wasWindowedFs   the window held windowed fullscreen (its release is deferred)
+/// @p wasTiled        the window was tiled, read in the same pass before the
+///                    demote clears the fact
 ///
 /// The cross-OUTPUT question is deliberately NOT decided here. Bucket rects are
 /// absolute compositor coordinates, so one measured on another monitor would
@@ -128,8 +134,15 @@ enum class PreTileRestore {
 /// function runs a valid rect is always safe to apply as-is.
 ///
 /// AskDaemon is only for the genuinely-empty case: the window was snap-managed
-/// when it entered autotile, so nothing was ever stored locally.
-inline PreTileRestore resolvePreTileRestore(bool haveLocalRect, bool wasTracked, bool wasWindowedFs)
+/// when it entered autotile, so nothing was ever stored locally. It also needs
+/// @p wasTiled. Tracked-ness alone is the announce trail, and an open the
+/// daemon refused (no engine claimed the screen while an announce was in
+/// flight) leaves a tracked window that was never tiled. The daemon's record
+/// is mode-shared and session-persisted, so asking for it there moved a window
+/// that was never placed to a float-back from another mode (#1151). (A
+/// floating window never reaches this decision: the demote pass skips it
+/// first, since it stands at its own free rect.)
+inline PreTileRestore resolvePreTileRestore(bool haveLocalRect, bool wasTracked, bool wasWindowedFs, bool wasTiled)
 {
     if (!wasTracked) {
         // Every restore arm is gated on tracked-ness: the buckets survive
@@ -139,7 +152,7 @@ inline PreTileRestore resolvePreTileRestore(bool haveLocalRect, bool wasTracked,
         return PreTileRestore::None;
     }
     if (!haveLocalRect) {
-        return PreTileRestore::AskDaemon;
+        return wasTiled ? PreTileRestore::AskDaemon : PreTileRestore::None;
     }
     return wasWindowedFs ? PreTileRestore::QueueForWindowedFullscreen : PreTileRestore::Apply;
 }

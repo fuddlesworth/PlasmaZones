@@ -15,7 +15,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getScreenInfo">
-            <annotation name="org.gtk.GDBus.DocString" value="Return detailed info for a screen as JSON (geometry, scale, refresh rate, etc.)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return detailed info for a screen as JSON (geometry, scale, refresh rate, etc.). It includes pixelSize, the screen's size in device pixels as {width, height}. That is derived as the logical size times the scale, rounded, so it lands on the output's mode or within a pixel of it, and a virtual screen's covers its own region. An empty id, or one that does not resolve, an unknown virtual screen included, answers an empty string."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (EDID-based like Dell:U2722D:115107, or virtual like Dell:U2722D:115107/vs:0)."/>
             </arg>
@@ -39,13 +39,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setPrimaryScreenFromKWin">
-            <annotation name="org.gtk.GDBus.DocString" value="Override the primary screen with the KWin compositor's output order primary. Called by the KWin effect on daemon ready."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Override the primary screen with the KWin compositor's output order primary. Called by the KWin effect on daemon ready. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="connectorName" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Connector name from Workspace::outputOrder().first() (e.g. DP-1). Resolved to EDID-based identifier internally."/>
             </arg>
         </method>
         <method name="setAvailableGeometryFromKWin">
-            <annotation name="org.gtk.GDBus.DocString" value="Record the authoritative per-screen available geometry (panel-excluded work area) as reported by the KWin effect's clientArea(MaximizeArea) query. Overrides the layer-shell sensor + plasmashell D-Bus panel-strut heuristic, which mis-attributes per-edge struts for top-panel layouts. The effect always reports a valid work area (the full screen rect when no panels reserve space); a zero-size rect is accepted defensively to clear the override and revert to the heuristic. Called by the KWin effect."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Record the authoritative per-screen available geometry (panel-excluded work area) as reported by the KWin effect's clientArea(MaximizeArea) query. Overrides the layer-shell sensor + plasmashell D-Bus panel-strut heuristic, which mis-attributes per-edge struts for top-panel layouts. The effect always reports a valid work area (the full screen rect when no panels reserve space). A zero-size rect is accepted defensively to clear the override and revert to the heuristic. Called by the KWin effect. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="screenName" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Connector name (e.g. DP-1)."/>
             </arg>
@@ -63,7 +63,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getAvailableGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Return the available geometry (excluding panels/taskbars) for a screen. Handles virtual screen IDs (e.g. physId/vs:0). Uses layer-shell sensor data when available, falls back to Qt's availableGeometry."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return the available geometry (excluding panels/taskbars) for a screen. Handles virtual screen IDs (e.g. physId/vs:0). Uses layer-shell sensor data when available, falls back to Qt's availableGeometry. An empty id answers for the primary screen. An id that does not resolve, an unknown virtual screen included, answers an empty rect."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (EDID-based, connector name, or virtual screen ID)."/>
             </arg>
@@ -73,7 +73,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getScreenGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Return the full geometry for a screen. Handles virtual screen IDs. Used by the editor to determine drawing area dimensions for VS-aware zone editing."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return the full geometry for a screen. Handles virtual screen IDs. Used by the editor to determine drawing area dimensions for VS-aware zone editing. An empty id answers for the primary screen. An id that does not resolve, an unknown virtual screen included, answers an empty rect."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (EDID-based, connector name, or virtual screen ID)."/>
             </arg>
@@ -95,7 +95,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="screenGeometryChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen's resolution or position changes."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen's resolution, position or scale changes."/>
             <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Effective screen identifier whose geometry changed."/>
             </arg>
@@ -143,6 +143,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when virtual screen subdivisions change for a physical screen."/>
             <arg name="physicalScreenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Physical screen whose virtual screen configuration changed."/>
+            </arg>
+        </signal>
+        <signal name="availableGeometryChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen's available area (the space panels leave) changes, including when its full geometry does not."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Effective screen identifier whose available area changed."/>
             </arg>
         </signal>
         <method name="swapVirtualScreenInDirection">

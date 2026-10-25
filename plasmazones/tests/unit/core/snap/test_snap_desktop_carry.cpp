@@ -12,7 +12,8 @@
  *        one apply, a float kept on a hidden desktop is given its float-back
  *        when that desktop shows, and an arrival in view takes focus. Plus
  *        the activity arms: a move into the activity in view is carried like
- *        a desktop move, and a move to one not in view lands when its desktop
+ *        a desktop move, each desktop from the zone or float the window held
+ *        on it, and a move to one not in view lands when its desktop
  *        shows there (F550, ledger-pass26 DJ).
  */
 
@@ -624,6 +625,93 @@ private Q_SLOTS:
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(on({2}, kActX)));
 
         QVERIFY2(m_batch.isEmpty(), "the carry went with its desktop");
+    }
+
+    // A window on desktops 1 and 2 with its own zone on each, moved to an
+    // activity not in view and back before it arrived there, comes home in
+    // each desktop's own zone, not only the one shown first: the waiting
+    // carry holds both.
+    void anActivityRoundTripKeepsEachDesktopsZone()
+    {
+        showActivity(kActY);
+        snapOn(1, m_zoneIds[0]);
+        snapOn(2, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({1, 2}, kActX)));
+        QVERIFY(m_batch.isEmpty());
+
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({1, 2}, kActY)));
+
+        QCOMPARE(m_batch.size(), 1);
+        QCOMPARE(m_batch.first().virtualDesktop, 1);
+        QCOMPARE(zonesOn(1), QStringList{m_zoneIds[0]});
+        QCOMPARE(zonesOn(2), QStringList{m_zoneIds[1]});
+    }
+
+    // The same window moved into the activity in view: each desktop is given
+    // the slot of its own zone, not the first source's. Desktop 2 runs the
+    // same layout in both activities and keeps its zone. Desktop 1 runs
+    // another there and takes the slot of its zone in that layout.
+    void anActivityMoveIntoViewCarriesEachDesktopsZone()
+    {
+        const QStringList other = activityLayout();
+        showActivity(kActY);
+        snapOn(1, m_zoneIds[0]);
+        snapOn(2, m_zoneIds[1]);
+        showActivity(kActX);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({1, 2}, kActX)));
+
+        QCOMPARE(m_batch.size(), 1);
+        QCOMPARE(m_batch.first().virtualDesktop, 1);
+        QCOMPARE(m_batch.first().targetZoneId, other[0]);
+        QCOMPARE(zonesOn(1), QStringList{other[0]});
+        QCOMPARE(zonesOn(2), QStringList{m_zoneIds[1]});
+    }
+
+    // A window floating on desktop 1 and snapped on desktop 2, moved into the
+    // activity in view: each desktop arrives the way the window held it, in
+    // whichever order its two stores were made. Desktop 1, in view, floats
+    // and says so with no apply, and desktop 2 is given its own zone.
+    void anActivityMoveIntoViewCarriesEachDesktopsFloatOrZone_data()
+    {
+        QTest::addColumn<bool>("floatFirst");
+        QTest::newRow("the float's store made first") << true;
+        QTest::newRow("the zone's store made first") << false;
+    }
+    void anActivityMoveIntoViewCarriesEachDesktopsFloatOrZone()
+    {
+        QFETCH(bool, floatFirst);
+        showActivity(kActY);
+        const auto floatOnOne = [this] {
+            m_engine->stateForWindowOnScreen(kWindow, kScreen, 1)->setFloatingOnScreen(kWindow, kScreen, 1);
+        };
+        const auto snapOnTwo = [this] {
+            m_engine->stateForWindowOnScreen(kWindow, kScreen, 2)
+                ->assignWindowToZones(kWindow, {m_zoneIds[1]}, kScreen, 2);
+        };
+        if (floatFirst) {
+            floatOnOne();
+            snapOnTwo();
+        } else {
+            snapOnTwo();
+            floatOnOne();
+        }
+        showActivity(kActX);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        QSignalSpy floats(m_engine, &SnapEngine::windowFloatingChanged);
+
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({1, 2}, kActX)));
+
+        QVERIFY2(m_batch.isEmpty(), "a float arriving in view keeps its frame, and desktop 2 is out of view");
+        QCOMPARE(floats.count(), 1);
+        QCOMPARE(floats.first().at(1).toBool(), true);
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        const SnapState* inView = static_cast<SnapState*>(m_engine->stateForScreen(kScreen));
+        QVERIFY(inView && inView->isFloating(kWindow));
+        QVERIFY(inView->zonesForWindow(kWindow).isEmpty());
+        QCOMPARE(zonesOn(2), QStringList{m_zoneIds[1]});
     }
 
 private:

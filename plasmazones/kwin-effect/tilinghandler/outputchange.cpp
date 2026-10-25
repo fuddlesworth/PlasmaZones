@@ -110,7 +110,8 @@ bool TilingHandler::isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& 
         return false;
     }
     // The rect the strip last gave it: the commanded rect where one is armed (an
-    // X11 tile, a maximized column), else the column offered to a Wayland tile.
+    // X11 tile, a maximized column, one placed outside its output), else the
+    // column the strip offered it.
     const auto commanded = m_effect->m_scrollCommandedRects.constFind(windowId);
     const QRect stripRect = commanded != m_effect->m_scrollCommandedRects.constEnd()
         ? commanded->rect
@@ -120,12 +121,36 @@ bool TilingHandler::isKWinMoveOfStripTile(KWin::EffectWindow* w, const QString& 
     }
     // Parked is either end at a park: the strip's rect while the client has
     // not committed it yet, the frame once it has. The frame rounded as
-    // atScrollPark rounds the live one.
+    // atScrollPark rounds the live one. The commanded rect's recorded flag as
+    // well: a park tests against the CURRENT output union, so an output that
+    // arrives under an old park makes the rect test fail, and the recorded
+    // flag is what keeps that park from reading as a move.
     const QRect frameRect(qRound(frame.x()), qRound(frame.y()), qRound(frame.width()), qRound(frame.height()));
-    const KWin::LogicalOutput* const stripOutput = KWin::effects->screenAt(stripRect.center());
-    return ScrollDecisions::isKWinMoveOffStrip(
-        frame, stripOutput ? QRectF(QRect(stripOutput->geometry())) : QRectF(), m_expectedOutputMove.contains(windowId),
-        rectAtScrollPark(frameRect) || rectAtScrollPark(stripRect), w->isUserMove());
+    const bool recordedPark = commanded != m_effect->m_scrollCommandedRects.constEnd() && commanded->parked;
+    ScrollDecisions::KWinMoveOffStripFacts facts;
+    facts.markerArmed = m_expectedOutputMove.contains(windowId);
+    facts.userMove = w->isUserMove();
+    facts.parked = recordedPark || rectAtScrollPark(frameRect) || rectAtScrollPark(stripRect);
+    // Each of these refuses on its own (isKWinMoveOffStrip asks them first), so
+    // a frame change that one refuses skips the output lookups below: this
+    // runs on every frame change of a strip window the counter-assert guards
+    // (F126).
+    if (facts.markerArmed || facts.userMove || facts.parked) {
+        return false;
+    }
+    const KWin::LogicalOutput* const centreOutput = KWin::effects->screenAt(stripRect.center());
+    // The pure resolve, not scrollTrackedScreenFor: this is a probe, and that
+    // one reports a lost scroll clip and spends its dedupe slot (F145). A
+    // screen whose output is gone resolves no output below, as it would there.
+    const QString trackedScreen = scrollStripScreenFor(windowId);
+    const KWin::LogicalOutput* const trackedOutput =
+        trackedScreen.isEmpty() ? nullptr : m_effect->outputForScreenId(trackedScreen);
+    facts.frame = frame;
+    facts.trackedOutput = trackedOutput ? QRectF(QRect(trackedOutput->geometry())) : QRectF();
+    facts.centreOutput = centreOutput ? QRectF(QRect(centreOutput->geometry())) : QRectF();
+    facts.coordinatesHold =
+        !m_effect->m_screenChangeHandler->isScreenChangeInProgress() && !stripOutputMovedSinceBatch(trackedScreen);
+    return ScrollDecisions::isKWinMoveOffStrip(facts);
 }
 
 bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w, ReAdd readd)
@@ -244,39 +269,52 @@ bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w, ReAdd readd
             if (m_managedScreens.contains(positional)) {
                 m_notifiedWindowScreens[windowId] = positional;
                 // On a scroll→scroll handoff the SOURCE screen's commanded
-                // rect survives this bookkeeping-only arm (the funnel that
-                // drops it, cleanupAutotileTracking, is bypassed here), and
-                // once the record above names the destination the
-                // counter-assert could fight one legitimate X11 position
-                // with the old screen's rect before the destination's first
-                // batch overwrites it. Same hazard the funnel documents.
-                //
-                // The relocation hint is deliberately NOT dropped alongside
-                // it, despite the two looking symmetric. By the ordering this
-                // function documents above, the destination's tile requests
-                // have NORMALLY already landed (that is what pre-seeded the
-                // record this arm is echoing), so the entry here is usually
-                // the DESTINATION's, freshly written. This arm only proves the
-                // source bucket emptied, so it does not guarantee that — but
-                // keeping the entry is right either way. Where the destination
-                // batch has not run yet, its per-window insert-or-remove
-                // corrects a stale source value as soon as it does. Where it
-                // has, dropping would be permanent: the engine emits on change,
-                // so with the strip at rest nothing rewrites an unchanged
-                // value, and the column would be drawn at its committed rect
-                // below the union of all outputs, i.e. invisible, until the
-                // user scrolled it. A stale commanded rect only disarms a
-                // counter-assert, which is invisible. A lost relocation is not.
-                //
-                // The offered column IS dropped, on the opposite reasoning to
-                // the relocation hint: a stale one is read as a column the
-                // client has already answered, so the destination's first batch
+                // rect and offered column can survive this bookkeeping-only arm
+                // (the funnel that drops them, cleanupAutotileTracking, is
+                // bypassed here). A stale commanded rect lets the
+                // counter-assert fight a legitimate position with the old
+                // screen's rect, and a stale offer is read as a column the
+                // client has already answered, so the destination's batch
                 // would skip offering it and hand the window whatever size it
-                // is holding. That mistake does not self-correct, because the
-                // offer looks settled. Re-offering the column costs one extra
-                // resize, which is the cheap direction here.
-                m_effect->m_scrollCommandedRects.remove(windowId);
-                m_effect->m_scrollOfferedColumn.remove(windowId);
+                // is holding, which does not self-correct because the offer
+                // looks settled.
+                //
+                // But by the ordering this function documents above, the
+                // destination's tile requests have NORMALLY already landed
+                // (that is what pre-seeded the record this arm is echoing), so
+                // both entries are usually the DESTINATION's, freshly written,
+                // and dropping those disarmed the counter-assert for a column
+                // just placed outside its output and threw away the answer
+                // owed to the offer just sent (F502). So each goes only when it
+                // predates the destination's delivery: the window is not yet
+                // tiled on the destination, or the entry's command is no
+                // longer the window's latest (a destination batch that ran
+                // without delivering, deferred or bailed, still took a newer
+                // stamp). Re-offering the column costs one extra resize, which
+                // is the cheap direction where it is stale.
+                //
+                // The relocation hint is deliberately NOT dropped at all. Where
+                // the destination batch has not run yet, its per-window
+                // insert-or-remove corrects a stale source value as soon as it
+                // does. Where it has, dropping would be permanent: the engine
+                // emits on change, so with the strip at rest nothing rewrites
+                // an unchanged value, and the column would be drawn at its
+                // committed rect below the union of all outputs, i.e.
+                // invisible, until the user scrolled it.
+                const auto destinationBucket = m_border.tiledWindowsByScreen.constFind(positional);
+                const bool placedOnDestination = destinationBucket != m_border.tiledWindowsByScreen.constEnd()
+                    && destinationBucket->contains(windowId);
+                const auto deliveredHere = [this, w, placedOnDestination](quint64 commandStamp) {
+                    return placedOnDestination && m_effect->m_daemonGate.commandStamps.isCurrent(w, commandStamp);
+                };
+                if (const auto cit = m_effect->m_scrollCommandedRects.constFind(windowId);
+                    cit != m_effect->m_scrollCommandedRects.constEnd() && !deliveredHere(cit->commandStamp)) {
+                    m_effect->m_scrollCommandedRects.remove(windowId);
+                }
+                if (const auto oit = m_effect->m_scrollOfferedColumn.constFind(windowId);
+                    oit != m_effect->m_scrollOfferedColumn.constEnd() && !deliveredHere(oit->commandStamp)) {
+                    m_effect->m_scrollOfferedColumn.remove(windowId);
+                }
                 // The autotile centring maps go only when the window lands on a
                 // strip: their skip short-circuit there downgrades a resize to
                 // a move. On an autotile destination the entry and stamp are
@@ -403,17 +441,11 @@ bool TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w, ReAdd readd
             // m_notifiedWindowScreens answers a different question, because
             // that map is the same one oldScreenId comes from and this block
             // only runs when oldScreenId equals newScreenId, which is by
-            // construction a live output. Spelled locally rather than calling
-            // the real predicate because that one warns and mutates its dedupe
-            // set, neither of which belongs on a bookkeeping path.
-            const QString trackedScreen = [&]() -> QString {
-                const QString bucket = TilingStateHelpers::screenForTiledWindow(m_border, windowId);
-                if (m_scrollingScreens.contains(bucket)) {
-                    return bucket;
-                }
-                const QString recorded = m_notifiedWindowScreens.value(windowId);
-                return m_scrollingScreens.contains(recorded) ? recorded : QString();
-            }();
+            // construction a live output. The pure resolve, not
+            // scrollTrackedScreenFor, which reports a lost scroll clip and
+            // spends its dedupe slot, and would answer empty for exactly the
+            // unplugged screen this term exists to see.
+            const QString trackedScreen = scrollStripScreenFor(windowId);
             const bool trackedOutputGone = !trackedScreen.isEmpty()
                 && !m_effect->connectedPhysicalIds().contains(
                     PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen));

@@ -4,8 +4,10 @@
 /**
  * @file test_wta_capture_guards.cpp
  * @brief Capture-orchestrator guards in WindowTrackingAdaptor::captureWindowPlacement:
- *        the managed-frame float-back refusal and the untracked-window
- *        no-engine contract (frozen per-mode snap slot preserved).
+ *        the managed-frame float-back refusal, the untracked-window
+ *        no-engine contract (frozen per-mode snap slot preserved), and the
+ *        excluded-window close guard (no new record for a window excluded by
+ *        the minimum size or a rule, an own record kept current).
  *
  * Unlike test_wta_convenience's shared fixture, these tests wire a REAL
  * ScreenManager (FakePhysicalScreenSource): the untracked-window regression only
@@ -29,6 +31,10 @@
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleSet.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -705,6 +711,153 @@ private Q_SLOTS:
         snap.reset();
     }
 
+    // The engine-miss CLOSE fallback leaves nothing behind for a window that
+    // was excluded from placement. An app's splash screen under the minimum
+    // size is never placed by any engine, so it closes untracked; recorded,
+    // its frame became a floating record in the app's bucket, and the app's
+    // main window opening next consumed it as a reopen and came up floating
+    // at the splash's size and spot. An untracked window of another app,
+    // above the minimum size, closing the same way still records, so the
+    // refusal is shown to be the exclusion and not the fallback going quiet.
+    void testCloseOfExcludedWindowLeavesNoRecordForItsApp()
+    {
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1600, 900), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        m_settings->setMinimumWindowWidth(500);
+        m_settings->setMinimumWindowHeight(500);
+        // The exclusion is asked through the full rule query, which needs the
+        // window's registry metadata. Production removes a closing window from
+        // the registry only after this capture, so both windows are in it.
+        PhosphorEngine::WindowRegistry registry;
+        for (const QString& app : {QStringLiteral("splashapp"), QStringLiteral("bigapp")}) {
+            PhosphorEngine::WindowMetadata metadata;
+            metadata.appId = app;
+            metadata.isMinimized = false;
+            registry.upsert(app == QStringLiteral("splashapp") ? QStringLiteral("splash") : QStringLiteral("big"),
+                            metadata);
+        }
+        // Engine before parent — see testMinimizedCapturePreservesPreMinimizePlacement.
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap->setEngineSettings(m_settings);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr, nullptr);
+        const auto teardown = qScopeGuard([wta, &snap] {
+            wta->setEngines(nullptr, nullptr, nullptr);
+            wta->service()->setSnapState(nullptr);
+            wta->service()->setSnapEngine(nullptr);
+            snap.reset();
+            wta->setWindowRegistry(nullptr);
+        });
+
+        const QString screenId = QStringLiteral("DP-1");
+        const QString splash = QStringLiteral("splashapp|splash");
+        const QString splashApp = wta->service()->currentAppIdFor(splash);
+        wta->setFrameGeometry(splash, 650, 261, 300, 378);
+        wta->captureWindowPlacement(splash, screenId);
+        QVERIFY2(!wta->service()->placementStore().peek(QStringLiteral("splashapp|main"), splashApp),
+                 "a closing window under the minimum size must leave no record its app's next window can take");
+
+        const QString big = QStringLiteral("bigapp|big");
+        const QString bigApp = wta->service()->currentAppIdFor(big);
+        const QRect bigFrame(330, 86, 940, 728);
+        wta->setFrameGeometry(big, bigFrame.x(), bigFrame.y(), bigFrame.width(), bigFrame.height());
+        wta->captureWindowPlacement(big, screenId);
+        const auto rec = wta->service()->placementStore().peek(big, bigApp);
+        QVERIFY2(rec, "an untracked window above the minimum size still records its float-back at close");
+        QCOMPARE(rec->freeGeometryFor(screenId), bigFrame);
+    }
+
+    // The exclusion gate's other half, and its limit. A window an Exclude rule
+    // matches closes untracked like the small splash above and leaves no record
+    // either. A window under the minimum size that already HAS a record
+    // of its own keeps it current: the gate may only stop a record from being
+    // created, since every free window on a snapping screen closes through
+    // this branch. Mutation: drop the own-record test from the gate
+    // and the kept window's float-back stays at its older rect.
+    void testCloseOfExcludedWindowRefusesOnlyANewRecord()
+    {
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1600, 900), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        m_settings->setMinimumWindowWidth(500);
+        m_settings->setMinimumWindowHeight(500);
+        PhosphorEngine::WindowRegistry registry;
+        const QList<QPair<QString, QString>> windows = {{QStringLiteral("ruled"), QStringLiteral("ruledapp")},
+                                                        {QStringLiteral("kept"), QStringLiteral("keptapp")}};
+        for (const auto& [instance, app] : windows) {
+            PhosphorEngine::WindowMetadata metadata;
+            metadata.appId = app;
+            metadata.isMinimized = false;
+            registry.upsert(instance, metadata);
+        }
+        PhosphorRules::RuleSet excludeSet;
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("exclude ruledapp");
+        rule.enabled = true;
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::AppId, PhosphorRules::Operator::AppIdMatches, QStringLiteral("ruledapp"));
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Exclude);
+        rule.actions.append(action);
+        QVERIFY(excludeSet.addRule(rule));
+        // Engine before parent — see testMinimizedCapturePreservesPreMinimizePlacement.
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap->setEngineSettings(m_settings);
+        snap->setExcludeRuleSet(&excludeSet);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr, nullptr);
+        const auto teardown = qScopeGuard([wta, &snap] {
+            wta->setEngines(nullptr, nullptr, nullptr);
+            snap->setExcludeRuleSet(nullptr);
+            wta->service()->setSnapState(nullptr);
+            wta->service()->setSnapEngine(nullptr);
+            snap.reset();
+            wta->setWindowRegistry(nullptr);
+        });
+        const QString screenId = QStringLiteral("DP-1");
+
+        // Above the minimum size, so only the rule can refuse it.
+        const QString ruled = QStringLiteral("ruledapp|ruled");
+        const QString ruledApp = wta->service()->currentAppIdFor(ruled);
+        wta->setFrameGeometry(ruled, 330, 86, 940, 728);
+        QVERIFY(snap->isWindowExcluded(ruled, screenId));
+        wta->captureWindowPlacement(ruled, screenId);
+        QVERIFY2(!wta->service()->placementStore().peek(QStringLiteral("ruledapp|next"), ruledApp),
+                 "a closing window an exclude rule matches must leave no record its app's next window can take");
+
+        // Under the minimum size, with a float-back of its own from earlier.
+        const QString kept = QStringLiteral("keptapp|kept");
+        const QString keptApp = wta->service()->currentAppIdFor(kept);
+        wta->service()->recordFreeGeometry(kept, screenId, QRect(100, 100, 900, 700), true);
+        const QRect smallFrame(650, 261, 300, 378);
+        wta->setFrameGeometry(kept, smallFrame.x(), smallFrame.y(), smallFrame.width(), smallFrame.height());
+        QVERIFY(snap->isWindowExcluded(kept, screenId));
+        wta->captureWindowPlacement(kept, screenId);
+        const auto rec = wta->service()->placementStore().peek(kept, keptApp);
+        QVERIFY(rec);
+        QCOMPARE(rec->freeGeometryFor(screenId), smallFrame);
+    }
+
     // Close DURING a fullscreen hold: the window's frame is the output rect.
     // Tiling.windowClosed drops the engine slot before WindowTracking's
     // capture runs, so without the engine's closed-hold memory the orphan
@@ -835,14 +988,19 @@ private Q_SLOTS:
         // The same record shape for a window that does not fill its output.
         QVERIFY(recordSnapped(QStringLiteral("app|half"), QStringLiteral("DP-1/vs:1")));
         wta->setFrameGeometry(QStringLiteral("app|half"), 100, 100, 800, 600);
+        // Hanging past DP-2's top edge, its centre on no output: it left
+        // nothing, and the primary screen's fallback must not say it did.
+        QVERIFY(recordSnapped(QStringLiteral("app|edge"), QStringLiteral("DP-2")));
+        wta->setFrameGeometry(QStringLiteral("app|edge"), 3500, -700, 800, 600);
 
         const QStringList alive{QStringLiteral("app|left"), QStringLiteral("app|stay"), QStringLiteral("app|full"),
-                                QStringLiteral("app|half")};
+                                QStringLiteral("app|half"), QStringLiteral("app|edge")};
         wta->pruneStaleWindows(alive);
         QCOMPARE(snapState(QStringLiteral("app|left")), released);
         QCOMPARE(snapState(QStringLiteral("app|stay")), snapped);
         QCOMPARE(snapState(QStringLiteral("app|full")), snapped);
         QCOMPARE(snapState(QStringLiteral("app|half")), released);
+        QCOMPARE(snapState(QStringLiteral("app|edge")), snapped);
 
         // Once per daemon: a window that moves later is the live handlers'.
         wta->setFrameGeometry(QStringLiteral("app|stay"), 2000, 100, 800, 600);

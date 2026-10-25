@@ -645,6 +645,11 @@ public:
     /// the daemon's scrollingScreensChanged lags, and until it lands every
     /// id-keyed consumer would keep resolving to the dead output.
     QString scrollTrackedScreenFor(const QString& windowId) const;
+    /// scrollTrackedScreenFor's resolve without its connected-output gate, and
+    /// so without its clip-loss report or the dedupe set that report mutates: a
+    /// PURE question for a bookkeeping path. A screen whose output is gone is
+    /// answered as it stands, and the caller's own output lookup fails for it.
+    QString scrollStripScreenFor(const QString& windowId) const;
 
     /// True when @p w's live frame lies entirely off the union of every
     /// connected output — i.e. it is sitting at a strip park right now.
@@ -788,18 +793,26 @@ public:
 
     /// What reportStripCommit did with a client's answer to its column.
     enum class StripCommitReport : quint8 {
-        Sent, ///< the answer differed from the offer and went to the engine
+        Sent, ///< the answer went to the engine (shouldReportCommittedSize said so)
         NothingToReport, ///< nothing the engine acts on, or a daemon without the method this session
         Deferred, ///< not yet: no daemon registered, or its axis map has not landed
     };
-    /// Report a Wayland strip window's settled answer to the column it was offered
+    /// Report a strip window's settled answer to the column it was offered
     /// (Scrolling.reportCommittedSize), when ScrollDecisions::shouldReportCommittedSize
-    /// says it differs: along the strip either way, across it only when longer.
-    /// The caller (PlasmaZonesEffect::readColumnAnswer) has already read the
-    /// frame as an answer; @p screenId is the strip's screen, which says which
-    /// extent is the main one. Defined in framecentering.cpp.
+    /// says so: off a park, an answer that differs from @p expected on either
+    /// axis; at a park, any answer, the one that takes the park included
+    /// (#1154). The caller (PlasmaZonesEffect::readColumnAnswer) has already
+    /// read the frame as an answer; @p screenId is the strip's screen, which
+    /// says which extent is the main one. @p expected is the size the client's
+    /// answer is judged against: the column's own for Wayland, its size hints'
+    /// answer to the column for X11 (constrainTileGeometry), so a size increment
+    /// is no answer. The engine is still told @p offered, and an extent the
+    /// answer took whole within the tolerance of @p expected is reported as
+    /// the offer's (ScrollDecisions::reportedCommittedSize). A report that
+    /// fails on the wire makes the answer owed again. Defined in
+    /// framecentering.cpp.
     StripCommitReport reportStripCommit(const QString& windowId, const QString& screenId, const QRect& offered,
-                                        const QRect& committed);
+                                        const QSize& expected, const QRect& committed);
     /// @p w's decoration changed, which moves its declared minimum as a frame
     /// size (declaredMinSize): re-report it through the change-gated writer,
     /// only for a window the engine holds a minimum for (the announce seeds the
@@ -1451,10 +1464,11 @@ private:
      * the reply lands, unless ANY owner took the window back during the
      * round-trip (re-notified, autotile screen, snap commit, float, user
      * move/resize, desktop switched again). Callers must only invoke this
-     * for windows that were verifiably autotile-managed (tracked in
-     * m_notifiedWindows at demotion time): the daemon record is mode-shared and
-     * session-persisted, so an ungated call would move a never-autotiled
-     * window to its own float-back from another mode or an earlier session.
+     * for windows that were verifiably placed by the tiling engine: tracked
+     * at demotion time and tiled there (PreTileDecisions::resolvePreTileRestore
+     * takes both). The daemon record is mode-shared and session-persisted, so
+     * an ungated call would move a never-tiled window to its own float-back
+     * from another mode or an earlier session (#1151).
      * `capturedScreenId` is the caller's screen taken while the engine's
      * override was still live; by reply time a positional re-resolve of a
      * parked (off-canvas) frame can name a neighbouring output.
@@ -1698,11 +1712,11 @@ private:
     quint64 m_scrollEffectBehaviourQueryGeneration = 0;
     /// The scroll cap's blocked-window list, on its own property because it
     /// updates per relayout rather than per settings change, carries the same
-    /// bounded retry and the same two guards as the map beside it.
+    /// bounded retry and the same guards as the map beside it.
     int m_scrollFocusScrollBlockedFetchRetriesLeft = 0;
     quint64 m_scrollFocusScrollBlockedQueryGeneration = 0;
-    /// The two tab-indicator bring-up fetches carry the same bounded retry
-    /// and per-dispatch generation guard as their four siblings. The guard
+    /// The tab-indicator bring-up fetches carry the same bounded retry and
+    /// per-dispatch generation guard as their sibling fetches. The guard
     /// matters across a daemon restart: two loadSettings runs put two calls in
     /// flight, and a late reply from the DEAD session would otherwise
     /// re-install a payload for a screen the new daemon never names and

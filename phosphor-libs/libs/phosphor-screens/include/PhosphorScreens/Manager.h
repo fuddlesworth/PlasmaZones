@@ -40,8 +40,8 @@ class IPhysicalScreenSource;
  *     real-time available-area tracking.
  *
  * Pointers are non-owning EXCEPT a null @ref physicalScreenSource, where the
- * manager owns the QtPhysicalScreenSource it constructs. An injected source /
- * store / source must outlive the manager.
+ * manager owns the QtPhysicalScreenSource it constructs. An injected physical
+ * screen source, panel source or config store must outlive the manager.
  *
  * Top-level (not nested in ScreenManager) so its in-class member
  * initialisers are reachable at the @ref ScreenManager constructor's
@@ -71,6 +71,13 @@ struct ScreenManagerConfig
  * NOT a singleton — the lib never owns process-global state. Consumers
  * that need a process-wide ScreenManager (the Phosphor daemon does)
  * provide their own thin service-locator outside this class.
+ *
+ * GUI THREAD ONLY. Every member, the const queries included, must be called
+ * on the thread that owns QGuiApplication: the queries fill lazy caches with
+ * no locking, and the sensor windows and QScreen reads behind them are GUI
+ * objects. Debug builds assert it on the hot accessors
+ * (PS_SCREEN_MANAGER_ASSERT_GUI_THREAD). ScreenIdentity carries the same
+ * constraint.
  */
 class PHOSPHORSCREENSRUNTIME_EXPORT ScreenManager : public QObject
 {
@@ -163,14 +170,25 @@ public:
      * sensor (a synthetic test screen never gets one — see
      * @c createGeometrySensor) or the sensor has not been mapped yet, and to
      * 1.0 when there is no QScreen either. The fallback is the OLD, coarse
-     * answer rather than a wrong-by-construction guess.
+     * answer, the integer ceiling on a fractional output. For a diagnostic
+     * reader that is only imprecise, but a reader that divides by the scale
+     * gets a wrong size from it (a device-pixel zone on a 1.15 output comes
+     * out at 1/2 of its pixels instead of 1/1.15). Such a reader must not
+     * cache a value read before the sensor maps. It must recompute on
+     * @ref logicalScaleChanged, which fires when the real number arrives and
+     * on every later change; the daemon's layout recalculation does.
      *
-     * DIAGNOSTIC USE ONLY today (the support report and the getScreenInfo
-     * reply). Nothing in placement reads a scale: PlasmaZones works in
-     * logical coordinates throughout, and the compositor owns the conversion.
-     * Do not introduce a device-pixel calculation on the strength of this
-     * accessor without checking that the surface in question is actually
-     * scaled the same way.
+     * Placement works in logical coordinates throughout, and the compositor
+     * owns the conversion. The one placement reader is a layout that declares
+     * its fixed zone geometry in the OUTPUT's device pixels
+     * (PhosphorZones::Layout::fixedGeometryInDevicePixels), which divides by
+     * this to land in those logical coordinates. The getScreenInfo reply
+     * carries it too, as devicePixelRatio, and is no longer read for
+     * diagnostics only: the layout editor converts that unit with it,
+     * between the device pixels a layout stores and the logical ones it
+     * edits in. It also feeds the support report. Do not introduce another
+     * device-pixel calculation on the strength of this accessor without
+     * checking that the surface in question is actually scaled the same way.
      */
     qreal logicalScale(const PhysicalScreen& screen) const;
 

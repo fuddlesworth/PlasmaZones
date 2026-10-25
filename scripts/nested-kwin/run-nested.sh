@@ -11,9 +11,17 @@
 # Usage:
 #   scripts/nested-kwin/run-nested.sh [output-count] [width height] [scale]
 #
-# width/height/scale apply to EVERY virtual output (kwin_wayland's flags
-# are global). Genuinely MIXED per-output scale needs a seeded
-# kwinoutputconfig.json in the nested config home instead.
+# width/height apply to EVERY output (kwin_wayland's flags are global).
+# scale is passed only to the visible window (PZ_NESTED_VISIBLE). The headless
+# --virtual backend does not take --scale as an output scale: it multiplies
+# the mode by it and keeps scale 1 (1600x900 at 1.25 comes up 2000x1125 at
+# scale 1), so the script does not pass it there and warns instead. To scale
+# a headless output, change it once the session is up, from a shell that
+# sourced env.sh:
+#   kscreen-doctor output.Virtual-0.scale.1.25
+# (the regression probe fscale-fixed-device-pixels does this). The same
+# command per output gives mixed scales, and so does a seeded
+# kwinoutputconfig.json in the nested config home.
 #
 # Set PZ_NESTED_XWAYLAND to any value to start Xwayland in the nested
 # session (X11 test clients; see the flag site below for how to point a
@@ -387,15 +395,17 @@ export XDG_DATA_DIRS="$NEST/dbus-services:${XDG_DATA_DIRS:-/usr/local/share:/usr
 EXTRA_FLAGS=""
 [ -n "$WIDTH" ] && EXTRA_FLAGS="$EXTRA_FLAGS --width $WIDTH"
 [ -n "$HEIGHT" ] && EXTRA_FLAGS="$EXTRA_FLAGS --height $HEIGHT"
-[ -n "$SCALE" ] && EXTRA_FLAGS="$EXTRA_FLAGS --scale $SCALE"
+# --scale goes to the visible backend only (see the backend selection below).
 # Opt-in Xwayland: X11 clients (Proton games are the ones that matter) take
 # different KWin paths for fullscreen geometry, so X11-specific bugs cannot
 # reproduce in a Wayland-only nested session. env.sh cannot carry the X11
 # DISPLAY — it is written before kwin_wayland execs, and the nested
-# Xwayland picks its display number at startup (kwin_wayland usually
-# prints it on this terminal; if not, `ls /tmp/.X11-unix` and pick the
-# socket that appeared). To run an X11 test client: source env.sh, find
-# the display number, then
+# Xwayland picks its display number at startup. Read it from the Xwayland
+# process the nested kwin_wayland started, whose first argument is the
+# display (`ps -o args= --ppid <kwin_wayland pid>`). Failing that, KWin
+# opens two new sockets under /tmp/.X11-unix and serves the display on the
+# LOWER-numbered one, and a client sent to the other never maps. To run an
+# X11 test client: source env.sh, find the display number, then
 #   DISPLAY=:<n> QT_QPA_PLATFORM=xcb <client>
 # (QT_QPA_PLATFORM=xcb alone would connect to the HOST X server and
 # silently test the wrong compositor).
@@ -418,6 +428,10 @@ if [ -n "${PZ_NESTED_VISIBLE:-}" ]; then
     if [ -z "$WIDTH" ]; then
         EXTRA_FLAGS="$EXTRA_FLAGS --width 1600 --height 900"
     fi
+    [ -n "$SCALE" ] && EXTRA_FLAGS="$EXTRA_FLAGS --scale $SCALE"
+elif [ -n "$SCALE" ]; then
+    echo "scale $SCALE is not passed to the headless --virtual backend, which would grow the mode by it and keep scale 1." >&2
+    echo "Set it once the session is up with kscreen-doctor output.Virtual-N.scale.$SCALE (see the header)." >&2
 fi
 
 exec dbus-run-session -- sh -c "

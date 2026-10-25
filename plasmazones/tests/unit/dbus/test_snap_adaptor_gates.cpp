@@ -10,13 +10,15 @@
  *        and a swap pass the same gates (F362, F79), none of them acts on the
  *        window being dragged (F773), and the effect's confirmations commit
  *        only real zones on real screens (F459). A restore asked for a screen
- *        the daemon does not know runs nothing.
+ *        the daemon does not know runs nothing, and a bus batch takes a
+ *        restore entry only from the compositor bridge.
  */
 
 #include "wta_float_back_fixture.h"
 #include "helpers/VirtualScreenTestHelpers.h"
 #include "dbus/controladaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
+#include "helpers/BusPeer.h"
 #include "helpers/ScreenDisablingResolver.h"
 
 #include <PhosphorEngine/EngineTypes.h>
@@ -24,6 +26,8 @@
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorRules/WindowQuery.h>
 
+#include <QDBusMessage>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QUuid>
 
@@ -807,6 +811,45 @@ private Q_SLOTS:
         f.adaptor->handleBatchedResnap(batchFor(f, w, f.zone(0), kLeft, 1));
         QCOMPARE(batches.count(), 1);
         QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+    }
+
+    // A restore entry unsnaps the window, floats it and moves it, none of
+    // which the snap gate checks, so a bus batch takes one only from the
+    // registered compositor bridge. A stranger's restore leaves the window
+    // snapped. A direct call, the daemon's own, commits it.
+    void busBatchRestoreIsTakenOnlyFromTheBridge()
+    {
+        GateFixture f;
+        const QString w = f.registerOn(QStringLiteral("batch-restore"), 1);
+        f.adaptor->moveWindowToZoneOnScreen(w, f.zone(0), kLeft);
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+        PhosphorEngine::ZoneAssignmentEntry restore;
+        restore.windowId = w;
+        restore.targetZoneId = PhosphorEngine::RestoreSentinel;
+        restore.targetGeometry = QRect(200, 150, 640, 480);
+        restore.targetScreenId = kLeft;
+        const QString payload = PhosphorEngine::GeometryUtils::serializeZoneAssignments({restore});
+
+        {
+            // Exported through a host as Daemon exports its adaptors, so a bus
+            // call's context reaches the adaptor. No bridge is registered.
+            PlasmaZones::TestHelpers::BusHost host;
+            auto* exported = new SnapAdaptor(f.snap.get(), f.wta, &f.settings, &host);
+            const auto detach = qScopeGuard([exported] {
+                exported->clearEngine();
+            });
+            PlasmaZones::TestHelpers::BusPeer stranger(&host, QStringLiteral("BatchStranger"));
+            QVERIFY(stranger.ready());
+            const QDBusMessage reply =
+                stranger.call(QStringLiteral("org.plasmazones.Snap"), QStringLiteral("handleBatchedResnap"), {payload});
+            QVERIFY2(reply.type() != QDBusMessage::InvalidMessage, "the call must have been answered");
+        }
+        QCOMPARE(f.snap->zoneForWindow(w), f.zone(0));
+        QVERIFY(!f.snap->isFloating(w));
+
+        f.adaptor->handleBatchedResnap(payload);
+        QVERIFY(f.snap->zoneForWindow(w).isEmpty());
+        QVERIFY(f.snap->isFloating(w));
     }
 
     void busAutotileOrderOnATilingScreenDoesNothing()

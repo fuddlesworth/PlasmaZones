@@ -52,6 +52,19 @@ QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
     return m_frameGeometry.value(shadowWindowId(windowId));
 }
 
+bool WindowTrackingAdaptor::isSettledManagedFrame(const QString& windowId, const QRect& frame) const
+{
+    // The frame the window settled at while a zone or a tile held it in view
+    // (setFrameGeometry's m_lastManagedFrame), never a drag frame. The settled
+    // frame only, not WindowTrackingService::isManagedFrame: that one also
+    // answers for every member store's zone rect, which the membership pass
+    // already compares for itself.
+    if (windowId.isEmpty() || !frame.isValid()) {
+        return false;
+    }
+    return m_lastManagedFrame.value(shadowWindowId(windowId)) == frame;
+}
+
 QStringList WindowTrackingAdaptor::knownWindowIds() const
 {
     return m_frameGeometry.keys();
@@ -178,7 +191,7 @@ QString WindowTrackingAdaptor::getZoneForWindow(const QString& windowId)
     if (!validateWindowId(windowId, QStringLiteral("get zone for window"))) {
         return QString();
     }
-    // Delegate to service
+    // Empty with no snap store resolving (none wired, or the engine is gone).
     return m_service->zoneForWindow(windowId);
 }
 
@@ -208,8 +221,8 @@ QStringList WindowTrackingAdaptor::getMultiZoneForWindow(const QString& windowId
     if (!validateWindowId(windowId, QStringLiteral("get multi-zone for window"))) {
         return QStringList();
     }
-
-    // Return stored zone IDs directly (multi-zone support)
+    // Return stored zone IDs directly (multi-zone support); empty with no
+    // snap store resolving.
     return m_service->zonesForWindow(windowId);
 }
 

@@ -53,7 +53,15 @@ public:
                                              int desktop) const override;
 
 public Q_SLOTS:
-    // PhosphorZones::Zone detection for cursor position
+    // PhosphorZones::Zone detection for cursor position. Not pure queries:
+    // both recompute the point's screen layout against that screen (the one
+    // Layout object every screen running that layout shares, its last
+    // recalculation scale included) and bind the shared zone detector to it,
+    // as a drag tick does. detectZoneAtPosition also highlights the zone found
+    // and emits zoneDetected with the zone's rect on the detected screen. When
+    // the detection runs and finds no zone it clears the highlight, but a call
+    // that returns before detecting (no screen, no layout for it, or a
+    // degenerate screen geometry) leaves the highlight as it was.
     QString detectZoneAtPosition(int x, int y);
     QStringList detectMultiZoneAtPosition(int x, int y);
     PhosphorProtocol::ZoneGeometryRect getZoneGeometry(const QString& zoneId);
@@ -117,6 +125,8 @@ public Q_SLOTS:
     QString detectZoneWithModifiers(int x, int y);
 
 Q_SIGNALS:
+    /// The zone detectZoneAtPosition found, with its rect on the screen the
+    /// point was detected on.
     void zoneDetected(const QString& zoneId, const PhosphorProtocol::ZoneGeometryRect& geometry);
 
 private:

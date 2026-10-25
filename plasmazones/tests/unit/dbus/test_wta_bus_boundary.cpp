@@ -6,10 +6,12 @@
  * @brief What WindowTrackingAdaptor takes from the effect's reports: a screen
  *        the daemon does not know is held until it arrives, a split monitor's
  *        physical id lands in the right virtual screen, a metadata push is
- *        normalised to WindowMetadata's invariants, the focused-window, frame
- *        and resize reports are keyed and routed as the adaptor documents, the
- *        stale-window prune drops what died, and a close on a removed virtual
- *        screen files where the frame is (F81, F852, F48, F853 to F858, F251).
+ *        normalised to WindowMetadata's invariants (a caption refresh keeps a
+ *        span or activity list KWin merely reordered, #1147), the
+ *        focused-window, frame and resize reports are keyed and routed as the
+ *        adaptor documents, the stale-window prune drops what died, and a close
+ *        on a removed virtual screen files where the frame is (F81, F852, F48,
+ *        F853 to F858, F251).
  */
 
 #include "wta_float_back_fixture.h"
@@ -74,6 +76,53 @@ private Q_SLOTS:
         f.setFrame(windowId, QRect(3000, 100, 400, 300)); // the right half of DP-2
         f.wta->windowActivated(windowId, kRight);
         QCOMPARE(f.wta->lastActiveScreenName(), QStringLiteral("DP-2/vs:1"));
+    }
+
+    // An activation names the new focused window, so the previous window's
+    // screen goes with its id: an activation with no screen leaves none, and
+    // one on a screen the daemon does not know yet leaves none until the held
+    // report lands. Window shortcuts then use the cursor's screen, never the
+    // last window's. Mutation: restore the guarded assignment and
+    // both reads answer DP-1.
+    void activationReplacesThePreviousWindowsScreen()
+    {
+        FloatBackFixture f;
+        QCoreApplication::processEvents(); // the adaptor wires its screen hooks on the first loop turn
+        const QString first = f.registerWindow(QStringLiteral("focus-first"));
+        const QString second = f.registerWindow(QStringLiteral("focus-second"));
+        f.wta->windowActivated(first, kLeft);
+        QCOMPARE(f.wta->lastActiveScreenName(), kLeft);
+
+        f.wta->windowActivated(second, QString());
+        QCOMPARE(f.wta->lastActiveWindowId(), second);
+        QVERIFY2(f.wta->lastActiveScreenName().isEmpty(), "an unknown screen is not the previous window's");
+
+        f.wta->windowActivated(first, kLeft);
+        f.wta->windowActivated(second, QStringLiteral("DP-9"));
+        QVERIFY2(f.wta->lastActiveScreenName().isEmpty(), "a held activation keeps no stale screen meanwhile");
+        f.fake.addScreen(QStringLiteral("DP-9"), QRect(3840, 0, 1920, 1080), QStringLiteral("DP-9"));
+        QTRY_COMPARE(f.wta->lastActiveScreenName(), QStringLiteral("DP-9"));
+    }
+
+    // A crossing report for the focused window whose activation is still held
+    // runs that activation on the newer screen rather than discarding it: the
+    // activation's own work (here the snap float's re-home) happens, on the
+    // screen the window is on. Mutation: restore the shared hold key
+    // and the float stays on DP-1.
+    void crossingReportRunsAHeldActivation()
+    {
+        FloatBackFixture f;
+        QCoreApplication::processEvents();
+        const QString w = f.registerWindow(QStringLiteral("held-activation"));
+        f.snapThenFloat(w, kLeft);
+        QCOMPARE(f.snap->screenForTrackedWindow(w), kLeft);
+
+        f.wta->windowActivated(w, QStringLiteral("DP-9"));
+        f.wta->activeWindowScreenChanged(w, kRight);
+
+        QCOMPARE(f.wta->lastActiveScreenName(), kRight);
+        QVERIFY(f.snap->isFloating(w));
+        QCOMPARE(f.snap->screenForTrackedWindow(w), kRight);
     }
 
     // The focused window's move report names the physical id of a split
@@ -152,6 +201,37 @@ private Q_SLOTS:
         QCOMPARE(f.wta->frameGeometry(windowId), frame);
     }
 
+    // The snap membership pass asks where management left a window
+    // (INavigationStateProvider::isSettledManagedFrame): the frame it settled
+    // at while a zone held it in view, short of the zone for a size-increment
+    // client, answers yes. A frame reported while the user drags it is a spot
+    // the user chose and never counts, nor does any frame of a window never
+    // reported managed. Mutation: answer false in the override
+    // and the settled frame reads as the user's.
+    void settledManagedFrameIsTheOneReportedUnderManagement()
+    {
+        FloatBackFixture f;
+        const QString windowId = f.registerWindow(QStringLiteral("settled-1"));
+        f.snap->commitSnap(windowId, f.zone(0), kLeft);
+        const QRect zone = f.zoneRect(0, kLeft);
+        const QRect settled(zone.x(), zone.y(), zone.width() - 7, zone.height() - 11);
+        f.setFrame(windowId, settled);
+        QVERIFY(f.wta->isSettledManagedFrame(windowId, settled));
+        QVERIFY(!f.wta->isSettledManagedFrame(windowId, zone));
+
+        const QRect dragged(settled.translated(300, 200));
+        f.wta->setInteractiveDragWindow(windowId);
+        f.setFrame(windowId, dragged);
+        f.wta->setInteractiveDragWindow(QString());
+        QVERIFY2(!f.wta->isSettledManagedFrame(windowId, dragged), "a frame from a drag is the user's");
+        QVERIFY(f.wta->isSettledManagedFrame(windowId, settled));
+
+        const QString free = f.registerWindow(QStringLiteral("settled-free"));
+        f.setFrame(free, settled);
+        QVERIFY2(!f.wta->isSettledManagedFrame(free, settled), "a free window's frame is its own");
+        QVERIFY(!f.wta->isSettledManagedFrame(windowId, QRect()));
+    }
+
     // A finished interactive resize goes to the engine holding the window in
     // view, a scroll strip ahead of the tiles, and keeps the frame shadow; a
     // non-positive old frame reaches neither and changes nothing (F858).
@@ -223,11 +303,22 @@ private Q_SLOTS:
         ext.insert(QString(Key::VirtualDesktops), QVariantList{2, 3});
         push(f.wta, QStringLiteral("span-1"), QStringLiteral("app"), 2, ext);
         QCOMPARE(f.registry.metadata(QStringLiteral("span-1"))->virtualDesktops, (QList<int>{2, 3}));
+
+        // A repeated desktop is one desktop: [2, 2] is no span, and a repeat
+        // inside a real span is dropped rather than kept as a third entry.
+        ext.insert(QString(Key::VirtualDesktops), QVariantList{2, 2});
+        push(f.wta, QStringLiteral("span-1"), QStringLiteral("app"), 2, ext);
+        QVERIFY2(f.registry.metadata(QStringLiteral("span-1"))->virtualDesktops.isEmpty(),
+                 "a span naming one desktop twice is no span");
+        ext.insert(QString(Key::VirtualDesktops), QVariantList{2, 3, 2});
+        push(f.wta, QStringLiteral("span-1"), QStringLiteral("app"), 2, ext);
+        QCOMPARE(f.registry.metadata(QStringLiteral("span-1"))->virtualDesktops, (QList<int>{2, 3}));
     }
 
     // The activity list follows the same invariant: two or more, led by the
-    // scalar activity. A caption-only refresh that moves the scalar drops a
-    // list from before the move (F426).
+    // scalar activity. A caption-only refresh that moves the scalar to an
+    // activity outside the list drops the list from before the move (F426). A
+    // move onto one of its members keeps it (#1147, the case below).
     void metadataActivityListFollowsTheSpanInvariant()
     {
         FloatBackFixture f;
@@ -246,9 +337,47 @@ private Q_SLOTS:
                  "a list not led by the scalar activity is no list");
 
         pushActivities(a, {{QString(Key::Width), 640}, {QString(Key::Activities), QVariantList{a, b}}});
-        pushActivities(b, {});
+        pushActivities(QStringLiteral("act-c"), {});
         QVERIFY2(f.registry.metadata(QStringLiteral("acts-1"))->activities.isEmpty(),
                  "a caption refresh that moved the scalar drops the stale list");
+    }
+
+    // KWin does not keep a window's desktop list in a stable order, so a
+    // caption refresh can carry a scalar that is the span's second entry
+    // without the window having moved. The span survives, re-led by the
+    // scalar. A scalar outside the span is a real move and drops it (#1147).
+    void captionRefreshKeepsAReorderedSpan()
+    {
+        FloatBackFixture f;
+        const QString id = QStringLiteral("span-flap-1");
+        push(f.wta, id, QStringLiteral("app"), 1,
+             {{QString(Key::Width), 640}, {QString(Key::VirtualDesktops), QVariantList{1, 3}}});
+        QCOMPARE(f.registry.metadata(id)->virtualDesktops, (QList<int>{1, 3}));
+
+        push(f.wta, id, QStringLiteral("app"), 3, {});
+        QCOMPARE(f.registry.metadata(id)->virtualDesktop, 3);
+        QCOMPARE(f.registry.metadata(id)->virtualDesktops, (QList<int>{3, 1}));
+
+        push(f.wta, id, QStringLiteral("app"), 2, {});
+        QCOMPARE(f.registry.metadata(id)->virtualDesktop, 2);
+        QVERIFY2(f.registry.metadata(id)->virtualDesktops.isEmpty(),
+                 "a scalar outside the carried span is a real move");
+    }
+
+    // The activity list takes the same membership rule on a caption refresh.
+    void captionRefreshKeepsAReorderedActivityList()
+    {
+        FloatBackFixture f;
+        const QString a = QStringLiteral("act-a");
+        const QString b = QStringLiteral("act-b");
+        const QString id = QStringLiteral("acts-flap-1");
+        const auto pushActivity = [&f, &id](const QString& activity, const QVariantMap& extended) {
+            f.wta->setWindowMetadata(id, QStringLiteral("app"), QString(), QStringLiteral("t"), QString(), 100, 1,
+                                     activity, static_cast<int>(PhosphorProtocol::WindowType::Normal), extended);
+        };
+        pushActivity(a, {{QString(Key::Width), 640}, {QString(Key::Activities), QVariantList{a, b}}});
+        pushActivity(b, {});
+        QCOMPARE(f.registry.metadata(id)->activities, (QStringList{b, a}));
     }
 
     // A non-positive size is unknown, not one the min-size gate compares.

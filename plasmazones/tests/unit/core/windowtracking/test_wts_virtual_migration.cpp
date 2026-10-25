@@ -19,6 +19,9 @@
  * 6. Removing all virtual screens reverts to physical, touching only the
  *    target monitor.
  * 7. physicalScreensWithStaleVirtualAssignments orphan discovery.
+ * 8. Windows with no live zone: a closed snapped record, a snap-floated
+ *    window, a zoneless floating record, and the un-split fold of float-back
+ *    rects.
  */
 
 #include <QTest>
@@ -738,6 +741,38 @@ private Q_SLOTS:
         QVERIFY(!after->freeGeometryByScreen.contains(split.physId));
     }
 
+    // A closed record's zone is looked up in the layout of the record's own
+    // desktop. Its zone exists only in desktop 2's layout, in the right half,
+    // while desktop 1 (in view, and the store's last-used desktop) runs a
+    // layout without it. A closed window has no membership, so the store the
+    // resolver answers for it says nothing about its context: read through
+    // that store, the zone was looked up on desktop 1, not found, and the
+    // record fell to the first virtual screen.
+    void migrateToVirtual_closedRecordUsesItsOwnDesktopLayout()
+    {
+        SplitFixture split;
+        PhosphorZones::Layout* desktop2 = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(desktop2);
+        m_layoutManager->assignLayout(split.physId, 2, QString(), desktop2);
+        const QString rightZone = desktop2->zones().at(1)->id().toString();
+        QVERIFY(!m_testLayout->zoneById(QUuid::fromString(rightZone)));
+        // The store's last-used desktop is 1, on another monitor so the
+        // last-used migration leaves it alone.
+        m_snapState->restoreLastUsedZone(m_zoneIds[0], QStringLiteral("LG:27GP850:ABC123"), QStringLiteral("konsole"),
+                                         1);
+        QCOMPARE(m_snapState->lastUsedDesktop(), 1);
+
+        PhosphorEngine::WindowPlacement rec = closedSnappedRecord(split.physId, rightZone, QRect());
+        rec.virtualDesktop = 2;
+        QVERIFY(m_service->placementStore().record(rec));
+
+        m_service->migrateScreenAssignmentsToVirtual(split.physId, split.virtualIds, &split.mgr);
+
+        const auto after = m_service->placementStore().peekExact(rec.windowId);
+        QVERIFY(after.has_value());
+        QCOMPARE(after->screenId, split.vs1);
+    }
+
     // A record on a virtual screen the new configuration does not have is
     // re-homed by index, the same as a live window's.
     void migrateToVirtual_deadVsRecordReHomed()
@@ -751,6 +786,85 @@ private Q_SLOTS:
         const auto after = m_service->placementStore().peekExact(QStringLiteral("kate|closed"));
         QVERIFY(after.has_value());
         QCOMPARE(after->screenId, split.vs1);
+    }
+
+    // A window floated out of a zone has no live zone, only its pre-float
+    // home. It goes to the half that home sits in, the right one for zone 3,
+    // and its screen and its pre-float screen agree. Resolved from no zone at
+    // all it was filed on the left half, and the next activation on the right
+    // one read as a move and dropped the home.
+    void migrateToVirtual_snapFloatedWindowFollowsItsPreFloatZone()
+    {
+        SplitFixture split;
+        const QString w = QStringLiteral("konsole|snap-floated");
+        m_service->assignWindowToZone(w, m_zoneIds[2], split.physId, 1);
+        m_service->unsnapForFloat(w);
+        QVERIFY(m_service->zonesForWindow(w).isEmpty());
+        QCOMPARE(m_service->screenForWindow(w), split.physId);
+
+        m_service->migrateScreenAssignmentsToVirtual(split.physId, split.virtualIds, &split.mgr);
+
+        QCOMPARE(m_service->screenForWindow(w), split.vs1);
+        QCOMPARE(m_service->preFloatScreen(w), split.vs1);
+    }
+
+    // A floating record with no zone to go by moves to the half its float-back
+    // rect sits in, the managed screen and the rect's key alike. Left on the
+    // monitor's bare id, the reopen never matched it on the split monitor.
+    void migrateToVirtual_zonelessFloatingRecordFollowsItsRect()
+    {
+        SplitFixture split;
+        const QRect spot(2500, 200, 800, 600); // centred in the right half
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("kate|floated");
+        rec.appId = QStringLiteral("kate");
+        rec.screenId = split.physId;
+        rec.virtualDesktop = 1;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(split.physId, spot);
+        QVERIFY(m_service->placementStore().record(rec));
+
+        m_service->migrateScreenAssignmentsToVirtual(split.physId, split.virtualIds, &split.mgr);
+
+        const auto after = m_service->placementStore().peekExact(rec.windowId);
+        QVERIFY(after.has_value());
+        QCOMPARE(after->screenId, split.vs1);
+        QCOMPARE(after->freeGeometryByScreen.value(split.vs1), spot);
+        QVERIFY(!after->freeGeometryByScreen.contains(split.vs0));
+        QVERIFY(!after->freeGeometryByScreen.contains(split.physId));
+    }
+
+    // Removing the split folds every key of the monitor into its one physical
+    // key. The rect kept for the virtual screen the record names, where the
+    // window was last managed, wins over an older one left under the physical
+    // id from before the split and over the other half's.
+    void migrateFromVirtual_foldKeepsTheRecordsOwnRect()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1);
+        const QRect beforeSplit(100, 100, 640, 480);
+        const QRect onLeft(200, 150, 640, 480);
+        const QRect onRight(2600, 300, 640, 480);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("kate|unsplit");
+        rec.appId = QStringLiteral("kate");
+        rec.screenId = vs1;
+        rec.virtualDesktop = 1;
+        rec.freeGeometryByScreen.insert(physId, beforeSplit);
+        rec.freeGeometryByScreen.insert(vs0, onLeft);
+        rec.freeGeometryByScreen.insert(vs1, onRight);
+        QVERIFY(m_service->placementStore().record(rec));
+
+        m_service->migrateScreenAssignmentsFromVirtual(physId);
+
+        const auto after = m_service->placementStore().peekExact(rec.windowId);
+        QVERIFY(after.has_value());
+        QCOMPARE(after->screenId, physId);
+        QCOMPARE(after->freeGeometryByScreen.size(), 1);
+        QCOMPARE(after->freeGeometryByScreen.value(physId), onRight);
     }
 
 private:

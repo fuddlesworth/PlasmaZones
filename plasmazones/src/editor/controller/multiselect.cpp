@@ -11,6 +11,7 @@
 
 #include "phosphor_i18n.h"
 #include <QGuiApplication>
+#include <QPair>
 #include <QPointer>
 #include <QScreen>
 
@@ -268,6 +269,65 @@ bool EditorController::resizeSelectedZones(int direction, qreal step)
 }
 
 // Multi-zone drag operations
+//
+// The drag delta arrives in relative units (the primary zone's canvas
+// position over the canvas size). Every selected zone moves by it in its own
+// unit: a relative zone directly, a fixed zone by the delta scaled to the
+// reference in pixels. Both ZoneManager::updateZoneGeometryDirect and
+// updateZoneGeometry take pixels for a fixed zone, and a relative position
+// handed to them reads as a sub-minimum pixel rect, collapsing the zone.
+
+namespace {
+
+/// Where a selected zone lands when the primary moved by (@p dx, @p dy)
+/// relative units from the drag's start, as the (x, y, width, height) its
+/// own unit takes. @p initial is its start position in that unit.
+QRectF multiDragTarget(const ZoneManager& zoneManager, const QVariantMap& zone, const QPointF& initial, qreal dx,
+                       qreal dy)
+{
+    if (ZoneManager::isFixedMode(zone)) {
+        const QRectF fixed = zoneManager.extractFixedGeometry(zone);
+        const QSizeF reference = zoneManager.effectiveScreenSizeF();
+        // Spelled out rather than qBound: a fixed zone wider than the
+        // reference has no room to move, and qBound requires min <= max.
+        const qreal x = qMax(0.0, qMin(reference.width() - fixed.width(), initial.x() + dx * reference.width()));
+        const qreal y = qMax(0.0, qMin(reference.height() - fixed.height(), initial.y() + dy * reference.height()));
+        return QRectF(x, y, fixed.width(), fixed.height());
+    }
+    const qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+    const qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
+    return QRectF(qBound(0.0, initial.x() + dx, 1.0 - width), qBound(0.0, initial.y() + dy, 1.0 - height), width,
+                  height);
+}
+
+/// The zone's position in its own unit, which is what the drag records.
+QPointF multiDragOrigin(const ZoneManager& zoneManager, const QVariantMap& zone)
+{
+    if (ZoneManager::isFixedMode(zone)) {
+        return zoneManager.extractFixedGeometry(zone).topLeft();
+    }
+    return zoneManager.extractZoneGeometry(zone).topLeft();
+}
+
+/// Put a non-primary zone back at its recorded drag start, @p start in the
+/// zone's own unit, as no edit. Goes through a geometry snapshot rather than
+/// updateZoneGeometryDirect, which clamps a fixed zone's origin to zero and
+/// would move one that started at a negative offset.
+void restoreMultiDragStart(ZoneManager& zoneManager, const QString& zoneId, const QPointF& start)
+{
+    ZoneGeometrySnapshot snapshot = zoneManager.geometrySnapshot(zoneId);
+    if (snapshot.zoneId.isEmpty()) {
+        return;
+    }
+    if (snapshot.fixed.isValid()) {
+        snapshot.fixed.moveTopLeft(start);
+    } else {
+        snapshot.relative.moveTopLeft(start);
+    }
+    zoneManager.restoreGeometrySnapshot(snapshot, /*markModified*/ false);
+}
+
+} // anonymous namespace
 
 void EditorController::startMultiZoneDrag(const QString& primaryZoneId, qreal startX, qreal startY)
 {
@@ -287,13 +347,15 @@ void EditorController::startMultiZoneDrag(const QString& primaryZoneId, qreal st
     m_dragStartY = startY;
     m_dragInitialPositions.clear();
 
-    // Store initial positions of all selected zones
+    // Store initial positions of all selected zones, each in its own unit.
+    // The primary's is read in relative units below, where the delta it
+    // defines is computed, so it is recorded relative whatever its mode.
     for (const QString& zoneId : m_selectedZoneIds) {
         QVariantMap zone = m_zoneManager->getZoneById(zoneId);
         if (!zone.isEmpty()) {
-            qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
-            qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
-            m_dragInitialPositions[zoneId] = QPointF(x, y);
+            m_dragInitialPositions[zoneId] = zoneId == primaryZoneId
+                ? m_zoneManager->extractZoneGeometry(zone).topLeft()
+                : multiDragOrigin(*m_zoneManager, zone);
         }
     }
 }
@@ -324,15 +386,9 @@ void EditorController::updateMultiZoneDrag(const QString& primaryZoneId, qreal n
             continue;
         }
 
-        qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
-        qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
-
-        // Calculate new position with bounds checking
-        qreal newZoneX = qBound(0.0, it.value().x() + dx, 1.0 - width);
-        qreal newZoneY = qBound(0.0, it.value().y() + dy, 1.0 - height);
-
         // Update the zone's visual position directly (without creating undo commands)
-        m_zoneManager->updateZoneGeometryDirect(it.key(), newZoneX, newZoneY, width, height);
+        const QRectF target = multiDragTarget(*m_zoneManager, zone, it.value(), dx, dy);
+        m_zoneManager->updateZoneGeometryDirect(it.key(), target.x(), target.y(), target.width(), target.height());
     }
 
     m_zoneManager->endBatchUpdate();
@@ -346,6 +402,14 @@ void EditorController::endMultiZoneDrag(bool commit)
         return;
     }
 
+    // Every zone goes back unless a commit records the move. Cancel restores,
+    // and so does a commit that moved nothing or whose primary zone is gone
+    // (no delta to commit by). Neither creates a command, but the preview may
+    // have shifted a zone anyway: multiDragTarget clamps a fixed zone into the
+    // reference, so one parked at a negative offset or past an edge moved on
+    // the first preview tick and would otherwise stay moved with no undo and
+    // no unsaved mark.
+    bool restoreStarts = true;
     if (commit && !m_dragInitialPositions.isEmpty()) {
         // Calculate final delta from primary zone
         QVariantMap primaryZone = m_zoneManager->getZoneById(m_dragPrimaryZoneId);
@@ -354,9 +418,11 @@ void EditorController::endMultiZoneDrag(bool commit)
             qreal finalY = primaryZone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
             qreal dx = finalX - m_dragInitialPositions[m_dragPrimaryZoneId].x();
             qreal dy = finalY - m_dragInitialPositions[m_dragPrimaryZoneId].y();
+            const bool moved = qAbs(dx) > 0.0001 || qAbs(dy) > 0.0001;
+            restoreStarts = !moved;
 
             // Only create undo commands for other zones (primary zone already has its own)
-            if (m_undoController && (qAbs(dx) > 0.0001 || qAbs(dy) > 0.0001)) {
+            if (m_undoController && moved) {
                 m_undoController->beginMacro(
                     PhosphorI18n::tr("Move %1 Zones", "@action").arg(m_dragInitialPositions.count()));
 
@@ -365,37 +431,38 @@ void EditorController::endMultiZoneDrag(bool commit)
                         continue; // Skip primary - it already has undo from normal updateZoneGeometry
                     }
 
-                    QVariantMap zone = m_zoneManager->getZoneById(it.key());
+                    const QVariantMap zone = m_zoneManager->getZoneById(it.key());
                     if (zone.isEmpty()) {
                         continue;
                     }
+                    const QRectF target = multiDragTarget(*m_zoneManager, zone, it.value(), dx, dy);
 
-                    qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
-                    qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
-                    qreal newX = qBound(0.0, it.value().x() + dx, 1.0 - width);
-                    qreal newY = qBound(0.0, it.value().y() + dy, 1.0 - height);
-
-                    // Create undo command for this zone
-                    updateZoneGeometry(it.key(), newX, newY, width, height);
+                    // The preview already moved the zone to (about) the target,
+                    // so a command built from where it sits now would record no
+                    // change and undo could not bring it back. Put it at its
+                    // start without a command, then move it by one, so the
+                    // command's old geometry is where the drag began.
+                    restoreMultiDragStart(*m_zoneManager, it.key(), it.value());
+                    // Skip snapping: the zone moves rigidly with the primary,
+                    // whose own commit already snapped.
+                    updateZoneGeometry(it.key(), target.x(), target.y(), target.width(), target.height(),
+                                       /*skipSnapping*/ true);
                 }
 
                 m_undoController->endMacro();
             }
         }
-    } else if (!commit) {
-        // Cancel - restore original positions
+    }
+
+    if (restoreStarts) {
         m_zoneManager->beginBatchUpdate();
         for (auto it = m_dragInitialPositions.constBegin(); it != m_dragInitialPositions.constEnd(); ++it) {
             if (it.key() == m_dragPrimaryZoneId) {
                 continue; // Primary zone's restore is handled by its drag handler
             }
-
-            QVariantMap zone = m_zoneManager->getZoneById(it.key());
-            if (!zone.isEmpty()) {
-                qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
-                qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
-                m_zoneManager->updateZoneGeometryDirect(it.key(), it.value().x(), it.value().y(), width, height);
-            }
+            // The recorded start is in the zone's own unit, so it goes back
+            // exactly, unclamped (a fixed zone may have started past the edge).
+            restoreMultiDragStart(*m_zoneManager, it.key(), it.value());
         }
         m_zoneManager->endBatchUpdate();
     }
@@ -431,10 +498,31 @@ void EditorController::updateSelectedZonesAppearance(const QString& propertyName
         }
     }
 
+    // Switching custom colours on seeds the colours of the zones it switches,
+    // in the same undo step. Zones that already had custom colours keep them.
+    QStringList enabling;
+    if (propertyName.compare(::PhosphorZones::ZoneJsonKeys::UseCustomColors, Qt::CaseInsensitive) == 0
+        && value.toBool()) {
+        for (auto it = oldValues.constBegin(); it != oldValues.constEnd(); ++it) {
+            if (!it.value().toBool()) {
+                enabling.append(it.key());
+            }
+        }
+    }
+    const QString text = PhosphorI18n::tr("Update Appearance for %1 Zones", "@action").arg(m_selectedZoneIds.count());
+    if (!enabling.isEmpty()) {
+        m_undoController->beginMacro(text);
+    }
+
     // Use batch command for single undo step with deferred signals
     auto* command = new BatchUpdateAppearanceCommand(QPointer<ZoneManager>(m_zoneManager), m_selectedZoneIds,
-                                                     propertyName, oldValues, value);
+                                                     propertyName, oldValues, value, text);
     m_undoController->push(command);
+
+    if (!enabling.isEmpty()) {
+        seedCustomColors(enabling);
+        m_undoController->endMacro();
+    }
     markUnsaved();
 }
 

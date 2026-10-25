@@ -50,16 +50,12 @@ bool EditorController::expandToFillSpace(const QString& zoneId, qreal mouseX, qr
         return false;
     }
 
-    // Get old geometry for undo state
-    QVariantMap zone = m_zoneManager->getZoneById(zoneId);
-    if (zone.isEmpty()) {
+    // Get old geometry for undo state, a fixed zone's pixels included
+    const ZoneGeometrySnapshot oldGeometry = m_zoneManager->geometrySnapshot(zoneId);
+    if (oldGeometry.zoneId.isEmpty()) {
         qCWarning(lcEditor) << "Zone not found for fill:" << zoneId;
         return false;
     }
-
-    QRectF oldGeometry(zone[::PhosphorZones::ZoneJsonKeys::X].toReal(), zone[::PhosphorZones::ZoneJsonKeys::Y].toReal(),
-                       zone[::PhosphorZones::ZoneJsonKeys::Width].toReal(),
-                       zone[::PhosphorZones::ZoneJsonKeys::Height].toReal());
 
     // Perform operation
     bool result = m_zoneManager->expandToFillSpace(zoneId, mouseX, mouseY);
@@ -68,19 +64,13 @@ bool EditorController::expandToFillSpace(const QString& zoneId, qreal mouseX, qr
     }
 
     // Get new geometry after operation
-    QVariantMap updatedZone = m_zoneManager->getZoneById(zoneId);
-    if (updatedZone.isEmpty()) {
+    const ZoneGeometrySnapshot newGeometry = m_zoneManager->geometrySnapshot(zoneId);
+    if (newGeometry.zoneId.isEmpty()) {
         return false;
     }
 
-    QRectF newGeometry(updatedZone[::PhosphorZones::ZoneJsonKeys::X].toReal(),
-                       updatedZone[::PhosphorZones::ZoneJsonKeys::Y].toReal(),
-                       updatedZone[::PhosphorZones::ZoneJsonKeys::Width].toReal(),
-                       updatedZone[::PhosphorZones::ZoneJsonKeys::Height].toReal());
-
     // Create and push command
-    auto* command =
-        new FillZoneCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldGeometry, newGeometry, QString());
+    auto* command = new FillZoneCommand(QPointer<ZoneManager>(m_zoneManager), oldGeometry, newGeometry, QString());
     m_undoController->push(command);
 
     markUnsaved();
@@ -201,57 +191,31 @@ QString EditorController::duplicateZone(const QString& zoneId)
         return QString();
     }
 
-    // Get source zone data BEFORE operation (for command state)
-    QVariantMap sourceZoneData = m_zoneManager->getZoneById(zoneId);
-    if (sourceZoneData.isEmpty()) {
+    if (m_zoneManager->getZoneById(zoneId).isEmpty()) {
         qCWarning(lcEditor) << "Source zone not found for duplication:" << zoneId;
         return QString();
     }
 
-    // Calculate duplicate zone data (offset position, new ID will be generated in redo())
-    qreal x = sourceZoneData[::PhosphorZones::ZoneJsonKeys::X].toDouble();
-    qreal y = sourceZoneData[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
-    qreal width = sourceZoneData[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
-    qreal height = sourceZoneData[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
-    QString sourceName = sourceZoneData[::PhosphorZones::ZoneJsonKeys::Name].toString();
-
-    // Calculate offset position
-    qreal newX = x + EditorConstants::DuplicateOffset;
-    qreal newY = y + EditorConstants::DuplicateOffset;
-    newX = qMin(newX, 1.0 - width);
-    newY = qMin(newY, 1.0 - height);
-
-    // Create duplicate zone data (new ID will be generated in redo())
-    QVariantMap duplicatedZoneData = sourceZoneData;
-    duplicatedZoneData[::PhosphorZones::ZoneJsonKeys::Id] = QString(); // Empty ID - will be generated in redo()
-    duplicatedZoneData[::PhosphorZones::ZoneJsonKeys::X] = newX;
-    duplicatedZoneData[::PhosphorZones::ZoneJsonKeys::Y] = newY;
-    duplicatedZoneData[::PhosphorZones::ZoneJsonKeys::Name] = QString(sourceName + QStringLiteral(" (Copy)"));
-
-    // Create command (redo() will perform the operation)
-    // We need to get the new zone ID after redo() is called, so we'll use a temporary approach
-    // Actually, we need the zone ID to select it, so we'll perform the operation and then push
-    // But we need to make redo() idempotent
-
-    // Perform operation to get zone ID for selection
+    // Perform the operation first: the selection needs the new zone's id, so
+    // the command is pushed afterwards and its redo() is idempotent.
     QString newZoneId = m_zoneManager->duplicateZone(zoneId);
     if (newZoneId.isEmpty()) {
         return QString();
     }
 
-    // Get the actual duplicated zone data (with the generated ID)
+    // The command replays exactly the zone the duplicate produced. A payload
+    // rebuilt from the source here would keep the source's fixed pixels (only
+    // the relative copy was offset), so a redo after undo of a fixed zone's
+    // duplicate landed on top of the original.
     QVariantMap actualDuplicatedZoneData = m_zoneManager->getZoneById(newZoneId);
     if (actualDuplicatedZoneData.isEmpty()) {
         qCWarning(lcEditor) << "Failed to get duplicated zone data";
         return QString();
     }
 
-    // Update the zone data with the actual ID
-    duplicatedZoneData[::PhosphorZones::ZoneJsonKeys::Id] = newZoneId;
-
     // Create and push command (redo() will be called automatically, but zone already exists)
     auto* command = new DuplicateZoneCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, newZoneId,
-                                             duplicatedZoneData, QString());
+                                             actualDuplicatedZoneData, QString());
     m_undoController->push(command);
 
     if (!newZoneId.isEmpty()) {

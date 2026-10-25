@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <memory>
 
 class QThread;
 
@@ -27,10 +28,16 @@ public:
 
     void setLayoutManager(LayoutRegistry* manager);
 
-    bool requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
+    /// @p screenScale is the output's logical scale, an input for a layout whose
+    /// fixed geometry counts device pixels; zero keeps the layout's last one.
+    bool requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry,
+                            qreal screenScale = 0.0);
     uint64_t currentGeneration(const QString& screenId) const;
 
-    static void recalculateSync(Layout* layout, const QRectF& screenGeometry);
+    /// Recalculate @p layout in place, on the calling (GUI) thread. Refuses an
+    /// invalid @p screenGeometry, as requestRecalculate does: an empty rect
+    /// would stamp a frame with no size and collapse every zone onto a point.
+    static void recalculateSync(Layout* layout, const QRectF& screenGeometry, qreal screenScale = 0.0);
 
 Q_SIGNALS:
     void requestCompute(const PhosphorZones::LayoutSnapshot& snapshot, uint64_t generation);
@@ -38,7 +45,8 @@ Q_SIGNALS:
                                          uint64_t generation);
 
 private:
-    static LayoutSnapshot buildSnapshot(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
+    static LayoutSnapshot buildSnapshot(Layout* layout, const QString& screenId, const QRectF& screenGeometry,
+                                        qreal screenScale);
     void applyResult(const LayoutComputeResult& result);
     void onLayoutRemoved(const QUuid& layoutId);
     void publishResult(const QString& screenId, const QUuid& layoutId, Layout* layout, uint64_t generation);
@@ -51,7 +59,13 @@ private:
     QHash<QString, uint64_t> m_screenGeneration;
     QPointer<LayoutRegistry> m_layoutManager;
     QThread* m_thread = nullptr;
-    LayoutWorker* m_worker = nullptr;
+    /// Owned here rather than by the thread's finished() → deleteLater: it is
+    /// reset in the destructor once the thread has stopped, on the one path
+    /// that also covers a worker thread that had to be terminated.
+    std::unique_ptr<LayoutWorker> m_worker;
+    /// Per-screen count of computes dispatched to the worker whose result has
+    /// not come back yet. An entry is removed when it drops to zero.
+    QHash<QString, int> m_inFlight;
 };
 
 } // namespace PhosphorZones

@@ -9,6 +9,7 @@
 #include "tilinghandler.h"
 #include "handlers/screenchangehandler.h"
 #include "pretiledecisions.h"
+#include "scrolldecisions.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "plasmazoneseffect/desktopvisibility.h"
 #include "compositor/effectlogging.h"
@@ -19,6 +20,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
@@ -29,6 +31,7 @@
 #include <QLoggingCategory>
 #include <QTimer>
 
+#include <algorithm>
 #include <type_traits>
 
 namespace PlasmaZones {
@@ -104,9 +107,8 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // that desktop's live session and restoring it here would leak the
         // title bar / geometry into it. The only sanctioned restore for these
         // windows is the genuine-toggle path below. Activities carry the same
-        // hazard: empty activities() means all-activities.
-        if (w->isOnAllDesktops() || w->desktops().size() > 1 || w->activities().isEmpty()
-            || w->activities().size() > 1) {
+        // hazard (spansContexts).
+        if (spansContexts(w)) {
             continue;
         }
         const QString windowId = m_effect->getWindowId(w);
@@ -174,17 +176,26 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             clearWindowTiledAllScreens(windowId);
             continue;
         }
-        // Capture tracked-ness BEFORE demoting: it is the only
-        // evidence the window was actually autotile-managed on this
-        // desktop. The daemon-fallback restore below must never fire
-        // without it — the placement record is mode-shared and
-        // session-persisted, so a never-autotiled free window would be
-        // moved to its own float-back from another mode or an earlier
-        // session on a mere desktop switch.
-        const bool wasTracked = m_notifiedWindows.remove(windowId);
+        // Capture tracked-ness BEFORE demoting: every restore below is gated
+        // on it, because the buckets survive non-destructively and a window
+        // already restored by an earlier switch must not be re-teleported.
+        // A window PARKED when an earlier switch left its desktop counts as
+        // tracked: the park means the daemon still holds it in this desktop's
+        // state, and leaving it out kept a window whose context stopped
+        // tiling while it was out of view at its tile rect (F504). Its park
+        // entry is spent here, since this pass ends that state.
+        const bool wasParked = m_savedNotifiedForDesktopReturn.remove(windowId);
+        const bool wasTracked = m_notifiedWindows.remove(windowId) || wasParked;
         if (wasTracked) {
             m_notifiedWindowScreens.remove(windowId);
         }
+        // The tiled fact too, before the clear below: tracked-ness is only the
+        // announce trail, and the daemon fallback must never fire without
+        // proof the window was really placed here, because the placement
+        // record is mode-shared and session-persisted, so a never-tiled free
+        // window would be moved to its own float-back from another mode or an
+        // earlier session on a mere desktop switch (resolvePreTileRestore).
+        const bool wasTiled = isTiledWindow(windowId);
         // Drop autotile tiled tracking on every screen (title-bar
         // restores flow through the rule path).
         clearWindowTiledAllScreens(windowId);
@@ -209,12 +220,13 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // desktop switch. m_preTileGeometries is read non-
         // destructively (the entry stays for the next genuine toggle);
         // the all-bucket lookup covers windows whose rect is keyed
-        // under a screen other than their current one. BOTH restore
-        // branches are gated on wasTracked: the geometry bucket also
+        // under a screen other than their current one. EVERY restore
+        // branch is gated on wasTracked: the geometry bucket also
         // survives non-destructively, so a window already restored by
         // a previous switch (now untracked, user may have moved it)
         // would otherwise be re-teleported to the stale rect on every
-        // later switch onto this desktop.
+        // later switch onto this desktop. The daemon branch takes wasTiled
+        // too.
         //
         // preTileRestoreRectFor, not a raw findPreTileGeometry: the buckets are
         // keyed by the output a rect was measured on, and applying one from
@@ -225,8 +237,8 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // un-tiling it exists for.
         const QRectF savedGeo = preTileRestoreRectFor(windowId, screenId, w->frameGeometry());
         using PlasmaZones::PreTileDecisions::PreTileRestore;
-        const PreTileRestore restore =
-            PlasmaZones::PreTileDecisions::resolvePreTileRestore(savedGeo.isValid(), wasTracked, wasWindowedFs);
+        const PreTileRestore restore = PlasmaZones::PreTileDecisions::resolvePreTileRestore(
+            savedGeo.isValid(), wasTracked, wasWindowedFs, wasTiled);
         if (restore == PreTileRestore::QueueForWindowedFullscreen) {
             // The apply below would bail inside applyWindowGeometry on
             // the still-requested fullscreen state (membership is
@@ -243,7 +255,8 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // placement store holds the true pre-snap geometry —
             // fetch it async and restore once the reply lands.
             // Without this the window stays parked at its tiled
-            // frame. Gated on wasTracked: see the capture above.
+            // frame. Gated on wasTiled as well as wasTracked: see the
+            // captures above.
             //
             // NOT reached when the local rect was declined just above as
             // belonging to another monitor. This fallback is the
@@ -268,6 +281,10 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
                                                      QStringList& windowedFsToRelease)
 {
     QSet<QString> windowsOnRemovedScreens;
+    // The live windows on a removed screen this pass leaves alone, because
+    // another context may still tile them: their per-window state below is
+    // theirs to keep (F443).
+    QSet<QString> keptForOtherContexts;
     for (KWin::EffectWindow* w : windows) {
         // isDeleted: close-grabbed dying windows linger in the
         // stacking order — getWindowId on them would re-pollute the
@@ -280,6 +297,7 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
             // restoring them here would leak title bars into those
             // contexts' autotile sessions.
             if (!isOnOwnOutputCurrentDesktop(w) || !w->isOnCurrentActivity()) {
+                keptForOtherContexts.insert(m_effect->getWindowId(w));
                 continue;
             }
             // Skip sticky (all-desktops) and multi-desktop windows when
@@ -289,14 +307,12 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
             // Only restore when autotile is fully disabled.
             //
             // Activities carry the identical hazard and the demote pass
-            // already spells it out: an empty activities() means
-            // all-activities, and a multi-activity window may be tiled in
-            // another activity's live session. Without these terms such a
-            // window has its border restored and its tracking dropped here
-            // while the other activity still autotiles it.
-            if ((w->isOnAllDesktops() || w->desktops().size() > 1 || w->activities().isEmpty()
-                 || w->activities().size() > 1)
-                && !newScreens.isEmpty()) {
+            // already spells it out: a window on every activity or several
+            // may be tiled in another activity's live session. Without these
+            // terms such a window has its border restored and its tracking
+            // dropped here while the other activity still autotiles it.
+            if (spansContexts(w) && !newScreens.isEmpty()) {
+                keptForOtherContexts.insert(m_effect->getWindowId(w));
                 continue;
             }
             windowsOnRemovedScreens.insert(m_effect->getWindowId(w));
@@ -338,7 +354,7 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
         clearWindowTiledAllScreens(wid);
         anyVisualDeltaDropped = dropScrollCompanions(wid, /*damage=*/false) || anyVisualDeltaDropped;
     }
-    if (anyVisualDeltaDropped && KWin::effects) {
+    if (anyVisualDeltaDropped) {
         KWin::effects->addRepaintFull();
     }
 
@@ -433,7 +449,7 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
             return value.rect;
         }
     };
-    const auto pruneRemovedScreenEntries = [this, &removed, &entryRect](auto& map) {
+    const auto pruneRemovedScreenEntries = [this, &removed, &entryRect, &keptForOtherContexts](auto& map) {
         for (auto it = map.begin(); it != map.end();) {
             // EXACT resolve: the entry is keyed to a specific
             // instance's id, and a fuzzy same-app hit would keep a
@@ -445,13 +461,25 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
                 it = map.erase(it);
                 continue;
             }
-            const QPoint zoneCenter = entryRect(it.value()).center();
-            // Guarded like every other KWin::effects use in this file (see the
-            // single-model note in slotScreensChanged); a null pointer resolves
-            // the entry through the window's own screen instead.
-            const auto* output = KWin::effects ? KWin::effects->screenAt(zoneCenter) : nullptr;
+            // A window another context may still tile keeps its entry, as it
+            // keeps its tracking and its border above (F443).
+            if (keptForOtherContexts.contains(it.key())) {
+                ++it;
+                continue;
+            }
+            const QRect rect = entryRect(it.value());
+            // A PARKED column's rect lies off every output, and screenAt()
+            // answers the nearest one, which on a stacked layout can be a
+            // neighbour of the strip's own output, so a park is classified by
+            // the window's own screen instead (F357). For a strip column that
+            // is its tracked strip screen: a window this pass untracked lost
+            // its offer with its scroll companions above, so every park left
+            // here is a still-tracked window's. screenAt() resolves null only
+            // with no outputs at all, where the window's screen is the answer
+            // too.
+            const auto* output = rectAtScrollPark(rect) ? nullptr : KWin::effects->screenAt(rect.center());
             const QString entryScreen =
-                output ? m_effect->resolveEffectiveScreenId(zoneCenter, output) : m_effect->getWindowScreenId(mw);
+                output ? m_effect->resolveEffectiveScreenId(rect.center(), output) : m_effect->getWindowScreenId(mw);
             if (removed.contains(entryScreen)) {
                 it = map.erase(it);
             } else {
@@ -467,10 +495,6 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     // into that rect. An entry surviving its screen's removal teleports a live
     // window into a dead column — strictly worse than the stale centring
     // targets this prune already covers.
-    //
-    // For a PARKED column the stored rect's centre sits below every output, so
-    // screenAt() returns null and the lambda falls back to the window's own
-    // screen. That fallback is the right answer here; do not "fix" it.
     pruneRemovedScreenEntries(m_effect->m_scrollOfferedColumn);
 
     // Expected-output-move markers, pruned BY VALUE rather than by key: the key
@@ -514,6 +538,13 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     // screen's bucket (outputchange.cpp re-files it there on
     // purpose). Dropping the whole bucket would lose those windows'
     // effect-side float-backs and leave only the daemon copy.
+    //
+    // Only for a window this pass untracked, or one that is gone. A window
+    // still on the removed screen in another desktop or activity kept its
+    // tracking above because that context may still tile it, and its
+    // float-back is that context's: erasing it left a later drag-to-float
+    // or overflow float there with nothing to restore, at its tile size
+    // (F443).
     for (const QString& screenId : removed) {
         auto bucketIt = m_preTileGeometries.find(screenId);
         if (bucketIt == m_preTileGeometries.end()) {
@@ -521,8 +552,8 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
         }
         for (auto it = bucketIt->begin(); it != bucketIt->end();) {
             KWin::EffectWindow* w = m_effect->findWindowByIdExact(it.key());
-            const QString current = (w && !w->isDeleted()) ? m_effect->getWindowScreenId(w) : QString();
-            if (current.isEmpty() || removed.contains(current)) {
+            const bool gone = !w || w->isDeleted();
+            if (gone || windowsOnRemovedScreens.contains(it.key())) {
                 it = bucketIt->erase(it);
             } else {
                 ++it;
@@ -560,40 +591,30 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
                 if (!reply.isValid()) {
                     return;
                 }
-                // Bail if the autotile screen set changed while we were waiting
-                if (m_managedScreens != expectedScreens) {
-                    qCDebug(lcEffect) << "Stale async pre-autotile geometry reply, screen set changed";
-                    return;
-                }
-                // A newer signal superseded this dispatch. RE-DISPATCH rather
-                // than simply returning: the generation bumps on every
-                // slotScreensChanged including a no-op re-emit with an
-                // identical set, so this test is strictly stricter than the set
-                // test above — and the fetch is a one-shot per genuine autotile
-                // toggle, so a silent drop loses the daemon's true pre-tile
-                // geometries for the session and leaves float-back on the
-                // current-frame captures. Returning here would trade a rare
-                // teleport for a more frequent silent loss.
-                if (m_screensSignalGeneration != generationAtDispatch) {
-                    qCDebug(lcEffect) << "Superseded async pre-autotile geometry reply, re-requesting for" << added;
-                    fetchDaemonPreTileGeometries(added, m_managedScreens);
+                // A newer signal superseded this dispatch: the managed set
+                // moved while we were waiting, or a re-emit bumped the
+                // generation. RE-DISPATCH rather than simply returning, for the
+                // screens of this toggle the managed set still holds: the
+                // fetch is a one-shot per genuine autotile toggle, so a silent
+                // drop loses the daemon's true pre-tile geometries for the
+                // session and leaves float-back on the current-frame captures.
+                // A second toggle landing before this reply lost the first
+                // screen's rects that way (F333). Returning here would trade a
+                // rare teleport for a more frequent silent loss. A screen that
+                // has left the set since is dropped: its rects would be written
+                // for windows no engine tiles there now.
+                if (m_managedScreens != expectedScreens || m_screensSignalGeneration != generationAtDispatch) {
+                    const QSet<QString> stillManaged = added & m_managedScreens;
+                    qCDebug(lcEffect) << "Superseded async pre-autotile geometry reply, re-requesting for"
+                                      << stillManaged;
+                    if (!stillManaged.isEmpty()) {
+                        fetchDaemonPreTileGeometries(stillManaged, m_managedScreens);
+                    }
                     return;
                 }
                 const PhosphorProtocol::PreTileGeometryList entries = reply.value();
-                // One model for the pointer in this lambda. The loop below
-                // guards KWin::effects before calling screenAt(), so reading
-                // stackingOrder() off it unguarded here left the two lines
-                // contradicting each other: if the guard's premise held, this
-                // had already crashed; if this was safe, the guard was dead.
-                // The guard is the redundant half — nothing can dispatch a
-                // queued reply after KWin::effects is gone, because aboutToQuit
-                // stops the event loop before the effect is destroyed and there
-                // is no nested event loop anywhere in this tree — but the file
-                // should still state one position rather than both.
-                if (!KWin::effects) {
-                    return;
-                }
                 const auto allWindows = KWin::effects->stackingOrder();
+                const auto outputs = KWin::effects->screens();
                 for (const auto& entry : entries) {
                     const QString stableId = entry.appId;
                     QRectF geom = QRectF(entry.toRect());
@@ -606,8 +627,16 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
                     // restore path, so a daemon-supplied origin on no
                     // connected output parks the window where nothing
                     // can show it. The capture side has a chokepoint
-                    // for this; the ingest side did not.
-                    if (!KWin::effects || !KWin::effects->screenAt(geom.center().toPoint())) {
+                    // for this; the ingest side did not. Tested against
+                    // the outputs themselves: screenAt() answers the
+                    // NEAREST output for any point, so it never refused
+                    // one (F358).
+                    const QPoint centre = geom.center().toPoint();
+                    const bool onAnOutput =
+                        std::any_of(outputs.cbegin(), outputs.cend(), [&centre](const KWin::LogicalOutput* output) {
+                            return QRect(output->geometry()).contains(centre);
+                        });
+                    if (!onAnOutput) {
                         qCDebug(lcEffect)
                             << "Ignoring daemon pre-tile geometry off every output for" << stableId << ":" << geom;
                         continue;
@@ -645,15 +674,37 @@ void TilingHandler::fetchDaemonPreTileGeometries(const QSet<QString>& added, con
                         // reached first — possibly a rect measured
                         // in the other monitor's coordinate space.
                         // Update the existing entry in place under
-                        // its own bucket; insert under the current
-                        // screen only on a genuine all-bucket miss.
+                        // its own bucket when that bucket is on the
+                        // record's physical output; insert under the
+                        // record's screen on a genuine all-bucket miss.
+                        //
+                        // The daemon's rect is filed under the record's own
+                        // screen, which the match above holds the window to.
+                        // An existing entry under a bucket on another physical
+                        // output (a transferred window's capture-screen
+                        // bucket) is re-homed rather than overwritten in
+                        // place: the bucket key names the rect's coordinate
+                        // space, and a daemon rect filed under another
+                        // output's key was later degraded to its size alone
+                        // (F555). Still one entry per window.
                         QString bucketScreenId;
                         const QRectF existing = findPreTileGeometry(wId, &bucketScreenId);
                         if (!existing.isValid()) {
-                            const QString scr = m_effect->getWindowScreenId(matchedWindow);
-                            m_preTileGeometries[scr][wId] = geom;
+                            m_preTileGeometries[entry.screenId][wId] = geom;
                             qCDebug(lcEffect) << "Pre-populated pre-autotile geometry from daemon for" << stableId
-                                              << "on" << scr << ":" << geom;
+                                              << "on" << entry.screenId << ":" << geom;
+                        } else if (!PhosphorIdentity::VirtualScreenId::samePhysical(bucketScreenId, entry.screenId)) {
+                            qCDebug(lcEffect)
+                                << "Re-homed pre-autotile geometry from daemon for" << stableId << "from bucket"
+                                << bucketScreenId << "to" << entry.screenId << ":" << existing << "->" << geom;
+                            if (auto oldBucket = m_preTileGeometries.find(bucketScreenId);
+                                oldBucket != m_preTileGeometries.end()) {
+                                oldBucket->remove(wId);
+                                if (oldBucket->isEmpty()) {
+                                    m_preTileGeometries.erase(oldBucket);
+                                }
+                            }
+                            m_preTileGeometries[entry.screenId][wId] = geom;
                         } else if (existing.toRect() != geom.toRect()) {
                             // Daemon stored a different geometry (likely from before the window
                             // was resnapped to a zone). Prefer the daemon's version as it's the
@@ -761,7 +812,9 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                          << "— already on" << m_effect->lastReportedScreenDesktops();
         return;
     }
-    const QSet<QString> newScreens(screenIds.begin(), screenIds.end());
+    // Empty ids dropped at this boundary, as the sibling slots drop them
+    // (nonEmptyIdSet, F359).
+    const QSet<QString> newScreens = ScrollDecisions::nonEmptyIdSet(screenIds);
     const QSet<QString> removed = m_managedScreens - newScreens;
     const QSet<QString> added = newScreens - m_managedScreens;
 
@@ -816,13 +869,8 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         }
     }
 
-    // Same single-model point as the reply lambda above: this function guards
-    // KWin::effects at its later repaint sites, so the walk here is guarded too
-    // rather than leaving the file arguing with itself about whether the
-    // pointer can be null on a signal path.
-    if (!KWin::effects) {
-        return;
-    }
+    // KWin::effects is not tested: the global outlives every effect (see
+    // PlasmaZonesEffect::windowOutput).
     const auto windows = KWin::effects->stackingOrder();
 
     if (!removed.isEmpty()) {
@@ -884,7 +932,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         // `Mode Equals "scrolling"` SetOpacity rule resolves in the paint
         // path, and the border sweep rebuilds decorations rather than the
         // per-frame alpha of windows that have none.
-        if (m_effect->m_shaderManager.hasOpacityRules() && KWin::effects) {
+        if (m_effect->m_shaderManager.hasOpacityRules()) {
             KWin::effects->addRepaintFull();
         }
     }
@@ -978,69 +1026,72 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // (discussion #219), where the engine re-emits the unchanged set
             // with isDesktopSwitch=true precisely to reach this scan.
             // notifyWindowAdded is idempotent (checks m_notifiedWindows).
-            for (const QString& screenId : m_managedScreens) {
-                for (KWin::EffectWindow* w : windows) {
-                    if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !isOnOwnOutputCurrentDesktop(w)
-                        || !w->isOnCurrentActivity() || w->isMinimized()) {
-                        continue;
-                    }
-                    if (m_effect->getWindowScreenId(w) != screenId) {
-                        continue;
-                    }
-                    const QString windowId = m_effect->getWindowId(w);
-                    if (m_savedNotifiedForDesktopReturn.contains(windowId)) {
-                        // PARKED, not moved. The park set means exactly "the
-                        // daemon STILL holds this window in this desktop's
-                        // state" (see the resetNotified comment in
-                        // (A parked held window can outlive a genuine toggle's daemon
-                        // release; the re-track's return is then refused and resolved from the cache.)
-                        // tilinghandler.cpp), and a window that genuinely
-                        // changed desktops was un-parked by
-                        // cleanupAutotileTracking on its way out. So this is a
-                        // RE-TRACK, never a notify: notifyWindowAdded would
-                        // append the window to the arrived-at desktop's state
-                        // a second time, which on scrolling screens leaks the
-                        // other desktop's windows into this strip and destroys
-                        // the column order.
-                        //
-                        // The `added`-keyed re-track loop above does the same,
-                        // but `added` is empty on an identical-set switch (every
-                        // desktop the same mode, the ordinary setup), so this
-                        // scan is the only pass those windows reach.
-                        m_notifiedWindows.insert(windowId);
-                        m_notifiedWindowScreens[windowId] = screenId;
-                        settleParkedFullscreenHold(w, windowId, screenId);
-                    } else if (!m_notifiedWindows.contains(windowId) && !heldForSettle(w)) {
-                        // Restore preserved pre-autotile geometry so float-restore
-                        // returns to the original position, not the tiled frame from
-                        // the source desktop. Shared with the windowDesktopsChanged
-                        // arrival arm, the other re-add path that has to consume this
-                        // stash; see restorePreTileForDesktopMove for the
-                        // cross-screen decline.
-                        restorePreTileForDesktopMove(windowId, screenId);
-                        qCInfo(lcEffect) << "Desktop switch: re-adding moved window to autotile:" << windowId << "on"
-                                         << screenId;
-                        // RE-ADD (desktop return): this window's current frame is
-                        // the tiled rect from the source desktop, not a free
-                        // position. knownFreeFloating=false runs the floating
-                        // guard so a tiled rect is not persisted as free geometry
-                        // (a stash restore above already populated the local
-                        // bucket for windows that had one; this protects the rest).
-                        notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
-                    }
-                    // Whether this scan re-announced the window or found it
-                    // already tracked, it is now on the current desktop and
-                    // notified, so any parked desktop-return entry for it is
-                    // spent. Sweeping here (not only in the `added`-keyed loop
-                    // above) is what keeps a park from outliving its purpose:
-                    // the batch paths that park an off-desktop window are not
-                    // all desktop switches, and `added` is empty on an
-                    // identical-set switch, so this scan is the only place
-                    // some entries are ever reached. A surviving entry would
-                    // later make the re-track branch treat the window as
-                    // already known to the daemon and skip the notify.
-                    m_savedNotifiedForDesktopReturn.remove(windowId);
+            // One pass over the windows with a set lookup, like the loops
+            // above, not a pass per managed screen (F289). Within a screen the
+            // windows are still met in stacking order, which is the order the
+            // daemon appends them.
+            for (KWin::EffectWindow* w : windows) {
+                if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !isOnOwnOutputCurrentDesktop(w)
+                    || !w->isOnCurrentActivity() || w->isMinimized()) {
+                    continue;
                 }
+                const QString screenId = m_effect->getWindowScreenId(w);
+                if (!m_managedScreens.contains(screenId)) {
+                    continue;
+                }
+                const QString windowId = m_effect->getWindowId(w);
+                if (m_savedNotifiedForDesktopReturn.contains(windowId)) {
+                    // PARKED, not moved. The park set means exactly "the
+                    // daemon STILL holds this window in this desktop's
+                    // state" (see the resetNotified comment in
+                    // tilinghandler.cpp), and a window that genuinely
+                    // changed desktops was un-parked by
+                    // cleanupAutotileTracking on its way out. So this is a
+                    // RE-TRACK, never a notify: notifyWindowAdded would
+                    // append the window to the arrived-at desktop's state
+                    // a second time, which on scrolling screens leaks the
+                    // other desktop's windows into this strip and destroys
+                    // the column order. (A parked held window can outlive
+                    // a genuine toggle's daemon release; the re-track's
+                    // return is then refused and resolved from the cache.)
+                    //
+                    // The `added`-keyed re-track loop above does the same,
+                    // but `added` is empty on an identical-set switch (every
+                    // desktop the same mode, the ordinary setup), so this
+                    // scan is the only pass those windows reach.
+                    m_notifiedWindows.insert(windowId);
+                    m_notifiedWindowScreens[windowId] = screenId;
+                    settleParkedFullscreenHold(w, windowId, screenId);
+                } else if (!m_notifiedWindows.contains(windowId) && !heldForSettle(w)) {
+                    // Restore preserved pre-autotile geometry so float-restore
+                    // returns to the original position, not the tiled frame from
+                    // the source desktop. Shared with the windowDesktopsChanged
+                    // arrival arm, the other re-add path that has to consume this
+                    // stash; see restorePreTileForDesktopMove for the
+                    // cross-screen decline.
+                    restorePreTileForDesktopMove(windowId, screenId);
+                    qCInfo(lcEffect) << "Desktop switch: re-adding moved window to autotile:" << windowId << "on"
+                                     << screenId;
+                    // RE-ADD (desktop return): this window's current frame is
+                    // the tiled rect from the source desktop, not a free
+                    // position. knownFreeFloating=false runs the floating
+                    // guard so a tiled rect is not persisted as free geometry
+                    // (a stash restore above already populated the local
+                    // bucket for windows that had one; this protects the rest).
+                    notifyWindowAdded(w, /*knownFreeFloating=*/false, /*focusEligible=*/false);
+                }
+                // Whether this scan re-announced the window or found it
+                // already tracked, it is now on the current desktop and
+                // notified, so any parked desktop-return entry for it is
+                // spent. Sweeping here (not only in the `added`-keyed loop
+                // above) is what keeps a park from outliving its purpose:
+                // the batch paths that park an off-desktop window are not
+                // all desktop switches, and `added` is empty on an
+                // identical-set switch, so this scan is the only place
+                // some entries are ever reached. A surviving entry would
+                // later make the re-track branch treat the window as
+                // already known to the daemon and skip the notify.
+                m_savedNotifiedForDesktopReturn.remove(windowId);
             }
             // A window that left a tiling desktop for this one, which does not
             // tile, gets its free placement the first time it is seen here (F364).
@@ -1110,8 +1161,12 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             for (KWin::EffectWindow* window : windows) {
                 // isDeleted mirrors the batch loop in wiring.cpp — a dying
                 // window's getWindowId would re-pollute the scrubbed caches.
-                if (window && !window->isDeleted() && !completedDeferredRoutes.contains(m_effect->getWindowId(window))
-                    && !heldForSettle(window)) {
+                // The screen filter first, on the resolve the batch itself
+                // filters by (pendingWindowScreenId): heldForSettle notes a
+                // skipped announce, which a window on a screen this toggle
+                // does not touch was never owed (F506).
+                if (window && !window->isDeleted() && added.contains(m_effect->pendingWindowScreenId(window))
+                    && !completedDeferredRoutes.contains(m_effect->getWindowId(window)) && !heldForSettle(window)) {
                     batchWindows.append(window);
                 }
             }

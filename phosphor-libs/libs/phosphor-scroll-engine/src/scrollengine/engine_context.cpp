@@ -149,10 +149,11 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         m_pendingSelfActivations.removeAll(windowId);
         m_pendingSelfActivationQueuedAt.remove(windowId);
         // The declined-open marker with it. This sweep matters more for that
-        // map than for the one above: the marker's other three sweeps all hang
-        // off a windowClosed signal, and a window that dies WITHOUT one — the
-        // case this whole function exists to catch — reaches none of them. It
-        // also has no size cap of its own, so nothing else bounds its growth.
+        // map than for the one above: the marker's other per-window sweeps
+        // (windowClosed, handoffRelease) hang off a signal about that window,
+        // and a window that dies WITHOUT one — the case this whole function
+        // exists to catch — reaches neither. It also has no size cap of its
+        // own, so nothing else bounds its growth.
         m_declinedOpenFocus.remove(windowId);
         ++pruned;
     }
@@ -260,19 +261,17 @@ bool ScrollEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& oldK
         // the float markers and last-applied rects survive for the handler,
         // and the emit + final sweep run after the loop.
         if (!existing->managedWindows().isEmpty()) {
-            qCWarning(lcScrollEngine) << "updateStickyScreenPins: releasing" << existing->managedWindows().size()
-                                      << "window(s) held by the state the unpin migration displaced on" << screenId;
+            qCWarning(lcScrollEngine) << "migrateStateKey: releasing" << existing->managedWindows().size()
+                                      << "window(s) held by the state the key migration displaced on" << screenId;
             displacedScreens.insert(screenId);
         }
-        // RELEASE FIRST, then unhook. releaseScreenState's placement snapshot
-        // goes through capturePlacement -> stateForWindow, which resolves the
-        // window's reverse-map key and then looks THAT key up in the forward
-        // map. Take the state out first and every one of those lookups misses,
-        // so capturePlacement returns nullopt for every displaced window and
-        // not one record is written — the exact loss the comment above says
-        // this arm prevents. removeStatesIf documents the same ordering
-        // ("invoke onRemove BEFORE dropping the entry") for its callers.
-        releaseScreenState(existing, displacedWindows);
+        // RELEASE FIRST, then unhook: the order removeStatesIf documents for
+        // its callers ("invoke onRemove BEFORE dropping the entry"), kept here
+        // so every teardown runs the release against a state the maps still
+        // name. The placement snapshot no longer depends on it, since
+        // releaseScreenState hands capturePlacementIn the state and key
+        // explicitly instead of resolving them through the forward map.
+        releaseScreenState(newKey, existing, displacedWindows);
         m_states.takeState(newKey);
     }
     m_states.takeState(oldKey);
@@ -386,8 +385,28 @@ void ScrollEngine::finishDisplacedRelease(QStringList& displacedWindows, const Q
     if (!displacedWindows.isEmpty()) {
         // A displaced window leaves the engine, so every context it held on other
         // desktops goes too (removeWindowsIf drops only the memberships).
+        //
+        // Recorded first from the strip that still holds it, when one does.
+        // releaseScreenState snapshots only from the window's primary context,
+        // and a window whose primary was a surviving strip was skipped there on
+        // the promise that the survivor's own teardown would record it. The
+        // drop below breaks that promise, so the snapshot is taken here, after
+        // every migration in the pass has settled the keys. A window whose
+        // displaced state was its only one has no survivor and keeps the
+        // record releaseScreenState took. It runs for every displaced window,
+        // though, so one whose displaced state WAS its primary but which a
+        // surviving context also held is recorded twice, and the survivor's
+        // slot replaces the one releaseScreenState took. That is deliberate:
+        // once the migrations have rekeyed the memberships, which context was
+        // primary at release time cannot be read back (the displaced key may
+        // hold another strip by now), and the survivor is a strip the window
+        // is really leaving, still standing with its neighbours.
         for (const QString& wid : std::as_const(displacedWindows)) {
+            recordSurvivingPlacement(wid);
             dropFromOtherContexts(wid, PhosphorEngine::PlacementStateKey{});
+            // releaseScreenState skips these for a window a surviving context
+            // still held, and that context has just let it go.
+            forgetReleasedWindowMemories(wid);
         }
         const QSet<QString> displacedSet(displacedWindows.cbegin(), displacedWindows.cend());
         m_states.removeWindowsIf([&displacedSet](const QString& wid, const PhosphorEngine::PlacementStateKey&) {
@@ -720,7 +739,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         [&matches](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return matches(key.screenId);
         },
-        [this, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+        [this, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
             releasedScreens.insert(state->screenId());
             // Removed screen: the per-context rule overrides go with the state
             // too — this prune is their documented purger, and releaseScreenState
@@ -737,7 +756,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
             // that carries the scrolling slot across the release.
             // AutotileEngine's twin routes this path through its full teardown
             // for exactly these reasons.
-            releaseScreenState(state, releasedWindows);
+            releaseScreenState(key, state, releasedWindows);
         });
     m_states.removeWindowsIf([&matches](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
@@ -855,7 +874,8 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     }
 }
 
-void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedWindows)
+void ScrollEngine::releaseScreenState(const PhosphorEngine::PlacementStateKey& key, ScrollState* state,
+                                      QStringList& releasedWindows)
 {
     const QString screenId = state->screenId();
     const QStringList windows = state->managedWindows();
@@ -865,35 +885,67 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // structure, so without this a window floated in scrolling loses its
     // floating slot across a mode round trip and comes back tiled with a stale
     // slot.order. AutotileEngine::releaseScreenStateForTeardown does the same.
+    // Against THIS state and its key, as autotile's capturePlacementForKey
+    // does, and only for the window's PRIMARY membership. A prune that tears
+    // down several of a window's contexts in one walk (a removed output takes
+    // every desktop of it) visits them in hash order, so capturing in each
+    // overwrote the record once per context and the one that survived named
+    // whichever came last. A window whose primary context survives this
+    // teardown is captured when that one goes, or by finishDisplacedRelease
+    // (recordSurvivingPlacement) when a displacement drops it from the
+    // survivor instead.
     if (m_windowTracker) {
         for (const QString& windowId : windows) {
-            if (auto record = capturePlacement(windowId)) {
+            const std::optional<PhosphorEngine::PlacementStateKey> primary = m_states.windowKey(windowId);
+            if (primary && *primary != key) {
+                continue;
+            }
+            if (auto record = capturePlacementIn(windowId, state, key)) {
                 m_windowTracker->placementStore().record(*record);
             }
         }
     }
-    // Only the unfloat-slot memory dies here. The float markers and the
-    // last-applied rects are inputs to the daemon's windowsReleased handler,
-    // which has not run yet — see the contract on the declaration.
-    // The pending self-activation entries and the declined-open marks go too,
-    // for windowClosed's reason: a released window's echo can never be answered
-    // in another mode, and a stale entry would eat the first genuine focus
-    // report on the way back. The parked-edge and windowed-fullscreen memories
-    // go for eviction symmetry: neither feeds windowsReleased, and nothing can
-    // sweep them later. A fullscreen HOLD is remembered for
+    // The per-window memories that release the window from the engine: the
+    // unfloat slot, the committed extents, the pending self-activations, the
+    // declined-open marks, and the parked-edge and windowed-fullscreen apply
+    // memories. The float markers and the last-applied rects are NOT among
+    // them: they are inputs to the daemon's windowsReleased handler, which has
+    // not run yet (see the contract on the declaration).
+    //
+    // The self-activation entries and the declined-open marks go for
+    // windowClosed's reason: a released window's echo can never be answered in
+    // another mode, and a stale entry would eat the first genuine focus report
+    // on the way back. The parked-edge and windowed-fullscreen memories go for
+    // eviction symmetry: neither feeds windowsReleased, and nothing can sweep
+    // them later. A fullscreen HOLD is remembered for
     // announceReleasedFullscreenHolds, since its slot dies here. The committed
     // extents go with the window, which is leaving the engine; an evacuee's
     // were copied into the park before this ran (parkOutput).
+    //
+    // Only from the window's LAST live context, dropWindowBookkeeping's rule.
+    // In a walk that releases several of its contexts the earlier ones are
+    // already out of the forward map when the later ones are visited, so a
+    // context still in it is one this walk has yet to release or one that
+    // survives. Dropping the unfloat slot from the first context visited made
+    // the primary's capture above read no fullscreen hold and record the
+    // held window as an ordinary float, depending on hash order alone.
+    //
+    // A window skipped here because a context that SURVIVES the walk still
+    // holds it does not stay in the engine either: setActiveScreens and
+    // finishDisplacedRelease then take it out of every context, and run
+    // forgetReleasedWindowMemories for it once they have.
     for (const QString& windowId : windows) {
-        rememberReleasedFullscreenHold(windowId);
-        m_floatRestore.remove(windowId);
-        forgetCommittedExtents(windowId);
-        m_pendingSelfActivations.removeAll(windowId);
-        m_pendingSelfActivationQueuedAt.remove(windowId);
-        m_declinedOpenFocus.remove(windowId);
-        m_parkedScrollEdge.remove(windowId);
-        m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedMaximizedToEdges.remove(windowId);
+        bool heldElsewhere = false;
+        for (const PhosphorEngine::PlacementStateKey& other : m_states.membershipsForWindow(windowId)) {
+            if (other != key && m_states.stateForKey(other)) {
+                heldElsewhere = true;
+                break;
+            }
+        }
+        if (heldElsewhere) {
+            continue;
+        }
+        forgetReleasedWindowMemories(windowId);
     }
     releasedWindows.append(windows);
     // Per-screen bookkeeping dies with the state: a stale seed must not
@@ -909,8 +961,8 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // broadcast is DEFERRED: this function runs from inside
     // PerScreenStates::removeStatesIf's iteration over m_states, and a
     // consumer slot that touched the engine's state map synchronously would
-    // invalidate the live iterator. All eight clearTabStripsForScreen call
-    // sites are outside the state map's own iteration and emit directly.
+    // invalidate the live iterator. Every clearTabStripsForScreen call site
+    // is outside the state map's own iteration and emits directly.
     m_lastTabStripPayload.remove(screenId);
     if (m_screensWithTabStrips.remove(screenId)) {
         QMetaObject::invokeMethod(
@@ -933,6 +985,50 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
             Qt::QueuedConnection);
     }
     state->deleteLater();
+}
+
+void ScrollEngine::forgetReleasedWindowMemories(const QString& windowId)
+{
+    // Idempotent: the hold is queued off the unfloat slot, which goes in the
+    // same pass, so a second run for the same window queues nothing.
+    rememberReleasedFullscreenHold(windowId);
+    m_floatRestore.remove(windowId);
+    forgetCommittedExtents(windowId);
+    m_pendingSelfActivations.removeAll(windowId);
+    m_pendingSelfActivationQueuedAt.remove(windowId);
+    m_declinedOpenFocus.remove(windowId);
+    m_parkedScrollEdge.remove(windowId);
+    m_lastAppliedWindowedFs.remove(windowId);
+    m_lastAppliedMaximizedToEdges.remove(windowId);
+}
+
+void ScrollEngine::recordSurvivingPlacement(const QString& windowId)
+{
+    if (!m_windowTracker) {
+        return;
+    }
+    // A membership can name a key whose state no longer holds the window: a
+    // migration re-seats another strip at the displaced state's key. So the
+    // state has to hold it, and the primary wins among those that do. The
+    // primary alone is not enough here, because a desktop remap releases
+    // before the context tracker is renumbered and its resolver can name a
+    // key in the old numbering.
+    const PhosphorEngine::PlacementStateKey primary = m_states.keyForWindow(windowId);
+    const ScrollState* home = nullptr;
+    PhosphorEngine::PlacementStateKey homeKey;
+    for (const PhosphorEngine::PlacementStateKey& key : m_states.membershipsForWindow(windowId)) {
+        const ScrollState* state = m_states.stateForKey(key);
+        if (state && state->containsWindow(windowId) && (!home || key == primary)) {
+            home = state;
+            homeKey = key;
+        }
+    }
+    if (!home) {
+        return;
+    }
+    if (auto record = capturePlacementIn(windowId, home, homeKey)) {
+        m_windowTracker->placementStore().record(*record);
+    }
 }
 
 } // namespace PhosphorScrollEngine

@@ -867,18 +867,19 @@ public:
 
     /// Flip mode to @c Snapping for every entry currently in @c Autotile
     /// (preserves @c snappingLayout + @c tilingAlgorithm +
-    /// @c scrollingTemplateLayout) and CLEAR the autotile quick-layout slots.
-    /// Emits @c layoutAssigned per affected screen; one save at end. The
-    /// quick-slot wipe is intentional and one-way: it is persisted with the
-    /// save and @ref restoreAutotileAssignments cannot bring it back.
+    /// @c scrollingTemplateLayout). The autotile quick-layout slots are kept,
+    /// as the scrolling ones are, so a Tiling off/on round trip keeps the
+    /// bindings. Emits @c layoutAssigned per affected screen; one save at end.
     void clearAutotileAssignments();
 
     /// Reverse direction of @ref clearAutotileAssignments FOR THE ASSIGNMENT
-    /// RULES ONLY (the wiped quick-layout slots are NOT restored): flip mode
+    /// RULES (the quick-layout slots were never touched): flip mode
     /// back to @c Autotile for every context-assignment entry sitting in
     /// @c Snapping while still carrying a @c tilingAlgorithm; preserves
-    /// @c snappingLayout, advisory null-layout @c layoutAssigned per affected
-    /// screen, one save at end. Needed because the disable is global across
+    /// @c snappingLayout. Emits @c layoutAssigned once per affected
+    /// (screen, desktop), carrying the layout that context now resolves to
+    /// under the current activity, the same emit shape as
+    /// @ref clearAutotileAssignments. One save at end. Needed because the disable is global across
     /// every desktop/activity while the daemon's re-enable writes only the
     /// current desktop per screen. The carried @c tilingAlgorithm is the only
     /// discriminator and survives a manual switch back to Snapping just as it

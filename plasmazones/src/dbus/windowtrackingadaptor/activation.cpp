@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // WindowTrackingAdaptor: focus and activation reports from the effect. The
-// cursor and active-window screen, a screen's current desktop, and the
-// window activation that feeds focus memory and last-used-zone tracking.
+// cursor and active-window screen, a screen's current desktop, the window
+// activation that feeds focus memory and last-used-zone tracking, and the
+// hold-and-replay of reports naming a screen the daemon does not know yet.
 
 #include "windowtrackingadaptor.h"
 #include "internal.h"
 #include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -37,6 +39,9 @@ void WindowTrackingAdaptor::replayHeldScreenReports()
 
 void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     m_heldScreenReports.remove(QStringLiteral("cursor")); // a later report supersedes a held one
     if (screenId.isEmpty()) {
         return;
@@ -72,12 +77,24 @@ QString WindowTrackingAdaptor::resolveFocusedWindowScreen(const QString& windowI
 
 void WindowTrackingAdaptor::activeWindowScreenChanged(const QString& windowId, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty() || screenId.isEmpty()) {
         return;
     }
     // Only the focused window's record: a report for any other window (the
     // focus moved on before this one arrived) must not repoint the shortcuts.
     if (shadowWindowId(windowId) != m_lastActiveWindowId) {
+        return;
+    }
+    // This window's activation is held for a screen the daemon did not know
+    // (windowActivated). It still owes more than the screen record: the snap
+    // re-home, snap's focus memory and the last-used zone. Dropping it for
+    // this report lost all of that, so it runs now on the newer screen, the
+    // one the window is on.
+    if (m_heldScreenReports.contains(QStringLiteral("activation"))) {
+        windowActivated(windowId, screenId);
         return;
     }
     m_heldScreenReports.remove(QStringLiteral("active"));
@@ -105,6 +122,9 @@ void WindowTrackingAdaptor::activeWindowScreenChanged(const QString& windowId, c
 
 void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int desktop)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager) {
         return;
     }
@@ -126,6 +146,9 @@ void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int de
 
 void WindowTrackingAdaptor::seedScreenDesktop(const QString& screenId, int desktop)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager
         || (desktopCount() > 0 && desktop > desktopCount())) {
         return;
@@ -135,12 +158,20 @@ void WindowTrackingAdaptor::seedScreenDesktop(const QString& screenId, int deskt
 
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("process windowActivated"))) {
         return;
     }
 
     // Track the active window for daemon-driven navigation (move/focus/swap/etc.)
     m_lastActiveWindowId = shadowWindowId(windowId);
+    // A new activation supersedes both held focus reports: an earlier held
+    // activation, and a held crossing report of the window focused before.
+    // Each has its own key, so activeWindowScreenChanged can tell a held
+    // activation apart from its own held report.
+    m_heldScreenReports.remove(QStringLiteral("activation"));
     m_heldScreenReports.remove(QStringLiteral("active"));
 
     // The focused window's screen, which window shortcuts act on (the cursor's
@@ -148,18 +179,20 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     // screen of the reported monitor wins, since the effect can send a
     // physical id before the virtual-screen definitions load. A screen the
     // daemon does not know yet is held, and the rest of the activation waits
-    // for it (F81, F302).
+    // for it (F81, F302). The previous window's screen goes either way: it
+    // was that window's, and paired with this window's id it sends shortcuts
+    // to a screen this window may not be on. With none known, window
+    // shortcuts fall back to the cursor's screen (as after windowClosed)
+    // until the report or the held replay names this window's.
     const QString resolvedScreen = resolveFocusedWindowScreen(windowId, screenId);
+    m_lastActiveScreenId = resolvedScreen;
     if (resolvedScreen.isEmpty() && !screenId.isEmpty()) {
-        holdScreenReport(QStringLiteral("active"), screenId, [this, windowId, screenId] {
+        holdScreenReport(QStringLiteral("activation"), screenId, [this, windowId, screenId] {
             if (shadowWindowId(windowId) == m_lastActiveWindowId) {
                 windowActivated(windowId, screenId);
             }
         });
         return;
-    }
-    if (!resolvedScreen.isEmpty()) {
-        m_lastActiveScreenId = resolvedScreen;
     }
 
     // Cross-monitor re-home backstop for a snap FLOAT (#724): snap tracks the

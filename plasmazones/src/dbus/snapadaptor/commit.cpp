@@ -5,6 +5,7 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowtrackingadaptor/internal.h"
 #include "core/platform/logging.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -13,7 +14,8 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Snap confirmations from the effect and external callers: each is checked by
+// Snap confirmations from the compositor: only the registered bridge may make
+// them (DbusHelpers::admitCompositorReport, #1155), and each is checked by
 // validBusSnapTarget (busgate.cpp), then committed through the engine, which
 // owns the orchestration (clear floating and the auto-snapped flag, assign,
 // last-used tracking, the state-change signal). They confirm placements already
@@ -22,6 +24,9 @@ namespace PlasmaZones {
 
 void SnapAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("track window snap"))) {
         return;
     }
@@ -42,6 +47,9 @@ bool SnapAdaptor::confirmSnap(const QString& windowId, const QString& zoneId, co
 
 void SnapAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("track multi-zone window snap"))) {
         return;
     }
@@ -56,6 +64,9 @@ void SnapAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringL
 
 void SnapAdaptor::windowUnsnapped(const QString& windowId)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("untrack window"))) {
         return;
     }
@@ -78,6 +89,9 @@ void SnapAdaptor::releaseSnapSlotIfFree(const QString& windowId)
 
 void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationList& entries)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     qCInfo(lcDbusWindow) << "windowsSnappedBatch: processing" << entries.size() << "entries";
 
     for (const auto& entry : entries) {
@@ -109,6 +123,9 @@ void SnapAdaptor::windowsSnappedBatch(const PhosphorProtocol::SnapConfirmationLi
 
 void SnapAdaptor::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (windowId.isEmpty()) {
         return;
     }
@@ -330,6 +347,12 @@ PhosphorProtocol::UnfloatRestoreResult SnapAdaptor::calculateUnfloatRestore(cons
 
 void SnapAdaptor::windowUnsnappedForFloat(const QString& windowId)
 {
+    // Compositor-only: from any other caller it unsnapped a window that its
+    // gated second half (setWindowFloat) could then refuse to float, leaving
+    // it in neither state.
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
     if (!validateWindowId(windowId, QStringLiteral("prepare float"))) {
         return;
     }

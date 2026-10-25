@@ -23,18 +23,31 @@
  * The stacking contract for undo: deleting a zone and undoing must put it back
  * at its original height, not on top. Paste and duplicate deliberately land on
  * top, which is why they are pinned here too.
+ *
+ * Beside those, the edges of the same manager: a resync of fixed zones is no
+ * edit, non-finite input is refused, switching custom colours on sets that
+ * one property, a fixed zone's geometry snapshot (and the fill and divider
+ * undo built on it) puts its pixels back verbatim with the relative copy
+ * re-derived against the current reference, and the clipboard carries a
+ * fixed zone as one.
  */
 
 #include <QTest>
 #include <QSignalSpy>
 #include <QSet>
+#include <QSize>
 #include <QUndoStack>
+#include <QtMath>
 
 #include <algorithm>
+#include <utility>
 
 #include "core/types/constants.h"
+#include "editor/helpers/ZoneSerialization.h"
 #include "editor/services/ZoneManager.h"
 #include "editor/undo/commands/DeleteZoneCommand.h"
+#include "editor/undo/commands/DividerResizeCommand.h"
+#include "editor/undo/commands/FillZoneCommand.h"
 #include <PhosphorZones/Zone.h>
 
 using namespace PlasmaZones;
@@ -118,6 +131,34 @@ private:
         manager.updateZoneName(ids[1], QStringLiteral("B"));
         manager.updateZoneName(ids[2], QStringLiteral("C"));
         return ids;
+    }
+
+    /// A fixed zone authored at @p pixels against the manager's reference size.
+    static QString addFixedZone(ZoneManager& manager, const QRectF& pixels)
+    {
+        QVariantMap zone;
+        zone[::PhosphorZones::ZoneJsonKeys::Id] = QUuid::createUuid().toString();
+        // The relative copy is derived from the pixels on insert.
+        zone[::PhosphorZones::ZoneJsonKeys::X] = 0.0;
+        zone[::PhosphorZones::ZoneJsonKeys::Y] = 0.0;
+        zone[::PhosphorZones::ZoneJsonKeys::Width] = 0.1;
+        zone[::PhosphorZones::ZoneJsonKeys::Height] = 0.1;
+        zone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
+        zone[::PhosphorZones::ZoneJsonKeys::FixedX] = pixels.x();
+        zone[::PhosphorZones::ZoneJsonKeys::FixedY] = pixels.y();
+        zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = pixels.width();
+        zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = pixels.height();
+        return manager.addZoneFromMap(zone);
+    }
+
+    static QRectF fixedRectOf(const ZoneManager& manager, const QString& zoneId)
+    {
+        return manager.extractFixedGeometry(manager.getZoneById(zoneId));
+    }
+
+    static QRectF relativeRectOf(const ZoneManager& manager, const QString& zoneId)
+    {
+        return manager.extractZoneGeometry(manager.getZoneById(zoneId));
     }
 
 private Q_SLOTS:
@@ -699,6 +740,228 @@ private Q_SLOTS:
         QCOMPARE(manager.zoneCount(), 3);
         verifyDense(manager, "after the second undo");
         QCOMPARE(stackingOrder(manager), QStringList({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")}));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Fixed zones, input and appearance
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief A resync of fixed zones re-derives data and is no edit.
+     *
+     * A screen switch or an inset reply moves the reference under unchanged
+     * pixels. Each fixed zone's relative copy follows and reports a geometry
+     * change, but the layout must not read as unsaved for it.
+     */
+    void testResyncFixedZones_changesGeometryWithoutMarkingAnEdit()
+    {
+        ZoneManager manager;
+        const QString id = addFixedZone(manager, QRectF(100, 50, 640, 480));
+        QVERIFY(!id.isEmpty());
+        const QRectF relativeBefore = relativeRectOf(manager, id);
+        QSignalSpy geometry(&manager, &ZoneManager::zoneGeometryChanged);
+        QSignalSpy modified(&manager, &ZoneManager::zonesModified);
+
+        manager.setReferenceScreenSize(QSize(2560, 1440));
+        manager.resyncFixedZones();
+
+        QCOMPARE(geometry.count(), 1);
+        QCOMPARE(geometry.first().at(0).toString(), id);
+        QCOMPARE(modified.count(), 0);
+        QVERIFY(relativeRectOf(manager, id) != relativeBefore);
+        QCOMPARE(fixedRectOf(manager, id), QRectF(100, 50, 640, 480));
+    }
+
+    /// NaN fails every ordered comparison, so a range test alone lets it in.
+    void testAddZone_refusesNonFiniteInput_data()
+    {
+        QTest::addColumn<qreal>("x");
+        QTest::addColumn<qreal>("width");
+        QTest::newRow("NaN position") << qQNaN() << 0.2;
+        QTest::newRow("NaN size") << 0.1 << qQNaN();
+    }
+    void testAddZone_refusesNonFiniteInput()
+    {
+        QFETCH(qreal, x);
+        QFETCH(qreal, width);
+        ZoneManager manager;
+
+        QVERIFY(manager.addZone(x, 0.1, width, 0.2).isEmpty());
+        QCOMPARE(manager.zoneCount(), 0);
+    }
+
+    /**
+     * @brief Switching custom colours on sets that one property.
+     *
+     * Seeding the colours is the controller's job, as undoable commands of
+     * their own. Seeded here, the undo of switching custom colours off re-ran
+     * the seed and overwrote the zone's colours with no way back.
+     */
+    void testUpdateZoneAppearance_useCustomColorsLeavesTheColoursAlone()
+    {
+        ZoneManager manager;
+        const QString id = manager.addZone(0.0, 0.0, 0.2, 0.2);
+        QVERIFY(!id.isEmpty());
+        const QString highlightKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::HighlightColor);
+        manager.updateZoneColor(id, highlightKey, QStringLiteral("#ff123456"));
+        const QVariantMap before = manager.getZoneById(id);
+        manager.setDefaultColors(QStringLiteral("#ffaaaaaa"), QStringLiteral("#ffbbbbbb"), QStringLiteral("#ffcccccc"));
+
+        manager.updateZoneAppearance(id, QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::UseCustomColors), true);
+
+        const QVariantMap after = manager.getZoneById(id);
+        QVERIFY(after.value(::PhosphorZones::ZoneJsonKeys::UseCustomColors).toBool());
+        QCOMPARE(after.value(::PhosphorZones::ZoneJsonKeys::HighlightColor).toString(), QStringLiteral("#ff123456"));
+        QCOMPARE(after.value(::PhosphorZones::ZoneJsonKeys::InactiveColor),
+                 before.value(::PhosphorZones::ZoneJsonKeys::InactiveColor));
+        QCOMPARE(after.value(::PhosphorZones::ZoneJsonKeys::BorderColor),
+                 before.value(::PhosphorZones::ZoneJsonKeys::BorderColor));
+    }
+
+    /**
+     * @brief A fixed zone's snapshot restores its pixels verbatim and re-derives the relative copy.
+     *
+     * The reference moves between the edit and the restore without the undo
+     * stack unwinding it, the way a screen switch or an inset reply moves it,
+     * and resyncFixedZones re-derives every fixed zone against the new one.
+     * The pixels must land on the captured values, and the relative copy must
+     * describe them against the reference as it now stands. Writing the
+     * captured relative copy back would draw the zone where the old reference
+     * put it.
+     */
+    void testGeometrySnapshot_restoresPixelsAndRederivesTheRelativeCopy()
+    {
+        ZoneManager manager; // reference 1920x1080
+        const QString id = addFixedZone(manager, QRectF(100, 50, 640, 480));
+        const ZoneGeometrySnapshot snapshot = manager.geometrySnapshot(id);
+        QCOMPARE(snapshot.zoneId, id);
+        QCOMPARE(snapshot.fixed, QRectF(100, 50, 640, 480));
+
+        manager.updateZoneGeometry(id, 300, 200, 800, 600);
+        QCOMPARE(fixedRectOf(manager, id), QRectF(300, 200, 800, 600));
+        manager.setReferenceScreenSize(QSize(2560, 1440));
+        manager.resyncFixedZones();
+        manager.restoreGeometrySnapshot(snapshot);
+
+        QCOMPARE(fixedRectOf(manager, id), snapshot.fixed);
+        const QRectF expectedRelative(100.0 / 2560, 50.0 / 1440, 640.0 / 2560, 480.0 / 1440);
+        QCOMPARE(relativeRectOf(manager, id), expectedRelative);
+        QVERIFY2(expectedRelative != snapshot.relative, "precondition: the reference move changed the relative copy");
+    }
+
+    /**
+     * @brief A restore puts a fixed zone back at a negative offset, as no edit when asked.
+     *
+     * A cancelled multi-zone drag puts each zone back through a snapshot.
+     * updateZoneGeometryDirect clamps a fixed zone's origin to zero, so a zone
+     * that started at a negative offset would move on a cancel, and a cancel
+     * is no edit, so it must not mark the layout unsaved either.
+     */
+    void testRestoreGeometrySnapshot_keepsANegativeOffsetAndCanSkipTheEditMark()
+    {
+        ZoneManager manager;
+        const QString id = addFixedZone(manager, QRectF(100, 50, 640, 480));
+        ZoneGeometrySnapshot start = manager.geometrySnapshot(id);
+        start.fixed.moveTopLeft(QPointF(-40, -20));
+
+        manager.updateZoneGeometryDirect(id, start.fixed.x(), start.fixed.y(), start.fixed.width(),
+                                         start.fixed.height());
+        QCOMPARE(fixedRectOf(manager, id).topLeft(), QPointF(0, 0)); // the clamp a restore must avoid
+
+        QSignalSpy geometry(&manager, &ZoneManager::zoneGeometryChanged);
+        QSignalSpy modified(&manager, &ZoneManager::zonesModified);
+        manager.restoreGeometrySnapshot(start, /*markModified*/ false);
+
+        QCOMPARE(fixedRectOf(manager, id), QRectF(-40, -20, 640, 480));
+        QCOMPARE(geometry.count(), 1);
+        QCOMPARE(modified.count(), 0);
+    }
+
+    /// A relative zone's snapshot carries no pixel rect.
+    void testGeometrySnapshot_ofARelativeZoneHasNoFixedRect()
+    {
+        ZoneManager manager;
+        const QString id = manager.addZone(0.1, 0.1, 0.3, 0.3);
+        const ZoneGeometrySnapshot snapshot = manager.geometrySnapshot(id);
+        QCOMPARE(snapshot.relative, QRectF(0.1, 0.1, 0.3, 0.3));
+        QVERIFY(!snapshot.fixed.isValid());
+        QVERIFY(manager.geometrySnapshot(QUuid::createUuid().toString()).zoneId.isEmpty());
+    }
+
+    /**
+     * @brief Undoing a divider resize gives a fixed zone its pixels back.
+     *
+     * The undo used to replay the relative rect through updateZoneGeometry,
+     * which takes pixels for a fixed zone, and collapsed it to the minimum
+     * size.
+     */
+    void testUndoDividerResize_restoresAFixedZonesPixelsExactly()
+    {
+        ZoneManager manager; // reference 1920x1080
+        const QString left = addFixedZone(manager, QRectF(0, 0, 955, 1080));
+        const QString right = addFixedZone(manager, QRectF(955, 0, 965, 1080));
+        QVERIFY(!left.isEmpty() && !right.isEmpty());
+        const qreal divider = relativeRectOf(manager, left).right();
+
+        QUndoStack stack;
+        stack.push(new DividerResizeCommand(QPointer<ZoneManager>(&manager), left, right, divider + 0.1, 0.0, true,
+                                            manager.collectGeometriesAtDivider(left, right, true), QString()));
+        QVERIFY2(fixedRectOf(manager, left).width() > 955, "precondition: the resize moved the divider");
+
+        stack.undo();
+
+        QCOMPARE(fixedRectOf(manager, left), QRectF(0, 0, 955, 1080));
+        QCOMPARE(fixedRectOf(manager, right), QRectF(955, 0, 965, 1080));
+    }
+
+    /// The fill's undo and redo replay snapshots the same way.
+    void testUndoFill_restoresAFixedZonesPixelsExactly()
+    {
+        ZoneManager manager;
+        const QString id = addFixedZone(manager, QRectF(100, 50, 640, 480));
+        const ZoneGeometrySnapshot before = manager.geometrySnapshot(id);
+        manager.updateZoneGeometry(id, 0, 0, 1920, 1080);
+        const ZoneGeometrySnapshot filled = manager.geometrySnapshot(id);
+
+        QUndoStack stack;
+        stack.push(new FillZoneCommand(QPointer<ZoneManager>(&manager), before, filled, QString()));
+        QCOMPARE(fixedRectOf(manager, id), QRectF(0, 0, 1920, 1080));
+
+        stack.undo();
+        QCOMPARE(fixedRectOf(manager, id), QRectF(100, 50, 640, 480));
+        stack.redo();
+        QCOMPARE(fixedRectOf(manager, id), QRectF(0, 0, 1920, 1080));
+    }
+
+    /**
+     * @brief The clipboard carries a fixed zone as one, with its unit.
+     *
+     * Without the mode and the pixel rect a paste rebuilt it from the relative
+     * copy as a relative zone, and without the unit a paste into a layout
+     * counting the other unit could not convert the pixels.
+     */
+    void testClipboard_roundTripsAFixedZoneAndItsUnit_data()
+    {
+        QTest::addColumn<bool>("devicePixels");
+        QTest::newRow("logical pixels") << false;
+        QTest::newRow("device pixels") << true;
+    }
+    void testClipboard_roundTripsAFixedZoneAndItsUnit()
+    {
+        QFETCH(bool, devicePixels);
+        ZoneManager manager;
+        const QString id = addFixedZone(manager, QRectF(100.5, 50, 640, 480.25));
+
+        const QString text = ZoneSerialization::serializeZonesToClipboard({manager.getZoneById(id)}, devicePixels);
+        bool unit = !devicePixels;
+        const QVariantList zones = ZoneSerialization::deserializeZonesFromClipboard(text, &unit);
+
+        QCOMPARE(zones.size(), 1);
+        const QVariantMap zone = zones.first().toMap();
+        QCOMPARE(zone.value(::PhosphorZones::ZoneJsonKeys::GeometryMode).toInt(),
+                 static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed));
+        QCOMPARE(manager.extractFixedGeometry(zone), QRectF(100.5, 50, 640, 480.25));
+        QCOMPARE(unit, devicePixels);
     }
 };
 

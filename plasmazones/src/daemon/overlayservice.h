@@ -886,10 +886,14 @@ private:
     /// layout lists with that id so gate and rows agree.
     LayoutIncludeFlags resolvePerScreenLayoutInclude(const QString& screenId, QString* resolvedIdOut = nullptr) const;
     // overlayOverride is resolved once per screen by the caller (screen-invariant
-    // across zones) and threaded in, rather than re-resolved per zone.
+    // across zones) and threaded in, rather than re-resolved per zone. So are
+    // fixedReference and fixedScale, the rect a fixed zone is laid out in on
+    // this screen and the output's scale, which normalize a fixed zone's
+    // relative geometry (fixedReference invalid: the stored hint is kept).
     QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,
                                  const QRect& overlayGeometry, PhosphorZones::Layout* layout,
-                                 const PhosphorZones::ContextOverlayOverride& overlayOverride) const;
+                                 const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                 const QRectF& fixedReference, qreal fixedScale) const;
 
     /**
      * @brief Resolve the layout for a given screen with fallback chain

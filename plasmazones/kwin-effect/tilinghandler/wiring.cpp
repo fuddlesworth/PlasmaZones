@@ -192,7 +192,7 @@ void TilingHandler::loadSettings()
                 }
                 QDBusPendingReply<QDBusVariant> reply = *w;
                 if (reply.isValid()) {
-                    QStringList screens = reply.value().variant().toStringList();
+                    const QStringList screens = reply.value().variant().toStringList();
                     // The ENTIRE published set, not a diff. The raw replace
                     // is safe only because removals are covered elsewhere:
                     // drainDeadSessionState's clears (and, when the daemon exits
@@ -202,7 +202,9 @@ void TilingHandler::loadSettings()
                     // this reply to miss. If those resets ever stop being
                     // load-bearing, this handler must route through
                     // slotScreensChanged's removed/added diff instead.
-                    const QSet<QString> published(screens.begin(), screens.end());
+                    // Empty ids dropped, as every managed-set writer drops them
+                    // (nonEmptyIdSet, F359).
+                    const QSet<QString> published = ScrollDecisions::nonEmptyIdSet(screens);
                     // Same intersection hazard as slotScreensChanged: this
                     // reply and the scrollingScreens reply race, so whichever
                     // lands second changes the Mode discriminator without

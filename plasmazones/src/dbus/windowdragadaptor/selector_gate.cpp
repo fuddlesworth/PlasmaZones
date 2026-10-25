@@ -54,13 +54,17 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     // place the toggle and the rule are folded.
 
     // A rule-excluded dragged window never sees the popup, on EITHER
-    // variant. The probe (SnapEngine::isWindowExcluded) is mode-neutral by
-    // design: the Exclude rules and the minimum-window-size floor live in
-    // the shared placement-exclusion vocabulary, and the scroll side
-    // enforces the same rules effect-side before a strip ever adopts such
-    // a window — so on a strip screen too, offering targets would promise
-    // an insert the placement policy refuses. Evaluated once at drag start.
-    if (m_dragWindowExcludedFromSelector) {
+    // variant. The probe (SnapEngine::isWindowExcludedByRule) is mode-neutral
+    // by design: the Exclude rules live in the shared placement-exclusion
+    // vocabulary, and the scroll side enforces the same rules effect-side
+    // before a strip ever adopts such a window — so on a strip screen too,
+    // offering targets would promise an insert the placement policy refuses.
+    // Evaluated once at drag start. The minimum-window-size floor is asked
+    // here every tick instead, on the size the window holds as its own
+    // (dragClientSizeBelowMinimum), the same answer the drag-insert adoption
+    // gate acts on: a window in a short zone or tile is not refused for the
+    // frame its zone or tile gave it.
+    if (m_dragWindowExcludedFromSelector || dragClientSizeBelowMinimum()) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
             m_zoneSelectorShownOn.clear();

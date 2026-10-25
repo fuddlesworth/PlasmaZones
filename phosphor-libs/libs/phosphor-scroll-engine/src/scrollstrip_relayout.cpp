@@ -5,6 +5,7 @@
 
 #include "scrollengine/scrollenginelogging.h"
 
+#include <QVarLengthArray>
 #include <QtGlobal>
 
 namespace PhosphorScrollEngine {
@@ -124,10 +125,87 @@ int ScrollStrip::committedMainFloorPx(const QString& windowId, const ScrollLayou
     return qMax(0, params.axis.mainSize(params.committedFloor(windowId)));
 }
 
+int ScrollStrip::tileMinCrossPx(const Tile& t, const Column& c, const ScrollLayoutParams& params)
+{
+    const int declared = t.minCross(params.axis);
+    // The setting gate is here as well as at every caller, committedMainFloorPx's
+    // reason: no caller can read a committed floor the setting has switched
+    // off. A maximized-to-edges column declares its extent, so a committed
+    // floor has nothing to hold there; its declared minimum still reads,
+    // as it did before committed floors existed.
+    if (!params.respectMinimumSize || !params.committedCrossFloor || c.maximizedToEdges) {
+        return declared;
+    }
+    return qMax(declared, qMax(0, params.committedCrossFloor(t.windowId)));
+}
+
 int ScrollStrip::windowColumnMainExtentPx(const QString& windowId, const ScrollLayoutParams& params) const
 {
     const int colIdx = columnOfWindow(windowId);
     return colIdx < 0 ? -1 : columnExtentPx(m_columns.at(colIdx), params);
+}
+
+int ScrollStrip::windowTileCrossExtentPx(const QString& windowId, const ScrollLayoutParams& params) const
+{
+    const int colIdx = columnOfWindow(windowId);
+    if (colIdx < 0) {
+        return -1;
+    }
+    const ResolvedStrip resolved = relayout(params);
+    for (const ResolvedColumn& rc : resolved.columns) {
+        if (rc.columnIndex != colIdx) {
+            continue;
+        }
+        for (const ResolvedTile& rt : rc.tiles) {
+            if (rt.windowId == windowId) {
+                return params.axis.crossSize(rt.rect);
+            }
+        }
+        break;
+    }
+    return -1;
+}
+
+int ScrollStrip::tileCrossCapacityPx(const QString& windowId, const ScrollLayoutParams& params) const
+{
+    const int colIdx = columnOfWindow(windowId);
+    const int fullCross = crossExtent(params);
+    if (colIdx < 0 || fullCross <= 0) {
+        return -1;
+    }
+    const Column& c = m_columns.at(colIdx);
+    int visibleTiles = 0;
+    int siblingFloors = 0;
+    bool held = false;
+    for (const Tile& tile : c.tiles) {
+        if (tile.minimized) {
+            continue;
+        }
+        ++visibleTiles;
+        if (tile.windowId == windowId) {
+            held = true;
+        } else {
+            siblingFloors += qMax(1, params.respectMinimumSize ? tileMinCrossPx(tile, c, params) : 0);
+        }
+    }
+    if (!held) {
+        return -1;
+    }
+    // Every tab is committed at the one content rect, so no sibling takes
+    // anything from it; tabbedColumnCrossPx caps the column at the work area,
+    // and the tab gets that less the indicator's reservation across.
+    if (c.display == ColumnDisplay::Tabbed) {
+        return qMax(1, fullCross - tabbedCrossReservationPx(c, params));
+    }
+    // relayout's availH for this column (the gaps BETWEEN the visible tiles
+    // come out of the budget), less what the siblings' own floors keep: the
+    // relayout's rebalance never shrinks a tile below its floor, nor an Auto
+    // one below a pixel. Never below 0: siblings whose floors alone fill the
+    // column leave the tile nothing, and a negative answer would read as the
+    // -1 "no tile here" sentinel, so a floor the tile holds there would be
+    // neither floated nor dropped.
+    const int availH = qMax(visibleTiles, fullCross - params.gap * (visibleTiles - 1));
+    return qMax(0, availH - siblingFloors);
 }
 
 int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params)
@@ -222,13 +300,14 @@ int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& 
     if (params.respectMinimumSize) {
         // Every visible tab is committed at this column's content rect, the
         // hidden ones included, so the floor is the tallest minimum in the
-        // set and not just the shown tab's. Capped at the work area for the
+        // set and not just the shown tab's, each raised to any committed
+        // cross floor its client taught. Capped at the work area for the
         // same reason the stack branch caps its own floors: a frame minimum
         // larger than the output must not size the column past the screen.
         int floorPx = 0;
         for (const Tile& tile : c.tiles) {
             if (!tile.minimized) {
-                floorPx = qMax(floorPx, tile.minCross(params.axis));
+                floorPx = qMax(floorPx, tileMinCrossPx(tile, c, params));
             }
         }
         if (floorPx > 0) {
@@ -1150,20 +1229,31 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             // Min-height clamp after distribution. Soft constraint: when
             // even the floors overflow the column, the overflow stands and
             // the trailing tiles lay out below the work area. No float-out
-            // policy exists for this case: the engine's oversized floats (the
-            // open-time check and its revisits through
-            // ScrollEngine::outgrowsWorkArea) fire only when ONE window
-            // outgrows the work area, never for a stack whose floors overflow
-            // only together. The whole clamp (and the rebalance it
-            // necessitates) is the respect-minimum-size arm: off, the
-            // distributed heights stand and the compositor's own min-size
-            // enforcement decides what overhangs.
+            // policy exists for DECLARED minimums that overflow only
+            // together: the engine's oversized floats (the open-time check
+            // and its revisits through ScrollEngine::outgrowsWorkArea) fire
+            // for a declared minimum only when ONE window outgrows the work
+            // area. A committed cross floor is the exception, since the
+            // engine floats the window that teaches one its stack can never
+            // hold, and drops a held one the stack stops being able to hold
+            // (ScrollEngine::settleCommittedFloors). The whole clamp (and the
+            // rebalance it necessitates) is the respect-minimum-size arm:
+            // off, the distributed heights stand and the compositor's own
+            // min-size enforcement decides what overhangs.
             if (params.respectMinimumSize) {
+                // tileMinCrossPx: heights[] divides the column ACROSS the
+                // strip, so the floor is the frame minimum on that axis,
+                // raised to any share the client's own commits hold the tile
+                // to. Resolved once, since the rebalance below reads it per
+                // pass. Held inline for an ordinary stack, so the relayout
+                // (which the indicator probe and the auto-scroll run per tick)
+                // pays no heap allocation for it; every slot is written below.
+                QVarLengthArray<int, 8> floors(n);
                 for (int vi = 0; vi < n; ++vi) {
-                    // minCross: heights[] divides the column ACROSS the
-                    // strip, so the floor is the frame minimum on that axis.
-                    const Tile& t = col.tiles.at(visible.at(vi));
-                    const int floorPx = t.minCross(params.axis);
+                    floors[vi] = tileMinCrossPx(col.tiles.at(visible.at(vi)), col, params);
+                }
+                for (int vi = 0; vi < n; ++vi) {
+                    const int floorPx = floors.at(vi);
                     if (floorPx > 0 && heights[vi] < floorPx) {
                         heights[vi] = qMin(floorPx, availH);
                     }
@@ -1182,15 +1272,13 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                     while (excess > 0) {
                         int slackTotal = 0;
                         for (int vi = 0; vi < n; ++vi) {
-                            const Tile& t = col.tiles.at(visible.at(vi));
-                            slackTotal += qMax(0, heights[vi] - qMax(1, t.minCross(params.axis)));
+                            slackTotal += qMax(0, heights[vi] - qMax(1, floors.at(vi)));
                         }
                         if (slackTotal <= 0) {
                             break;
                         }
                         for (int vi = 0; vi < n && excess > 0; ++vi) {
-                            const Tile& t = col.tiles.at(visible.at(vi));
-                            const int slack = qMax(0, heights[vi] - qMax(1, t.minCross(params.axis)));
+                            const int slack = qMax(0, heights[vi] - qMax(1, floors.at(vi)));
                             if (slack <= 0) {
                                 continue;
                             }

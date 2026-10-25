@@ -81,7 +81,14 @@ class MyPlugin : public PhosphorCompositor::IGeometryHandler,
 
         connect(&m_client, &PhosphorCompositor::DaemonClient::daemonReady,
                 this, [this]() {
-            m_client.registerBridge(QStringLiteral("river"), PhosphorProtocol::Service::ApiVersion, {"borderless", "animation"});
+            m_client.registerBridge(QStringLiteral("river"), PhosphorProtocol::Service::ApiVersion,
+                                    {QStringLiteral("borderless"), QStringLiteral("animation")});
+        });
+        // Report nothing before this. The daemon admits window, drag and
+        // screen reports only from the registered bridge.
+        connect(&m_client, &PhosphorCompositor::DaemonClient::bridgeRegistered,
+                this, [this]() {
+            announceExistingWindows();
         });
     }
 
@@ -117,6 +124,28 @@ ICompositorBridge (plugin implements, wraps native window APIs)
 
 The daemon always runs. The plugin is stateless with respect to placement.
 It applies what the daemon tells it and reports window events back.
+
+### Registration comes first
+
+The daemon admits the compositor's reports (window opens, closes and
+activations, the drag calls, the cursor and primary screen notices, the
+stale window prune) only from the bus name that registered the bridge, and
+answers every other caller with `AccessDenied`. A plugin must therefore wait
+for `bridgeRegistered` before it reports anything. `DaemonClient` refuses a
+report sent earlier and logs one warning, because a fire-and-forget call
+would never see the daemon's refusal. The queries are not gated.
+
+Only the compositor's own process may register. The daemon accepts a
+registration only from a bus connection owned by the process on the far end of
+its Wayland connection (or a direct child of it when that process is
+`kwin_wayland_wrapper`), and answers any other process with a `REJECTED`
+session, which `DaemonClient` reports as `bridgeRejected`. A bridge therefore
+has to run inside the compositor, not as a separate helper process.
+
+Only one bridge is registered at a time. While the registered bridge is still
+on the bus, a registration from another bus name gets a `REJECTED` session,
+which `DaemonClient` reports as `bridgeRejected`. The same name registering
+again, or any name once the old one has left the bus, is accepted.
 
 ## Dependencies
 

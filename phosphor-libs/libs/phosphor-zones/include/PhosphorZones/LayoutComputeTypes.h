@@ -29,6 +29,18 @@ struct LayoutSnapshot
     QString screenId;
     QRectF screenGeometry;
     QVector<ZoneSnapshot> zones;
+    /// Logical scale of the output, carried to the result so the applier
+    /// stamps the frame the geometries were computed in. buildSnapshot always
+    /// fills a positive one: the caller's scale, or the layout's last
+    /// recalculation scale when the caller passed none.
+    qreal screenScale = 0.0;
+    /// What fixed geometries are divided by (Layout::fixedGeometryDivisor),
+    /// resolved on the GUI thread: the worker cannot read the layout.
+    qreal fixedDivisor = 1.0;
+    /// Layout::zoneGeometryEpoch() when the snapshot was taken.
+    quint64 zoneGeometryEpoch = 0;
+    /// Layout::syncRecalcEpoch() when the snapshot was taken.
+    quint64 syncRecalcEpoch = 0;
 };
 
 struct ComputedZoneGeometry
@@ -44,6 +56,11 @@ struct LayoutComputeResult
     QRectF screenGeometry;
     QVector<ComputedZoneGeometry> zones;
     uint64_t generation = 0;
+    qreal screenScale = 0.0;
+    /// Carried from the snapshot, so the applier can tell whether the layout's
+    /// inputs or frame moved while the worker computed.
+    quint64 zoneGeometryEpoch = 0;
+    quint64 syncRecalcEpoch = 0;
 };
 
 } // namespace PhosphorZones

@@ -191,7 +191,8 @@ pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp scrollstu
 # A client that commits a frame other than its tile (reportCommittedSize): the
 # committed floor, its peek memory, its oversized verdict and every path that
 # keeps or drops it.
-pse_add_test(test_scrollengine_committedfloor test_scrollengine_committedfloor.cpp scrollstubsettings.h)
+pse_add_test(test_scrollengine_committedfloor test_scrollengine_committedfloor.cpp scrollstubsettings.h
+             scrollstubtracking.h)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)
 # The compositor focus-report protocol: which self-activation echoes the
 # filter swallows and which it adopts. Its own file rather than more of the
@@ -204,8 +205,9 @@ pse_add_test(test_scrollengine_maximize test_scrollengine_maximize.cpp)
 # The compositor's fullscreen hold: a strip tile held out for its own
 # fullscreen with a passive announcement, and what returns it.
 pse_add_test(test_scrollengine_fullscreenfloat test_scrollengine_fullscreenfloat.cpp)
-# Which float transitions announce active and which passive (F557, F578).
-pse_add_test(test_scrollengine_floatannounce test_scrollengine_floatannounce.cpp)
+# Which float transitions announce active and which passive (F557, F578), the
+# oversized verdict included.
+pse_add_test(test_scrollengine_floatannounce test_scrollengine_floatannounce.cpp scrollstubsettings.h)
 # The tile-focus family: cycleTab and focusTab, plus the float refusal and the
 # panned-view hand-back they share with focusWindowTop/Bottom. Its own file
 # rather than more of the smoke suite.

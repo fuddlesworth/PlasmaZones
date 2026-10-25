@@ -506,6 +506,13 @@ SettingsController::SettingsController(QObject* parent)
     QStringList failedSubscriptions;
     wireDaemonSubscriptions(failedSubscriptions);
 
+    // Seed the primary scale recalcLocalLayouts reads. The initial local load
+    // above ran before any answer could arrive, so a device-pixel layout's
+    // first preview keeps its last scale until this reply reloads it. A new
+    // primary screen invalidates the cache, which keys on the screen.
+    connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, &SettingsController::refreshPrimaryScreenScale);
+    refreshPrimaryScreenScale();
+
     // Client-side timeout for the async window picker. If the daemon
     // never fans out a runningWindowsAvailable signal (KWin effect
     // unloaded, crashed, or slow), the timer fires runningWindowsTimedOut()
@@ -544,6 +551,7 @@ SettingsController::SettingsController(QObject* parent)
             // daemon start, and the common case (a daemon restart that enumerates
             // the same desktops and activities) must not churn every bound view.
             scheduleLayoutLoad();
+            refreshPrimaryScreenScale();
             const int desktopCountBefore = m_virtualDesktopCount;
             const QStringList desktopNamesBefore = m_virtualDesktopNames;
             refreshVirtualDesktops();

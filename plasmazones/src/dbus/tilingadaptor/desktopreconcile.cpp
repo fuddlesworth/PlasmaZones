@@ -43,15 +43,24 @@ QSet<int> desktopSetOf(const PhosphorEngine::WindowMetadata& meta)
     return desktops;
 }
 
-// Whether two metadata records describe the same context membership, without
-// building a set for either. The registry re-emits for every metadata edit,
-// title ticks included, and the overwhelming majority of those leave the
-// context fields untouched — so the cheap compare comes first and only a real
-// difference pays for the sets.
+// Whether two metadata records describe the same context membership. The
+// registry re-emits for every metadata edit, title ticks included, and the
+// overwhelming majority of those leave the context fields untouched, so the
+// cheap field compare comes first and only a difference pays for the sets.
+// The desktops are compared as the set the span is built from (desktopSetOf):
+// the same span listed in another order, or led by another of its desktops
+// (#1147), is not a move, and reconciling it would only churn the engines.
+// The activities stay field-compared: the span carries the lead activity
+// itself, as a carry's destination.
 bool sameContextFields(const PhosphorEngine::WindowMetadata& a, const PhosphorEngine::WindowMetadata& b)
 {
-    return a.virtualDesktop == b.virtualDesktop && a.virtualDesktops == b.virtualDesktops && a.activity == b.activity
-        && a.activities == b.activities && a.isSticky == b.isSticky;
+    if (a.activity != b.activity || a.activities != b.activities || a.isSticky != b.isSticky) {
+        return false;
+    }
+    if (a.virtualDesktop == b.virtualDesktop && a.virtualDesktops == b.virtualDesktops) {
+        return true;
+    }
+    return desktopSetOf(a) == desktopSetOf(b);
 }
 } // namespace
 

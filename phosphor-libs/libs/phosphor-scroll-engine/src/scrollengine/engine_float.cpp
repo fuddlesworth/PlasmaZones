@@ -126,6 +126,18 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     // focus-side memory alone.
     const bool wasActiveTile = state->strip().activeWindowId() == windowId;
     state->strip().takeWindow(windowId, params);
+    // The tab the take handed the extent ownership to, and the intent it
+    // inherited with, so the unfloat can tell a column still sized the way
+    // this leave left it from one the user has resized since
+    // (FloatRestore::tabbedHeightHeirId). The surviving sibling the stack
+    // anchor names locates the column.
+    if (restore.ownedTabbedHeight && !restore.stackAnchor.isEmpty()) {
+        const int heirColumn = state->strip().columnOfWindow(restore.stackAnchor);
+        if (heirColumn >= 0) {
+            restore.tabbedHeightHeirId = state->strip().columns().at(heirColumn).heightOwnerId;
+            restore.tabbedHeightHeirIntent = state->strip().windowHeightIntent(restore.tabbedHeightHeirId);
+        }
+    }
     state->addFloating(windowId);
     if (wasActiveTile) {
         state->setLastFloatingFocus(windowId);
@@ -253,8 +265,21 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         inserted = state->strip().insertWindowAt(restore.column, windowId, restore.width, restore.display, params);
     }
     if (!inserted) {
-        inserted = state->strip().insertWindow(windowId, params.defaultColumnWidth,
-                                               effectiveDefaultColumnDisplay(contextScreen), params);
+        // A window that never held a tile (a seeded entry, or none) opens the
+        // way the open path would open it, so under "the client decides" its
+        // column takes the client's own width, the twin of the height commit
+        // below. A slot whose insert failed keeps the configured default: its
+        // window had a column shape of its own, which this fresh column is
+        // not.
+        const ColumnDisplay display = effectiveDefaultColumnDisplay(contextScreen);
+        ColumnWidth width = params.defaultColumnWidth;
+        if (restore.column < 0 && restore.tileIndex < 0) {
+            if (const auto clientSize =
+                    clientSizeForDecidedWidth(windowId, contextScreen, overridesForScreen(contextScreen))) {
+                width = clientDecidedColumnWidth(*clientSize, params, display);
+            }
+        }
+        inserted = state->strip().insertWindow(windowId, width, display, params);
     }
     if (!inserted) {
         // Every insert refused (an empty id is the only way today). The float
@@ -291,15 +316,21 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         // fresh insert just seeded — so a window floated at open and then
         // unfloated came back at Auto instead of the configured default.
         if (restore.column >= 0 || restore.tileIndex >= 0) {
-            state->strip().setWindowHeightIntent(windowId, restore.height);
+            // Re-stated, not written as a bid: a tab that did NOT own its
+            // tabbed column comes back without taking the column from the tab
+            // that sizes it, which a non-Auto intent written through
+            // setWindowHeightIntent would.
+            state->strip().restateWindowHeightIntent(windowId, restore.height);
             // And the extent ownership, when this window held it. Not implied
             // by the height write: that claims nothing for an Auto intent, and
             // a tab can legitimately own the column while asking for the whole
             // work area. Without this the column keeps the height of whichever
-            // tab came on show when this one floated out.
-            if (restore.ownedTabbedHeight) {
-                state->strip().setTabbedHeightOwner(windowId);
-            }
+            // tab came on show when this one floated out. Only while the
+            // column is still sized the way this window's leave left it
+            // (restoreTabbedHeightOwner): a resize since then is the user's
+            // newer word on the column, and reclaiming would revert it. That
+            // helper documents the one such resize it cannot see.
+            restoreTabbedHeightOwner(state->strip(), windowId, restore);
             // The maximize-to-edges flag the lone-tile capture carried:
             // declared column state nothing else re-derives, so a
             // minimize/unminimize round trip of a maximized column's only
@@ -415,9 +446,15 @@ void ScrollEngine::setWindowFloatAnnounced(const QString& rawWindowId, bool shou
         // re-apply the adopted tile relayouts unclamped until the client
         // happens to re-report, which for a fixed-size window is never.
         const FloatRestore adopted = m_floatRestore.value(windowId);
-        if (target->strip().insertWindow(windowId, params.defaultColumnWidth,
-                                         effectiveDefaultColumnDisplay(targetScreen), params, adopted.minWidth,
-                                         adopted.minHeight)) {
+        // A fresh column, so "the client decides" sizes it the way it sizes
+        // an open, the width twin of the height commit below.
+        const ColumnDisplay display = effectiveDefaultColumnDisplay(targetScreen);
+        ColumnWidth width = params.defaultColumnWidth;
+        if (const auto clientSize =
+                clientSizeForDecidedWidth(windowId, targetScreen, overridesForScreen(targetScreen))) {
+            width = clientDecidedColumnWidth(*clientSize, params, display);
+        }
+        if (target->strip().insertWindow(windowId, width, display, params, adopted.minWidth, adopted.minHeight)) {
             // The tile owns the clamp from here; a refused insert keeps the
             // entry so a later attempt still has it.
             m_floatRestore.remove(windowId);
@@ -511,6 +548,41 @@ void ScrollEngine::applyReturnedTile(const PhosphorEngine::PlacementStateKey& ke
         applyLayout(key.screenId, false);
     }
     Q_EMIT placementChanged(key.screenId);
+}
+
+void ScrollEngine::restoreTabbedHeightOwner(ScrollStrip& strip, const QString& windowId, const FloatRestore& slot)
+{
+    if (!slot.ownedTabbedHeight) {
+        return;
+    }
+    // An entry the drag paths captured names no heir: the hold leaves no room
+    // for a resize, so it hands the ownership back outright. One that names an
+    // heir hands it back only while the column is still sized the way the
+    // leave left it.
+    if (!slot.tabbedHeightHeirId.isEmpty()) {
+        const int colIdx = strip.columnOfWindow(windowId);
+        if (colIdx < 0) {
+            return;
+        }
+        const Column& col = strip.columns().at(colIdx);
+        // An heir still in the column must still own it with the intent it
+        // inherited. An heir that has LEFT the column (closed, floated,
+        // dragged away) passed the ownership on through the leave's hand-off,
+        // which is not a resize, so the column counts as untouched. A claim
+        // made by another tab before the heir left looks the same from here
+        // and is reclaimed too: nothing records which of the two moved the
+        // ownership once the heir is gone. A resize made AFTER the heir left,
+        // against the tab that took the column over from it, is reverted the
+        // same way. This is the accepted cost of keying the test on the heir
+        // alone, since telling those cases apart would need a record of every
+        // ownership move made while this window was away.
+        if (col.indexOfWindow(slot.tabbedHeightHeirId) >= 0
+            && (col.heightOwnerId != slot.tabbedHeightHeirId
+                || !(strip.windowHeightIntent(slot.tabbedHeightHeirId) == slot.tabbedHeightHeirIntent))) {
+            return;
+        }
+    }
+    strip.setTabbedHeightOwner(windowId);
 }
 
 void ScrollEngine::announceReleasedFullscreenHolds()

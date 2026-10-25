@@ -183,7 +183,9 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
             QJsonObject pZone;
             pZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
             pZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
-            pZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = QStringLiteral("Zone %1").arg(zoneNum);
+            // The editor's default zone name (ZoneManager), so an imported
+            // zone reads like one drawn there, in the user's language.
+            pZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = PhosphorI18n::tr("Zone %1").arg(zoneNum);
 
             QJsonObject relGeo;
             relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = x;

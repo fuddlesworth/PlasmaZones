@@ -109,6 +109,7 @@ private Q_SLOTS:
     void tabIndicatorRejectsGarbageNumericOverrides();
     void tabIndicatorRejectsAGarbagePositionOverride();
     void tabIndicatorRectIsNullForAZeroExtentColumn();
+    void aHandoffOntoABackgroundDesktopTakesThatDesktopsDisplay();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -310,12 +311,15 @@ void TestScrollEnginePerScreen::perScreenStripAxisOverridesTheResolvedAxis()
     // takes only the default share of it).
     QVERIFY(Ax::crossLen(forcedRects.first()) < kCrossExtent);
 
-    // Clearing the override drops the screen back onto the resolved axis, so
-    // it looks like the untouched one again. applyPerScreenConfig and its
-    // clear schedule the retile QUEUED — drain the loop rather than calling
-    // retile(): the assertions below read the resolve-on-demand path either
-    // way, and draining is what the committed-rect spy leg at the end needs.
-    engine->clearPerScreenConfig(kS1);
+    // A context that resolves no override drops the screen back onto the
+    // resolved axis, so it looks like the untouched one again. That is an
+    // EMPTY push, as the daemon makes it: clearPerScreenConfig is the
+    // screen-left-scrolling door and keeps a live context's entry.
+    // applyPerScreenConfig schedules the retile QUEUED — drain the loop rather
+    // than calling retile(): the assertions below read the resolve-on-demand
+    // path either way, and draining is what the committed-rect spy leg at the
+    // end needs.
+    engine->applyPerScreenConfig(kS1, QVariantMap());
     QCoreApplication::processEvents();
     const QVector<QRect> cleared = engine->visibleTileRects(kS1);
     QCOMPARE(cleared.size(), 1);
@@ -770,8 +774,9 @@ void TestScrollEnginePerScreen::templateListShrinkClampsResolvedPresetWidth()
     QCOMPARE(rects.size(), 1);
     QCOMPARE(Ax::mainLen(rects.first()), qRound(0.6 * kMainExtent));
 
-    // Clearing the override restores the settings vocabulary.
-    engine->clearPerScreenConfig(kS1);
+    // A context that resolves no override restores the settings vocabulary
+    // (an empty push; clearPerScreenConfig keeps a live context's entry).
+    engine->applyPerScreenConfig(kS1, QVariantMap());
     rects = engine->visibleTileRects(kS1);
     QCOMPARE(rects.size(), 1);
     QCOMPARE(Ax::mainLen(rects.first()), qRound(0.75 * kMainExtent));
@@ -1176,6 +1181,43 @@ void TestScrollEnginePerScreen::tabIndicatorRectIsNullForAZeroExtentColumn()
         params.position = position;
         QVERIFY(params.indicatorRectFor(QRect(0, 0, 0, 0), kTiles).isNull());
     }
+}
+
+void TestScrollEnginePerScreen::aHandoffOntoABackgroundDesktopTakesThatDesktopsDisplay()
+{
+    // A handoff can name a desktop that is not the one in view. The column
+    // it opens there takes the default display that desktop's own rules set,
+    // not the one the desktop in view runs.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    QVariantMap tabbed;
+    tabbed.insert(ScrollPerScreenKeys::defaultColumnDisplay(), static_cast<int>(ColumnDisplay::Tabbed));
+    engine->applyPerScreenConfig(kS1, tabbed);
+    engine->setCurrentDesktopForScreen(kS1, 1);
+    engine->windowOpened(QStringLiteral("app|here"), kS1, 0, 0);
+    QCoreApplication::processEvents();
+    const auto displayOf = [engine](const QString& windowId) -> std::optional<ColumnDisplay> {
+        const auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+        const int column = state ? state->strip().columnOfWindow(windowId) : -1;
+        if (column < 0) {
+            return std::nullopt;
+        }
+        return state->strip().columns().at(column).display;
+    };
+    QVERIFY2(displayOf(QStringLiteral("app|here")) == ColumnDisplay::Normal,
+             "precondition: the desktop in view opens Normal columns");
+
+    PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+    ctx.windowId = QStringLiteral("app|arrival");
+    ctx.fromEngineId = QStringLiteral("snap");
+    ctx.toScreenId = kS1;
+    ctx.toDesktop = 2;
+    engine->handoffReceive(ctx);
+    QCoreApplication::processEvents();
+
+    engine->setCurrentDesktopForScreen(kS1, 2);
+    QVERIFY(displayOf(QStringLiteral("app|arrival")) == ColumnDisplay::Tabbed);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePerScreen)

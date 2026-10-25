@@ -13,6 +13,7 @@
 #include <QVariantList>
 #include <QFont>
 #include <QRectF>
+#include <QSizeF>
 #include <QTimer>
 #include <QUuid>
 #include <QScreen>
@@ -28,6 +29,8 @@
 
 #include <memory>
 #include <optional>
+
+class QJsonObject;
 
 namespace PhosphorZones {
 class Layout;
@@ -139,17 +142,15 @@ class EditorController : public QObject
     Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY
                    useFullScreenGeometryChanged)
 
+    // Unit of fixed-size zones: the target output's device pixels, or logical pixels
+    Q_PROPERTY(bool fixedGeometryInDevicePixels READ fixedGeometryInDevicePixels WRITE setFixedGeometryInDevicePixels
+                   NOTIFY fixedGeometryInDevicePixelsChanged)
+
     // Aspect ratio classification (0=Any, 1=Standard, 2=Ultrawide, 3=SuperUltrawide, 4=Portrait)
     Q_PROPERTY(int aspectRatioClass READ aspectRatioClass WRITE setAspectRatioClass NOTIFY aspectRatioClassChanged)
 
     // Target screen size (for fixed geometry coordinate conversion)
     Q_PROPERTY(QSize targetScreenSize READ targetScreenSize NOTIFY targetScreenSizeChanged)
-
-    // Virtual screen offset within the physical monitor.
-    // When editing a VS, the drawing area must be positioned at this offset so zones
-    // align with the VS region, not the full physical monitor.
-    Q_PROPERTY(QRect virtualScreenRect READ virtualScreenRect NOTIFY targetScreenSizeChanged)
-    Q_PROPERTY(bool isVirtualScreen READ isVirtualScreen NOTIFY targetScreenSizeChanged)
 
     // Usable area insets — offset from full screen geometry to available geometry (panels/taskbars)
     Q_PROPERTY(int insetLeft READ insetLeft NOTIFY usableAreaInsetsChanged)
@@ -269,16 +270,14 @@ public:
     bool hasOverlayDisplayModeOverride() const;
     int globalOverlayDisplayMode() const;
     bool useFullScreenGeometry() const;
+    bool fixedGeometryInDevicePixels() const;
     int aspectRatioClass() const;
+    /// The reference size fixed-zone numbers are drawn against: the fixed-zone
+    /// bounds override when one is pinned, else the area zones occupy on the
+    /// target screen (its usable area unless the layout covers the full
+    /// screen). Logical pixels, scaled to the output's device pixels when the
+    /// layout counts fixed geometry in device pixels.
     QSize targetScreenSize() const;
-    QRect virtualScreenRect() const
-    {
-        return m_virtualScreenRect;
-    }
-    bool isVirtualScreen() const
-    {
-        return m_virtualScreenRect.isValid();
-    }
     int insetLeft() const;
     int insetTop() const;
     int insetRight() const;
@@ -441,23 +440,30 @@ public:
      * showFullScreen(), giving KWin the correct output hint.
      */
     Q_INVOKABLE void showFullScreenOnTargetScreen(QQuickWindow* window);
-    void setTargetScreenDirect(const QString& screenName); // Sets screen without loading layout (for initialization)
+    /// Swap the target screen WITHOUT loading that screen's layout: for a
+    /// launch that loads its own layout or template over the top, for putting
+    /// a stranded session's screen back after a failed load, and for moving a
+    /// screen-portable template session.
+    void setTargetScreenDirect(const QString& screenName);
     Q_INVOKABLE void clearOverlayDisplayModeOverride();
 
-    // Fetches every gap and overlay key (zonePadding + outerGap cluster +
-    // overlayDisplayMode) in a single daemon round-trip. Hands the gap globals
-    // to EditorGapsModel::applyGlobalSettings (which emits its own
+    // Fetches every gap and overlay key (the innerGap and outerGap cluster
+    // plus overlayDisplayMode) in a single daemon round-trip. Hands the gap
+    // globals to EditorGapsModel::applyGlobalSettings (which emits its own
     // globalZonePaddingChanged / globalOuterGapChanged) and refreshes the
     // overlay-mode global here, emitting globalOverlayDisplayModeChanged only
     // when it changed. Called from loadEditorSettings() on the startup hot path.
     void refreshGlobalGapOverlaySettings();
     void setOverlayDisplayMode(int mode);
     void setUseFullScreenGeometry(bool enabled);
+    void setFixedGeometryInDevicePixels(bool enabled);
     void setAspectRatioClass(int cls);
 
     // Gap override setters - Direct (for undo/redo, bypass command creation)
     void setOverlayDisplayModeDirect(int mode);
     void setUseFullScreenGeometryDirect(bool enabled);
+    void setFixedGeometryInDevicePixelsDirect(bool enabled);
+    void setAspectRatioClassDirect(int cls);
 
     // Visibility setters - Direct (for undo/redo, bypass command creation)
     void setAllowedScreensDirect(const QStringList& screens);
@@ -497,7 +503,9 @@ public Q_SLOTS:
     // reload so loadLayout()'s instant-open fast path resolves against the
     // daemon's view rather than the snapshot scanned at launch. The registry
     // watches nothing, so this explicit reload is the only way a daemon-side
-    // layout write reaches the editor.
+    // layout write reaches the editor. saveLayout() also calls it directly,
+    // ahead of the debounced signal, so a load in the same call stack sees
+    // what was just saved.
     void reloadLocalLayouts();
 
     // PhosphorZones::Zone CRUD operations (using zone IDs)
@@ -523,8 +531,8 @@ public Q_SLOTS:
      * @param zoneId PhosphorZones::Zone ID to retrieve
      * @return Complete zone data as QVariantMap, or empty map if not found
      *
-     * Performance optimization: O(1) lookup instead of O(n) JavaScript loop in QML.
-     * Delegates to ZoneManager::getZoneById().
+     * A linear scan in C++, which spares QML its own loop over the zones
+     * list. Delegates to ZoneManager::getZoneById().
      */
     Q_INVOKABLE QVariantMap getZoneById(const QString& zoneId) const;
 
@@ -734,6 +742,12 @@ Q_SIGNALS:
     /// confirmPendingTargetScreen() or cancelPendingTargetScreen().
     void targetScreenChangeRequiresConfirmation(const QString& screenName);
 
+    /// A parked screen switch was dropped unanswered because the object it
+    /// asked about was replaced (another layout or template loaded, or the
+    /// editing mode changed). The prompt that asked about it must close, or
+    /// its Save would act on the replacement.
+    void pendingTargetScreenDropped();
+
     /// A forwarded launch (`plasmazones-editor --new` / `--layout <id>`) wants
     /// to replace the loaded layout while it has unsaved edits. The UI must
     /// answer with confirmPendingLaunch() or cancelPendingLaunch(), or the
@@ -744,6 +758,7 @@ Q_SIGNALS:
     void overlayDisplayModeChanged();
     void globalOverlayDisplayModeChanged();
     void useFullScreenGeometryChanged();
+    void fixedGeometryInDevicePixelsChanged();
     void aspectRatioClassChanged();
     void targetScreenSizeChanged();
 
@@ -767,6 +782,10 @@ Q_SIGNALS:
 
     void layoutSaved();
     void layoutExported();
+    /// exportLayout's failures. Its own signal, because the layoutSaveFailed
+    /// toast prefixes "Failed to save layout", which would misname an export.
+    /// The messages are self-contained, so QML toasts them verbatim.
+    void layoutExportFailed(const QString& error);
     void layoutLoadFailed(const QString& error);
     void layoutSaveFailed(const QString& error);
     /// Relayed from ILayoutService::errorOccurred. The service's messages are
@@ -790,15 +809,75 @@ Q_SIGNALS:
     void canPasteChanged();
     void clipboardOperationFailed(const QString& error);
 
+private Q_SLOTS:
+    /// Daemon Screen.screenGeometryChanged subscriber: re-reads the target's
+    /// geometry when @p screenId is the target screen.
+    void onDaemonScreenGeometryChanged(const QString& screenId);
+    /// Daemon Screen.virtualScreensChanged subscriber: re-reads the target's
+    /// geometry when it is a virtual screen of @p physicalScreenId.
+    void onDaemonVirtualScreensChanged(const QString& physicalScreenId);
+    /// Daemon Screen.availableGeometryChanged subscriber: refetches the
+    /// insets (and through setInsets the reference they bound) when
+    /// @p screenId is the target screen, for a panel that moved under an
+    /// unchanged screen rect.
+    void onDaemonAvailableGeometryChanged(const QString& screenId);
+
 private:
     void markUnsaved();
     void cacheVirtualScreenGeometry(const QString& screenName);
+    /// Fetch the target output's logical scale (the per-output fractional
+    /// one) from the daemon into m_targetScreenScale, unless it is already
+    /// known. The reference size reads the scale only for a layout counting
+    /// device pixels, so those callers ask for it only while
+    /// m_fixedGeometryInDevicePixels is set. pasteZones is the other reader:
+    /// it converts zones copied in the other unit, so it asks whenever the
+    /// clipboard's unit differs from the layout's, a logical layout included.
+    void ensureTargetScreenScale();
+    /// The target's whole logical rect size, before insets and the override:
+    /// the virtual screen's, else the physical monitor's.
+    QSize targetFullLogicalScreenSize() const;
+    /// targetScreenSize() before the device-pixel scaling: the fixed-zone
+    /// bounds override, else the occupied area of the virtual screen, else
+    /// of the physical one.
+    QSize targetLogicalScreenSize() const;
+    /// targetLogicalScreenSize() unrounded, so the device-pixel scaling of a
+    /// fractional override rounds once.
+    QSizeF targetLogicalScreenSizeF() const;
+    /// Re-derive m_layoutBoundsOverride for @p layoutObj against the target
+    /// screen (see the load path's note), in logical units.
+    void refreshFixedBoundsOverride(const QJsonObject& layoutObj);
+    /// The layout as saveLayout() sends it, built from the editor's state.
+    QJsonObject currentLayoutJson() const;
+    /// Publish targetScreenSize() after anything it depends on changed:
+    /// the change signal when it moved, and the zone manager's reference with
+    /// the fixed zones' relative copies re-derived against it.
+    void republishTargetScreenSize(const QSize& previous);
+    /// Re-read everything the reference size is derived from for the
+    /// current target (virtual screen geometry, scale, insets, the bounds
+    /// override) and republish it. For geometry that changed under an
+    /// unchanged target, such as a resolution, scale or subdivision change.
+    void refreshTargetScreenGeometry();
     /// Carry out the gated screen switch (caller cleared the replace
     /// decision). forceLayoutMode = the plain-screen launch shape: flips out
     /// of template/preview mode at apply time and loads even same-screen.
     void applyTargetScreen(const QString& screenName, bool forceLayoutMode = false);
-    void applyUsableAreaInsets(const QRect& fullGeom, const QRect& availGeom);
+    /// Insets of @p availGeom within @p fullGeom, measured for
+    /// @p requestedScreen (the screen the replies were asked about).
+    void applyUsableAreaInsets(const QRect& fullGeom, const QRect& availGeom, const QString& requestedScreen);
     void setInsets(int left, int top, int right, int bottom);
+    /// Drop the screen switch parked by setTargetScreen(), announcing it with
+    /// pendingTargetScreenDropped() when one was parked.
+    void dropPendingTargetScreen();
+    /// The daemon import and load behind importLayout(), once nothing
+    /// unsaved stands in its way.
+    void importLayoutNow(const QString& filePath);
+    /// Set @p zoneIds' three colours to the theme defaults as undoable
+    /// commands, for zones that are switching custom colours on.
+    void seedCustomColors(const QStringList& zoneIds);
+    /// Re-read the daemon's screen list (and the virtual screens' display
+    /// names) into m_availableScreenIds and m_screenModel, announcing
+    /// availableScreenIdsChanged only when either changed.
+    void refreshAvailableScreens();
 
     /**
      * @brief Z-order operation types for changeZOrderImpl
@@ -834,14 +913,10 @@ private:
      */
     void syncSelectionSignals();
 
-    /**
-     * @brief Loads editor settings from KConfig
-     */
+    /// Read the editor settings and the global values the editor mirrors
+    /// from the config store, plus the gap and overlay globals from the daemon.
     void loadEditorSettings();
 
-    /**
-     * @brief Saves editor settings to KConfig
-     */
     /// Queue an editor-settings write. Coalesced behind
     /// m_editorSettingsSaveTimer — see flushEditorSettings for the real work.
     void saveEditorSettings();
@@ -951,9 +1026,9 @@ private:
     void refreshScrollingStripAxisSnapshot(PhosphorConfig::IBackend& backend);
 
     /// Recompute zone geometry for every manual layout against the primary
-    /// screen so a layout opened through the in-process registry carries its
-    /// fixed-geometry zones at their authored dimensions — see
-    /// SettingsController for the matching implementation.
+    /// screen, at that output's logical scale, so a layout opened through the
+    /// in-process registry carries its fixed-geometry zones at their authored
+    /// dimensions — see SettingsController for the matching implementation.
     void recalcLocalLayouts();
 
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
@@ -1010,6 +1085,9 @@ private:
         bool preview = false;
         QString templateId;
         bool newTemplate = false;
+        /// A file importLayout() parked: the import replaces the loaded
+        /// layout, so it takes the same prompt as the launch shapes.
+        QString importPath;
     };
     std::optional<PendingLaunch> m_pendingLaunch;
     /// Apply a launch request outright, replacing whatever is loaded.
@@ -1021,21 +1099,47 @@ private:
     /// Screen parked by setTargetScreen() / a plain-screen launch while
     /// unsaved edits are pending (optional: "" is a legitimate value). The
     /// bool is the launch shape's intent — confirm then also leaves
-    /// template/preview mode and loads. Both reset on any mode change.
+    /// template/preview mode and loads. Both reset through
+    /// dropPendingTargetScreen() on any mode change, and on a same-mode
+    /// replacement of the edited object (a new or loaded layout, a template
+    /// session begun over another).
     std::optional<QString> m_pendingTargetScreen;
     bool m_pendingTargetEditsLayout = false;
     QSize m_virtualScreenSize; ///< Cached VS geometry size (valid when m_targetScreen is virtual)
-    QRect m_virtualScreenRect; ///< Cached VS absolute geometry (position within physical monitor)
-    /// Layout-derived reference-size override. When valid, takes precedence
-    /// over m_virtualScreenSize in targetScreenSize() — used for fixed-
-    /// geometry layouts whose zone bounding box defines the canvas the
-    /// editor / preview should render against, independent of the live
-    /// screen size. Cleared for relative-only layouts.
-    QSize m_layoutBoundsOverride;
+    /// Target output's logical scale, from the daemon. Zero while unknown:
+    /// it is fetched on demand by ensureTargetScreenScale (see there for who
+    /// asks), and forgotten whenever the target or its geometry changes.
+    qreal m_targetScreenScale = 0.0;
+    /// The target's size in device pixels from the same getScreenInfo reply
+    /// as m_targetScreenScale, fetched and forgotten with it. Invalid when the
+    /// daemon does not report one; targetScreenSize() then scales instead.
+    QSize m_targetScreenPixelSize;
+    /// Cached VS geometry, positioned relative to its physical monitor's
+    /// origin (valid when m_targetScreen is virtual).
+    QRect m_virtualScreenRect;
+    /// Fixed-zone bounds override, in logical pixels. Pinned only when the
+    /// layout's fixed zones overflow the area they would occupy on the target
+    /// screen (see refreshFixedBoundsOverride), and then it takes precedence
+    /// over that area in targetLogicalScreenSize(). Invalid otherwise, which
+    /// is every relative-only layout and every fixed layout that fits.
+    /// Re-derived from the current zones when one of its inputs changes (a
+    /// load, the target's geometry or insets, the full-screen or unit
+    /// setting), and left pinned between those, so a zone dragged past the
+    /// edge does not resize the canvas under the drag.
+    QSizeF m_layoutBoundsOverride;
     int m_insetLeft = 0;
     int m_insetTop = 0;
     int m_insetRight = 0;
     int m_insetBottom = 0;
+    /// Stamp of the newest refreshUsableAreaInsets() request; a reply carrying
+    /// an older stamp answers for a screen that is no longer the target.
+    quint64 m_insetsRequestGeneration = 0;
+    /// Stamp of the newest showFullScreenOnTargetScreen() plan; a deferred
+    /// remap carrying an older stamp was superseded and must not run.
+    quint64 m_windowPlanGeneration = 0;
+    /// screenModel(), built by refreshAvailableScreens() so the property read
+    /// makes no D-Bus calls.
+    QVariantList m_screenModel;
 
     // Default colors (for theme-based defaults, set from QML)
     QString m_defaultHighlightColor;
@@ -1047,6 +1151,7 @@ private:
     // gaps property); overlay display mode stays here.
     int m_overlayDisplayMode = -1; // -1 = use global setting
     bool m_useFullScreenGeometry = false;
+    bool m_fixedGeometryInDevicePixels = false;
     int m_aspectRatioClass = 0; // 0 = Any (AspectRatioClass::Any)
     int m_cachedGlobalOverlayDisplayMode = 0; // Cached global overlay display mode
 
@@ -1076,7 +1181,11 @@ private:
     QString m_dragPrimaryZoneId;
     qreal m_dragStartX = 0.0;
     qreal m_dragStartY = 0.0;
-    QMap<QString, QPointF> m_dragInitialPositions; // Initial positions of all selected zones
+    /// Initial position of every selected zone, in the zone's own unit: the
+    /// fixed pixel origin for a fixed zone, the relative origin otherwise.
+    /// The primary is the exception and always records its relative origin,
+    /// because the drag delta is measured from it in relative units.
+    QMap<QString, QPointF> m_dragInitialPositions;
 };
 
 } // namespace PlasmaZones

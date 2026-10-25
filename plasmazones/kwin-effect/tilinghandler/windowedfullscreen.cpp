@@ -331,8 +331,9 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
     const QSize sentBefore = QRectF(kw->moveResizeGeometry()).toRect().size();
     const auto geomGuard = m_effect->geometryApplyScope();
     applyMaximizeSuppressed(kw, restored);
-    // KWin's axis maximize was a resize on KWin's account, which left the
-    // client's answer to its column Foreign (noteForeignStripRequest), and the
+    // KWin's axis maximize was a resize on KWin's account, which on Wayland
+    // left the client's answer to its column Foreign (noteForeignStripRequest;
+    // an X11 window's is the counter-assert's and stays as it was), and the
     // restore above is the strip's own write, inside the bracket. Re-armed the
     // way cancelStripQuickTile re-arms it: the client was sent the maximized
     // size and is now sent the restored one, so what it commits next answers
@@ -344,7 +345,8 @@ void TilingHandler::cancelAxisOnlyMaximize(KWin::EffectWindow* w)
         const QRect offeredColumn = offer->rect;
         m_effect->recordStripOffer(
             w, windowId, offeredColumn,
-            ScrollDecisions::stripEntrySendsSize(sentBefore, QRectF(kw->moveResizeGeometry()).toRect().size()));
+            ScrollDecisions::stripEntrySendsSize(sentBefore, QRectF(kw->moveResizeGeometry()).toRect().size(),
+                                                 !w->isWaylandClient()));
     }
 }
 

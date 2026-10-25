@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Nested-KWin regression probes
 
 Live checks of placement, tiling, scrolling and effect fixes against a real compositor. Each probe
@@ -5,6 +10,11 @@ stages a scene in a fresh nested KWin session (`../run-nested.sh`, `../daemon.sh
 current behaviour. The probes started as the PR #1125 audit's live probes. Each one kept here showed
 the defect on the old build and not on the fix, except the few the table calls a control, a smoke
 check or regression rows, which guard a fix without telling the two builds apart.
+
+A probe's number is the audit finding it came from (F1151) or, for the later ones, the issue it
+covers (#1151, #1153, #1155), so two probes can share one: f1151-touch-forgets-claim is audit
+finding F1151 and f1151-scroll-visit-back-to-zone is issue #1151. A probe named f followed by a
+word (fdrag, fresize, fscale, fsplash) is named for the behaviour it covers instead.
 
 ## Running
 
@@ -22,7 +32,8 @@ scripts/nested-kwin/regression/run.sh --out DIR --build build-nounity all
   `NAME.kwin.log`, `NAME.daemon.log`, `NAME.session.log`, and `summary.txt`.
 - Exit status: 0 all passed, 1 a probe failed, 2 none failed but one or more could not stage.
 - Needs the build tree (`build/bin`), `qdbus6`, `gdbus`, `dbus-monitor`, `kscreen-doctor`, python3 with
-  GTK4 bindings (PyGObject), PySide6 for `f345-caption-push`, and Xwayland for flag X. Flag F probes
+  GTK4 bindings (PyGObject), PySide6 for `f345-caption-push`, `f1154`, `f1156` and `f1157` (with
+  its xcb platform plugin for `f1157`), and Xwayland for flag X. Flag F probes
   use `fakeinput/`, which run.sh builds into `<build>/regression-fakeinput` (Qt6 Gui and KWayland).
 
 Flags in the table: X Xwayland, N KWin's permission checks off, F the fakeinput tool (implies N),
@@ -167,6 +178,16 @@ one whose daemon died or was replaced.
 | f1147-arrival-minimize-float | 2 | a minimized tile whose monitor leaves and returns gets its minimize-float back and tiles |
 | f1149-overlapping-settle-reports | 4 | with two settle reports in flight, the second one's park drop waits for its own verdict |
 | f1151-touch-forgets-claim | 2 | a touch after a Readopt that left a granted place forgets the Monocle claim, and the next batch does not take it back |
+| f1151-scroll-visit-back-to-zone | 1 | a window on every desktop, snapped on a snapping desktop, goes back into its zone after a visit to a scrolling desktop |
+| f1153-cropped-straddler-move | 2, S | regression row: KWin's Move to Screen of a scrolling column cropped at its output's edge still hands it to the neighbour's strip under the tracked-output test |
+| f1154-straddle-peek | 1, S | a column parked on the memory of an earlier, wider answer while it straddles the screen edge peeks again once its window takes the park, after output scale 1.25 narrows the column below that memory |
+| f1155-compositor-only-gate | 1 | the compositor-only D-Bus methods admit the KWin effect across a daemon restart, which keeps the strip as it was, and refuse another caller with AccessDenied |
+| f1156-cross-floor | 1, S | a Wayland window that makes itself taller than its share of a two-tile column keeps that height and the tile under it gives way; one too tall to fit beside that tile floats and the tile takes the column back |
+| f1157-x11-column-answer / -scaled | 1, XS | an X11 window that keeps resizing itself wider than its column is put back once, then learned, and its column widens to it; the -scaled row runs at output scale 1.25 and fails, saying so, when the frame never reads settled through rounding alone (F337) |
+| fdrag-float-keeps-size | 1, FS | with column width and window height on "Window decides", a resized floating window drag-inserted into the strip with the trigger held is a column at its size on both axes (the drop indicator, the popup drop and the adopted arm are not staged) |
+| fsplash-sibling-size-scroll / -tile / -snap | 1, S | a splash under the minimum window size that closes before its app's main window opens does not hand the main window its frame: on scrolling and tiling it is a column or a tile, on snapping it opens at its own size |
+| fresize-centred-edge | 1, FS | under Center focused column Always, two Meta+right drags of a lone column's left edge each land that edge at the release and grow the column by twice the drag; with Center short columns on, a drag of its bottom edge up and one of its top edge down each land that edge at the release and shrink the column by twice the drag |
+| fscale-fixed-device-pixels | 1, S | at scale 1.25, a layout whose fixed zones count device pixels snaps a window to the zone divided by the scale; the same zones counted in logical pixels are the control |
 
 ## Follow-up probes (pr1125-followups)
 

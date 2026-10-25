@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "layoutadaptor.h"
+#include "config/configdefaults.h"
 #include "core/interfaces/interfaces.h"
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorZones/Layout.h>
@@ -23,9 +24,11 @@
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QCoreApplication>
-#include <array>
 #include <QFile>
 #include <QScopeGuard>
+
+#include <algorithm>
+#include <cmath>
 
 namespace PlasmaZones {
 
@@ -187,26 +190,91 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
             qCWarning(lcDbusLayout) << "updateLayout: autotile id with empty algorithm id rejected:" << idStr;
             return false;
         }
+        // The sidecar is keyed by the algorithm, so an id the registry does
+        // not know would persist a group nothing ever reads, and a caller
+        // naming fresh ids grew layout-settings.json without bound.
+        if (!m_algorithmRegistry || !m_algorithmRegistry->hasAlgorithm(algoId)) {
+            qCWarning(lcDbusLayout) << "updateLayout: unknown autotile algorithm rejected:" << algoId;
+            return false;
+        }
         // Start from the stored entry so keys this editor doesn't manage
         // (notably hiddenFromSelector, written via setLayoutHidden) survive a
         // gaps/allow-list save — autotile entries now share the unified
         // layout-settings.json sidecar. Editor-managed keys are set when present
         // in the incoming object and cleared when absent (reset-to-default).
+        // Each is checked at this boundary as the manual path's setters take
+        // it: a number in range for the gaps (the per-side ones included) and
+        // the overlay mode (-1 is "use the global setting"), a boolean for
+        // the per-side toggle, and the allow-lists through the layout
+        // (de)serializers, bounded in length.
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
-        // CTAD deduces the array size from the initializer so the element count
-        // stays in sync automatically (no hand-maintained size). hiddenFromSelector
-        // is intentionally absent — it's owned by setLayoutHidden, not the editor.
-        const std::array editorKeys{
-            ::PhosphorZones::ZoneJsonKeys::ZonePadding,       ::PhosphorZones::ZoneJsonKeys::OuterGap,
-            ::PhosphorZones::ZoneJsonKeys::AllowedScreens,    ::PhosphorZones::ZoneJsonKeys::AllowedDesktops,
-            ::PhosphorZones::ZoneJsonKeys::AllowedActivities, ::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode,
-        };
-        for (const QLatin1String key : editorKeys) {
-            if (obj.contains(key)) {
-                overrides[key] = obj.value(key);
-            } else {
+        const auto setNumber = [&](QLatin1String key, int minimum, int maximum) {
+            if (!obj.contains(key)) {
                 overrides.remove(key);
+                return true;
             }
+            const QJsonValue value = obj.value(key);
+            const double number = value.toDouble();
+            const bool inRange = number == -1 || (number >= minimum && number <= maximum);
+            if (!value.isDouble() || number != std::floor(number) || !inRange) {
+                qCWarning(lcDbusLayout) << "updateLayout: autotile override" << key << "out of range for" << algoId;
+                return false;
+            }
+            overrides[key] = static_cast<int>(number);
+            return true;
+        };
+        if (!setNumber(::PhosphorZones::ZoneJsonKeys::ZonePadding, ConfigDefaults::innerGapMin(),
+                       ConfigDefaults::innerGapMax())
+            || !setNumber(::PhosphorZones::ZoneJsonKeys::OuterGap, ConfigDefaults::outerGapMin(),
+                          ConfigDefaults::outerGapMax())
+            || !setNumber(::PhosphorZones::ZoneJsonKeys::OuterGapTop, ConfigDefaults::outerGapTopMin(),
+                          ConfigDefaults::outerGapTopMax())
+            || !setNumber(::PhosphorZones::ZoneJsonKeys::OuterGapBottom, ConfigDefaults::outerGapBottomMin(),
+                          ConfigDefaults::outerGapBottomMax())
+            || !setNumber(::PhosphorZones::ZoneJsonKeys::OuterGapLeft, ConfigDefaults::outerGapLeftMin(),
+                          ConfigDefaults::outerGapLeftMax())
+            || !setNumber(::PhosphorZones::ZoneJsonKeys::OuterGapRight, ConfigDefaults::outerGapRightMin(),
+                          ConfigDefaults::outerGapRightMax())
+            || !setNumber(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode, ConfigDefaults::overlayDisplayModeMin(),
+                          ConfigDefaults::overlayDisplayModeMax())) {
+            return false;
+        }
+        // The per-side toggle the editor writes beside the per-side gaps,
+        // only while it is on (EditorGapsModel::writeToJson).
+        if (!obj.contains(::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap)) {
+            overrides.remove(::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap);
+        } else if (obj.value(::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap).isBool()) {
+            overrides[::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap] =
+                obj.value(::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap).toBool();
+        } else {
+            qCWarning(lcDbusLayout) << "updateLayout: autotile override"
+                                    << ::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap << "is not a boolean for"
+                                    << algoId;
+            return false;
+        }
+        {
+            constexpr qsizetype MaxAllowListEntries = 256;
+            constexpr qsizetype MaxAllowListIdLength = 512;
+            QStringList screens;
+            QList<int> desktops;
+            QStringList activities;
+            PhosphorZones::LayoutUtils::deserializeAllowLists(obj, screens, desktops, activities);
+            const auto oversized = [](const QStringList& ids) {
+                return ids.size() > MaxAllowListEntries || std::any_of(ids.cbegin(), ids.cend(), [](const QString& id) {
+                           return id.isEmpty() || id.size() > MaxAllowListIdLength;
+                       });
+            };
+            if (oversized(screens) || oversized(activities) || desktops.size() > MaxAllowListEntries
+                || std::any_of(desktops.cbegin(), desktops.cend(), [](int desktop) {
+                       return desktop < 1;
+                   })) {
+                qCWarning(lcDbusLayout) << "updateLayout: malformed autotile allow-list for" << algoId;
+                return false;
+            }
+            overrides.remove(::PhosphorZones::ZoneJsonKeys::AllowedScreens);
+            overrides.remove(::PhosphorZones::ZoneJsonKeys::AllowedDesktops);
+            overrides.remove(::PhosphorZones::ZoneJsonKeys::AllowedActivities);
+            PhosphorZones::LayoutUtils::serializeAllowLists(overrides, screens, desktops, activities);
         }
         m_layoutManager->saveAutotileOverrides(algoId, overrides);
         qCInfo(lcDbusLayout) << "Saved autotile overrides for algorithm:" << algoId;
@@ -214,7 +282,13 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         // the layout list itself. Emit layoutChanged only; layoutListChanged
         // stays reserved for add/delete operations. SettingsController wires
         // both signals to the same reload slot so no visible behavior changes.
-        Q_EMIT layoutChanged(layoutJson);
+        // The payload is the entry as stored, under its id, not the caller's
+        // object: the signal reaches every subscriber, and relaying a caller's
+        // payload verbatim would let any peer broadcast arbitrary JSON as the
+        // daemon.
+        QJsonObject stored = overrides;
+        stored[::PhosphorZones::ZoneJsonKeys::Id] = idStr;
+        Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(stored).toJson(QJsonDocument::Compact)));
         return true;
     }
 
@@ -278,6 +352,10 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
 
     // Update full screen geometry mode
     layout->setUseFullScreenGeometry(obj[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false));
+
+    // Update the unit of fixed-geometry zones
+    layout->setFixedGeometryInDevicePixels(
+        obj[::PhosphorZones::ZoneJsonKeys::FixedGeometryInDevicePixels].toBool(false));
 
     // Update aspect ratio classification. fromJsonValue accepts both serialized
     // forms and maps a missing key to Any, which is the reset this branch wants.

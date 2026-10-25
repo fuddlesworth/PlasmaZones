@@ -513,11 +513,8 @@ void TilingHandler::payOwedFreePlacement(KWin::EffectWindow* w, const QString& w
         return;
     }
     // Still on another desktop or activity, where its tile frame belongs to
-    // that layout (the pass-2 rule). An empty activity set is "every
-    // activity" only when the session has activities at all.
-    const bool everyActivity =
-        w->activities().isEmpty() && KWin::effects && !KWin::effects->currentActivity().isEmpty();
-    if (w->isOnAllDesktops() || w->desktops().size() > 1 || everyActivity || w->activities().size() > 1) {
+    // that layout (the pass-2 rule).
+    if (spansContexts(w)) {
         m_desktopMoveStash.setOwed(windowId, false);
         return;
     }

@@ -13,6 +13,7 @@
 #include <QSet>
 #include <algorithm>
 #include "core/platform/logging.h"
+#include "phosphor_i18n.h"
 
 using namespace PlasmaZones;
 
@@ -65,7 +66,12 @@ ZoneManager::ValidatedGeometry ZoneManager::validateAndClampGeometry(qreal x, qr
 {
     ValidatedGeometry result;
 
-    // Input validation
+    // Input validation. NaN fails no ordered comparison, so the range test
+    // below would let it through; reject non-finite input first.
+    if (!qIsFinite(x) || !qIsFinite(y) || !qIsFinite(width) || !qIsFinite(height)) {
+        result.isValid = false;
+        return result;
+    }
     if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
         result.isValid = false;
         return result;
@@ -88,7 +94,7 @@ ZoneManager::ValidatedFixedGeometry ZoneManager::validateAndClampFixedGeometry(q
 {
     ValidatedFixedGeometry result;
 
-    // Reject NaN/Inf inputs (consistent with relative validateAndClampGeometry)
+    // Reject NaN/Inf inputs, as validateAndClampGeometry does for relative ones
     if (!qIsFinite(x) || !qIsFinite(y) || !qIsFinite(width) || !qIsFinite(height)) {
         result.isValid = false;
         return result;
@@ -124,6 +130,70 @@ void ZoneManager::syncRelativeFromFixed(QVariantMap& zone) const
         zone[::PhosphorZones::ZoneJsonKeys::FixedWidth].toDouble() / ss.width();
     zone[::PhosphorZones::ZoneJsonKeys::Height] =
         zone[::PhosphorZones::ZoneJsonKeys::FixedHeight].toDouble() / ss.height();
+}
+
+void ZoneManager::resyncFixedZones()
+{
+    beginBatchUpdate();
+    for (QVariant& zoneVar : m_zones) {
+        QVariantMap zone = zoneVar.toMap();
+        if (!isFixedMode(zone) || !zone.contains(::PhosphorZones::ZoneJsonKeys::FixedX)) {
+            continue;
+        }
+        syncRelativeFromFixed(zone);
+        const QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+        zoneVar = zone;
+        // Derived data only, so no zonesModified (see the header): a screen
+        // switch or an inset reply must not mark a just-loaded layout unsaved.
+        emitZoneSignal(SignalType::GeometryChanged, zoneId, /*includeModified*/ false);
+    }
+    endBatchUpdate();
+}
+
+ZoneGeometrySnapshot ZoneManager::geometrySnapshot(const QString& zoneId) const
+{
+    ZoneGeometrySnapshot snapshot;
+    const int index = findZoneIndex(zoneId);
+    if (index < 0) {
+        return snapshot;
+    }
+    const QVariantMap zone = m_zones[index].toMap();
+    snapshot.zoneId = zoneId;
+    snapshot.relative = extractZoneGeometry(zone);
+    if (isFixedMode(zone) && zone.contains(::PhosphorZones::ZoneJsonKeys::FixedX)) {
+        snapshot.fixed = extractFixedGeometry(zone);
+    }
+    return snapshot;
+}
+
+void ZoneManager::restoreGeometrySnapshot(const ZoneGeometrySnapshot& snapshot, bool markModified)
+{
+    const int index = findZoneIndex(snapshot.zoneId);
+    if (snapshot.zoneId.isEmpty() || index < 0) {
+        return;
+    }
+    QVariantMap zone = m_zones[index].toMap();
+    if (snapshot.fixed.isValid() && isFixedMode(zone)) {
+        // The pixels are the fixed zone's real geometry and its relative copy
+        // is derived from them against the reference. The reference can move
+        // between the capture and this restore without the undo stack
+        // unwinding it (a screen switch, an inset reply), and resyncFixedZones
+        // has re-derived every other fixed zone against the new one by then.
+        // So derive the relative copy again here rather than writing back the
+        // captured one, which was measured against the old reference.
+        zone[::PhosphorZones::ZoneJsonKeys::FixedX] = snapshot.fixed.x();
+        zone[::PhosphorZones::ZoneJsonKeys::FixedY] = snapshot.fixed.y();
+        zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = snapshot.fixed.width();
+        zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = snapshot.fixed.height();
+        syncRelativeFromFixed(zone);
+    } else {
+        zone[::PhosphorZones::ZoneJsonKeys::X] = snapshot.relative.x();
+        zone[::PhosphorZones::ZoneJsonKeys::Y] = snapshot.relative.y();
+        zone[::PhosphorZones::ZoneJsonKeys::Width] = snapshot.relative.width();
+        zone[::PhosphorZones::ZoneJsonKeys::Height] = snapshot.relative.height();
+    }
+    m_zones[index] = zone;
+    emitZoneSignal(SignalType::GeometryChanged, snapshot.zoneId, markModified);
 }
 
 bool ZoneManager::applyGeometryToZoneMap(QVariantMap& zone, qreal x, qreal y, qreal width, qreal height) const
@@ -291,7 +361,7 @@ QString ZoneManager::addZone(qreal x, qreal y, qreal width, qreal height)
     }
 
     int zoneNumber = nextAvailableZoneNumber();
-    QString zoneName = QStringLiteral("Zone %1").arg(zoneNumber);
+    QString zoneName = PhosphorI18n::tr("Zone %1").arg(zoneNumber);
     QVariantMap zone = createZone(zoneName, zoneNumber, geom.x, geom.y, geom.width, geom.height);
     QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
@@ -444,18 +514,12 @@ void ZoneManager::updateZoneAppearance(const QString& zoneId, const QString& pro
         normalizedKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode);
     }
 
+    // Sets exactly the one property. Seeding the colours when custom colours
+    // are switched on is the controller's job (EditorController::
+    // seedCustomColors), as undoable commands of their own: done here, the
+    // undo of switching them OFF re-ran the seed and overwrote the user's
+    // colours with no way back.
     zone[normalizedKey] = value;
-
-    // When enabling useCustomColors, initialize zone colors to theme defaults
-    // so they match what the KCM/global settings show (not the hardcoded constants)
-    if (normalizedKey == useCustomColorsKey && value.toBool()) {
-        if (!m_defaultHighlightColor.isEmpty())
-            zone[QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::HighlightColor)] = m_defaultHighlightColor;
-        if (!m_defaultInactiveColor.isEmpty())
-            zone[QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::InactiveColor)] = m_defaultInactiveColor;
-        if (!m_defaultBorderColor.isEmpty())
-            zone[QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::BorderColor)] = m_defaultBorderColor;
-    }
 
     m_zones.replace(index, zone);
 

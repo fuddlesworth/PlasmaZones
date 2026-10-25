@@ -262,6 +262,9 @@ int OverlayAdaptor::getMinimumZoneDisplaySizePx()
 bool OverlayAdaptor::showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
                                     const PhosphorProtocol::SnapAssistCandidateList& candidates)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return false;
+    }
     if (!m_overlayService) {
         qCWarning(lcDbus) << "showSnapAssist: overlay service not wired";
         return false;
@@ -276,17 +279,29 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenId, const PhosphorProto
     }
     // When the effect sends a physical screen ID for a subdivided monitor,
     // resolve to the correct virtual screen so snap assist appears on the
-    // right side.  Use the first empty zone's center to determine which
-    // virtual screen to target.
+    // right side. The first empty zone's center decides which virtual screen
+    // is the target. The zones are local to the monitor, not global
+    // (WindowTrackingService::getEmptyZones translates them to its origin),
+    // so the center is moved onto the monitor before the lookup, and the
+    // zones are rebased onto the virtual screen's origin, where its overlay
+    // is anchored.
     QString resolvedScreen = screenId;
+    PhosphorProtocol::EmptyZoneList zones = emptyZones;
     if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         auto* mgr = m_screenManager;
-        if (mgr && mgr->hasVirtualScreens(screenId) && !emptyZones.isEmpty()) {
-            const PhosphorProtocol::EmptyZoneEntry& first = emptyZones.first();
-            QPoint center(first.x + first.width / 2, first.y + first.height / 2);
-            QString vsId = mgr->effectiveScreenAt(center);
-            if (!vsId.isEmpty()) {
+        const QRect monitor = mgr && mgr->hasVirtualScreens(screenId) ? mgr->screenGeometry(screenId) : QRect();
+        if (monitor.isValid()) {
+            const PhosphorProtocol::EmptyZoneEntry& first = zones.first();
+            const QPoint center = monitor.topLeft() + QPoint(first.x + first.width / 2, first.y + first.height / 2);
+            const QString vsId = mgr->effectiveScreenAt(center);
+            const QRect vsGeometry = vsId.isEmpty() ? QRect() : mgr->screenGeometry(vsId);
+            if (vsGeometry.isValid()) {
                 resolvedScreen = vsId;
+                const QPoint shift = monitor.topLeft() - vsGeometry.topLeft();
+                for (PhosphorProtocol::EmptyZoneEntry& zone : zones) {
+                    zone.x += shift.x();
+                    zone.y += shift.y();
+                }
             }
         }
     }
@@ -294,8 +309,11 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenId, const PhosphorProto
     // Defer actual work so we return immediately — the KWin effect blocks on this D-Bus
     // call; returning quickly prevents compositor freeze during overlay creation.
     // Note: Return value means "request accepted for deferred processing", not "overlay shown".
-    QTimer::singleShot(0, m_overlayService, [this, resolvedScreen, emptyZones, candidates]() {
-        m_overlayService->showSnapAssist(resolvedScreen, emptyZones, candidates);
+    // The service is captured rather than this adaptor: the timer's context is
+    // the service, so the lambda runs only while the service lives, and the
+    // adaptor may already be gone by then.
+    QTimer::singleShot(0, m_overlayService, [overlay = m_overlayService, resolvedScreen, zones, candidates]() {
+        overlay->showSnapAssist(resolvedScreen, zones, candidates);
     });
     return true;
 }
@@ -458,23 +476,36 @@ bool OverlayAdaptor::authenticateKwinSender()
         qCDebug(lcDbus) << "authenticateKwinSender: refused" << sender;
         return false;
     };
+    // The thumbnail entries are held to the compositor's process rather than
+    // to the registered bridge (DbusHelpers::admitCompositorReport), which
+    // registration itself is held to (CompositorBridgeAdaptor's identity
+    // check). Both admit the compositor's own connection.
+    return isCompositorPeerOn(context->connection(), sender) ? true : refuse();
+}
+
+bool OverlayAdaptor::isCompositorPeer(const QString& uniqueName)
+{
+    return isCompositorPeerOn(QDBusConnection::sessionBus(), uniqueName);
+}
+
+bool OverlayAdaptor::isCompositorPeerOn(const QDBusConnection& bus, const QString& uniqueName)
+{
     // Every message the bus daemon routes names its sender, so an empty one
     // has no identity to check.
-    if (sender.isEmpty()) {
-        return refuse();
+    if (uniqueName.isEmpty()) {
+        return false;
     }
 
-    if (m_trustedKwinSenders.contains(sender)) {
+    if (m_trustedKwinSenders.contains(uniqueName)) {
         return true;
     }
 
     // Slow-path fallback. The pre-warm chain (@ref prewarmKwinTrust →
     // @ref resolvePidAndTrust → @ref trustIfCompositor) primes the
     // cache before any thumbnail call lands in steady state, so this
-    // sync block runs only when a thumbnail call races a fresh pre-warm
-    // (e.g. the very first call after a kwin restart). Acceptable cost:
-    // one ~1ms GetConnectionUnixProcessID round-trip; subsequent calls
-    // hit the cache.
+    // sync block runs only when a call races a fresh pre-warm (e.g. the
+    // very first call after a kwin restart). Acceptable cost: one ~1ms
+    // GetConnectionUnixProcessID round-trip; subsequent calls hit the cache.
     //
     // Bounded with the shared @c SyncCallTimeoutMs (500 ms) — the
     // dbus-daemon's @c GetConnectionUnixProcessID is a hash lookup, so
@@ -482,28 +513,24 @@ bool OverlayAdaptor::authenticateKwinSender()
     // expected latency. Qt's default 25 s timeout would freeze the
     // daemon's main thread (and every overlay it drives) under
     // dbus-daemon stress; capping here keeps degradation graceful.
-    QDBusConnection bus = context->connection();
     QDBusMessage pidMsg = QDBusMessage::createMethodCall(
         QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
         QStringLiteral("org.freedesktop.DBus"), QStringLiteral("GetConnectionUnixProcessID"));
-    pidMsg << sender;
+    pidMsg << uniqueName;
     const QDBusMessage pidReplyMsg = bus.call(pidMsg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
     if (pidReplyMsg.type() != QDBusMessage::ReplyMessage || pidReplyMsg.arguments().isEmpty()) {
-        // Most commonly hit when a thumbnail call beats the pre-warm reply
-        // and KWin disconnects mid-flight (PID has gone, GetConnectionUnixProcessID
+        // Most commonly hit when a call beats the pre-warm reply and KWin
+        // disconnects mid-flight (PID has gone, GetConnectionUnixProcessID
         // returns NameHasNoOwner). Benign and self-healing — kwin's next
         // registration re-fires the pre-warm. Demoted from qCWarning to keep
         // routine session churn out of the warning channel; actual auth
         // rejections still log at warning level inside @ref trustIfCompositor.
-        qCDebug(lcDbus) << "authenticateKwinSender: GetConnectionUnixProcessID failed for" << sender << "—"
+        qCDebug(lcDbus) << "isCompositorPeer: GetConnectionUnixProcessID failed for" << uniqueName << "—"
                         << pidReplyMsg.errorMessage();
-        return refuse();
+        return false;
     }
     const uint pid = pidReplyMsg.arguments().constFirst().toUInt();
-    if (pid == 0 || !trustIfCompositor(sender, pid)) {
-        return refuse();
-    }
-    return true;
+    return pid != 0 && trustIfCompositor(uniqueName, pid);
 }
 
 bool OverlayAdaptor::trustIfCompositor(const QString& uniqueName, uint pid)
@@ -524,7 +551,7 @@ bool OverlayAdaptor::trustIfCompositor(const QString& uniqueName, uint pid)
         if (!m_noCompositorLogged) {
             m_noCompositorLogged = true;
             qCWarning(lcDbus) << "trustIfCompositor: no Wayland compositor to authenticate against, so no thumbnail "
-                                 "sender is trusted";
+                                 "sender or compositor bridge is trusted";
         }
         qCDebug(lcDbus) << "trustIfCompositor: no compositor - rejecting" << uniqueName << "pid=" << pid;
         return false;

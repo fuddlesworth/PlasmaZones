@@ -58,8 +58,8 @@ class Workspaces;
  * promoteToMaster and toggleMaximizeColumn act on the screen's own
  * daemon-reported focus, and do nothing without one or on a pinned screen.
  *
- * `workArea` and `cellRect(id)` are in this screen's own pixels, origin
- * at the screen's top-left, so a full-screen surface on the screen can
+ * `workArea` and `cellRect(id)` are in this screen's logical coordinates,
+ * origin at the screen's top-left, so a full-screen surface on the screen can
  * place an item on a cell directly (the OSD and toast bands, A3 §3–§4).
  *
  * `currentDesktop` and `switchDesktop(index)` are both 0-based, matching
@@ -126,8 +126,9 @@ public:
     [[nodiscard]] bool isUrgent() const;
     [[nodiscard]] QVariantList menuModel() const;
 
-    /// The cell's rect in screen pixels (work-area fractions scaled onto
-    /// `workArea`), or a null rect for an unknown id.
+    /// The cell's rect in this screen's logical coordinates, origin at its
+    /// top-left (work-area fractions scaled onto `workArea`), or a null rect
+    /// for an unknown id.
     Q_INVOKABLE QRect cellRect(const QString& id) const;
     /// The id of the cell holding the focused window, or empty.
     Q_INVOKABLE QString focusedCellId() const;
@@ -155,7 +156,8 @@ public:
     /// Register the miniature as a drop proxy for the compositor's own
     /// window drag (`WindowDrag.registerDropProxy`). `miniatureScreenRect`
     /// is the miniature's rect and `cellScreenRects` one `{id, x, y, w, h}`
-    /// map per cell, both in this screen's pixels. Snapping only; a no-op
+    /// map per cell, both in this screen's logical coordinates with its
+    /// top-left as origin, as the daemon reads them. Snapping only; a no-op
     /// otherwise and on a daemon without it. Change-gated: re-sent only
     /// when the payload differs.
     Q_INVOKABLE void registerDropProxy(const QRect& miniatureScreenRect, const QVariantList& cellScreenRects);
@@ -183,7 +185,7 @@ public:
     void serviceLost();
     /// Re-read the mode for the current (screen, desktop, activity).
     void refreshMode();
-    /// Re-read the work area.
+    /// Re-read the work area, the screen origin and the output's scale.
     void refreshGeometry();
     /// Occupancy (snapping) or focus (any mode) changed upstream.
     void occupancyChanged();
@@ -220,6 +222,7 @@ Q_SIGNALS:
 
 private:
     void resolveScreenId();
+    void fetchDeviceScale();
     void fetchModeData();
     void fetchSnappingLayout();
     void fetchStrip();
@@ -333,6 +336,12 @@ private:
     QVariantList m_menu;
 
     QTimer m_coalesce;
+
+    // The output's logical scale from the daemon (Screen.getScreenInfo
+    // devicePixelRatio), which a snapping layout counting its fixed zones in
+    // device pixels is divided by. 0 until the daemon has answered. Re-read
+    // with the work area. Appended last (installed class).
+    qreal m_deviceScale = 0.0;
 };
 
 /**

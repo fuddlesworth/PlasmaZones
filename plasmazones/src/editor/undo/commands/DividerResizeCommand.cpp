@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "DividerResizeCommand.h"
-#include "../../services/ZoneManager.h"
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
+
+#include <utility>
 
 using namespace PlasmaZones;
 
@@ -30,13 +31,8 @@ void DividerResizeCommand::undo()
     // Use batch update to defer signals until all zones are restored (matches
     // BatchUpdateAppearanceCommand, BatchUpdateColorCommand, PasteZonesCommand).
     m_zoneManager->beginBatchUpdate();
-    for (const auto& p : m_oldGeometries) {
-        const QString& zoneId = p.first;
-        const QRectF& rect = p.second;
-        if (zoneId.isEmpty()) {
-            continue;
-        }
-        m_zoneManager->updateZoneGeometry(zoneId, rect.x(), rect.y(), rect.width(), rect.height());
+    for (const ZoneGeometrySnapshot& snapshot : std::as_const(m_oldGeometries)) {
+        m_zoneManager->restoreGeometrySnapshot(snapshot);
     }
     m_zoneManager->endBatchUpdate();
 }

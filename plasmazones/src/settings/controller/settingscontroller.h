@@ -884,6 +884,13 @@ private Q_SLOTS:
     // all: the string-based connect resolves through the meta-object, which
     // carries private slots and public ones alike.
     void scheduleLayoutLoad();
+    /// Ask the daemon, asynchronously, for the primary screen's logical scale
+    /// and cache it for recalcLocalLayouts. Runs at construction, when the
+    /// daemon comes up, when Qt's primary screen changes, and on the daemon's
+    /// Screen.screenGeometryChanged (which also fires when a scale settles).
+    /// A reply that changes the scale reloads the layouts, but only when some
+    /// local layout counts device pixels, since no other layout reads it.
+    void refreshPrimaryScreenScale();
     void onVirtualDesktopsChanged();
     void onActivitiesChanged();
     void onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
@@ -1182,6 +1189,16 @@ private:
     int m_pendingDaemonLayoutCalls = 0;
     std::optional<QVariantList> m_withheldLocalLayouts;
 
+    // The primary screen's logical scale as the daemon last reported it, and
+    // the screen it was reported for. recalcLocalLayouts uses the scale only
+    // while that screen is still the primary one, and zero otherwise (zero
+    // keeps each layout's last scale). Written only by the reply to the newest
+    // refreshPrimaryScreenScale request, which m_primaryScreenScaleRequest
+    // numbers so a slower, older reply cannot overwrite a newer one.
+    qreal m_primaryScreenScale = 0.0;
+    QString m_primaryScreenScaleId;
+    quint64 m_primaryScreenScaleRequest = 0;
+
     // Daemon-independent layout source — see localLayoutPreviews() doc.
     // PhosphorZones::LayoutRegistry opens its own assignments backend + scans the standard
     // layouts directory; the bundle's composite aggregates manual + autotile
@@ -1252,7 +1269,8 @@ private:
     /// @c ZonesLayoutSource::previewFromLayout gets a populated
     /// @c lastRecalcGeometry() — without this, fixed-geometry layouts
     /// report @c referenceAspectRatio == 0 and zones render as zero-size
-    /// rects.
+    /// rects. Reads the scale cached by refreshPrimaryScreenScale and makes
+    /// no D-Bus call of its own, because it runs on every local reload.
     void recalcLocalLayouts();
 
     // Virtual desktop / activity state

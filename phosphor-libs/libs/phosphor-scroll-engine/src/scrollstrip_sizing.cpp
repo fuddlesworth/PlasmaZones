@@ -79,7 +79,9 @@ int ScrollStrip::activeWindowHeightFloorPx(const ScrollLayoutParams& params) con
     // fraction); the repeatable verbs would otherwise be the ones that could
     // walk a window down to a single pixel with minimum sizes off.
     const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
-    int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
+    // tileMinCrossPx: the frame minimum raised to any share the client's own
+    // commits hold the tile to, which the relayout clamps to the same way.
+    int clientFloor = params.respectMinimumSize ? tileMinCrossPx(*tile, *col, params) : 0;
     if (tabbed && params.respectMinimumSize) {
         // The whole tab SET's minimum, matching tabbedColumnCrossPx: every
         // visible tab is committed at this one rect, so a shrink stopped at
@@ -88,7 +90,7 @@ int ScrollStrip::activeWindowHeightFloorPx(const ScrollLayoutParams& params) con
         // nothing moving.
         for (const Tile& t : col->tiles) {
             if (!t.minimized) {
-                clientFloor = qMax(clientFloor, t.minCross(params.axis));
+                clientFloor = qMax(clientFloor, tileMinCrossPx(t, *col, params));
             }
         }
     }
@@ -149,6 +151,16 @@ bool ScrollStrip::applyColumnDisplay(Column& c, ColumnDisplay display)
         // ownership is meaningless and is dropped rather than left to go
         // stale. Because it was only ever a POINTER, the intents it arbitrated
         // between are all still intact and the stack comes back as it was.
+        //
+        // The cost is on the way back. A tabbed -> normal -> tabbed round trip
+        // hands the extent to the tab on show at the second flip, not to the
+        // tab that owned it before, so the column's cross extent changes
+        // across the round trip whenever those two differ and carry different
+        // intents. Accepted rather than remembered: a Normal column holds no
+        // owner anywhere else either (Column::heightOwnerId, and the rotate
+        // clears one from a Normal slot), and the entering rule above is one
+        // the user can see and steer, by showing the tab they want sizing the
+        // column before tabbing it.
         c.heightOwnerId.clear();
     }
     return true;
@@ -875,10 +887,10 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
     Column& col = m_columns[colIdx];
     bool changed = false;
     // Only take the column's extent when the resize actually MOVED it along
-    // the strip (the engine compares against the last applied rect): a resize
-    // purely ACROSS the strip must not convert a Proportion/Preset intent into
-    // Fixed pixels — that would stop the column reflowing on work-area,
-    // preset-list, and DPI changes.
+    // the strip (the engine compares the gesture's start frame with the frame
+    // it ended on): a resize purely ACROSS the strip must not convert a
+    // Proportion/Preset intent into Fixed pixels — that would stop the column
+    // reflowing on work-area, preset-list, and DPI changes.
     //
     // The acked size is a PHYSICAL QSize from the compositor, so it has to be
     // decoded by role here. Reading .width() unconditionally would, on a
@@ -971,9 +983,10 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
         // a casualty of one; ScrollStrip.h carries the full note.
         //
         // The dragged tab becomes the column's sole height owner, the same
-        // claim the keyboard verbs make: without it a drag on tab B would
-        // settle, and then the column would snap back to tab A's older intent
-        // because the resolver takes the first non-Auto tab it finds.
+        // claim the keyboard verbs make: the column is sized by the tab
+        // Column::heightOwnerId names, so without the claim a drag on tab B
+        // would settle B's intent and the column would then snap back to the
+        // owning tab A's older one.
         if (claimTabbedHeightOwnership(col, ti, ackedH)) {
             changed = true;
         }

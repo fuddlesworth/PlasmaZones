@@ -96,6 +96,9 @@ inline constexpr QLatin1String FixedX{"fixedX"};
 inline constexpr QLatin1String FixedY{"fixedY"};
 inline constexpr QLatin1String FixedWidth{"fixedWidth"};
 inline constexpr QLatin1String FixedHeight{"fixedHeight"};
+/// Layout-level: the layout's fixed geometries count DEVICE pixels, divided by
+/// the output's scale when resolved, rather than logical ones. Absent = false.
+inline constexpr QLatin1String FixedGeometryInDevicePixels{"fixedGeometryInDevicePixels"};
 
 // Per-side outer-gap keys — canonical definition in phosphor-layout-api's
 // GapKeys.h (shared with phosphor-tiles AutotileConstants). Re-exported so

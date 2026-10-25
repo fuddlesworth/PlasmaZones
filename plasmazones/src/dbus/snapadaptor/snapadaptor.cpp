@@ -6,6 +6,8 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "core/platform/logging.h"
 
+#include <QPointer>
+
 namespace PlasmaZones {
 
 SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingAdaptor* adaptor, ISettings* settings,
@@ -48,7 +50,7 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     // because the KWin effect listens for them on that D-Bus interface.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    m_connections.reserve(9);
+    m_connections.reserve(11);
 
     // Navigation feedback (shared OSD path — both engines use the same signal)
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::navigationFeedback, adaptor,
@@ -70,12 +72,14 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
                                  }));
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::fullscreenHandBackRequested, adaptor,
                                  &WindowTrackingAdaptor::fullscreenHandBackRequested));
-    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::restatementGeometryRequested, adaptor,
-                                 [adaptor](const QString& windowId, int x, int y, int width, int height,
-                                           const QString& zoneId, const QString& screenId) {
-                                     Q_EMIT adaptor->applyGeometryRequested(
-                                         windowId, x, y, width, height, zoneId, screenId, false,
-                                         static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
+    // A re-statement is judged by the effect against the managed set it last
+    // heard, like a batch (a maximize is kept only on a screen it does not
+    // manage), and the desktop-switch pass states windows in the same turn
+    // that queues the announce, so it is sequenced like the batches.
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::restatementGeometryRequested, this,
+                                 [this](const QString& windowId, int x, int y, int width, int height,
+                                        const QString& zoneId, const QString& screenId) {
+                                     emitRestatement(windowId, QRect(x, y, width, height), zoneId, screenId);
                                  }));
 
     // Snap-all-windows (effect collects candidates, daemon calculates)
@@ -91,9 +95,30 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
 
     // Batched geometry application: rotate / resnap / snap-all paths build
     // a PhosphorProtocol::WindowGeometryList and emit it here. WTA's applyGeometriesBatch
-    // signal is the D-Bus surface.
-    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::applyGeometriesBatch, adaptor,
-                                 &WindowTrackingAdaptor::applyGeometriesBatch));
+    // signal is the D-Bus surface, reached in the same order as every other
+    // snap batch (emitPlacementBatch).
+    m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::applyGeometriesBatch, this,
+                                 [this](const PhosphorProtocol::WindowGeometryList& geometries, const QString& action) {
+                                     emitPlacementBatch(geometries, action);
+                                 }));
+
+    // Any placement of a window that reaches the wire supersedes the one held
+    // for it behind the announce: sent after it, the held one would put the
+    // window back where the newer command moved it from. Both of the
+    // WindowTracking placement signals, whoever emits them.
+    m_connections.append(
+        connect(adaptor, &WindowTrackingAdaptor::applyGeometryRequested, this, [this](const QString& windowId) {
+            supersedeHeldPlacements({windowId});
+        }));
+    m_connections.append(connect(adaptor, &WindowTrackingAdaptor::applyGeometriesBatch, this,
+                                 [this](const PhosphorProtocol::WindowGeometryList& geometries) {
+                                     QStringList windowIds;
+                                     windowIds.reserve(geometries.size());
+                                     for (const PhosphorProtocol::WindowGeometryEntry& entry : geometries) {
+                                         windowIds.append(entry.windowId);
+                                     }
+                                     supersedeHeldPlacements(windowIds);
+                                 }));
 
     // Window activation: focus-in-direction and cycle operations resolve a
     // target window and ask the KWin effect to raise/focus it.
@@ -122,6 +147,108 @@ void SnapAdaptor::clearEngine()
     // a possibly-stale pointer; the existing per-slot null guards now
     // catch the cleared state instead.
     m_contextResolver = nullptr;
+    // The sequencer borrows the TilingAdaptor, which clears its own held work
+    // with the announce it voids; what this adaptor still holds names the
+    // dead session's windows.
+    m_announceSequencer = {};
+    m_heldPlacementSerial.clear();
+}
+
+quint64 SnapAdaptor::holdPlacement(const QStringList& windowIds)
+{
+    const quint64 serial = ++m_lastHeldSerial;
+    for (const QString& windowId : windowIds) {
+        m_heldPlacementSerial.insert(windowId, serial);
+    }
+    return serial;
+}
+
+QSet<QString> SnapAdaptor::releaseHeldPlacement(const QStringList& windowIds, quint64 serial)
+{
+    QSet<QString> current;
+    for (const QString& windowId : windowIds) {
+        if (m_heldPlacementSerial.value(windowId) == serial) {
+            current.insert(windowId);
+        }
+    }
+    for (const QString& windowId : std::as_const(current)) {
+        m_heldPlacementSerial.remove(windowId);
+    }
+    return current;
+}
+
+void SnapAdaptor::supersedeHeldPlacements(const QStringList& windowIds)
+{
+    if (m_heldPlacementSerial.isEmpty()) {
+        return;
+    }
+    for (const QString& windowId : windowIds) {
+        m_heldPlacementSerial.remove(windowId);
+    }
+}
+
+void SnapAdaptor::emitPlacementBatch(PhosphorProtocol::WindowGeometryList geometries, const QString& action)
+{
+    if (!m_adaptor) {
+        return;
+    }
+    // An empty batch places nothing and so has nothing to be judged against.
+    if (!m_announceSequencer || geometries.isEmpty()) {
+        Q_EMIT m_adaptor->applyGeometriesBatch(geometries, action);
+        return;
+    }
+    QStringList windowIds;
+    windowIds.reserve(geometries.size());
+    for (const PhosphorProtocol::WindowGeometryEntry& entry : std::as_const(geometries)) {
+        windowIds.append(entry.windowId);
+    }
+    const quint64 serial = holdPlacement(windowIds);
+    m_announceSequencer(
+        [guard = QPointer<SnapAdaptor>(this), geometries = std::move(geometries), windowIds, action, serial]() {
+            if (!guard || !guard->m_adaptor) {
+                return;
+            }
+            const QSet<QString> current = guard->releaseHeldPlacement(windowIds, serial);
+            PhosphorProtocol::WindowGeometryList still;
+            still.reserve(current.size());
+            for (const PhosphorProtocol::WindowGeometryEntry& entry : geometries) {
+                if (current.contains(entry.windowId)) {
+                    still.append(entry);
+                }
+            }
+            if (still.size() < geometries.size()) {
+                qCDebug(lcDbusWindow) << "applyGeometriesBatch:" << geometries.size() - still.size()
+                                      << "held placement(s) superseded before the announce went out";
+            }
+            if (!still.isEmpty()) {
+                Q_EMIT guard->m_adaptor->applyGeometriesBatch(still, action);
+            }
+        });
+}
+
+void SnapAdaptor::emitRestatement(const QString& windowId, const QRect& geometry, const QString& zoneId,
+                                  const QString& screenId)
+{
+    if (!m_adaptor) {
+        return;
+    }
+    const auto emitNow = [](WindowTrackingAdaptor* adaptor, const QString& windowId, const QRect& geometry,
+                            const QString& zoneId, const QString& screenId) {
+        Q_EMIT adaptor->applyGeometryRequested(windowId, geometry.x(), geometry.y(), geometry.width(),
+                                               geometry.height(), zoneId, screenId, false,
+                                               static_cast<int>(PhosphorProtocol::PlacementPurpose::Restatement));
+    };
+    if (!m_announceSequencer) {
+        emitNow(m_adaptor, windowId, geometry, zoneId, screenId);
+        return;
+    }
+    const quint64 serial = holdPlacement({windowId});
+    m_announceSequencer([guard = QPointer<SnapAdaptor>(this), emitNow, windowId, geometry, zoneId, screenId, serial]() {
+        if (!guard || !guard->m_adaptor || guard->releaseHeldPlacement({windowId}, serial).isEmpty()) {
+            return;
+        }
+        emitNow(guard->m_adaptor, windowId, geometry, zoneId, screenId);
+    });
 }
 
 } // namespace PlasmaZones

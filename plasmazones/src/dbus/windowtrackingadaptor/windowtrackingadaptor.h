@@ -297,10 +297,17 @@ public Q_SLOTS:
 
     /// A snapped window was dragged without the activation trigger and dropped
     /// on its own screen: unsnap it as a drag-out (floating, zone cleared).
+    /// Compositor-only (#1155): any other bus caller is answered AccessDenied.
     void notifyDragOutUnsnap(const QString& windowId);
 
     /// KWin moved a window between screens no tiling engine runs: its snap memory off
     /// the new one goes (its zone, unless the daemon put it there; a float's home).
+    /// A floating window is handed to the new screen's engine instead. A tiling
+    /// hold kept off the new screen always goes. Unless the daemon placed the
+    /// window there, the rest of every engine's memory on the monitor left goes
+    /// too: the residue releaseLeftScreens drops with its leave hook, and the
+    /// record's slots for that monitor (releaseSlotsLeftBehind), the arriving
+    /// engine's excepted.
     void windowScreenChanged(const QString& windowId, const QString& newScreenId);
     /// KWin moved a window across screens a tiling engine runs: drop every hold off the new one.
     void windowCrossedScreens(const QString& windowId, const QString& fromScreenId, const QString& toScreenId);
@@ -333,7 +340,8 @@ public Q_SLOTS:
      * @param windowId Window ID from the effect
      *
      * No in-tree caller (see getPreFloatZone) — kept as the write half of
-     * the same external contract surface.
+     * the same external contract surface. Compositor-only (#1155), like the
+     * writes it undoes: any other bus caller is answered AccessDenied.
      */
     void clearPreFloatZone(const QString& windowId);
 
@@ -363,7 +371,9 @@ public Q_SLOTS:
     bool hasPreTileGeometry(const QString& windowId);
 
     /**
-     * Clear stored pre-tile geometry for a window (called after restore)
+     * Clear stored pre-tile geometry for a window, on every screen. No in-tree
+     * caller. Compositor-only (#1155), like storePreTileGeometry whose write it
+     * undoes: any other bus caller is answered AccessDenied.
      */
     void clearPreTileGeometry(const QString& windowId);
 
@@ -730,6 +740,18 @@ public:
     QRect frameGeometry(const QString& windowId) const override;
 
     /**
+     * INavigationStateProvider override: whether @p frame is the frame
+     * @p windowId last settled at while a zone or a tile held it in view
+     * (m_lastManagedFrame), never a drag frame. The snap membership pass
+     * reads it to tell where management left a window (a size-increment
+     * client short of its zone, a strip or tile rect from another mode) from
+     * a spot the user moved it to. The settled frame only, not
+     * WindowTrackingService::isManagedFrame, which also answers for every
+     * member store's zone rect that the pass already compares for itself.
+     */
+    bool isSettledManagedFrame(const QString& windowId, const QRect& frame) const override;
+
+    /**
      * Every window the effect has reported a frame for, i.e. every open
      * window, as canonical shadow-store ids (safe to feed straight back to
      * captureWindowPlacement — the same contract refreshOpenWindowPlacements
@@ -747,6 +769,13 @@ public:
                             const PhosphorEngine::IPlacementEngine* arrival);
     /// True if it handled a drop with no snap commit: off the screen snap holds it on, or plain on a tiling screen.
     bool dragEndedOnScreen(const QString& windowId, const QString& releaseScreenId, bool floatIfSnapped);
+    /// The pre-snap size a drag-out restores on @p screenId, the screen it was
+    /// released on: the float-back there, else the size of the window's
+    /// float-back on another monitor, bounded to this one's available area.
+    /// The position stays where the window was dropped; only the size travels.
+    /// Every drag-out path reads it, the activated drop and the pending and
+    /// tiling-screen drops alike, so one drag lands one size.
+    std::optional<QSize> preSnapSizeOn(const QString& windowId, const QString& screenId) const;
 
     /// Internal: the QRect itself, without the D-Bus ZoneGeometryRect wrapper, for daemon-internal callers.
     QRect zoneGeometryRect(const QString& zoneId, const QString& screenId);
@@ -816,10 +845,13 @@ public:
     /// and the destination never adopted it, so every capturePlacement
     /// returns nullopt and the live screen would otherwise be lost. In that
     /// case the float-back is recorded on @p authoritativeScreen via
-    /// WindowTrackingService::recordFloatingClose. NOTE a screen-LESS call is
+    /// WindowTrackingService::recordFloatingClose, except where it refuses and
+    /// records nothing: a frame still on its zone or tile rect (or a window a
+    /// tiling engine holds tiled), and a window excluded from placement that
+    /// has no record of its own. NOTE a screen-LESS call is
     /// not necessarily a live capture: TilingAdaptor::windowClosed runs the
     /// funnel screen-less while its engine still tracks the closing window,
-    /// deliberately forfeiting the three close-only branches above in
+    /// deliberately forfeiting the close-only branches above in
     /// exchange for an authoritative engine slot; the WindowTracking close
     /// then re-runs the funnel WITH the screen.
     /// @param fromStateChange Pass true when the capture is triggered by an
@@ -1595,8 +1627,7 @@ private:
     quint64 m_shellWindowFactsSeq = 0;
 
     /// The first screen whose layout for the desktop and activity it shows holds
-    /// @p zoneId, else the screen the zone's centre lands on under the active
-    /// layout. A screen id, or empty.
+    /// @p zoneId. A screen id, or empty when no screen's layout holds the zone.
     QString detectScreenForZone(const QString& zoneId) const;
 
     // applySnapResult moved to SnapAdaptor.
@@ -1627,7 +1658,9 @@ private:
     QString m_lastCursorScreenId; // From cursorScreenChanged (cursor's screen)
     /// Effect reports naming a screen the daemon does not know yet (KWin's output
     /// can reach the effect before the daemon's QScreen). The latest per key
-    /// replays once the screen resolves (F81).
+    /// replays once the screen resolves (F81). Keys: "cursor", "activation"
+    /// (windowActivated), "active" (activeWindowScreenChanged), and the
+    /// per-window "screen:<id>" and "crossed:<id>".
     struct HeldScreenReport
     {
         QString screenId;

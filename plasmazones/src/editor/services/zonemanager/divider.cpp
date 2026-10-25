@@ -70,10 +70,16 @@ QVariantList ZoneManager::getZonesSharingEdge(const QString& zoneId, qreal edgeX
     return result;
 }
 
-QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QString& zoneId1, const QString& zoneId2,
-                                                                        bool isVertical)
+QVector<ZoneGeometrySnapshot> ZoneManager::collectGeometriesAtDivider(const QString& zoneId1, const QString& zoneId2,
+                                                                      bool isVertical)
 {
-    QVector<QPair<QString, QRectF>> result;
+    QVector<ZoneGeometrySnapshot> result;
+    // A fixed zone's pixels are captured too: undo restores them verbatim,
+    // where replaying the relative rect alone through updateZoneGeometry
+    // (which takes pixels for a fixed zone) collapsed it to the minimum size.
+    const auto snapshotAt = [this](int idx) {
+        return geometrySnapshot(m_zones[idx].toMap()[::PhosphorZones::ZoneJsonKeys::Id].toString());
+    };
     int index1 = findZoneIndex(zoneId1);
     int index2 = findZoneIndex(zoneId2);
 
@@ -121,22 +127,10 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
         }
 
         for (int idx : leftZones) {
-            const QVariantMap zone = m_zones[idx].toMap();
-            const QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
-            const qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
-            const qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
-            const qreal w = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
-            const qreal h = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
-            result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
+            result.append(snapshotAt(idx));
         }
         for (int idx : rightZones) {
-            const QVariantMap zone = m_zones[idx].toMap();
-            const QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
-            const qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
-            const qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
-            const qreal w = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
-            const qreal h = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
-            result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
+            result.append(snapshotAt(idx));
         }
     } else {
         if (z1y < z2y) {
@@ -165,22 +159,10 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
         }
 
         for (int idx : topZones) {
-            const QVariantMap zone = m_zones[idx].toMap();
-            const QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
-            const qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
-            const qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
-            const qreal w = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
-            const qreal h = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
-            result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
+            result.append(snapshotAt(idx));
         }
         for (int idx : bottomZones) {
-            const QVariantMap zone = m_zones[idx].toMap();
-            const QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
-            const qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
-            const qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
-            const qreal w = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
-            const qreal h = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
-            result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
+            result.append(snapshotAt(idx));
         }
     }
 

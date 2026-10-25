@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include <QPoint>
 #include <QRect>
 #include <QRectF>
@@ -278,9 +280,11 @@ inline constexpr bool counterAssertMovable(bool inMaximizeTransition, bool wayla
 /// strip committed outside its output. A plain Wayland column always: the
 /// clamp moved it and nothing resized it, and a client that holds its own size
 /// would only refuse a re-offered column again. Anything else only when the
-/// size still matches the command, so a mover that also RESIZED it (a client
-/// re-asserting a saved size, KWin's maximize re-assert) still gets the
-/// commanded size back.
+/// size still matches the command, so a mover that also RESIZED it (KWin's
+/// maximize re-assert, a client re-asserting a saved size) gets the commanded
+/// size back. For an X11 client that holds only the first time: one that
+/// insists on its size under the same command is learned instead and re-seated
+/// by position (x11ForeignSizeVerdict, #1157).
 inline constexpr bool counterAssertsByPosition(bool outOfViewEntry, bool waylandClient, bool maximizedMember,
                                                bool sizeMatches)
 {
@@ -340,11 +344,32 @@ inline bool mayCarryCommittedSize(bool declaredRect, bool columnAnswered, const 
     return committed.width() <= column.width() && committed.height() <= column.height();
 }
 
-/// Whether a strip batch's entry is a new offer to a Wayland client: it sends
-/// the client a SIZE, so whatever the client settles on next answers this
-/// column (ColumnAnswer::Owed). @p commanded is KWin's move-resize size before
-/// the apply, @p delivered the size the entry delivers (the column, or a size
-/// mayCarryCommittedSize carried). It is the split both arms of
+/// The largest difference between a committed and an offered extent that is
+/// not an answer. A server-side decoration with fractional borders at a
+/// fractional scale rounds the frame of a client that took its column exactly
+/// a pixel either way, depending on where the frame sits, and reporting that
+/// pixel would leave the engine a floor the client never asked for.
+///
+/// The wire constant itself, not a copy: both ends of
+/// Scrolling.reportCommittedSize read it from the protocol header, where its
+/// doc says why they must agree (PhosphorProtocol::Service::
+/// CommittedSizeTolerancePx).
+inline constexpr int CommittedSizeTolerancePx = PhosphorProtocol::Service::CommittedSizeTolerancePx;
+
+/// Whether two frame sizes are the same size but for rounding: within
+/// CommittedSizeTolerancePx on both axes.
+inline bool withinCommittedSizeTolerance(const QSize& a, const QSize& b)
+{
+    return qAbs(a.width() - b.width()) <= CommittedSizeTolerancePx
+        && qAbs(a.height() - b.height()) <= CommittedSizeTolerancePx;
+}
+
+/// Whether a strip batch's entry is a new offer: it sends the client a SIZE,
+/// so whatever the client settles on next answers this column
+/// (ColumnAnswer::Owed). @p commanded is KWin's move-resize size before the
+/// apply, @p delivered the size the entry delivers (the column, or a size
+/// mayCarryCommittedSize carried; for an X11 window its size hints' answer to
+/// either, constrainTileGeometry). It is the split both arms of
 /// applyWindowGeometry take: an equal size goes out as a pure move, or not at
 /// all, and asks the client nothing.
 ///
@@ -355,9 +380,18 @@ inline bool mayCarryCommittedSize(bool declaredRect, bool columnAnswered, const 
 /// answer the engine could not learn while they were off is read again. A
 /// client whose smaller answer is carried is not re-offered, and needs not
 /// be: a narrower answer never sets a floor.
-inline bool stripEntrySendsSize(const QSize& commanded, const QSize& delivered)
+///
+/// @p x11Client: an X11 window's delivered size is a PREDICTION of what KWin
+/// commits, and at a fractional XWayland scale KWin rounds the request through
+/// device pixels, so the frame it committed last time can sit a pixel off the
+/// same prediction. A pixel either way is that rounding, not a new size, and
+/// re-owing the answer for it read a parked column's frame again on every pan
+/// and reported it each time (F336). Deliberately no default argument, so a
+/// call site cannot keep compiling while silently reading every X11 entry
+/// exactly.
+inline bool stripEntrySendsSize(const QSize& commanded, const QSize& delivered, bool x11Client)
 {
-    return commanded != delivered;
+    return x11Client ? !withinCommittedSizeTolerance(commanded, delivered) : commanded != delivered;
 }
 
 /// Whether a geometry request made outside every effect apply resizes a strip
@@ -412,7 +446,7 @@ inline bool droppedTileAckOutstanding(const QSize& requestedAtDrop, const QSize&
     return requestedAtDrop != committedAtDrop && commandedAfter == committedAfter;
 }
 
-/// Where a Wayland strip window's answer to the column it was offered stands
+/// Where a strip window's answer to the column it was offered stands
 /// (ScrollOfferedColumn::answer in the effect).
 ///
 /// The answer is the frame the client settles on after the strip sent it a
@@ -420,8 +454,10 @@ inline bool droppedTileAckOutstanding(const QSize& requestedAtDrop, const QSize&
 /// change that carries it, or from the client's commit when the settle leaves
 /// the frame unchanged (a client answering with the frame it already had, or
 /// settling on a state-only configure that followed the resize), which emits no
-/// frame change at all. Once read, a size the client later settles on by
-/// itself is read too (isNewColumnAnswer).
+/// frame change at all. An X11 apply commits its frame inside the apply, where
+/// nothing reads it, so the catch-up walk reads that one once the batch is
+/// done. Once read, a size the client later settles on by itself is read too
+/// (isNewColumnAnswer).
 enum class ColumnAnswer : quint8 {
     Owed, ///< a batch sent the client this column's size; no settled answer has been read since
     Read, ///< the settled answer was read: reported to the engine, or nothing to report
@@ -436,6 +472,12 @@ enum class ColumnAnswer : quint8 {
     /// size. Nothing the client commits answers the strip's column until the
     /// column is delivered again: the next batch, or a cancel that puts it
     /// back.
+    ///
+    /// Wayland's, bar the user's resize. An X11 client resizes itself with a
+    /// request KWin grants at once, which cannot be told from KWin's own when
+    /// it is made, so an X11 frame at a size the strip did not command is the
+    /// counter-assert's to decide (x11ForeignSizeVerdict) and is read only
+    /// once learned (x11SizeAnswersColumn).
     Foreign,
 };
 
@@ -495,9 +537,24 @@ inline bool readsAsColumnAnswer(const ColumnAnswerGates& gates, ColumnAnswer ans
 /// the answer is Owed, and once Read only when the client has since settled on
 /// another size by itself (@p lastRead is the size read then). A frame change
 /// that kept the size, such as a pure move, repeats nothing.
-inline bool isNewColumnAnswer(ColumnAnswer answer, const QSize& lastRead, const QSize& live)
+///
+/// @p x11Client: a batch that sends an X11 window no size records KWin's
+/// move-resize size as the size read (PlasmaZonesEffect::recordStripOffer),
+/// and at a fractional XWayland scale the frame KWin commits for it can sit a
+/// pixel off that prediction. A pixel either way is that rounding, as
+/// stripEntrySendsSize reads it, not a size the client moved to, and reading
+/// it as new re-read a parked column's frame on every pan and reported it each
+/// time, since a park reports any answer (shouldReportCommittedSize).
+/// Deliberately no default argument, as on stripEntrySendsSize.
+inline bool isNewColumnAnswer(ColumnAnswer answer, const QSize& lastRead, const QSize& live, bool x11Client)
 {
-    return answer == ColumnAnswer::Owed || (answer == ColumnAnswer::Read && live != lastRead);
+    if (answer == ColumnAnswer::Owed) {
+        return true;
+    }
+    if (answer != ColumnAnswer::Read) {
+        return false;
+    }
+    return x11Client ? !withinCommittedSizeTolerance(live, lastRead) : live != lastRead;
 }
 
 /// The facts putsBackKWinResize weighs, gathered by the effect when KWin makes
@@ -527,20 +584,20 @@ struct KWinResizePutBackGates
     /// TilingHandler::isKWinMoveOfStripTile), so a move that arm would take is
     /// never put back onto the old output, where its output change never
     /// comes. A request at a park, or one still overlapping the strip's
-    /// output (a straddler growing past its edge), is no such move, and nor is
-    /// one still on the output of the window's tracked strip screen
-    /// (requestLeavesStripOutput).
+    /// output (a straddler growing past its edge), is no such move.
     bool leavesOutput = false;
 };
 
-/// Whether a resize KWin requested for a strip window on its own account
-/// (resizesOnKWinsAccount) is put back (CR2-kwin-resize): the strip owns the
-/// column's rect, as it does against KWin's quick tile and axis-only
-/// maximize, and an X11 window gets the same answer from the counter-assert.
-/// The caller then asks the put-back budget (shouldCounterAssert, re-armed by
-/// every delivery of a column) and only for a request these gates pass, so a
-/// refused one costs nothing. A request it does not put back leaves the
-/// client's answer Foreign until the column is delivered again.
+/// Whether a resize KWin requested for a Wayland strip window on its own
+/// account (resizesOnKWinsAccount) is put back (CR2-kwin-resize): the strip
+/// owns the column's rect, as it does against KWin's quick tile and axis-only
+/// maximize. An X11 window's request is not decided here: the counter-assert
+/// puts its new size back after KWin applies it, and learns one the client
+/// insists on (x11ForeignSizeVerdict). The caller then asks the put-back
+/// budget (shouldCounterAssert, re-armed by every delivery of a column) and
+/// only for a request these gates pass, so a refused one costs nothing. A
+/// request it does not put back leaves the client's answer Foreign until the
+/// column is delivered again.
 inline bool putsBackKWinResize(const KWinResizePutBackGates& gates)
 {
     return gates.managed && gates.coordinatesHold && gates.kwinStateAtRest && !gates.userGesture && !gates.leavesOutput;
@@ -593,20 +650,6 @@ inline bool requestVoidsStaleAck(const QSizeF& requested, const QSize& staleTarg
     return qAbs(requested.width() - staleTarget.width()) > 1.0 || qAbs(requested.height() - staleTarget.height()) > 1.0;
 }
 
-/// The largest difference between a committed and an offered extent that is
-/// not an answer. A server-side decoration with fractional borders at a
-/// fractional scale rounds the frame of a client that took its column exactly
-/// a pixel either way, depending on where the frame sits, and reporting that
-/// pixel would leave the engine a floor the client never asked for.
-///
-/// MUST equal the engine's kCommittedExtentSlackPx (phosphor-scroll-engine,
-/// enginelimits.h), which reads an answer within that slack of the offer as
-/// the offer. The two sides cannot share the constant, because the engine's
-/// is private to its library. A tolerance wider here would withhold answers
-/// the engine would act on, and a narrower one would send it answers it
-/// discards as the offer.
-inline constexpr int CommittedSizeTolerancePx = 1;
-
 /// Whether a readable answer goes to the engine (Scrolling.reportCommittedSize).
 ///
 /// The engine lays a column out at the extent it asked for, so a client that
@@ -614,30 +657,65 @@ inline constexpr int CommittedSizeTolerancePx = 1;
 /// hears about it, and one that later commits narrower than a column the
 /// engine widened for it leaves that width standing empty.
 ///
-/// @p offered    the column size the strip offered.
-/// @p committed  the frame size the client committed.
-/// @p vertical   the strip runs vertically, so its main axis is the height.
+/// @p expected     the size the answer is judged against: what the client
+///                 commits when it takes its column. The column size the strip
+///                 offered for a Wayland client; for an X11 one its size hints'
+///                 answer to that column (constrainTileGeometry), so a size
+///                 increment is no answer.
+/// @p committed    the frame size the client committed.
+/// @p vertical     the strip runs vertically, so its main axis is the height.
+/// @p offerParked  the offer is a park, off every output.
 ///
-/// The MAIN axis reports a difference either way. The CROSS axis reports only
-/// a longer answer, which hangs past the work area's edge and is the engine's
-/// to judge (one that exceeds the work area floats the window like an
-/// oversized declared minimum). A shorter cross answer is not reported: the
-/// commit path centres it, and a client holding an aspect ratio answers a
-/// full-height column a little short on every placement, which would
-/// otherwise send the engine a no-op each time. Differences of
+/// Either axis reports a difference either way. A longer CROSS answer hangs
+/// past the work area's edge and is the engine's to judge (one that exceeds
+/// the work area floats the window like an oversized declared minimum). A
+/// shorter one is what lets the engine give back a cross floor an earlier,
+/// longer answer set, as a narrower main answer gives back a width floor
+/// (F266). The engine reads a shorter cross answer from a window that holds
+/// no cross floor as the no-op it is, so a client holding an aspect ratio,
+/// which answers a full-height column a little short on every placement,
+/// costs one call per new answer and changes nothing. Differences of
 /// CommittedSizeTolerancePx or less are rounding, never answers.
+///
+/// A park reports any answer, one that takes it included. A column remembered
+/// wider than its clamp keeps parking on that memory, and only the client's
+/// own word that it took the park lets the engine end the memory and let the
+/// column peek again (#1154). The fact comes from the offer rect, so this side
+/// keeps no memory of its own, and a park that sends a size is rare (a pan
+/// moves parks without resizing them).
 ///
 /// Stateless itself; the effect asks it once per answer (isNewColumnAnswer),
 /// so a client that keeps its answer is not reported again on every frame
 /// change.
-inline bool shouldReportCommittedSize(const QSize& offered, const QSize& committed, bool vertical)
+inline bool shouldReportCommittedSize(const QSize& expected, const QSize& committed, bool vertical, bool offerParked)
 {
-    if (offered.isEmpty() || committed.isEmpty()) {
+    if (expected.isEmpty() || committed.isEmpty()) {
         return false;
     }
-    const int mainDelta = vertical ? committed.height() - offered.height() : committed.width() - offered.width();
-    const int crossDelta = vertical ? committed.width() - offered.width() : committed.height() - offered.height();
-    return qAbs(mainDelta) > CommittedSizeTolerancePx || crossDelta > CommittedSizeTolerancePx;
+    if (offerParked) {
+        return true;
+    }
+    const int mainDelta = vertical ? committed.height() - expected.height() : committed.width() - expected.width();
+    const int crossDelta = vertical ? committed.width() - expected.width() : committed.height() - expected.height();
+    return qAbs(mainDelta) > CommittedSizeTolerancePx || qAbs(crossDelta) > CommittedSizeTolerancePx;
+}
+
+/// The committed size the engine is told, per axis: the OFFERED extent where
+/// the client's answer is within CommittedSizeTolerancePx of @p expected, and
+/// the answer itself elsewhere. The engine judges the answer against
+/// @p offered, the column rect it laid out (its whole-tile check needs that
+/// exact size), so an X11 client whose size hints narrow every column a little
+/// would otherwise read there as narrower than every offer it took, and a park
+/// it took would never end the peek memory it was reported for (#1154, F118).
+/// For a Wayland client @p expected is @p offered, and an extent within the
+/// tolerance of it is one the engine reads as the offer anyway.
+inline QSize reportedCommittedSize(const QSize& offered, const QSize& expected, const QSize& committed)
+{
+    const auto axis = [](int offeredPx, int expectedPx, int committedPx) {
+        return qAbs(committedPx - expectedPx) <= CommittedSizeTolerancePx ? offeredPx : committedPx;
+    };
+    return QSize(axis(offered.width(), expected.width(), committed.width()),
+                 axis(offered.height(), expected.height(), committed.height()));
 }
 
 // ── Compositor-state claims ────────────────────────────────────────────────
@@ -809,34 +887,114 @@ inline bool restoreRectOnOutput(const QRectF& restore, const QRectF& outputGeome
     return restore.isValid() && outputGeometry.contains(restore.center());
 }
 
+/// What the strip counter-assert does with an X11 strip window's frame at a
+/// size other than the one its batch commanded.
+enum class ForeignSizeVerdict : quint8 {
+    PutBack, ///< re-apply the commanded rect, as for any external resize
+    Learn, ///< keep the size and re-seat by position, so the report teaches the engine
+};
+
+/// The X11 half of the strip's answer to a size it did not command (#1157).
+///
+/// A Wayland client's answer to its column is read off its commit, but an X11
+/// client resizes itself with a request KWin grants at once, and from the
+/// frame hook that request cannot be told from KWin's own (Expand Window, a
+/// script). So the strip puts the first new size back, as it always has, and
+/// learns only a client that insists: the same size again under the same
+/// command, as SDL and friends answer every configure, from a frame that reads
+/// as the client's answer to its column (@p readsAsAnswer). The same commit is
+/// never both put back and learned.
+///
+/// "Insists" is read from the size alone, so a KWin resize that lands on the
+/// same size twice under one command (Shrink Window pressed twice from the
+/// same column, a script writing one frame twice) is learned on the second
+/// landing like a client's. Only a resize KWin makes once is never learned.
+///
+/// @p commanded    the size the batch commanded (the counter-assert's rect)
+/// @p committed    the size the frame holds now
+/// @p lastPutBack  the size last put back under this command; empty for none.
+///                 The counter-assert records one only for a put-back it made
+///                 beyond rounding of the command.
+inline ForeignSizeVerdict x11ForeignSizeVerdict(const QSize& commanded, const QSize& committed,
+                                                const QSize& lastPutBack, bool readsAsAnswer)
+{
+    if (committed.isEmpty() || withinCommittedSizeTolerance(committed, commanded)) {
+        return ForeignSizeVerdict::PutBack;
+    }
+    if (lastPutBack.isEmpty() || !withinCommittedSizeTolerance(committed, lastPutBack)) {
+        return ForeignSizeVerdict::PutBack;
+    }
+    return readsAsAnswer ? ForeignSizeVerdict::Learn : ForeignSizeVerdict::PutBack;
+}
+
+/// Whether an X11 strip window's frame size may be read as its client's
+/// answer to its column (the report and the size-continuity carry read it).
+/// Only under a strip command the counter-assert still guards
+/// (@p commandCurrent: a commanded rect recorded by the strip apply that is
+/// still the window's latest command), and only at a size that command
+/// decided: within rounding of the size it commanded (@p commanded), or the
+/// size the counter-assert learned under it (@p learned, empty for none).
+///
+/// Any other size is one nobody decided. A put-back the budget refused, or a
+/// window whose command is not guarded (a batch the user's gesture deferred
+/// records none), leaves KWin's own resize standing, and from the frame alone
+/// that cannot be told from the client's. Read as the answer it planted a
+/// committed floor at KWin's size (F116).
+inline bool x11SizeAnswersColumn(bool commandCurrent, const QSize& commanded, const QSize& learned, const QSize& live)
+{
+    return commandCurrent
+        && (withinCommittedSizeTolerance(live, commanded)
+            || (!learned.isEmpty() && withinCommittedSizeTolerance(live, learned)));
+}
+
+/// What isKWinMoveOffStrip reads about a strip tile and its frame.
+struct KWinMoveOffStripFacts
+{
+    /// the live frame, or the rect KWin requested at the resize put-back
+    QRectF frame;
+    /// the output of the window's tracked strip screen; invalid when it has none
+    QRectF trackedOutput;
+    /// the output under the centre of the rect the strip last gave the window
+    /// (commanded, or the offered column)
+    QRectF centreOutput;
+    /// no screen change is settling and the strip's output has not moved since
+    /// its last batch, so the tracked output's geometry still describes the strip
+    bool coordinatesHold = false;
+    /// the engine's own move armed a marker
+    bool markerArmed = false;
+    /// the frame or the strip's rect sits at a park, or the strip recorded it parked
+    bool parked = false;
+    /// a drag holds the window; the drop owns the move
+    bool userMove = false;
+};
+
 /// Whether an output change of a strip tile is a move KWin made itself (its
 /// Move to Screen, a window rule), not a column the engine parked or handed
 /// over (F738). The engine's own moves arm a marker, a parked column sits off
 /// every output by design, and a drag is the drop's. Anything else whose frame
-/// has left the output of the rect the strip last gave it has gone to another
-/// output: a column straddling its output's edge still intersects it.
-/// @p commandedOutput the output under that rect (commanded, or the offered column)
-inline bool isKWinMoveOffStrip(const QRectF& frame, const QRectF& commandedOutput, bool markerArmed, bool parked,
-                               bool userMove)
+/// has left the strip's output has gone to another output: a column straddling
+/// its output's edge still intersects it.
+///
+/// The strip's output is the TRACKED one while the coordinates hold. A tile
+/// cropped at its output's edge can have the centre of its strip rect on the
+/// neighbour, and measured against that centre a move onto the neighbour never
+/// left it (#1153), while a resize that stays on its own output read as a move
+/// off it. While a screen change settles or the output has moved since the
+/// strip's batch, the output's geometry is live but the strip's rects and the
+/// tracked screen were measured where the outputs used to be, so the frame
+/// must miss the centre's output as well, which is never more willing than the
+/// centre lookup alone. With no tracked output the centre's answer stands.
+inline bool isKWinMoveOffStrip(const KWinMoveOffStripFacts& f)
 {
-    return !markerArmed && !parked && !userMove && commandedOutput.isValid() && frame.isValid()
-        && !frame.intersects(commandedOutput);
-}
-
-/// Whether a resize KWin requested for a strip window moves it off the strip's
-/// output (KWinResizePutBackGates::leavesOutput). @p movesOffStrip is the
-/// output-change arm's own answer for the requested rect (isKWinMoveOffStrip,
-/// through TilingHandler::isKWinMoveOfStripTile), which finds the strip's
-/// output at the centre of the rect the strip last gave the window. For a
-/// straddler cropped at its output's edge that centre can sit on the
-/// neighbour, and a request that keeps the window wholly on its own strip
-/// output would read as a move off it, so the request must also miss
-/// @p trackedOutput, the output of the window's tracked strip screen. Both
-/// together keep the answer to moves that arm hands over. An invalid
-/// @p trackedOutput leaves the arm's answer as it is.
-inline bool requestLeavesStripOutput(bool movesOffStrip, const QRectF& requested, const QRectF& trackedOutput)
-{
-    return movesOffStrip && (!trackedOutput.isValid() || !requested.intersects(trackedOutput));
+    if (f.markerArmed || f.parked || f.userMove || !f.frame.isValid()) {
+        return false;
+    }
+    const bool missesCentre = f.centreOutput.isValid() && !f.frame.intersects(f.centreOutput);
+    if (!f.trackedOutput.isValid()) {
+        return missesCentre;
+    }
+    const bool missesTracked = !f.frame.intersects(f.trackedOutput);
+    return missesTracked && (f.coordinatesHold || missesCentre);
 }
 
 /// The scope the passive float channel releases under (F723). On a scrolling

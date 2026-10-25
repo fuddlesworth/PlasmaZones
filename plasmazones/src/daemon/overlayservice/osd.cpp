@@ -18,6 +18,7 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
+#include <PhosphorZones/GeometryUtils.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 
@@ -180,14 +181,17 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
 
     // Pass the actual screen geometry so fixed-mode zones normalize against
     // the screen we're about to render on, not Layout::lastRecalcGeometry()
-    // (which may belong to a different screen).
+    // (which may belong to a different screen), and that screen's scale, not
+    // Layout::lastRecalcScale(), for a layout counting device pixels.
     LayoutOsdContentParams p;
     p.screenId = effectiveScreenId;
     p.id = layout->id().toString();
     p.name = layout->name();
     p.zones = layout->zones().isEmpty()
         ? QVariantList()
-        : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full, QRectF(screenGeom));
+        : PhosphorZones::LayoutUtils::zonesToVariantList(
+              layout, PhosphorZones::ZoneField::Full, QRectF(screenGeom),
+              PhosphorZones::GeometryUtils::screenScale(m_screenManager, effectiveScreenId));
     // Since the native-template pivot this path serves NON-template screens
     // only: a template apply carries no Layout* and routes to
     // showScrollingTemplateOsd instead, and every producer of this overload
@@ -796,12 +800,14 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     // Use shared PhosphorZones::LayoutUtils with minimal fields for zone number
     // lookup (only need zoneId and zoneNumber, not name/appearance). Pass
-    // navScreenGeom so fixed-mode zones normalize against the navigated-to
-    // screen rather than Layout::lastRecalcGeometry().
+    // navScreenGeom and that screen's scale so fixed-mode zones normalize
+    // against the navigated-to screen rather than Layout::lastRecalcGeometry()
+    // and Layout::lastRecalcScale().
     QVariantList zonesList = scrollZonesFor();
     if (zonesList.isEmpty()) {
-        zonesList = PhosphorZones::LayoutUtils::zonesToVariantList(screenLayout, PhosphorZones::ZoneField::Minimal,
-                                                                   QRectF(navScreenGeom));
+        zonesList = PhosphorZones::LayoutUtils::zonesToVariantList(
+            screenLayout, PhosphorZones::ZoneField::Minimal, QRectF(navScreenGeom),
+            PhosphorZones::GeometryUtils::screenScale(m_screenManager, effectiveId));
     }
     writeQmlProperty(osdSlot, QStringLiteral("zones"), zonesList);
 

@@ -7,8 +7,10 @@
  *        cross-screen move runs: what each engine still holds of a window on
  *        a monitor it left is dropped, the arriving engine is left alone, and
  *        a record naming an output that went away stays parked. Plus the
- *        sites that call it on a daemon-driven move (the engine relays and
- *        the cross-mode handoff).
+ *        sites that call it: a plain drag's drop on another monitor
+ *        (dragEndedOnScreen), a daemon-driven move (the engine relays, the
+ *        cross-mode handoff and the open routes), and the two KWin moves the
+ *        effect reports (windowCrossedScreens, windowScreenChanged).
  */
 
 #include "wta_convenience_fixture.h"
@@ -155,6 +157,8 @@ private Q_SLOTS:
         cleanupFixture();
     }
 
+    // ── releaseLeftScreens: what it drops ────────────────────────────────────
+
     // Every snap membership on the monitor left goes, on every desktop, with
     // the record's snap slot, and silently: no zone change is announced for
     // memory on a screen the window left. The other tiling engine is asked to
@@ -204,6 +208,8 @@ private Q_SLOTS:
         QCOMPARE(held->desktop, 2);
         m_wta->setEngines(m_snapEngine, nullptr, nullptr);
     }
+
+    // ── A plain drag's drop on another monitor (dragEndedOnScreen) ───────────
 
     // A plain drag (no snap trigger) of a snapped window dropped on a monitor
     // a tiling engine runs: that engine adopts it floating where it was
@@ -284,6 +290,43 @@ private Q_SLOTS:
         QVERIFY(!m_wta->dragEndedOnScreen(dead, QStringLiteral("DP-2"), /*floatIfSnapped=*/true));
         QCOMPARE(m_wta->service()->zoneForWindow(dead), m_zoneIds[0]);
     }
+
+    // A plain drag of a snapped window dropped on another snapping monitor
+    // restores the size the window has free on the RELEASE monitor and
+    // consumes that record, the rule the activated drop follows, so one drag
+    // lands one size whichever path ends it. The monitor it left
+    // keeps its own record. Mutation: read the source monitor's record and the
+    // restore is 640x480.
+    void plainDropOnAnotherSnappingMonitorRestoresTheReleaseMonitorsSize()
+    {
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, nullptr, 0);
+        m_settings->setRestoreOriginalSizeOnUnsnap(true);
+        const QRect onFirst(200, 150, 640, 480);
+        const QRect onSecond(2100, 150, 800, 600);
+        env.wta->service()->recordFreeGeometry(env.window, QStringLiteral("DP-1"), onFirst, true);
+        env.wta->service()->recordFreeGeometry(env.window, QStringLiteral("DP-2"), onSecond, true);
+        env.snap->setCurrentDesktopForScreen(QStringLiteral("DP-1"), 1);
+        env.snap->setCurrentDesktopForScreen(QStringLiteral("DP-2"), 1);
+        env.wta->service()->assignWindowToZone(env.window, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        QSignalSpy applySpy(env.wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        QVERIFY(env.wta->dragEndedOnScreen(env.window, QStringLiteral("DP-2"), /*floatIfSnapped=*/true));
+
+        QSize restored;
+        for (const QList<QVariant>& args : std::as_const(applySpy)) {
+            if (args.at(0).toString() == env.window && args.at(7).toBool()) {
+                restored = QSize(args.at(3).toInt(), args.at(4).toInt());
+            }
+        }
+        QCOMPARE(restored, onSecond.size());
+        const auto rec = env.wta->service()->placementStore().peekExact(env.window);
+        QVERIFY(rec.has_value());
+        QVERIFY2(!rec->freeGeometryFor(QStringLiteral("DP-2")).isValid(), "the release monitor's record is consumed");
+        QCOMPARE(rec->freeGeometryFor(QStringLiteral("DP-1")), onFirst);
+        m_settings->setRestoreOriginalSizeOnUnsnap(false);
+    }
+
+    // ── releaseLeftScreens: the record's slots, the hook and parked records ──
 
     // Snap arriving on the new screen keeps the slot: the arrival is the
     // placement it now describes. The memberships on the monitor left go all
@@ -414,6 +457,8 @@ private Q_SLOTS:
         QCOMPARE(slotState(left), QString(PhosphorEngine::WindowPlacement::stateReleased()));
     }
 
+    // ── The daemon-driven moves that call it ─────────────────────────────────
+
     // An engine relays its move marker BEFORE it re-keys the window: the
     // screens left are released first, and the relaying engine is never asked
     // to let go of the window it is moving.
@@ -536,7 +581,7 @@ private Q_SLOTS:
         QVERIFY(env.dispatched.isEmpty());
     }
 
-    // ── Hook 2: a KWin move across screens a tiling engine runs ─────────────
+    // ── A KWin move across screens a tiling engine runs (windowCrossedScreens) ──
 
     // A tile KWin moved onto a snapping monitor: the zone it kept frozen on
     // the monitor left goes, with every slot of the record naming that monitor,
@@ -643,6 +688,52 @@ private Q_SLOTS:
         QVERIFY(env.snap->isWindowTracked(env.window));
         QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::snapEngineId()),
                  QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+    }
+
+    // ── A KWin move between screens no tiling engine runs (windowScreenChanged) ──
+
+    // A snapped window KWin moved to another snapping monitor leaves every
+    // engine's slot on the monitor it left, not only snap's, and the daemon
+    // hears of it, as a crossing between tiling screens does. A tiling
+    // slot surviving there would be seeded by a later mode switch on the new
+    // monitor. Mutation: drop the release in windowScreenChanged's unsnap arm
+    // and the autotile slot stays tiled with no hook call.
+    void screenChanged_snappedMoveReleasesEveryEngineSlot()
+    {
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, nullptr, 0);
+        snapOnDp1WithTileSlot(env);
+        QList<QPair<QString, QString>> told;
+        env.wta->setWindowLeftScreenHook([&told](const QString& windowId, const QString& keepScreenId) {
+            told.append({windowId, keepScreenId});
+        });
+
+        env.wta->windowScreenChanged(env.window, QStringLiteral("DP-2"));
+
+        QVERIFY(env.wta->service()->zoneForWindow(env.window).isEmpty());
+        QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::snapEngineId()),
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
+        QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::autotileEngineId()),
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
+        QVERIFY(told.contains(qMakePair(env.window, QStringLiteral("DP-2"))));
+        env.wta->setWindowLeftScreenHook({});
+    }
+
+    // A free window carries a tiling float verdict on the monitor it left: the
+    // move between snapping monitors drops it too. Mutation: restore
+    // the snap-only release in the free arm and the verdict stays floating.
+    void screenChanged_freeMoveReleasesAStaleTilingFloat()
+    {
+        RoutedOpenEnv env(m_layoutManager, m_zoneDetector, m_settings, nullptr, 0);
+        env.wta->service()->placementStore().record(PlasmaZones::TestHelpers::makePlacement(
+            env.window, QStringLiteral("routeapp"), PhosphorEngine::WindowPlacement::stateFloating(),
+            PhosphorEngine::WindowPlacement::autotileEngineId(), QStringLiteral("DP-1")));
+        QVERIFY(env.wta->service()->zoneForWindow(env.window).isEmpty());
+        QVERIFY(!env.wta->service()->isWindowFloating(env.window));
+
+        env.wta->windowScreenChanged(env.window, QStringLiteral("DP-2"));
+
+        QCOMPARE(slotState(env, PhosphorEngine::WindowPlacement::autotileEngineId()),
+                 QString(PhosphorEngine::WindowPlacement::stateReleased()));
     }
 };
 

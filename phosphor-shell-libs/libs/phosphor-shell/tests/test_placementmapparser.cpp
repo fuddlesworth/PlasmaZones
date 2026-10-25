@@ -55,6 +55,31 @@ private Q_SLOTS:
         QCOMPARE(parseSnappingLayout(json, QSize()).size(), 0);
     }
 
+    // A layout counting its fixed zones in device pixels (#1160) is divided by
+    // the output's scale before the logical work area normalises it: 1200 x
+    // 1315 device pixels at 1.25 are 960 x 1052 logical, half the width and
+    // the full height. Without the scale such a zone cannot be placed, and a
+    // logical layout ignores the scale altogether.
+    void snappingLayoutDividesDevicePixelZonesByTheScale()
+    {
+        const QString device = QStringLiteral(R"({"fixedGeometryInDevicePixels":true,"zones":[
+            {"id":"d","zoneNumber":1,"geometryMode":1,"fixedGeometry":{"x":0,"y":0,"width":1200,"height":1315},
+             "relativeGeometry":{"x":0,"y":0,"width":0.1,"height":0.1}}
+        ]})");
+        const auto scaled = parseSnappingLayout(device, QSize(1920, 1052), 1.25);
+        QCOMPARE(scaled.size(), 1);
+        QCOMPARE(scaled[0].rect, QRectF(0, 0, 0.5, 1.0));
+        QCOMPARE(parseSnappingLayout(device, QSize(1920, 1052)).size(), 0);
+
+        const QString logical = QStringLiteral(R"({"zones":[
+            {"id":"l","zoneNumber":1,"geometryMode":1,"fixedGeometry":{"x":0,"y":0,"width":960,"height":526},
+             "relativeGeometry":{"x":0,"y":0,"width":0.1,"height":0.1}}
+        ]})");
+        const auto plain = parseSnappingLayout(logical, QSize(1920, 1052), 1.25);
+        QCOMPARE(plain.size(), 1);
+        QCOMPARE(plain[0].rect, QRectF(0, 0, 0.5, 0.5));
+    }
+
     void snappingLayoutRejectsGarbage()
     {
         QCOMPARE(parseSnappingLayout(QStringLiteral("not json"), QSize(10, 10)).size(), 0);

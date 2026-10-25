@@ -13,6 +13,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Zone.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 
 class TestLayoutZones : public QObject
 {
@@ -390,6 +391,94 @@ private Q_SLOTS:
         const QList<QVariant> args = computedForGeneration.first();
         QCOMPARE(qvariant_cast<PhosphorZones::Layout*>(args.at(2)), &layout);
         QCOMPARE(args.at(3).toULongLong(), qulonglong(service.currentGeneration(screenId)));
+    }
+
+    // A zone replaced while the worker computes, by one with the SAME id but
+    // another rect: the result's zone ids all still match, yet its geometry
+    // describes the zone that is gone. The applied geometry has to be the
+    // replacement's, and the layout must not be stamped fresh over a stale
+    // rect (F21).
+    void testLayout_asyncResultAfterSameIdZoneSwapUsesTheNewZone()
+    {
+        PhosphorZones::Layout layout(QStringLiteral("Swapped"));
+        auto* original = new PhosphorZones::Zone();
+        original->setRelativeGeometry(QRectF(0, 0, 0.5, 1));
+        layout.addZone(original);
+
+        PhosphorZones::LayoutComputeService service;
+        QSignalSpy computedForGeneration(&service,
+                                         &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration);
+        const QRectF screen(0, 0, 1000, 500);
+        QVERIFY(service.requestRecalculate(&layout, QStringLiteral("DP-1"), screen));
+
+        // Before the event loop spins, so the worker's queued result lands
+        // after the swap.
+        const QString id = original->id().toString();
+        layout.removeZone(original);
+        namespace Keys = PhosphorZones::ZoneJsonKeys;
+        const QJsonObject relGeo{{Keys::X, 0.5}, {Keys::Y, 0.0}, {Keys::Width, 0.5}, {Keys::Height, 1.0}};
+        const QJsonObject replacementJson{{Keys::Id, id}, {Keys::RelativeGeometry, relGeo}};
+        auto* replacement = PhosphorZones::Zone::fromJson(replacementJson);
+        QVERIFY(replacement);
+        QCOMPARE(replacement->id().toString(), id);
+        layout.addZone(replacement);
+
+        QTRY_COMPARE(computedForGeneration.size(), 1);
+        QCOMPARE(replacement->geometry(), QRectF(500, 0, 500, 500));
+        QVERIFY(!layout.needsRecalc(screen));
+    }
+
+    // A synchronous recalculation after the request records the frame its
+    // caller wants now. The worker result, asked for earlier at another
+    // scale, must not put the layout back on that older frame (F23).
+    void testLayout_asyncResultDoesNotOverwriteALaterSyncScale()
+    {
+        PhosphorZones::Layout layout(QStringLiteral("Device"));
+        layout.setFixedGeometryInDevicePixels(true);
+        auto* zone = new PhosphorZones::Zone();
+        zone->setGeometryMode(PhosphorZones::ZoneGeometryMode::Fixed);
+        zone->setFixedGeometry(QRectF(0, 0, 1000, 500));
+        layout.addZone(zone);
+
+        const QRectF screen(0, 0, 2000, 1000);
+        PhosphorZones::LayoutComputeService::recalculateSync(&layout, screen, 1.0);
+
+        PhosphorZones::LayoutComputeService service;
+        QSignalSpy computedForGeneration(&service,
+                                         &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration);
+        QVERIFY(service.requestRecalculate(&layout, QStringLiteral("DP-1"), screen, 2.0));
+        PhosphorZones::LayoutComputeService::recalculateSync(&layout, screen, 1.25);
+
+        QTRY_COMPARE(computedForGeneration.size(), 1);
+        QCOMPARE(layout.lastRecalcScale(), 1.25);
+        QCOMPARE(zone->geometry().width(), 800.0);
+    }
+
+    // A request back to the frame the layout already holds, made while a
+    // request for another frame is in flight, supersedes that one: the layout
+    // ends on the frame asked for last (F205).
+    void testLayout_requestBackToTheCurrentFrameSupersedesTheInFlightOne()
+    {
+        PhosphorZones::Layout layout(QStringLiteral("FlipBack"));
+        auto* zone = new PhosphorZones::Zone();
+        zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
+        layout.addZone(zone);
+
+        PhosphorZones::LayoutComputeService service;
+        QSignalSpy computedForGeneration(&service,
+                                         &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration);
+        const QString screenId = QStringLiteral("DP-1");
+        const QRectF first(0, 0, 1920, 1080);
+        const QRectF second(0, 0, 2560, 1440);
+        QVERIFY(service.requestRecalculate(&layout, screenId, first));
+        QTRY_COMPARE(computedForGeneration.size(), 1);
+        computedForGeneration.clear();
+
+        QVERIFY(service.requestRecalculate(&layout, screenId, second));
+        QVERIFY(service.requestRecalculate(&layout, screenId, first));
+        QTRY_COMPARE(computedForGeneration.size(), 2);
+        QCOMPARE(layout.lastRecalcGeometry(), first);
+        QCOMPARE(zone->geometry(), first);
     }
 };
 

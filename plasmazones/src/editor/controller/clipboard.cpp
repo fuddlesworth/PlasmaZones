@@ -58,7 +58,7 @@ void EditorController::copyZones(const QStringList& zoneIds)
     }
 
     // Serialize to JSON using helper
-    QString jsonData = ZoneSerialization::serializeZonesToClipboard(zonesToCopy);
+    QString jsonData = ZoneSerialization::serializeZonesToClipboard(zonesToCopy, m_fixedGeometryInDevicePixels);
 
     // Copy to clipboard
     QClipboard* clipboard = QGuiApplication::clipboard();
@@ -117,9 +117,22 @@ QStringList EditorController::pasteZones(bool withOffset)
     }
 
     // Deserialize zones using helper
-    QVariantList zonesToPaste = ZoneSerialization::deserializeZonesFromClipboard(clipboardText);
+    bool copiedInDevicePixels = false;
+    QVariantList zonesToPaste = ZoneSerialization::deserializeZonesFromClipboard(clipboardText, &copiedInDevicePixels);
     if (zonesToPaste.isEmpty()) {
         return QStringList();
+    }
+
+    // Fixed zones copied from a layout counting the other unit keep their
+    // size on the panel: device pixels are the logical ones times the target
+    // output's scale. When the scale cannot be read the numbers are kept as
+    // they are, which is all the editor can do without it.
+    qreal fixedUnitFactor = 1.0;
+    if (copiedInDevicePixels != m_fixedGeometryInDevicePixels) {
+        ensureTargetScreenScale();
+        if (m_targetScreenScale > 0.0) {
+            fixedUnitFactor = m_fixedGeometryInDevicePixels ? m_targetScreenScale : 1.0 / m_targetScreenScale;
+        }
     }
 
     // Calculate offset if needed
@@ -142,11 +155,16 @@ QStringList EditorController::pasteZones(bool withOffset)
         QString newId = QUuid::createUuid().toString();
         zone[::PhosphorZones::ZoneJsonKeys::Id] = newId;
 
-        if (ZoneManager::isFixedMode(zone) && withOffset) {
-            // Fixed mode: offset fixed pixel coords, skip 0-1 clamping for fixed keys
-            QRectF fg = m_zoneManager->extractFixedGeometry(zone);
-            fg.moveLeft(qMax(0.0, fg.x() + EditorConstants::DuplicateOffsetPixels));
-            fg.moveTop(qMax(0.0, fg.y() + EditorConstants::DuplicateOffsetPixels));
+        if (ZoneManager::isFixedMode(zone)) {
+            // Fixed mode: convert the pixels to this layout's unit, offset
+            // them when asked, skip 0-1 clamping for fixed keys. The size floor
+            // keeps a zone shrunk by the unit change above the minimum
+            // addZoneFromMap accepts.
+            const QRectF copied = m_zoneManager->extractFixedGeometry(zone);
+            QRectF fg(copied.topLeft() * fixedUnitFactor, copied.size() * fixedUnitFactor);
+            const qreal offset = withOffset ? EditorConstants::DuplicateOffsetPixels : 0.0;
+            fg.moveLeft(qMax(0.0, fg.x() + offset));
+            fg.moveTop(qMax(0.0, fg.y() + offset));
             fg.setWidth(qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fg.width()));
             fg.setHeight(qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fg.height()));
 
@@ -162,7 +180,7 @@ QStringList EditorController::pasteZones(bool withOffset)
             zone[::PhosphorZones::ZoneJsonKeys::Width] = fg.width() / ss.width();
             zone[::PhosphorZones::ZoneJsonKeys::Height] = fg.height() / ss.height();
         } else {
-            // Relative mode (or fixed without offset): apply relative offset and clamp
+            // Relative mode: apply relative offset and clamp
             qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble() + offsetX;
             qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble() + offsetY;
             qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();

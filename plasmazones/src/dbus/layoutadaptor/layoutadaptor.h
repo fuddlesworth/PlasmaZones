@@ -358,9 +358,10 @@ Q_SIGNALS:
      * Emitted by @c updateLayout (the editor's save path) and by active-layout
      * switches, where the client genuinely needs the whole serialized layout.
      * Usually carries the complete layout JSON (5–20 KB in prod); when the
-     * update targeted an AUTOTILE entry the payload is the caller's raw
-     * autotile-override object (id "autotile:&lt;algorithmId&gt;", not a
-     * serialized layout), so subscribers must not blindly parse it as one.
+     * update targeted an AUTOTILE entry the payload is that algorithm's
+     * override entry as stored, under its id "autotile:&lt;algorithmId&gt;"
+     * (not a serialized layout), so subscribers must not blindly parse it as
+     * one.
      *
      * @c createLayoutFromJson does NOT emit this — a new layout announces
      * itself with @c layoutCreated(id) instead. An active-layout switch is not
@@ -746,7 +747,12 @@ private:
     // getActiveLayoutsForScreens.
     QHash<QString, QString> m_activeAssignmentByScreen;
 
-    // JSON caching for performance
+    // JSON caching for performance. Invalidated by layout edits only, so the
+    // relativeGeometry a fixed zone's JSON carries (Layout::toJson computes it
+    // from the layout's last recalculation) stays the one of the first read
+    // across later recalculations, a scale change included. Nothing reads that
+    // hint from these replies today; a reader that needs the zones' current
+    // proportions must normalize the fixed geometry itself, not rely on it.
     QString m_cachedActiveLayoutJson;
     QUuid m_cachedActiveLayoutId;
     QHash<QUuid, QString> m_cachedLayoutJson; // Cache for individual layouts

@@ -81,6 +81,14 @@ public:
                     SLOT(onStripChanged(QString)));
         bus.connect(Name, ObjectPath, Iface::Scrolling, QStringLiteral("stripContextChanged"), this,
                     SLOT(onStripChanged(QString)));
+        bus.connect(Name, ObjectPath, Iface::Screen, QStringLiteral("screenGeometryChanged"), this,
+                    SLOT(onScreenGeometryChanged(QString)));
+        // A panel added, removed or resized moves the work area under an
+        // unchanged screen rect, which screenGeometryChanged does not report.
+        // The same re-read covers it. An older daemon never emits it, which is
+        // harmless.
+        bus.connect(Name, ObjectPath, Iface::Screen, QStringLiteral("availableGeometryChanged"), this,
+                    SLOT(onScreenGeometryChanged(QString)));
     }
 
     QDBusPendingCall call(const QString& interface, const QString& method, const QVariantList& args) const
@@ -102,6 +110,7 @@ Q_SIGNALS:
     void focusRequested(const QString& windowId);
     void focusedWindowChanged(const QString& screenId, const QString& windowId);
     void stripChanged(const QString& screenId);
+    void screenGeometryChanged(const QString& screenId);
 
 private Q_SLOTS:
     void onScreenLayoutChanged(const QString& screenId)
@@ -173,6 +182,10 @@ private Q_SLOTS:
     void onStripChanged(const QString& screenId)
     {
         Q_EMIT stripChanged(screenId);
+    }
+    void onScreenGeometryChanged(const QString& screenId)
+    {
+        Q_EMIT screenGeometryChanged(screenId);
     }
 };
 

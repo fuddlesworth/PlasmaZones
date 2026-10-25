@@ -32,6 +32,7 @@ namespace Ax = ScrollTestUtils::Ax;
 using ScrollTestUtils::engineParams;
 using ScrollTestUtils::makeGappedProviderEngine;
 using ScrollTestUtils::makeProviderEngine;
+using ScrollTestUtils::tileRectOn;
 
 using DragTarget = PhosphorEngine::IPlacementEngine::DragInsertTarget;
 
@@ -105,6 +106,14 @@ private Q_SLOTS:
     void commitLandsTheDropWhereTheIndicatorPromised();
     void commitCentersTheDropUnderAlwaysCentering();
     void focusReportsAreDroppedWhileAPreviewSteersTheView();
+    void floatedAtOpenDropTakesTheConfiguredWidth();
+    void cancelOfTheActiveColumnsWindowRestoresFocusAndView();
+    void cancelOfAShownNonOwnerTabKeepsTheColumnsHeight();
+    void anOwningTabDroppedBackIntoItsColumnKeepsTheColumnsHeight();
+    void aZeroMotionDropOfAFloatedOwnerKeepsAResizeMadeWhileItFloated();
+    void anUnfloatReclaimsTheColumnAfterItsHeirClosed();
+    void zeroMotionCommitOfADefensivelyDetachedWindowReturnsItToItsSlot();
+    void aMinimumChangedMidHoldIsAppliedAtTheDrop();
 
 private:
     static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
@@ -117,6 +126,31 @@ private:
         for (const QString& id : ids) {
             engine->windowOpened(id, screenId, 0, 0);
         }
+    }
+
+    /// One tabbed column on S1 holding a and b, sized by a at Fixed 500 while
+    /// b carries Fixed 300 of its own, with a on show.
+    static void tabbedPairOwnedByA(ScrollEngine* engine)
+    {
+        const QString s1 = QStringLiteral("S1");
+        openWindows(engine, s1, {QStringLiteral("a"), QStringLiteral("b")});
+        engine->windowFocused(QStringLiteral("a"), s1);
+        engine->consumeWindowIntoColumn(s1); // b joins a's column
+        engine->windowFocused(QStringLiteral("b"), s1);
+        engine->setWindowHeight(WindowHeight::makeFixed(300), s1);
+        engine->toggleColumnTabbed(s1);
+        engine->windowFocused(QStringLiteral("a"), s1);
+        engine->setWindowHeight(WindowHeight::makeFixed(500), s1);
+        QCoreApplication::processEvents();
+    }
+
+    /// The extent owner of the column holding @p windowId on S1, or an empty
+    /// string when the strip does not hold it, which no row passes on.
+    static QString heightOwnerOf(ScrollEngine* engine, const QString& windowId)
+    {
+        const ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+        const int column = state ? state->strip().columnOfWindow(windowId) : -1;
+        return column < 0 ? QString() : state->strip().columns().at(column).heightOwnerId;
     }
 
     /// Where the view sits, in strip pixels. The auto-scroll's whole job.
@@ -170,18 +204,6 @@ private:
     static int rightBandX()
     {
         return ScrollTestUtils::Ax::mainEnd(ScrollTestUtils::defaultScreenRect());
-    }
-
-    /// The rect of @p windowId among visibleTiles, or a null rect.
-    static QRect tileRect(ScrollEngine* engine, const QString& screenId, const QString& windowId)
-    {
-        const auto tiles = engine->visibleTiles(screenId);
-        for (const auto& tile : tiles) {
-            if (tile.windowId == windowId) {
-                return tile.rect;
-            }
-        }
-        return {};
     }
 };
 
@@ -330,7 +352,7 @@ void TestScrollEngineDragInsert::joinTrailColumnIsStableAcrossTicks()
     QVERIFY(state);
 
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
-    const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
+    const QRect rectB = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("b"));
     QVERIFY(!rectB.isNull());
     const QPoint cursor = rectB.center();
 
@@ -531,7 +553,7 @@ void TestScrollEngineDragInsert::hitTestResolvesTargets()
 
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
     // a detached: b settled as the only column (index 0).
-    const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
+    const QRect rectB = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("b"));
     QVERIFY(!rectB.isNull());
 
     // Middle of b: join it as a tile.
@@ -583,8 +605,8 @@ void TestScrollEngineDragInsert::hitTestResolvesStackedTileSlots()
     QVERIFY(state->strip().insertWindowIntoColumnAt(1, 1, QStringLiteral("c"), engineParams()));
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
 
-    const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
-    const QRect rectC = tileRect(engine, QStringLiteral("S1"), QStringLiteral("c"));
+    const QRect rectB = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("b"));
+    const QRect rectC = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("c"));
     QVERIFY(!rectB.isNull());
     QVERIFY(!rectC.isNull());
     // Cross-LEAD half of the first tile: insert before b (model index 0). The
@@ -626,8 +648,8 @@ void TestScrollEngineDragInsert::hitTestMapsThroughAMinimizedTile()
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
 
     // c is hidden, so it has no rect — the `continue` in the cross-axis walk.
-    QVERIFY(tileRect(engine, QStringLiteral("S1"), QStringLiteral("c")).isNull());
-    const QRect rectD = tileRect(engine, QStringLiteral("S1"), QStringLiteral("d"));
+    QVERIFY(tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("c")).isNull());
+    const QRect rectD = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("d"));
     QVERIFY(!rectD.isNull());
 
     // Cross-LEAD half of d: insert BEFORE d, model index 2. Reusing d's
@@ -664,7 +686,7 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     // Preview live but no target hit-tested yet.
     QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S1")).isNull());
 
-    const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
+    const QRect rectB = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("b"));
     QVERIFY(!rectB.isNull());
 
     // New column BEFORE b, aimed from the leading edge: the promise sits
@@ -788,7 +810,7 @@ void TestScrollEngineDragInsert::indicatorRectMatchesTheDropUnderAGap()
     QVERIFY(promised.isValid());
 
     engine->commitDragInsertPreview();
-    const QRect delivered = tileRect(engine, QStringLiteral("S1"), QStringLiteral("a"));
+    const QRect delivered = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("a"));
     QVERIFY(!delivered.isNull());
 
     // SIZE, not position. The indicator resolves the slot in the LIVE view
@@ -822,7 +844,7 @@ void TestScrollEngineDragInsert::indicatorRectMatchesTheDropForANewColumn()
     QVERIFY(promised.isValid());
 
     engine->commitDragInsertPreview();
-    const QRect delivered = tileRect(engine, QStringLiteral("S1"), QStringLiteral("a"));
+    const QRect delivered = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("a"));
     QVERIFY(!delivered.isNull());
 
     // SIZE, not position, for the reason spelled out in
@@ -902,8 +924,8 @@ void TestScrollEngineDragInsert::scrolledStripEdgeSlotsMirror()
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
 
     const QRect screen = ScrollTestUtils::defaultScreenRect();
-    const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
-    const QRect rectC = tileRect(engine, QStringLiteral("S1"), QStringLiteral("c"));
+    const QRect rectB = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("b"));
+    const QRect rectC = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("c"));
     QVERIFY(!rectB.isNull());
     QVERIFY(!rectC.isNull());
 
@@ -2108,7 +2130,7 @@ void TestScrollEngineDragInsert::commitLandsTheDropWhereTheIndicatorPromised()
     QVERIFY(state->strip().viewDetached());
     // The neighbour's near edge is on screen (its column starts at 900 on a
     // 1200px viewport), which is what "the strip did not fly away" means.
-    const QRect neighbour = tileRect(engine, QStringLiteral("S1"), QStringLiteral("a"));
+    const QRect neighbour = tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("a"));
     QVERIFY(!neighbour.isNull());
     QCOMPARE(Ax::mainPos(neighbour), 900);
 }
@@ -2178,6 +2200,268 @@ void TestScrollEngineDragInsert::focusReportsAreDroppedWhileAPreviewSteersTheVie
     QCOMPARE(state->strip().viewAnchor(), anchorBefore);
     QCOMPARE(viewX(engine, QStringLiteral("S1")), viewBefore);
     engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::floatedAtOpenDropTakesTheConfiguredWidth()
+{
+    // A window floated AT OPEN holds a seeded float entry with no tile in it,
+    // whose width is FloatRestore's default-constructed 50%. Dragged into the
+    // strip it must take the configured width, as its unfloat does, and not
+    // that placeholder.
+    QObject owner;
+    auto* settings = new ScrollTestUtils::StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
+    settings->widthValue = 0.25;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setEngineSettings(settings);
+    engine->refreshConfigFromSettings();
+    engine->setFloatPredicate([](const QString& windowId, const QString&) {
+        return windowId == QStringLiteral("floater");
+    });
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("floater")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state && state->isFloating(QStringLiteral("floater")));
+    engine->setFloatPredicate({});
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("floater"), QStringLiteral("S1")));
+    DragTarget target;
+    target.primary = 0;
+    target.newSlot = true;
+    engine->updateDragInsertPreview(target);
+    engine->commitDragInsertPreview();
+
+    QVERIFY(state->strip().containsWindow(QStringLiteral("floater")));
+    QCOMPARE(Ax::mainLen(tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("floater"))),
+             ScrollTestUtils::kMainExtent / 4);
+}
+
+void TestScrollEngineDragInsert::cancelOfTheActiveColumnsWindowRestoresFocusAndView()
+{
+    // Begin's take hands the focus to a neighbour when the dragged window was
+    // the active one, and the view anchor is stored relative to the active
+    // column. An Escape that put the window back without making it active
+    // again left the strip's focus disagreeing with the compositor's, and the
+    // anchor replayed onto the wrong column shifted the view by that column.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    engine->windowFocused(QStringLiteral("b"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("b"));
+    const int anchorBefore = state->strip().viewAnchor();
+    const int viewBefore = viewX(engine, QStringLiteral("S1"));
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+    DragTarget target;
+    target.primary = 0;
+    target.newSlot = true;
+    engine->updateDragInsertPreview(target);
+    engine->cancelDragInsertPreview();
+
+    QCOMPARE(state->strip().windowsInOrder(),
+             (QStringList{QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("b"));
+    QCOMPARE(state->strip().viewAnchor(), anchorBefore);
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), viewBefore);
+}
+
+void TestScrollEngineDragInsert::cancelOfAShownNonOwnerTabKeepsTheColumnsHeight()
+{
+    // A tabbed column takes its extent across the strip from ONE tab, its
+    // height owner, not the tab on show. An Escape of a drag of the shown tab
+    // that does not own it gives the tab back its own Fixed intent, and wrote
+    // it as a bid, which took the column from its owner.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+    engine->windowFocused(QStringLiteral("a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1")); // b joins a's column
+    engine->windowFocused(QStringLiteral("b"), QStringLiteral("S1"));
+    engine->setWindowHeight(WindowHeight::makeFixed(300), QStringLiteral("S1")); // b's own intent, in the stack
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+    engine->windowFocused(QStringLiteral("a"), QStringLiteral("S1"));
+    engine->setWindowHeight(WindowHeight::makeFixed(500), QStringLiteral("S1")); // a sizes the tabbed column
+    QCoreApplication::processEvents();
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    const auto columnOf = [state]() -> const Column& {
+        return state->strip().columns().at(state->strip().columnOfWindow(QStringLiteral("a")));
+    };
+    QCOMPARE(state->strip().columnCount(), 1);
+    QVERIFY(columnOf().display == ColumnDisplay::Tabbed);
+    QCOMPARE(columnOf().heightOwnerId, QStringLiteral("a"));
+    QCOMPARE(state->strip().windowHeightIntent(QStringLiteral("b")), WindowHeight::makeFixed(300));
+
+    engine->windowFocused(QStringLiteral("b"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    const int crossBefore = Ax::crossLen(tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("b")));
+    QVERIFY(crossBefore > 0);
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+    engine->cancelDragInsertPreview();
+    QCoreApplication::processEvents();
+
+    QCOMPARE(columnOf().heightOwnerId, QStringLiteral("a"));
+    QCOMPARE(Ax::crossLen(tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("b"))), crossBefore);
+}
+
+void TestScrollEngineDragInsert::anOwningTabDroppedBackIntoItsColumnKeepsTheColumnsHeight()
+{
+    // The commit twin of the cancel above, for the tab that DOES own the
+    // column. The take hands the extent to the tab left on show, and a drop
+    // that joins the dragged tab back into the column it came from hands it
+    // back, as an Escape would. Left with the heir, the column took b's
+    // height.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    tabbedPairOwnedByA(engine);
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("a")), QStringLiteral("a"));
+    const int crossBefore = Ax::crossLen(tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("a")));
+    QVERIFY(crossBefore > 0);
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    const int hostColumn = state->strip().columnOfWindow(QStringLiteral("b"));
+    QVERIFY2(hostColumn >= 0 && !state->strip().containsWindow(QStringLiteral("a")),
+             "precondition: the take detached a and left b's column");
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("b")), QStringLiteral("b"));
+    DragTarget target;
+    target.primary = hostColumn;
+    target.newSlot = false;
+    target.secondary = -1;
+    engine->updateDragInsertPreview(target);
+    engine->commitDragInsertPreview();
+    QCoreApplication::processEvents();
+
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("a")), state->strip().columnOfWindow(QStringLiteral("b")));
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("a")), QStringLiteral("a"));
+    QCOMPARE(Ax::crossLen(tileRectOn(engine, QStringLiteral("S1"), QStringLiteral("a"))), crossBefore);
+}
+
+void TestScrollEngineDragInsert::aZeroMotionDropOfAFloatedOwnerKeepsAResizeMadeWhileItFloated()
+{
+    // A floated owner's slot names the tab its leave handed the column to.
+    // A zero-motion drop of the float puts it back in its slot, and hands
+    // the column back only while the heir still sizes it the way it
+    // inherited it. Here b was resized while a floated, which is the user's
+    // newer word on the column, so b keeps it.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    tabbedPairOwnedByA(engine);
+    engine->toggleWindowFloat(QStringLiteral("a"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(state->isFloating(QStringLiteral("a")));
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("b")), QStringLiteral("b"));
+    engine->windowFocused(QStringLiteral("b"), QStringLiteral("S1"));
+    engine->setWindowHeight(WindowHeight::makeFixed(350), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("b")), QStringLiteral("b"));
+    QCOMPARE(state->strip().windowHeightIntent(QStringLiteral("b")), WindowHeight::makeFixed(350));
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+    engine->commitDragInsertPreview();
+    QCoreApplication::processEvents();
+
+    QVERIFY(!state->isFloating(QStringLiteral("a")));
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("a")), state->strip().columnOfWindow(QStringLiteral("b")));
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("b")), QStringLiteral("b"));
+}
+
+void TestScrollEngineDragInsert::anUnfloatReclaimsTheColumnAfterItsHeirClosed()
+{
+    // The unfloat's side of the same rule. The heir leaving the column
+    // passes the ownership on through the leave's hand-off, which is no
+    // resize, so the column counts as untouched and the returning owner
+    // takes it back. The tabs run c, a, b so a's stack anchor is c and
+    // survives b's close, and b is the tab that comes on show when a floats.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    const QString s1 = QStringLiteral("S1");
+    openWindows(engine, s1, {QStringLiteral("c"), QStringLiteral("a"), QStringLiteral("b")});
+    engine->windowFocused(QStringLiteral("c"), s1);
+    engine->consumeWindowIntoColumn(s1); // a joins c's column
+    engine->consumeWindowIntoColumn(s1); // and b after it
+    engine->toggleColumnTabbed(s1);
+    engine->windowFocused(QStringLiteral("a"), s1);
+    engine->setWindowHeight(WindowHeight::makeFixed(500), s1);
+    QCoreApplication::processEvents();
+    ScrollState* state = stateFor(engine, s1);
+    QVERIFY(state);
+    QCOMPARE(state->strip().columnCount(), 1);
+    QCOMPARE(state->strip().windowsInOrder(),
+             (QStringList{QStringLiteral("c"), QStringLiteral("a"), QStringLiteral("b")}));
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("a")), QStringLiteral("a"));
+
+    engine->toggleWindowFloat(QStringLiteral("a"), s1);
+    QCoreApplication::processEvents();
+    QVERIFY(state->isFloating(QStringLiteral("a")));
+    QVERIFY2(heightOwnerOf(engine, QStringLiteral("c")) == QStringLiteral("b"), "precondition: b is the heir");
+    engine->windowClosed(QStringLiteral("b"));
+    QCoreApplication::processEvents();
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("c")), QStringLiteral("c"));
+
+    engine->setWindowFloat(QStringLiteral("a"), false, s1);
+    QCoreApplication::processEvents();
+
+    QVERIFY(!state->isFloating(QStringLiteral("a")));
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("a")), state->strip().columnOfWindow(QStringLiteral("c")));
+    QCOMPARE(heightOwnerOf(engine, QStringLiteral("a")), QStringLiteral("a"));
+}
+
+void TestScrollEngineDragInsert::zeroMotionCommitOfADefensivelyDetachedWindowReturnsItToItsSlot()
+{
+    // cancelRestoresADefensivelyDetachedWindow's commit twin. A drop that
+    // resolved no target puts a window back where it was, and for begin's
+    // defensive take that is the slot captured before the take, not the end
+    // of the strip.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(state->strip().insertWindowAt(0, QStringLiteral("ghost"), ColumnWidth{}, ColumnDisplay::Normal,
+                                          engineParams()));
+    QCOMPARE(state->strip().windowsInOrder(), (QStringList{QStringLiteral("ghost"), QStringLiteral("a")}));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("ghost")));
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("ghost"), QStringLiteral("S1")));
+    QVERIFY(!state->strip().containsWindow(QStringLiteral("ghost")));
+    engine->commitDragInsertPreview();
+
+    QCOMPARE(state->strip().windowsInOrder(), (QStringList{QStringLiteral("ghost"), QStringLiteral("a")}));
+}
+
+void TestScrollEngineDragInsert::aMinimumChangedMidHoldIsAppliedAtTheDrop()
+{
+    // A window a live preview holds detached sits in no strip and in no float
+    // slot, so a minimum the compositor reports mid-hold had nowhere to land,
+    // and the commit or the cancel put the window back with the minimum it had
+    // at begin. Both endings are pinned.
+    const QSize min = Ax::t(QSize(250, 0));
+    for (const bool commit : {true, false}) {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+        openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+        QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+        engine->windowMinSizeUpdated(QStringLiteral("b"), min.width(), min.height());
+        if (commit) {
+            DragTarget target;
+            target.primary = 0;
+            target.newSlot = true;
+            engine->updateDragInsertPreview(target);
+            engine->commitDragInsertPreview();
+        } else {
+            engine->cancelDragInsertPreview();
+        }
+        QVERIFY2(stateFor(engine, QStringLiteral("S1"))->strip().containsWindow(QStringLiteral("b")),
+                 commit ? "the commit tiles b" : "the cancel tiles b");
+        QCOMPARE(engine->windowMinimumSize(QStringLiteral("b")), min);
+    }
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineDragInsert)

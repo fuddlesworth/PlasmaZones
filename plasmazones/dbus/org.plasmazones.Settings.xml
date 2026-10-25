@@ -167,7 +167,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Asynchronously request the running-windows list. The daemon emits runningWindowsRequested to the KWin effect; the reply is delivered via the runningWindowsAvailable signal."/>
         </method>
         <method name="provideRunningWindows">
-            <annotation name="org.gtk.GDBus.DocString" value="KWin effect to daemon callback: deliver the enumerated running-windows list in response to requestRunningWindows. The daemon re-broadcasts it via runningWindowsAvailable."/>
+            <annotation name="org.gtk.GDBus.DocString" value="KWin effect to daemon callback: deliver the enumerated running-windows list in response to requestRunningWindows. The daemon re-broadcasts it via runningWindowsAvailable. Only the registered compositor bridge may call it, and any other caller is answered with AccessDenied."/>
             <arg name="json" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON array: [{windowClass, appName, caption}, ...]."/>
             </arg>

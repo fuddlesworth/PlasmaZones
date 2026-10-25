@@ -31,21 +31,22 @@ ScreenGeometries resolveScreenGeometries(PhosphorScreens::ScreenManager* mgr, co
     return {mgr->screenGeometry(screenId), mgr->screenAvailableGeometry(screenId)};
 }
 
-QRectF calculateZoneGeometry(Zone* zone, QScreen* screen)
+QRectF calculateZoneGeometry(Zone* zone, QScreen* screen, qreal scale)
 {
     if (!zone || !screen) {
         return QRectF();
     }
-    return zone->calculateAbsoluteGeometry(QRectF(screen->geometry()));
+    return zone->calculateAbsoluteGeometry(QRectF(screen->geometry()), scale);
 }
 
-QRectF calculateZoneGeometryInAvailableArea(PhosphorScreens::ScreenManager* mgr, Zone* zone, QScreen* screen)
+QRectF calculateZoneGeometryInAvailableArea(PhosphorScreens::ScreenManager* mgr, Zone* zone, QScreen* screen,
+                                            qreal scale)
 {
     if (!zone || !screen) {
         return QRectF();
     }
     const QRectF availableGeom = mgr ? mgr->actualAvailableGeometry(screen) : screen->availableGeometry();
-    return zone->calculateAbsoluteGeometry(availableGeom);
+    return zone->calculateAbsoluteGeometry(availableGeom, scale);
 }
 
 struct EdgeBoundaries
@@ -56,12 +57,15 @@ struct EdgeBoundaries
     bool bottom = false;
 };
 
-EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom)
+EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom, qreal scale)
 {
     EdgeBoundaries edges;
     if (zone->isFixedGeometry()) {
         constexpr qreal pixelTolerance = 5.0;
-        QRectF fixedGeo = zone->fixedGeometry();
+        // In the screen's logical units, which is what screenGeom is: a
+        // device-pixel zone's raw right edge runs past the logical width on a
+        // scaled output and would read as touching the edge when it does not.
+        const QRectF fixedGeo = Zone::fixedGeometryToLogical(zone->fixedGeometry(), zone->fixedGeometryDivisor(scale));
         edges.left = (fixedGeo.left() < pixelTolerance);
         edges.top = (fixedGeo.top() < pixelTolerance);
         edges.right = (fixedGeo.right() > (screenGeom.width() - pixelTolerance));
@@ -78,11 +82,11 @@ EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom)
 }
 
 QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const QRectF& referenceGeom, int innerGap,
-                               const ::PhosphorLayout::EdgeGaps& outerGaps,
+                               const ::PhosphorLayout::EdgeGaps& outerGaps, qreal scale,
                                const PhosphorScreens::VirtualScreenDef::PhysicalEdges& physEdges = {true, true, true,
                                                                                                     true})
 {
-    EdgeBoundaries edges = detectEdgeBoundaries(zone, referenceGeom);
+    EdgeBoundaries edges = detectEdgeBoundaries(zone, referenceGeom, scale);
     qreal leftAdj = (edges.left && physEdges.left) ? outerGaps.left : (innerGap / 2.0);
     qreal topAdj = (edges.top && physEdges.top) ? outerGaps.top : (innerGap / 2.0);
     qreal rightAdj = (edges.right && physEdges.right) ? outerGaps.right : (innerGap / 2.0);
@@ -95,12 +99,15 @@ QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const QRectF&
         geoF.setHeight(1.0);
     }
     // Clamp the gapped rect into the reference (screen / available) area.
-    // A well-formed zone is a subdivision of the screen, so its gapped rect
-    // is already inside referenceGeom and the contains() check makes this a
-    // true no-op. It acts only on malformed layout data — a hand-edited
-    // layout whose relative x+width or y+height exceeds 1.0 — which would
-    // otherwise place a window past the screen edge. Boundary validation on
-    // untrusted layout input, not a workaround.
+    // A well-formed relative zone is a subdivision of the screen, so its
+    // gapped rect is already inside referenceGeom and the contains() check
+    // makes this a true no-op. It acts in two cases. One is malformed relative
+    // data, a hand-edited layout whose x+width or y+height exceeds 1.0. The
+    // other is a fixed zone that legitimately overflows the area it resolves
+    // against: fixed pixels are authored against one screen, and the same
+    // layout on a smaller or panel-reduced one (or a negative fixed offset,
+    // which the format allows) reaches past its edge. Either way the window
+    // would otherwise be placed past the screen edge.
     if (referenceGeom.isValid() && !referenceGeom.contains(geoF)) {
         geoF = geoF.intersected(referenceGeom);
     }
@@ -123,21 +130,25 @@ QRectF getZoneGeometryWithGaps(PhosphorScreens::ScreenManager* mgr, Zone* zone, 
     if (!zone || !screen) {
         return QRectF();
     }
+    // The id is only ever read through the manager, so without one there is
+    // nothing to resolve it for.
+    const QString resolvedId =
+        (mgr && screenId.isEmpty()) ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
+    const qreal scale = screenScale(mgr, resolvedId, screen);
     QRectF geom;
     if (useAvailableGeometry) {
-        geom = calculateZoneGeometryInAvailableArea(mgr, zone, screen);
+        geom = calculateZoneGeometryInAvailableArea(mgr, zone, screen, scale);
     } else {
-        geom = calculateZoneGeometry(zone, screen);
+        geom = calculateZoneGeometry(zone, screen, scale);
     }
     QRectF screenGeom = useAvailableGeometry
         ? (mgr ? mgr->actualAvailableGeometry(screen) : screen->availableGeometry())
         : screen->geometry();
     PhosphorScreens::VirtualScreenDef::PhysicalEdges physEdges{true, true, true, true};
     if (mgr) {
-        QString resolvedId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
         physEdges = mgr->physicalEdgesFor(resolvedId);
     }
-    return applyGapsToZoneGeometry(geom, zone, screenGeom, innerGap, outerGaps, physEdges);
+    return applyGapsToZoneGeometry(geom, zone, screenGeom, innerGap, outerGaps, scale, physEdges);
 }
 
 QRectF getZoneGeometryWithGaps(PhosphorScreens::ScreenManager* mgr, Zone* zone, const QRect& screenGeometry,
@@ -149,12 +160,13 @@ QRectF getZoneGeometryWithGaps(PhosphorScreens::ScreenManager* mgr, Zone* zone, 
         return QRectF();
     }
     QRectF referenceGeom = useAvailableGeometry ? QRectF(availableGeometry) : QRectF(screenGeometry);
-    QRectF geom = zone->calculateAbsoluteGeometry(referenceGeom);
+    const qreal scale = screenId.isEmpty() ? 0.0 : screenScale(mgr, screenId);
+    QRectF geom = zone->calculateAbsoluteGeometry(referenceGeom, scale);
     if (!screenId.isEmpty() && mgr) {
         auto pe = mgr->physicalEdgesFor(screenId);
-        return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps, pe);
+        return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps, scale, pe);
     }
-    return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps);
+    return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps, scale);
 }
 
 QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManager* mgr, Zone* zone, QScreen* screen,
@@ -187,6 +199,20 @@ QRect getZoneGeometryForScreen(PhosphorScreens::ScreenManager* mgr, Zone* zone, 
     return geoF.isValid() ? PhosphorGeometry::snapToRect(geoF) : QRect();
 }
 
+qreal screenScale(PhosphorScreens::ScreenManager* mgr, const QString& screenId, QScreen* screen)
+{
+    if (!mgr) {
+        return 0.0;
+    }
+    if (!screenId.isEmpty()) {
+        const PhosphorScreens::PhysicalScreen physical = mgr->physicalScreenFor(screenId);
+        if (physical.isValid()) {
+            return mgr->logicalScale(physical);
+        }
+    }
+    return screen ? mgr->logicalScale(screen) : 0.0;
+}
+
 QRectF effectiveScreenGeometry(PhosphorScreens::ScreenManager* mgr, Layout* layout, QScreen* screen)
 {
     if (!screen) {
@@ -206,6 +232,13 @@ QRectF effectiveScreenGeometry(PhosphorScreens::ScreenManager* mgr, Layout* layo
             return QRectF(geom);
         }
         return availGeom.isValid() ? QRectF(availGeom) : QRectF(geom);
+    }
+    // The rule getZoneGeometryForScreenF follows: a virtual screen the manager
+    // cannot resolve has no frame of its own. findByIdOrName would hand back
+    // its physical parent, and measuring against that lays the layout out
+    // across every sibling at once.
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        return QRectF();
     }
     QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     return effectiveScreenGeometry(mgr, layout, screen);

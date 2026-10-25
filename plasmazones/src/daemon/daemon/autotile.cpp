@@ -213,6 +213,11 @@ void Daemon::updateEngineScreens()
                 [this]() {
                     m_updateEngineScreensQueued = false;
                     updateEngineScreens();
+                    // The re-run is a pass of its own, with no caller to
+                    // consume the snap-zone half of the windows it releases
+                    // (the nested caller's flush stood down for the outer
+                    // pass's consumer), so it consumes it here.
+                    flushPendingSnapZoneRestores();
                 },
                 Qt::QueuedConnection);
         }
@@ -793,10 +798,13 @@ void Daemon::reconcileActiveAssignments()
 }
 
 /**
- * @brief Deactivate autotile: clear assignments, restore manual layout, resnap windows.
+ * @brief Deactivate autotile: flip every autotile assignment to Snapping,
+ *        keeping each context's snapping layout and tiling algorithm, and set
+ *        an active layout when there is none. It resnaps nothing.
  *
  * @note Callers MUST call updateEngineScreens() + updateLayoutFilter()
- *       afterward to derive per-screen state and update the layout model.
+ *       afterward to derive per-screen state and update the layout model, and
+ *       resnap the screens that left tiling themselves.
  */
 void Daemon::handleAutotileDisabled()
 {
@@ -821,76 +829,30 @@ void Daemon::handleAutotileDisabled()
         m_layoutManager->clearAutotileAssignments();
     }
 
-    // Some screens may have entered autotile without ever having a snap layout
-    // assigned (fresh installs, imported configs). For those, assignmentEntry's
-    // snappingLayout is empty, and layoutForScreen() would fall through to the
-    // default layout — which is fine except the overlay/layout model prefers
-    // an explicit per-screen assignment. Fill those in individually without
-    // clobbering screens that already have a valid snap layout.
-    if (m_layoutManager && m_screenManager) {
-        const QString activity = currentActivity();
-        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-
+    // A context that entered autotile without ever having a snap layout
+    // (a fresh install, an imported config) is left without one. Its flipped
+    // entry carries no snapping layout, so layoutForScreen() falls through to
+    // the default layout, the same answer any unassigned context gets.
+    //
+    // This used to write the fallback layout into every such context, and
+    // that write was destructive in both of its halves. It deleted the
+    // activity-scoped entry first, and with it the tiling algorithm the flip
+    // above had just kept for restoreAutotileAssignments, so turning tiling
+    // back on could not restore that activity. And the entry it wrote was a
+    // new rule for the screen and its current desktop at the top priority,
+    // which outranks the flipped entry wherever that one is broader (a
+    // screen-wide or activity entry) and kept those contexts in Snapping
+    // after the restore flipped their own entry back to Autotile. Nothing
+    // needs the write, because assignment resolution is per slot
+    // (LayoutRegistry::resolveAssignmentEntry): a broader rule's snapping
+    // layout fills the empty slot where one exists, and layoutForScreen()
+    // reads a slot still empty as the default layout.
+    if (m_layoutManager) {
         PhosphorZones::Layout* fallbackLayout = m_layoutManager->activeLayout();
         if (!fallbackLayout && !m_layoutManager->layouts().isEmpty()) {
             fallbackLayout = m_layoutManager->layouts().first();
         }
-
-        {
-            QSignalBlocker blocker(m_layoutManager.get());
-            // Suppress the RECONCILE consumer of rulesChanged, not the whole store
-            // — same rationale as the clearAutotileAssignments block above. One
-            // reconcile is driven explicitly at the end by the caller.
-            QScopedValueRollback<bool> reconcileGuard(m_suppressAssignmentReconcile, true);
-            for (const QString& screenId : effectiveIds) {
-                // Per-output virtual desktops (#648): each screen resolves its own desktop.
-                const int desktop = currentDesktopForScreen(screenId);
-                const QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
-                // The OPT-OUT test alone widens to the empty-activity entry.
-                // The cascade returns the most specific entry WHOLE rather
-                // than merging fields, and clearAutotileAssignments leaves
-                // exactly the shape that hides a broader opt-out: flipping an
-                // Autotile entry to Snapping preserves tilingAlgorithm, not
-                // snappingLayout. Without the widening the skip missed,
-                // parseUuid("") failed, and the loop deleted the activity
-                // entry and overwrote the broader one with the fallback —
-                // silently destroying the user's stored no-layout choice on
-                // any system using activities.
-                //
-                // Deliberately scoped to this test rather than to
-                // existingSnapId itself: the valid-UUID arm below decides
-                // whether this context already has a usable layout of its
-                // OWN, and answering that with a broader entry's layout would
-                // leave the empty activity-scoped entry in place while
-                // skipping the fill this loop exists to perform.
-                QString optOutProbe = existingSnapId;
-                if (optOutProbe.isEmpty() && !activity.isEmpty()) {
-                    optOutProbe = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
-                }
-                if (optOutProbe == PhosphorZones::NoSnappingLayout) {
-                    // The explicit opt-out IS a stored choice, not a missing
-                    // assignment: parseUuid("none") fails like a dangling id
-                    // would, and without this skip the loop replaces the
-                    // opt-out with the fallback layout (after deleting the
-                    // activity-scoped entry that held it).
-                    continue;
-                }
-                const auto existingSnapUuid = Utils::parseUuid(existingSnapId);
-                PhosphorZones::Layout* existing =
-                    existingSnapUuid ? m_layoutManager->layoutById(*existingSnapUuid) : nullptr;
-                if (existing) {
-                    continue; // Per-screen snap layout already valid — don't overwrite.
-                }
-                if (!fallbackLayout) {
-                    continue;
-                }
-                if (!activity.isEmpty()) {
-                    m_layoutManager->clearAssignment(screenId, desktop, activity);
-                }
-                m_layoutManager->assignLayout(screenId, desktop, QString(), fallbackLayout);
-            }
-        }
-        // Set active layout OUTSIDE the blocker so activeLayoutChanged fires
+        // Set active layout OUTSIDE the blockers so activeLayoutChanged fires
         // and UnifiedLayoutController syncs its internal state.
         if (fallbackLayout && !m_layoutManager->activeLayout()) {
             m_layoutManager->setActiveLayout(fallbackLayout);
@@ -911,11 +873,48 @@ void Daemon::handleAutotileDisabled()
     // windowsReleased clears floating state before windows are resnapped.
 }
 
+int Daemon::restoreTilingAssignments()
+{
+    if (!m_layoutManager) {
+        return 0;
+    }
+    // Pre-save snap-float state BEFORE anything flips a context to autotile.
+    // captureWindowPlacement routes by the window's CURRENT mode (see the
+    // contract in presaveSnapFloats), so the snap slot is only recorded while
+    // modeForScreen still answers Snapping. The restore below flips whole
+    // contexts to Autotile, so running the presave after it would route the
+    // capture to the autotile engine and lose exactly the float this exists to
+    // preserve.
+    presaveSnapFloats();
+
+    // THEN restore every context a previous global disable neutered. The
+    // disable walks all desktops and activities, while the conversion in
+    // handleSnappingToAutotile only ever writes the current desktop, so without
+    // this an off/on round trip left desktops 2..N and every activity-pinned
+    // context stranded in Snapping with no way back. Running it ahead of the
+    // conversion also means a restored current-desktop screen is already
+    // Autotile by the time the conversion runs, so its "skip screens already on
+    // autotile" guard preserves the algorithm the restore just put back rather
+    // than overwriting it with the global default.
+    //
+    // Suppressed the same way the conversion is, and for the same reason: each
+    // flipped rule emits RuleStore::rulesChanged synchronously, so an
+    // unsuppressed restore would drive a full reconcile per rule over a
+    // half-restored set.
+    QSignalBlocker blocker(m_layoutManager.get());
+    QScopedValueRollback<bool> reconcileGuard(m_suppressAssignmentReconcile, true);
+    return m_layoutManager->restoreAutotileAssignments();
+}
+
 /**
- * @brief Activate autotile: presave snap floats, restore every neutered
- *        context, then convert the screens still on snapping.
+ * @brief Activate autotile with snapping off: presave snap floats, restore
+ *        every neutered context, then convert the current-desktop screens
+ *        still on snapping.
  *
- * Assigns autotile layout to every screen and sets mode to Autotile.
+ * A screen whose resolved assignment is already autotile or scrolling, or the
+ * explicit snapping opt-out, is left alone, and so is one with nothing to
+ * convert to (the global default is the no-algorithm word and the screen kept
+ * no algorithm of its own).
  * @note Callers MUST call updateEngineScreens() + updateLayoutFilter() and
  *       diffActiveAssignments() afterward — this function derives no per-screen
  *       state and publishes nothing itself. See the daemon.h docblock.
@@ -933,34 +932,7 @@ void Daemon::handleSnappingToAutotile()
         defaultAlgoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
     }
 
-    // Pre-save snap-float state BEFORE anything flips a context to autotile.
-    // captureWindowPlacement routes by the window's CURRENT mode (see the
-    // contract in presaveSnapFloats), so the snap slot is only recorded while
-    // modeForScreen still answers Snapping. The restore below flips whole
-    // contexts to Autotile, so running the presave after it would route the
-    // capture to the autotile engine and lose exactly the float this exists to
-    // preserve.
-    presaveSnapFloats();
-
-    // THEN restore every context a previous global disable neutered. The
-    // disable walks all desktops and activities; the per-screen loop below only
-    // ever writes the current desktop, so without this an off/on round trip left
-    // desktops 2..N and every activity-pinned context stranded in Snapping with
-    // no way back. Running it ahead of the loop also means a restored
-    // current-desktop screen is already Autotile by the time the loop runs, so
-    // the "skip screens already on autotile" guard preserves the algorithm the
-    // restore just put back rather than overwriting it with the global default.
-    //
-    // Suppressed the same way the loop below is, and for the same reason: each
-    // flipped rule emits RuleStore::rulesChanged synchronously, so an
-    // unsuppressed restore would drive a full reconcile per rule over a
-    // half-restored set.
-    int restored = 0;
-    {
-        QSignalBlocker blocker(m_layoutManager.get());
-        QScopedValueRollback<bool> reconcileGuard(m_suppressAssignmentReconcile, true);
-        restored = m_layoutManager->restoreAutotileAssignments();
-    }
+    const int restored = restoreTilingAssignments();
 
     // Determine which screens need to be converted to autotile. Skip screens
     // that already have an autotile assignment so we preserve their per-screen
@@ -977,10 +949,10 @@ void Daemon::handleSnappingToAutotile()
         // clobber an explicit scrolling assignment (its id is the
         // "scrolling:" sentinel, which is not an autotile id). The explicit
         // snapping opt-out (the bare reserved word) gets the same protection:
-        // converting it would erase the stored no-layout choice (the write
-        // loop clears the activity-scoped entry holding it), so an opted-out
-        // screen stays opted out across a global autotile enable — the same
-        // contract the scrolling exemption gives explicit assignments.
+        // converting it would take the stored no-layout choice out of force
+        // (it survives only as dormant data on an Autotile entry), so an
+        // opted-out screen stays opted out across a global autotile enable —
+        // the same contract the scrolling exemption gives explicit assignments.
         if (PhosphorLayout::LayoutId::isAutotile(existing) || PhosphorLayout::LayoutId::isScrolling(existing)
             || existing == PhosphorZones::NoSnappingLayout) {
             continue;
@@ -1073,12 +1045,17 @@ void Daemon::handleSnappingToAutotile()
             // trip. (The "skip screens already on autotile" guard above cannot
             // cover this: after a disable, no screen is on autotile.)
             const QString screenAlgo = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
-            const QString algoForScreen = screenAlgo.isEmpty() ? defaultAlgoId : screenAlgo;
-            if (!activity.isEmpty()) {
-                m_layoutManager->clearAssignment(screenId, desktop, activity);
+            const QString autotileId =
+                PhosphorLayout::LayoutId::makeAutotileId(screenAlgo.isEmpty() ? defaultAlgoId : screenAlgo);
+            // An entry of the current activity's own is converted where it
+            // stands rather than deleted: it keeps that activity's snapping
+            // layout for when snapping comes back (assignLayoutById carries
+            // the stored fields over), and it is the entry that answers the
+            // engine mode there whenever it outranks the one written below.
+            if (!activity.isEmpty() && m_layoutManager->hasExplicitAssignment(screenId, desktop, activity)) {
+                m_layoutManager->assignLayoutById(screenId, desktop, activity, autotileId);
             }
-            m_layoutManager->assignLayoutById(screenId, desktop, QString(),
-                                              PhosphorLayout::LayoutId::makeAutotileId(algoForScreen));
+            m_layoutManager->assignLayoutById(screenId, desktop, QString(), autotileId);
         }
     }
     // No reconcile here either, for the same reason as handleAutotileDisabled:
@@ -1343,19 +1320,31 @@ void Daemon::processPendingGeometryUpdates()
     // the cap the pass runs anyway — one recompute during a "drag" longer
     // than any real gesture is the old behaviour, a permanently stale work
     // area is worse.
+    //
+    // The cap is spent once per session the flag reports. The clock keeps
+    // running while the session stays reported active, so every later pass
+    // of a stranded one runs at once instead of being held for another full
+    // cap, and it is invalidated only by a pass that finds no session. A
+    // real drag begun while the flag is still stranded is therefore not held
+    // either, until a pass sees the flag clear.
     if (m_windowDragAdaptor && m_windowDragAdaptor->isDragSessionActive()) {
         if (!m_geometryDeferralClock.isValid()) {
             m_geometryDeferralClock.start();
+            m_geometryDeferralCapLogged = false;
         }
         if (m_geometryDeferralClock.elapsed() < GEOMETRY_DRAG_DEFERRAL_CAP_MS) {
             m_geometryUpdateTimer.start();
             return;
         }
-        qCWarning(lcDaemon) << "Geometry update held" << m_geometryDeferralClock.elapsed()
-                            << "ms for a drag session that is still reported active — running it anyway;"
-                            << "the drag state is most likely stale";
+        if (!m_geometryDeferralCapLogged) {
+            m_geometryDeferralCapLogged = true;
+            qCWarning(lcDaemon) << "Geometry update held" << m_geometryDeferralClock.elapsed()
+                                << "ms for a drag session that is still reported active — running it anyway,"
+                                << "and every later update until it ends; the drag state is most likely stale";
+        }
+    } else {
+        m_geometryDeferralClock.invalidate();
     }
-    m_geometryDeferralClock.invalidate();
 
     // Recalculate zone geometries for each effective screen (virtual or physical)
     // so fixed-mode zones stay normalized correctly against the correct screen geometry.
@@ -1372,7 +1361,8 @@ void Daemon::processPendingGeometryUpdates()
         if (!layout) {
             return;
         }
-        if (m_layoutComputeService->requestRecalculate(layout, screenId, geom)) {
+        if (m_layoutComputeService->requestRecalculate(
+                layout, screenId, geom, PhosphorZones::GeometryUtils::screenScale(m_screenManager.get(), screenId))) {
             pending->insert(screenId, m_layoutComputeService->currentGeneration(screenId));
         }
     };
@@ -1469,8 +1459,9 @@ void Daemon::processPendingGeometryUpdates()
     // screen's current generation IS the newest request for that screen —
     // whatever layout it computed. A competing same-screen request for a
     // DIFFERENT layout only exists when the screen's displayed layout changed
-    // mid-flight (activeLayoutChanged / layoutAssigned), and then ITS result is
-    // exactly the geometry the overlay refresh needs; re-keying by
+    // mid-flight (activeLayoutChanged / layoutAssigned, which request only for
+    // a screen that shows the layout: see recalculateActiveLayout), and then
+    // ITS result is exactly the geometry the overlay refresh needs; re-keying by
     // (screen, layout) would instead strand the barrier waiting for a
     // generation that can never arrive.
     auto conn = std::make_shared<QMetaObject::Connection>();

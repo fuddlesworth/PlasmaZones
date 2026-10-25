@@ -233,9 +233,14 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
     // Resolve the per-context overlay override ONCE for the screen (it is invariant
     // across the screen's zones) and thread it into each zoneToVariantMap call.
     const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
+    // Likewise the rect a fixed zone is laid out in and the output's scale,
+    // which every fixed zone of the layout normalizes against.
+    const QRectF fixedReference = GeometryUtils::effectiveScreenGeometry(m_screenManager, screenLayout, screenId);
+    const qreal fixedScale = PhosphorZones::GeometryUtils::screenScale(m_screenManager, screenId, physScreen);
     for (auto* zone : screenLayout->zones()) {
         if (zone) {
-            zonesList.append(zoneToVariantMap(zone, screenId, physScreen, overlayGeom, screenLayout, overlayOverride));
+            zonesList.append(zoneToVariantMap(zone, screenId, physScreen, overlayGeom, screenLayout, overlayOverride,
+                                              fixedReference, fixedScale));
         }
     }
 
@@ -244,7 +249,8 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
 
 QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,
                                              const QRect& overlayGeometry, PhosphorZones::Layout* layout,
-                                             const PhosphorZones::ContextOverlayOverride& overlayOverride) const
+                                             const PhosphorZones::ContextOverlayOverride& overlayOverride,
+                                             const QRectF& fixedReference, qreal fixedScale) const
 {
     QVariantMap map;
 
@@ -317,8 +323,16 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     }
     map[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode] = resolvedDisplayMode;
 
-    // Relative geometry for LayoutPreview rendering (miniature zone thumbnail)
-    const QRectF relGeo = zone->relativeGeometry();
+    // Relative geometry for LayoutPreview rendering (miniature zone thumbnail).
+    // The stored relative rect is exact for a relative zone. A fixed zone's is
+    // only the hint written when the layout was saved, so it is normalized
+    // against the rect it is laid out in on this screen, at this output's
+    // scale: a layout counting device pixels moves with the scale. The
+    // caller resolves both once for the screen (fixedReference, fixedScale).
+    QRectF relGeo = zone->relativeGeometry();
+    if (zone->isFixedGeometry() && fixedReference.isValid()) {
+        relGeo = zone->normalizedGeometry(fixedReference, fixedScale);
+    }
     QVariantMap relGeoMap;
     relGeoMap[::PhosphorZones::ZoneJsonKeys::X] = relGeo.x();
     relGeoMap[::PhosphorZones::ZoneJsonKeys::Y] = relGeo.y();

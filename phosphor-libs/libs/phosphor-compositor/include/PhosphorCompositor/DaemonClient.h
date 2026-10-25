@@ -53,7 +53,29 @@ public:
         m_lifecycleHandler = handler;
     }
 
-    // Registration
+    /// Register this client as THE compositor bridge. Answers through
+    /// bridgeRegistered or bridgeRejected.
+    ///
+    /// ORDERING: the daemon admits the compositor reports below (every
+    /// notify*, beginDrag / updateDragCursor / endDrag and pruneStaleWindows)
+    /// only from the bus name that registered the bridge, and answers any
+    /// other caller with AccessDenied. Send none of them before
+    /// bridgeRegistered. This client refuses them itself until then, with one
+    /// warning per registration, because a fire-and-forget call would never
+    /// see the daemon's refusal. The queries are not gated.
+    ///
+    /// COMPOSITOR PROCESS ONLY: the daemon accepts a registration only from a
+    /// bus connection owned by the compositor's own process, the one on the
+    /// far end of the daemon's Wayland connection (or a direct child of it
+    /// when that process is kwin_wayland_wrapper). A DaemonClient in any
+    /// other process is answered with a REJECTED session, which arrives here
+    /// as bridgeRejected, so a bridge has to run inside the compositor.
+    ///
+    /// ONE BRIDGE AT A TIME: while a registered bridge's bus name is still on
+    /// the bus, a registration from another name is answered with a REJECTED
+    /// session, which arrives here as bridgeRejected. The same name
+    /// registering again, and any name once the old one has left the bus,
+    /// are accepted.
     void registerBridge(const QString& compositorId, int apiVersion, const QStringList& capabilities);
 
     // Window lifecycle notifications (plugin → daemon)
@@ -152,6 +174,9 @@ private Q_SLOTS:
 private:
     void connectDaemonSignals();
     void disconnectDaemonSignals();
+    /// Whether a compositor report may be sent: only once the bridge is
+    /// registered (see registerBridge). Warns once per registration otherwise.
+    bool reportAdmitted(const char* method);
 
     QDBusServiceWatcher* m_serviceWatcher = nullptr;
     IDragHandler* m_dragHandler = nullptr;
@@ -162,6 +187,9 @@ private:
     bool m_daemonSignalsConnected = false;
     bool m_registrationInFlight = false;
     QString m_sessionId;
+    /// reportAdmitted has warned since the last registration. Appended last
+    /// (installed class).
+    bool m_warnedUnregisteredReport = false;
 };
 
 } // namespace PhosphorCompositor

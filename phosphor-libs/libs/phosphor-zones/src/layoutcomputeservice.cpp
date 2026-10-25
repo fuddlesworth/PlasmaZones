@@ -20,12 +20,11 @@ LayoutComputeService::LayoutComputeService(QObject* parent)
 
     m_thread = new QThread(this);
     m_thread->setObjectName(QStringLiteral("LayoutWorker"));
-    m_worker = new LayoutWorker();
+    m_worker = std::make_unique<LayoutWorker>();
     m_worker->moveToThread(m_thread);
 
-    connect(this, &LayoutComputeService::requestCompute, m_worker, &LayoutWorker::computeGeometries);
-    connect(m_worker, &LayoutWorker::geometriesReady, this, &LayoutComputeService::applyResult);
-    connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
+    connect(this, &LayoutComputeService::requestCompute, m_worker.get(), &LayoutWorker::computeGeometries);
+    connect(m_worker.get(), &LayoutWorker::geometriesReady, this, &LayoutComputeService::applyResult);
 
     m_thread->start();
     qCDebug(lcLayoutLib) << "LayoutComputeService: worker thread started";
@@ -43,12 +42,12 @@ LayoutComputeService::~LayoutComputeService()
         qCWarning(lcLayoutLib) << "LayoutComputeService: worker thread did not quit within 5s — terminating";
         m_thread->terminate();
         m_thread->wait();
-        // The worker's deleteLater is posted into the terminated thread's
-        // event loop, which never runs again — reclaim it directly. Safe: the
-        // thread is fully stopped after wait(), so nothing races the delete.
-        delete m_worker;
-        m_worker = nullptr;
     }
+    // The thread has stopped either way, so its event loop will never run
+    // again and nothing races this. Destroying the worker here rather than
+    // through a deleteLater posted to that loop is what makes the terminated
+    // case and the clean one the same path.
+    m_worker.reset();
 }
 
 void LayoutComputeService::setLayoutManager(LayoutRegistry* manager)
@@ -70,7 +69,8 @@ void LayoutComputeService::setLayoutManager(LayoutRegistry* manager)
     });
 }
 
-bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry)
+bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry,
+                                              qreal screenScale)
 {
     if (!layout || !screenGeometry.isValid()) {
         return false;
@@ -79,20 +79,24 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
     // needsRecalc, not a bare rect comparison: a zone edit at unchanged
     // screen geometry (m_zoneGeometryDirty) must take the worker path or the
     // edited zones keep stale/absent absolute geometry.
-    if (!layout->needsRecalc(screenGeometry)) {
-        // NO generation bump for a no-op: bumping here would supersede an
-        // in-flight worker compute carrying a REAL geometry change — its
-        // result would be discarded as stale while this cached callback
-        // publishes a non-null layout for a generation whose geometry it
-        // never computed, satisfying the caller's barrier with nothing
-        // applied. Publishing under the current generation keeps both the
-        // barrier and any in-flight compute honest.
-        // Contract note: because the no-op path deliberately does NOT bump the
-        // generation, this queued publish can share a generation number with an
-        // in-flight worker compute (geometry flipped back to lastRecalcGeometry
-        // while the intermediate compute is still running) — two results at the
-        // same generation, the worker's second. Barriers must therefore settle
-        // on the LATEST result for a generation, not the first.
+    //
+    // The cached no-op answers only when nothing is in flight for the screen.
+    // With a compute in flight the layout is about to move to THAT request's
+    // frame, so "already there" is not true for long: a request that flips
+    // back to the current frame (or names another layout) must supersede the
+    // in-flight one, and only a real dispatch does that. Its result then finds
+    // the layout already at its frame and publishes without recomputing.
+    if (!layout->needsRecalc(screenGeometry, screenScale) && m_inFlight.value(screenId) == 0) {
+        // NO generation bump for a no-op. Nothing is in flight for this
+        // screen, so the current generation's result has already been
+        // published, and this queued publish repeats it for the new caller.
+        // A newer request made before the callback runs bumps the generation
+        // and turns this into a superseded (null) publish.
+        if (screenScale > 0.0) {
+            // Record the asked-for scale the way a recalculation would, so a
+            // layout the scale cannot move still answers the current one.
+            layout->setLastRecalcGeometry(layout->lastRecalcGeometry(), screenScale);
+        }
         const uint64_t gen = m_screenGeneration.value(screenId);
         const QString sid = screenId;
         const QUuid lid = layout->id();
@@ -109,8 +113,9 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
 
     const uint64_t gen = ++m_screenGeneration[screenId];
     m_trackedLayouts[layout->id()] = layout;
+    ++m_inFlight[screenId];
 
-    LayoutSnapshot snapshot = buildSnapshot(layout, screenId, screenGeometry);
+    LayoutSnapshot snapshot = buildSnapshot(layout, screenId, screenGeometry, screenScale);
     Q_EMIT requestCompute(snapshot, gen);
     return true;
 }
@@ -120,21 +125,26 @@ uint64_t LayoutComputeService::currentGeneration(const QString& screenId) const
     return m_screenGeneration.value(screenId);
 }
 
-void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenGeometry)
+void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenGeometry, qreal screenScale)
 {
-    if (!layout) {
+    if (!layout || !screenGeometry.isValid()) {
         return;
     }
-    layout->recalculateZoneGeometries(screenGeometry);
+    layout->recalculateZoneGeometries(screenGeometry, screenScale);
 }
 
 LayoutSnapshot LayoutComputeService::buildSnapshot(Layout* layout, const QString& screenId,
-                                                   const QRectF& screenGeometry)
+                                                   const QRectF& screenGeometry, qreal screenScale)
 {
     LayoutSnapshot snapshot;
     snapshot.layoutId = layout->id();
     snapshot.screenId = screenId;
     snapshot.screenGeometry = screenGeometry;
+    // Zero keeps the layout's last scale, as recalculateZoneGeometries reads it.
+    snapshot.screenScale = screenScale > 0.0 ? screenScale : layout->lastRecalcScale();
+    snapshot.fixedDivisor = layout->fixedGeometryDivisor(snapshot.screenScale);
+    snapshot.zoneGeometryEpoch = layout->zoneGeometryEpoch();
+    snapshot.syncRecalcEpoch = layout->syncRecalcEpoch();
     snapshot.zones.reserve(layout->zoneCount());
 
     for (const auto* zone : layout->zones()) {
@@ -151,6 +161,12 @@ LayoutSnapshot LayoutComputeService::buildSnapshot(Layout* layout, const QString
 
 void LayoutComputeService::applyResult(const LayoutComputeResult& result)
 {
+    // Every result, stale or not, retires one dispatched compute.
+    auto inFlightIt = m_inFlight.find(result.screenId);
+    if (inFlightIt != m_inFlight.end() && --inFlightIt.value() <= 0) {
+        m_inFlight.erase(inFlightIt);
+    }
+
     auto genIt = m_screenGeneration.constFind(result.screenId);
     if (genIt != m_screenGeneration.constEnd() && result.generation < *genIt) {
         qCDebug(lcLayoutLib) << "LayoutComputeService: discarding stale result for" << result.screenId
@@ -176,43 +192,55 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     }
     Layout* layout = layoutIt->data();
 
-    // needsRecalc, not a bare rect comparison: if zones were edited after the
-    // sync recalc stamped this rect, the worker's freshly computed geometries
-    // are exactly what the edited zones are missing — discarding them here
-    // would publish a non-null layout whose new zones have no absolute
-    // geometry.
-    if (!layout->needsRecalc(result.screenGeometry)) {
-        qCDebug(lcLayoutLib) << "LayoutComputeService: sync path already applied for" << result.screenId;
+    // A synchronous recalculation ran after this snapshot was taken. It
+    // recorded the frame its caller wants NOW, which is newer than the one
+    // this result was asked for, so applying the result would put the layout
+    // back on an older frame (an older scale, or a rect the caller has since
+    // flipped away from). The epoch is per layout, not per screen, so the
+    // layout now holds the newer state for whichever screen that sync named,
+    // which need not be this result's screen. The result publishes the layout
+    // as it stands as the outcome of this generation. The generation itself
+    // is still current, so a null publish would strand the barrier.
+    if (layout->syncRecalcEpoch() != result.syncRecalcEpoch) {
+        qCDebug(lcLayoutLib) << "LayoutComputeService: a later sync recalculation superseded the result for"
+                             << result.screenId;
         publishResult(result.screenId, result.layoutId, layout, result.generation);
         return;
     }
 
+    // needsRecalc, not a bare rect comparison: if zones were edited after the
+    // last pass stamped this rect, the geometries computed below are exactly
+    // what the edited zones are missing — skipping them here would publish a
+    // non-null layout whose new zones have no absolute geometry.
+    if (!layout->needsRecalc(result.screenGeometry, result.screenScale)) {
+        qCDebug(lcLayoutLib) << "LayoutComputeService: sync path already applied for" << result.screenId;
+        // Same rect and nothing to recompute, but record the scale the way a
+        // recalculation would, so lastRecalcScale() stays the current one.
+        layout->setLastRecalcGeometry(result.screenGeometry, result.screenScale);
+        publishResult(result.screenId, result.layoutId, layout, result.generation);
+        return;
+    }
+
+    // The worker computed from the zones and unit the layout held at snapshot
+    // time. If either changed since (a zone added or removed, a zone replaced
+    // by one with the same id, the fixed-geometry unit flipped), those
+    // geometries describe inputs the layout no longer has, and stamping them
+    // as a full recalculation would clear the dirty bit over stale zones. The
+    // frame is still the current request's, so run the same computation again
+    // in place from the layout as it is now.
+    const LayoutComputeResult current = layout->zoneGeometryEpoch() == result.zoneGeometryEpoch
+        ? result
+        : LayoutWorker::compute(buildSnapshot(layout, result.screenId, result.screenGeometry, result.screenScale),
+                                result.generation);
+
     layout->beginBatchModify();
-    for (const auto& computed : result.zones) {
+    for (const auto& computed : current.zones) {
         Zone* zone = layout->zoneById(computed.zoneId);
         if (zone) {
             zone->setGeometry(computed.absoluteGeometry);
         }
     }
-    // Clear the zone-set dirty bit only when this result covered the layout's
-    // CURRENT zones. A zone edited mid-flight (snapshot taken before the
-    // edit) leaves the layout dirty so the next request recomputes it; the
-    // rect is still stamped either way, preserving the pre-existing
-    // rect-comparison behavior for that partial case.
-    bool coversCurrentZones = result.zones.size() == layout->zoneCount();
-    if (coversCurrentZones) {
-        for (const auto& computed : result.zones) {
-            if (!layout->zoneById(computed.zoneId)) {
-                coversCurrentZones = false;
-                break;
-            }
-        }
-    }
-    if (coversCurrentZones) {
-        layout->markRecalculated(result.screenGeometry);
-    } else {
-        layout->setLastRecalcGeometry(result.screenGeometry);
-    }
+    layout->markRecalculated(current.screenGeometry, current.screenScale);
     layout->endBatchModify();
 
     publishResult(result.screenId, result.layoutId, layout, result.generation);

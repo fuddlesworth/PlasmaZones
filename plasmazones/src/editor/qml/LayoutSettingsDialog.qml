@@ -9,13 +9,19 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Layout-specific settings dialog
  *
- * Per-layout gap overrides: zone padding and edge gap can be set
- * independently of the global defaults from System Settings.
+ * Per-layout settings: gap overrides (zone padding and edge gap, set
+ * independently of the global defaults from System Settings), the overlay
+ * style override, the aspect ratio class, and the geometry settings (the
+ * screen area zones occupy, and the unit fixed-size zones count in).
  */
 Kirigami.Dialog {
     id: root
 
     required property var editorController
+    // Preview mode shows an autotile algorithm, whose saved overrides carry
+    // only gaps, the overlay style and visibility. Settings it would drop on
+    // save are hidden rather than offered and silently reverted.
+    readonly property bool layoutOnlySettingsShown: root.editorController ? !root.editorController.previewMode : true
 
     title: i18nc("@title:window", "Layout Settings")
     // Every control here applies its change as it is made, so all the dialog
@@ -24,19 +30,16 @@ Kirigami.Dialog {
     standardButtons: Kirigami.Dialog.Close
     preferredWidth: Kirigami.Units.gridUnit * 22
     padding: Kirigami.Units.largeSpacing
-    // Refresh checkbox/spinbox state every time the dialog opens, so stale
-    // imperative assignments from Connections are overwritten.
+    // Refresh checkbox/spinbox state every time the dialog opens.
     //
-    // EVERY control below is driven imperatively, not by a declarative binding,
-    // and that is the whole design rather than an inconsistency. A QQC2 control
-    // severs its value binding permanently the first time the user touches it,
-    // so a control that carried both would show the right value until first use
-    // and a stale one for the rest of the dialog's life. This dialog is
-    // persistent (it survives close and reopen across layout switches), which
-    // is exactly when that stale value becomes visible. The re-sync here and
-    // the Connections below are the only thing keeping these controls honest.
-    // The two comments further down call this out for the combos, where the
-    // failure is most surprising, and it applies to all of them.
+    // A user click does NOT sever a control's declarative binding (the
+    // control writes its value from C++). A JS assignment does, and the gap
+    // and overlay controls below are written from here and from the
+    // Connections, so once those writes have run, the writes are what keep
+    // those controls current. That is also why the re-sync must run on open:
+    // the dialog is persistent across layout switches. The aspect ratio combo
+    // and the two geometry checkboxes are never written from JS, so their
+    // bindings stay alive and need no re-sync.
     onOpened: {
         if (!root.editorController)
             return;
@@ -50,12 +53,6 @@ Kirigami.Dialog {
         perSideBottomSpin.value = root.editorController.gaps.outerGapBottom >= 0 ? root.editorController.gaps.outerGapBottom : root.editorController.gaps.globalOuterGapBottom;
         perSideLeftSpin.value = root.editorController.gaps.outerGapLeft >= 0 ? root.editorController.gaps.outerGapLeft : root.editorController.gaps.globalOuterGapLeft;
         perSideRightSpin.value = root.editorController.gaps.outerGapRight >= 0 ? root.editorController.gaps.outerGapRight : root.editorController.gaps.globalOuterGapRight;
-        fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
-        // aspectRatioCombo's declarative `currentIndex` binding dies the first
-        // time the user activates the combo (QQC2), so this imperative re-sync
-        // is load-bearing: without it the persistent dialog shows a stale class
-        // on reopen after a layout switch. Same pattern as overlayDisplayModeCombo.
-        aspectRatioCombo.currentIndex = Math.max(0, Math.min(root.editorController.aspectRatioClass, aspectRatioCombo.count - 1));
         overlayDisplayModeOverrideCheck.checked = root.editorController.hasOverlayDisplayModeOverride;
         overlayDisplayModeCombo.currentIndex = Math.max(0, Math.min(root.editorController.hasOverlayDisplayModeOverride ? root.editorController.overlayDisplayMode : root.editorController.globalOverlayDisplayMode, 1));
     }
@@ -113,14 +110,12 @@ Kirigami.Dialog {
                 overlayDisplayModeCombo.currentIndex = Math.max(0, Math.min(root.editorController.globalOverlayDisplayMode, 1));
         }
 
-        function onAspectRatioClassChanged() {
-            // The combo's declarative binding is severed on first user
-            // activation (QQC2), so layout switches/loads must re-sync it here.
-            aspectRatioCombo.currentIndex = Math.max(0, Math.min(root.editorController.aspectRatioClass, aspectRatioCombo.count - 1));
-        }
-
-        function onUseFullScreenGeometryChanged() {
-            fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
+        // Every control here writes layout state, so the dialog must not
+        // outlive the layout session it was opened for: a forwarded template
+        // launch flips the editor into template mode underneath it.
+        function onEditorModeChanged() {
+            if (root.editorController.editorMode !== 0)
+                root.close();
         }
 
         target: root.editorController
@@ -444,11 +439,13 @@ Kirigami.Dialog {
         }
 
         Kirigami.Separator {
+            visible: root.layoutOnlySettingsShown
             Layout.fillWidth: true
         }
 
         // ─── Aspect Ratio section ────────────────────────────────
         ColumnLayout {
+            visible: root.layoutOnlySettingsShown
             spacing: Kirigami.Units.smallSpacing
             Layout.fillWidth: true
 
@@ -479,9 +476,10 @@ Kirigami.Dialog {
                     id: aspectRatioCombo
 
                     model: [i18nc("@item:inlistbox aspect ratio class", "Any"), i18nc("@item:inlistbox aspect ratio class", "Standard (16:9)"), i18nc("@item:inlistbox aspect ratio class", "Ultrawide (21:9)"), i18nc("@item:inlistbox aspect ratio class", "Super-Ultrawide (32:9)"), i18nc("@item:inlistbox aspect ratio class", "Portrait (9:16)")]
-                    // Clamped like the two imperative re-syncs (onOpened and
-                    // onAspectRatioClassChanged): a class outside the model's range
-                    // would blank the combo rather than fall back to a real entry.
+                    // Clamped: a class outside the model's range would blank
+                    // the combo rather than fall back to a real entry. Nothing
+                    // assigns currentIndex from JS, so this binding stays live
+                    // across activations and layout switches.
                     currentIndex: root.editorController ? Math.max(0, Math.min(root.editorController.aspectRatioClass, aspectRatioCombo.count - 1)) : 0
                     Layout.fillWidth: true
                     Accessible.name: i18nc("@label", "Aspect ratio class")
@@ -495,11 +493,13 @@ Kirigami.Dialog {
         }
 
         Kirigami.Separator {
+            visible: root.layoutOnlySettingsShown
             Layout.fillWidth: true
         }
 
         // ─── Geometry section ────────────────────────────────
         ColumnLayout {
+            visible: root.layoutOnlySettingsShown
             spacing: Kirigami.Units.smallSpacing
             Layout.fillWidth: true
 
@@ -509,7 +509,7 @@ Kirigami.Dialog {
             }
 
             Label {
-                text: i18nc("@info", "Control which screen area zones occupy.")
+                text: i18nc("@info", "Control which screen area zones occupy and how fixed sizes are measured.")
                 wrapMode: Text.WordWrap
                 opacity: 0.7
                 Layout.fillWidth: true
@@ -527,6 +527,34 @@ Kirigami.Dialog {
                     if (root.editorController)
                         root.editorController.useFullScreenGeometry = checked;
                 }
+            }
+
+            CheckBox {
+                id: physicalPixelsCheck
+
+                text: i18nc("@option:check", "Fixed sizes count physical pixels")
+                checked: root.editorController ? root.editorController.fixedGeometryInDevicePixels : false
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Accessible.description: physicalPixelsHint.text
+                onToggled: {
+                    if (root.editorController)
+                        root.editorController.fixedGeometryInDevicePixels = checked;
+                }
+            }
+
+            Label {
+                id: physicalPixelsHint
+
+                // Starts where the checkbox's own text starts, so the hint
+                // reads as that option's description.
+                readonly property real textIndent: physicalPixelsCheck.Layout.leftMargin + physicalPixelsCheck.leftPadding + (physicalPixelsCheck.indicator ? physicalPixelsCheck.indicator.width : 0) + physicalPixelsCheck.spacing
+
+                text: i18nc("@info", "Fixed-size zones cover exactly the number of screen pixels you enter, whatever the display scaling.")
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+                Layout.fillWidth: true
+                Layout.leftMargin: textIndent
+                Layout.maximumWidth: root.preferredWidth - root.padding * 2 - textIndent
             }
         }
     }

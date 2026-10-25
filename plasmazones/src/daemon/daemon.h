@@ -598,33 +598,54 @@ private:
     SeedScope seedScopeFor(const QString& screenId, int desktop) const;
 
     /**
-     * @brief Flip every autotile assignment to Snapping and restore each
-     *        screen's saved snap layout. Caller is responsible for the
-     *        post-conditioning calls (updateEngineScreens, updateLayoutFilter,
-     *        snap resnap). Clears no autotile-floating state of its own: each
-     *        window's cross-mode float lives only in its unified WindowPlacement
-     *        record, which the resnap at the call site consumes (see the tail
+     * @brief Flip every autotile assignment to Snapping. Every context goes,
+     *        on every desktop and activity, and each keeps its snapping layout
+     *        (it snaps into that one while tiling is off) and its tiling
+     *        algorithm (restoreTilingAssignments revives it). A context with
+     *        no snapping layout of its own is left without one, and nothing
+     *        is written for it: its empty slot resolves to the default
+     *        layout, as any unassigned context's does. Also
+     *        sets an active layout when there is none. The caller does the
+     *        rest: updateEngineScreens, updateLayoutFilter and the resnap of
+     *        the screens that left tiling. Clears no autotile-floating state of
+     *        its own: each window's cross-mode float lives only in its unified
+     *        WindowPlacement record, which that resnap consumes (see the tail
      *        comment in autotile.cpp).
      */
     void handleAutotileDisabled();
 
     /**
-     * @brief Activate autotile: restore every neutered context, then convert the
-     *        current-desktop screens still on snapping.
+     * @brief Revive every context a global tiling disable flipped to Snapping:
+     *        presave snap floats (which must happen while the contexts still
+     *        read as Snapping), then flip back every context-assignment rule
+     *        sitting in Snapping while carrying a tiling algorithm, on every
+     *        desktop and activity. Returns how many it flipped. The settings
+     *        handler runs it on every Tiling-on edge, and through
+     *        handleSnappingToAutotile when snapping is off as well.
+     */
+    int restoreTilingAssignments();
+
+    /**
+     * @brief Activate autotile with snapping off: restore every neutered
+     *        context, then convert the current-desktop screens still on
+     *        snapping.
      *
-     * Runs in three stages. It first presaves snap floats (which must happen
-     * while the contexts still read as Snapping), then performs a GLOBAL
-     * cross-context restore of every context-assignment rule sitting in Snapping
-     * while carrying a tiling algorithm, then converts the effective screens
-     * whose current-desktop assignment is still not autotile. Screens already on
-     * autotile (including ones the restore just flipped) keep their per-screen
-     * algorithm customisation. Not idempotent in the engine sense: a call with
-     * nothing left to restore or convert returns before touching engine state,
-     * a restore-only call leaves the engine's global algorithm alone (restored
-     * contexts carry their own), and the presave runs on every call. The caller
-     * must drive diffActiveAssignments() afterwards — this function deliberately
-     * publishes nothing itself (see the tail of Daemon::handleSnappingToAutotile
-     * in autotile.cpp).
+     * Runs in three stages: restoreTilingAssignments (the presave and the
+     * GLOBAL cross-context restore), then the conversion of the effective
+     * screens whose current-desktop assignment is still snapping, skipping
+     * scrolling screens, the snapping opt-out, and a screen with nothing to
+     * convert to. Screens already on autotile (including ones the restore
+     * just flipped) keep their per-screen algorithm customisation. The
+     * conversion is persisted, and switching snapping back on does not undo
+     * it: a converted screen stays on tiling until the user assigns it
+     * snapping again. That is deliberate (2.3.3 made the conversion run
+     * whichever switch flips last). Not idempotent in the engine sense: a call with
+     * nothing left to restore or convert returns before touching engine
+     * state, a restore-only call leaves the engine's global algorithm alone
+     * (restored contexts carry their own), and the presave runs on every
+     * call. The caller must drive diffActiveAssignments() afterwards — this
+     * function deliberately publishes nothing itself (see the tail of
+     * Daemon::handleSnappingToAutotile in autotile.cpp).
      */
     void handleSnappingToAutotile();
 
@@ -859,10 +880,12 @@ private:
      *
      * updateEngineScreens' tail drain preserves the zone half for the
      * mode-toggle and autotile-disable paths, which feed it into
-     * preClaimedZoneIds and their batched restore. The context-switch
-     * recomputes (per-screen desktop switch, activity switch, virtual-screen
-     * reconfigure, the tiled-count gates, the rule reconcile) have no such
-     * consumer, so a tiling→snapping demotion there left windows sitting at
+     * preClaimedZoneIds and their batched restore. The other recomputes have
+     * no such consumer: the per-screen desktop switch, the activity switch,
+     * a desktop renumber, the virtual-screen reconfigure, the tiled-count
+     * gate, the rule reconcile, any settings save that runs the derive pass
+     * (the master-switch arm takes its batch first), and updateEngineScreens'
+     * own queued re-run. A tiling→snapping demotion there left windows sitting at
      * their tile rects and the entries lingering for an unrelated later
      * consumer to replay. The entries are complete (window, zones, geometry,
      * screen, desktop), so they are emitted directly as their own batch
@@ -1373,6 +1396,13 @@ private:
     bool m_shuttingDown = false;
     bool m_aboutToQuitConnected = false;
 
+    /// The startup welcome OSD is waiting for the first activity KActivities
+    /// reports (finalizeStartup). The activity handler (connectDesktopActivity)
+    /// shows it for the first non-empty one in place of its switch OSD, and
+    /// the fallback timer shows it when KActivities never reports. Whichever
+    /// runs first clears it.
+    bool m_welcomeOsdAwaitsActivity = false;
+
     /// Deadline bumped by `screenRemoved` (start.cpp). ~1 s cooldown prevents
     /// OSD shows during output teardown cascades and monitor hot-unplug.
     std::chrono::steady_clock::time_point m_screensSettlingUntil;
@@ -1608,13 +1638,18 @@ private:
     // Geometry update debouncing to prevent cascade of redundant recalculations
     QTimer m_geometryUpdateTimer;
     bool m_geometryUpdatePending = false;
-    /// Runs while processPendingGeometryUpdates is holding a pass back for a
-    /// live drag session. Invalid whenever no hold is in progress, so
-    /// isValid() doubles as "are we currently deferring". Bounds the hold —
-    /// see the deferral block in autotile.cpp for why an unbounded one is not
-    /// safe.
+    /// Runs while processPendingGeometryUpdates sees a live drag session,
+    /// from the first pass that held one back until a pass finds none. Bounds
+    /// the hold, once per session — see the deferral block in autotile.cpp for
+    /// why an unbounded one is not safe.
     QElapsedTimer m_geometryDeferralClock;
+    /// The past-the-cap warning has gone out for the session the clock times.
+    bool m_geometryDeferralCapLogged = false;
     void processPendingGeometryUpdates();
+    /// The activeLayoutChanged recalculation of @p layout, requested against
+    /// a screen that shows it (init_services.cpp says why), or in place
+    /// against the primary when none does.
+    void recalculateActiveLayout(PhosphorZones::Layout* layout);
 
     // After geometry updates settle, request KWin effect to re-apply window positions (panel editor fix)
     QTimer m_reapplyGeometriesTimer;

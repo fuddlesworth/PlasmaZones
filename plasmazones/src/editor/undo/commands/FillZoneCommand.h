@@ -4,19 +4,23 @@
 #pragma once
 
 #include "BaseZoneCommand.h"
-#include <QRectF>
+#include "../../services/ZoneManager.h"
 #include <QString>
 
 namespace PlasmaZones {
 
 /**
  * @brief Command for filling a zone (expand to fill space)
+ *
+ * Replays geometry snapshots, so a fixed zone gets its pixels back verbatim
+ * rather than a relative rect read as pixels.
  */
 class FillZoneCommand : public BaseZoneCommand
 {
 public:
-    explicit FillZoneCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId, const QRectF& oldGeometry,
-                             const QRectF& newGeometry, const QString& text, QUndoCommand* parent = nullptr);
+    explicit FillZoneCommand(QPointer<ZoneManager> zoneManager, const ZoneGeometrySnapshot& oldGeometry,
+                             const ZoneGeometrySnapshot& newGeometry, const QString& text,
+                             QUndoCommand* parent = nullptr);
 
     void undo() override;
     void redo() override;
@@ -26,9 +30,8 @@ public:
     } // No merging
 
 private:
-    QString m_zoneId;
-    QRectF m_oldGeometry;
-    QRectF m_newGeometry;
+    ZoneGeometrySnapshot m_oldGeometry;
+    ZoneGeometrySnapshot m_newGeometry;
 };
 
 } // namespace PlasmaZones

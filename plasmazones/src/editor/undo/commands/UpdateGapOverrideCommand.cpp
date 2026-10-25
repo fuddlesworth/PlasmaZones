@@ -19,7 +19,9 @@ UpdateGapOverrideCommand::UpdateGapOverrideCommand(QPointer<EditorController> ed
                                                 ? PhosphorI18n::tr("Toggle Per-Side Edge Gap", "@action")
                                                 : (type == GapType::OverlayDisplayMode
                                                        ? PhosphorI18n::tr("Change Overlay Style", "@action")
-                                                       : PhosphorI18n::tr("Change Edge Gap", "@action"))))
+                                                       : (type == GapType::AspectRatioClass
+                                                              ? PhosphorI18n::tr("Change Aspect Ratio", "@action")
+                                                              : PhosphorI18n::tr("Change Edge Gap", "@action")))))
                                   : text,
                    parent)
     , m_editorController(editorController)
@@ -73,6 +75,9 @@ void UpdateGapOverrideCommand::applyValue(int value)
         break;
     case GapType::OverlayDisplayMode:
         m_editorController->setOverlayDisplayModeDirect(value);
+        break;
+    case GapType::AspectRatioClass:
+        m_editorController->setAspectRatioClassDirect(value);
         break;
     }
 }

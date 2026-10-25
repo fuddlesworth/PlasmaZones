@@ -93,6 +93,7 @@ private Q_SLOTS:
     void aCloseDuringTheHoldKeepsTheHoldAnswerUntilThePrune();
     void aReopenOfAClosedHeldWindowConsumesTheHoldAnswer();
     void aModeReleaseAnnouncesTheHoldClearBeforeWindowsReleased();
+    void aModeReleaseOfAMultiDesktopWindowAnnouncesTheHoldClear();
 };
 
 void TestScrollEngineFullscreenFloat::theHoldLeavesTheStripPassivelyAndReturnsToTheSlot()
@@ -452,6 +453,63 @@ void TestScrollEngineFullscreenFloat::aModeReleaseAnnouncesTheHoldClearBeforeWin
     QVERIFY2(markerVisibleInRelease,
              "the mode-specific float marker is an INPUT to the windowsReleased handler and must survive the announce");
     QVERIFY(!engine->isFullscreenFloated(kB));
+}
+
+void TestScrollEngineFullscreenFloat::aModeReleaseOfAMultiDesktopWindowAnnouncesTheHoldClear()
+{
+    // The same release for a held window with a column on another desktop of
+    // the screen too. The teardown of the desktop in view keeps the window's
+    // memories while another strip still holds it, and the release then
+    // takes it out of that strip as well, so the hold has to go there, and be
+    // announced, or the window leaves the engine still reading as held.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {kScreen});
+    engine->setCurrentDesktopForScreen(kScreen, 1);
+    for (const QString& id : {kA, kB, kC}) {
+        engine->windowOpened(id, kScreen, 0, 0);
+    }
+    engine->windowFocused(kB, kScreen);
+    QCoreApplication::processEvents();
+    const PhosphorEngine::DesktopSpanQuery spanOf = [](const QString& windowId) {
+        PhosphorEngine::DesktopSpan span;
+        span.known = true;
+        span.desktops = windowId == kB ? QSet<int>{1, 2} : QSet<int>{1};
+        return span;
+    };
+    engine->setCurrentDesktopForScreen(kScreen, 2);
+    QCOMPARE(engine->reconcileDesktopMemberships(kScreen, spanOf).adopted.size(), 1);
+    QCoreApplication::processEvents();
+    QVERIFY2(stateFor(engine) && stateFor(engine)->strip().containsWindow(kB),
+             "precondition: b has a column on desktop 2");
+    engine->setCurrentDesktopForScreen(kScreen, 1);
+    QVERIFY(engine->setWindowFullscreenFloat(kB, true, kScreen));
+    QVERIFY(engine->isFullscreenFloated(kB));
+
+    int order = 0;
+    int passiveAt = -1;
+    int releasedAt = -1;
+    QString announcedScreen = QStringLiteral("unset");
+    QObject::connect(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced, engine,
+                     [&](const QString& windowId, bool floating, const QString& screenId) {
+                         if (windowId == kB && !floating) {
+                             passiveAt = order++;
+                             announcedScreen = screenId;
+                         }
+                     });
+    QObject::connect(engine, &PhosphorEngine::PlacementEngineBase::windowsReleased, engine,
+                     [&](const QStringList& ids, const QSet<QString>&) {
+                         if (ids.contains(kB)) {
+                             releasedAt = order++;
+                         }
+                     });
+
+    engine->setActiveScreens({});
+
+    QVERIFY(!engine->isFullscreenFloated(kB));
+    QVERIFY2(passiveAt >= 0, "the release must announce the hold clear");
+    QVERIFY2(releasedAt >= 0, "the release must emit windowsReleased for b");
+    QVERIFY2(passiveAt < releasedAt, "the passive clear must precede windowsReleased");
+    QVERIFY(announcedScreen.isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineFullscreenFloat)

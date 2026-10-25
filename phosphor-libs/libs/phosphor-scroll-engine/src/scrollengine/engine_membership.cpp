@@ -95,6 +95,27 @@ MembershipReconcileResult ScrollEngine::applyMembershipWork(const QString& scree
     }
     bool touchedCurrent = false;
     for (const PendingMembership& entry : pending) {
+        // A MOVE: the window takes the context in view and gives up every
+        // context it held. What its client's commits taught answered the
+        // contexts it is leaving, so it is forgotten the way windowOpened's
+        // migration forgets it, and ahead of the adopt for the same reason
+        // (the insert re-anchors with the floors read live). Without this the
+        // floors survived a desktop move into the context in view, because
+        // the adopt below runs before the release and the release then never
+        // finds the window's last membership, while a move into a background
+        // desktop (no adopt) lost them on that release: the outcome hung on
+        // which desktop the window went to. A window that keeps any context
+        // it held (a span growing or shifting) keeps them, since a strip it
+        // still holds a column in reads them.
+        if (entry.adopt && !entry.stale.isEmpty()) {
+            const QList<PlacementStateKey> held = m_states.membershipsForWindow(entry.windowId);
+            const bool leavesEveryContext = std::all_of(held.cbegin(), held.cend(), [&entry](const auto& heldKey) {
+                return entry.stale.contains(heldKey);
+            });
+            if (leavesEveryContext) {
+                forgetCommittedExtents(entry.windowId);
+            }
+        }
         // Adopt BEFORE releasing: adoptIntoContext reads the float, the min
         // size and the FloatRestore from the contexts the window still holds,
         // and the one it is leaving is the one that knows (F1001). The release

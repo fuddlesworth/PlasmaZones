@@ -341,12 +341,16 @@ void Daemon::toggleScreenMode(const QString& screenId, bool snappingAutotilePair
             entry.mode = Mode::Snapping;
             entry.snappingLayout = QString(PhosphorZones::NoSnappingLayout);
             // Re-resolve the sibling slot with the same empty-activity
-            // widening the scrolling arm uses: when the resolved "none" came
-            // from the broader empty-activity entry, this direct write
-            // creates an activity-scoped entry that would otherwise shadow
-            // the broader entry's algorithm memory from single-resolve
-            // consumers (the cascade returns the most specific entry whole,
-            // not field-merged).
+            // widening the scrolling arm uses. Resolution is per slot
+            // (LayoutRegistry::resolveAssignmentEntry): a slot the new
+            // activity-scoped entry carries replaces the broader entry's
+            // value, and a slot it leaves empty inherits it. The widening is
+            // still not a plain re-read of that inheritance: the slot readers
+            // go through assignmentEntryForScreen, which hands a resolved
+            // entry with no layout of its own on to the connector and default
+            // tiers as a whole, so the activity-scoped read can come back
+            // empty where the empty-activity one finds the broader entry's
+            // algorithm memory. Copying what that finds keeps the memory.
             entry.tilingAlgorithm = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
             if (entry.tilingAlgorithm.isEmpty() && !activity.isEmpty()) {
                 entry.tilingAlgorithm = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, QString());

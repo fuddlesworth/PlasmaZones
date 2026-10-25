@@ -197,7 +197,8 @@ public:
 
     // ── Engine relay entry points ────────────────────────────────────────
     // The composition root connects every pipeline engine's signals here
-    // (this adaptor makes no connections itself, keeping it type-agnostic).
+    // (this adaptor makes no engine connections itself, keeping it
+    // type-agnostic).
 
     /// Tile-request JSON from any pipeline engine (the engines' windowsTiled
     /// payload contract) — parsed and re-emitted as windowsTileRequested.
@@ -219,6 +220,17 @@ public:
     /// (restore-then-retile churn). One deferred emission carries the final
     /// state of the whole pass.
     void notifyEngineScreensChanged(bool isDesktopSwitch);
+    /// Run @p work right behind a queued screens announce, or now when none
+    /// is queued. For a placement the effect judges against the managed set
+    /// it last heard: a desktop switch off a scrolling desktop re-applies snap
+    /// zones and re-states single windows in the same pass that queues the
+    /// announce, and sent first, those were judged as if the screen still
+    /// tiled (#1151). SnapAdaptor hands every zone batch and re-statement it
+    /// emits through here. Runs after the held tile batches, in arrival
+    /// order, and is swept by clearEngine with the announce. The work runs
+    /// behind whichever announce goes out next, whether or not the effect
+    /// accepts it.
+    void runBehindScreensAnnounce(std::function<void()> work);
     /// Per-screen tab-indicator model from the scroll engine, cached for the
     /// scrollTabStrips replay query and re-emitted as scrollTabStripsChanged.
     /// A "[]" (or empty) payload retracts the screen: the cache entry is
@@ -370,12 +382,12 @@ public Q_SLOTS:
      * startup/restart and mode toggle-on to avoid per-window D-Bus
      * round-trips.
      *
-     * Trusted-peer boundary: batch size is deliberately unbounded on the
+     * Compositor-only (DbusHelpers::admitCompositorReport, #1155): any bus
+     * caller but the registered bridge is answered with AccessDenied. The
+     * bridge is trusted on size: batch size is deliberately unbounded on the
      * panel-ready path (the deferral queue's kMaxPendingOpens is a depth
      * valve that processes on overflow, never a drop cap), and the numeric
-     * in-args are sign-clamped only. The KWin effect is the sole producer;
-     * a foreign caller can spend daemon CPU proportional to the batch it
-     * sends, nothing more.
+     * in-args are sign-clamped only.
      *
      * @param entries Array of (windowId, screenId, minWidth, minHeight) structs
      */
@@ -475,7 +487,8 @@ public Q_SLOTS:
      * The placement map's bring-up read: a JSON array of the last
      * windowsTileRequested batch's entries for @p screenId, with the keys
      * relayTileRequestsJson parses (windowId, x, y, width, height, screenId,
-     * monocle, floating, zoneId). One batch per screen, replaced by each
+     * monocle, floating) plus zoneId, which the parser does not read: it is
+     * reserved and always empty. One batch per screen, replaced by each
      * newer batch naming it; entries are pruned when their window closes or
      * is released, and the screen's batch is dropped when it leaves the
      * managed set. "[]" when nothing is held. Implemented in mapmodel.cpp.
@@ -767,6 +780,8 @@ private:
     /// applied synchronously (relayTileRequestsJson documents the shape).
     /// Swept by clearEngine with the announce it was waiting on.
     QList<PhosphorProtocol::TileRequestList> m_tileBatchesHeldForAnnounce;
+    /// runBehindScreensAnnounce's queue, in arrival order.
+    QList<std::function<void()>> m_workHeldForAnnounce;
     /// Last enabled value broadcast (unset until the first emission).
     std::optional<bool> m_lastEnabledBroadcast;
     /// Last tab-strip payload per screen, the scrollTabStrips replay cache.

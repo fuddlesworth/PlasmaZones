@@ -17,6 +17,7 @@
 #include "internal.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -158,6 +159,9 @@ void WindowTrackingAdaptor::setContextModeResolver(
 PhosphorProtocol::OutputSettleVerdictList
 WindowTrackingAdaptor::reportOutputSettle(const PhosphorProtocol::OutputSettleRowList& rows)
 {
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return {};
+    }
     PhosphorProtocol::OutputSettleVerdictList verdicts;
     PhosphorScreens::ScreenManager* mgr = m_service ? m_service->screenManager() : nullptr;
     QSet<QString> reassertedScreens;
@@ -421,11 +425,20 @@ QString WindowTrackingAdaptor::reassertEvacuee(const OutputSettleRow& row, QSet<
 {
     const QString windowId = shadowWindowId(row.windowId);
     // A zone: applied again on the screen it is stored for, whatever
-    // "Re-snap on resolution change" says.
+    // "Re-snap on resolution change" says. Only where snapping runs that
+    // screen and may place there: snap keeps frozen memory on a screen a
+    // tiling engine took over, and re-applying that zone rect there would
+    // fight the tile the arms below re-assert. A geometry re-apply is a
+    // placement, so none with snapping off or in a disabled context either,
+    // as getUpdatedWindowGeometries holds.
     if (m_cachedSnapEngine && !m_cachedSnapEngine->zoneForWindow(windowId).isEmpty() && m_service) {
         const QString screen = m_service->screenForWindow(windowId);
         const QStringList zones = m_service->zonesForWindow(windowId);
-        const QRect geo = m_service->resolveZoneGeometry(zones, screen);
+        const bool snapPlacesHere = m_cachedSnapEngine->isActiveOnScreen(screen)
+            && (!m_settings || m_settings->snappingEnabled())
+            && !isPersistedContextDisabled(screen, currentDesktopForScreen(screen),
+                                           m_layoutManager ? m_layoutManager->currentActivity() : QString());
+        const QRect geo = snapPlacesHere ? m_service->resolveZoneGeometry(zones, screen) : QRect();
         if (geo.isValid()) {
             Q_EMIT applyGeometryRequested(row.windowId, geo.x(), geo.y(), geo.width(), geo.height(), zones.first(),
                                           screen, false,

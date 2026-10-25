@@ -131,6 +131,7 @@ void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
         return;
     }
     const QSet<QString> valid(validActivities.begin(), validActivities.end());
+    m_enteredActivities.intersect(valid);
     // The global holder has an empty activity, so !activity.isEmpty() excludes it.
     const auto matches = [&valid](const PhosphorEngine::PlacementStateKey& key) {
         return !key.activity.isEmpty() && !valid.contains(key.activity);

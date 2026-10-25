@@ -15,6 +15,8 @@
 //     restart.
 //   * Scrolling strip wake-ups (Scrolling interface) — relayed straight back
 //     out as `scrollingStripChanged` for the Monitors page's live thumbnail.
+//   * Screen geometry changes (Screen interface) — refresh the cached primary
+//     scale behind the local fixed-zone previews.
 //
 // The D-Bus wire-up is a natural seam away from `settingscontroller.cpp`. The
 // helper lambda and subscriptions are cohesive, only call into D-Bus
@@ -130,6 +132,14 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
     // change on a context that only later becomes current.
     const QString scrollingIface = QString(PhosphorProtocol::Service::Interface::Scrolling);
     subscribeDaemonSignal(scrollingIface, QStringLiteral("stripChanged"), SIGNAL(scrollingStripChanged(QString)));
+
+    // Screen geometry changes, a settled fractional scale among them, refresh
+    // the cached primary scale that recalcLocalLayouts reads. Not filtered to
+    // the primary screen here: the refresh asks for the current primary and
+    // reloads only on a real change, so a change on another screen costs one
+    // asynchronous round trip and nothing else.
+    subscribeDaemonSignal(QString(PhosphorProtocol::Service::Interface::Screen),
+                          QStringLiteral("screenGeometryChanged"), SLOT(refreshPrimaryScreenScale()));
 
     // Window-rules → settings-side mirror store. The daemon owns
     // rules.json; when it persists a change via setAllRules() the

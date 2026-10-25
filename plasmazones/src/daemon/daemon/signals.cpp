@@ -583,48 +583,38 @@ void Daemon::finalizeStartup()
             // the level-1 fallback (e.g. autotile-bsp) on a system
             // configured for snapping. Two arms:
             //
-            //   (a) signal — currentActivityChanged fires non-empty;
+            //   (a) the activity handler (connectDesktopActivity) shows it
+            //       for the first non-empty activity reported, in place of
+            //       its own switch OSD;
             //   (b) fallback timer — KActivities never reports.
             //
-            // `fired` is the canonical "already shown" flag.
-            // QMetaObject::Connection's `operator bool()` reports
-            // "the connection was successfully made," NOT "still
-            // active," so checking `*conn` after `disconnect(*conn)`
-            // cannot tell "still queued" from "already fired and
-            // disconnected." A shared_ptr<bool> captured by both arms
-            // lets each compare-and-set first. The 5000ms timeout is
-            // sized for KActivities cold-boot autostart at 2-3s on
-            // slower systems, where 2s produced false fallbacks.
-            auto conn = std::make_shared<QMetaObject::Connection>();
-            auto fired = std::make_shared<bool>(false);
-            *conn = connect(m_activityManager.get(), &PhosphorWorkspaces::ActivityManager::currentActivityChanged, this,
-                            [this, conn, fired](const QString& a) {
-                                if (a.isEmpty() || *fired) {
-                                    return;
-                                }
-                                *fired = true;
-                                QObject::disconnect(*conn);
-                                showOsdForAllScreens(a);
-                            });
-            QTimer::singleShot(5000, this, [this, conn, fired]() {
-                if (*fired) {
+            // m_welcomeOsdAwaitsActivity is the shared "not shown yet" flag,
+            // which each arm tests and clears before it shows. The handler
+            // owns arm (a) rather than a second connection to the same
+            // signal, so whether the change is the welcome or a switch is
+            // decided in one place, with no dependence on which of two
+            // connections Qt runs first. The 5000ms timeout is sized for
+            // KActivities cold-boot autostart at 2-3s on slower systems,
+            // where 2s produced false fallbacks.
+            m_welcomeOsdAwaitsActivity = true;
+            QTimer::singleShot(5000, this, [this]() {
+                if (!m_welcomeOsdAwaitsActivity) {
                     return;
                 }
-                *fired = true;
-                QObject::disconnect(*conn);
                 // Only fall back to firing the OSD if the activity has now
                 // become available. If we land here while currentActivity()
                 // is still empty AND KActivities is supposed to be
                 // available, firing would replay the very wrong-cascade
                 // OSD (autotile-bsp on a snapping-mode user) the deferral
-                // was added to avoid — just delayed by 5 s instead of
-                // immediate. Suppressing the welcome OSD entirely is the
-                // lesser harm: the user gets no welcome banner, but never
-                // sees content keyed to the wrong activity.
+                // was added to avoid, just delayed by 5 s instead of
+                // immediate. The flag stays set instead, so a KActivities
+                // slower than the timeout still gets its welcome from the
+                // activity handler when the activity arrives.
                 const QString activity = currentActivity();
                 if (activity.isEmpty() && PhosphorWorkspaces::ActivityManager::isAvailable()) {
                     return;
                 }
+                m_welcomeOsdAwaitsActivity = false;
                 showOsdForAllScreens(activity);
             });
         }
@@ -655,11 +645,15 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
         if (floating) {
             m_windowTrackingAdaptor->syncWindowFloating(windowId, true);
             m_autotileEngine->markModeSpecificFloated(windowId);
-            // The snap-mode pre-float home goes, whatever screen it names. On
-            // this screen it is stale. On another one the window has moved away
-            // from it, and a window that moves forgets the zone it floated from:
-            // keeping it threw the window back across on the next unfloat there.
-            wts->clearPreFloatZone(windowId);
+            // The snap-mode pre-float home goes, on the desktop this screen
+            // shows and on every other screen. Here it is stale. On another
+            // screen the window has moved away from it, and a window that moves
+            // forgets the zone it floated from: keeping it threw the window back
+            // across on the next unfloat there. This screen's other desktops
+            // and activities keep theirs: a window on several desktops, or a
+            // sticky one, has a snap home on each, and a float in view must not
+            // take the others (the float is per mode and per context).
+            wts->clearPreFloatZoneExceptHiddenContexts(windowId, screenId);
         } else {
             // The window's snap-mode float (if any) already lives in its placement
             // record's snap slot — captured at the mode-switch snapshot / save time —
@@ -717,7 +711,7 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
         m_windowTrackingAdaptor->syncWindowFloating(windowId, true);
         m_autotileEngine->markModeSpecificFloated(windowId);
         // The snap-mode pre-float home goes, as in syncAutotileFloatState.
-        wts->clearPreFloatZone(windowId);
+        wts->clearPreFloatZoneExceptHiddenContexts(windowId, screenId);
     } else {
         // Snap-mode float persists in the placement record's snap slot (single
         // source of truth); nothing to save into a parallel set here.
@@ -735,7 +729,6 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
         m_windowTrackingAdaptor->releaseLeftScreens(windowId, m_autotileEngine->screenForTrackedWindow(windowId),
                                                     m_autotileEngine.get());
     }
-    Q_UNUSED(screenId)
     // Deliberately no applyGeometryForFloat and no navigation OSD — this is
     // a silent sync of engine↔WTS state, not a user-visible float action.
 }
@@ -760,7 +753,7 @@ void Daemon::syncScrollFloatStatePassive(const QString& windowId, bool floating,
         m_windowTrackingAdaptor->syncWindowFloating(windowId, true);
         m_scrollEngine->markModeSpecificFloated(windowId);
         // The snap-mode pre-float home goes, as in syncAutotileFloatState.
-        wts->clearPreFloatZone(windowId);
+        wts->clearPreFloatZoneExceptHiddenContexts(windowId, screenId);
     } else {
         m_windowTrackingAdaptor->syncWindowFloating(windowId, false);
         // A release-time hold clear (announceReleasedFullscreenHolds) arrives
@@ -776,7 +769,6 @@ void Daemon::syncScrollFloatStatePassive(const QString& windowId, bool floating,
         m_windowTrackingAdaptor->releaseLeftScreens(windowId, m_scrollEngine->screenForTrackedWindow(windowId),
                                                     m_scrollEngine.get());
     }
-    Q_UNUSED(screenId)
     // Deliberately no applyGeometryForFloat and no navigation OSD.
 }
 
@@ -808,7 +800,7 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
         m_windowTrackingAdaptor->relayWindowFloatingChanged(windowId, true, screenId);
         m_autotileEngine->markModeSpecificFloated(windowId);
         // The snap-mode pre-float home goes, as in the single-window handler.
-        wts->clearPreFloatZone(windowId);
+        wts->clearPreFloatZoneExceptHiddenContexts(windowId, screenId);
     }
     if (!windowIds.isEmpty() && navigationOsdAllowed(screenId)) {
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), QStringLiteral("overflow"), QString(),

@@ -418,7 +418,9 @@ void WindowTrackingService::validateLastUsedZone(const QString& targetScreen)
     // not the desktop in view, so a background desktop on another layout keeps
     // its last-used (F162). A store whose context has no snapping layout is
     // left alone: nothing can PROVE its zone stale, and an unprovable claim
-    // must not be destructive (the free-geometry loop's "don't guess").
+    // must not be destructive, the same rule migrateScreenAssignmentsToVirtual
+    // keeps in its resolveZoneless arm, which leaves a bare physical id it has
+    // nothing to place by where it is.
     bool cleared = false;
     for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
         const QString lastZoneId = state->lastUsedZoneId();
@@ -452,15 +454,7 @@ PhosphorZones::Layout* WindowTrackingService::lastUsedLayoutFor(const PhosphorSn
     if (!m_layoutManager || !state) {
         return nullptr;
     }
-    // The store's own context: its key when the resolver can name it, else the
-    // desktop the last-used was recorded on, else the screen's current one.
-    const std::optional<PhosphorEngine::PlacementStateKey> key =
-        m_snapResolver.keyFor ? m_snapResolver.keyFor(state) : std::nullopt;
-    int desktop = (key && key->desktop >= 1) ? key->desktop : state->lastUsedDesktop();
-    if (desktop < 1) {
-        desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
-    }
-    const QString activity = key ? key->activity : m_layoutManager->currentActivity();
+    const auto [desktop, activity] = storeContextFor(state, screenId);
     // A context running autotile or scrolling keeps its snap memory frozen; it
     // is not judged against the default layout the cascade answers there.
     if (m_layoutManager->modeForScreen(screenId, desktop, activity) != PhosphorZones::AssignmentEntry::Snapping
@@ -468,6 +462,21 @@ PhosphorZones::Layout* WindowTrackingService::lastUsedLayoutFor(const PhosphorSn
         return nullptr;
     }
     return m_layoutManager->layoutForScreen(screenId, desktop, activity);
+}
+
+std::pair<int, QString> WindowTrackingService::storeContextFor(const PhosphorSnapEngine::SnapState* state,
+                                                               const QString& screenId) const
+{
+    // The store's own context: its key when the resolver can name it, else the
+    // desktop the last-used was recorded on, else the screen's current one.
+    const std::optional<PhosphorEngine::PlacementStateKey> key =
+        (m_snapResolver.keyFor && state) ? m_snapResolver.keyFor(state) : std::nullopt;
+    int desktop = (key && key->desktop >= 1) ? key->desktop : (state ? state->lastUsedDesktop() : 0);
+    if (desktop < 1) {
+        desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+    }
+    const QString activity = key ? key->activity : m_layoutManager->currentActivity();
+    return {desktop, activity};
 }
 
 QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId) const

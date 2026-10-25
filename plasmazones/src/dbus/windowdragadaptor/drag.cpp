@@ -23,6 +23,7 @@
 #include "core/utils/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/types/constants.h"
+#include "dbus/dbushelpers.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -118,11 +119,12 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     if (m_overlayService) {
         m_overlayService->setActiveDragWindowId(windowId);
     }
-    // Selector suppression for rule-excluded windows, evaluated once per
-    // drag (see the member's comment).
+    // Selector suppression for rule-excluded windows, evaluated at the
+    // begin and again here when a pending drag promotes (see the member's
+    // comment).
     {
         auto* snapEngine = m_windowTracking ? m_windowTracking->snapEngine() : nullptr;
-        m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
+        m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcludedByRule(windowId);
     }
 
     // Check if window started inside a zone (for restoreOriginalSizeOnUnsnap feature)
@@ -142,9 +144,10 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         QScreen* screen = screenAtPoint(m_originalGeometry.center().x(), m_originalGeometry.center().y());
 
         if (screen) {
-            QString screenId = effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
-            if (screenId.isEmpty())
-                screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
+            // Never empty here: effectiveScreenIdAt falls back to the QScreen
+            // at the point, which is the non-null screen just found.
+            const QString screenId =
+                effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
             // Suppressed context: the resolve below would hand back the global
             // default layout for a screen that has no zones, and a window that
             // happens to match one of its rects would be misread as snapped
@@ -156,7 +159,8 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
                 : m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 PhosphorZones::LayoutComputeService::recalculateSync(
-                    layout, GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, screenId));
+                    layout, GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, screenId),
+                    PhosphorZones::GeometryUtils::screenScale(m_screenManager, screenId, screen));
 
                 for (auto* zone : layout->zones()) {
                     QRect zoneRect = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId,
@@ -310,7 +314,8 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
     if (!effectiveGeom.isValid()) {
         effectiveGeom = GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, outScreen);
     }
-    PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveGeom);
+    PhosphorZones::LayoutComputeService::recalculateSync(
+        layout, effectiveGeom, PhosphorZones::GeometryUtils::screenScale(mgr, outScreenId, outScreen));
     return layout;
 }
 
@@ -438,7 +443,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                                                     return pt.modifier == static_cast<int>(DragModifier::AlwaysActive);
                                                 });
 
-    // Use pre-parsed triggers (cached on dragStarted) to avoid QVariantMap
+    // Use pre-parsed triggers (cached by beginDrag) to avoid QVariantMap
     // unboxing per tick. EXCLUDES the AlwaysActive sentinel — that bit is
     // owned by alwaysActiveOnDrag above. Otherwise the inversion in
     // always-active mode would read as "trigger always held" and the overlay
@@ -512,25 +517,51 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     if (m_settings && (m_autotileEngine || m_scrollEngine)) {
         const QString& insertScreenId = cursorScreenId;
         PhosphorEngine::IPlacementEngine* insertEngine = dragInsertEngineFor(insertScreenId);
-        // Engine set membership is mode, not health: a context-DISABLED
-        // engine screen stays in its engine's active set, and the policy
-        // tier deliberately ranks ContextDisabled above EngineOwnedScreen.
-        // Without this gate the preview block was the one consumer that
-        // reordered a disabled screen's stack anyway.
+        // The daemon's engine-set derivation already leaves a context-DISABLED
+        // screen out (a disabled tiling context runs snapping), so this gate
+        // covers the gap between a disable edit and the next engine-set
+        // recompute, when the screen is still in the set. The policy tier
+        // ranks ContextDisabled above EngineOwnedScreen for the same window,
+        // and the preview block must not reorder a disabled screen's stack
+        // inside it.
         if (insertEngine && m_contextResolver
             && m_contextResolver->isDisabled(m_contextResolver->handleFor(insertScreenId))) {
             insertEngine = nullptr;
         }
         const bool onScrollingScreen = insertEngine && insertEngine == m_scrollEngine;
+        const QVector<ParsedTrigger>& insertTriggers =
+            onScrollingScreen ? m_cachedScrollingDragInsertTriggers : m_cachedAutotileDragInsertTriggers;
 
-        const bool rawInsertHeld = insertEngine
-            && anyTriggerHeld(onScrollingScreen ? m_cachedScrollingDragInsertTriggers
-                                                : m_cachedAutotileDragInsertTriggers,
-                              mods, mouseButtons);
+        // Escape dismissed the re-insert for this drag (cancelSnap). Only a real
+        // trigger re-press brings it back: a non-sentinel entry released and then
+        // pressed again on an engine screen. The AlwaysActive sentinel is left out
+        // of that test because it matches every tick, so under "always re-insert"
+        // it would begin the preview again on the very next tick and the drop
+        // would commit the re-insert Escape dismissed.
+        if (m_dragInsertCancelled && insertEngine) {
+            if (!anyTriggerHeld(insertTriggers, mods, mouseButtons, /*excludeSentinel=*/true)) {
+                m_dragInsertReleasedAfterCancel = true;
+            } else if (m_dragInsertReleasedAfterCancel) {
+                m_dragInsertCancelled = false;
+                m_dragInsertReleasedAfterCancel = false;
+            }
+        }
+        const bool rawInsertHeld =
+            insertEngine && !m_dragInsertCancelled && anyTriggerHeld(insertTriggers, mods, mouseButtons);
 
-        // Toggle mode: detect rising edge (release→press) to flip insert-active state
+        // Toggle mode: detect rising edge (release→press) to flip insert-active state.
+        // Not under "always re-insert" (the bare AlwaysActive sentinel in the
+        // list): the sentinel reads as held on every tick, so it never makes
+        // the rising edge a toggle needs, and a toggle setting left on from
+        // before the switch to always-on would hold the re-insert off for
+        // every window the reorder latch does not cover (a floating or
+        // arriving one). Always-on has nothing to toggle.
         bool insertHeld;
-        const bool toggleMode = insertEngine
+        const bool insertAlwaysOn =
+            insertEngine && std::any_of(insertTriggers.cbegin(), insertTriggers.cend(), [](const ParsedTrigger& pt) {
+                return pt.modifier == static_cast<int>(DragModifier::AlwaysActive) && pt.mouseButton == 0;
+            });
+        const bool toggleMode = insertEngine && !insertAlwaysOn
             && (onScrollingScreen ? m_settings->scrollingDragInsertToggle() : m_settings->autotileDragInsertToggle());
         // Hold-mode release grace, the drag-insert twin of the activation
         // grace above, on the grace setting of the engine owning the cursor
@@ -655,9 +686,30 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 stopDragScrollTimer();
             }
             if (!insertEngine->hasDragInsertPreview()) {
-                const bool began = insertEngine->beginDragInsertPreview(windowId, insertScreenId);
-                qCDebug(lcDbusWindow) << "drag-insert preview begin:" << windowId << "on" << insertScreenId
-                                      << "engine=" << insertEngine->engineId() << "=>" << began;
+                // A window under the minimum window size stays out of tiling
+                // (the effect keeps it out of the tree at open), so a drag
+                // must not adopt one into the strip or stack either. Asked of
+                // the global setting against the size the window holds as its
+                // own (dragInsertClientSize), and only for an adoption: a
+                // window the engine already tiles is only being reordered. A
+                // window managed at begin started on a frame its zone or tile
+                // decided, so that frame says nothing about the window: it is
+                // tested only once a restore during the drag hands its own
+                // size back, and the gate is re-asked every tick until a
+                // preview begins, so a restore landing later is seen.
+                const bool adoptionRefused = dragClientSizeBelowMinimum() && !insertEngine->isWindowTiled(windowId);
+                if (adoptionRefused != m_lastLoggedAdoptionRefused) {
+                    m_lastLoggedAdoptionRefused = adoptionRefused;
+                    if (adoptionRefused) {
+                        qCDebug(lcDbusWindow) << "drag-insert adoption refused:" << windowId << "on" << insertScreenId
+                                              << "is under the minimum window size at" << dragInsertClientSize();
+                    }
+                }
+                const bool began = !adoptionRefused && insertEngine->beginDragInsertPreview(windowId, insertScreenId);
+                if (!adoptionRefused) {
+                    qCDebug(lcDbusWindow) << "drag-insert preview begin:" << windowId << "on" << insertScreenId
+                                          << "engine=" << insertEngine->engineId() << "=>" << began;
+                }
                 if (!began) {
                     // Correct on tick 1, wrong on tick 2 without this. A failed
                     // begin (or an engine that dropped its own preview between
@@ -668,19 +720,31 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     // would stay painted for the rest of the drag.
                     clearScrollDropIndicator();
                     stopDragScrollTimer();
-                } else if (insertEngine->providesDragInsertSelector() && m_overlayService) {
-                    // The begin detached the drag window. The popup's
-                    // exclusion emulated that detach, so the column set
-                    // normally matches — but the begin boundary is the ONE
-                    // mid-drag moment the frozen strip is ALLOWED to change
-                    // shape (DETACH-ONCE), so re-snapshot here rather than
-                    // relying on the emulation staying faithful forever.
-                    m_overlayService->refreshStripSelector(insertScreenId);
+                } else {
+                    // Before the first target lands, so the indicator the
+                    // update below paints already shows the slot at the size
+                    // the drop will give it.
+                    insertEngine->setDragInsertClientSize(dragInsertClientSize());
+                    if (insertEngine->providesDragInsertSelector() && m_overlayService) {
+                        // The begin detached the drag window. The popup's
+                        // exclusion emulated that detach, so the column set
+                        // normally matches — but the begin boundary is the ONE
+                        // mid-drag moment the frozen strip is ALLOWED to change
+                        // shape (DETACH-ONCE), so re-snapshot here rather than
+                        // relying on the emulation staying faithful forever.
+                        m_overlayService->refreshStripSelector(insertScreenId);
+                    }
                 }
             }
             if (insertEngine->hasDragInsertPreview()
                 && PhosphorScreens::ScreenIdentity::screensMatch(insertEngine->dragInsertPreviewScreenId(),
                                                                  insertScreenId)) {
+                // The client size again on every tick of a live preview, not
+                // only at its begin: a restore during the drag (the effect's
+                // drag-to-float, a drag-out size) can land after the begin,
+                // and the indicator below and the commit should both see the
+                // size the user is holding now. The engine only stores it.
+                insertEngine->setDragInsertClientSize(dragInsertClientSize());
                 // Strip popup keep-alive: the early return below starves the
                 // per-tick selector check for the whole preview, which is
                 // fine on autotile screens (no popup there) but would freeze
@@ -990,6 +1054,9 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             const auto preSnap = preSnapSizeFor(windowId, cursorScreenId);
             if (preSnap) {
                 m_restoreSizeEmittedDuringDrag = true;
+                // The window's own size again, which a later drag-insert may
+                // hand an engine (dragInsertClientSize).
+                m_dragRestoredSize = *preSnap;
                 m_lastEmittedZoneGeometry = QRect(); // Reset so re-entering zone will emit
                 Q_EMIT restoreSizeDuringDragChanged(windowId, preSnap->width(), preSnap->height());
             }
@@ -999,9 +1066,12 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
 void WindowDragAdaptor::selectorScrollWheel(int angleDeltaY)
 {
-    // Session-bus callable: gate on the selector actually being shown by a
-    // live drag, matching the validation its sibling entry points carry —
-    // an idle-time call must not scroll a popup that isn't there.
+    // A compositor report like beginDrag and the cursor ticks: only the
+    // registered bridge may send it over the bus (#1155).
+    if (!DbusHelpers::admitCompositorReport(this, QLatin1StringView(__func__))) {
+        return;
+    }
+    // An idle-time call must not scroll a popup that is not there.
     if (m_zoneSelectorShown && m_overlayService) {
         m_overlayService->scrollZoneSelector(angleDeltaY);
     }

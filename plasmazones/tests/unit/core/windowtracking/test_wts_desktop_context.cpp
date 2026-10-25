@@ -132,6 +132,40 @@ private Q_SLOTS:
         QCOMPARE(m_service->recordedSnapZones(w), QStringList{m_zoneIds[2]});
     }
 
+    // A float on the desktop in view clears the pre-float zone the screen
+    // shows and every other screen's, and keeps the one of a desktop the
+    // screen does not show: that is the window's snap home there (F450). The
+    // plain clear forgets it too, which tells the two apart.
+    void clearPreFloatZoneExceptHiddenContexts_keepsTheHiddenDesktopsHome()
+    {
+        const QString w = announce(QStringLiteral("multi"), /*sticky=*/false, 0);
+        const auto storeOn = [this](const QString& screenId) {
+            return static_cast<PhosphorSnapEngine::SnapState*>(m_engine->stateForScreen(screenId));
+        };
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        PhosphorSnapEngine::SnapState* d2 = storeOn(kScreen);
+        QVERIFY(d2);
+        d2->addPreFloatZone(w, {m_zoneIds[1]});
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        PhosphorSnapEngine::SnapState* d1 = storeOn(kScreen);
+        QVERIFY(d1 && d1 != d2);
+        d1->addPreFloatZone(w, {m_zoneIds[0]});
+        const QString otherScreen = QStringLiteral("DP-2");
+        m_engine->setCurrentDesktopForScreen(otherScreen, 1);
+        PhosphorSnapEngine::SnapState* other = storeOn(otherScreen);
+        QVERIFY(other && other != d1 && other != d2);
+        other->addPreFloatZone(w, {m_zoneIds[2]});
+
+        m_service->clearPreFloatZoneExceptHiddenContexts(w, kScreen);
+
+        QVERIFY2(d1->preFloatZones(w).isEmpty(), "the store the screen shows clears");
+        QVERIFY2(other->preFloatZones(w).isEmpty(), "another screen's store clears");
+        QCOMPARE(d2->preFloatZones(w), QStringList{m_zoneIds[1]});
+
+        m_service->clearPreFloatZone(w);
+        QVERIFY(d2->preFloatZones(w).isEmpty());
+    }
+
 private:
     /// Register @p instance with the registry and answer its composite id.
     QString announce(const QString& instance, bool sticky, int desktop)
