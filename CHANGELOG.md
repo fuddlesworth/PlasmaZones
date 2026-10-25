@@ -10,6 +10,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.5.3] - 2026-10-24
+
 ### Fixed
 
 - **A window taller than its scrolling tile no longer covers the tile below it**: a window that made itself taller than its share of a column it was stacked in with others, as some games do to keep a whole-number scale, hung over the window under it. Its tile now gets the height the window takes and the other tiles in the column share what is left, or the window floats when the column cannot hold them all. The tile gives that height back once the window has its column to itself again on every desktop it is shown on, once the column's width changes, or once you resize the window across the strip yourself. On a strip that runs vertically this applies to the window's width. Like the width, this is learned only while "Respect minimum size" is on. ([#1156](https://github.com/fuddlesworth/PlasmaZones/issues/1156))
@@ -2751,7 +2753,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.2...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.3...HEAD
+[3.5.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.2...v3.5.3
 [3.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.1...v3.5.2
 [3.5.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.5.0...v3.5.1
 [3.5.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.4.18...v3.5.0

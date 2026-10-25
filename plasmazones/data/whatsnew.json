@@ -1,6 +1,27 @@
 {
     "releases": [
         {
+            "version": "3.5.3",
+            "date": "2026-10-24",
+            "highlights": [
+                "Fixed: Fixed-size zones can keep their exact pixel size under display scaling with the new \"Fixed sizes count physical pixels\" layout setting in the editor (#1160)",
+                "Fixed: Resizing a centred scrolling column with the mouse puts the edge you dragged where you let go (#1158)",
+                "Fixed: A floating window dragged into the scrolling strip keeps the size it had (#1158)",
+                "Fixed: A window taller than its scrolling tile no longer covers the tile below it (#1156)",
+                "Fixed: An X11 window wider than its scrolling column widens the column, as Wayland windows already did (#1157)",
+                "Fixed: A scrolling column that was once wider peeks past the screen edge again (#1154)",
+                "Fixed: Move to Screen hands a scrolling window cropped at the screen edge to the other screen's strip (#1153)",
+                "Fixed: Snapped windows go back to their zones after a visit to a tiling or scrolling desktop (#1151)",
+                "Fixed: A window on several desktops or activities keeps its place on each of them (#1147)",
+                "Fixed: An app's splash screen no longer sizes and floats the main window that opens after it (#1158)",
+                "Fixed: Activities are followed when the activity service starts after PlasmaZones (#1146)",
+                "Fixed: Only the compositor can report window and screen changes to PlasmaZones, and other programs on the session bus are refused (#1155)",
+                "Fixed: Switching Tiling off and on again keeps your Tiling quick-layout shortcuts (#1158)",
+                "Fixed: A floating window reopens where it floated on a monitor split into virtual screens (#1158)",
+                "Fixed: Brazilian Portuguese button tooltips read as actions (#1152)"
+            ]
+        },
+        {
             "version": "3.5.2",
             "date": "2026-10-22",
             "highlights": [
