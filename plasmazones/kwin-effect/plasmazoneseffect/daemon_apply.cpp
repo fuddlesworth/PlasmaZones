@@ -1039,6 +1039,7 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
 
     QJsonArray windowArray;
     QSet<QString> seenClasses;
+    QSet<QString> seenClasslessCaptions;
 
     // Iterate in reverse (top-to-bottom) so deduplication keeps the topmost
     // window's caption per class, which is more useful to the user
@@ -1064,9 +1065,6 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
         }
 
         QString windowClass = w->windowClass();
-        if (windowClass.isEmpty()) {
-            continue;
-        }
 
         // Hide the daemon's own overlay / editor windows from the rule picker —
         // surfacing `plasmazonesd` or `plasmazones-editor` as an authoring
@@ -1087,15 +1085,28 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
         // downstream — a rule the user authors against the picker's
         // case-preserved output with `Equals` would silently never match.
         windowClass = ::PhosphorIdentity::WindowId::normalizeAppId(QString(), windowClass);
-        if (windowClass.isEmpty()) {
-            continue;
-        }
+        const QString caption = w->caption();
 
-        // Deduplicate by windowClass (first seen = topmost due to reverse iteration)
-        if (seenClasses.contains(windowClass)) {
-            continue;
+        if (windowClass.isEmpty()) {
+            // A client that sets no app_id, and whose executable KWin cannot
+            // read for the fallback (a gamescope binary carrying file
+            // capabilities, for one), reaches us with a blank class. Placement
+            // still manages it, so it must stay pickable: its caption is the
+            // only identity a rule can match on, and the dialog greys out its
+            // class-keyed modes. With no caption either there is nothing to
+            // pick, so it is skipped. Classless rows are deduplicated by
+            // caption, since they share the one empty class.
+            if (caption.isEmpty() || seenClasslessCaptions.contains(caption)) {
+                continue;
+            }
+            seenClasslessCaptions.insert(caption);
+        } else {
+            // Deduplicate by windowClass (first seen = topmost due to reverse iteration)
+            if (seenClasses.contains(windowClass)) {
+                continue;
+            }
+            seenClasses.insert(windowClass);
         }
-        seenClasses.insert(windowClass);
 
         QString appName = ::PhosphorIdentity::WindowId::deriveShortName(windowClass);
         if (appName.isEmpty()) {
@@ -1114,7 +1125,7 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
         QJsonObject obj;
         obj[QLatin1String("windowClass")] = windowClass;
         obj[QLatin1String("appName")] = appName;
-        obj[QLatin1String("caption")] = w->caption();
+        obj[QLatin1String("caption")] = caption;
         obj[QLatin1String("desktopFile")] = desktopFile;
         windowArray.append(obj);
     }

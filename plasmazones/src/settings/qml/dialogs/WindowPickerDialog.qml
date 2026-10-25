@@ -261,14 +261,18 @@ Kirigami.Dialog {
                 // window has no registered .desktop), fall back to the
                 // app name so the user can still tell which window the
                 // row represents — but disable selection so they don't
-                // commit an empty leaf value.
-                readonly property string primaryText: valueAvailable ? rawValue : (modelData.appName && modelData.appName.length > 0 ? modelData.appName : dialog.deriveAppName(modelData.windowClass))
+                // commit an empty leaf value. A window with no class at all
+                // (a client that sets no app_id) has no app name either, so
+                // its caption names the row.
+                readonly property string _fallbackName: (modelData.appName && modelData.appName.length > 0) ? modelData.appName : dialog.deriveAppName(modelData.windowClass)
+                readonly property string primaryText: valueAvailable ? rawValue : (_fallbackName.length > 0 ? _fallbackName : (modelData.caption || ""))
                 // Subtext gives the user some disambiguation context — for
                 // a Title pick we show the windowClass so two windows with
                 // the same caption are distinguishable; for the other
                 // modes we surface the caption. When the value is
                 // unavailable we replace it with an explanatory hint.
-                readonly property string secondaryText: !valueAvailable ? (dialog.mode === "desktopFiles" ? i18n("(no desktop file)") : dialog.mode === "titles" ? i18n("(no title)") : "") : dialog.mode === "titles" ? (modelData.windowClass || "") : (modelData.caption || "")
+                readonly property string _unavailableHint: dialog.mode === "desktopFiles" ? i18n("(no desktop file)") : dialog.mode === "titles" ? i18n("(no title)") : i18n("(no window class)")
+                readonly property string secondaryText: !valueAvailable ? _unavailableHint : dialog.mode === "titles" ? (modelData.windowClass || i18n("(no window class)")) : (modelData.caption || "")
 
                 width: ListView.view.width
                 // Rows commit on click, so hovering is how a row gets
