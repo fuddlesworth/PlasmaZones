@@ -10,6 +10,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Pick a zone for a Zone condition**: a rule's Zone condition now lists every zone of every layout by its layout and zone names, where it used to need the zone's ID typed in by hand. That makes a rule for one zone easy to write, for example keeping windows in a zone that covers the panel above it. The rule list shows the same names. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
+
+### Fixed
+
+- **Windows without a window class show up in the window picker**: an app that names no window class, as Gamescope can, was left out of the rule editor's window picker even though PlasmaZones places it. It is now listed by its title and can be picked for a Title condition. The modes that need a window class show it greyed out. ([#1163](https://github.com/fuddlesworth/PlasmaZones/pull/1163))
+
 ## [3.5.3] - 2026-10-24
 
 ### Fixed
