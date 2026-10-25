@@ -219,6 +219,11 @@ set(plasmazones_settings_SRCS
     rules/ruleauthoring_actions.cpp
     rules/ruletemplates.h
     rules/ruletemplates.cpp
+    # Option lists built from live state for the rule editor's pickers (the
+    # Zone condition's zones, the running-windows rows). Free functions, so
+    # test_rule_picker_options compiles them without the controller.
+    rules/rulepickeroptions.h
+    rules/rulepickeroptions.cpp
     # QAbstractItemModel adapter that exposes a rule's match expression
     # to QtQuick.Controls.TreeView for read-only preview. Registered as a
     # QML type via the qt_add_qml_module call below.
@@ -442,6 +447,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/layouts/LayoutComboBox.qml
         qml/pages/layouts/LayoutContextMenu.qml
         qml/components/WideComboBox.qml
+        qml/components/MatchValueCombo.qml
         qml/dialogs/FontPickerDialog.qml
         qml/components/ColorButton.qml
         qml/components/InputCapture.qml
@@ -590,6 +596,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/wizard/WizardConfigCard.qml
         qml/pages/wizard/WizardPreviewFrame.qml
         qml/js/WizardUtils.js
+        qml/js/MatchWireValue.js
     NO_PLUGIN
 )
 

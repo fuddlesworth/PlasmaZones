@@ -376,11 +376,13 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Clear existing zones and add new ones
     layout->clearZones();
 
-    // A zone id another layout holds is replaced, as the registry's load and
-    // import do (F552): a remembered zone id has to name one layout.
+    // A zone id another layout holds is replaced, and a missing one filled in,
+    // as the registry's load and import do (F552): a remembered zone id has to
+    // name one layout.
     if (const int reissued = PhosphorZones::LayoutUtils::reissueTakenZoneIds(obj, m_layoutManager->layouts());
         reissued > 0) {
-        qCInfo(lcDbusLayout) << "updateLayout:" << reissued << "zone id(s) of another layout given new ids";
+        qCInfo(lcDbusLayout) << "updateLayout:" << reissued
+                             << "zone id(s) that another layout held or that were missing given ids of their own";
     }
     const auto zonesArray = obj[::PhosphorZones::ZoneJsonKeys::Zones].toArray();
     for (const auto& zoneVal : zonesArray) {
@@ -451,13 +453,14 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
         return QString();
     }
 
-    // Zone ids another layout holds are replaced, as the registry's load and
-    // import do (F552). A layout id that is no UUID (the schema asks only for a
-    // string) is handled there too (F1052). A layout-id collision clones, which
-    // replaces them all.
+    // Zone ids another layout holds are replaced, and missing ones filled in,
+    // as the registry's load and import do (F552). A layout id that is no UUID
+    // (the schema asks only for a string) is handled there too (F1052). A
+    // layout-id collision clones, which replaces them all.
     if (const int reissued = PhosphorZones::LayoutUtils::reissueTakenZoneIds(obj, m_layoutManager->layouts());
         reissued > 0) {
-        qCInfo(lcDbusLayout) << "createLayoutFromJson:" << reissued << "zone id(s) of another layout given new ids";
+        qCInfo(lcDbusLayout) << "createLayoutFromJson:" << reissued
+                             << "zone id(s) that another layout held or that were missing given ids of their own";
     }
 
     auto* parsed = PhosphorZones::Layout::fromJson(obj, m_layoutManager);

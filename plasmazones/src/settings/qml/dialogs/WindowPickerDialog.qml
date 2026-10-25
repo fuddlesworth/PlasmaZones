@@ -23,13 +23,17 @@ Kirigami.Dialog {
     // requestRunningWindows(). Named `controller` (not `appSettings`) because
     // it is the controller, not a Settings object.
     required property var controller
-    /// Picker mode — `"apps"` returns the app's short / desktop-file name,
-    /// `"classes"` the X11/Wayland window class, `"desktopFiles"` the full
-    /// `.desktop` basename (rows without a desktop file render as
-    /// disabled placeholders so the user can still see which window the
-    /// row represents — not filtered out), `"titles"` the window caption
-    /// (rows without a caption ARE filtered out). Drives the title, the
-    /// row's primary text, and the value passed to `picked`.
+    /// Picker mode. `"apps"` returns the short name of the window's app id,
+    /// `"classes"` the window class exactly as the WindowClass rule field
+    /// compares it ("resourceName resourceClass"), `"desktopFiles"` the full
+    /// `.desktop` basename, and `"titles"` the window caption. A row with no
+    /// value for the current mode (no app id or class in apps and classes,
+    /// no desktop file in desktopFiles) renders as a disabled placeholder,
+    /// so the user can still see which window it is. Titles mode is the
+    /// exception: the effect never lists a window with no class and no
+    /// caption, and titles mode filters out the rest that lack a caption.
+    /// Drives the title, the row's primary text, and the value passed to
+    /// `picked`.
     property string mode: "apps"
     property var windowList: []
     // Set by the Connections block below when the controller signals a
@@ -55,6 +59,15 @@ Kirigami.Dialog {
             return windowClass.substring(dotIdx + 1);
 
         return windowClass;
+    }
+
+    /// The app name @p row offers: the effect's `appName`, or one derived
+    /// from the class for a row that carries none.
+    function appNameFor(row) {
+        if (!row)
+            return "";
+
+        return (row.appName && row.appName.length > 0) ? row.appName : deriveAppName(row.windowClass);
     }
 
     function openForApps() {
@@ -126,8 +139,11 @@ Kirigami.Dialog {
         if (!row)
             return "";
 
+        // rawWindowClass, not the canonical windowClass token: the WindowClass
+        // rule field compares KWin's "resourceName resourceClass" as reported,
+        // so the token alone could never satisfy an Equals leaf.
         if (mode === "classes")
-            return row.windowClass || "";
+            return row.rawWindowClass || "";
 
         if (mode === "desktopFiles")
             return row.desktopFile || "";
@@ -135,7 +151,7 @@ Kirigami.Dialog {
         if (mode === "titles")
             return row.caption || "";
 
-        return row.appName && row.appName.length > 0 ? row.appName : deriveAppName(row.windowClass);
+        return appNameFor(row);
     }
 
     // Async refresh: show whatever we already have cached from a previous
@@ -235,7 +251,7 @@ Kirigami.Dialog {
                 return base.filter(function (w) {
                     let primary = dialog.primaryFor(w);
                     if (primary.length === 0)
-                        primary = w.appName || dialog.deriveAppName(w.windowClass);
+                        primary = dialog.appNameFor(w);
 
                     return primary.toLowerCase().includes(filter) || (w.caption || "").toLowerCase().includes(filter);
                 });
@@ -261,14 +277,20 @@ Kirigami.Dialog {
                 // window has no registered .desktop), fall back to the
                 // app name so the user can still tell which window the
                 // row represents — but disable selection so they don't
-                // commit an empty leaf value.
-                readonly property string primaryText: valueAvailable ? rawValue : (modelData.appName && modelData.appName.length > 0 ? modelData.appName : dialog.deriveAppName(modelData.windowClass))
+                // commit an empty leaf value. A window with no class at all
+                // (a client that sets no app_id) has no app name either, so
+                // its caption names the row.
+                readonly property string _fallbackName: dialog.appNameFor(modelData)
+                readonly property string primaryText: valueAvailable ? rawValue : (_fallbackName.length > 0 ? _fallbackName : (modelData.caption || ""))
                 // Subtext gives the user some disambiguation context — for
                 // a Title pick we show the windowClass so two windows with
                 // the same caption are distinguishable; for the other
                 // modes we surface the caption. When the value is
-                // unavailable we replace it with an explanatory hint.
-                readonly property string secondaryText: !valueAvailable ? (dialog.mode === "desktopFiles" ? i18n("(no desktop file)") : dialog.mode === "titles" ? i18n("(no title)") : "") : dialog.mode === "titles" ? (modelData.windowClass || "") : (modelData.caption || "")
+                // unavailable we replace it with an explanatory hint, which
+                // for a classless window names the way to target it. Titles
+                // mode never needs one (see `mode`).
+                readonly property string _unavailableHint: dialog.mode === "desktopFiles" ? i18n("(no desktop file)") : i18n("(no window class, match it by title)")
+                readonly property string secondaryText: !valueAvailable ? _unavailableHint : dialog.mode === "titles" ? (modelData.windowClass || i18n("(no window class)")) : (modelData.caption || "")
 
                 width: ListView.view.width
                 // Rows commit on click, so hovering is how a row gets
@@ -277,9 +299,9 @@ Kirigami.Dialog {
                 highlighted: ListView.isCurrentItem || hovered
                 enabled: valueAvailable
                 opacity: valueAvailable ? 1 : 0.5
-                Accessible.name: primaryText + (secondaryText.length > 0 ? ", " + secondaryText : "")
+                Accessible.name: windowDelegate.secondaryText.length > 0 ? i18nc("accessible name: a window picker row's primary text, then its secondary text", "%1, %2", windowDelegate.primaryText, windowDelegate.secondaryText) : windowDelegate.primaryText
                 onClicked: {
-                    dialog.picked(rawValue);
+                    dialog.picked(windowDelegate.rawValue);
                     dialog.close();
                 }
 
@@ -307,20 +329,20 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
 
                         Label {
-                            text: primaryText
+                            text: windowDelegate.primaryText
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                             color: windowDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                         }
 
                         Label {
-                            text: secondaryText
+                            text: windowDelegate.secondaryText
                             Layout.fillWidth: true
                             font: Kirigami.Theme.smallFont
                             color: windowDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
                             opacity: windowDelegate.highlighted ? 0.85 : 0.7
                             elide: Text.ElideRight
-                            visible: secondaryText.length > 0
+                            visible: windowDelegate.secondaryText.length > 0
                         }
                     }
                 }

@@ -10,6 +10,8 @@
 # -----------------------------------------------------------------------------
 build/
 build*/
+# CI's compiler cache (.github/workflows/ci.yml)
+.ccache/
 CMakeCache.txt
 CMakeFiles/
 CMakeScripts/

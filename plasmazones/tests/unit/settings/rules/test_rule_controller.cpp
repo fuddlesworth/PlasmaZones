@@ -9,14 +9,10 @@
  * The controller talks to the daemon over D-Bus; in a headless unit run the
  * daemon is absent, so `daemonReachable` is false and the model starts empty.
  * The staging contract (in-memory CRUD by UUID, dirty-tracking, revert) is
- * fully exercisable without a live daemon.
- *
- * Pins:
- *   - `newEmptyRule` produces a valid, subject-shaped rule with a fresh UUID,
- *   - add / update / remove by UUID flip the dirty bit,
- *   - `monitorOverview` summarises rules per connected monitor,
- *   - `moveRule` reorders and renormalizes priorities,
- *   - the field / operator / action authoring metadata is well-formed.
+ * fully exercisable without a live daemon. This file pins that staging
+ * contract, the authoring metadata the editor is driven from, the user-rule
+ * staging gate, and the zone lists the editor's pickers read; each slot says
+ * what it pins.
  */
 
 #include <QJsonObject>
@@ -24,6 +20,8 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QUuid>
+
+#include <algorithm>
 
 #include "settings/rules/ruleauthoring.h"
 #include "settings/rules/rulecontroller.h"
@@ -57,6 +55,7 @@ private Q_SLOTS:
     void stageUserRulesEnforcesTheAddRuleBoundary();
     void stageUserRulesRaisesTheCommitGate();
     void promotedLeafRootRoundTrips();
+    void zoneListProvidersPublishOnlyOnChange();
 };
 
 void TestRuleController::newEmptyRuleShapesBySubject()
@@ -112,7 +111,7 @@ void TestRuleController::addUpdateRemoveByUuid()
 {
     RuleController controller;
 
-    // Build a monitor rule, give it a usable action, and add it.
+    // Build an application rule, give it a usable action, and add it.
     QVariantMap rule = controller.newEmptyRule(QStringLiteral("application"));
     rule[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
     const QString id = controller.addRuleFromJson(rule);
@@ -386,10 +385,11 @@ void TestRuleController::authoringMetadata()
 
     const QVariantList fields = controller.matchFields();
     QVERIFY(!fields.isEmpty());
-    // Every field entry carries value / label / valueKind. The `screen` and
-    // `activity` kinds drive the dedicated picker editors in QML — assert
-    // at least one of each is present so a regression that reverts those
-    // fields back to `string` (silently breaking the picker UX) is caught.
+    // Every field entry carries value / label / valueKind, and the kind is one
+    // the QML leaf editor dispatches on. The picker kinds drive dedicated
+    // editors, so each is asserted present below (zone through the
+    // kindByWire check further down), catching a regression that reverts a
+    // field to `string` and silently drops its picker.
     bool sawScreenKind = false;
     bool sawActivityKind = false;
     bool sawWindowTypeKind = false;
@@ -408,7 +408,7 @@ void TestRuleController::authoringMetadata()
                 || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop")
                 || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
                 || kind == QLatin1String("layout") || kind == QLatin1String("colorScheme")
-                || kind == QLatin1String("aspectRatio"));
+                || kind == QLatin1String("aspectRatio") || kind == QLatin1String("zone"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }
@@ -469,8 +469,8 @@ void TestRuleController::authoringMetadata()
     // Picker categories drive the fly-out submenu grouping. Every field carries
     // a non-empty category label + a categoryOrder int. The Field enum
     // interleaves state/context, so assert grouping is by CATEGORY (via the
-    // language-independent order), not by enum position. The (formerly single,
-    // 19-entry) State bucket is split into fine-grained categories:
+    // language-independent order), not by enum position. The formerly single
+    // State bucket is split into fine-grained categories:
     // Alphabetical by label: Context=0, Identity=1, Size=2, State=3,
     // Taskbar & switcher=4, Tiling=5, Type=6.
     QHash<QString, int> fieldCategoryOrder;
@@ -538,6 +538,9 @@ void TestRuleController::authoringMetadata()
                  QString(PhosphorRules::kAspectRatioTokens[0].token));
     }
     QCOMPARE(controller.operatorsForField(valueByWire.value(QStringLiteral("screenAspectRatio"), -1)).size(), 1);
+    // Zone drives the zone picker. Reverting it to a bare string would put the
+    // user back to hand-typing a braced UUID out of a layout file.
+    QCOMPARE(kindByWire.value(QStringLiteral("zone")), QStringLiteral("zone"));
 
     const auto opWires = [&](const QString& wire) {
         QSet<QString> s;
@@ -546,6 +549,9 @@ void TestRuleController::authoringMetadata()
         }
         return s;
     };
+    // A zone UUID only means anything compared whole: no substring or regex
+    // operator, just Equals.
+    QCOMPARE(opWires(QStringLiteral("zone")), QSet<QString>{QStringLiteral("equals")});
     const QSet<QString> widthOps = opWires(QStringLiteral("width"));
     QVERIFY(widthOps.contains(QStringLiteral("lessThan")));
     QVERIFY(widthOps.contains(QStringLiteral("greaterThan")));
@@ -559,7 +565,9 @@ void TestRuleController::operatorMetadata()
 
     // AppId (Field enum 0) supports the AppIdMatches operator.
     const QVariantList appOps = controller.operatorsForField(0);
-    QVERIFY(!appOps.isEmpty());
+    QVERIFY(std::any_of(appOps.cbegin(), appOps.cend(), [](const QVariant& op) {
+        return op.toMap().value(QStringLiteral("wire")).toString() == QLatin1String("appIdMatches");
+    }));
 
     // allOperators() surfaces the FULL operator vocabulary (not a field
     // subset). The leaf editor sizes the operator dropdown to the widest
@@ -743,9 +751,9 @@ void TestRuleController::boolActionPolaritySweep()
     // to render the raw wire string in the rule row with the whole suite
     // green — this is the future-miss net.
     //
-    // Its own slot, because QVERIFY aborts the whole slot: as the tail of a
-    // 345-line authoringMetadata it was unreachable whenever anything above
-    // it failed, which is exactly when a net matters most.
+    // Its own slot, because QVERIFY aborts the whole slot: as the tail of
+    // authoringMetadata it was unreachable whenever anything above it failed,
+    // which is exactly when a net matters most.
     int boolActions = 0;
     const QStringList allTypes = PhosphorRules::ActionRegistry::instance().registeredTypes();
     for (const QString& type : allTypes) {
@@ -1031,6 +1039,78 @@ void TestRuleController::stageUserRulesRaisesTheCommitGate()
     controller.stageUserRules({good});
     QVERIFY(controller.isDirty());
     QCOMPARE(dirtySpy.count(), 2);
+}
+
+void TestRuleController::zoneListProvidersPublishOnlyOnChange()
+{
+    const auto option = [](const QString& id, const QString& displayName) {
+        QVariantMap m;
+        m[QStringLiteral("id")] = id;
+        m[QStringLiteral("displayName")] = displayName;
+        return QVariant(m);
+    };
+    // Declared before the controller, so they outlive it: the providers below
+    // read them by reference.
+    QVariantList options{
+        option(QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"), QStringLiteral("Columns — Left"))};
+    QStringList names{QStringLiteral("Left")};
+
+    RuleController controller;
+    QSignalSpy namesSpy(&controller, &RuleController::zoneNamesChanged);
+    QSignalSpy optionsSpy(&controller, &RuleController::zoneMatchOptionsChanged);
+
+    // Installing a provider publishes its own list at once, so the picker is
+    // populated before the first registry reload, and leaves the other alone.
+    controller.setZoneMatchOptionsProvider([&options]() {
+        return options;
+    });
+    QCOMPARE(optionsSpy.count(), 1);
+    QCOMPARE(namesSpy.count(), 0);
+    QCOMPARE(controller.zoneMatchOptions(), options);
+    controller.setZoneNamesProvider([&names]() {
+        return names;
+    });
+    QCOMPARE(namesSpy.count(), 1);
+    QCOMPARE(optionsSpy.count(), 1);
+    QCOMPARE(controller.zoneNames(), names);
+
+    // A refresh with nothing changed emits neither signal.
+    controller.refreshZoneLists();
+    QCOMPARE(optionsSpy.count(), 1);
+    QCOMPARE(namesSpy.count(), 1);
+
+    // A zone rename changes the option label but not the id, and must still
+    // republish the options.
+    options = {option(QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"), QStringLiteral("Columns — Media"))};
+    controller.refreshZoneLists();
+    QCOMPARE(optionsSpy.count(), 2);
+    QCOMPARE(controller.zoneMatchOptions(), options);
+    QCOMPARE(namesSpy.count(), 1);
+
+    // The name list is re-read on a registry reload too, independently of
+    // the options: a change to it alone republishes it alone.
+    names = {QStringLiteral("Media")};
+    controller.refreshZoneLists();
+    QCOMPARE(namesSpy.count(), 2);
+    QCOMPARE(controller.zoneNames(), names);
+    QCOMPARE(optionsSpy.count(), 2);
+
+    // Clearing a provider keeps its last published list and stays silent, so
+    // a refresh landing during teardown cannot blank an open picker. Each
+    // list is guarded on its own.
+    const QVariantList lastOptions = controller.zoneMatchOptions();
+    controller.setZoneMatchOptionsProvider({});
+    options.clear();
+    controller.refreshZoneLists();
+    QCOMPARE(optionsSpy.count(), 2);
+    QCOMPARE(controller.zoneMatchOptions(), lastOptions);
+
+    const QStringList lastNames = controller.zoneNames();
+    controller.setZoneNamesProvider({});
+    names.clear();
+    controller.refreshZoneLists();
+    QCOMPARE(namesSpy.count(), 2);
+    QCOMPARE(controller.zoneNames(), lastNames);
 }
 
 QTEST_MAIN(TestRuleController)

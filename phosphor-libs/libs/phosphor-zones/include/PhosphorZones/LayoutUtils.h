@@ -155,21 +155,24 @@ PHOSPHORZONES_EXPORT QStringList sameNumberedZones(const QStringList& zoneIds, c
                                                    const QHash<QString, int>& positions);
 
 /**
- * @brief Give a layout document's zones ids no other layout holds (F552).
+ * @brief Give a layout document's zones ids no other layout holds (F552), and
+ *        a zone with no id one of its own.
  *
  * Every zone id in @p layoutJson's zones array that a layout in @p loaded
- * already holds, or that repeats within the document, is replaced. A layout
- * with the document's own id is not another layout: a user copy overriding a
- * system layout shares its zone ids. The new id is a name-based UUID of the
- * layout id, the old zone id and its index, so the same document gets the same
- * ids on every load even before the caller writes it back, re-derived with a
- * counter while the result is taken or already in the document. A document
- * whose id is not a UUID derives from a random namespace instead, as
- * Layout::fromJson mints it a random id. Returns the number of ids replaced.
+ * already holds, or that repeats within the document, is replaced, and a zone
+ * with no id is given one. A layout with the document's own id is not another
+ * layout: a user copy overriding a system layout shares its zone ids. The new
+ * id is a name-based UUID of the layout id, the old zone id (or a fixed
+ * stand-in for a missing one) and its index, so the same document gets the
+ * same ids on every load, in every process, even before the caller writes it
+ * back, re-derived with a counter while the result is taken or already in the
+ * document. A document whose id is not a UUID derives from a random namespace
+ * instead, as Layout::fromJson mints it a random id. Returns the number of ids
+ * replaced or given.
  *
- * The registry's directory load and its import run every document through
- * this before Layout::fromJson, which is what makes the uniqueness the
- * position map and layoutHoldsZones rely on hold.
+ * The registry's directory load, its import and its restore of a system layout
+ * run every document through this before Layout::fromJson, which is what makes
+ * the uniqueness the position map and layoutHoldsZones rely on hold.
  */
 PHOSPHORZONES_EXPORT int reissueTakenZoneIds(QJsonObject& layoutJson, const QList<Layout*>& loaded);
 

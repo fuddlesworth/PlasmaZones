@@ -15,7 +15,7 @@ namespace PlasmaZones::RuleAuthoring {
 /// Match fields suitable for the leaf-editor field dropdown. Each entry:
 /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
 ///    valueKind: "string"|"number"|"bool"|"screen"|"activity"|"windowType"|
-///    "virtualDesktop"|"mode"|"orientation"|"aspectRatio"|"colorScheme"|"layout" }`.
+///    "virtualDesktop"|"mode"|"orientation"|"aspectRatio"|"colorScheme"|"layout"|"zone" }`.
 ///    Closed-vocab kinds (windowType/mode/orientation/aspectRatio/colorScheme) also carry
 ///    an `options` array. QML keys off `wire` so it never has to reconstruct
 ///    the enum↔wire-string table.

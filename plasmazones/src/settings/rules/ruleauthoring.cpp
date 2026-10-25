@@ -29,8 +29,8 @@ using PhosphorRules::Operator;
 /// Group a match Field into a picker category. The `Field` enum interleaves
 /// state and context (e.g. IsMaximized sits after Activity), so the picker
 /// groups by THIS classification, never by enum / emit order. The categories
-/// are deliberately fine-grained: a single flat "State" bucket of ~19 entries
-/// is hard to scan, so the window-kind, taskbar/switcher-hint, and
+/// are deliberately fine-grained: a single flat "State" bucket is hard to
+/// scan, so the window-kind, taskbar/switcher-hint, and
 /// PlasmaZones-tiling concepts each get their own top-level fly-out. Items
 /// within a category are sorted alphabetically by CategoryMenuButton; only the
 /// returned order int controls the relative position of the categories. The
@@ -101,9 +101,9 @@ PickerCategory fieldCategory(Field f)
 }
 
 /// Short, user-facing help for one match Field — surfaced as the hover
-/// tooltip on the leaf editor's info icon. Kept concise (one line); the
-/// switch is exhaustive so every field, including the picker-hidden ones,
-/// has a description.
+/// tooltip on the leaf editor's info icon. Kept concise; the switch is
+/// exhaustive so every field, including the picker-hidden ones, has a
+/// description.
 QString fieldDescription(Field f)
 {
     switch (f) {
@@ -182,7 +182,10 @@ QString fieldDescription(Field f)
     case Field::IsTiled:
         return PhosphorI18n::tr("Whether the window is managed by the tiling engine.");
     case Field::Zone:
-        return PhosphorI18n::tr("The zone the window is snapped into (manual-zone mode only).");
+        return PhosphorI18n::tr(
+            "The zone the window is snapped into, in snapping mode. A window spanning several zones counts as being "
+            "in the first of them. It suits rules about how a window looks or stacks while it sits in a zone, not "
+            "rules about where a window opens.");
     case Field::ScreenId:
         return PhosphorI18n::tr("The monitor the window is on.");
     case Field::VirtualDesktop:
@@ -321,8 +324,10 @@ QList<ClosedTokenOption> colorSchemeOptions()
 }
 QString closedTokenLabel(const QList<ClosedTokenOption>& opts, const QString& token)
 {
+    // Ignoring case, as the engine's Equals compares these leaves, so a
+    // hand-edited "DARK" reads as the option it matches.
     for (const ClosedTokenOption& o : opts) {
-        if (o.wire == token) {
+        if (o.wire.compare(token, Qt::CaseInsensitive) == 0) {
             return o.label;
         }
     }
@@ -531,8 +536,8 @@ QVariantList matchFields()
     //     restarts. Surfacing it in the picker invites users to author
     //     rules that silently stop working.
     //   * WindowRole is the X11 WM_WINDOW_ROLE property, empty for every
-    //     Wayland-native window — PlasmaZones is Wayland-only (per
-    //     CLAUDE.md), so the picker would always read as blank.
+    //     Wayland-native window and set only by the occasional XWayland
+    //     client, so the picker would almost always read as blank.
     // The Field enum keeps both values for back-compat with already-saved
     // rules; only the authoring UI hides them.
     //
@@ -668,6 +673,12 @@ QVariantList matchFields()
             // screen / activity pickers), so the user picks a friendly name
             // while the wire value stays the id.
             kind = QStringLiteral("layout");
+        } else if (f == Field::Zone) {
+            // The value is a braced zone UUID. The QML editor swaps this for a
+            // zone picker with one submenu per layout, driven by
+            // `RuleController::zoneMatchOptions`, so nobody has to copy a UUID
+            // out of a layout file by hand.
+            kind = QStringLiteral("zone");
         }
         entry[QStringLiteral("valueKind")] = kind;
         out.append(entry);
@@ -700,9 +711,7 @@ QVariantList operatorsForField(int fieldValue)
         // id, a zone UUID) — only an exact-token Equals is meaningful. A substring or
         // regex against a closed token set, a layout UUID, or a zone UUID is a
         // footgun the picker cannot author sensibly. Mirrors the WindowType
-        // enum treatment. Zone has no picker of its own yet, so its value is
-        // still a hand-typed brace-wrapped UUID; restricting the operators at
-        // least stops a partial-UUID Contains from silently matching nothing.
+        // enum treatment.
         ops = {Operator::Equals};
     } else if (PhosphorRules::fieldIsString(field)) {
         ops = {Operator::Equals, Operator::Contains, Operator::StartsWith, Operator::EndsWith, Operator::Regex};
